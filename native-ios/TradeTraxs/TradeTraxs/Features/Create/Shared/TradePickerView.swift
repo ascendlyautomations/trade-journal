@@ -33,8 +33,7 @@ struct TradePickerView: View {
                     }
                     .accessibilityIdentifier(pickerAccessibilityID(for: trade))
                 }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
+                .experienceInsetGroupedListStyle(pageBackground: false)
             }
         }
         .experienceScreenBackground()

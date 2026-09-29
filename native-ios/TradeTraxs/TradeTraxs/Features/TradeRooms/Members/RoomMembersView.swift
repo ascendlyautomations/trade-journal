@@ -60,7 +60,7 @@ struct RoomMembersView: View {
                                 viewModel.openProfile(item.id)
                             }
                         }
-                        .listRowBackground(colors.backgroundPrimary)
+                        .experienceDashboardListRow()
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             if viewModel.canManageMember(item) {
                                 Button("Ban", role: .destructive) {
@@ -73,8 +73,7 @@ struct RoomMembersView: View {
                         }
                     }
                 }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
+                .experienceInsetGroupedListStyle(pageBackground: true)
             }
         }
         .experienceScreenBackground()

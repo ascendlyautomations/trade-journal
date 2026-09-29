@@ -24,10 +24,7 @@ struct TradeRoomCardView: View {
                         )
                         .lineLimit(1)
                     if item.ownerIsVerified {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.caption)
-                            .foregroundStyle(colors.accent)
-                            .accessibilityLabel("Verified")
+                        TradeTraxsVerifiedBadge(size: .compact)
                     }
                     Spacer(minLength: 4)
                     if let timestamp = item.timestamp {

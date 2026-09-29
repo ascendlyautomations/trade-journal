@@ -61,10 +61,7 @@ struct SettingsSubscriptionView: View {
                 restoreSection
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
-        .background(colors.groupedBackground.ignoresSafeArea())
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .experienceNavigationTitle("Plan")
         .overlay {
             if viewModel.isLoading, viewModel.status == nil {
@@ -206,6 +203,10 @@ struct SettingsSubscriptionView: View {
                                     .experienceStyle(.body, color: colors.primaryText)
                                 Text("\(product.displayPrice) / \(product.subscriptionPeriodLabel)")
                                     .experienceStyle(.footnote, color: colors.secondaryText)
+                                if let offer = product.introductoryOfferSummary {
+                                    Text(offer)
+                                        .experienceStyle(.footnote, color: colors.secondaryText)
+                                }
                             }
                             Spacer(minLength: ExperienceSpacing.sm)
                             Image(systemName: viewModel.selectedProduct?.id == product.id ? "checkmark.circle.fill" : "circle")

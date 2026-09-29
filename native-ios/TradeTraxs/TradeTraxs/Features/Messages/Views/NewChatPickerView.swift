@@ -295,8 +295,14 @@ struct NewChatPickerView: View {
         HStack(spacing: ExperienceSpacing.sm) {
             FollowListAvatarView(profile: profile, imagePipeline: imagePipeline)
             VStack(alignment: .leading, spacing: 2) {
-                Text(profile.displayName)
-                    .experienceStyle(.body, color: colors.primaryText)
+                HStack(spacing: 4) {
+                    Text(profile.displayName)
+                        .experienceStyle(.body, color: colors.primaryText)
+                        .lineLimit(1)
+                    if profile.isCreator {
+                        TradeTraxsVerifiedBadge(size: .inline)
+                    }
+                }
                 Text("@\(profile.username)")
                     .experienceStyle(.caption, color: colors.secondaryText)
             }

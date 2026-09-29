@@ -100,6 +100,7 @@ enum SessionScopedCaches {
         Task { await data.cache.images.removeAllImages() }
         GlobalUploadCoordinator.shared.invalidateForSessionChange()
         SessionBillingEntitlementStore.shared.clear()
+        MonetizationRuntimeConfiguration.shared.resetToFailClosed()
         data.detailCache.removeAll()
         data.engagementStore.removeAll()
         data.vaultStore.removeAll()

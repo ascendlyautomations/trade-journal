@@ -88,6 +88,7 @@ final class BrokerIntegrationsViewModel {
     var pendingTradovateImportPreview: PendingTradovateImportPreview?
     var showsTradovateImportPreview = false
     var isConfirmingTradovateImport = false
+    var showsTradovateNoTradeHistorySheet = false
 
     struct ImportReconnectPrompt: Equatable, Sendable {
         var provider: BrokerIntegrationProvider
@@ -157,19 +158,26 @@ final class BrokerIntegrationsViewModel {
     private let manageAccounts: ManageAccountsViewModel
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
+    private let onOpenCSVImport: () -> Void
 
     init(
         broker: any BrokerIntegrationRepository,
         trades: any TradeRepository,
         manageAccounts: ManageAccountsViewModel,
         session: any SessionProviding,
-        detailCache: DetailPresentationCache
+        detailCache: DetailPresentationCache,
+        onOpenCSVImport: @escaping () -> Void = {}
     ) {
         self.broker = broker
         self.trades = trades
         self.manageAccounts = manageAccounts
         self.session = session
         self.detailCache = detailCache
+        self.onOpenCSVImport = onOpenCSVImport
+    }
+
+    func openTradovatePerformanceCSVImport() {
+        onOpenCSVImport()
     }
 
     func loadIfNeeded() {
@@ -568,6 +576,10 @@ final class BrokerIntegrationsViewModel {
                 if response.summary.ok {
                     importReconnectPrompt = nil
                     importRetryPrompt = nil
+                    if BrokerSyncFailureResolution.isNoAvailableTradeHistory(response) {
+                        showsTradovateNoTradeHistorySheet = true
+                        return
+                    }
                     let previews = response.summary.importPreviewTrades
                     if previews.isEmpty {
                         presentMessage("No new trades to import.", error: false)
@@ -706,6 +718,10 @@ final class BrokerIntegrationsViewModel {
         if response.summary.ok {
             importReconnectPrompt = nil
             importRetryPrompt = nil
+            if BrokerSyncFailureResolution.isNoAvailableTradeHistory(response) {
+                showsTradovateNoTradeHistorySheet = true
+                return
+            }
             let partialSync =
                 response.summary.status == "partial"
                 || response.summary.errorCode == "import_partial"
@@ -776,6 +792,10 @@ final class BrokerIntegrationsViewModel {
                 mappingId: mappingId
             )
             presentMessage(message, error: true)
+        case .noAvailableTradeHistory:
+            importReconnectPrompt = nil
+            importRetryPrompt = nil
+            showsTradovateNoTradeHistorySheet = true
         case .success, .importFailed:
             importReconnectPrompt = nil
             importRetryPrompt = nil

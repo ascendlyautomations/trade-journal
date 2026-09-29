@@ -797,6 +797,60 @@ export type Database = {
           },
         ]
       }
+      app_monetization_account_overrides: {
+        Row: {
+          created_at: string
+          entitlement_enforcement_enabled: boolean | null
+          ios_paywall_enabled: boolean | null
+          note: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          entitlement_enforcement_enabled?: boolean | null
+          ios_paywall_enabled?: boolean | null
+          note?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          entitlement_enforcement_enabled?: boolean | null
+          ios_paywall_enabled?: boolean | null
+          note?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      app_monetization_settings: {
+        Row: {
+          entitlement_enforcement_enabled: boolean
+          id: number
+          ios_paywall_enabled: boolean
+          launch_access_cutoff_at: string | null
+          launch_access_mode: string
+          updated_at: string
+        }
+        Insert: {
+          entitlement_enforcement_enabled?: boolean
+          id?: number
+          ios_paywall_enabled?: boolean
+          launch_access_cutoff_at?: string | null
+          launch_access_mode?: string
+          updated_at?: string
+        }
+        Update: {
+          entitlement_enforcement_enabled?: boolean
+          id?: number
+          ios_paywall_enabled?: boolean
+          launch_access_cutoff_at?: string | null
+          launch_access_mode?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       apple_subscription_notifications: {
         Row: {
           environment: string | null

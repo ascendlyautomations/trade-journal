@@ -115,8 +115,7 @@ struct ContentReportSheet: View {
                 .disabled(!viewModel.canSubmit || viewModel.phase == .submitting)
             }
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
+        .experienceInsetGroupedListStyle(pageBackground: false)
     }
 
     private func successContent(wasDuplicate: Bool) -> some View {

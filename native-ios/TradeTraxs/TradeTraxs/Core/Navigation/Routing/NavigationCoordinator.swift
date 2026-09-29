@@ -243,6 +243,17 @@ final class NavigationCoordinator {
         if case .room(let roomID) = route {
             InboxMarkReadCoordinator.shared.prepareOpenRoom(roomID)
         }
+        if store.paths.profile.last == route {
+            logNavigationEvent(
+                action: "pushSkippedDuplicate",
+                source: "pushProfile",
+                destination: String(describing: route),
+                tab: .profile,
+                pathBefore: store.paths.profile.count,
+                pathAfter: store.paths.profile.count
+            )
+            return
+        }
         let pathBefore = store.paths.profile.count
         store.paths.profile.append(route)
         logNavigationEvent(
@@ -254,6 +265,59 @@ final class NavigationCoordinator {
             pathAfter: store.paths.profile.count
         )
         emit(.pushed(tab: .profile, description: String(describing: route)))
+    }
+
+    func pushAdmin(_ route: AdminRoute) {
+        pushProfile(.admin(route))
+    }
+
+    /// Open Settings home from Profile — idempotent; avoids duplicate `settings(.home)` frames.
+    func pushProfileSettingsHome(source: String) {
+        ensureAuthenticatedOrStash(.profile(.settings(.home)))
+        guard store.sessionPhase == .authenticated else { return }
+
+        let home = ProfileRoute.settings(.home)
+        let before = store.paths.profile
+        #if DEBUG
+        AppLog.navigation.debug(
+            """
+            settings.home.push source=\(source, privacy: .public) \
+            pathBefore=\(Self.describeProfilePath(before), privacy: .public)
+            """
+        )
+        #endif
+
+        if before.last == home {
+            #if DEBUG
+            AppLog.navigation.debug("settings.home.push skipped reason=alreadyCurrent")
+            #endif
+            logNavigationEvent(
+                action: "pushSkippedDuplicate",
+                source: "pushProfileSettingsHome",
+                destination: String(describing: home),
+                tab: .profile,
+                pathBefore: before.count,
+                pathAfter: before.count
+            )
+            return
+        }
+
+        if let existingIndex = before.lastIndex(of: home) {
+            store.paths.profile = Array(before.prefix(existingIndex + 1))
+            #if DEBUG
+            AppLog.navigation.debug(
+                "settings.home.push truncated pathAfter=\(Self.describeProfilePath(self.store.paths.profile), privacy: .public)"
+            )
+            #endif
+            return
+        }
+
+        pushProfile(home)
+        #if DEBUG
+        AppLog.navigation.debug(
+            "settings.home.push appended pathAfter=\(Self.describeProfilePath(self.store.paths.profile), privacy: .public)"
+        )
+        #endif
     }
 
     /// Opens social trade detail on the active tab stack without switching tabs.
@@ -590,6 +654,10 @@ final class NavigationCoordinator {
     }
 
 #if DEBUG
+    private static func describeProfilePath(_ path: [ProfileRoute]) -> String {
+        path.map { String(describing: $0) }.joined(separator: " → ")
+    }
+
     private func logNavigationEvent(
         action: String,
         source: String,

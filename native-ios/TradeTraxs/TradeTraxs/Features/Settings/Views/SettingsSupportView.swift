@@ -1,69 +1,46 @@
 import SwiftUI
 
+/// Help hub for Profile → Help and legacy deep links (Settings home opens support forms directly).
 struct SettingsSupportView: View {
-    @Environment(\.themeColors) private var colors
-    @Environment(\.openURL) private var openURL
-
-    private let supportEmail = URL(string: "mailto:support@tradetraxs.com")
-    private let helpURL = URL(string: "https://www.tradetraxs.com/help")
-    private let supportURL = URL(string: "https://www.tradetraxs.com/support")
-    private let feedbackURL = URL(string: "https://www.tradetraxs.com/feedback")
+    @Environment(\.stackNavigation) private var stackNavigation
 
     var body: some View {
         List {
             Section {
-                if let helpURL {
-                    Button {
-                        openURL(helpURL)
-                    } label: {
-                        SettingsNavigationRow(title: "Help Center", systemImage: "questionmark.circle")
-                    }
-                    .buttonStyle(.plain)
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    stackNavigation?.pushSettings(.support)
+                } label: {
+                    SettingsNavigationRow(title: "Help & Support", systemImage: "questionmark.circle")
                 }
-                if let supportURL {
-                    Button {
-                        openURL(supportURL)
-                    } label: {
-                        SettingsNavigationRow(title: "Contact Support", systemImage: "envelope")
-                    }
-                    .buttonStyle(.plain)
-                }
-                if let feedbackURL {
-                    Button {
-                        openURL(feedbackURL)
-                    } label: {
-                        SettingsNavigationRow(title: "Send Feedback", systemImage: "text.bubble")
-                    }
-                    .buttonStyle(.plain)
-                }
-            } header: {
-                Text("Help")
-            } footer: {
-                Text("Get answers or reach the TradeTraxs team.")
-            }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("settings.support.row.contact")
 
-            Section {
-                if let supportEmail {
-                    Button {
-                        openURL(supportEmail)
-                    } label: {
-                        SettingsNavigationRow(
-                            title: "Email Support",
-                            subtitle: "support@tradetraxs.com",
-                            systemImage: "envelope.open"
-                        )
-                    }
-                    .buttonStyle(.plain)
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    stackNavigation?.pushSettings(.productFeedback)
+                } label: {
+                    SettingsNavigationRow(title: "Product Feedback", systemImage: "text.bubble")
                 }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("settings.support.row.feedback")
+
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    stackNavigation?.pushSettings(.supportBugReport)
+                } label: {
+                    SettingsNavigationRow(title: "Report a Bug", systemImage: "ladybug")
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("settings.support.row.bug")
             } header: {
-                Text("Email")
+                Text("Help Center")
+            } footer: {
+                Text("Reach the TradeTraxs team without leaving the app.")
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
-        .background(colors.groupedBackground.ignoresSafeArea())
-        .experienceNavigationTitle("Help & Support")
-        .accessibilityIdentifier("settings.support")
+        .experienceInsetGroupedListStyle(pageBackground: true)
+        .experienceNavigationTitle("Help Center")
+        .accessibilityIdentifier("settings.support.hub")
     }
 }

@@ -1,10 +1,16 @@
 import SwiftUI
+import UIKit
 
 /// Trade Room workspace — compact header + channel switcher + DM-style conversation.
 struct RoomConversationView: View {
     @State private var viewModel: RoomConversationViewModel
     @State private var contentRevealed = false
-    @State private var didApplyInitialScrollToLatest = false
+    @State private var appliedScrollCommandGeneration: UInt64 = 0
+    @State private var initialScrollRetryTask: Task<Void, Never>?
+    @State private var settlingStabilityTask: Task<Void, Never>?
+    @State private var lastScrollContentHeight: CGFloat = 0
+    @State private var lastScrollSample: ConversationThreadScrollSupport.LayoutSample?
+    @State private var userReleasedInitialPin = false
     @State private var actionMenuMessageID: MessageID?
     private let imagePipeline: any ImagePipeline
     private let data: DataEnvironment?
@@ -215,7 +221,7 @@ struct RoomConversationView: View {
             }
         }
         .task {
-            didApplyInitialScrollToLatest = false
+            resetInitialScrollSessionState()
             viewModel.loadIfNeeded()
         }
         .onDisappear {
@@ -329,7 +335,7 @@ struct RoomConversationView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: ExperienceSpacing.xs) {
-                    if viewModel.hasMoreOlder {
+                    if viewModel.hasMoreOlder, viewModel.isInitialScrollConfirmed {
                         ProgressView()
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, ExperienceSpacing.sm)
@@ -431,21 +437,25 @@ struct RoomConversationView: View {
                             )
                             .id(bubble.id.rawValue)
                             .onAppear {
-                                if bubble.id == viewModel.newestMessageID, !didApplyInitialScrollToLatest {
-                                    didApplyInitialScrollToLatest = true
-                                    scrollToLatest(proxy: proxy, animated: false)
-                                }
+                                guard viewModel.isInitialScrollPinningBottom else { return }
+                                guard bubble.id == viewModel.newestMessageID else { return }
+                                scrollToLatest(proxy: proxy, animated: false, reason: "newest-bubble-onAppear")
                             }
                         }
                     }
 
                     Color.clear
                         .frame(height: 1)
-                        .id(RoomConversationScrollAnchor.bottom)
+                        .id(ConversationScrollAnchorID.bottom)
+                        .onAppear {
+                            guard viewModel.isInitialScrollPinningBottom else { return }
+                            scrollToLatest(proxy: proxy, animated: false, reason: "bottom-anchor-onAppear")
+                        }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, ExperienceSpacing.sm)
             }
+            .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
             .messageBubbleActionMenuOverlay(
                 activeMessageID: $actionMenuMessageID,
@@ -484,60 +494,281 @@ struct RoomConversationView: View {
                     )
                 }
             }
-            .onChange(of: viewModel.phase) { _, phase in
-                guard phase == .loaded, !didApplyInitialScrollToLatest else { return }
-                // Non-empty threads wait for the newest bubble's onAppear before scrolling.
-                guard viewModel.showsEmpty else { return }
-                didApplyInitialScrollToLatest = true
-                scrollToLatest(proxy: proxy, animated: false)
+            .simultaneousGesture(initialScrollReleaseGesture)
+            .onScrollGeometryChange(for: ConversationThreadScrollSupport.LayoutSample.self) { geometry in
+                let distanceFromBottom = geometry.contentSize.height
+                    - geometry.contentOffset.y
+                    - geometry.containerSize.height
+                return ConversationThreadScrollSupport.LayoutSample(
+                    contentHeight: geometry.contentSize.height,
+                    contentOffsetY: geometry.contentOffset.y,
+                    containerHeight: geometry.containerSize.height,
+                    isNearBottom: distanceFromBottom <= ConversationThreadScrollSupport.bottomProximityThreshold
+                )
+            } action: { _, sample in
+                lastScrollSample = sample
+                handleInitialScrollGeometry(sample, proxy: proxy)
+                guard viewModel.isInitialScrollConfirmed else { return }
+                viewModel.scrollCoordinator.reportNearBottom(
+                    sample.isNearBottom,
+                    conversationID: viewModel.scrollScopeConversationID
+                )
             }
-            .onChange(of: viewModel.messages.count) { _, _ in
-                if viewModel.pendingScrollMessageID == nil, didApplyInitialScrollToLatest {
-                    scrollToLatest(proxy: proxy, animated: !reduceMotion)
+            .onChange(of: viewModel.scrollCoordinator.scrollCommandGeneration) { _, _ in
+                applyCoordinatorScrollCommand(proxy: proxy)
+            }
+            .onChange(of: viewModel.phase) { _, phase in
+                guard phase == .loaded else { return }
+                if viewModel.showsEmpty {
+                    viewModel.confirmInitialScrollPositionForEmptyThread()
+                } else if !viewModel.messages.isEmpty {
+                    startInitialScrollPositioning(proxy: proxy, reason: "phase-loaded")
                 }
             }
-            .onChange(of: viewModel.selectedChannelID) { _, _ in
-                restoreScroll(proxy: proxy)
+            .onChange(of: viewModel.messages.count) { _, _ in
+                guard viewModel.isInitialScrollPinningBottom else { return }
+                guard !viewModel.messages.isEmpty else { return }
+                startInitialScrollPositioning(proxy: proxy, reason: "messages-count")
             }
-            .onChange(of: viewModel.pendingScrollMessageID) { _, _ in
-                restoreScroll(proxy: proxy)
+            .onChange(of: viewModel.sharedTrades.count) { _, _ in
+                maintainInitialPinAfterRichContentHydration(proxy: proxy)
+            }
+            .onChange(of: viewModel.sharedPosts.count) { _, _ in
+                maintainInitialPinAfterRichContentHydration(proxy: proxy)
+            }
+            .onChange(of: viewModel.sharedReels.count) { _, _ in
+                maintainInitialPinAfterRichContentHydration(proxy: proxy)
+            }
+            .onChange(of: viewModel.sharedAchievements.count) { _, _ in
+                maintainInitialPinAfterRichContentHydration(proxy: proxy)
+            }
+            .onChange(of: viewModel.selectedChannelID) { _, _ in
+                resetInitialScrollSessionState()
+            }
+            .onChange(of: viewModel.pendingScrollMessageID) { _, messageID in
+                guard viewModel.isInitialScrollConfirmed, let messageID else { return }
+                DispatchQueue.main.async {
+                    proxy.scrollTo(messageID.rawValue, anchor: .center)
+                    viewModel.clearPendingScroll()
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if viewModel.scrollCoordinator.showsNewMessagesIndicator {
+                    newMessagesIndicator(proxy: proxy)
+                }
             }
             .accessibilityIdentifier("tradeRooms.conversation.messageList")
+            .onAppear {
+                if viewModel.showsEmpty, viewModel.phase == .loaded {
+                    viewModel.confirmInitialScrollPositionForEmptyThread()
+                } else if !viewModel.messages.isEmpty, viewModel.phase == .loaded {
+                    startInitialScrollPositioning(proxy: proxy, reason: "messageList-onAppear")
+                }
+            }
+            .onDisappear {
+                resetInitialScrollSessionState()
+            }
         }
     }
 
-    private func restoreScroll(proxy: ScrollViewProxy) {
-        if let anchor = viewModel.pendingScrollMessageID {
-            DispatchQueue.main.async {
-                proxy.scrollTo(anchor.rawValue, anchor: .bottom)
-                viewModel.clearPendingScroll()
+    private var initialScrollReleaseGesture: some Gesture {
+        DragGesture(minimumDistance: 8)
+            .onChanged { value in
+                guard viewModel.isInitialScrollPinningBottom else { return }
+                guard value.translation.height > 0 else { return }
+                releaseInitialBottomPinToUser(reason: "user-drag-up")
             }
-        } else {
-            scrollToLatest(proxy: proxy, animated: false)
-        }
     }
 
-    private func scrollToLatest(proxy: ScrollViewProxy, animated: Bool) {
-        let action = {
-            if let newest = viewModel.newestMessageID?.rawValue {
-                proxy.scrollTo(newest, anchor: .bottom)
-            } else {
-                proxy.scrollTo(RoomConversationScrollAnchor.bottom, anchor: .bottom)
+    private func resetInitialScrollSessionState() {
+        initialScrollRetryTask?.cancel()
+        settlingStabilityTask?.cancel()
+        lastScrollContentHeight = 0
+        lastScrollSample = nil
+        userReleasedInitialPin = false
+    }
+
+    private func releaseInitialBottomPinToUser(reason: String) {
+        guard !userReleasedInitialPin else { return }
+        guard viewModel.isInitialScrollPinningBottom else { return }
+        userReleasedInitialPin = true
+        settlingStabilityTask?.cancel()
+        initialScrollRetryTask?.cancel()
+        viewModel.confirmInitialScrollPosition(userInitiatedRelease: true)
+    }
+
+    private func newMessagesIndicator(proxy: ScrollViewProxy) -> some View {
+        Button {
+            viewModel.scrollCoordinator.jumpToLatest(conversationID: viewModel.scrollScopeConversationID)
+            applyCoordinatorScrollCommand(proxy: proxy)
+        } label: {
+            HStack(spacing: ExperienceSpacing.xs) {
+                Image(systemName: "chevron.down")
+                Text("New messages")
             }
-        }
-        if animated {
-            ExperienceMotion.withAnimation(
-                MotionCurve.easeOut.animation(duration: .fast),
-                reduceMotion: reduceMotion,
-                action
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(colors.primaryText)
+            .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.vertical, ExperienceSpacing.xs)
+            .background(
+                colors.navigationBackground.opacity(0.96),
+                in: Capsule(style: .continuous)
             )
-        } else {
-            action()
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(colors.border, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .padding(.bottom, ExperienceSpacing.sm)
+    }
+
+    private func maintainInitialPinAfterRichContentHydration(proxy: ScrollViewProxy) {
+        guard viewModel.initialScrollPhase == .settling else { return }
+        guard let sample = lastScrollSample else { return }
+        maintainInitialBottomPin(sample: sample, proxy: proxy, reason: "shared-content-hydrated")
+        scheduleSettlingStabilityCheck(proxy: proxy)
+    }
+
+    private func startInitialScrollPositioning(proxy: ScrollViewProxy, reason: String) {
+        guard !viewModel.isInitialScrollConfirmed else { return }
+        guard !viewModel.messages.isEmpty else { return }
+
+        if viewModel.initialScrollPhase == .pending {
+            viewModel.beginInitialScrollPositioning()
+            scheduleInitialScrollRetries(proxy: proxy)
+        }
+
+        scrollToLatest(proxy: proxy, animated: false, reason: reason)
+    }
+
+    private func handleInitialScrollGeometry(
+        _ sample: ConversationThreadScrollSupport.LayoutSample,
+        proxy: ScrollViewProxy
+    ) {
+        let contentSizeDelta = sample.contentHeight - lastScrollContentHeight
+        lastScrollContentHeight = sample.contentHeight
+
+        switch viewModel.initialScrollPhase {
+        case .pending:
+            break
+        case .positioning:
+            guard sample.isNearBottom else { return }
+            viewModel.beginInitialScrollSettling()
+            scrollToLatest(proxy: proxy, animated: false, reason: "enter-settling")
+            scheduleSettlingStabilityCheck(proxy: proxy)
+        case .settling:
+            if userReleasedInitialPin { return }
+            if contentSizeDelta <= 1,
+               sample.distanceFromBottom > ConversationThreadScrollSupport.userScrollReleaseThreshold
+            {
+                releaseInitialBottomPinToUser(reason: "scroll-offset-away-from-bottom")
+                return
+            }
+            maintainInitialBottomPin(sample: sample, proxy: proxy, reason: "layout-geometry-change")
+            scheduleSettlingStabilityCheck(proxy: proxy)
+        case .confirmed:
+            break
         }
     }
 
-    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
-        scrollToLatest(proxy: proxy, animated: animated)
+    private func maintainInitialBottomPin(
+        sample: ConversationThreadScrollSupport.LayoutSample,
+        proxy: ScrollViewProxy,
+        reason: String
+    ) {
+        guard viewModel.initialScrollPhase == .settling else { return }
+        guard !userReleasedInitialPin else { return }
+        if sample.contentHeight > 0,
+           (!sample.isNearBottom || sample.distanceFromBottom > ConversationThreadScrollSupport.bottomProximityThreshold / 2)
+        {
+            scrollToLatest(proxy: proxy, animated: false, reason: reason)
+        }
+    }
+
+    private func scheduleSettlingStabilityCheck(proxy: ScrollViewProxy) {
+        guard viewModel.initialScrollPhase == .settling else { return }
+        guard !userReleasedInitialPin else { return }
+
+        settlingStabilityTask?.cancel()
+        let baselineHeight = lastScrollContentHeight
+        settlingStabilityTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: ConversationThreadScrollSupport.settlingStabilityDelayNs)
+            guard !Task.isCancelled else { return }
+            guard viewModel.initialScrollPhase == .settling else { return }
+            guard !userReleasedInitialPin else { return }
+            guard lastScrollContentHeight == baselineHeight else { return }
+            guard lastScrollSample?.isNearBottom == true else { return }
+
+            scrollToLatest(proxy: proxy, animated: false, reason: "settling-stable")
+            viewModel.confirmInitialScrollPosition()
+        }
+    }
+
+    private func scheduleInitialScrollRetries(proxy: ScrollViewProxy) {
+        initialScrollRetryTask?.cancel()
+        initialScrollRetryTask = Task { @MainActor in
+            for attempt in 1...ConversationThreadScrollSupport.initialScrollRetryCount {
+                guard !Task.isCancelled else { return }
+                guard viewModel.isInitialScrollPinningBottom else { return }
+                scrollToLatest(proxy: proxy, animated: false, reason: "retry-\(attempt)")
+                try? await Task.sleep(nanoseconds: ConversationThreadScrollSupport.initialScrollRetryIntervalNs)
+            }
+            guard !Task.isCancelled else { return }
+            guard viewModel.isInitialScrollPinningBottom else { return }
+            viewModel.confirmInitialScrollPosition()
+        }
+    }
+
+    private func scrollToLatest(proxy: ScrollViewProxy, animated: Bool, reason: String) {
+        #if DEBUG
+        ConversationThreadScrollActions.scrollToLatest(
+            proxy: proxy,
+            newestMessageID: viewModel.newestMessageID,
+            timelineContainsTarget: threadTimelineContainsScrollTarget,
+            animated: animated,
+            reduceMotion: reduceMotion,
+            reason: reason,
+            conversationID: viewModel.scrollScopeConversationID,
+            debugContext: ConversationScrollDiagnostics.ScrollAttemptContext(
+                firstMessageID: viewModel.messages.first?.id,
+                lastMessageID: viewModel.messages.last?.id,
+                initialScrollPhase: String(describing: viewModel.initialScrollPhase),
+                phase: String(describing: viewModel.phase),
+                messageCount: viewModel.messages.count,
+                hasMoreOlder: viewModel.hasMoreOlder
+            )
+        )
+        #else
+        ConversationThreadScrollActions.scrollToLatest(
+            proxy: proxy,
+            newestMessageID: viewModel.newestMessageID,
+            timelineContainsTarget: threadTimelineContainsScrollTarget,
+            animated: animated,
+            reduceMotion: reduceMotion,
+            reason: reason,
+            conversationID: viewModel.scrollScopeConversationID
+        )
+        #endif
+    }
+
+    private func threadTimelineContainsScrollTarget(_ target: String) -> Bool {
+        viewModel.timeline.contains { item in
+            if case .message(let bubble) = item {
+                return bubble.id.rawValue == target
+            }
+            return target == ConversationScrollAnchorID.bottom
+        }
+    }
+
+    private func applyCoordinatorScrollCommand(proxy: ScrollViewProxy) {
+        ConversationThreadScrollActions.applyCoordinatorScrollCommand(
+            proxy: proxy,
+            coordinator: viewModel.scrollCoordinator,
+            appliedGeneration: &appliedScrollCommandGeneration,
+            reduceMotion: reduceMotion,
+            isInitialScrollConfirmed: viewModel.isInitialScrollConfirmed
+        )
     }
 
     private func incomingRoomMessageReportAction(for bubble: ConversationBubbleItem) -> (() -> Void)? {
@@ -552,8 +783,4 @@ struct RoomConversationView: View {
             )
         }
     }
-}
-
-private enum RoomConversationScrollAnchor {
-    static let bottom = "trade-room-scroll-bottom"
 }

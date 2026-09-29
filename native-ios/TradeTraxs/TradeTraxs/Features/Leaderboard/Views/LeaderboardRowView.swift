@@ -55,9 +55,7 @@ struct LeaderboardRowView: View {
                     .fontWeight(.semibold)
                     .lineLimit(1)
                 if row.isVerified {
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(colors.accent)
+                    TradeTraxsVerifiedBadge(size: .inline)
                 }
             }
             if LeaderboardRowView.showsUsername(profile.username) {

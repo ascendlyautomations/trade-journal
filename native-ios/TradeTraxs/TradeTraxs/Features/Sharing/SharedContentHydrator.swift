@@ -8,7 +8,7 @@ enum SharedContentHydrator {
     private enum ParallelFetchResult: Sendable {
         case post(PostID, Post)
         case reel(ReelID, Reel, embeddedTrade: Trade?)
-        case achievement(AchievementID, Achievement)
+        case achievement(postReference: PostID, achievement: Achievement)
         case unavailable(String)
     }
     struct Context {
@@ -18,7 +18,7 @@ enum SharedContentHydrator {
         let tradesRepo: (any TradeRepository)?
         let feedRepo: (any FeedRepository)?
         let achievementsRepo: (any AchievementRepository)?
-        let profilesRepo: any ProfileRepository
+        let profilesRepo: (any ProfileRepository)?
     }
 
     struct Snapshot {
@@ -27,6 +27,78 @@ enum SharedContentHydrator {
         var sharedReels: [ReelID: Reel]
         var sharedAchievements: [AchievementID: Achievement]
         var unavailableSharedContentKeys: Set<String>
+    }
+
+    /// Cache-only hydration for outbound internal share — no network.
+    static func shareOutboundSnapshot(
+        message: Message,
+        detailCache: DetailPresentationCache,
+        feedSessionStore: FeedSessionStore,
+        viewerID: ProfileID,
+        surface: SharedContentHydrationProbe.Surface
+    ) -> Snapshot? {
+        guard message.sharedContent != nil else { return nil }
+        return cacheFirstSnapshot(
+            messages: [message],
+            context: Context(
+                detailCache: detailCache,
+                feedSessionStore: feedSessionStore,
+                viewerID: viewerID,
+                tradesRepo: nil,
+                feedRepo: nil,
+                achievementsRepo: nil,
+                profilesRepo: nil
+            ),
+            surface: surface
+        )
+    }
+
+    static func cacheFirstSnapshot(
+        messages: [Message],
+        context: Context,
+        surface: SharedContentHydrationProbe.Surface
+    ) -> Snapshot {
+        var sharedTrades: [TradeID: Trade] = [:]
+        var sharedPosts: [PostID: Post] = [:]
+        var sharedReels: [ReelID: Reel] = [:]
+        var sharedAchievements: [AchievementID: Achievement] = [:]
+        var unavailableSharedContentKeys: Set<String> = []
+        let probe = SharedContentHydrationProbe.Session(surface: surface)
+        primeFromCaches(
+            messages: messages,
+            sharedTrades: &sharedTrades,
+            sharedPosts: &sharedPosts,
+            sharedReels: &sharedReels,
+            sharedAchievements: &sharedAchievements,
+            unavailableSharedContentKeys: &unavailableSharedContentKeys,
+            context: context,
+            probe: probe
+        )
+        return Snapshot(
+            sharedTrades: sharedTrades,
+            sharedPosts: sharedPosts,
+            sharedReels: sharedReels,
+            sharedAchievements: sharedAchievements,
+            unavailableSharedContentKeys: unavailableSharedContentKeys
+        )
+    }
+
+    static func mergeSnapshot(_ incoming: Snapshot, into existing: Snapshot) -> Snapshot {
+        var merged = existing
+        for (id, trade) in incoming.sharedTrades where merged.sharedTrades[id] == nil {
+            merged.sharedTrades[id] = trade
+        }
+        for (id, post) in incoming.sharedPosts where merged.sharedPosts[id] == nil {
+            merged.sharedPosts[id] = post
+        }
+        for (id, reel) in incoming.sharedReels where merged.sharedReels[id] == nil {
+            merged.sharedReels[id] = reel
+        }
+        for (id, achievement) in incoming.sharedAchievements where merged.sharedAchievements[id] == nil {
+            merged.sharedAchievements[id] = achievement
+        }
+        merged.unavailableSharedContentKeys.formUnion(incoming.unavailableSharedContentKeys)
+        return merged
     }
 
     /// Synchronous cache priming — no network. Seeds ``DetailPresentationCache`` from feed rows.
@@ -46,7 +118,8 @@ enum SharedContentHydrator {
             sharedPosts: sharedPosts,
             sharedReels: sharedReels,
             sharedAchievements: sharedAchievements,
-            unavailableSharedContentKeys: unavailableSharedContentKeys
+            unavailableSharedContentKeys: unavailableSharedContentKeys,
+            detailCache: context.detailCache
         )
 
         var memoryHits = 0
@@ -121,7 +194,8 @@ enum SharedContentHydrator {
             sharedPosts: sharedPosts,
             sharedReels: sharedReels,
             sharedAchievements: sharedAchievements,
-            unavailableSharedContentKeys: unavailableSharedContentKeys
+            unavailableSharedContentKeys: unavailableSharedContentKeys,
+            detailCache: context.detailCache
         ) {
             probe.markFirstRenderableIfNeeded()
         }
@@ -146,13 +220,14 @@ enum SharedContentHydrator {
             sharedPosts: sharedPosts,
             sharedReels: sharedReels,
             sharedAchievements: sharedAchievements,
-            unavailableSharedContentKeys: unavailableSharedContentKeys
+            unavailableSharedContentKeys: unavailableSharedContentKeys,
+            detailCache: context.detailCache
         )
 
         var pendingFeedPosts = Set<PostID>()
         var pendingProfilePosts = Set<PostID>()
         var pendingReels = Set<ReelID>()
-        var pendingAchievements = Set<AchievementID>()
+        var pendingAchievementPosts = Set<PostID>()
 
         for reference in references {
             switch reference {
@@ -163,7 +238,7 @@ enum SharedContentHydrator {
             case .reel(let id):
                 pendingReels.insert(id)
             case .achievementPost(let id):
-                pendingAchievements.insert(AchievementID(id.rawValue))
+                pendingAchievementPosts.insert(id)
             case .trade:
                 break
             }
@@ -179,7 +254,7 @@ enum SharedContentHydrator {
             trades: pendingTradeIDs.count,
             reels: pendingReels.count,
             posts: pendingFeedPosts.count + pendingProfilePosts.count,
-            achievements: pendingAchievements.count
+            achievements: pendingAchievementPosts.count
         )
 
         let batchStarted = CFAbsoluteTimeGetCurrent()
@@ -200,9 +275,14 @@ enum SharedContentHydrator {
                     await loadReel(id: id, context: context, probe: probe)
                 }
             }
-            for id in pendingAchievements where sharedAchievements[id] == nil {
+            for postReference in pendingAchievementPosts
+            where !SharedContentEntityPresentation.isAchievementResolved(
+                forPostReference: postReference,
+                detailCache: context.detailCache,
+                sharedAchievements: sharedAchievements
+            ) {
                 group.addTask {
-                    await loadAchievement(id: id, context: context, probe: probe)
+                    await loadAchievement(postReference: postReference, context: context, probe: probe)
                 }
             }
 
@@ -219,9 +299,13 @@ enum SharedContentHydrator {
                         context.detailCache.seed(embeddedTrade)
                         sharedTrades[embeddedTrade.id] = embeddedTrade
                     }
-                case .achievement(let id, let achievement):
-                    sharedAchievements[id] = achievement
-                    context.detailCache.seed(achievement)
+                case .achievement(let postReference, let achievement):
+                    SharedContentEntityPresentation.storeAchievement(
+                        achievement,
+                        messagePostReference: postReference,
+                        detailCache: context.detailCache,
+                        sharedAchievements: &sharedAchievements
+                    )
                 case .unavailable(let key):
                     unavailableSharedContentKeys.insert(key)
                     probe.logResolution(
@@ -241,7 +325,8 @@ enum SharedContentHydrator {
             sharedPosts: sharedPosts,
             sharedReels: sharedReels,
             sharedAchievements: sharedAchievements,
-            unavailableSharedContentKeys: unavailableSharedContentKeys
+            unavailableSharedContentKeys: unavailableSharedContentKeys,
+            detailCache: context.detailCache
         ) {
             probe.markFirstRenderableIfNeeded()
         }
@@ -286,7 +371,8 @@ enum SharedContentHydrator {
         sharedPosts: [PostID: Post],
         sharedReels: [ReelID: Reel],
         sharedAchievements: [AchievementID: Achievement],
-        unavailableSharedContentKeys: Set<String>
+        unavailableSharedContentKeys: Set<String>,
+        detailCache: DetailPresentationCache
     ) -> [SharedContentReference] {
         messages.compactMap(\.sharedContent).filter { reference in
             guard !unavailableSharedContentKeys.contains(reference.stableKey) else { return false }
@@ -296,7 +382,11 @@ enum SharedContentHydrator {
             case .reel(let id):
                 return sharedReels[id] == nil
             case .achievementPost(let id):
-                return sharedAchievements[AchievementID(id.rawValue)] == nil
+                return !SharedContentEntityPresentation.isAchievementResolved(
+                    forPostReference: id,
+                    detailCache: detailCache,
+                    sharedAchievements: sharedAchievements
+                )
             case .trade(let id):
                 return sharedTrades[id] == nil
             }
@@ -337,7 +427,8 @@ enum SharedContentHydrator {
         sharedPosts: [PostID: Post],
         sharedReels: [ReelID: Reel],
         sharedAchievements: [AchievementID: Achievement],
-        unavailableSharedContentKeys: Set<String>
+        unavailableSharedContentKeys: Set<String>,
+        detailCache: DetailPresentationCache
     ) -> Bool {
         for message in messages {
             if let tradeID = message.attachments.first?.tradeID, sharedTrades[tradeID] != nil {
@@ -351,7 +442,13 @@ enum SharedContentHydrator {
             case .reel(let id):
                 if sharedReels[id] != nil { return true }
             case .achievementPost(let id):
-                if sharedAchievements[AchievementID(id.rawValue)] != nil { return true }
+                if SharedContentEntityPresentation.isAchievementResolved(
+                    forPostReference: id,
+                    detailCache: detailCache,
+                    sharedAchievements: sharedAchievements
+                ) {
+                    return true
+                }
             case .trade(let id):
                 if sharedTrades[id] != nil { return true }
             }
@@ -409,17 +506,46 @@ enum SharedContentHydrator {
                 sharedTrades[tradeID] = TradeSummaryMapper.previewTrade(from: summary)
             }
             return true
-        case .achievementPost(let id):
-            let achievementID = AchievementID(id.rawValue)
-            guard let achievement = SocialEntityPersistedCacheCoordinator.loadAchievement(
-                id: achievementID,
+        case .achievementPost(let postReference):
+            if let achievement = detailCache.achievement(forMessageReference: postReference) {
+                SharedContentEntityPresentation.storeAchievement(
+                    achievement,
+                    messagePostReference: postReference,
+                    detailCache: detailCache,
+                    sharedAchievements: &sharedAchievements
+                )
+                return true
+            }
+            let lookupID = SharedContentEntityPresentation.achievementLookupKey(forPostReference: postReference)
+            if let achievement = SocialEntityPersistedCacheCoordinator.loadAchievement(
+                id: lookupID,
                 viewerID: viewerID,
-                purpose: "sharedContentHydrator"
-            )
-            else { return false }
-            detailCache.seed(achievement)
-            sharedAchievements[achievementID] = achievement
-            return true
+                purpose: "sharedContentHydrator.postAlias"
+            ) {
+                SharedContentEntityPresentation.storeAchievement(
+                    achievement,
+                    messagePostReference: postReference,
+                    detailCache: detailCache,
+                    sharedAchievements: &sharedAchievements
+                )
+                return true
+            }
+            if let canonical = detailCache.achievementID(forMessageReference: postReference),
+               let achievement = SocialEntityPersistedCacheCoordinator.loadAchievement(
+                   id: canonical,
+                   viewerID: viewerID,
+                   purpose: "sharedContentHydrator.canonical"
+               )
+            {
+                SharedContentEntityPresentation.storeAchievement(
+                    achievement,
+                    messagePostReference: postReference,
+                    detailCache: detailCache,
+                    sharedAchievements: &sharedAchievements
+                )
+                return true
+            }
+            return false
         case .trade(let id):
             guard let summary = SocialEntityPersistedCacheCoordinator.loadTradeSummary(
                 id: id,
@@ -461,10 +587,16 @@ enum SharedContentHydrator {
                 sharedTrades[tradeID] = preview
             }
             return true
-        case .achievementPost(let id):
-            let achievementID = AchievementID(id.rawValue)
-            guard let achievement = detailCache.achievement(id: achievementID) else { return false }
-            sharedAchievements[achievementID] = achievement
+        case .achievementPost(let postReference):
+            guard let achievement = detailCache.achievement(forMessageReference: postReference)
+                ?? detailCache.achievement(id: SharedContentEntityPresentation.achievementLookupKey(forPostReference: postReference))
+            else { return false }
+            SharedContentEntityPresentation.storeAchievement(
+                achievement,
+                messagePostReference: postReference,
+                detailCache: detailCache,
+                sharedAchievements: &sharedAchievements
+            )
             return true
         case .trade(let id):
             guard let preview = detailCache.previewTrade(id: id)
@@ -502,8 +634,13 @@ enum SharedContentHydrator {
             }
         }
         if let achievement = seed.achievement {
-            detailCache.seed(achievement)
-            sharedAchievements[achievement.id] = achievement
+            let postReference = SharedContentEntityPresentation.messagePostReference(from: reference)
+            SharedContentEntityPresentation.storeAchievement(
+                achievement,
+                messagePostReference: postReference,
+                detailCache: detailCache,
+                sharedAchievements: &sharedAchievements
+            )
         }
 
         switch reference {
@@ -589,6 +726,16 @@ enum SharedContentHydrator {
         probe: SharedContentHydrationProbe.Session
     ) async -> ParallelFetchResult? {
         let stableKey = SharedContentReference.profilePost(id).stableKey
+        guard let profilesRepo = context.profilesRepo else {
+            probe.logResolution(
+                type: "post",
+                contentID: id.rawValue,
+                source: "network",
+                result: "failed",
+                reason: "missingRepository"
+            )
+            return .unavailable(stableKey)
+        }
         let started = CFAbsoluteTimeGetCurrent()
         probe.logMetadataRequestStarted(type: "profilePost", count: 1)
         let flightKey = "sharedContent:profilePost:\(id.rawValue)"
@@ -596,7 +743,7 @@ enum SharedContentHydrator {
             key: flightKey,
             resource: "sharedContent.profilePost"
         ) {
-            try await context.profilesRepo.wallPost(id: id)
+            try await profilesRepo.wallPost(id: id)
         }
         guard let coalesced else {
             probe.logResolution(
@@ -665,27 +812,28 @@ enum SharedContentHydrator {
     }
 
     private static func loadAchievement(
-        id: AchievementID,
+        postReference: PostID,
         context: Context,
         probe: SharedContentHydrationProbe.Session
     ) async -> ParallelFetchResult? {
-        let stableKey = SharedContentReference.achievementPost(PostID(id.rawValue)).stableKey
+        let stableKey = SharedContentReference.achievementPost(postReference).stableKey
         guard let achievementsRepo = context.achievementsRepo else {
             return .unavailable(stableKey)
         }
+        let lookupID = SharedContentEntityPresentation.achievementLookupKey(forPostReference: postReference)
         let started = CFAbsoluteTimeGetCurrent()
         probe.logMetadataRequestStarted(type: "achievement", count: 1)
-        let flightKey = "sharedContent:achievement:\(id.rawValue)"
+        let flightKey = "sharedContent:achievement:\(postReference.rawValue)"
         let coalesced = try? await RepositoryRequestFlight.shared.coalesceWithMetadata(
             key: flightKey,
             resource: "sharedContent.achievement"
         ) {
-            try await achievementsRepo.achievement(id: id)
+            try await achievementsRepo.achievement(id: lookupID)
         }
         guard let coalesced else {
             probe.logResolution(
                 type: "achievement",
-                contentID: id.rawValue,
+                contentID: postReference.rawValue,
                 source: "network",
                 result: "failed",
                 durationMs: Int((CFAbsoluteTimeGetCurrent() - started) * 1000),
@@ -697,13 +845,13 @@ enum SharedContentHydrator {
         probe.logMetadataReturned(type: "achievement", dtMs: dtMs)
         probe.logResolution(
             type: "achievement",
-            contentID: id.rawValue,
+            contentID: postReference.rawValue,
             source: "network",
             result: "resolved",
             durationMs: dtMs,
             deduped: coalesced.deduped
         )
-        return .achievement(id, coalesced.value)
+        return .achievement(postReference: postReference, achievement: coalesced.value)
     }
 
     private static func fetchTrades(
@@ -743,11 +891,11 @@ enum SharedContentHydrator {
         authorIDs.append(contentsOf: sharedReels.values.map(\.authorProfileID))
         authorIDs.append(contentsOf: sharedAchievements.values.map(\.ownerProfileID))
         let missing = Array(Set(authorIDs)).filter { context.detailCache.profile(id: $0) == nil }
-        guard !missing.isEmpty else { return }
+        guard !missing.isEmpty, let profilesRepo = context.profilesRepo else { return }
         _ = try? await SessionProfileStore.shared.profiles(
             ids: missing,
             detailCache: context.detailCache,
-            repository: context.profilesRepo
+            repository: profilesRepo
         )
     }
 

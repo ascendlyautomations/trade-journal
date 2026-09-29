@@ -1,7 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { loadActiveAppleSubscriptionForUser } from "./appleSubscription.ts"
+import { entitlementEnforcementEnabled } from "./server/monetizationConfig.ts"
 import { mirrorAccountSettingsHasUsedCsvImport } from "./profileSplitMirrorWrites.ts"
-import { isTraxProActive, type TraxProEntitlementProfile } from "./traxProEntitlement.ts"
+import {
+  isTraxProActive,
+  loadTraxProEntitlementSnapshot,
+  type TraxProEntitlementProfile,
+} from "./traxProEntitlement.ts"
 
 export const FREE_PLAN_CSV_IMPORT_COOLDOWN_DAYS = 7
 const MS_PER_DAY = 24 * 60 * 60 * 1000
@@ -54,6 +59,9 @@ export async function fetchCsvImportGateStatus(
   supabase: SupabaseClient,
   userId: string
 ): Promise<CsvImportGateStatus> {
+  const enforced = await entitlementEnforcementEnabled(supabase)
+  if (!enforced) return { allowed: true }
+
   const { data: profile, error } = await supabase
     .from("profiles")
     .select(
@@ -67,13 +75,16 @@ export async function fetchCsvImportGateStatus(
     return { allowed: true }
   }
 
+  const loaded = await loadTraxProEntitlementSnapshot(supabase, userId)
+  if (loaded.ok) {
+    return evaluateCsvImportGate(profile, loaded.snapshot.traxProActive)
+  }
+
   const appleSubscription = await loadActiveAppleSubscriptionForUser(
     supabase,
     userId
   )
-  const traxProActive = isTraxProActive(profile, appleSubscription)
-
-  return evaluateCsvImportGate(profile, traxProActive)
+  return evaluateCsvImportGate(profile, isTraxProActive(profile, appleSubscription))
 }
 
 /** Free users may run one successful CSV import every 7 days until they upgrade to Pro. */

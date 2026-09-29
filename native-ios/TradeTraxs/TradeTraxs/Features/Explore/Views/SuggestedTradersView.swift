@@ -172,8 +172,7 @@ struct SuggestedTradersView: View {
                 .accessibilityIdentifier("suggestedTraders.loadMoreError")
             }
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
+        .experienceInsetGroupedListStyle(pageBackground: false)
         .accessibilityIdentifier("suggestedTraders.list")
     }
 }

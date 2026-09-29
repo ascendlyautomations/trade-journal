@@ -192,6 +192,9 @@ nonisolated enum ConversationMessageMerge {
         if let body = message.body?.trimmingCharacters(in: .whitespacesAndNewlines), !body.isEmpty {
             return body
         }
+        if let reference = message.sharedContent {
+            return "shared:\(reference.stableKey)"
+        }
         if let tradeID = message.attachments.first?.tradeID {
             return "trade:\(tradeID.rawValue)"
         }

@@ -62,7 +62,7 @@ struct CSVImportTradeReviewView: View {
                 }
             }
         }
-        .experienceDashboardGroupedRows()
+        .experienceTradeTraxsFormStyle(pageBackground: false)
         .experienceNavigationTitle("Review Trade")
         .scrollDismissesKeyboard(.interactively)
         .experienceSignedDecimalKeyboardSignToggle(isActive: isPnlFocused) {

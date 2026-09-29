@@ -27,7 +27,22 @@ final class SharedContentShareViewModel {
 
     var selectedConversationIDs: Set<ConversationID> = []
     var selectedRoomIDs: Set<RoomID> = []
+    /// Resolved destination channel per selected Trade Room (required before send).
+    private(set) var selectedRoomChannelIDs: [RoomID: RoomChannelID] = [:]
+    private(set) var selectedRoomChannels: [RoomID: RoomChannel] = [:]
+    var pendingRoomChannelPicker: RoomChannelPickerRequest?
     var accompanyingMessage = ""
+
+    struct RoomChannelPickerRequest: Identifiable, Equatable {
+        var id: RoomID { room.id }
+        let room: TradeRoom
+        var channels: [RoomChannel]
+        var isLoadingChannels: Bool = false
+    }
+
+    private var cachedViewerProfileID: ProfileID?
+    private var roomChannelsCache: [RoomID: [RoomChannel]] = [:]
+    private var roomChannelFetchTasks: [RoomID: Task<Void, Never>] = [:]
 
     private let messagesRepo: any MessageRepository
     private let roomsRepo: any RoomRepository
@@ -55,6 +70,19 @@ final class SharedContentShareViewModel {
         !selectedConversationIDs.isEmpty || !selectedRoomIDs.isEmpty
     }
 
+    /// Send stays disabled until every selected Trade Room has a postable sub-room.
+    var canSend: Bool {
+        guard hasSelection else { return false }
+        for roomID in selectedRoomIDs {
+            guard selectedRoomChannelIDs[roomID] != nil else { return false }
+        }
+        return true
+    }
+
+    func selectedChannelDisplayTitle(for roomID: RoomID) -> String? {
+        selectedRoomChannels[roomID]?.displayTitle
+    }
+
     var selectedDestinationCount: Int {
         selectedConversationIDs.count + selectedRoomIDs.count
     }
@@ -71,6 +99,11 @@ final class SharedContentShareViewModel {
         selectedRoomIDs.contains(id)
     }
 
+    /// Room row highlight while the sub-room sheet is open (before channel is confirmed).
+    func isRoomSelectionPending(_ id: RoomID) -> Bool {
+        pendingRoomChannelPicker?.room.id == id
+    }
+
     func toggleConversationSelection(_ conversation: Conversation) {
         guard phase != .sending else { return }
         ExperienceHaptics.play(.selection)
@@ -83,12 +116,157 @@ final class SharedContentShareViewModel {
 
     func toggleRoomSelection(_ room: TradeRoom) {
         guard phase != .sending else { return }
-        ExperienceHaptics.play(.selection)
         if selectedRoomIDs.contains(room.id) {
+            ExperienceHaptics.play(.selection)
+            if pendingRoomChannelPicker?.room.id == room.id {
+                pendingRoomChannelPicker = nil
+            }
             selectedRoomIDs.remove(room.id)
-        } else {
-            selectedRoomIDs.insert(room.id)
+            selectedRoomChannelIDs.removeValue(forKey: room.id)
+            selectedRoomChannels.removeValue(forKey: room.id)
+            return
         }
+
+        ExperienceHaptics.play(.selection)
+
+        guard let profileID = resolvedViewerProfileID() else {
+            Task { await resolveViewerAndSelectRoom(room) }
+            return
+        }
+
+        if let postable = postableChannels(for: room, viewerID: profileID) {
+            finishRoomSelection(room: room, postable: postable)
+            return
+        }
+
+        pendingRoomChannelPicker = RoomChannelPickerRequest(
+            room: room,
+            channels: [],
+            isLoadingChannels: true
+        )
+        startRoomChannelFetch(room: room, viewerID: profileID)
+    }
+
+    func confirmRoomChannelSelection(room: TradeRoom, channel: RoomChannel) {
+        ExperienceHaptics.play(.selection)
+        applyRoomChannelSelection(room: room, channel: channel)
+        pendingRoomChannelPicker = nil
+    }
+
+    func cancelRoomChannelPicker() {
+        pendingRoomChannelPicker = nil
+    }
+
+    private func resolvedViewerProfileID() -> ProfileID? {
+        cachedViewerProfileID ?? inboxStore.persistedViewerID
+    }
+
+    private func postableChannels(for room: TradeRoom, viewerID: ProfileID) -> [RoomChannel]? {
+        let raw: [RoomChannel]
+        if let cached = roomChannelsCache[room.id] {
+            raw = cached
+        } else if let snapshot = SocialPersistedCacheCoordinator.restoreRoomSnapshot(
+            viewerID: viewerID,
+            roomID: room.id
+        ) {
+            roomChannelsCache[room.id] = snapshot.channels
+            raw = snapshot.channels
+        } else {
+            return nil
+        }
+        let postable = SharedContentShareRoomChannelSupport.postableChannels(
+            from: raw,
+            room: room,
+            viewerID: viewerID
+        )
+        return postable.isEmpty ? nil : postable
+    }
+
+    private func warmRoomChannelsCache(viewerID: ProfileID) {
+        for room in rooms {
+            _ = postableChannels(for: room, viewerID: viewerID)
+        }
+        Task { await prefetchRoomChannels(viewerID: viewerID) }
+    }
+
+    private func prefetchRoomChannels(viewerID: ProfileID) async {
+        for room in rooms where roomChannelsCache[room.id] == nil {
+            await fetchRoomChannels(room: room, viewerID: viewerID, applyToPendingPicker: false)
+        }
+    }
+
+    private func startRoomChannelFetch(room: TradeRoom, viewerID: ProfileID) {
+        roomChannelFetchTasks[room.id]?.cancel()
+        roomChannelFetchTasks[room.id] = Task { [weak self] in
+            guard let self else { return }
+            await fetchRoomChannels(room: room, viewerID: viewerID, applyToPendingPicker: true)
+            roomChannelFetchTasks.removeValue(forKey: room.id)
+        }
+    }
+
+    private func fetchRoomChannels(
+        room: TradeRoom,
+        viewerID: ProfileID,
+        applyToPendingPicker: Bool
+    ) async {
+        do {
+            let channels = try await roomsRepo.channels(roomID: room.id)
+            roomChannelsCache[room.id] = channels
+            let postable = SharedContentShareRoomChannelSupport.postableChannels(
+                from: channels,
+                room: room,
+                viewerID: viewerID
+            )
+            guard applyToPendingPicker else { return }
+            guard pendingRoomChannelPicker?.room.id == room.id else { return }
+            guard !postable.isEmpty else {
+                pendingRoomChannelPicker = nil
+                sendErrorMessage = "You can't post in any sub-room in \(room.name)."
+                ExperienceHaptics.play(.warning)
+                return
+            }
+            if postable.count == 1, let channel = postable.first {
+                confirmRoomChannelSelection(room: room, channel: channel)
+            } else {
+                pendingRoomChannelPicker = RoomChannelPickerRequest(
+                    room: room,
+                    channels: postable,
+                    isLoadingChannels: false
+                )
+            }
+        } catch {
+            guard applyToPendingPicker, pendingRoomChannelPicker?.room.id == room.id else { return }
+            pendingRoomChannelPicker = nil
+            sendErrorMessage = ProfileSectionSupport.message(for: error)
+            ExperienceHaptics.play(.error)
+        }
+    }
+
+    private func finishRoomSelection(room: TradeRoom, postable: [RoomChannel]) {
+        if postable.count == 1, let channel = postable.first {
+            applyRoomChannelSelection(room: room, channel: channel)
+        } else {
+            pendingRoomChannelPicker = RoomChannelPickerRequest(
+                room: room,
+                channels: postable,
+                isLoadingChannels: false
+            )
+        }
+    }
+
+    private func resolveViewerAndSelectRoom(_ room: TradeRoom) async {
+        guard let viewerID = await session.currentUserID else {
+            sendErrorMessage = "Sign in to share this content."
+            return
+        }
+        cachedViewerProfileID = ProfileID(viewerID.rawValue)
+        toggleRoomSelection(room)
+    }
+
+    private func applyRoomChannelSelection(room: TradeRoom, channel: RoomChannel) {
+        selectedRoomIDs.insert(room.id)
+        selectedRoomChannelIDs[room.id] = channel.id
+        selectedRoomChannels[room.id] = channel
     }
 
     var externalShareText: String { target.externalShareText }
@@ -102,11 +280,16 @@ final class SharedContentShareViewModel {
 
         if inboxStore.hasLoaded, scope == .messages, !inboxStore.visibleConversations.isEmpty {
             conversations = inboxStore.visibleConversations
+            cachedViewerProfileID = inboxStore.persistedViewerID
             phase = .loaded
             return
         }
         if inboxStore.hasLoadedRooms, scope == .rooms, !inboxStore.rooms.isEmpty {
             rooms = inboxStore.rooms
+            cachedViewerProfileID = inboxStore.persistedViewerID
+            if let viewerID = resolvedViewerProfileID() {
+                warmRoomChannelsCache(viewerID: viewerID)
+            }
             phase = .loaded
             return
         }
@@ -115,6 +298,7 @@ final class SharedContentShareViewModel {
             phase = .failed("Sign in to share this content.")
             return
         }
+        cachedViewerProfileID = ProfileID(viewerID.rawValue)
 
         do {
             switch scope {
@@ -127,6 +311,7 @@ final class SharedContentShareViewModel {
                     page: PageRequest(limit: 80)
                 )
                 rooms = page.items
+                warmRoomChannelsCache(viewerID: ProfileID(viewerID.rawValue))
             }
             phase = .loaded
         } catch {
@@ -136,7 +321,13 @@ final class SharedContentShareViewModel {
 
     /// Sends optional accompanying text (first) then shared content to every selected destination.
     func sendToSelected() async -> Bool {
-        guard phase != .sending, hasSelection, let viewerID = await session.currentUserID else { return false }
+        guard phase != .sending, canSend, let viewerID = await session.currentUserID else {
+            if hasSelection, !canSend {
+                sendErrorMessage = "Choose a sub-room for each Trade Room before sending."
+                ExperienceHaptics.play(.warning)
+            }
+            return false
+        }
 
         phase = .sending
         sendErrorMessage = nil
@@ -169,13 +360,15 @@ final class SharedContentShareViewModel {
         for room in selectedRooms {
             if await sendBundle(to: room, accompanyingText: accompanyingText, viewerID: profileID) {
                 selectedRoomIDs.remove(room.id)
+                selectedRoomChannelIDs.removeValue(forKey: room.id)
+                selectedRoomChannels.removeValue(forKey: room.id)
                 successCount += 1
             } else {
                 failures.append(room.name)
             }
         }
 
-        if failures.isEmpty {
+        if failures.isEmpty, successCount > 0 {
             accompanyingMessage = ""
             phase = .sent
             ExperienceHaptics.play(.messageSent)
@@ -183,6 +376,11 @@ final class SharedContentShareViewModel {
         }
 
         phase = .loaded
+        if successCount == 0, failures.isEmpty {
+            sendErrorMessage = "Couldn't send. Choose a destination and try again."
+            ExperienceHaptics.play(.error)
+            return false
+        }
         if successCount > 0 {
             if failures.count == 1 {
                 sendErrorMessage =
@@ -199,18 +397,19 @@ final class SharedContentShareViewModel {
         return false
     }
 
-    // MARK: - DM bundle (text → shared content)
+    // MARK: - DM bundle (shared content → optional text)
 
     private func sendBundle(
         to conversation: Conversation,
         accompanyingText: String?,
         viewerID: ProfileID
     ) async -> Bool {
+        let sharedSent = await sendSharedContent(to: conversation, viewerID: viewerID)
+        if !sharedSent { return false }
         if let text = accompanyingText {
-            let sent = await sendTextMessage(text, to: conversation, viewerID: viewerID)
-            if !sent { return false }
+            return await sendTextMessage(text, to: conversation, viewerID: viewerID)
         }
-        return await sendSharedContent(to: conversation, viewerID: viewerID)
+        return true
     }
 
     private func sendTextMessage(
@@ -238,14 +437,12 @@ final class SharedContentShareViewModel {
             return true
         }
 
-        do {
-            let saved = try await messagesRepo.send(optimistic)
-            deliverOutbound(message: saved, conversation: conversation, viewerID: viewerID)
-            return true
-        } catch {
-            sendErrorMessage = ProfileSectionSupport.message(for: error)
-            return false
-        }
+        deliverOutbound(message: optimistic, conversation: conversation, viewerID: viewerID)
+        return await persistOutboundSharedMessage(
+            optimistic: optimistic,
+            conversation: conversation,
+            viewerID: viewerID
+        )
     }
 
     private func sendSharedContent(
@@ -264,9 +461,28 @@ final class SharedContentShareViewModel {
             return true
         }
 
+        deliverOutbound(message: optimistic, conversation: conversation, viewerID: viewerID)
+        return await persistOutboundSharedMessage(
+            optimistic: optimistic,
+            conversation: conversation,
+            viewerID: viewerID
+        )
+    }
+
+    /// Inserts on the server and reconciles the optimistic row — UI already updated via ``deliverOutbound``.
+    private func persistOutboundSharedMessage(
+        optimistic: Message,
+        conversation: Conversation,
+        viewerID: ProfileID
+    ) async -> Bool {
         do {
             let saved = try await messagesRepo.send(optimistic)
-            deliverOutbound(message: saved, conversation: conversation, viewerID: viewerID)
+            reconcileOutbound(
+                optimistic: optimistic,
+                saved: saved,
+                conversation: conversation,
+                viewerID: viewerID
+            )
             return true
         } catch {
             sendErrorMessage = ProfileSectionSupport.message(for: error)
@@ -274,45 +490,50 @@ final class SharedContentShareViewModel {
         }
     }
 
-    // MARK: - Room bundle (text → shared content)
+    private func reconcileOutbound(
+        optimistic: Message,
+        saved: Message,
+        conversation: Conversation,
+        viewerID: ProfileID
+    ) {
+        patchInbox(with: saved, conversation: conversation, viewerID: viewerID)
+        SharedContentOutboundDelivery.post(
+            SharedContentOutboundDelivery.Payload(
+                destination: .dm(conversation.id),
+                message: saved,
+                hydrationSnapshot: nil
+            )
+        )
+    }
+
+    // MARK: - Room bundle (shared content → optional text)
 
     private func sendBundle(
         to room: TradeRoom,
         accompanyingText: String?,
         viewerID: ProfileID
     ) async -> Bool {
-        if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID)
-            || room.id.rawValue.hasPrefix("dev-")
-        {
-            return true
-        }
-
-        do {
-            let channels = try await roomsRepo.channels(roomID: room.id)
-            guard let channel = channels.first(where: \.isGeneral) ?? channels.first else {
-                sendErrorMessage = "\(room.name) has no channels yet."
-                return false
-            }
-
-            if let text = accompanyingText {
-                let sent = await sendRoomTextMessage(
-                    text,
-                    room: room,
-                    channelID: channel.id,
-                    viewerID: viewerID
-                )
-                if !sent { return false }
-            }
-
-            return await sendRoomSharedContent(
-                room: room,
-                channelID: channel.id,
-                viewerID: viewerID
-            )
-        } catch {
-            sendErrorMessage = ProfileSectionSupport.message(for: error)
+        guard let channelID = selectedRoomChannelIDs[room.id] else {
+            sendErrorMessage = "Choose a sub-room in \(room.name) before sending."
             return false
         }
+
+        let sharedSent = await sendRoomSharedContent(
+            room: room,
+            channelID: channelID,
+            viewerID: viewerID
+        )
+        if !sharedSent { return false }
+
+        if let text = accompanyingText {
+            return await sendRoomTextMessage(
+                text,
+                room: room,
+                channelID: channelID,
+                viewerID: viewerID
+            )
+        }
+        return true
     }
 
     private func sendRoomTextMessage(
@@ -335,12 +556,18 @@ final class SharedContentShareViewModel {
             createdAt: .now
         )
 
-        do {
-            let saved = try await roomsRepo.send(payload)
-            let display = RoomMessageMapping.displayMessage(from: saved)
-            deliverRoomOutbound(message: display, room: room, channelID: channelID, viewerID: viewerID)
+        let context = roomSendContext(room: room, channelID: channelID, viewerID: viewerID)
+        let skipNetwork = MessagesInboxSupport.isLocalDevelopmentProfile(viewerID)
+            || room.id.rawValue.hasPrefix("dev-")
+
+        switch await RoomOutboundMessageDelivery.send(
+            payload: payload,
+            context: context,
+            skipNetwork: skipNetwork
+        ) {
+        case .success:
             return true
-        } catch {
+        case .failure(let error):
             sendErrorMessage = ProfileSectionSupport.message(for: error)
             return false
         }
@@ -357,23 +584,36 @@ final class SharedContentShareViewModel {
             viewerID: viewerID
         )
 
-        do {
-            let saved = try await roomsRepo.send(payload)
-            let display = RoomMessageMapping.displayMessage(from: saved)
-            if let reference = display.sharedContent {
-                SharedContentShareSeeder.seed(
-                    reference: reference,
-                    detailCache: detailCache,
-                    feedSessionStore: FeedSessionStore.shared,
-                    viewerID: viewerID
-                )
-            }
-            deliverRoomOutbound(message: display, room: room, channelID: channelID, viewerID: viewerID)
+        let context = roomSendContext(room: room, channelID: channelID, viewerID: viewerID)
+        let skipNetwork = MessagesInboxSupport.isLocalDevelopmentProfile(viewerID)
+            || room.id.rawValue.hasPrefix("dev-")
+
+        switch await RoomOutboundMessageDelivery.send(
+            payload: payload,
+            context: context,
+            skipNetwork: skipNetwork
+        ) {
+        case .success:
             return true
-        } catch {
+        case .failure(let error):
             sendErrorMessage = ProfileSectionSupport.message(for: error)
             return false
         }
+    }
+
+    private func roomSendContext(
+        room: TradeRoom,
+        channelID: RoomChannelID,
+        viewerID: ProfileID
+    ) -> RoomOutboundMessageDelivery.SendContext {
+        RoomOutboundMessageDelivery.SendContext(
+            room: room,
+            channelID: channelID,
+            viewerID: viewerID,
+            roomsRepo: roomsRepo,
+            detailCache: detailCache,
+            inboxStore: inboxStore
+        )
     }
 
     // MARK: - Message builders
@@ -462,32 +702,18 @@ final class SharedContentShareViewModel {
             )
         }
         patchInbox(with: message, conversation: conversation, viewerID: viewerID)
+        let hydrationSnapshot = SharedContentHydrator.shareOutboundSnapshot(
+            message: message,
+            detailCache: detailCache,
+            feedSessionStore: FeedSessionStore.shared,
+            viewerID: viewerID,
+            surface: .dm
+        )
         SharedContentOutboundDelivery.post(
             SharedContentOutboundDelivery.Payload(
                 destination: .dm(conversation.id),
-                message: message
-            )
-        )
-    }
-
-    private func deliverRoomOutbound(
-        message: Message,
-        room: TradeRoom,
-        channelID: RoomChannelID,
-        viewerID: ProfileID
-    ) {
-        if let reference = message.sharedContent {
-            SharedContentShareSeeder.seed(
-                reference: reference,
-                detailCache: detailCache,
-                feedSessionStore: FeedSessionStore.shared,
-                viewerID: viewerID
-            )
-        }
-        SharedContentOutboundDelivery.post(
-            SharedContentOutboundDelivery.Payload(
-                destination: .room(room.id, channelID: channelID),
-                message: message
+                message: message,
+                hydrationSnapshot: hydrationSnapshot
             )
         )
     }

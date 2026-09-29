@@ -54,8 +54,7 @@ struct ReelPickerView: View {
                     }
                     .accessibilityIdentifier("create.reelPicker.\(reel.id.rawValue)")
                 }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
+                .experienceInsetGroupedListStyle(pageBackground: false)
             }
         }
         .experienceScreenBackground()

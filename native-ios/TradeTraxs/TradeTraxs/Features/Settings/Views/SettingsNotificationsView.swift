@@ -46,11 +46,8 @@ struct SettingsNotificationsView: View {
                 rootContent
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .listSectionSpacing(ExperienceSpacing.sm)
-        .scrollContentBackground(.hidden)
-        .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle(category?.title ?? "Notifications")
         .overlay {
             if viewModel.phase == .loading && viewModel.preferences == nil {

@@ -20,8 +20,8 @@ import {
 } from "@/lib/integrations/tradovate/tradovateSyncAcquisitionFailure"
 import { tradovateAcquisitionErrorsIndicateAuthFailure } from "@/lib/integrations/tradovate/tradovateAcquisitionAuth"
 import {
-  tradovateClientSyncErrorForIncompletePartial,
-  tradovateClientSyncOk,
+  deriveTradovateClientSyncResult,
+  type TradovateClientSyncOutcome,
 } from "@/lib/integrations/tradovate/tradovateClientSyncOutcome"
 import { TradovateApiError } from "@/lib/integrations/tradovate/tradovateApiClient"
 import {
@@ -145,6 +145,8 @@ export type TradovateSyncSummary = {
   failureCategory?: TradovateSyncFailureCategory
   failureStage?: TradovateSyncFailureStage
   acquisitionStatus?: string
+  /** Observability + client UX: trades_found | up_to_date | no_available_trade_history | provider_failure */
+  syncOutcome?: TradovateClientSyncOutcome
 }
 
 type MappingRow = {
@@ -1061,29 +1063,34 @@ export async function syncTradovateBrokerAccount(
       stageDurationsMs,
     })
 
-    const historicalBackfillComplete =
-      fillAcquisition.historicalCompleteness.historicalBackfillComplete
-
-    const incompletePartial = tradovateClientSyncErrorForIncompletePartial({
+    const clientSync = deriveTradovateClientSyncResult({
       acquisitionStatus,
+      stats: fillAcquisition.stats,
+      acquisitionErrors: fillAcquisition.acquisitionErrors,
       fetchedFillCount: accountFills.length,
       ledgerExecutionCountAtStart: ledgerSnapshotAtStart.executionCount,
-      historicalBackfillComplete,
+      newExecutions,
+      importPreviewTradeCount: importablePreviews.length,
     })
+
     const partialErrorCode =
-      incompletePartial?.errorCode ??
-      (syncLockStatus === "partial" ? "import_partial" : null)
+      !clientSync.ok && clientSync.errorCode
+        ? clientSync.errorCode
+        : syncLockStatus === "partial" && clientSync.syncOutcome === "provider_failure"
+          ? "import_partial"
+          : null
     const partialErrorMessage =
-      incompletePartial?.error ??
-      (syncLockStatus === "partial"
-        ? "Some Tradovate fills could not be retrieved. Sync again to retry."
-        : null)
+      !clientSync.ok && clientSync.error
+        ? clientSync.error
+        : syncLockStatus === "partial" && clientSync.syncOutcome === "provider_failure"
+          ? "Some Tradovate fills could not be retrieved. Sync again to retry."
+          : null
 
     await releaseBrokerSyncLock(supabase, brokerIntegrationAccountId, {
       lastSyncStatus: syncLockStatus,
       lastSyncSuccessAt: successAt,
-      lastSyncErrorCode: partialErrorCode,
-      lastSyncErrorMessage: partialErrorMessage,
+      lastSyncErrorCode: clientSync.ok ? null : partialErrorCode,
+      lastSyncErrorMessage: clientSync.ok ? null : partialErrorMessage,
       maxExternalFillId: maxFillId != null ? String(maxFillId) : null,
       maxExecutedAt: maxExecutedAt,
       lastAutoSyncAt: trigger === "manual" ? undefined : successAt,
@@ -1098,47 +1105,38 @@ export async function syncTradovateBrokerAccount(
       provider: "tradovate",
     })
 
-    const clientOk = tradovateClientSyncOk({
-      acquisitionStatus,
-      fetchedFillCount: accountFills.length,
-      ledgerExecutionCountAtStart: ledgerSnapshotAtStart.executionCount,
-      historicalBackfillComplete,
+    const syncLogMessage =
+      clientSync.syncOutcome === "provider_failure"
+        ? "sync_error"
+        : clientSync.syncOutcome === "trades_found"
+          ? "sync_success"
+          : clientSync.syncOutcome === "up_to_date"
+            ? "sync_up_to_date"
+            : "sync_no_available_trade_history"
+
+    logTradovateSync(syncLogMessage, {
+      userId,
+      connectionId,
+      mappingId: brokerIntegrationAccountId,
+      trigger,
+      durationMs,
+      fetched: accountFills.length,
+      newExecutions,
+      tradesCreated,
+      tradesUpdated,
+      tradesWithPnL,
+      tradesWithoutPnL,
+      tradesBuilt: completed.length,
+      numericTickersPersisted,
+      errorCode: clientSync.errorCode,
+      detail: clientSync.syncOutcome,
+      ok: clientSync.ok,
     })
 
-    if (clientOk) {
-      logTradovateSync("sync_success", {
-        userId,
-        connectionId,
-        mappingId: brokerIntegrationAccountId,
-        trigger,
-        durationMs,
-        fetched: accountFills.length,
-        newExecutions,
-        tradesCreated,
-        tradesUpdated,
-        tradesWithPnL,
-        tradesWithoutPnL,
-        tradesBuilt: completed.length,
-        numericTickersPersisted,
-      })
-    } else {
-      logTradovateSync("sync_error", {
-        userId,
-        connectionId,
-        mappingId: brokerIntegrationAccountId,
-        trigger,
-        failureCategory: "fill_retrieval_failure",
-        failureStage: "historical_bootstrap",
-        errorCode: incompletePartial?.errorCode ?? "import_incomplete_history",
-        detail: incompletePartial?.error ?? "historical_import_incomplete",
-        durationMs,
-        fetched: accountFills.length,
-      })
-    }
-
     return {
-      ok: clientOk,
+      ok: clientSync.ok,
       status: syncLockStatus,
+      syncOutcome: clientSync.syncOutcome,
       acquisitionStatus,
       trigger,
       fetched: accountFills.length,
@@ -1154,14 +1152,18 @@ export async function syncTradovateBrokerAccount(
       existingLifecycleCountAtStart,
       previewEligibleCount,
       persistCalled: persistTrades,
-      ...(incompletePartial && !clientOk
+      ...(!clientSync.ok
         ? {
-            error: incompletePartial.error,
-            errorCode: incompletePartial.errorCode,
+            error: clientSync.error,
+            errorCode: clientSync.errorCode,
             failureCategory: "provider_api_failure" as TradovateSyncFailureCategory,
             failureStage: "fill_list" as TradovateSyncFailureStage,
           }
-        : {}),
+        : clientSync.syncOutcome === "no_available_trade_history"
+          ? {
+              errorCode: clientSync.errorCode,
+            }
+          : {}),
     }
   } catch (err) {
     let code = "sync_failed"

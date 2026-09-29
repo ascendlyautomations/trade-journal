@@ -88,13 +88,10 @@ struct SettingsProfileView: View {
             }
 
         }
-        .listStyle(.insetGrouped)
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .listSectionSpacing(ExperienceSpacing.xxs)
         .contentMargins(.top, ExperienceSpacing.xxs, for: .scrollContent)
-        .scrollContentBackground(.hidden)
-        .experienceDashboardGroupedRows()
         .scrollDismissesKeyboard(.interactively)
-        .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Profile")
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {

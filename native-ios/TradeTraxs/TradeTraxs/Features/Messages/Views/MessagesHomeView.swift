@@ -271,8 +271,7 @@ struct MessagesHomeView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
+        .experienceInsetGroupedListStyle(pageBackground: false)
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: viewModel.searchText)
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: orderSignature)
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: inboxStore.activityRevision)

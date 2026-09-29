@@ -44,10 +44,7 @@ struct TraxProMembershipInfoView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
-        .background(colors.groupedBackground.ignoresSafeArea())
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .experienceNavigationTitle("TraxPro")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {

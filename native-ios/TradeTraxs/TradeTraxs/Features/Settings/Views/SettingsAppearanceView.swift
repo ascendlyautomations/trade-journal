@@ -53,10 +53,7 @@ struct SettingsAppearanceView: View {
                 Text("System follows your iPhone. Light and Dark stay fixed regardless of iOS appearance.")
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
-        .background(colors.groupedBackground.ignoresSafeArea())
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .experienceNavigationTitle("Appearance")
         .onAppear { viewModel.refresh() }
         .onChange(of: appEnvironment.themeManager.selectedIdentifier) { _, _ in

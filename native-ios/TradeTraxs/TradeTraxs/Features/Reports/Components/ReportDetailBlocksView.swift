@@ -197,10 +197,6 @@ struct ReportDetailBlocksView: View {
     }
 
     private func formatHold(_ seconds: Int) -> String {
-        let hours = seconds / 3600
-        let minutes = (seconds % 3600) / 60
-        if hours > 0 { return "\(hours)h \(minutes)m" }
-        if minutes > 0 { return "\(minutes)m" }
-        return "\(seconds)s"
+        TradeHoldDuration.formatSeconds(seconds) ?? "—"
     }
 }

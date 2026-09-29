@@ -323,8 +323,7 @@ struct ExploreHomeView: View {
                     }
                 }
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
+            .experienceInsetGroupedListStyle(pageBackground: false)
             .accessibilityIdentifier("explore.search.results")
         }
     }

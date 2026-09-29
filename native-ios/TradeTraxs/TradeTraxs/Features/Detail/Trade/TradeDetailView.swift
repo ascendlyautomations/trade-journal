@@ -181,7 +181,9 @@ struct TradeDetailView: View {
             if viewModel.isDeleting {
                 ProgressView("Deleting…")
                     .padding(ExperienceSpacing.md)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
+                    .experienceFloatingPanelBackground(
+                        in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                    )
             }
         }
     }
@@ -200,6 +202,7 @@ struct TradeDetailView: View {
             username: viewModel.authorUsername,
             subtitle: viewModel.accountIdentityLine,
             dateText: TradeDisplay.dateText(trade.entryAt),
+            showsVerifiedBadge: viewModel.author?.isCreator == true,
             isOwner: viewModel.isOwner,
             contentLink: .trade(trade.id),
             ownerProfileID: trade.ownerProfileID,

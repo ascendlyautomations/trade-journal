@@ -29,9 +29,7 @@ struct RoomMemberRowView: View {
                             .experienceStyle(.subheadline, color: colors.primaryText)
                             .lineLimit(1)
                         if item.profile.isCreator {
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.caption2)
-                                .foregroundStyle(colors.accent)
+                            TradeTraxsVerifiedBadge(size: .inline)
                         }
                     }
                     Text("@\(item.profile.username)")

@@ -401,11 +401,16 @@ private struct FeedClipsPageView: View {
                             imagePipeline: imagePipeline,
                             size: 32
                         )
-                        Text(authorPrimaryLabel)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+                        HStack(spacing: 4) {
+                            Text(authorPrimaryLabel)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+                            if resolvedProfile.isCreator {
+                                TradeTraxsVerifiedBadge(size: .compact)
+                            }
+                        }
                     }
                     .contentShape(Rectangle())
                 }

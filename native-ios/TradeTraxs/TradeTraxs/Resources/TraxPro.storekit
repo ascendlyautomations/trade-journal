@@ -43,7 +43,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.tradetraxs.traxpro.monthly",
+          "productID" : "com.tradetraxs.traxspro.monthly",
           "recurringSubscriptionPeriod" : "P1M",
           "referenceName" : "TraxPro Monthly",
           "subscriptionGroupID" : "traxpro",

@@ -23,8 +23,8 @@ import { fillTimestampWindow } from "./tradovateFillAcquisitionCore.ts"
  *
  * fill/deps?masterid={orderId} is order-scoped, not account archival.
  *
- * Therefore INITIAL BACKFILL (empty ledger) = session deps/list/ldeps PLUS cashBalanceLog/deps → fill/items,
- * executionReport/list → fill/ldeps, order/ldeps, then ledger merge.
+ * INITIAL BACKFILL (empty ledger) may attempt cashBalanceLog/deps, executionReport/list, order/ldeps when the
+ * ledger is empty; HTTP 200 with zero entities means no API-visible history (not a sync failure).
  * INCREMENTAL = same pipeline with watermark; skip initial bootstrap when ledger has executions.
  * REPAIR = fill/items (+ order/items) for hole candidates without deleting ledger rows.
  */
@@ -84,6 +84,8 @@ export function assessTradovateHistoricalCompleteness(params: {
   repairFillIdsRequested: string[]
   repairFillIdsRecovered: string[]
   initialBootstrapAttempted?: boolean
+  /** Bootstrap HTTP/transport failures — empty 200 responses are not failures. */
+  initialBootstrapFailed?: boolean
   /** When set (initial backfill), remote window must cover this start. */
   requestedStart?: string | null
   requestedEnd?: string | null
@@ -131,7 +133,8 @@ export function assessTradovateHistoricalCompleteness(params: {
   const initialBootstrapIncomplete =
     params.ledger.executionCount === 0 &&
     params.initialBootstrapAttempted === true &&
-    params.accountFills.length === 0
+    params.accountFills.length === 0 &&
+    params.initialBootstrapFailed === true
 
   const historicalBackfillComplete =
     !initialBootstrapIncomplete &&

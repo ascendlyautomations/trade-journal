@@ -826,6 +826,15 @@ struct ProfileNavigationStack: View {
                 authenticationCoordinator: authenticationCoordinator,
                 currentUserProfile: currentUserProfile
             )
+            .environment(\.stackNavigation, StackNavigation.profile(store: store))
+        case .admin(let adminRoute):
+            AdminProfileDestinationView.view(
+                route: adminRoute,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                currentUserProfile: currentUserProfile
+            )
+            .environment(\.stackNavigation, StackNavigation.profile(store: store))
         case .help:
             SettingsSupportView()
         case .affiliate, .referrals:
@@ -863,6 +872,7 @@ struct ProfileNavigationStack: View {
         case .followRequests: return "Follow Requests"
         case .tradeRoomJoinRequest: return "Join Request"
         case .settings(let settingsRoute): return settingsRoute.title
+        case .admin: return ""
         case .referrals: return "Referrals"
         case .affiliate: return "Affiliate"
         case .help: return "Help"

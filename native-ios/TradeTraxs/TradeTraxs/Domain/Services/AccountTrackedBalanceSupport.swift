@@ -20,6 +20,34 @@ nonisolated enum AccountTrackedBalanceSupport {
         return startingBalance + lifetimeRealizedPnL - withdrawals
     }
 
+    /// Dashboard hero account value — one definition for Eval, Live, and Funded prop.
+    ///
+    /// - Eval / Live / Sim: `startingBalance + lifetimeRealizedPnL` (manual ledger subtracts withdrawals on Live).
+    /// - Funded prop (payout cycles): ``PropFirmStatusSnapshot/currentBalance`` when trade replay is available.
+    static func dashboardAccountBalance(
+        account: TradingAccount,
+        startingBalance: Decimal,
+        lifetimeRealizedPnL: Decimal,
+        propFirmSnapshot: PropFirmStatusSnapshot?,
+        manualPayoutEntries: [AccountPayoutEntry],
+        propFirmTradeReplayCount: Int
+    ) -> Decimal {
+        if PropFirmPayoutPolicy.supportsRecordPayout(for: account),
+           let snapshot = propFirmSnapshot,
+           propFirmTradeReplayCount > 0
+        {
+            return snapshot.currentBalance
+        }
+        if usesManualLedgerForTrackedBalance(account: account) {
+            return ledgerTrackedBalance(
+                startingBalance: startingBalance,
+                lifetimeRealizedPnL: lifetimeRealizedPnL,
+                payoutEntries: manualPayoutEntries
+            )
+        }
+        return startingBalance + lifetimeRealizedPnL
+    }
+
     /// Accounts whose balance should subtract manual ledger rows (Live, etc.).
     static func usesManualLedgerForTrackedBalance(account: TradingAccount) -> Bool {
         PropFirmPayoutPolicy.supportsManualPayoutLedger(for: account)

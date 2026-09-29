@@ -92,6 +92,7 @@ struct PostDetailView: View {
                             displayName: viewModel.authorDisplayName,
                             username: viewModel.authorUsername,
                             dateText: TradeDisplay.dateText(post.createdAt),
+                            showsVerifiedBadge: viewModel.author?.isCreator == true,
                             isOwner: viewModel.isOwner,
                             contentLink: .post(post.id),
                             ownerProfileID: post.authorProfileID,
@@ -129,7 +130,9 @@ struct PostDetailView: View {
             if viewModel.isDeleting {
                 ProgressView("Deleting…")
                     .padding(ExperienceSpacing.lg)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: ExperienceRadius.md))
+                    .experienceFloatingPanelBackground(
+                        in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                    )
             }
         }
     }

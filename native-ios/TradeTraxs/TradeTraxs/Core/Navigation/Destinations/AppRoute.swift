@@ -114,6 +114,8 @@ enum ProfileRoute: Hashable, Codable, Sendable {
     case roomInfo(RoomID)
     case manageRoom(RoomID)
     case roomSettings(RoomID)
+    /// Admin utility subdestinations (pushed above Settings → Admin).
+    case admin(AdminRoute)
 }
 
 /// Settings navigation hierarchy (Instagram / Apple Settings style).
@@ -144,6 +146,11 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
     case affiliate
     case vault
     case support
+    case productFeedback = "product-feedback"
+    case supportContact = "support-contact"
+    case supportFeedback = "support-feedback"
+    case supportBugReport = "support-bug-report"
+    case admin
     case about
     case legalTerms = "legal-terms"
     case legalPrivacy = "legal-privacy"
@@ -175,6 +182,11 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
         case .affiliate: return "Referrals"
         case .vault: return "Vault"
         case .support: return "Help & Support"
+        case .productFeedback: return "Product Feedback"
+        case .supportContact: return "Contact Support"
+        case .supportFeedback: return "Product Feedback"
+        case .supportBugReport: return "Report a Bug"
+        case .admin: return ""
         case .about: return "About TradeTraxs"
         case .legalTerms: return "Terms & Conditions"
         case .legalPrivacy: return "Privacy Policy"

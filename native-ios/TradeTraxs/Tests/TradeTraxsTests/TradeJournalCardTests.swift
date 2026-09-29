@@ -26,7 +26,7 @@ final class TradeJournalCardTests: XCTestCase {
         )
         XCTAssertEqual(
             TradeDisplay.cardDurationText(entryAt: entry, exitAt: entry.addingTimeInterval(14 * 60 + 22)),
-            "14m"
+            "14m 22s"
         )
         XCTAssertEqual(
             TradeDisplay.cardDurationText(entryAt: entry, exitAt: entry.addingTimeInterval(4_320)),

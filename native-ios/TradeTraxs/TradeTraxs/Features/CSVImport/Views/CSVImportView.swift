@@ -129,8 +129,7 @@ struct CSVImportView: View {
         }
         .listSectionSpacing(ExperienceSpacing.xs)
         .scrollDismissesKeyboard(.interactively)
-        .scrollContentBackground(.hidden)
-        .experienceDashboardGroupedRows()
+        .experienceTradeTraxsFormStyle(pageBackground: false)
     }
 }
 

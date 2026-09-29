@@ -17,6 +17,10 @@ nonisolated enum FeedScopePreferenceStore {
         UserDefaults.standard.set(scope.rawValue, forKey: key(for: userID))
     }
 
+    static func clearSavedScope(for userID: UserID) {
+        UserDefaults.standard.removeObject(forKey: key(for: userID))
+    }
+
     private static func key(for userID: UserID) -> String {
         "\(prefix)\(userID.rawValue)"
     }

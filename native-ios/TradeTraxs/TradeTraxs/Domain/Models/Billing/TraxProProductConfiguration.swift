@@ -12,7 +12,7 @@ nonisolated enum TraxProProductConfiguration {
     static let sixMonthInfoPlistKey = "TRAXPRO_IAP_PRODUCT_ID_SIX_MONTH"
     static let yearlyInfoPlistKey = "TRAXPRO_IAP_PRODUCT_ID_YEARLY"
 
-    static let defaultMonthlyProductID = "com.tradetraxs.traxpro.monthly"
+    static let defaultMonthlyProductID = "com.tradetraxs.traxspro.monthly"
     static let defaultSixMonthProductID = "com.tradetraxs.traxpro.sixmonth"
     static let defaultYearlyProductID = "com.tradetraxs.traxpro.yearly"
 

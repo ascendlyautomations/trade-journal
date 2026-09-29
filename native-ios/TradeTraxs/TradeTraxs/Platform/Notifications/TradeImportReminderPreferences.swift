@@ -1,6 +1,6 @@
 import Foundation
 
-/// Device-local preference for weekday trade-import reminders (11:15 AM / 4:00 PM Eastern).
+/// Device-local preference for weekday trade-import reminders (11:15 AM and 4:00 PM Eastern, Mon–Fri).
 enum TradeImportReminderPreferences {
     private static let enabledKey = "tt.ios.tradeImportReminder.enabled"
 

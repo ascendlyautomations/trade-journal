@@ -441,6 +441,99 @@ final class TradeRoomsExperienceTests: XCTestCase {
         )
     }
 
+    func testAllScopeDiscoverySortsByAuthoritativeMemberCount() {
+        let rooms = [
+            ExploreRoomSuggestion(
+                id: RoomID("room-low"),
+                name: "Beta Room",
+                slug: "beta",
+                description: nil,
+                memberCount: 10,
+                imageURL: nil
+            ),
+            ExploreRoomSuggestion(
+                id: RoomID("room-high"),
+                name: "Alpha Room",
+                slug: "alpha",
+                description: nil,
+                memberCount: 500,
+                imageURL: nil
+            ),
+            ExploreRoomSuggestion(
+                id: RoomID("room-tie-b"),
+                name: "Same Count B",
+                slug: "tie-b",
+                description: nil,
+                memberCount: 100,
+                imageURL: nil
+            ),
+            ExploreRoomSuggestion(
+                id: RoomID("room-tie-a"),
+                name: "Same Count A",
+                slug: "tie-a",
+                description: nil,
+                memberCount: 100,
+                imageURL: nil
+            ),
+        ]
+        let sorted = TradeRoomDiscoveryMemberCountSort.sorted(rooms)
+        XCTAssertEqual(sorted.map(\.id.rawValue), [
+            "room-high",
+            "room-tie-a",
+            "room-tie-b",
+            "room-low",
+        ])
+    }
+
+    func testAllScopePopularListUsesMemberCountSortNotFollowedCount() async {
+        let store = MessagesInboxStore.shared
+        TradeRoomsFixtures.seedInbox(store)
+
+        let lowFollowHighMembers = ExploreRoomSuggestion(
+            id: RoomID("dev.discovery.high-members"),
+            name: "High Members",
+            slug: "high-members",
+            description: nil,
+            memberCount: 900,
+            imageURL: nil,
+            followedMemberCount: 0
+        )
+        let highFollowLowMembers = ExploreRoomSuggestion(
+            id: RoomID("dev.discovery.low-members"),
+            name: "Low Members",
+            slug: "low-members",
+            description: nil,
+            memberCount: 50,
+            imageURL: nil,
+            followedMemberCount: 200
+        )
+        let explore = TradeRoomsFilteringExploreRepository(
+            rooms: [highFollowLowMembers, lowFollowHighMembers]
+        )
+
+        let viewModel = TradeRoomsHomeViewModel(
+            messages: TradeRoomsStubMessageRepository(),
+            rooms: TradeRoomsStubRoomRepository(),
+            explore: explore,
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: TradeRoomsFixtures.viewerID.rawValue),
+            detailCache: DetailPresentationCache(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
+            inboxStore: store
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.discoveryPhase == .loaded }
+        viewModel.selectDiscoveryScope(TradeRoomDiscoveryScope.all)
+        await waitFor {
+            viewModel.activeDiscoveryScope == TradeRoomDiscoveryScope.all
+                && viewModel.discoveryPhase == MessagingState.Phase.loaded
+        }
+
+        let popular = viewModel.popularDiscoverableRooms
+        XCTAssertEqual(popular.first?.id, lowFollowHighMembers.id)
+        XCTAssertEqual(popular.last?.id, highFollowLowMembers.id)
+    }
+
     func testSuggestedRoomsKeepJoinButtonTitle() {
         XCTAssertEqual(
             TradeRoomJoinPresentation.discoveryStatusTitle(

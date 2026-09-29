@@ -237,6 +237,27 @@ final class MessageIntegrityTests: XCTestCase {
         XCTAssertEqual(ConversationInboxActivity.preview(for: latest!), "newest")
     }
 
+    func testInboxPatchMarksShortThreadAsNeedingFullBootstrap() {
+        ConversationThreadSessionStore.shared.invalidate()
+        let note = makeMessage(id: "m1", createdAt: 100)
+        let conversation = makeConversation(id: conversationID.rawValue, preview: "one", at: 100, messageID: "m1")
+        ConversationThreadSessionStore.shared.patchMessages(
+            viewerID: viewer,
+            conversationID: conversationID,
+            incoming: [note],
+            conversation: conversation
+        )
+        let key = ConversationThreadSessionStore.cacheKey(viewerID: viewer, conversationID: conversationID)
+        let snapshot = ConversationThreadSessionStore.shared.restore(key: key)
+        XCTAssertEqual(snapshot?.messages.count, 1)
+        XCTAssertTrue(snapshot?.hasMoreMessages == true)
+        XCTAssertTrue(
+            ConversationThreadSessionStore.openThreadNeedsFullBootstrap(
+                messageCount: snapshot?.messages.count ?? 0
+            )
+        )
+    }
+
     // MARK: - Helpers
 
     private func makeMessage(

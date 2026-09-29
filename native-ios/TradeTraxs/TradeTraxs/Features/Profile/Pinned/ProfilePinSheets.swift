@@ -39,8 +39,7 @@ struct ProfilePinReplaceSheet: View {
                     }
                 }
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
+            .experienceInsetGroupedListStyle(pageBackground: false)
             .experienceScreenBackground()
             .navigationTitle("Replace Pin")
             .navigationBarTitleDisplayMode(.inline)
@@ -111,8 +110,7 @@ struct ProfileManagePinnedSheet: View {
                     .listRowBackground(colors.backgroundPrimary)
                 }
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
+            .experienceInsetGroupedListStyle(pageBackground: false)
             .experienceScreenBackground()
             .navigationTitle("Manage Pinned")
             .navigationBarTitleDisplayMode(.inline)

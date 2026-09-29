@@ -166,9 +166,7 @@ struct ManageRoomView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
+        .experienceInsetGroupedListStyle(pageBackground: false)
     }
 
     private var detailsScreen: some View {
@@ -263,8 +261,7 @@ struct ManageRoomView: View {
         }
         .listSectionSpacing(ExperienceSpacing.xs)
         .scrollDismissesKeyboard(.interactively)
-        .scrollContentBackground(.hidden)
-        .experienceDashboardGroupedRows()
+        .experienceTradeTraxsFormStyle(pageBackground: false)
         .experienceNavigationTitle("Edit Room Details")
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -343,9 +340,7 @@ struct ManageRoomView: View {
                 .disabled(member.role == .owner)
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
+        .experienceInsetGroupedListStyle(pageBackground: false)
         .experienceNavigationTitle("Members")
         .refreshable { await viewModel.refreshMembersAndBans() }
     }
@@ -392,9 +387,7 @@ struct ManageRoomView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
+        .experienceInsetGroupedListStyle(pageBackground: false)
         .experienceNavigationTitle("Join Requests")
         .refreshable { await viewModel.refreshJoinRequests() }
     }
@@ -431,9 +424,7 @@ struct ManageRoomView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
+        .experienceInsetGroupedListStyle(pageBackground: false)
         .experienceNavigationTitle("Banned Members")
         .refreshable { await viewModel.refreshMembersAndBans() }
     }

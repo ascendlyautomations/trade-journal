@@ -1,4 +1,5 @@
-import { iosPaidSubscriptionsEnabled } from "@/lib/server/iosSubscriptionReleaseConfiguration"
+import { supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
+import { entitlementEnforcementEnabled } from "@/lib/server/monetizationConfig"
 import {
   loadProEntitlementProfile,
   requireProEntitlement,
@@ -8,8 +9,9 @@ import {
 /**
  * Central gate for OpenAI-backed BFF routes.
  *
- * - Release with paid iOS subscriptions OFF: authenticated users pass (profile must load).
- * - Future paid release: same behavior as `requireProEntitlement()`.
+ * Follows `entitlement_enforcement_enabled`. When that flag is false, or the
+ * config cannot be read, authenticated users pass. When it is true, TraxPro
+ * is required.
  */
 export async function requireAIFeatureEntitlement(
   userId: string,
@@ -18,7 +20,8 @@ export async function requireAIFeatureEntitlement(
     reply?: string
   }
 ): Promise<ProEntitlementCheck> {
-  if (!iosPaidSubscriptionsEnabled()) {
+  const enforced = await entitlementEnforcementEnabled(supabaseServiceRole)
+  if (!enforced) {
     return loadProEntitlementProfile(userId)
   }
   return requireProEntitlement(userId, options)

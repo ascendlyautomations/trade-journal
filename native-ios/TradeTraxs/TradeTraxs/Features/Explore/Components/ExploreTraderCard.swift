@@ -35,12 +35,16 @@ struct ExploreTraderCard: View {
                     )
 
                     VStack(alignment: .leading, spacing: textRowSpacing) {
-                        fixedTextRow(
-                            text: profile.displayName,
-                            font: ExperienceTypography.subheadline.weight(.semibold),
-                            color: colors.primaryText,
-                            height: nameRowHeight
-                        )
+                        HStack(spacing: 4) {
+                            Text(profile.displayName)
+                                .font(ExperienceTypography.subheadline.weight(.semibold))
+                                .foregroundStyle(colors.primaryText)
+                                .lineLimit(1)
+                            if profile.isCreator {
+                                TradeTraxsVerifiedBadge(size: .inline)
+                            }
+                        }
+                        .frame(height: nameRowHeight, alignment: .center)
 
                         fixedTextRow(
                             text: "@\(profile.username)",

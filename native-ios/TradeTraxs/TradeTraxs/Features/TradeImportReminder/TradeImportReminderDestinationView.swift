@@ -80,8 +80,7 @@ struct TradeImportReminderDestinationView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
+        .experienceInsetGroupedListStyle(pageBackground: false)
         .experienceNavigationTitle("Import Trades")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -111,8 +110,7 @@ struct TradeImportReminderDestinationView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
+        .experienceInsetGroupedListStyle(pageBackground: false)
         .experienceNavigationTitle("Import Trades")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {

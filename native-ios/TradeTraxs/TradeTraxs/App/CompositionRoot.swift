@@ -535,6 +535,12 @@ enum CompositionRoot {
         authLifecycle.refreshBillingEntitlementsOnForeground = {
             guard let userID = sessionManager.currentSession?.userID else { return }
             let profileID = ProfileID(userID.rawValue)
+            if let refresher = data.billing as? MonetizationConfigurationRefreshing {
+                await refresher.refreshMonetizationConfiguration(for: profileID)
+            }
+            if IosSubscriptionReleaseConfiguration.iosPaywallEnabled {
+                await data.storeKitSubscriptions.startTransactionListenerIfNeeded()
+            }
             await BillingEntitlementRefreshFlight.shared.refresh {
                 do {
                     let refreshed = try await data.billing.refreshEntitlements(for: profileID)
@@ -570,7 +576,11 @@ enum CompositionRoot {
                 AppIconBadgeSync.refresh(animated: false)
                 await DailyCheckInReminderCoordinator.shared.sync()
                 await TradeImportReminderCoordinator.shared.sync()
-                if IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled {
+                if let profileID = sessionManager.currentSession.map({ ProfileID($0.userID.rawValue) }),
+                   let refresher = data.billing as? MonetizationConfigurationRefreshing {
+                    await refresher.refreshMonetizationConfiguration(for: profileID)
+                }
+                if IosSubscriptionReleaseConfiguration.iosPaywallEnabled {
                     await data.storeKitSubscriptions.startTransactionListenerIfNeeded()
                     try? await data.storeKitSubscriptions.syncVerifiedTransactionsToServer()
                 }

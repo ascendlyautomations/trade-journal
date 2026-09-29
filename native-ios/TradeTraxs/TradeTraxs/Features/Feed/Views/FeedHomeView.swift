@@ -5,6 +5,7 @@ import SwiftUI
 /// Data lifecycle is owned exclusively by ``FeedScreenViewModel``.
 /// Child views (stories, cards, filters, empty/error) are render-only.
 struct FeedHomeView: View {
+    @Bindable private var feedScopeSession = FeedScopeSessionStore.shared
     @State private var viewModel: FeedScreenViewModel
     @State private var playbackCoordinator: FeedVideoPlaybackCoordinator
     @State private var shareTarget: SharedContentShareTarget?
@@ -129,7 +130,10 @@ struct FeedHomeView: View {
             ToolbarItem(placement: .topBarLeading) {
                 FeedScopeToggle(
                     scope: Binding(
-                        get: { viewModel.scope },
+                        get: {
+                            _ = feedScopeSession.revision
+                            return viewModel.scope
+                        },
                         set: { viewModel.setScope($0) }
                     )
                 )

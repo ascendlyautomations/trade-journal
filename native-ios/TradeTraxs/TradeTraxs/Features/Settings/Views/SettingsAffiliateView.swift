@@ -80,10 +80,7 @@ struct SettingsAffiliateView: View {
                 )
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
-        .background(colors.groupedBackground.ignoresSafeArea())
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .experienceNavigationTitle("Referrals")
         .overlay {
             if viewModel.isLoading {

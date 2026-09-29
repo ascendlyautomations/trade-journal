@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server"
 import { supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
-import { loadActiveAppleSubscriptionForUser } from "@/lib/appleSubscription"
 import {
-  isTraxProActive,
+  loadTraxProEntitlementSnapshot,
   TRAXPRO_ENTITLEMENT_PROFILE_COLUMNS,
   type TraxProEntitlementProfile,
 } from "@/lib/traxProEntitlement"
@@ -47,15 +46,21 @@ export async function requireProEntitlement(
     reply?: string
   }
 ): Promise<ProEntitlementCheck> {
-  const loaded = await loadProEntitlementProfile(userId)
-  if (!loaded.ok) return loaded
-
-  const appleSubscription = await loadActiveAppleSubscriptionForUser(
+  const loaded = await loadTraxProEntitlementSnapshot(
     supabaseServiceRole,
     userId
   )
+  if (!loaded.ok || !loaded.snapshot.profile) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Could not verify subscription" },
+        { status: 500 }
+      ),
+    }
+  }
 
-  if (!isTraxProActive(loaded.profile, appleSubscription)) {
+  if (!loaded.snapshot.traxProActive) {
     return {
       ok: false,
       response: NextResponse.json(
@@ -70,5 +75,5 @@ export async function requireProEntitlement(
     }
   }
 
-  return { ok: true, profile: loaded.profile }
+  return { ok: true, profile: loaded.snapshot.profile }
 }

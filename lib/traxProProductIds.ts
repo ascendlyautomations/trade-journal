@@ -22,7 +22,7 @@ export type TraxProAppleProductConfig = {
 }
 
 const DEFAULT_PRODUCT_IDS: Record<TraxProAppleProductKey, string> = {
-  monthly: "com.tradetraxs.traxpro.monthly",
+  monthly: "com.tradetraxs.traxspro.monthly",
   sixMonth: "com.tradetraxs.traxpro.sixmonth",
   yearly: "com.tradetraxs.traxpro.yearly",
 }

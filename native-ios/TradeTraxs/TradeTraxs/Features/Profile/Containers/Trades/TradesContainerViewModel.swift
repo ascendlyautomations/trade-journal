@@ -804,8 +804,12 @@ nonisolated enum TradeDisplay {
 
     static func durationText(entryAt: Date, exitAt: Date?) -> String? {
         guard let exitAt, exitAt >= entryAt else { return nil }
-        let seconds = Int(exitAt.timeIntervalSince(entryAt))
-        return durationTextFromSeconds(seconds)
+        let seconds = Int(exitAt.timeIntervalSince(entryAt).rounded(.down))
+        let allowSubMinute = TradeHoldDuration.timestampsSupportSecondPrecision(
+            entryAt: entryAt,
+            exitAt: exitAt
+        )
+        return TradeHoldDuration.formatSeconds(seconds, allowSubMinuteSeconds: allowSubMinute)
     }
 
     /// Public trade-card duration — derived only from entry/exit timestamps.
@@ -819,16 +823,20 @@ nonisolated enum TradeDisplay {
         {
             return text
         }
-        if let seconds = summary.durationSeconds, seconds > 0 {
-            return cardDurationTextFromSeconds(seconds)
+        if let seconds = summary.durationSeconds, seconds >= 0 {
+            return cardDurationTextFromSeconds(seconds, allowSubMinuteSeconds: true)
         }
         return cardDurationText(entryAt: summary.entryAt, exitAt: summary.exitAt)
     }
 
     static func cardDurationText(entryAt: Date, exitAt: Date?) -> String? {
         guard let exitAt, exitAt >= entryAt else { return nil }
-        let seconds = Int(exitAt.timeIntervalSince(entryAt))
-        return cardDurationTextFromSeconds(seconds)
+        let seconds = Int(exitAt.timeIntervalSince(entryAt).rounded(.down))
+        let allowSubMinute = TradeHoldDuration.timestampsSupportSecondPrecision(
+            entryAt: entryAt,
+            exitAt: exitAt
+        )
+        return cardDurationTextFromSeconds(seconds, allowSubMinuteSeconds: allowSubMinute)
     }
 
     /// Prefer authoritative DB duration fields, then entry/exit timestamps.
@@ -838,8 +846,8 @@ nonisolated enum TradeDisplay {
         {
             return text
         }
-        if let seconds = trade.durationSeconds, seconds > 0 {
-            return durationTextFromSeconds(seconds)
+        if let seconds = trade.durationSeconds, seconds >= 0 {
+            return durationTextFromSeconds(seconds, allowSubMinuteSeconds: true)
         }
         return durationText(entryAt: trade.entryAt, exitAt: trade.exitAt)
     }
@@ -848,41 +856,18 @@ nonisolated enum TradeDisplay {
         holdDuration(for: TradeSummaryMapper.listMatchTrade(from: item))
     }
 
-    private static func durationTextFromSeconds(_ seconds: Int) -> String? {
-        guard seconds >= 0 else { return nil }
-        let hours = seconds / 3_600
-        let minutes = (seconds % 3_600) / 60
-        let secs = seconds % 60
-        if hours > 0 {
-            return "\(hours)h \(minutes)m"
-        }
-        if minutes > 0 {
-            return "\(minutes)m \(secs)s"
-        }
-        if secs > 0 {
-            return "\(secs)s"
-        }
-        return nil
+    private static func durationTextFromSeconds(
+        _ seconds: Int,
+        allowSubMinuteSeconds: Bool = true
+    ) -> String? {
+        TradeHoldDuration.formatSeconds(seconds, allowSubMinuteSeconds: allowSubMinuteSeconds)
     }
 
-    private static func cardDurationTextFromSeconds(_ seconds: Int) -> String? {
-        guard seconds > 0 else { return nil }
-        let hours = seconds / 3_600
-        let minutes = (seconds % 3_600) / 60
-        let secs = seconds % 60
-        if hours > 0 {
-            return "\(hours)h \(minutes)m"
-        }
-        if minutes >= 10 {
-            return "\(minutes)m"
-        }
-        if minutes >= 1 {
-            if secs > 0 {
-                return "\(minutes)m \(secs)s"
-            }
-            return "\(minutes)m"
-        }
-        return "\(secs)s"
+    private static func cardDurationTextFromSeconds(
+        _ seconds: Int,
+        allowSubMinuteSeconds: Bool = true
+    ) -> String? {
+        TradeHoldDuration.formatSeconds(seconds, allowSubMinuteSeconds: allowSubMinuteSeconds)
     }
 
     /// Account · date · time line for journal cards.

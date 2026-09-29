@@ -15,6 +15,8 @@ import {
   type AppleNotificationContext,
   type AppleRenewalContext,
 } from "./appleSubscriptionState.ts"
+import { appleAppAccountTokenMatchesUser } from "./monetizationConfig.ts"
+import { loadAppleRootCertificates } from "./appleRootCertificates.ts"
 import {
   isKnownTraxProAppleProductId,
   resolveTraxProBillingIntervalFromAppleProductId,
@@ -52,6 +54,8 @@ export type VerifiedAppleTransaction = {
   purchasedAt: Date | null
   revocationReason: number | null
   isUpgraded: boolean
+  /** Apple appAccountToken, when the purchase was bound to a TradeTraxs user id. */
+  appAccountToken: string | null
 }
 
 export type VerifiedAppleRenewalInfo = AppleRenewalContext & {
@@ -111,12 +115,22 @@ function mapEnvironment(
 }
 
 function createVerifier(environment: Environment): SignedDataVerifier | null {
-  const rootCerts: Buffer[] = []
   const bundleId = process.env.APPLE_BUNDLE_ID?.trim()
   const appAppleIdRaw = process.env.APPLE_APP_APPLE_ID?.trim()
   const appAppleId = appAppleIdRaw ? Number(appAppleIdRaw) : undefined
 
   if (!bundleId || !appleCredentialsConfigured()) return null
+  if (environment === Environment.PRODUCTION && !Number.isFinite(appAppleId)) {
+    return null
+  }
+
+  let rootCerts: Buffer[]
+  try {
+    rootCerts = loadAppleRootCertificates()
+  } catch {
+    return null
+  }
+  if (rootCerts.length === 0) return null
 
   try {
     return new SignedDataVerifier(
@@ -149,6 +163,9 @@ export function mapDecodedTransaction(
     purchasedAt: purchasedMs != null ? new Date(Number(purchasedMs)) : null,
     revocationReason: decoded.revocationReason ?? null,
     isUpgraded: decoded.isUpgraded === true,
+    appAccountToken: decoded.appAccountToken
+      ? String(decoded.appAccountToken)
+      : null,
   }
 }
 
@@ -206,9 +223,7 @@ export async function verifyAppleTransactionId(
 
   for (const environment of [Environment.PRODUCTION, Environment.SANDBOX]) {
     const client = createAppStoreServerClient(environment)
-    if (!client) {
-      return { ok: false, reason: "Apple verifier unavailable" }
-    }
+    if (!client) continue
 
     try {
       const response = await client.getTransactionInfo(id)
@@ -251,9 +266,7 @@ export async function verifyAppleSignedTransactionInfo(
 
   for (const environment of attempts) {
     const verifier = createVerifier(environment)
-    if (!verifier) {
-      return { ok: false, reason: "Apple verifier unavailable" }
-    }
+    if (!verifier) continue
 
     try {
       const decoded = await verifier.verifyAndDecodeTransaction(jws)
@@ -306,9 +319,7 @@ export async function verifyAppleSignedRenewalInfo(
 
   for (const environment of attempts) {
     const verifier = createVerifier(environment)
-    if (!verifier) {
-      return { ok: false, reason: "Apple verifier unavailable" }
-    }
+    if (!verifier) continue
 
     try {
       const decoded = await verifier.verifyAndDecodeRenewalInfo(jws)
@@ -342,9 +353,7 @@ export async function verifyAppleSignedNotification(
 
   for (const environment of [Environment.PRODUCTION, Environment.SANDBOX]) {
     const verifier = createVerifier(environment)
-    if (!verifier) {
-      return { ok: false, reason: "Apple verifier unavailable" }
-    }
+    if (!verifier) continue
 
     try {
       const payload = await verifier.verifyAndDecodeNotification(jws)
@@ -439,6 +448,13 @@ export async function applyVerifiedAppleSubscription(
     return {
       ok: false,
       reason: "This App Store subscription belongs to another account",
+    }
+  }
+
+  if (!appleAppAccountTokenMatchesUser(transaction.appAccountToken, userId)) {
+    return {
+      ok: false,
+      reason: "This App Store purchase is linked to a different TradeTraxs account",
     }
   }
 

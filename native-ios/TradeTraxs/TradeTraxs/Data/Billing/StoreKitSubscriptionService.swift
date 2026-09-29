@@ -10,7 +10,7 @@ protocol StoreKitEntitlementSyncing: Sendable {
 
 protocol StoreKitSubscriptionServicing: StoreKitEntitlementSyncing, Sendable {
     func loadProducts() async throws -> [StoreKitTraxProProduct]
-    func purchase(productID: String) async -> StoreKitPurchaseOutcome
+    func purchase(productID: String, appAccountToken: UUID?) async -> StoreKitPurchaseOutcome
     func restorePurchases() async throws -> Bool
 }
 
@@ -21,6 +21,8 @@ struct StoreKitTraxProProduct: Sendable, Identifiable, Hashable {
     var subscriptionPeriodLabel: String
     var billingInterval: BillingInterval?
     var hasEligibleIntroductoryOffer: Bool
+    /// Present only when StoreKit says the user is eligible for the product's introductory offer.
+    var introductoryOfferSummary: String? = nil
 }
 
 enum StoreKitPurchaseOutcome: Sendable, Equatable {
@@ -56,17 +58,24 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
     }
 
     func loadProducts() async throws -> [StoreKitTraxProProduct] {
-        guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else { return [] }
+        guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else {
+            logStoreKitProducts(requested: [], loaded: [])
+            return []
+        }
         let ids = TraxProProductConfiguration.allProductIDs
         let products = try await Product.products(for: ids)
-        return products
-            .sorted { lhs, rhs in
-                Self.sortOrder(for: lhs.id) < Self.sortOrder(for: rhs.id)
-            }
-            .map { Self.makeProduct($0) }
+        logStoreKitProducts(requested: ids, loaded: products.map(\.id))
+        let sorted = products.sorted { lhs, rhs in
+            Self.sortOrder(for: lhs.id) < Self.sortOrder(for: rhs.id)
+        }
+        var mapped: [StoreKitTraxProProduct] = []
+        for product in sorted {
+            mapped.append(await Self.makeProduct(product))
+        }
+        return mapped
     }
 
-    func purchase(productID: String) async -> StoreKitPurchaseOutcome {
+    func purchase(productID: String, appAccountToken: UUID?) async -> StoreKitPurchaseOutcome {
         guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else {
             return .failed("In-app subscriptions aren't available in this version of TradeTraxs.")
         }
@@ -76,7 +85,11 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
                 return .failed("TraxPro product unavailable")
             }
 
-            let result = try await product.purchase()
+            var options: Set<Product.PurchaseOption> = []
+            if let appAccountToken {
+                options.insert(.appAccountToken(appAccountToken))
+            }
+            let result = try await product.purchase(options: options)
             switch result {
             case .success(let verification):
                 switch verification {
@@ -163,17 +176,65 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
         }
     }
 
-    nonisolated private static func makeProduct(_ product: Product) -> StoreKitTraxProProduct {
+    private static func makeProduct(_ product: Product) async -> StoreKitTraxProProduct {
         let periodLabel = product.subscription.map { subscriptionPeriodLabel($0.subscriptionPeriod) } ?? "Subscription"
-        let introEligible = product.subscription?.introductoryOffer != nil
+        let offer = product.subscription?.introductoryOffer
+        let eligible: Bool
+        if let subscription = product.subscription, subscription.introductoryOffer != nil {
+            eligible = await subscription.isEligibleForIntroOffer
+        } else {
+            eligible = false
+        }
+        let summary: String? = {
+            guard eligible, let offer else { return nil }
+            return IntroductoryOfferCopy.summary(
+                paymentMode: introPaymentMode(offer.paymentMode),
+                periodValue: offer.period.value,
+                periodUnit: introPeriodUnit(offer.period.unit),
+                displayPrice: offer.displayPrice
+            )
+        }()
         return StoreKitTraxProProduct(
             id: product.id,
             displayName: product.displayName,
             displayPrice: product.displayPrice,
             subscriptionPeriodLabel: periodLabel,
             billingInterval: TraxProProductConfiguration.billingInterval(for: product.id),
-            hasEligibleIntroductoryOffer: introEligible
+            hasEligibleIntroductoryOffer: eligible,
+            introductoryOfferSummary: summary
         )
+    }
+
+    nonisolated private static func introPaymentMode(
+        _ mode: Product.SubscriptionOffer.PaymentMode
+    ) -> IntroductoryOfferCopy.PaymentMode {
+        switch mode {
+        case .freeTrial:
+            return .freeTrial
+        case .payAsYouGo:
+            return .payAsYouGo
+        case .payUpFront:
+            return .payUpFront
+        default:
+            return .payAsYouGo
+        }
+    }
+
+    nonisolated private static func introPeriodUnit(
+        _ unit: Product.SubscriptionPeriod.Unit
+    ) -> IntroductoryOfferCopy.PeriodUnit {
+        switch unit {
+        case .day:
+            return .day
+        case .week:
+            return .week
+        case .month:
+            return .month
+        case .year:
+            return .year
+        @unknown default:
+            return .day
+        }
     }
 
     nonisolated private static func subscriptionPeriodLabel(_ period: Product.SubscriptionPeriod) -> String {
@@ -189,6 +250,18 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
         @unknown default:
             return "Subscription"
         }
+    }
+
+    private func logStoreKitProducts(requested: [String], loaded: [String]) {
+        #if DEBUG
+        print(
+            """
+            [StoreKit]
+            requestedProducts=\(requested)
+            loadedProducts=\(loaded)
+            """
+        )
+        #endif
     }
 
     nonisolated private static func sortOrder(for productID: String) -> Int {

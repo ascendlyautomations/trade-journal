@@ -149,10 +149,11 @@ final class CurrentUserProfileStore {
         let incoming = SessionBootstrapStore.normalizedAvatarURL(session: profile.avatar?.id, viewer: nil)
         let current = SessionBootstrapStore.normalizedAvatarURL(session: self.profile?.avatar?.id, viewer: nil)
         if incoming != current {
-            if var existing = self.profile {
-                existing.avatar = incoming.map { MediaReference(id: $0, kind: .image, altText: nil) }
-                self.profile = existing
-                detailCache?.seed(existing)
+            if let existing = self.profile {
+                var updated = existing
+                updated.avatar = incoming.map { MediaReference(id: $0, kind: .image, altText: nil) }
+                self.profile = updated
+                detailCache?.seed(updated)
             } else {
                 var seeded = profile
                 seeded.avatar = incoming.map { MediaReference(id: $0, kind: .image, altText: nil) }

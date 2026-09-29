@@ -78,6 +78,7 @@ struct AchievementDetailView: View {
                             displayName: viewModel.authorDisplayName,
                             username: viewModel.authorUsername,
                             dateText: TradeDisplay.dateText(achievement.achievedAt),
+                            showsVerifiedBadge: viewModel.author?.isCreator == true,
                             isOwner: viewModel.isOwner,
                             contentLink: .achievement(achievement.id),
                             ownerProfileID: achievement.ownerProfileID,

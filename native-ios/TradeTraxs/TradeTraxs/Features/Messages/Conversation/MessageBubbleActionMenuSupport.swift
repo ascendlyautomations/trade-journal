@@ -31,7 +31,7 @@ enum MessageBubbleActionMenuSupport {
         let selected = reactionConfiguration?.summaries.first(where: \.reactedByViewer)?.emoji
 
         let copyAction: (() -> Void)? = {
-            guard let text = item.text, !text.isEmpty, item.message.kind != .tradeShare else { return nil }
+            guard let text = item.copyableMessageText else { return nil }
             return {
                 UIPasteboard.general.string = text
                 ExperienceHaptics.play(.success)
@@ -63,7 +63,7 @@ enum MessageBubbleActionMenuSupport {
         onReport: (() -> Void)?
     ) -> Int {
         var count = 0
-        if item.text.flatMap({ !$0.isEmpty && item.message.kind != .tradeShare ? $0 : nil }) != nil {
+        if item.copyableMessageText != nil {
             count += 1
         }
         if item.sendState == .failed, onRetry != nil { count += 1 }

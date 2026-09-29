@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { fetchServerTraxProActive } from "@/lib/fetchServerTraxProActive"
 import { useRouter } from "next/navigation"
 import { Button } from "@/app/components/ui"
 import { useUserProfile } from "@/lib/useUserProfile"
@@ -36,6 +37,18 @@ export default function FinishTrialPage() {
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [continueLoading, setContinueLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    void (async () => {
+      const active = await fetchServerTraxProActive()
+      if (!cancelled && active) router.replace("/dashboard")
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user, router])
+
   const [billingInterval, setBillingInterval] = useState<TraxProBillingIntervalId>(
     TRAXPRO_DEFAULT_BILLING_INTERVAL
   )

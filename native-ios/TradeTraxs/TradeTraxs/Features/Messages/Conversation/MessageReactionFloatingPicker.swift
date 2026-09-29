@@ -67,11 +67,10 @@ struct MessageBubbleActionMenu: View {
             }
         }
         .fixedSize(horizontal: true, vertical: true)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(colors.separator.opacity(0.35), lineWidth: 0.5)
-        }
+        .experienceFloatingPanelBackground(
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous),
+            borderOpacity: 0.35
+        )
         .shadow(color: .black.opacity(0.14), radius: 8, y: 3)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("message.actionMenu")

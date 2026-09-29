@@ -8,8 +8,19 @@ nonisolated enum TraxProEntitlementPolicy {
 }
 
 nonisolated extension BillingStatus {
-    /// Authoritative TraxPro entitlement for native UI and feature gates.
+    /// Authoritative TraxPro entitlement. A server snapshot wins over local field math.
     var hasTraxProAccess: Bool {
-        TraxProEntitlementResolver.resolve(self).isActive
+        if serverTraxProActive != nil {
+            let record = EntitlementSnapshotRecord(
+                userID: profileID.rawValue,
+                traxProActive: serverTraxProActive == true,
+                source: entitlementSource.rawValue,
+                accessExpiresAt: accessExpiresAt,
+                revokedAt: appleRevokedAt,
+                fetchedAt: entitlementFetchedAt ?? Date()
+            )
+            return EntitlementSnapshotPolicy.decision(record) == .grant
+        }
+        return TraxProEntitlementResolver.resolve(self).isActive
     }
 }

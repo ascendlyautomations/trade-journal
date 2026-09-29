@@ -75,8 +75,7 @@ struct ConversationBubbleView: View {
     }
 
     private var copyableText: String? {
-        guard let text = item.text, !text.isEmpty, item.message.kind != .tradeShare else { return nil }
-        return text
+        item.copyableMessageText
     }
 
     private var resolvedAuthor: Profile? {
@@ -367,6 +366,7 @@ struct ConversationBubbleView: View {
                 isOutgoing: item.isOutgoing,
                 includesBackground: false
             )
+            sharedContentUserCaptionBlock()
             reactionChipsOnly(topPadding: 6, capWidth: tradeBubbleMaxWidth)
         }
         .padding(.horizontal, ExperienceSpacing.sm + 2)
@@ -458,6 +458,7 @@ struct ConversationBubbleView: View {
     private func sharedContentBubbleContent<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             content()
+            sharedContentUserCaptionBlock()
             reactionChipsOnly(topPadding: 6, capWidth: tradeBubbleMaxWidth)
         }
         .padding(.horizontal, ExperienceSpacing.sm + 2)
@@ -468,6 +469,20 @@ struct ConversationBubbleView: View {
             item.isOutgoing ? colors.accent : colors.incomingMessageBubble,
             in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
         )
+    }
+
+    @ViewBuilder
+    private func sharedContentUserCaptionBlock() -> some View {
+        if let caption = item.resolvedShareUserCaption {
+            Text(caption)
+                .experienceStyle(
+                    .body,
+                    color: item.isOutgoing ? colors.onAccent : colors.primaryText
+                )
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: tradeBubbleMaxWidth, alignment: .leading)
+                .padding(.top, ExperienceSpacing.xs)
+        }
     }
 
     private var reactionsOnlyBubble: some View {

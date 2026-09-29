@@ -66,11 +66,8 @@ struct SettingsTradetraxsRemindersView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .listSectionSpacing(ExperienceSpacing.sm)
-        .scrollContentBackground(.hidden)
-        .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("TradeTraxs Reminders")
         .onAppear { viewModel.loadIfNeeded() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in

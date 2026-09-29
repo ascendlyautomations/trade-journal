@@ -206,7 +206,9 @@ export default function TradovateIntegrationSettingsSection({
       )
       const data = (await res.json()) as {
         error?: string
+        code?: string
         summary?: {
+          ok?: boolean
           fetched: number
           newExecutions: number
           duplicateExecutions: number
@@ -214,7 +216,9 @@ export default function TradovateIntegrationSettingsSection({
           tradesUpdated: number
           newTradeIds?: string[]
           status: string
+          syncOutcome?: string
           error?: string
+          errorCode?: string
         }
         accounts?: BrokerAccount[]
       }
@@ -222,6 +226,19 @@ export default function TradovateIntegrationSettingsSection({
         throw new Error(
           data.summary?.error ?? data.error ?? "Could not sync trades."
         )
+      }
+      if (
+        data.code === "BROKER_NO_AVAILABLE_TRADE_HISTORY" ||
+        data.summary?.syncOutcome === "no_available_trade_history"
+      ) {
+        setSyncFeedback(
+          "No trades are currently available to import from Tradovate. Import a Tradovate Performance CSV from Add Trade → CSV to add older trades."
+        )
+        if (userId) {
+          invalidateTradesCache(userId)
+          void ensureAccountsLoaded(supabase, userId, { force: true })
+        }
+        return
       }
       if (data.accounts) {
         setAccountsByConnection((prev) => ({

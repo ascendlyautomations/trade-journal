@@ -52,10 +52,17 @@ final class DataEnvironment {
     let psychologyReports: any PsychologyReportRepository
     let dailyCheckIns: any TraderDailyCheckInRepository
     let contentReports: any ContentReportRepository
+    let userSubmissions: any UserSubmissionRepository
     let vault: any VaultRepository
     /// Session-scoped private Vault cache — shared by Feed, detail, and Vault home.
     let vaultStore: VaultStore
     let brokerIntegrations: any BrokerIntegrationRepository
+    let adminUsers: any AdminUsersRepository
+    let adminContentReports: any AdminContentReportsRepository
+    let adminBugReports: any AdminBugReportsRepository
+    let adminSupportTickets: any AdminSupportTicketsRepository
+    let adminProductFeedback: any AdminProductFeedbackRepository
+    let adminUsageAnalytics: any AdminUsageAnalyticsRepository
 
     init(
         configuration: DataConfiguration,
@@ -99,9 +106,16 @@ final class DataEnvironment {
         psychologyReports: any PsychologyReportRepository,
         dailyCheckIns: any TraderDailyCheckInRepository,
         contentReports: any ContentReportRepository,
+        userSubmissions: any UserSubmissionRepository,
         vault: any VaultRepository,
         vaultStore: VaultStore,
-        brokerIntegrations: any BrokerIntegrationRepository
+        brokerIntegrations: any BrokerIntegrationRepository,
+        adminUsers: any AdminUsersRepository,
+        adminContentReports: any AdminContentReportsRepository,
+        adminBugReports: any AdminBugReportsRepository,
+        adminSupportTickets: any AdminSupportTicketsRepository,
+        adminProductFeedback: any AdminProductFeedbackRepository,
+        adminUsageAnalytics: any AdminUsageAnalyticsRepository
     ) {
         self.configuration = configuration
         self.supabase = supabase
@@ -144,9 +158,16 @@ final class DataEnvironment {
         self.psychologyReports = psychologyReports
         self.dailyCheckIns = dailyCheckIns
         self.contentReports = contentReports
+        self.userSubmissions = userSubmissions
         self.vault = vault
         self.vaultStore = vaultStore
         self.brokerIntegrations = brokerIntegrations
+        self.adminUsers = adminUsers
+        self.adminContentReports = adminContentReports
+        self.adminBugReports = adminBugReports
+        self.adminSupportTickets = adminSupportTickets
+        self.adminProductFeedback = adminProductFeedback
+        self.adminUsageAnalytics = adminUsageAnalytics
     }
 
     enum LaunchMode: Sendable {
@@ -282,7 +303,8 @@ final class DataEnvironment {
         let billing: any BillingRepository = DefaultBillingRepository(
             supabase: supabase,
             cache: cache,
-            storeKitSync: storeKitSubscriptions
+            storeKitSync: storeKitSubscriptions,
+            entitlementClient: appleSubscriptionSync
         )
 
         let engagementStore = makeEngagementStore(interactions: interactions, session: session)
@@ -348,6 +370,11 @@ final class DataEnvironment {
             ),
             dailyCheckIns: dailyCheckInRepository,
             contentReports: DefaultContentReportRepository(supabase: supabase),
+            userSubmissions: DefaultUserSubmissionRepository(
+                supabase: supabase,
+                session: session,
+                profiles: profiles
+            ),
             vault: vaultRepository,
             vaultStore: vaultStore,
             brokerIntegrations: {
@@ -357,7 +384,13 @@ final class DataEnvironment {
                     session: session
                 )
                 return repository
-            }()
+            }(),
+            adminUsers: DefaultAdminUsersRepository(supabase: supabase),
+            adminContentReports: DefaultAdminContentReportsRepository(supabase: supabase),
+            adminBugReports: DefaultAdminBugReportsRepository(supabase: supabase),
+            adminSupportTickets: DefaultAdminSupportTicketsRepository(supabase: supabase),
+            adminProductFeedback: DefaultAdminProductFeedbackRepository(supabase: supabase),
+            adminUsageAnalytics: DefaultAdminUsageAnalyticsRepository(supabase: supabase)
         )
     }
 
@@ -418,8 +451,9 @@ final class DataEnvironment {
             session: session,
             detailCache: detailCache
         )
+        let loginShellBillingClient = LoginShellAppleSubscriptionSyncClient()
         let storeKitSubscriptions: any StoreKitSubscriptionServicing = StoreKitSubscriptionService(
-            syncClient: LoginShellAppleSubscriptionSyncClient()
+            syncClient: loginShellBillingClient
         )
         let repositories = StartupTrace.measure("LoginShell.Repositories") {
             (
@@ -439,7 +473,8 @@ final class DataEnvironment {
                 billing: DefaultBillingRepository(
                     supabase: supabase,
                     cache: cache,
-                    storeKitSync: storeKitSubscriptions
+                    storeKitSync: storeKitSubscriptions,
+                    entitlementClient: loginShellBillingClient
                 ),
                 account: DefaultAccountRepository(supabase: supabase),
                 analytics: DefaultAnalyticsRepository(supabase: supabase),
@@ -510,9 +545,16 @@ final class DataEnvironment {
             psychologyReports: repositories.psychologyReports,
             dailyCheckIns: repositories.dailyCheckIns,
             contentReports: LoginShellContentReportRepository(),
+            userSubmissions: LoginShellUserSubmissionRepository(),
             vault: vaultRepository,
             vaultStore: VaultStore(repository: vaultRepository),
-            brokerIntegrations: LoginShellBrokerIntegrationRepository()
+            brokerIntegrations: LoginShellBrokerIntegrationRepository(),
+            adminUsers: LoginShellAdminUsersRepository(),
+            adminContentReports: LoginShellAdminContentReportsRepository(),
+            adminBugReports: LoginShellAdminBugReportsRepository(),
+            adminSupportTickets: LoginShellAdminSupportTicketsRepository(),
+            adminProductFeedback: LoginShellAdminProductFeedbackRepository(),
+            adminUsageAnalytics: LoginShellAdminUsageAnalyticsRepository()
         )
     }
 
@@ -574,8 +616,9 @@ final class DataEnvironment {
         let exploreRepository: any ExploreRepository = GuestPublicExploreRepository(supabase: supabase)
         let roomsRepository: any RoomRepository = DemoExploreRoomsRepository(supabase: supabase, cache: cache)
         let messagesRepository: any MessageRepository = DemoExploreMessageRepository()
+        let guestBillingClient = LoginShellAppleSubscriptionSyncClient()
         let storeKitSubscriptions: any StoreKitSubscriptionServicing = StoreKitSubscriptionService(
-            syncClient: LoginShellAppleSubscriptionSyncClient()
+            syncClient: guestBillingClient
         )
 
         let psychologyReports: any PsychologyReportRepository = DefaultPsychologyReportRepository(
@@ -628,7 +671,8 @@ final class DataEnvironment {
             billing: DefaultBillingRepository(
                 supabase: supabase,
                 cache: cache,
-                storeKitSync: storeKitSubscriptions
+                storeKitSync: storeKitSubscriptions,
+                entitlementClient: guestBillingClient
             ),
             storeKitSubscriptions: storeKitSubscriptions,
             account: DefaultAccountRepository(supabase: supabase),
@@ -648,9 +692,20 @@ final class DataEnvironment {
             psychologyReports: psychologyReports,
             dailyCheckIns: DefaultTraderDailyCheckInRepository(supabase: supabase, cache: cache),
             contentReports: LoginShellContentReportRepository(),
+            userSubmissions: DefaultUserSubmissionRepository(
+                supabase: supabase,
+                session: session,
+                profiles: profiles
+            ),
             vault: DefaultVaultRepository(supabase: supabase, session: session),
             vaultStore: VaultStore(repository: DemoVaultRepository()),
-            brokerIntegrations: LoginShellBrokerIntegrationRepository()
+            brokerIntegrations: LoginShellBrokerIntegrationRepository(),
+            adminUsers: LoginShellAdminUsersRepository(),
+            adminContentReports: LoginShellAdminContentReportsRepository(),
+            adminBugReports: LoginShellAdminBugReportsRepository(),
+            adminSupportTickets: LoginShellAdminSupportTicketsRepository(),
+            adminProductFeedback: LoginShellAdminProductFeedbackRepository(),
+            adminUsageAnalytics: LoginShellAdminUsageAnalyticsRepository()
         )
     }
     @MainActor
@@ -673,6 +728,141 @@ final class DataEnvironment {
         VaultPersistedCacheCoordinator.shared.configure(store: store, session: session)
         store.configurePersistence(VaultPersistedCacheCoordinator.shared)
         return store
+    }
+}
+
+private struct LoginShellAdminUsageAnalyticsRepository: AdminUsageAnalyticsRepository {
+    func fetchBundle(seriesDays: Int) async throws -> AdminUsageAnalyticsBundle {
+        _ = seriesDays
+        throw AppError.authentication(.sessionMissing)
+    }
+}
+
+private struct LoginShellAdminSupportTicketsRepository: AdminSupportTicketsRepository {
+    private func unavailable() -> AppError {
+        .authentication(.sessionMissing)
+    }
+
+    func fetchTickets(
+        queue: AdminSupportTicketQueueFilter,
+        limit: Int,
+        offset: Int
+    ) async throws -> AdminSupportTicketPage {
+        _ = (queue, limit, offset)
+        throw unavailable()
+    }
+
+    func updateTicketReview(ticketID: String, update: AdminSupportTicketReviewUpdate) async throws {
+        _ = (ticketID, update)
+        throw unavailable()
+    }
+}
+
+private struct LoginShellAdminProductFeedbackRepository: AdminProductFeedbackRepository {
+    private func unavailable() -> AppError {
+        .authentication(.sessionMissing)
+    }
+
+    func fetchFeedback(
+        queue: AdminProductFeedbackQueueFilter,
+        type: AdminProductFeedbackTypeFilter,
+        status: AdminProductFeedbackStatusFilter,
+        limit: Int,
+        offset: Int
+    ) async throws -> AdminProductFeedbackPage {
+        _ = (queue, type, status, limit, offset)
+        throw unavailable()
+    }
+
+    func updateFeedbackReview(feedbackID: String, update: AdminProductFeedbackReviewUpdate) async throws {
+        _ = (feedbackID, update)
+        throw unavailable()
+    }
+}
+
+private struct LoginShellAdminBugReportsRepository: AdminBugReportsRepository {
+    private func unavailable() -> AppError {
+        .authentication(.sessionMissing)
+    }
+
+    func fetchReports(
+        status: AdminBugReportStatusFilter,
+        severity: AdminBugReportSeverityFilter,
+        limit: Int,
+        offset: Int
+    ) async throws -> AdminBugReportPage {
+        _ = (status, severity, limit, offset)
+        throw unavailable()
+    }
+
+    func updateReportStatus(
+        reportID: String,
+        status: BugReportStatus,
+        previousStatus: BugReportStatus,
+        existingResolvedAt: Date?
+    ) async throws {
+        _ = (reportID, status, previousStatus, existingResolvedAt)
+        throw unavailable()
+    }
+}
+
+private struct LoginShellAdminContentReportsRepository: AdminContentReportsRepository {
+    private func unavailable() -> AppError {
+        .authentication(.sessionMissing)
+    }
+
+    func fetchReports(
+        status: AdminContentReportStatusFilter,
+        limit: Int,
+        offset: Int
+    ) async throws -> AdminContentReportPage {
+        _ = (status, limit, offset)
+        throw unavailable()
+    }
+
+    func updateReportStatus(
+        reportID: String,
+        status: ContentReportStatus,
+        reviewerID: ProfileID
+    ) async throws {
+        _ = (reportID, status, reviewerID)
+        throw unavailable()
+    }
+}
+
+private struct LoginShellAdminUsersRepository: AdminUsersRepository {
+    private func unavailable() -> AppError {
+        .authentication(.sessionMissing)
+    }
+
+    func fetchDirectory(_ query: AdminUserDirectoryQuery) async throws -> AdminUserDirectoryPage {
+        _ = query
+        throw unavailable()
+    }
+
+    func fetchActivityCounts(targetUserID: ProfileID) async throws -> AdminUserActivityCounts {
+        _ = targetUserID
+        throw unavailable()
+    }
+
+    func banUser(targetUserID: ProfileID, adminUserID: ProfileID, reason: String) async throws {
+        _ = (targetUserID, adminUserID, reason)
+        throw unavailable()
+    }
+
+    func unbanUser(targetUserID: ProfileID, adminUserID: ProfileID) async throws {
+        _ = (targetUserID, adminUserID)
+        throw unavailable()
+    }
+
+    func fetchDeletionPreview(targetUserID: ProfileID) async throws -> AdminUserDeletionPreview {
+        _ = targetUserID
+        throw unavailable()
+    }
+
+    func deleteUser(targetUserID: ProfileID) async throws {
+        _ = targetUserID
+        throw unavailable()
     }
 }
 
@@ -751,5 +941,9 @@ private struct LoginShellAppleSubscriptionSyncClient: AppleSubscriptionSyncClien
             appleExpiresAt: nil,
             appleProductId: nil
         )
+    }
+
+    func fetchMonetizationConfig() async throws -> IosMonetizationConfigResponse {
+        throw AppError.unknown(message: "Monetization config is unavailable")
     }
 }

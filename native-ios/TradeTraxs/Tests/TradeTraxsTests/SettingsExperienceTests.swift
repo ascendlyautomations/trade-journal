@@ -9,6 +9,9 @@ final class SettingsExperienceTests: XCTestCase {
         XCTAssertTrue(sections.contains { $0.id == "account" })
         XCTAssertTrue(sections.contains { $0.id == "tradetraxs" })
         XCTAssertTrue(sections.contains { $0.id == "legal" })
+        let supportItems = sections.first { $0.id == "support" }?.items.map(\.route) ?? []
+        XCTAssertTrue(supportItems.contains(.support))
+        XCTAssertTrue(supportItems.contains(.productFeedback))
         let allRoutes = sections.flatMap(\.items).map(\.route)
         XCTAssertTrue(allRoutes.contains(.account))
         XCTAssertTrue(allRoutes.contains(.privacy))
@@ -45,9 +48,24 @@ final class SettingsExperienceTests: XCTestCase {
         store.selectedTab = .profile
         let coordinator = NavigationCoordinator(store: store)
 
-        coordinator.pushProfile(.settings(.home))
+        coordinator.pushProfileSettingsHome(source: "test")
         XCTAssertEqual(store.selectedTab, .profile)
         XCTAssertEqual(profileSettingsRoutes(in: store), [.home])
+    }
+
+    func testRepeatedProfileSettingsHomeOpenIsIdempotent() {
+        let store = NavigationStore()
+        store.sessionPhase = .authenticated
+        store.selectedTab = .profile
+        let coordinator = NavigationCoordinator(store: store)
+
+        coordinator.pushProfileSettingsHome(source: "test")
+        coordinator.pushProfileSettingsHome(source: "test")
+        XCTAssertEqual(store.paths.profile, [.settings(.home)])
+
+        store.paths.profile = [.settings(.home), .settings(.account)]
+        coordinator.pushProfileSettingsHome(source: "test")
+        XCTAssertEqual(store.paths.profile, [.settings(.home)])
     }
 
     func testRepeatedSettingsOpenAppendsWithoutReplacingActivity() {
@@ -257,7 +275,7 @@ private final class SettingsStubNotificationPreferencesRepository: NotificationP
 
 private struct SettingsStubStoreKit: StoreKitSubscriptionServicing {
     func loadProducts() async throws -> [StoreKitTraxProProduct] { [] }
-    func purchase(productID: String) async -> StoreKitPurchaseOutcome { .userCancelled }
+    func purchase(productID: String, appAccountToken: UUID?) async -> StoreKitPurchaseOutcome { .userCancelled }
     func restorePurchases() async throws -> Bool { false }
     func syncVerifiedTransactionsToServer() async throws {}
     func startTransactionListenerIfNeeded() async {}

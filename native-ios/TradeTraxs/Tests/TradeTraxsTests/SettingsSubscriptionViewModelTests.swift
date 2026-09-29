@@ -3,7 +3,16 @@ import XCTest
 
 @MainActor
 final class SettingsSubscriptionViewModelTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        SessionBillingEntitlementStore.shared.clear()
+        MonetizationRuntimeConfiguration.shared.resetToFailClosed()
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = false
+    }
+
     override func tearDown() {
+        SessionBillingEntitlementStore.shared.clear()
+        MonetizationRuntimeConfiguration.shared.resetToFailClosed()
         IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = false
         super.tearDown()
     }
@@ -12,7 +21,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
         IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
         let products = [
             StoreKitTraxProProduct(
-                id: "com.tradetraxs.traxpro.monthly",
+                id: "com.tradetraxs.traxspro.monthly",
                 displayName: "TraxPro Monthly",
                 displayPrice: "$23.99",
                 subscriptionPeriodLabel: "Monthly",
@@ -150,6 +159,30 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.showsProMembership)
     }
 
+    func testPurchaseSendsAuthenticatedUserAsAppAccountToken() async {
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
+        let user = UUID()
+        let capture = PurchaseCapture()
+        let storeKit = StubStoreKit(products: [sampleProduct()], capture: capture)
+        let viewModel = SettingsSubscriptionViewModel(
+            billing: StubBilling(
+                status: BillingStatus(
+                    profileID: ProfileID(user.uuidString),
+                    plan: .free,
+                    lifecycle: .none,
+                    isProEntitled: false
+                )
+            ),
+            storeKit: storeKit,
+            session: SubscriptionTestSession(userID: user.uuidString),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { if case .loaded = viewModel.productsState { return true }; return false }
+        await viewModel.purchaseSelectedPlan()
+        XCTAssertEqual(capture.appAccountToken, user)
+    }
+
     func testFreeTierDisplayMatchesPolicy() async {
         IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
         let viewModel = makeViewModel(
@@ -198,7 +231,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
 
     private func sampleProduct() -> StoreKitTraxProProduct {
         StoreKitTraxProProduct(
-            id: "com.tradetraxs.traxpro.monthly",
+            id: "com.tradetraxs.traxspro.monthly",
             displayName: "TraxPro Monthly",
             displayPrice: "$23.99",
             subscriptionPeriodLabel: "Monthly",
@@ -283,13 +316,21 @@ private final class MutableBillingRepository: BillingRepository, @unchecked Send
     }
 }
 
+final class PurchaseCapture: @unchecked Sendable {
+    var appAccountToken: UUID?
+}
+
 private struct StubStoreKit: StoreKitSubscriptionServicing {
     var products: [StoreKitTraxProProduct] = []
     var purchaseOutcome: StoreKitPurchaseOutcome = .success
     var restoreFindsEntitlement = false
+    var capture: PurchaseCapture? = nil
 
     func loadProducts() async throws -> [StoreKitTraxProProduct] { products }
-    func purchase(productID: String) async -> StoreKitPurchaseOutcome { purchaseOutcome }
+    func purchase(productID: String, appAccountToken: UUID?) async -> StoreKitPurchaseOutcome {
+        capture?.appAccountToken = appAccountToken
+        return purchaseOutcome
+    }
     func restorePurchases() async throws -> Bool { restoreFindsEntitlement }
     func syncVerifiedTransactionsToServer() async throws {}
     func startTransactionListenerIfNeeded() async {}

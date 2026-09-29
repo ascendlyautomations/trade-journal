@@ -2,9 +2,11 @@ import SwiftUI
 import UIKit
 
 extension View {
-    /// Dark mode only. Inset-grouped form and settings rows use the Dashboard card
-    /// lift (`fillSecondary` at 35% over the page) instead of the system warm grouped fill.
-    /// Light mode is left untouched.
+    /// Dark mode only. Prefer `experienceInsetGroupedListStyle()` / `experienceTradeTraxsFormStyle()`
+    /// in `ExperienceThemedMaterials.swift` for new screens — they bundle list/form chrome with this installer.
+    ///
+    /// Inset-grouped rows use the Dashboard card lift (`fillSecondary` at 35% over the page) instead of
+    /// the system warm grouped fill. Light mode is left untouched.
     func experienceDashboardGroupedRows() -> some View {
         modifier(ExperienceDashboardGroupedRowsModifier())
     }

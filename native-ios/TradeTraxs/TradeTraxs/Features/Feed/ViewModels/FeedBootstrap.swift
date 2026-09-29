@@ -288,7 +288,7 @@ enum FeedBootstrap: ScreenBootstrap {
                     sortOrder: 0,
                     achievedAt: item.createdAt
                 )
-                detailCache.seed(achievement)
+                detailCache.seed(achievement, achievementPostID: PostID(item.id))
                 return .achievement(item, achievement)
             }
             return nil
@@ -527,11 +527,11 @@ enum FeedBootstrap: ScreenBootstrap {
                     sortOrder: 0,
                     achievedAt: item.createdAt
                 )
-                detailCache.seed(achievement)
+                detailCache.seed(achievement, achievementPostID: PostID(item.id))
                 return .achievement(item, achievement)
             }
             if let achievement = try? await achievements.achievement(id: achievementID) {
-                detailCache.seed(achievement)
+                detailCache.seed(achievement, achievementPostID: PostID(item.id))
                 return .achievement(item, achievement)
             }
             return nil

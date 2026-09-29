@@ -182,14 +182,9 @@ struct PayoutEquityCurveView: View {
         }
         .padding(.horizontal, ExperienceSpacing.sm)
         .padding(.vertical, ExperienceSpacing.xs)
-        .background(
-            .ultraThinMaterial,
+        .experienceFloatingPanelBackground(
             in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
         )
-        .overlay {
-            RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-                .stroke(colors.border.opacity(0.5), lineWidth: ExperienceBorder.hairline)
-        }
     }
 
     private struct RenderPoint: Identifiable {

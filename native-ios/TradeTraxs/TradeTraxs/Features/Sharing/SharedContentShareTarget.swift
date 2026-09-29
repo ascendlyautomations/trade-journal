@@ -55,7 +55,7 @@ struct SharedContentShareTarget: Identifiable, Equatable, Sendable {
             let suffix = title.isEmpty ? "an achievement" : "“\(title)”"
             return SharedContentShareTarget(
                 reference: .achievementPost(PostID(item.id)),
-                contentLink: .achievement(AchievementID(item.id)),
+                contentLink: .achievement(achievement.id),
                 shareTitle: "Share Achievement",
                 externalShareText: "\(handle) shared \(suffix) on TradeTraxs",
                 roomTradeID: nil

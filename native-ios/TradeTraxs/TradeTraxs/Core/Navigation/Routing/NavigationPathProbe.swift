@@ -139,6 +139,7 @@ nonisolated enum NavigationPathProbeFormatter {
         case .activity: return "activity"
         case .followRequests: return "followRequests"
         case .tradeRoomJoinRequest: return "tradeRoomJoinRequest"
+        case .admin(let adminRoute): return "admin(\(String(describing: adminRoute)))"
         }
     }
 }

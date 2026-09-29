@@ -24,7 +24,7 @@ struct FollowListRowView: View {
                                 .foregroundStyle(colors.primaryText)
                                 .lineLimit(1)
                             if profile.isCreator {
-                                ExperienceTag(title: "Creator", tone: .info)
+                                TradeTraxsVerifiedBadge(size: .compact)
                             }
                         }
                         Text("@\(profile.username)")

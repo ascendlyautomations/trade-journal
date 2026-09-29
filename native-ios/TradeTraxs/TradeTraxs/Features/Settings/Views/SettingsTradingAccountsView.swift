@@ -62,7 +62,7 @@ struct SettingsTradingAccountsView: View {
             if let data {
                 Section {
                     NavigationLink {
-                        BrokerIntegrationsView(data: data)
+                        BrokerIntegrationsView(data: data, navigationCoordinator: navigationCoordinator)
                     } label: {
                         brokerIntegrationsRow
                     }
@@ -209,11 +209,9 @@ struct SettingsTradingAccountsView: View {
                 }
             }
             }
-            .listStyle(.insetGrouped)
-            .experienceDashboardGroupedRows()
+            .experienceInsetGroupedListStyle(pageBackground: false)
             .listSectionSpacing(ExperienceSpacing.xxs)
             .contentMargins(.top, viewModel.accounts.isEmpty ? ExperienceSpacing.xs : 0, for: .scrollContent)
-            .scrollContentBackground(.hidden)
         }
         .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Manage Accounts")

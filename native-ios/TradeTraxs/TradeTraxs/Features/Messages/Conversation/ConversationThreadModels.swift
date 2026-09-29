@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 nonisolated enum ConversationThreadSupport {
     static func isLocalDevelopment(_ id: ProfileID) -> Bool {
@@ -48,6 +49,61 @@ nonisolated enum ConversationThreadSupport {
     }
 }
 
+/// One-time open / reopen bottom positioning for DM + Trade Room threads.
+enum ConversationThreadInitialScrollPhase: Equatable {
+    case pending
+    case positioning
+    case settling
+    case confirmed
+}
+
+enum ConversationThreadScrollSupport {
+    static let bottomProximityThreshold: CGFloat = 80
+    static let userScrollReleaseThreshold: CGFloat = 120
+    static let settlingStabilityDelayNs: UInt64 = 150_000_000
+    static let initialScrollRetryIntervalNs: UInt64 = 32_000_000
+    static let initialScrollRetryCount = 8
+
+    struct LayoutSample: Equatable {
+        let contentHeight: CGFloat
+        let contentOffsetY: CGFloat
+        let containerHeight: CGFloat
+        let isNearBottom: Bool
+
+        var distanceFromBottom: CGFloat {
+            contentHeight - contentOffsetY - containerHeight
+        }
+    }
+
+    /// Synthetic scroll scope for Trade Room channels (coordinator conversation binding).
+    static func roomChannelScrollScope(roomID: RoomID, channelID: RoomChannelID?) -> ConversationID {
+        let channel = channelID?.rawValue ?? "none"
+        return ConversationID("room-scroll:\(roomID.rawValue):\(channel)")
+    }
+
+    /// Shared cards may resize after cache/network hydration during the initial bottom pin.
+    static func hasPendingRichContentLayout(
+        messages: [Message],
+        richContentHydrationCount: Int,
+        unavailableKeys: Set<String>,
+        isPresentationResolved: (Message) -> Bool
+    ) -> Bool {
+        if richContentHydrationCount > 0 { return true }
+        for message in messages {
+            guard SharedContentMessageSupport.isInternallySharedContent(message) else { continue }
+            if let reference = message.sharedContent,
+               unavailableKeys.contains(reference.stableKey)
+            {
+                continue
+            }
+            if !isPresentationResolved(message) {
+                return true
+            }
+        }
+        return false
+    }
+}
+
 enum ConversationTimelineItem: Identifiable, Hashable {
     case daySeparator(id: String, title: String)
     case message(ConversationBubbleItem)
@@ -77,6 +133,28 @@ struct ConversationBubbleItem: Identifiable, Hashable {
     /// True when sender differs from the previous chronological message (Trade Rooms spacing).
     var startsSenderGroup: Bool = false
     var addsSenderGroupTopInset: Bool = false
+
+    /// Optional sender note rendered below the shared card inside the same bubble.
+    var shareUserCaption: String? = nil
+
+    var resolvedShareUserCaption: String? {
+        if let shareUserCaption {
+            return shareUserCaption
+        }
+        return SharedContentMessageSupport.userWrittenMessage(for: message)
+    }
+
+    /// Text surfaced in copy / action menus (includes bundled share captions).
+    var copyableMessageText: String? {
+        if SharedContentMessageSupport.isInternallySharedContent(message),
+           let caption = resolvedShareUserCaption,
+           !caption.isEmpty
+        {
+            return caption
+        }
+        guard let text, !text.isEmpty else { return nil }
+        return text
+    }
 
     enum SendState: Hashable {
         case sent
@@ -111,6 +189,9 @@ struct ConversationBubbleItem: Identifiable, Hashable {
         }
         if let payload = StoryReplyMessageSupport.decode(from: message.body) {
             return StoryReplyMessageSupport.replyText(from: payload)
+        }
+        if SharedContentMessageSupport.isInternallySharedContent(message) {
+            return nil
         }
         let body = message.body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return body.isEmpty ? nil : body

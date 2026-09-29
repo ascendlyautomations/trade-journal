@@ -26,6 +26,7 @@ struct AddTradeView: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.navigationEnvironment) private var navigationEnvironment
 
     private let embeddedInTradeEntryHub: Bool
     private let brokerData: DataEnvironment?
@@ -203,7 +204,10 @@ struct AddTradeView: View {
         .sheet(isPresented: $showsBrokerIntegrations) {
             if let brokerData {
                 NavigationStack {
-                    BrokerIntegrationsView(data: brokerData)
+                    BrokerIntegrationsView(
+                        data: brokerData,
+                        navigationCoordinator: navigationEnvironment.coordinator
+                    )
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
                                 Button("Close") { showsBrokerIntegrations = false }
@@ -536,8 +540,7 @@ struct AddTradeView: View {
             }
         }
         .scrollDismissesKeyboard(.interactively)
-        .scrollContentBackground(.hidden)
-        .experienceDashboardGroupedRows()
+        .experienceTradeTraxsFormStyle(pageBackground: false)
         .disabled(viewModel.phase == .saving)
         .listSectionSpacing(AddTradeFormLayout.sectionSpacing)
         .contentMargins(.top, ExperienceSpacing.xxs, for: .scrollContent)
@@ -1210,10 +1213,7 @@ struct AddTradeInstrumentPickerView: View {
                 customInstrumentSection
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
-        .background(colors.groupedBackground.ignoresSafeArea())
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .searchable(text: $searchText, prompt: "Search instruments")
         .experienceNavigationTitle("Instrument")
         .toolbar {
@@ -1299,7 +1299,7 @@ struct AddTradeNewClipComposerView: View {
                 Text("Linked to this trade")
             }
         }
-        .experienceDashboardGroupedRows()
+        .experienceTradeTraxsFormStyle(pageBackground: false)
         .experienceNavigationTitle("New Clip")
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {

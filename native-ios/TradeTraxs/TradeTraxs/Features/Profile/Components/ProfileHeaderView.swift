@@ -130,7 +130,7 @@ struct ProfileHeaderView: View {
                         .accessibilityIdentifier("profile.displayName")
 
                     if profile.isCreator {
-                        ExperienceTag(title: "Creator", tone: .info)
+                        TradeTraxsVerifiedBadge(size: .standard)
                     }
                 }
 

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { entitlementEnforcementEnabled } from "@/lib/server/monetizationConfig"
 import { isProActive } from "@/lib/subscription"
 import {
   accountCanAddTrades,
@@ -176,7 +177,8 @@ export async function assertCanCreateTradingAccount(
   userId: string,
   profile: { is_pro?: boolean | null; subscription_status?: string | null; trial_end?: string | null } | null
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  if (isProActive(profile)) {
+  const enforced = await entitlementEnforcementEnabled(client)
+  if (!enforced || isProActive(profile)) {
     return { ok: true }
   }
 

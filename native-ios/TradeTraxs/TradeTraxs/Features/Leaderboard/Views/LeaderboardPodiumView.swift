@@ -93,9 +93,7 @@ struct LeaderboardPodiumView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                     if row.isVerified {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(colors.accent)
+                        TradeTraxsVerifiedBadge(size: .inline)
                     }
                 }
                 if LeaderboardRowView.showsUsername(profile.username) {

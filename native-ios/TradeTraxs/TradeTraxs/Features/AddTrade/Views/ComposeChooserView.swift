@@ -82,12 +82,9 @@ struct ComposeChooserView: View {
                 .accessibilityIdentifier("compose.withdrawal")
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .listSectionSpacing(ExperienceSpacing.xs)
         .contentMargins(.top, ExperienceSpacing.xxs, for: .scrollContent)
-        .scrollContentBackground(.hidden)
-        .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Create")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {

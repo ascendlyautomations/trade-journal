@@ -120,9 +120,7 @@ struct TradeImportPreviewContent: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
+        .experienceInsetGroupedListStyle(pageBackground: false)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ExperienceButton(
                 title: "Import \(importableTrades.count) Trades",

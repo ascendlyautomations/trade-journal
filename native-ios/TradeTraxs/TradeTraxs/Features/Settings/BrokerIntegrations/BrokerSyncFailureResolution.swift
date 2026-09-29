@@ -3,12 +3,23 @@ import Foundation
 /// Classifies broker account sync outcomes for UI (reconnect vs retry vs hard failure).
 nonisolated enum BrokerSyncFailureResolution: Equatable, Sendable {
     case success
+    case noAvailableTradeHistory
     case reconnectRequired
     case retryable
     case importFailed
 
+    static func isNoAvailableTradeHistory(_ response: TradovateAccountSyncResponse) -> Bool {
+        if response.resolvedClientCode == "BROKER_NO_AVAILABLE_TRADE_HISTORY" { return true }
+        if response.summary.syncOutcome == "no_available_trade_history" { return true }
+        if response.summary.errorCode == "broker_no_available_trade_history" { return true }
+        return false
+    }
+
     static func from(_ response: TradovateAccountSyncResponse) -> BrokerSyncFailureResolution {
-        if response.summary.ok { return .success }
+        if response.summary.ok {
+            if isNoAvailableTradeHistory(response) { return .noAvailableTradeHistory }
+            return .success
+        }
         if isSyncInProgress(response) { return .retryable }
         if isReconnectRequired(response) { return .reconnectRequired }
         if isRetryable(response) { return .retryable }
@@ -82,6 +93,14 @@ nonisolated enum BrokerSyncPresentation {
         "Import finished, but some Tradovate history may still be missing. Sync again to retry."
     }
 
+    static func noAvailableTradeHistoryTitle() -> String {
+        "No trades are currently available to import from Tradovate."
+    }
+
+    static func noAvailableTradeHistoryDetail() -> String {
+        "Tradovate may only make recent trade history available through the connection. To add older trades, import your Tradovate Performance CSV."
+    }
+
     static func syncInProgressMessage() -> String {
         "Sync already in progress."
     }
@@ -96,7 +115,7 @@ nonisolated enum BrokerSyncPresentation {
         resolution: BrokerSyncFailureResolution
     ) -> String {
         switch resolution {
-        case .success:
+        case .success, .noAvailableTradeHistory:
             return ""
         case .reconnectRequired:
             return reconnectRequiredMessage(provider: provider)

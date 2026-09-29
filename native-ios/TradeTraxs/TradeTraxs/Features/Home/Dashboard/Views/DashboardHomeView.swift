@@ -123,6 +123,7 @@ struct DashboardHomeView: View {
                 brokerImportEligibilityStore.hydrateFromDiskIfNeeded(viewerID: userID)
             }
             viewModel.loadIfNeeded()
+            viewModel.ensureEquityChartOverlayIfNeeded()
             brokerImportEligibilityStore.loadIfNeeded()
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-uitesting-dashboard-propfirm") {
@@ -134,6 +135,7 @@ struct DashboardHomeView: View {
         .onChange(of: viewModel.phase, initial: true) { _, phase in
             guard tabIsActive else { return }
             guard phase == .loaded || viewModel.summary != nil else { return }
+            viewModel.ensureEquityChartOverlayIfNeeded()
             startDeferredDashboardBootstrapIfNeeded()
         }
         .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in

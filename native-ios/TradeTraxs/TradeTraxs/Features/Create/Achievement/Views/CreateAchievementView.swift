@@ -236,8 +236,7 @@ struct CreateAchievementView: View {
             }
         }
         .scrollDismissesKeyboard(.interactively)
-        .scrollContentBackground(.hidden)
-        .experienceDashboardGroupedRows()
+        .experienceTradeTraxsFormStyle(pageBackground: false)
         .listSectionSpacing(AddAchievementFormLayout.sectionSpacing)
         .contentMargins(.top, ExperienceSpacing.xxs, for: .scrollContent)
         .disabled(viewModel.phase == .publishing)

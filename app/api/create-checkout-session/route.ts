@@ -13,6 +13,7 @@ import {
   buildAffiliateAttributionMetadata,
 } from "@/lib/affiliateStripeDiscount"
 import { isProActive } from "@/lib/subscription"
+import { loadTraxProEntitlementSnapshot } from "@/lib/traxProEntitlement"
 import {
   parseCheckoutBillingInterval,
   resolveTraxProStripePriceId,
@@ -131,14 +132,20 @@ export async function POST(req: Request) {
 
     let profile = initialProfile
 
-    if (profile && isProActive(profile)) {
-      return Response.json(
-        {
-          error:
-            "You already have active Pro access. Stripe Checkout is not required.",
-        },
-        { status: 409 }
-      )
+    if (profile) {
+      const entitlement = await loadTraxProEntitlementSnapshot(supabase, user.id)
+      const alreadyPro =
+        (entitlement.ok && entitlement.snapshot.traxProActive) ||
+        isProActive(profile)
+      if (alreadyPro) {
+        return Response.json(
+          {
+            error:
+              "You already have active Pro access. Stripe Checkout is not required.",
+          },
+          { status: 409 }
+        )
+      }
     }
 
     if (!profile) {

@@ -1,24 +1,61 @@
 import Foundation
 
-/// App Store release switch for in-app TraxPro / StoreKit commerce.
+/// Runtime monetization switches. Values come from the server config endpoint.
 ///
-/// When `iosPaidSubscriptionsEnabled` is `false`, purchase UI and StoreKit product
-/// loading stay dormant; usage caps from ``FreeTierPolicy`` are not applied client-side.
-/// When `iosReferralProgramEnabled` is `false`, referral Settings and referral entry
-/// points stay hidden. StoreKit, billing, and referral infrastructure remain for a later release.
+/// Both flags fail closed. A missing cache and a failed fetch stay false, so a
+/// Release binary cannot turn StoreKit on by itself.
+///
+/// `iosPaywallEnabled` shows the plan screen and allows purchase, restore, and
+/// manage. `entitlementEnforcementEnabled` applies Free-plan usage caps in the
+/// client. Server limits use the same enforcement flag.
 nonisolated enum IosSubscriptionReleaseConfiguration {
     #if DEBUG
-    /// Override in unit tests when exercising purchase flows.
-    static var iosPaidSubscriptionsEnabled = false
+    private static var paywallOverride: Bool?
+    private static var enforcementOverride: Bool?
     /// Override in unit tests when exercising the referral Settings surface.
     static var iosReferralProgramEnabled = false
     #else
-    static let iosPaidSubscriptionsEnabled = false
     static let iosReferralProgramEnabled = false
     #endif
 
-    /// Free-tier caps and paywall-oriented UX apply only when paid IAP is offered.
-    static var appliesFreeTierUsageCaps: Bool {
-        iosPaidSubscriptionsEnabled
+    static var iosPaywallEnabled: Bool {
+        #if DEBUG
+        if let paywallOverride { return paywallOverride }
+        #endif
+        return MonetizationRuntimeConfiguration.shared.iosPaywallEnabled
     }
+
+    static var entitlementEnforcementEnabled: Bool {
+        #if DEBUG
+        if let enforcementOverride { return enforcementOverride }
+        #endif
+        return MonetizationRuntimeConfiguration.shared.entitlementEnforcementEnabled
+    }
+
+    /// Paywall / StoreKit commerce. Tracks ``iosPaywallEnabled``.
+    static var iosPaidSubscriptionsEnabled: Bool {
+        get { iosPaywallEnabled }
+        set {
+            #if DEBUG
+            paywallOverride = newValue
+            #endif
+        }
+    }
+
+    /// Free-tier caps apply only when entitlement enforcement is on.
+    static var appliesFreeTierUsageCaps: Bool {
+        entitlementEnforcementEnabled
+    }
+
+    #if DEBUG
+    static func setTestOverrides(paywall: Bool?, enforcement: Bool?) {
+        paywallOverride = paywall
+        enforcementOverride = enforcement
+    }
+
+    static func resetTestOverrides() {
+        paywallOverride = nil
+        enforcementOverride = nil
+    }
+    #endif
 }

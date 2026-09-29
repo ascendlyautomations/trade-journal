@@ -77,14 +77,14 @@ nonisolated struct TraderDailyCheckInDraft: Hashable, Sendable {
     }
 }
 
-/// Stress rating scale for daily check-ins — 1 is most stressed, 5 is calmest (matches other 1–5 metrics).
+/// Stress rating scale for daily check-ins — 1 is calmest, 5 is most stressed.
 nonisolated enum TraderDailyCheckInStressScale {
     static let labels: [Int: String] = [
-        1: "Very Stressed",
-        2: "Stressed",
+        1: "Calm",
+        2: "Slightly Stressed",
         3: "Moderate",
-        4: "Relaxed",
-        5: "Calm",
+        4: "Stressed",
+        5: "Very Stressed",
     ]
 
     static func label(for level: Int) -> String {
@@ -101,9 +101,9 @@ nonisolated enum TraderDailyCheckInStressScale {
         return "\(NumberDisplay.ratingOutOfFive(average)) · \(label(for: rounded))"
     }
 
-    /// True when the trader reported elevated stress (1–2 on the calmness scale).
+    /// True when the trader reported elevated stress (4–5 on the stress scale).
     static func isElevated(_ level: Int) -> Bool {
-        level <= 2
+        level >= 4
     }
 }
 

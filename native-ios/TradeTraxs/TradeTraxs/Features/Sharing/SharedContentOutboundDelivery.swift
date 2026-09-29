@@ -10,6 +10,8 @@ enum SharedContentOutboundDelivery {
     struct Payload: Sendable {
         var destination: Destination
         var message: Message
+        /// Pre-hydrated shared entities so open threads render cards on the first frame.
+        var hydrationSnapshot: SharedContentHydrator.Snapshot?
     }
 
     static let notification = Notification.Name("SharedContentOutboundDelivery")

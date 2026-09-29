@@ -117,6 +117,13 @@ final class TraderDailyCheckInTests: XCTestCase {
         XCTAssertEqual(correlated[0].dailyCheckIn?.id, checkIn.id)
     }
 
+    func testStressScaleLabelsMatchStorageSemantics() {
+        XCTAssertEqual(TraderDailyCheckInStressScale.label(for: 1), "Calm")
+        XCTAssertEqual(TraderDailyCheckInStressScale.label(for: 5), "Very Stressed")
+        XCTAssertFalse(TraderDailyCheckInStressScale.isElevated(1))
+        XCTAssertTrue(TraderDailyCheckInStressScale.isElevated(5))
+    }
+
     func testSleepHoursBands() {
         XCTAssertEqual(
             TraderPsychologyAnalyticsFoundation.SleepHoursBand.resolve(7.5),

@@ -28,9 +28,14 @@ struct FeedAuthorHeader: View {
                     .accessibilityHidden(true)
 
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(displayName)
-                            .experienceStyle(.headline, color: colors.primaryText)
-                            .lineLimit(1)
+                        HStack(spacing: 4) {
+                            Text(displayName)
+                                .experienceStyle(.headline, color: colors.primaryText)
+                                .lineLimit(1)
+                            if resolvedProfile.isCreator {
+                                TradeTraxsVerifiedBadge(size: .compact)
+                            }
+                        }
 
                         HStack(spacing: 4) {
                             if !username.isEmpty {

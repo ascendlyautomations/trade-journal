@@ -173,7 +173,9 @@ final class SettingsSubscriptionViewModel {
         actionMessage = nil
         errorMessage = nil
 
-        let outcome = await storeKit.purchase(productID: product.id)
+        let userID = await session.currentUserID
+        let appAccountToken = userID.flatMap { UUID(uuidString: $0.rawValue) }
+        let outcome = await storeKit.purchase(productID: product.id, appAccountToken: appAccountToken)
         switch outcome {
         case .success:
             actionState = .synchronizing

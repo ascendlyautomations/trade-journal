@@ -58,4 +58,8 @@ nonisolated struct BillingStatus: Hashable, Codable, Sendable {
     var appleRevokedAt: Date? = nil
     var appleProductID: String? = nil
     var entitlementSource: TraxProEntitlementSource = .none
+    /// Server entitlement snapshot. Nil means this status was not issued by the server.
+    var serverTraxProActive: Bool? = nil
+    var accessExpiresAt: Date? = nil
+    var entitlementFetchedAt: Date? = nil
 }

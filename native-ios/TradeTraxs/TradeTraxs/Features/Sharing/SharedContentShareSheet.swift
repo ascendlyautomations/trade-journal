@@ -70,6 +70,7 @@ struct SharedContentShareSheet: View {
                     }
                 }
             }
+            .experienceInsetGroupedListStyle(pageBackground: true)
             .experienceScreenBackground()
             .navigationTitle(target.shareTitle)
             .navigationBarTitleDisplayMode(.inline)

@@ -151,8 +151,7 @@ struct TradeRoomJoinRequestDetailView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
+        .experienceInsetGroupedListStyle(pageBackground: false)
     }
 }
 

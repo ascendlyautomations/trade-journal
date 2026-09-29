@@ -184,9 +184,12 @@ nonisolated enum TraderPsychologyAnalyticsEngine {
             }
         }
 
-        /// Higher score = better trading condition (5 is best on every 1–5 check-in scale).
+        /// Higher score = better trading condition for positive metrics; stress is inverted (lower is better).
         var higherIsBetter: Bool {
-            true
+            switch self {
+            case .stress: return false
+            default: return true
+            }
         }
     }
 
@@ -363,7 +366,7 @@ nonisolated enum TraderPsychologyAnalyticsEngine {
     private static func ratingHeadline(for dimension: DailyRatingDimension) -> String {
         switch dimension {
         case .stress:
-            return "Calmer days associated with better results"
+            return "Lower stress associated with better results"
         default:
             return "Higher \(dimension.title.lowercased()) associated with better results"
         }
@@ -630,7 +633,7 @@ nonisolated enum TraderPsychologyAnalyticsEngine {
     ) -> [PsychologyInsightCard] {
         var cards: [PsychologyInsightCard] = []
 
-        // Low sleep (<6h) + elevated stress (1–2)
+        // Low sleep (<6h) + elevated stress (4–5)
         let lowSleepHighStress = enriched.filter { item in
             guard let checkIn = item.dailyCheckIn,
                   let hours = checkIn.sleepHours,

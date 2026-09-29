@@ -3,6 +3,13 @@ import { buildTradeTimingPresentation, formatHoldDurationFromTimes, formatHoldDu
 import assert from "node:assert/strict"
 
 describe("formatHoldDurationSeconds", () => {
+  it("formats sub-minute holds as seconds", () => {
+    assert.equal(formatHoldDurationSeconds(8), "8s")
+    assert.equal(formatHoldDurationSeconds(59), "59s")
+    assert.equal(formatHoldDurationSeconds(0), "0s")
+    assert.equal(formatHoldDurationSeconds(60), "1m")
+  })
+
   it("formats under 24 hours with hours and minutes", () => {
     assert.equal(formatHoldDurationSeconds(2 * 3600 + 15 * 60), "2h 15m")
     assert.equal(formatHoldDurationSeconds(45 * 60), "45m")

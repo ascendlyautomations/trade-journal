@@ -383,6 +383,46 @@ final class DashboardExperienceTests: XCTestCase {
     }
 
     @MainActor
+    func testEquityHeroDisplayValueUpdatesImmediatelyOnAccountSwitch() async {
+        BackendV2FeatureFlags.resetFlagsForTests()
+        BackendV2FeatureFlags.setFlagForTests(.dashboardAnalyticsV3, enabled: false)
+        BackendV2FeatureFlags.setFlagForTests(.dashboard, enabled: false)
+        defer { BackendV2FeatureFlags.resetFlagsForTests() }
+
+        let profileID = ProfileID("00000000-0000-4000-8000-0000000000bb")
+        let now = Date()
+        let accountA = TradingAccountID("balance-account-a")
+        let accountB = TradingAccountID("balance-account-b")
+        let tradesRepo = DashboardAccountBalanceSwitchTradeRepository(
+            profileID: profileID,
+            now: now,
+            accountA: accountA,
+            accountB: accountB
+        )
+        let viewModel = DashboardViewModel(
+            home: DashboardStubHomeRepository(),
+            trades: tradesRepo,
+            achievements: DashboardStubAchievementRepository(),
+            dailyCheckIns: EmptyTraderDailyCheckInRepository(),
+            session: DashboardStubSession(userID: profileID.rawValue),
+            detailCache: DetailPresentationCache(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+
+        viewModel.setAccountFilter(.account(accountA))
+        XCTAssertEqual(viewModel.equityHeroDisplayValue, 51_000)
+
+        viewModel.setAccountFilter(.account(accountB))
+        XCTAssertEqual(viewModel.equityHeroDisplayValue, 97_500)
+
+        viewModel.setAccountFilter(.account(accountA))
+        XCTAssertEqual(viewModel.equityHeroDisplayValue, 51_000)
+    }
+
+    @MainActor
     func testEquityChartRangePreservesDashboardFilterOnAccountSwitch() async {
         BackendV2FeatureFlags.resetFlagsForTests()
         BackendV2FeatureFlags.setFlagForTests(.dashboardAnalyticsV3, enabled: false)
@@ -589,6 +629,41 @@ final class DashboardExperienceTests: XCTestCase {
         }
         XCTAssertEqual(summary.equityData.map(\.index), [0, 1, 2])
         XCTAssertEqual(summary.currentEquity, 25)
+    }
+
+    func testDashboardEvalAccountBalanceIgnoresPropReplayWithoutLocalTrades() {
+        let accountID = TradingAccountID("eval-balance-audit")
+        let eval = TradingAccount(
+            id: accountID,
+            ownerProfileID: ProfileID("dev.dashboard"),
+            name: "Eval 50K",
+            category: .propFirm,
+            mode: .evaluation,
+            size: Money(amount: 50_000),
+            isActive: true,
+            canAddTrades: true,
+            propFirmRules: PropFirmAccountRules(maxDrawdown: 2_000, profitTarget: 3_000)
+        )
+        let emptyReplaySnapshot = PropFirmStatusSnapshot.build(
+            account: eval,
+            trades: [],
+            payoutCycles: []
+        )
+        XCTAssertEqual(emptyReplaySnapshot?.currentBalance, 50_000)
+
+        let balance = AccountTrackedBalanceSupport.dashboardAccountBalance(
+            account: eval,
+            startingBalance: 50_000,
+            lifetimeRealizedPnL: 600,
+            propFirmSnapshot: emptyReplaySnapshot,
+            manualPayoutEntries: [],
+            propFirmTradeReplayCount: 0
+        )
+        XCTAssertEqual(
+            balance,
+            50_600,
+            "Eval dashboard value must be starting balance + analytics lifetime P&L when V3 clears tradeInputs"
+        )
     }
 
     func testEquityHeroPresentationOffsetsPropAccountOnly() {
@@ -951,6 +1026,114 @@ private struct DashboardStubTradeRepository: TradeRepository {
     }
 
     func accounts(for profileID: ProfileID) async throws -> [TradingAccount] { [] }
+}
+
+private struct DashboardAccountBalanceSwitchTradeRepository: TradeRepository {
+    let profileID: ProfileID
+    let now: Date
+    let accountA: TradingAccountID
+    let accountB: TradingAccountID
+
+    func trade(id: TradeID) async throws -> Trade {
+        throw AppError.unknown(message: "not found")
+    }
+
+    func trades(
+        ownedBy profileID: ProfileID,
+        accountID: TradingAccountID?,
+        page: PageRequest,
+        publicOnly: Bool
+    ) async throws -> CursorPage<Trade> {
+        CursorPage(items: sampleTrades(), nextCursor: nil)
+    }
+
+    func save(_ draft: TradeDraft) async throws -> Trade {
+        throw AppError.unknown(message: "stub")
+    }
+
+    func update(_ trade: Trade) async throws -> Trade { trade }
+    func delete(id: TradeID) async throws {}
+    func images(for tradeID: TradeID) async throws -> [TradeImage] { [] }
+    func notes(for tradeID: TradeID) async throws -> [TradeNote] { [] }
+
+    func statistics(
+        for profileID: ProfileID,
+        interval: DateIntervalValue
+    ) async throws -> TradeStatistics {
+        TradeStatistics(
+            tradeCount: 2,
+            winCount: 2,
+            lossCount: 0,
+            totalPnL: Money(amount: 0),
+            averagePnL: Money(amount: 0),
+            averageRiskReward: nil,
+            winRate: 1
+        )
+    }
+
+    func accounts(for profileID: ProfileID) async throws -> [TradingAccount] {
+        [
+            TradingAccount(
+                id: accountA,
+                ownerProfileID: self.profileID,
+                name: "Account A",
+                category: .personal,
+                mode: .live,
+                size: Money(amount: 50_000),
+                isActive: true,
+                canAddTrades: true
+            ),
+            TradingAccount(
+                id: accountB,
+                ownerProfileID: self.profileID,
+                name: "Account B",
+                category: .personal,
+                mode: .live,
+                size: Money(amount: 100_000),
+                isActive: true,
+                canAddTrades: true
+            ),
+        ]
+    }
+
+    private func sampleTrades() -> [Trade] {
+        [
+            makeTrade(id: "a-pnl", accountID: accountA, dayOffset: -3, pnl: 1_000),
+            makeTrade(id: "b-pnl", accountID: accountB, dayOffset: -10, pnl: -2_500),
+        ]
+    }
+
+    private func makeTrade(
+        id: String,
+        accountID: TradingAccountID,
+        dayOffset: Int,
+        pnl: Decimal
+    ) -> Trade {
+        let stamp = now.addingTimeInterval(TimeInterval(dayOffset * 86_400))
+        return Trade(
+            id: TradeID(id),
+            ownerProfileID: profileID,
+            accountID: accountID,
+            symbol: Symbol(ticker: "ES"),
+            side: .long,
+            mode: .live,
+            quantity: 1,
+            entryPrice: 1,
+            exitPrice: 2,
+            entryAt: stamp,
+            exitAt: stamp.addingTimeInterval(3_600),
+            realizedPnL: Money(amount: pnl),
+            riskReward: 1,
+            points: nil,
+            sessionLabel: "NY",
+            visibility: .private,
+            publicCaption: nil,
+            thumbnail: nil,
+            notePreview: nil,
+            createdAt: stamp,
+            updatedAt: stamp
+        )
+    }
 }
 
 private struct DashboardPerAccountEquityFallbackTradeRepository: TradeRepository {

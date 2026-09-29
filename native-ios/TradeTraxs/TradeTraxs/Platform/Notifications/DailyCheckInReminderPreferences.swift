@@ -1,6 +1,6 @@
 import Foundation
 
-/// Device-local preference for weekday daily check-in reminders (9:15 AM local).
+/// Device-local preference for weekday daily check-in reminders (9:15 AM Eastern).
 enum DailyCheckInReminderPreferences {
     private static let enabledKey = "tt.ios.dailyCheckInReminder.enabled"
 

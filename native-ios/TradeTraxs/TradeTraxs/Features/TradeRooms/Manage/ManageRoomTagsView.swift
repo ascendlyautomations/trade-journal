@@ -62,9 +62,7 @@ struct ManageRoomTagsView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
+        .experienceInsetGroupedListStyle(pageBackground: false)
         .experienceNavigationTitle("Tags")
         .refreshable { await viewModel.refreshTags() }
         .confirmationDialog(

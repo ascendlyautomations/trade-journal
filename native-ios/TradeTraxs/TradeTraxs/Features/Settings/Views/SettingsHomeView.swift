@@ -1,14 +1,17 @@
+import OSLog
 import SwiftUI
 
 struct SettingsHomeView: View {
     let authenticationCoordinator: AuthenticationCoordinator
 
     @Environment(\.stackNavigation) private var stackNavigation
-    @Environment(\.themeColors) private var colors
     @Environment(\.appEnvironment) private var appEnvironment
+    @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable private var launchController = AppLaunchController.shared
     @State private var confirmsLogout = false
+    @State private var monetizationConfigRevision = 0
+    @State private var showsAdminEntry = false
     #if DEBUG
     @State private var clipCacheClearConfirmation = false
     @State private var isClearingClipVideoCache = false
@@ -44,6 +47,22 @@ struct SettingsHomeView: View {
                 }
             }
 
+            if showsAdminEntry, !launchController.isDemoExperienceActive {
+                Section {
+                    Button {
+                        ExperienceHaptics.play(.selection)
+                        openAdminPortal()
+                    } label: {
+                        SettingsNavigationRow(title: "Admin", systemImage: "shield")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("settings.row.admin")
+                } header: {
+                    Text("Internal")
+                }
+            }
+
+            let _ = monetizationConfigRevision
             ForEach(SettingsHomeModel.sections) { section in
                 Section {
                     ForEach(section.items) { item in
@@ -133,11 +152,8 @@ struct SettingsHomeView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .listSectionSpacing(ExperienceSpacing.xxs)
-        .scrollContentBackground(.hidden)
-        .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Settings")
         .confirmationDialog(
             "Log out of TradeTraxs?",
@@ -156,6 +172,25 @@ struct SettingsHomeView: View {
         }
         #endif
         .accessibilityIdentifier("settings.home")
+        .onAppear {
+            #if DEBUG
+            AppLog.navigation.debug("settings.home.appeared")
+            #endif
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .monetizationConfigurationDidChange)) { _ in
+            monetizationConfigRevision += 1
+        }
+        .onDisappear {
+            #if DEBUG
+            AppLog.navigation.debug("settings.home.disappeared")
+            #endif
+        }
+        .task {
+            showsAdminEntry = SessionBootstrapStore.shared.isPlatformAdmin
+        }
+        .task {
+            await refreshMonetizationConfigurationForSettings()
+        }
         .onChange(of: ContextualTourCoordinator.shared.scrollTarget) { _, target in
             guard let target else { return }
             if reduceMotion {
@@ -168,7 +203,37 @@ struct SettingsHomeView: View {
         }
         }
     }
+
+    private func refreshMonetizationConfigurationForSettings() async {
+        guard !launchController.isDemoExperienceActive else { return }
+        guard let userID = await appEnvironment.data.session.currentUserID else { return }
+        guard let refresher = appEnvironment.data.billing as? MonetizationConfigurationRefreshing else { return }
+        await refresher.refreshMonetizationConfiguration(for: ProfileID(userID.rawValue))
+        if IosSubscriptionReleaseConfiguration.iosPaywallEnabled {
+            await appEnvironment.data.storeKitSubscriptions.startTransactionListenerIfNeeded()
+        }
+    }
+
+    private func openAdminPortal() {
+        #if DEBUG
+        AppLog.navigation.debug(
+            "settings.admin.row.tapped isPlatformAdmin=\(SessionBootstrapStore.shared.isPlatformAdmin, privacy: .public)"
+        )
+        #endif
+        if let stackNavigation {
+            stackNavigation.pushSettings(.admin)
+            #if DEBUG
+            AppLog.navigation.debug("settings.route.admin pushed via=stackNavigation")
+            #endif
+        } else {
+            appEnvironment.navigation.coordinator.pushProfile(.settings(.admin))
+            #if DEBUG
+            AppLog.navigation.debug("settings.route.admin pushed via=pushProfile")
+            #endif
+        }
+    }
 }
+
 
 /// Spotlight only the Appearance row. Other settings rows stay unchanged.
 private struct SettingsAppearanceTourTarget: ViewModifier {

@@ -18,7 +18,7 @@ function appleRow(
     user_id: "user-1",
     original_transaction_id: "orig-1",
     latest_transaction_id: "tx-1",
-    product_id: "com.tradetraxs.traxpro.monthly",
+    product_id: "com.tradetraxs.traxspro.monthly",
     environment: "Sandbox",
     billing_interval: "monthly",
     status: "active",

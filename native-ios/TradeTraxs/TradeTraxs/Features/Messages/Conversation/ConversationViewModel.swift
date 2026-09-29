@@ -52,12 +52,7 @@ final class ConversationViewModel {
     private(set) var unavailableSharedContentKeys: Set<String> = []
     let scrollCoordinator = ConversationScrollCoordinator()
 
-    enum InitialScrollPhase: Equatable {
-        case pending
-        case positioning
-        case settling
-        case confirmed
-    }
+    typealias InitialScrollPhase = ConversationThreadInitialScrollPhase
 
     private(set) var initialScrollPhase: InitialScrollPhase = .pending
     private(set) var richContentHydrationCount = 0
@@ -69,9 +64,14 @@ final class ConversationViewModel {
         initialScrollPhase == .positioning || initialScrollPhase == .settling
     }
 
-    /// Trade shares still awaiting hydration can resize the newest bubble after first layout.
+    /// Structured share hydration can resize the newest bubble after first layout.
     var hasPendingRichContentLayout: Bool {
-        richContentHydrationCount > 0 || messages.contains(where: hasUnhydratedTradeShare)
+        ConversationThreadScrollSupport.hasPendingRichContentLayout(
+            messages: messages,
+            richContentHydrationCount: richContentHydrationCount,
+            unavailableKeys: unavailableSharedContentKeys,
+            isPresentationResolved: { isSharedContentPresentationResolved($0) }
+        )
     }
 
     private let messagesRepo: any MessageRepository
@@ -345,7 +345,7 @@ final class ConversationViewModel {
                 applyBootstrapApplied(result.applied, isPagination: true)
                 nextOlderCursor = result.applied.nextCursor
                 hasMoreOlder = result.applied.hasMoreMessages
-                await hydrateSharedContent(from: result.applied.messages)
+                hydrateSharedContent(from: result.applied.messages)
             } else {
                 var page = PageRequest(limit: 40)
                 page.cursor = nextOlderCursor
@@ -586,13 +586,27 @@ final class ConversationViewModel {
     }
 
     func sharedAchievement(for message: Message) -> Achievement? {
-        guard case .achievementPost(let id) = message.sharedContent else { return nil }
-        return sharedAchievements[AchievementID(id.rawValue)]
+        guard case .achievementPost(let postReference) = message.sharedContent else { return nil }
+        return SharedContentEntityPresentation.resolvedAchievement(
+            forPostReference: postReference,
+            detailCache: detailCache,
+            sharedAchievements: sharedAchievements
+        )
     }
 
     func isSharedContentUnavailable(_ message: Message) -> Bool {
         guard let reference = message.sharedContent else { return false }
         return unavailableSharedContentKeys.contains(reference.stableKey)
+    }
+
+    private func isSharedContentPresentationResolved(_ message: Message) -> Bool {
+        if message.kind == .tradeShare || message.attachments.first?.tradeID != nil {
+            return sharedTrade(for: message) != nil
+        }
+        if sharedPost(for: message) != nil { return true }
+        if sharedReel(for: message) != nil { return true }
+        if sharedAchievement(for: message) != nil { return true }
+        return false
     }
 
     func authorProfile(for profileID: ProfileID) -> Profile? {
@@ -1092,7 +1106,7 @@ final class ConversationViewModel {
         replaceMessages(page.items)
         nextOlderCursor = page.nextCursor
         hasMoreOlder = page.nextCursor != nil
-        await hydrateSharedContent(from: messages)
+        hydrateSharedContent(from: messages)
     }
 
     private func loadFromV2Bootstrap(
@@ -1140,15 +1154,16 @@ final class ConversationViewModel {
             )
 #endif
             Task { [weak self] in
-                await self?.hydrateSharedContent(from: self?.messages ?? [])
+                self?.hydrateSharedContent(from: self?.messages ?? [])
             }
             await reconcileInboxAheadIfNeeded(viewerID: viewerID)
             let inboxAhead = ConversationThreadSyncPolicy.isInboxAheadOfThread(
                 inbox: inboxStore.conversations.first(where: { $0.id == conversationID }),
                 threadMessages: messages
             )
-            let needsWindowBackfill = cached.messages.count < ConversationThreadSessionStore.messageLimit
-                && cached.hasMoreMessages
+            let needsWindowBackfill = ConversationThreadSessionStore.openThreadNeedsFullBootstrap(
+                messageCount: cached.messages.count
+            )
             if !cached.isSoftStale, unreadBeforeOpen == 0, !needsWindowBackfill, !inboxAhead {
                 logThreadStateDiagnostics(context: "cache.reopen.skip-network")
                 return
@@ -1169,9 +1184,9 @@ final class ConversationViewModel {
                 inbox: inboxStore.conversations.first(where: { $0.id == conversationID }),
                 threadMessages: messages
             )
-            let needsWindowBackfill = (cached?.messages.count ?? messages.count)
-                < ConversationThreadSessionStore.messageLimit
-                && (cached?.hasMoreMessages ?? hasMoreOlder)
+            let needsWindowBackfill = ConversationThreadSessionStore.openThreadNeedsFullBootstrap(
+                messageCount: cached?.messages.count ?? messages.count
+            )
             if let cached,
                !cached.isSoftStale,
                unreadBeforeOpen == 0,
@@ -1272,12 +1287,24 @@ final class ConversationViewModel {
             conversationID: conversationID.rawValue,
             count: result.applied.messages.count
         )
+        ConversationThreadDiagnostics.logOpenPipeline(
+            conversationID: conversationID.rawValue,
+            stage: "network.bootstrap",
+            remoteReturned: result.applied.messages.count,
+            requestedPageSize: ConversationThreadSessionStore.messageLimit,
+            cursor: result.applied.nextCursor,
+            grdbOrDiskStored: nil,
+            grdbOrDiskQueried: nil,
+            viewModelCount: messages.count,
+            renderedCount: nil,
+            hasMoreOlder: result.applied.hasMoreMessages
+        )
 #endif
 
         if result.cacheHit {
             applyBootstrapApplied(result.applied)
             Task { [weak self] in
-                await self?.hydrateSharedContent(from: result.applied.messages)
+                self?.hydrateSharedContent(from: result.applied.messages)
             }
             return
         }
@@ -1285,7 +1312,7 @@ final class ConversationViewModel {
         applyBootstrapApplied(result.applied)
         bootstrapMarkReadApplied = result.applied.markReadApplied
         Task { [weak self] in
-            await self?.hydrateSharedContent(from: result.applied.messages)
+            self?.hydrateSharedContent(from: result.applied.messages)
         }
     }
 
@@ -1325,6 +1352,24 @@ final class ConversationViewModel {
         )
         phase = .loaded
 #if DEBUG
+        let sorted = ConversationMessageMerge.sortByCreatedAt(cached.messages)
+        ConversationThreadDiagnostics.logOpenPipeline(
+            conversationID: conversationID.rawValue,
+            stage: "immediateOpen.grdb",
+            remoteReturned: nil,
+            requestedPageSize: ConversationThreadSessionStore.messageLimit,
+            cursor: cached.nextCursor,
+            grdbOrDiskStored: cached.messages.count,
+            grdbOrDiskQueried: cached.messages.count,
+            viewModelBefore: 0,
+            viewModelAfter: messages.count,
+            renderedCount: timelineRenderedMessageCount,
+            hasMoreOlder: hasMoreOlder,
+            oldestMessageID: sorted.first?.id.rawValue,
+            newestMessageID: sorted.last?.id.rawValue,
+            initialScrollPhase: String(describing: initialScrollPhase),
+            remoteMessageIDsSample: Self.messageIDSample(sorted)
+        )
         ConversationOpenTrace.firstRender(
             conversationID: conversationID.rawValue,
             source: "immediateOpen"
@@ -1362,16 +1407,78 @@ final class ConversationViewModel {
         }
         nextOlderCursor = applied.nextCursor
         hasMoreOlder = applied.hasMoreMessages
+        if ConversationThreadSessionStore.openThreadNeedsFullBootstrap(messageCount: messages.count) {
+            hasMoreOlder = true
+        }
     }
 
     /// Web `mergeMessageLists(wire, existing)` — bootstrap must not wipe newer local rows.
     private func applyBootstrapMessages(_ incoming: [Message]) {
+        let beforeCount = messages.count
+        let beforeOldest = messages.first?.id.rawValue
+        let beforeNewest = messages.last?.id.rawValue
         let reconciled = ConversationMessageMerge.reconcileServerFirstPage(
             existing: messages,
             incoming: incoming
         )
-        messages = filterSuppressed(reconciled)
+        let filtered = filterSuppressed(reconciled)
+        if beforeCount > 0, filtered.isEmpty {
+#if DEBUG
+            ConversationThreadDiagnostics.logOpenPipeline(
+                conversationID: conversationID.rawValue,
+                stage: "bootstrap.merge.rejected-empty",
+                remoteReturned: incoming.count,
+                requestedPageSize: ConversationThreadSessionStore.messageLimit,
+                cursor: nextOlderCursor,
+                grdbOrDiskStored: nil,
+                grdbOrDiskQueried: nil,
+                viewModelBefore: beforeCount,
+                viewModelAfter: beforeCount,
+                renderedCount: timelineRenderedMessageCount,
+                hasMoreOlder: hasMoreOlder,
+                oldestMessageID: beforeOldest,
+                newestMessageID: beforeNewest,
+                initialScrollPhase: String(describing: initialScrollPhase),
+                remoteMessageIDsSample: Self.messageIDSample(incoming)
+            )
+#endif
+            return
+        }
+        messages = filtered
+#if DEBUG
+        let sorted = ConversationMessageMerge.sortByCreatedAt(messages)
+        ConversationThreadDiagnostics.logOpenPipeline(
+            conversationID: conversationID.rawValue,
+            stage: "bootstrap.merge",
+            remoteReturned: incoming.count,
+            requestedPageSize: ConversationThreadSessionStore.messageLimit,
+            cursor: nextOlderCursor,
+            grdbOrDiskStored: nil,
+            grdbOrDiskQueried: nil,
+            viewModelBefore: beforeCount,
+            viewModelAfter: messages.count,
+            renderedCount: timelineRenderedMessageCount,
+            hasMoreOlder: hasMoreOlder,
+            oldestMessageID: sorted.first?.id.rawValue,
+            newestMessageID: sorted.last?.id.rawValue,
+            initialScrollPhase: String(describing: initialScrollPhase),
+            remoteMessageIDsSample: Self.messageIDSample(incoming)
+        )
+#endif
     }
+
+    private var timelineRenderedMessageCount: Int {
+        buildTimeline(from: messages).reduce(into: 0) { count, item in
+            if case .message = item { count += 1 }
+        }
+    }
+
+#if DEBUG
+    private static func messageIDSample(_ messages: [Message], limit: Int = 5) -> String {
+        let ids = ConversationMessageMerge.sortByCreatedAt(messages).suffix(limit).map(\.id.rawValue)
+        return ids.isEmpty ? "none" : ids.joined(separator: ",")
+    }
+#endif
 
     /// Pull-to-refresh / explicit refresh — not used on a timer.
     private func fetchIncrementalUpdates() async {
@@ -1418,7 +1525,7 @@ final class ConversationViewModel {
                 page: PageRequest(limit: 30)
             )
             commitReconciledPage(page.items)
-            await hydrateSharedContent(from: page.items)
+            hydrateSharedContent(from: page.items)
             if let newest = ConversationMessageMerge.sortByCreatedAt(messages).last {
                 patchInbox(with: newest, source: "legacyRealtime")
             }
@@ -1511,7 +1618,7 @@ final class ConversationViewModel {
         commitMessages([incoming])
         syncThreadSessionCache(context: "realtimeV2.merge")
         MessageRealtimeLog.persisted(messageID: incoming.id)
-        await hydrateSharedContent(from: [incoming])
+        hydrateSharedContent(from: [incoming])
         inboxStore.patchFromMessage(
             incoming,
             viewerID: viewerID!,
@@ -1563,7 +1670,7 @@ final class ConversationViewModel {
             )
             MessageSyncLog.persisted(conversationID: conversationID, messageID: fetched.id)
             MessageSyncLog.visibleThreadUpdated(conversationID: conversationID, messageID: fetched.id)
-            await hydrateSharedContent(from: [fetched])
+            hydrateSharedContent(from: [fetched])
             return
         }
 
@@ -1587,7 +1694,7 @@ final class ConversationViewModel {
         if let newest = ConversationThreadSyncPolicy.localNewestMessageID(in: messages) {
             MessageSyncLog.visibleThreadUpdated(conversationID: conversationID, messageID: newest)
         }
-        await hydrateSharedContent(from: result.applied.messages)
+        hydrateSharedContent(from: result.applied.messages)
     }
 
     private func hydrateThreadMessageIfMissing(messageID: MessageID, source: String) async {
@@ -1609,7 +1716,7 @@ final class ConversationViewModel {
         MessageSyncLog.realtimeApplied(conversationID: conversationID, messageID: incoming.id)
         MessageSyncLog.visibleThreadUpdated(conversationID: conversationID, messageID: incoming.id)
         MessageRealtimeLog.visibleThreadUpdated(messageID: incoming.id)
-        await hydrateSharedContent(from: [incoming])
+        hydrateSharedContent(from: [incoming])
     }
 
     /// Sole write path for thread rows — web `mergeMessages` semantics.
@@ -1726,11 +1833,30 @@ final class ConversationViewModel {
             hasMore: hasMoreOlder,
             context: context
         )
+        let rendered = buildTimeline(from: messages).filter {
+            if case .message = $0 { return true }
+            return false
+        }.count
+        ConversationThreadDiagnostics.logOpenPipeline(
+            conversationID: conversationID.rawValue,
+            stage: context,
+            remoteReturned: nil,
+            requestedPageSize: ConversationThreadSessionStore.messageLimit,
+            cursor: nextOlderCursor,
+            grdbOrDiskStored: nil,
+            grdbOrDiskQueried: messages.count,
+            viewModelAfter: messages.count,
+            renderedCount: rendered,
+            hasMoreOlder: hasMoreOlder,
+            oldestMessageID: oldest,
+            newestMessageID: ConversationMessageMerge.sortByCreatedAt(messages).last?.id.rawValue,
+            initialScrollPhase: String(describing: initialScrollPhase)
+        )
 #endif
     }
 
     private var needsNewestWindowBackfill: Bool {
-        messages.count < ConversationThreadSessionStore.messageLimit && hasMoreOlder
+        ConversationThreadSessionStore.openThreadNeedsFullBootstrap(messageCount: messages.count)
     }
 
     /// Backfill the newest server window when deletes shrink the loaded page.
@@ -1760,7 +1886,7 @@ final class ConversationViewModel {
             nextOlderCursor = result.applied.nextCursor
             hasMoreOlder = result.applied.hasMoreMessages
             syncThreadSessionCache(context: "delete.backfill")
-            await hydrateSharedContent(from: result.applied.messages)
+            hydrateSharedContent(from: result.applied.messages)
         } catch {
             // Soft-fail — synced local state remains authoritative for non-deleted rows.
         }
@@ -1847,42 +1973,32 @@ final class ConversationViewModel {
 
     private func handleOutboundSharedContent(_ payload: SharedContentOutboundDelivery.Payload) async {
         guard case .dm(let id) = payload.destination, id == conversationID else { return }
+        if let snapshot = payload.hydrationSnapshot {
+            applySharedContentSnapshot(snapshot)
+        }
         commitMessages([payload.message])
-        await hydrateSharedContent(from: [payload.message])
+        hydrateSharedContent(from: [payload.message])
     }
 
-    private func hydrateSharedContent(from messages: [Message]) async {
-        guard !messages.isEmpty else { return }
-        sharedContentHydrationBacklog.append(contentsOf: messages)
-        if let existing = sharedContentHydrationTask {
-            await existing.value
-            return
-        }
-        sharedContentHydrationTask = Task { @MainActor in
-            defer { sharedContentHydrationTask = nil }
-            while !sharedContentHydrationBacklog.isEmpty {
-                let batch = sharedContentHydrationBacklog
-                sharedContentHydrationBacklog = []
-                await performSharedContentHydration(from: batch)
-            }
-        }
-        await sharedContentHydrationTask?.value
+    private func applySharedContentSnapshot(_ snapshot: SharedContentHydrator.Snapshot) {
+        for (id, trade) in snapshot.sharedTrades { sharedTrades[id] = trade }
+        for (id, post) in snapshot.sharedPosts { sharedPosts[id] = post }
+        for (id, reel) in snapshot.sharedReels { sharedReels[id] = reel }
+        for (id, achievement) in snapshot.sharedAchievements { sharedAchievements[id] = achievement }
+        unavailableSharedContentKeys.formUnion(snapshot.unavailableSharedContentKeys)
     }
 
-    private func performSharedContentHydration(from messages: [Message]) async {
+    /// Cache-first shared card hydration — never blocks the thread on network metadata.
+    private func hydrateSharedContent(from messages: [Message]) {
         guard !messages.isEmpty else { return }
+        primeSharedContentFromCaches(messages: messages)
+        enqueueSharedContentNetworkHydration(messages: messages)
+    }
 
+    private func primeSharedContentFromCaches(messages: [Message]) {
+        guard !messages.isEmpty else { return }
         let probe = SharedContentHydrationProbe.Session(surface: .dm)
-        let context = SharedContentHydrator.Context(
-            detailCache: detailCache,
-            feedSessionStore: FeedSessionStore.shared,
-            viewerID: viewerID,
-            tradesRepo: tradesRepo,
-            feedRepo: feedRepo,
-            achievementsRepo: achievementsRepo,
-            profilesRepo: profiles
-        )
-
+        let context = sharedContentHydratorContext()
         SharedContentHydrator.primeFromCaches(
             messages: messages,
             sharedTrades: &sharedTrades,
@@ -1893,10 +2009,40 @@ final class ConversationViewModel {
             context: context,
             probe: probe
         )
+    }
 
+    private func enqueueSharedContentNetworkHydration(messages: [Message]) {
+        sharedContentHydrationBacklog.append(contentsOf: messages)
+        guard sharedContentHydrationTask == nil else { return }
+        sharedContentHydrationTask = Task { @MainActor in
+            defer { sharedContentHydrationTask = nil }
+            while !sharedContentHydrationBacklog.isEmpty {
+                let batch = sharedContentHydrationBacklog
+                sharedContentHydrationBacklog = []
+                await performSharedContentNetworkHydration(from: batch)
+            }
+        }
+    }
+
+    private func sharedContentHydratorContext() -> SharedContentHydrator.Context {
+        SharedContentHydrator.Context(
+            detailCache: detailCache,
+            feedSessionStore: FeedSessionStore.shared,
+            viewerID: viewerID,
+            tradesRepo: tradesRepo,
+            feedRepo: feedRepo,
+            achievementsRepo: achievementsRepo,
+            profilesRepo: profiles
+        )
+    }
+
+    private func performSharedContentNetworkHydration(from messages: [Message]) async {
+        guard !messages.isEmpty else { return }
         richContentHydrationCount += 1
         defer { richContentHydrationCount -= 1 }
 
+        let probe = SharedContentHydrationProbe.Session(surface: .dm)
+        let context = sharedContentHydratorContext()
         let hydrated = await SharedContentHydrator.hydrateMissing(
             messages: messages,
             snapshot: SharedContentHydrator.Snapshot(
@@ -1914,6 +2060,54 @@ final class ConversationViewModel {
         sharedReels = hydrated.sharedReels
         sharedAchievements = hydrated.sharedAchievements
         unavailableSharedContentKeys = hydrated.unavailableSharedContentKeys
+        persistSharedContentNetworkResults(hydrated, messages: messages, context: context)
+    }
+
+    private func persistSharedContentNetworkResults(
+        _ snapshot: SharedContentHydrator.Snapshot,
+        messages: [Message],
+        context: SharedContentHydrator.Context
+    ) {
+        guard let viewerID = context.viewerID else { return }
+        for (_, post) in snapshot.sharedPosts {
+            SocialEntityPersistedCacheCoordinator.savePost(
+                post,
+                viewerID: viewerID,
+                source: .share
+            )
+        }
+        for (_, reel) in snapshot.sharedReels {
+            SocialEntityPersistedCacheCoordinator.saveReel(
+                reel,
+                viewerID: viewerID,
+                source: .share
+            )
+        }
+        var persistedAchievementIDs = Set<AchievementID>()
+        for message in messages {
+            guard case .achievementPost(let postReference) = message.sharedContent else { continue }
+            guard let achievement = SharedContentEntityPresentation.resolvedAchievement(
+                forPostReference: postReference,
+                detailCache: context.detailCache,
+                sharedAchievements: snapshot.sharedAchievements
+            ) else { continue }
+            guard persistedAchievementIDs.insert(achievement.id).inserted else { continue }
+            SocialEntityPersistedCacheCoordinator.saveAchievement(
+                achievement,
+                viewerID: viewerID,
+                source: .share,
+                messagePostReference: postReference
+            )
+        }
+        for (_, trade) in snapshot.sharedTrades {
+            if let summary = context.detailCache.tradeSummary(id: trade.id) {
+                SocialEntityPersistedCacheCoordinator.saveTradeSummary(
+                    summary,
+                    viewerID: viewerID,
+                    source: .share
+                )
+            }
+        }
     }
 
     private func sendVoice(data: Data, duration: TimeInterval) async {
@@ -2189,7 +2383,9 @@ final class ConversationViewModel {
         var items: [ConversationTimelineItem] = []
         let calendar = Calendar.current
         var lastDay: DateComponents?
-        for (index, message) in messages.enumerated() {
+        let shareCaptions = SharedContentMessageSupport.bundleShareCaptions(in: messages)
+        let visibleMessages = messages.filter { !shareCaptions.hiddenMessageIDs.contains($0.id) }
+        for (index, message) in visibleMessages.enumerated() {
             let day = calendar.dateComponents([.year, .month, .day], from: message.createdAt)
             if day != lastDay {
                 let key = "\(day.year ?? 0)-\(day.month ?? 0)-\(day.day ?? 0)"
@@ -2201,8 +2397,8 @@ final class ConversationViewModel {
                 )
                 lastDay = day
             }
-            let previous = index > 0 ? messages[index - 1] : nil
-            let next = index + 1 < messages.count ? messages[index + 1] : nil
+            let previous = index > 0 ? visibleMessages[index - 1] : nil
+            let next = index + 1 < visibleMessages.count ? visibleMessages[index + 1] : nil
             let isOutgoing = message.senderProfileID == viewerID
             let showsAvatar = !isOutgoing && (
                 previous?.senderProfileID != message.senderProfileID
@@ -2218,20 +2414,12 @@ final class ConversationViewModel {
                         isOutgoing: isOutgoing,
                         showsAvatar: showsAvatar,
                         showsTimestamp: showsTimestamp,
-                        sendState: sendStates[message.id] ?? .sent
+                        sendState: sendStates[message.id] ?? .sent,
+                        shareUserCaption: shareCaptions.captionByShareID[message.id]
                     )
                 )
             )
         }
         return items
-    }
-
-    private func hasUnhydratedTradeShare(_ message: Message) -> Bool {
-        switch message.kind {
-        case .tradeShare, .feedPostShare:
-            return sharedTrade(for: message) == nil
-        default:
-            return false
-        }
     }
 }

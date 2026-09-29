@@ -12,6 +12,7 @@ struct BrokerIntegrationsView: View {
     @Environment(\.themeColors) private var colors
 
     private let data: DataEnvironment
+    private let navigationCoordinator: NavigationCoordinator?
 
     private enum BrokerDisconnectTarget: Identifiable {
         case tradovate(TradovateConnectionSummary)
@@ -39,8 +40,9 @@ struct BrokerIntegrationsView: View {
         }
     }
 
-    init(data: DataEnvironment) {
+    init(data: DataEnvironment, navigationCoordinator: NavigationCoordinator? = nil) {
         self.data = data
+        self.navigationCoordinator = navigationCoordinator
         let manage = ManageAccountsViewModel(
             trades: data.trades,
             session: data.session,
@@ -53,7 +55,10 @@ struct BrokerIntegrationsView: View {
                 trades: data.trades,
                 manageAccounts: manage,
                 session: data.session,
-                detailCache: data.detailCache
+                detailCache: data.detailCache,
+                onOpenCSVImport: {
+                    navigationCoordinator?.openCompose(.importCSV)
+                }
             )
         )
     }
@@ -100,11 +105,8 @@ struct BrokerIntegrationsView: View {
                     .listRowSeparator(.hidden)
             }
         }
-        .listStyle(.insetGrouped)
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .listSectionSpacing(BrokerIntegrationProviderOptionsLayout.listSectionSpacing)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
-        .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Broker Integrations")
         .searchable(text: $brokerSearchText, prompt: "Search brokers")
         .background {
@@ -136,22 +138,35 @@ struct BrokerIntegrationsView: View {
         } message: {
             Text("Your TradeTraxs accounts and imported trades will stay in the journal.")
         }
-        .confirmationDialog(
-            "Connect Tradovate",
-            isPresented: $viewModel.showsTradovateEnvironmentPicker,
-            titleVisibility: .visible
-        ) {
-            Button("Live (production)") {
-                viewModel.connectTradovateWithEnvironment("live")
+        .sheet(isPresented: $viewModel.showsTradovateNoTradeHistorySheet) {
+            NavigationStack {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+                    Text(BrokerSyncPresentation.noAvailableTradeHistoryTitle())
+                        .experienceStyle(.headline, color: colors.primaryText)
+                    Text(BrokerSyncPresentation.noAvailableTradeHistoryDetail())
+                        .experienceStyle(.body, color: colors.secondaryText)
+                    Spacer(minLength: ExperienceSpacing.sm)
+                    Button("Import CSV") {
+                        viewModel.showsTradovateNoTradeHistorySheet = false
+                        viewModel.openTradovatePerformanceCSVImport()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Button("Done") {
+                        viewModel.showsTradovateNoTradeHistorySheet = false
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding(ExperienceSpacing.lg)
+                .experienceNavigationTitle("Import Trades")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") {
+                            viewModel.showsTradovateNoTradeHistorySheet = false
+                        }
+                    }
+                }
             }
-            Button("Demo (simulation)") {
-                viewModel.connectTradovateWithEnvironment("demo")
-            }
-            Button("Cancel", role: .cancel) {
-                viewModel.showsTradovateEnvironmentPicker = false
-            }
-        } message: {
-            Text("Choose the Tradovate environment that matches the account you sign in with. Live and Demo use separate API data.")
+            .presentationDetents([.medium])
         }
         .onAppear {
             BrokerIntegrationsLoadPriorityGate.setScreenActive(true)

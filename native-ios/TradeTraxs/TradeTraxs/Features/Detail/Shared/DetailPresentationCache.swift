@@ -15,6 +15,8 @@ final class DetailPresentationCache {
     private var reels: [ReelID: Reel] = [:]
     private var reelIDByLinkedTradeID: [TradeID: ReelID] = [:]
     private var achievements: [AchievementID: Achievement] = [:]
+    /// Maps ``achievement_posts.id`` (message share reference) → ``achievements.id``.
+    private var achievementIDByPostID: [PostID: AchievementID] = [:]
     private var storiesByID: [StoryID: Story] = [:]
     private var profilesByID: [ProfileID: Profile] = [:]
     private var statsByProfile: [ProfileID: ProfileStats] = [:]
@@ -185,13 +187,16 @@ final class DetailPresentationCache {
         }
     }
 
-    func seed(_ achievement: Achievement) {
+    func seed(_ achievement: Achievement, achievementPostID: PostID? = nil) {
         achievements[achievement.id] = achievement
+        if let achievementPostID {
+            achievementIDByPostID[achievementPostID] = achievement.id
+        }
     }
 
     func seed(achievements items: [Achievement]) {
         for achievement in items {
-            achievements[achievement.id] = achievement
+            seed(achievement)
         }
     }
 
@@ -453,6 +458,17 @@ final class DetailPresentationCache {
 
     func achievement(id: AchievementID) -> Achievement? {
         achievements[id]
+    }
+
+    func achievementID(forMessageReference postID: PostID) -> AchievementID? {
+        achievementIDByPostID[postID]
+    }
+
+    func achievement(forMessageReference postID: PostID) -> Achievement? {
+        if let canonical = achievementIDByPostID[postID] {
+            return achievements[canonical]
+        }
+        return achievements[AchievementID(postID.rawValue)]
     }
 
     // MARK: - Feed engagement overrides (detail opened from Home feed)

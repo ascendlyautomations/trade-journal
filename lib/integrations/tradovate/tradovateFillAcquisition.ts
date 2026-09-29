@@ -243,6 +243,7 @@ export async function acquireTradovateFillsForAccount(
   })
 
   let initialBootstrapAttempted = false
+  let initialBootstrapFailed = false
   let initialBootstrapCashBalanceLogCount = 0
   let initialBootstrapDiscoveredFillIds = 0
   let initialBootstrapFillCount = 0
@@ -271,6 +272,7 @@ export async function acquireTradovateFillsForAccount(
       alreadyMergedFillIds: mergedBeforeBootstrap,
     })
     initialBootstrapAttempted = bootstrap.attempted
+    initialBootstrapFailed = bootstrap.errors.length > 0
     initialBootstrapCashBalanceLogCount = bootstrap.cashBalanceLogCount
     initialBootstrapDiscoveredFillIds = bootstrap.discoveredFillIds.length
     initialBootstrapFillCount = bootstrap.fills.length
@@ -416,6 +418,7 @@ export async function acquireTradovateFillsForAccount(
     repairFillIdsRequested: repairCandidates,
     repairFillIdsRecovered: repairRecovered,
     initialBootstrapAttempted,
+    initialBootstrapFailed,
   })
   logTradovateHistoricalCompleteness(historicalCompleteness)
 

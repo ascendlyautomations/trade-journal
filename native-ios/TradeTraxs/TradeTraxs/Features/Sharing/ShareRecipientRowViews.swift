@@ -88,6 +88,7 @@ struct ShareRecipientTradeRoomRow: View {
     let room: TradeRoom
     let imagePipeline: any ImagePipeline
     var isSelected: Bool = false
+    var channelTitle: String? = nil
 
     @Environment(\.themeColors) private var colors
     @State private var logoImage: Image?
@@ -99,7 +100,7 @@ struct ShareRecipientTradeRoomRow: View {
                 Text(room.name)
                     .experienceStyle(.headline, color: colors.primaryText)
                     .lineLimit(1)
-                Text("Trade Room")
+                Text(channelTitle ?? "Trade Room")
                     .experienceStyle(.caption, color: colors.secondaryText)
                     .lineLimit(1)
             }

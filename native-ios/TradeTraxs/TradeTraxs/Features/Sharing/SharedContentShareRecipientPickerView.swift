@@ -30,6 +30,8 @@ struct SharedContentShareRecipientPickerView: View {
                 }
             }
             .experienceScreenBackground()
+            .toolbarBackground(colors.navigationBackground, for: .navigationBar)
+            .toolbarBackgroundVisibility(.visible, for: .navigationBar)
             .navigationTitle(scope == .messages ? "Messages" : "Trade Rooms")
             .navigationBarTitleDisplayMode(.inline)
             .experienceArrowBackToolbarButton(action: onClose)
@@ -52,6 +54,20 @@ struct SharedContentShareRecipientPickerView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(viewModel.sendErrorMessage ?? "")
+            }
+            .sheet(item: $viewModel.pendingRoomChannelPicker) { request in
+                SharedContentShareRoomChannelPickerView(
+                    room: request.room,
+                    channels: request.channels,
+                    isLoadingChannels: request.isLoadingChannels,
+                    selectedChannelID: viewModel.selectedRoomChannelIDs[request.room.id],
+                    onSelect: { channel in
+                        viewModel.confirmRoomChannelSelection(room: request.room, channel: channel)
+                    },
+                    onCancel: {
+                        viewModel.cancelRoomChannelPicker()
+                    }
+                )
             }
         }
         .experienceSheetChrome()
@@ -83,6 +99,7 @@ struct SharedContentShareRecipientPickerView: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(viewModel.phase == .sending)
+                        .experienceDashboardListRow()
                         .accessibilityIdentifier("sharedContentShare.conversation.\(conversation.id.rawValue)")
                     }
                 case .rooms:
@@ -94,15 +111,21 @@ struct SharedContentShareRecipientPickerView: View {
                                 room: room,
                                 imagePipeline: imagePipeline,
                                 isSelected: viewModel.isRoomSelected(room.id)
+                                    || viewModel.isRoomSelectionPending(room.id),
+                                channelTitle: viewModel.selectedChannelDisplayTitle(for: room.id)
                             )
                         }
                         .buttonStyle(.plain)
                         .disabled(viewModel.phase == .sending)
+                        .experienceDashboardListRow()
                         .accessibilityIdentifier("sharedContentShare.room.\(room.id.rawValue)")
                     }
                 }
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .experienceDashboardGroupedRows()
+            .listRowSeparatorTint(colors.separator)
             .scrollDismissesKeyboard(.interactively)
         }
     }
@@ -126,7 +149,7 @@ struct SharedContentShareRecipientPickerView: View {
             ExperienceButton(
                 title: sendButtonTitle,
                 kind: .primary,
-                isEnabled: viewModel.hasSelection,
+                isEnabled: viewModel.canSend,
                 isLoading: viewModel.phase == .sending,
                 accessibilityIdentifier: "sharedContentShare.send"
             ) {
@@ -141,13 +164,9 @@ struct SharedContentShareRecipientPickerView: View {
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.top, ExperienceSpacing.sm)
         .padding(.bottom, ExperienceSpacing.md)
-        .background {
-            Rectangle()
-                .fill(.bar)
-                .overlay(alignment: .top) {
-                    Divider()
-                }
-                .ignoresSafeArea(edges: .bottom)
+        .experienceChromeBarBackground()
+        .overlay(alignment: .top) {
+            Divider()
         }
     }
 

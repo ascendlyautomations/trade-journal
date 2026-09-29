@@ -389,7 +389,7 @@ struct DashboardAnalyticsV3Tests {
         #expect(chart.currentEquity == 53_500)
     }
 
-    @Test("Lifetime realized P&L prefers all-preset charts equity over window metrics")
+    @Test("Lifetime realized P&L falls back to all-preset charts when metrics all preset missing")
     func lifetimeRealizedPnLFromAllPresetCharts() throws {
         let bootstrap = try makeBootstrap()
         let accountID = TradingAccountID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")

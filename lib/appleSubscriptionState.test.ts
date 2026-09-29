@@ -18,13 +18,14 @@ function tx(
   return {
     originalTransactionId: "otid-1",
     transactionId: "100",
-    productId: "com.tradetraxs.traxpro.monthly",
+    productId: "com.tradetraxs.traxspro.monthly",
     environment: "Sandbox",
     expiresAt: future,
     revokedAt: null,
     purchasedAt: past,
     revocationReason: null,
     isUpgraded: false,
+    appAccountToken: null,
     ...overrides,
   }
 }

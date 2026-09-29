@@ -4,6 +4,34 @@ import Foundation
 protocol AppleSubscriptionSyncClienting: Sendable {
     func sync(transactionID: String) async throws -> AppleSubscriptionSyncResponse
     func fetchEntitlement() async throws -> BillingEntitlementResponse
+    func fetchMonetizationConfig() async throws -> IosMonetizationConfigResponse
+}
+
+struct IosMonetizationConfigResponse: Decodable, Sendable {
+    var iosPaywallEnabled: Bool
+    var entitlementEnforcementEnabled: Bool
+    /// False when the global settings row could not be read.
+    var settingsPresent: Bool?
+    var globalIosPaywallEnabled: Bool?
+    /// Null inherits the global paywall flag.
+    var accountIosPaywallOverride: Bool?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        iosPaywallEnabled = try container.decode(Bool.self, forKey: .iosPaywallEnabled)
+        entitlementEnforcementEnabled = try container.decode(Bool.self, forKey: .entitlementEnforcementEnabled)
+        settingsPresent = try container.decodeIfPresent(Bool.self, forKey: .settingsPresent)
+        globalIosPaywallEnabled = try container.decodeIfPresent(Bool.self, forKey: .globalIosPaywallEnabled)
+        accountIosPaywallOverride = try container.decodeIfPresent(Bool.self, forKey: .accountIosPaywallOverride)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case iosPaywallEnabled
+        case entitlementEnforcementEnabled
+        case settingsPresent
+        case globalIosPaywallEnabled
+        case accountIosPaywallOverride
+    }
 }
 
 struct AppleSubscriptionSyncResponse: Decodable, Sendable {
@@ -26,6 +54,10 @@ struct BillingEntitlementResponse: Decodable, Sendable {
     var cancelAtPeriodEnd: Bool?
     var appleExpiresAt: String?
     var appleProductId: String?
+    var accessExpiresAt: String? = nil
+    var issuedAt: String? = nil
+    var appleSubscriptionStatus: String? = nil
+    var appleRevokedAt: String? = nil
 }
 
 struct AppleSubscriptionSyncClient: AppleSubscriptionSyncClienting {
@@ -66,5 +98,23 @@ struct AppleSubscriptionSyncClient: AppleSubscriptionSyncClienting {
             throw AppError.unknown(message: "Billing entitlement fetch failed (\(response.statusCode))")
         }
         return try transport.decoder.decode(BillingEntitlementResponse.self, from: response)
+    }
+
+    func fetchMonetizationConfig() async throws -> IosMonetizationConfigResponse {
+        let response = try await transport.send(
+            host: .bff,
+            path: "/api/billing/ios-config",
+            method: .get,
+            body: nil,
+            requiresAuthentication: true
+        )
+        guard (200 ... 299).contains(response.statusCode) else {
+            throw AppError.unknown(message: "Monetization config fetch failed (\(response.statusCode))")
+        }
+        do {
+            return try transport.decoder.decode(IosMonetizationConfigResponse.self, from: response)
+        } catch {
+            throw AppError.unknown(message: "Monetization config response was malformed")
+        }
     }
 }

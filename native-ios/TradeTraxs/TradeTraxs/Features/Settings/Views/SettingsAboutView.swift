@@ -28,10 +28,7 @@ struct SettingsAboutView: View {
                 legalButton(.legalCommunityGuidelines)
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
-        .background(colors.groupedBackground.ignoresSafeArea())
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .experienceNavigationTitle("About TradeTraxs")
         .accessibilityIdentifier("settings.about")
     }

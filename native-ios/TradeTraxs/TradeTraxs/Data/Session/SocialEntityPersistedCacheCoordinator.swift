@@ -138,7 +138,8 @@ nonisolated enum SocialEntityPersistedCacheCoordinator {
         _ achievement: Achievement,
         viewerID: ProfileID,
         source: SaveSource,
-        mergeMode: MergeMode = .replace
+        mergeMode: MergeMode = .replace,
+        messagePostReference: PostID? = nil
     ) {
         persist(
             viewerID: viewerID,
@@ -162,6 +163,24 @@ nonisolated enum SocialEntityPersistedCacheCoordinator {
                 entityID: achievement.id.rawValue,
                 achievement: merged
             )
+        }
+        if let messagePostReference,
+           messagePostReference.rawValue != achievement.id.rawValue
+        {
+            persist(
+                viewerID: viewerID,
+                kind: .achievement,
+                entityID: messagePostReference.rawValue,
+                source: source,
+                mergeMode: mergeMode
+            ) { _ in
+                makeRecord(
+                    viewerID: viewerID,
+                    kind: .achievement,
+                    entityID: messagePostReference.rawValue,
+                    achievement: achievement
+                )
+            }
         }
     }
 

@@ -14,10 +14,7 @@ struct TradeRoomOfficialBadge: View {
     var body: some View {
         switch style {
         case .checkmark:
-            Image(systemName: "checkmark.seal.fill")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(colors.accent)
-                .accessibilityLabel("Official")
+            TradeTraxsVerifiedBadge(size: .compact, accessibilityLabel: "Official")
         case .label:
             Text("Official")
                 .font(.caption2.weight(.semibold))

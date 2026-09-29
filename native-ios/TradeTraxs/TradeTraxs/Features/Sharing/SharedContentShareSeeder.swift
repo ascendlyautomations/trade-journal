@@ -65,15 +65,25 @@ enum SharedContentShareSeeder {
                     detailCache.seedPresentationSeed(summary)
                 }
             }
-        case .achievementPost(let id):
-            let achievementID = AchievementID(id.rawValue)
-            if detailCache.achievement(id: achievementID) != nil { return }
+        case .achievementPost(let postReference):
+            if detailCache.achievement(forMessageReference: postReference) != nil { return }
+            let lookupID = SharedContentEntityPresentation.achievementLookupKey(forPostReference: postReference)
             if let achievement = SocialEntityPersistedCacheCoordinator.loadAchievement(
-                id: achievementID,
+                id: lookupID,
                 viewerID: viewerID,
-                purpose: "sharedContentShareSeeder"
+                purpose: "sharedContentShareSeeder.postAlias"
             ) {
-                detailCache.seed(achievement)
+                detailCache.seed(achievement, achievementPostID: postReference)
+                return
+            }
+            if let canonical = detailCache.achievementID(forMessageReference: postReference),
+               let achievement = SocialEntityPersistedCacheCoordinator.loadAchievement(
+                   id: canonical,
+                   viewerID: viewerID,
+                   purpose: "sharedContentShareSeeder.canonical"
+               )
+            {
+                detailCache.seed(achievement, achievementPostID: postReference)
             }
         case .trade(let id):
             seedTradeID(id, detailCache: detailCache, feedSessionStore: feedSessionStore, viewerID: viewerID)
@@ -111,7 +121,10 @@ enum SharedContentShareSeeder {
         }
         if let post = seed.post { detailCache.seed(post) }
         if let reel = seed.reel { detailCache.seed(reel) }
-        if let achievement = seed.achievement { detailCache.seed(achievement) }
+        if let achievement = seed.achievement {
+            let postReference = SharedContentEntityPresentation.messagePostReference(from: reference)
+            detailCache.seed(achievement, achievementPostID: postReference)
+        }
         if case .feedPost = reference, seed.post == nil, seed.tradeSummary != nil {
             detailCache.seed(seed.syntheticFeedPost)
         }

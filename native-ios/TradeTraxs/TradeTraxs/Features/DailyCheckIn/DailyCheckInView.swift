@@ -97,7 +97,16 @@ struct DailyCheckInView: View {
                 HStack(spacing: ExperienceSpacing.sm) {
                     TextField("7.5", text: sleepHoursBinding.numericInput(.unsignedDecimal(maxFractionDigits: 1)))
                         .keyboardType(.decimalPad)
-                        .textFieldStyle(.roundedBorder)
+                        .padding(.horizontal, ExperienceSpacing.sm)
+                        .padding(.vertical, ExperienceSpacing.xs)
+                        .background(
+                            colors.fillSecondary,
+                            in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                                .stroke(colors.border, lineWidth: ExperienceBorder.thin)
+                        )
                         .accessibilityIdentifier("dailyCheckIn.sleepHours")
                     Text("hours")
                         .experienceStyle(.body, color: colors.secondaryText)
@@ -145,8 +154,8 @@ struct DailyCheckInView: View {
             CompactRatingSelector(
                 title: "Stress",
                 value: $viewModel.draft.stressLevel,
-                lowLabel: "Very Stressed",
-                highLabel: "Calm"
+                lowLabel: "Calm",
+                highLabel: "Very Stressed"
             )
             .accessibilityIdentifier("dailyCheckIn.stress")
             CompactRatingSelector(

@@ -3,6 +3,20 @@ import XCTest
 
 @MainActor
 final class SubscriptionComplianceTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        SessionBillingEntitlementStore.shared.clear()
+        MonetizationRuntimeConfiguration.shared.resetToFailClosed()
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = false
+    }
+
+    override func tearDown() {
+        SessionBillingEntitlementStore.shared.clear()
+        MonetizationRuntimeConfiguration.shared.resetToFailClosed()
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = false
+        super.tearDown()
+    }
+
     func testPricingUniversalLinkIsNotRoutedInApp() throws {
         let parser = DeepLinkParser()
         let url = try XCTUnwrap(URL(string: "https://www.tradetraxs.com/pricing"))
@@ -183,7 +197,7 @@ private struct SubscriptionComplianceStubBilling: BillingRepository {
 
 private struct SubscriptionComplianceStubStoreKit: StoreKitSubscriptionServicing {
     func loadProducts() async throws -> [StoreKitTraxProProduct] { [] }
-    func purchase(productID: String) async -> StoreKitPurchaseOutcome { .userCancelled }
+    func purchase(productID: String, appAccountToken: UUID?) async -> StoreKitPurchaseOutcome { .userCancelled }
     func restorePurchases() async throws -> Bool { false }
     func syncVerifiedTransactionsToServer() async throws {}
     func startTransactionListenerIfNeeded() async {}

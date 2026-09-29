@@ -1,6 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
-import { getTraxProAppleProductIdSet } from "./traxProProductIds.ts"
+import {
+  getTraxProAppleProductIdSet,
+  isKnownTraxProAppleProductId,
+  resolveTraxProBillingIntervalFromAppleProductId,
+} from "./traxProProductIds.ts"
 import { isAppleSubscriptionActive } from "./appleSubscription.ts"
 
 const future = new Date(Date.now() + 86_400_000).toISOString()
@@ -66,10 +70,30 @@ describe("TraxPro product IDs", () => {
   it("matches expected production identifiers", () => {
     const ids = getTraxProAppleProductIdSet()
     assert.deepEqual([...ids].sort(), [
-      "com.tradetraxs.traxpro.monthly",
       "com.tradetraxs.traxpro.sixmonth",
       "com.tradetraxs.traxpro.yearly",
+      "com.tradetraxs.traxspro.monthly",
     ])
+    assert.equal(
+      isKnownTraxProAppleProductId("com.tradetraxs.traxspro.monthly"),
+      true
+    )
+    assert.equal(
+      resolveTraxProBillingIntervalFromAppleProductId(
+        "com.tradetraxs.traxspro.monthly"
+      ),
+      "monthly"
+    )
+    assert.equal(
+      isKnownTraxProAppleProductId("com.tradetraxs.traxpro.monthly"),
+      false
+    )
+    assert.equal(
+      resolveTraxProBillingIntervalFromAppleProductId(
+        "com.tradetraxs.traxpro.monthly"
+      ),
+      null
+    )
   })
 })
 

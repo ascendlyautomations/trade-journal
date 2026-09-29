@@ -17,6 +17,18 @@ final class TradeHoldDurationTests: XCTestCase {
     func testFormatSecondsUsesDayHourForLongHolds() {
         XCTAssertEqual(TradeHoldDuration.formatSeconds(90000), "1d 1h")
     }
+
+    func testFormatSecondsSubMinute() {
+        XCTAssertEqual(TradeHoldDuration.formatSeconds(8), "8s")
+        XCTAssertEqual(TradeHoldDuration.formatSeconds(59), "59s")
+        XCTAssertEqual(TradeHoldDuration.formatSeconds(0), "0s")
+        XCTAssertEqual(TradeHoldDuration.formatSeconds(60), "1m")
+    }
+
+    func testFormatSecondsOmitsSubMinuteWithoutTimestampPrecision() {
+        XCTAssertNil(TradeHoldDuration.formatSeconds(34, allowSubMinuteSeconds: false))
+        XCTAssertEqual(TradeHoldDuration.formatSeconds(0, allowSubMinuteSeconds: false), "0s")
+    }
 }
 
 final class TradeScreenshotDisplayModeTests: XCTestCase {

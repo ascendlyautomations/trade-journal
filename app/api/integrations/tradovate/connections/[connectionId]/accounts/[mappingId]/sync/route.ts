@@ -33,7 +33,15 @@ function httpStatusForSummary(summary: TradovateSyncSummary): number {
 
 /** Stable client contract — iOS must not infer reconnect from free-text errors. */
 function brokerClientCode(summary: TradovateSyncSummary): string | undefined {
-  if (summary.ok) return undefined
+  if (summary.ok) {
+    if (summary.syncOutcome === "no_available_trade_history") {
+      return "BROKER_NO_AVAILABLE_TRADE_HISTORY"
+    }
+    if (summary.syncOutcome === "up_to_date") {
+      return "BROKER_SYNC_UP_TO_DATE"
+    }
+    return undefined
+  }
   if (summary.status === "syncing") return "BROKER_SYNC_IN_PROGRESS"
   const errorCode = summary.errorCode?.trim()
   if (
@@ -116,9 +124,10 @@ function syncResponseBody(params: {
     accounts,
   }
 
+  const clientCode = brokerClientCode(summary)
+  if (clientCode != null) body.code = clientCode
+
   if (!summary.ok) {
-    const code = brokerClientCode(summary)
-    if (code != null) body.code = code
     if (summary.errorCode != null) body.errorCode = summary.errorCode
     if (summary.failureStage != null) body.failureStage = summary.failureStage
     if (summary.failureCategory != null) {

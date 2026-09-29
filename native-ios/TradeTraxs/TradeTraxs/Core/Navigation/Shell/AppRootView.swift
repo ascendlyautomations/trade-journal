@@ -318,6 +318,8 @@ struct AppRootView: View {
         )
         .onChange(of: ContextualTourCoordinator.shared.navigationRequest) { _, request in
             guard let request else { return }
+            let tour = ContextualTourCoordinator.shared
+            guard tour.phase == .measuring || tour.phase == .presenting else { return }
             applyAppWalkthroughNavigation(request)
         }
         .onChange(of: navigation.store.selectedTab) { _, _ in
@@ -630,9 +632,7 @@ struct AppRootView: View {
             }
         case .settings:
             navigation.coordinator.selectTab(.profile)
-            if navigation.store.paths.profile != [.settings(.home)] {
-                navigation.store.paths.profile = [.settings(.home)]
-            }
+            navigation.coordinator.pushProfileSettingsHome(source: "appWalkthrough")
         }
     }
 

@@ -360,6 +360,12 @@ struct TradeRoomsHomeView: View {
             } else {
                 ForEach(rooms) { room in
                     discoveryRow(for: room, isYourRoomsContext: false)
+                        .onAppear {
+                            guard viewModel.activeDiscoveryScope == .all else { return }
+                            Task {
+                                await viewModel.loadMoreAllScopeDiscoveryIfNeeded(currentRoomID: room.id)
+                            }
+                        }
                 }
             }
         }

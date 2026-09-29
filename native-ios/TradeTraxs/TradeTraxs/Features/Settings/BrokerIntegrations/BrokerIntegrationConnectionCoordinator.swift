@@ -31,11 +31,15 @@ struct BrokerIntegrationConnectionCoordinator: View {
                 if viewModel.isConnecting {
                     ProgressView("Opening Tradovate…")
                         .padding(ExperienceSpacing.lg)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        .experienceFloatingPanelBackground(
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        )
                 } else if viewModel.isConnectingRithmic, !viewModel.showsRithmicConnectSheet {
                     ProgressView("Connecting Rithmic…")
                         .padding(ExperienceSpacing.lg)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        .experienceFloatingPanelBackground(
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        )
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .tradovateBrokerOAuthCompleted)) { note in
@@ -121,6 +125,25 @@ struct BrokerIntegrationConnectionCoordinator: View {
                     )
                 }
             }
+            .confirmationDialog(
+                "Connect Tradovate",
+                isPresented: $viewModel.showsTradovateEnvironmentPicker,
+                titleVisibility: .visible
+            ) {
+                Button("Live (production)") {
+                    viewModel.connectTradovateWithEnvironment("live")
+                }
+                Button("Demo (simulation)") {
+                    viewModel.connectTradovateWithEnvironment("demo")
+                }
+                Button("Cancel", role: .cancel) {
+                    viewModel.showsTradovateEnvironmentPicker = false
+                }
+            } message: {
+                Text(
+                    "Choose the Tradovate environment that matches the account you sign in with. Live and Demo use separate API data."
+                )
+            }
     }
 
     private var showsImportedTradesReviewBinding: Binding<Bool> {
@@ -184,7 +207,7 @@ struct BrokerLinkExistingAccountSheet: View {
                     }
                 }
             }
-            .experienceDashboardGroupedRows()
+            .experienceTradeTraxsFormStyle(pageBackground: false)
             .experienceNavigationTitle("Link Account")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

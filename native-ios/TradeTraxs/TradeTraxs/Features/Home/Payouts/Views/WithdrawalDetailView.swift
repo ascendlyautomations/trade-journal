@@ -30,7 +30,6 @@ struct WithdrawalDetailView: View {
     }
 
     private var historyItem: PayoutHistoryItem? {
-        let accountsByID = Dictionary(uniqueKeysWithValues: accountsViewModel.accounts.map { ($0.id, $0) })
         let items = PayoutHistorySupport.buildHistory(
             accounts: accountsViewModel.accounts,
             entriesByAccount: withdrawalsHistory.ledgerByAccount,

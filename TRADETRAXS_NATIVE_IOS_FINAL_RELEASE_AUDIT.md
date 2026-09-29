@@ -29,7 +29,7 @@ TradeTraxs native is **architecturally shippable**: Release builds compile and v
 2. **Release `fatalError` if Supabase not configured** — `AppConfigurationValidator.assertReadyForLaunch` traps Release builds missing `Secrets.plist` / env injection (`TradeTraxs/Config/Secrets.example.plist` documents pipeline).
 3. **Residual `Dictionary(uniqueKeysWithValues:)` on `ProfileID`** in Explore/Messages/Leaderboard hydration — same crash class as Room Members if Supabase ever returns duplicate profile rows (Room path fixed; others not).
 4. **Minimum OS iOS 18.0** (`IPHONEOS_DEPLOYMENT_TARGET = 18.0` in `project.pbxproj`) — valid for submission but excludes all iOS 17 devices; confirm intentional product decision.
-5. **TraxPro on iOS** — StoreKit 2 + `/api/apple/subscription/sync` + DB tables exist; **IAP product IDs default to** `com.tradetraxs.traxpro.{monthly,sixmonth,yearly}` until Info.plist overrides — must exist in ASC and be sandbox-tested.
+5. **TraxPro on iOS** — StoreKit 2 + `/api/apple/subscription/sync` + DB tables exist; **IAP product IDs default to** `com.tradetraxs.traxspro.monthly`, `com.tradetraxs.traxpro.sixmonth`, and `com.tradetraxs.traxpro.yearly` until Info.plist overrides — must exist in ASC and be sandbox-tested.
 6. **Rithmic** — correctly **gated**: `showConnectUi` only when `apiEnvironment === "test"` (`app/api/integrations/rithmic/connect/route.ts` GET). Not an App Store blocker if UI hidden in production.
 
 ### Minimum work before submission
@@ -180,7 +180,7 @@ Not exhaustively counted (~thousands of `!` in SwiftUI). **No blanket P0** — s
 ### Architecture (verified in repo)
 
 - **StoreKit 2:** `StoreKitSubscriptionService.swift` — load products, purchase, restore, transaction listener, sync to BFF.
-- **Product IDs:** `TraxProProductConfiguration.swift` — defaults `com.tradetraxs.traxpro.monthly|sixmonth|yearly`; overridable via Info.plist keys.
+- **Product IDs:** `TraxProProductConfiguration.swift` — defaults `com.tradetraxs.traxspro.monthly`, `com.tradetraxs.traxpro.sixmonth`, `com.tradetraxs.traxpro.yearly`; overridable via Info.plist keys.
 - **Server sync:** `AppleSubscriptionSyncClient.swift` → `POST /api/apple/subscription/sync`.
 - **Server notifications:** `app/api/apple/subscription/notifications/route.ts`, migrations `20260909180000_*`, `20260909190000_*`.
 - **Entitlement resolver:** `TraxProEntitlementResolver.swift` — Apple, Stripe, manual, early access, creator.

@@ -1,47 +1,72 @@
 import Foundation
 
-nonisolated struct DefaultBillingRepository: BillingRepository {
+nonisolated struct DefaultBillingRepository: BillingRepository, MonetizationConfigurationRefreshing {
     private let supabase: SupabaseInfrastructure
     private let cache: CacheStack
     private let storeKitSync: (any StoreKitEntitlementSyncing)?
+    private let entitlementClient: (any AppleSubscriptionSyncClienting)?
 
     init(
         supabase: SupabaseInfrastructure,
         cache: CacheStack = .placeholder(),
-        storeKitSync: (any StoreKitEntitlementSyncing)? = nil
+        storeKitSync: (any StoreKitEntitlementSyncing)? = nil,
+        entitlementClient: (any AppleSubscriptionSyncClienting)? = nil
     ) {
         self.supabase = supabase
         self.cache = cache
         self.storeKitSync = storeKitSync
+        self.entitlementClient = entitlementClient
+    }
+
+    func refreshMonetizationConfiguration(for profileID: ProfileID) async {
+        let userID = profileID.rawValue
+        MonetizationRuntimeConfiguration.shared.restoreCache(userID: userID)
+        guard let entitlementClient else {
+            logMonetizationConfig(
+                userID: userID,
+                globalPaywall: "unknown",
+                accountOverride: "unknown",
+                effectivePaywall: MonetizationRuntimeConfiguration.shared.iosPaywallEnabled,
+                source: "noClient"
+            )
+            return
+        }
+        do {
+            let config = try await entitlementClient.fetchMonetizationConfig()
+            MonetizationRuntimeConfiguration.shared.applySuccessfulFetch(
+                CachedMonetizationFlags(
+                    iosPaywallEnabled: config.iosPaywallEnabled,
+                    entitlementEnforcementEnabled: config.entitlementEnforcementEnabled
+                ),
+                userID: userID
+            )
+            let source = config.settingsPresent == false ? "server settingsMissing" : "server"
+            logMonetizationConfig(
+                userID: userID,
+                globalPaywall: debugFlag(config.globalIosPaywallEnabled),
+                accountOverride: debugOverride(config.accountIosPaywallOverride),
+                effectivePaywall: config.iosPaywallEnabled,
+                source: source
+            )
+        } catch {
+            // Keep the restored cache, or false when there is no cache.
+            logMonetizationConfig(
+                userID: userID,
+                globalPaywall: "unknown",
+                accountOverride: "unknown",
+                effectivePaywall: MonetizationRuntimeConfiguration.shared.iosPaywallEnabled,
+                source: "fetchFailed \(monetizationConfigFailureLabel(error))"
+            )
+        }
     }
 
     func status(for profileID: ProfileID) async throws -> BillingStatus {
-        let profile: BillingProfileDTO = try await supabase.database.selectOne(
-            BillingProfileDTO.self,
-            from: "profiles",
-            query: [
-                SupabaseQuery.select(BillingProfileDTO.selectColumns),
-                SupabaseQuery.eq("id", profileID.rawValue),
-            ]
-        )
-
-        let appleRow: AppleSubscriptionDTO? = try? await supabase.database.selectOne(
-            AppleSubscriptionDTO.self,
-            from: "apple_subscriptions",
-            query: [
-                SupabaseQuery.select(AppleSubscriptionDTO.selectColumns),
-                SupabaseQuery.eq("user_id", profileID.rawValue),
-                SupabaseQuery.order("expires_at", ascending: false),
-                SupabaseQuery.limit(1),
-            ]
-        )
-
-        return buildBillingStatus(profileID: profileID, profile: profile, apple: appleRow)
+        try await loadServerEntitlement(for: profileID, syncStoreKit: false)
     }
 
     func subscription(for profileID: ProfileID) async throws -> Subscription? {
         let status = try await status(for: profileID)
-        guard TraxProEntitlementResolver.resolve(status).isActive else { return nil }
+        guard status.hasTraxProAccess else { return nil }
         return Subscription(
             id: SubscriptionID(profileID.rawValue),
             profileID: profileID,
@@ -55,59 +80,145 @@ nonisolated struct DefaultBillingRepository: BillingRepository {
     }
 
     func refreshEntitlements(for profileID: ProfileID) async throws -> BillingStatus {
-        if IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled, let storeKitSync {
-            try? await storeKitSync.syncVerifiedTransactionsToServer()
-        }
-        return try await status(for: profileID)
+        await refreshMonetizationConfiguration(for: profileID)
+        return try await loadServerEntitlement(for: profileID, syncStoreKit: true)
     }
 
-    private func buildBillingStatus(
-        profileID: ProfileID,
-        profile: BillingProfileDTO,
-        apple: AppleSubscriptionDTO?
-    ) -> BillingStatus {
-        let lifecycle = mapLifecycle(profile.subscription_status)
-        let interval = mapInterval(profile.billing_interval) ?? mapInterval(apple?.billing_interval)
-        let trialEndsAt = profile.trial_end.flatMap(ISO8601.date(from:))
-        let isProFlag = profile.is_pro == true
+    private func loadServerEntitlement(
+        for profileID: ProfileID,
+        syncStoreKit: Bool
+    ) async throws -> BillingStatus {
+        _ = supabase
+        _ = cache
+        if syncStoreKit,
+           IosSubscriptionReleaseConfiguration.iosPaywallEnabled,
+           let storeKitSync {
+            try? await storeKitSync.syncVerifiedTransactionsToServer()
+        }
 
+        if let entitlementClient {
+            do {
+                let response = try await entitlementClient.fetchEntitlement()
+                let status = mapServerEntitlement(response, profileID: profileID)
+                PersistedEntitlementSnapshotStore.save(snapshotRecord(from: status))
+                return status
+            } catch {
+                if let cached = statusFromCache(profileID: profileID) {
+                    return cached
+                }
+                throw error
+            }
+        }
+
+        if let cached = statusFromCache(profileID: profileID) {
+            return cached
+        }
+        throw AppError.unknown(message: "Billing entitlement is unavailable")
+    }
+
+    private func statusFromCache(profileID: ProfileID) -> BillingStatus? {
+        guard let record = PersistedEntitlementSnapshotStore.load(userID: profileID.rawValue) else {
+            return nil
+        }
+        switch EntitlementSnapshotPolicy.decision(record) {
+        case .unavailable:
+            return nil
+        case .deny:
+            return BillingStatus(
+                profileID: profileID,
+                plan: .free,
+                lifecycle: .expired,
+                isProEntitled: false,
+                serverTraxProActive: false,
+                accessExpiresAt: record.accessExpiresAt,
+                entitlementFetchedAt: record.fetchedAt
+            )
+        case .grant:
+            var status = BillingStatus(
+                profileID: profileID,
+                plan: .free,
+                lifecycle: .active,
+                isProEntitled: false,
+                serverTraxProActive: true,
+                accessExpiresAt: record.accessExpiresAt,
+                entitlementFetchedAt: record.fetchedAt
+            )
+            status.entitlementSource = mapSource(record.source)
+            return applyEnforcementCaps(status)
+        }
+    }
+
+    private func mapServerEntitlement(
+        _ response: BillingEntitlementResponse,
+        profileID: ProfileID
+    ) -> BillingStatus {
+        let source = mapSource(response.source)
+        let fetchedAt = response.issuedAt.flatMap(ISO8601.date(from:)) ?? Date()
         var status = BillingStatus(
             profileID: profileID,
-            plan: isProFlag ? .pro : .free,
-            lifecycle: lifecycle,
-            isProEntitled: isProFlag && (lifecycle == .active || lifecycle == .trialing),
-            dailyTradeLimit: nil,
-            dailyPostLimit: nil,
-            dailyMessageLimit: nil,
-            maxTradeEntryAccounts: nil,
-            trialEndsAt: trialEndsAt,
-            currentPeriodEndsAt: profile.current_period_end.flatMap(ISO8601.date(from:)),
-            billingInterval: interval,
-            cancelAtPeriodEnd: profile.cancel_at_period_end == true,
-            creatorAccess: profile.creator_access == true,
-            subscriptionStatusRaw: profile.subscription_status,
-            earlyAccessStatus: profile.early_access_status,
-            earlyAccessCampaignID: profile.early_access_campaign_id,
-            earlyAccessEnrollmentSource: profile.early_access_enrollment_source,
-            earlyAccessEnrolledAt: profile.early_access_enrolled_at.flatMap(ISO8601.date(from:)),
-            earlyAccessStartedAt: profile.early_access_started_at.flatMap(ISO8601.date(from:)),
-            earlyAccessEndsAt: profile.early_access_ends_at.flatMap(ISO8601.date(from:)),
-            appleSubscriptionStatus: apple?.status,
-            appleExpiresAt: apple?.expires_at.flatMap(ISO8601.date(from:)),
-            appleRevokedAt: apple?.revoked_at.flatMap(ISO8601.date(from:)),
-            appleProductID: apple?.product_id
+            plan: source == .manual || source == .launchAccess ? .pro : .free,
+            lifecycle: mapLifecycle(response.subscriptionStatus),
+            isProEntitled: false,
+            trialEndsAt: response.trialEndsAt.flatMap(ISO8601.date(from:)),
+            currentPeriodEndsAt: response.currentPeriodEndsAt.flatMap(ISO8601.date(from:)),
+            billingInterval: mapInterval(response.billingInterval),
+            cancelAtPeriodEnd: response.cancelAtPeriodEnd == true,
+            creatorAccess: source == .creator,
+            subscriptionStatusRaw: response.subscriptionStatus,
+            appleSubscriptionStatus: response.appleSubscriptionStatus,
+            appleExpiresAt: response.appleExpiresAt.flatMap(ISO8601.date(from:)),
+            appleRevokedAt: response.appleRevokedAt.flatMap(ISO8601.date(from:)),
+            appleProductID: response.appleProductId,
+            entitlementSource: response.traxProActive ? source : .none,
+            serverTraxProActive: response.traxProActive,
+            accessExpiresAt: response.accessExpiresAt.flatMap(ISO8601.date(from:)),
+            entitlementFetchedAt: fetchedAt
         )
+        if response.traxProActive, status.lifecycle == .none, source == .apple || source == .stripe {
+            status.lifecycle = .active
+        }
+        return applyEnforcementCaps(status)
+    }
 
-        let resolution = TraxProEntitlementResolver.resolve(status)
-        status.entitlementSource = resolution.source
-        if IosSubscriptionReleaseConfiguration.appliesFreeTierUsageCaps, !resolution.isActive {
+    private func snapshotRecord(from status: BillingStatus) -> EntitlementSnapshotRecord {
+        EntitlementSnapshotRecord(
+            userID: status.profileID.rawValue,
+            traxProActive: status.serverTraxProActive == true,
+            source: status.entitlementSource.rawValue,
+            accessExpiresAt: status.accessExpiresAt,
+            revokedAt: status.appleRevokedAt,
+            fetchedAt: status.entitlementFetchedAt ?? Date()
+        )
+    }
+
+    private func applyEnforcementCaps(_ status: BillingStatus) -> BillingStatus {
+        var status = status
+        if IosSubscriptionReleaseConfiguration.appliesFreeTierUsageCaps, !status.hasTraxProAccess {
             status.dailyTradeLimit = FreeTierPolicy.dailyTradeLimit
             status.dailyPostLimit = FreeTierPolicy.dailyPostLimit
             status.dailyMessageLimit = FreeTierPolicy.dailyDirectMessageLimit
             status.maxTradeEntryAccounts = FreeTierPolicy.maxTradeEntryAccounts
         }
-
         return status
+    }
+
+    private func mapSource(_ raw: String?) -> TraxProEntitlementSource {
+        switch raw {
+        case "stripe":
+            return .stripe
+        case "apple":
+            return .apple
+        case "manual":
+            return .manual
+        case "creator":
+            return .creator
+        case "early_access":
+            return .earlyAccess
+        case "launch_access":
+            return .launchAccess
+        default:
+            return .none
+        }
     }
 
     private func mapLifecycle(_ status: String?) -> SubscriptionLifecycle {
@@ -139,35 +250,43 @@ nonisolated struct DefaultBillingRepository: BillingRepository {
             return nil
         }
     }
-}
 
-nonisolated struct BillingProfileDTO: Codable, Sendable {
-    static let selectColumns =
-        "id,is_pro,creator_access,subscription_status,trial_end,current_period_end,billing_interval,cancel_at_period_end,early_access_status,early_access_campaign_id,early_access_enrollment_source,early_access_enrolled_at,early_access_started_at,early_access_ends_at"
+    private func logMonetizationConfig(
+        userID: String,
+        globalPaywall: String,
+        accountOverride: String,
+        effectivePaywall: Bool,
+        source: String
+    ) {
+        #if DEBUG
+        print(
+            """
+            [MonetizationConfig]
+            userID=\(userID)
+            globalPaywall=\(globalPaywall)
+            accountOverride=\(accountOverride)
+            effectivePaywall=\(effectivePaywall)
+            source=\(source)
+            """
+        )
+        #endif
+    }
 
-    var id: String?
-    var is_pro: Bool?
-    var creator_access: Bool?
-    var subscription_status: String?
-    var trial_end: String?
-    var current_period_end: String?
-    var billing_interval: String?
-    var cancel_at_period_end: Bool?
-    var early_access_status: String?
-    var early_access_campaign_id: String?
-    var early_access_enrollment_source: String?
-    var early_access_enrolled_at: String?
-    var early_access_started_at: String?
-    var early_access_ends_at: String?
-}
+    private func debugFlag(_ value: Bool?) -> String {
+        guard let value else { return "unknown" }
+        return value ? "true" : "false"
+    }
 
-nonisolated struct AppleSubscriptionDTO: Codable, Sendable {
-    static let selectColumns =
-        "product_id,status,expires_at,revoked_at,billing_interval"
+    private func debugOverride(_ value: Bool?) -> String {
+        guard let value else { return "null" }
+        return value ? "true" : "false"
+    }
 
-    var product_id: String?
-    var status: String?
-    var expires_at: String?
-    var revoked_at: String?
-    var billing_interval: String?
+    private func monetizationConfigFailureLabel(_ error: Error) -> String {
+        guard let appError = error as? AppError else { return "unavailable" }
+        if case .unknown(let message) = appError {
+            return message
+        }
+        return "unavailable"
+    }
 }

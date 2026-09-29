@@ -42,9 +42,7 @@ struct ManageRoomChannelsView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
+        .experienceInsetGroupedListStyle(pageBackground: false)
         .experienceNavigationTitle("Channels")
         .toolbar {
             if viewModel.canManageRoom {

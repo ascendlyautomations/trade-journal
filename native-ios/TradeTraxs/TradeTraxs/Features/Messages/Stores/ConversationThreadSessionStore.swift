@@ -8,6 +8,13 @@ final class ConversationThreadSessionStore {
     static let messageLimit = 50
     static let softStaleInterval: TimeInterval = 60
 
+    /// Open-thread bootstrap must refetch when the cached window is shorter than a normal first page.
+    /// Inbox realtime patches often persist 1–2 rows with `hasMoreMessages == false`; that is preview
+    /// semantics, not proof that the conversation has no older history.
+    static func openThreadNeedsFullBootstrap(messageCount: Int) -> Bool {
+        messageCount < messageLimit
+    }
+
     struct Snapshot: Sendable {
         var cacheKey: String
         var conversation: Conversation
@@ -69,6 +76,9 @@ final class ConversationThreadSessionStore {
                 incoming: incoming
             )
             snapshot.messages = Self.newestPage(from: merged, limit: Self.messageLimit)
+            if Self.openThreadNeedsFullBootstrap(messageCount: snapshot.messages.count) {
+                snapshot.hasMoreMessages = true
+            }
             if let conversation {
                 snapshot.conversation = conversation
             }
@@ -79,12 +89,13 @@ final class ConversationThreadSessionStore {
             return
         }
         guard let conversation else { return }
+        let firstPage = Self.newestPage(from: incoming, limit: Self.messageLimit)
         let created = Snapshot(
             cacheKey: key,
             conversation: conversation,
-            messages: Self.newestPage(from: incoming, limit: Self.messageLimit),
+            messages: firstPage,
             nextCursor: nil,
-            hasMoreMessages: false,
+            hasMoreMessages: Self.openThreadNeedsFullBootstrap(messageCount: firstPage.count),
             loadedAt: Date(),
             contentGeneration: 1
         )

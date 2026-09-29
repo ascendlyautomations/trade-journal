@@ -100,7 +100,9 @@ struct StoryShareRecipientPickerView: View {
                 if viewModel.phase == .sending {
                     ProgressView("Sending…")
                         .padding()
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        .experienceFloatingPanelBackground(
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        )
                 }
             }
         }

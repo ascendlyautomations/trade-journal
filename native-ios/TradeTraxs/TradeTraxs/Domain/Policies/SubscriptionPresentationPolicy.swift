@@ -8,15 +8,16 @@ nonisolated enum SubscriptionPresentationPolicy {
             return "Your TraxPro subscription is active through the App Store."
         case .stripe:
             return "Your TraxPro subscription is active. Billing is managed outside the App Store."
-        case .creator, .earlyAccess, .manual:
+        case .creator, .earlyAccess, .manual, .launchAccess:
             return "Your account has access to TraxPro features."
         case .none:
+            if status.hasTraxProAccess {
+                return "Your account has access to TraxPro features."
+            }
             if !IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled {
                 return "TradeTraxs includes all features at no additional cost in this release."
             }
-            return status.hasTraxProAccess
-                ? "Your account has access to TraxPro features."
-                : "Your account is currently on the Free plan."
+            return "Your account is currently on the Free plan."
         }
     }
 
@@ -42,7 +43,7 @@ nonisolated enum SubscriptionPresentationPolicy {
             return "Creator access"
         case .earlyAccess:
             return "Early access"
-        case .manual:
+        case .manual, .launchAccess:
             return "Granted access"
         case .none:
             return nil

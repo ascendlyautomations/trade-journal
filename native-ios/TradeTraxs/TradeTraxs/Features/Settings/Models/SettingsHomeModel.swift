@@ -50,6 +50,7 @@ enum SettingsHomeModel {
                 title: "Support",
                 items: [
                     SettingsHomeItem(route: .support, systemImage: "questionmark.circle"),
+                    SettingsHomeItem(route: .productFeedback, systemImage: "text.bubble"),
                     SettingsHomeItem(route: .about, systemImage: "info.circle"),
                 ]
             ),

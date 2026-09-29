@@ -85,10 +85,7 @@ struct SettingsBlockedAccountsView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
-        .background(colors.groupedBackground.ignoresSafeArea())
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .experienceNavigationTitle("Blocked Accounts")
         .overlay {
             if viewModel.isLoading {
@@ -153,10 +150,7 @@ struct SettingsMutedAccountsView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
-        .background(colors.groupedBackground.ignoresSafeArea())
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .experienceNavigationTitle("Muted Accounts")
         .overlay {
             if viewModel.isLoading {
@@ -208,10 +202,7 @@ struct SettingsDmPrivacyPickerView: View {
                 Text("This applies to new direct messages. Existing conversations are not affected.")
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
-        .background(colors.groupedBackground.ignoresSafeArea())
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .experienceNavigationTitle("Who Can Message Me")
         .onAppear {
             Task { await viewModel.refreshSummary() }

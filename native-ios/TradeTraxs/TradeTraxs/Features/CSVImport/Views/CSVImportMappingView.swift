@@ -23,9 +23,7 @@ struct CSVImportMappingView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
+        .experienceInsetGroupedListStyle(pageBackground: false)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ExperienceButton(
                 title: "Continue",

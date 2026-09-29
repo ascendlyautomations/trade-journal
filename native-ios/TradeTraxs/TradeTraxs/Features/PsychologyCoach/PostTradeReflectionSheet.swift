@@ -34,8 +34,7 @@ struct PostTradeReflectionSheet: View {
                         .lineLimit(2 ... 4)
                 }
             }
-            .scrollContentBackground(.hidden)
-            .experienceDashboardGroupedRows()
+            .experienceTradeTraxsFormStyle(pageBackground: false)
             .experienceScreenBackground()
             .navigationTitle("Quick Reflection")
             .navigationBarTitleDisplayMode(.inline)

@@ -100,7 +100,10 @@ struct SettingsDestinationView: View {
                     navigationCoordinator: navigationCoordinator
                 )
             case .brokerIntegrations:
-                BrokerIntegrationsView(data: data)
+                BrokerIntegrationsView(
+                    data: data,
+                    navigationCoordinator: navigationCoordinator
+                )
             case .payouts:
                 PayoutsScreenView(data: data, navigationCoordinator: navigationCoordinator)
             case .privacy:
@@ -136,8 +139,18 @@ struct SettingsDestinationView: View {
                 }
             case .vault:
                 VaultHomeView(data: data, navigationCoordinator: navigationCoordinator)
-            case .support:
-                SettingsSupportView()
+            case .support, .supportContact:
+                ContactSupportFormView(repository: data.userSubmissions)
+            case .productFeedback, .supportFeedback:
+                SendFeedbackFormView(repository: data.userSubmissions)
+            case .supportBugReport:
+                ReportBugFormView(repository: data.userSubmissions)
+            case .admin:
+                AdminPortalView(
+                    data: data,
+                    navigationCoordinator: navigationCoordinator,
+                    currentUserProfile: currentUserProfile
+                )
             case .about:
                 SettingsAboutView()
             case .legalTerms, .legalPrivacy, .legalCommunityGuidelines, .legalRefund:

@@ -128,6 +128,13 @@ struct SharedTradeMessageCard: View {
             .lineLimit(1)
     }
 
+    private func metaChipBackground(emphasized: Bool) -> Color {
+        if isOutgoing {
+            return colors.onAccent.opacity(emphasized ? 0.14 : 0.08)
+        }
+        return emphasized ? colors.accentMuted : colors.fillTertiary
+    }
+
     private func metaChip(_ title: String, emphasized: Bool = false) -> some View {
         Text(title)
             .experienceStyle(
@@ -139,10 +146,7 @@ struct SharedTradeMessageCard: View {
             .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, TradeMetaChipMetrics.horizontalPadding)
             .padding(.vertical, TradeMetaChipMetrics.verticalPadding)
-            .background(
-                (isOutgoing ? colors.onAccent : colors.primaryText)
-                    .opacity(emphasized ? 0.14 : 0.08)
-            )
+            .background(metaChipBackground(emphasized: emphasized))
             .clipShape(Capsule())
     }
 

@@ -9,6 +9,7 @@ struct DetailIdentityHeader: View {
     /// Optional second-line suffix after username (e.g. Trade account identity).
     var subtitle: String? = nil
     let dateText: String
+    var showsVerifiedBadge: Bool = false
     let isOwner: Bool
     var contentLink: DetailContentLink? = nil
     var ownerProfileID: ProfileID? = nil
@@ -41,10 +42,15 @@ struct DetailIdentityHeader: View {
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(displayName)
-                    .experienceStyle(.headline, color: colors.primaryText)
-                    .lineLimit(1)
-                    .padding(.trailing, 28)
+                HStack(spacing: 4) {
+                    Text(displayName)
+                        .experienceStyle(.headline, color: colors.primaryText)
+                        .lineLimit(1)
+                    if showsVerifiedBadge {
+                        TradeTraxsVerifiedBadge(size: .compact)
+                    }
+                }
+                .padding(.trailing, 28)
 
                 HStack(spacing: 4) {
                     if !username.isEmpty {

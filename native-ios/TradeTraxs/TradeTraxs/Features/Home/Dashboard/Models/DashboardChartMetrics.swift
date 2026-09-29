@@ -446,12 +446,8 @@ nonisolated enum DashboardChartMetrics {
 
     private static func formatDuration(_ seconds: TimeInterval?) -> String {
         guard let seconds else { return "—" }
-        let total = Int(seconds.rounded())
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        if h > 0 { return "\(h)h \(m)m" }
-        if m > 0 { return "\(m)m" }
-        return "\(total)s"
+        let total = Int(seconds.rounded(.down))
+        return TradeHoldDuration.formatSeconds(total) ?? "—"
     }
 
     // MARK: - Drawdown series (presentation from equity path)

@@ -65,22 +65,53 @@ export function isMultiCalendarDayTrade(
   return entryKey !== exitKey
 }
 
-/** Format hold length; ≥24h shows days + hours only (e.g. 2d 5h, 7d 0h). */
-export function formatHoldDurationSeconds(totalSeconds: number): string | null {
-  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return null
+/** True when ISO timestamps include clock time beyond date-only midnight placeholders. */
+export function timestampsSupportSecondPrecision(
+  start: string | null | undefined,
+  end: string | null | undefined
+): boolean {
+  const inspect = (raw: string | null | undefined): boolean => {
+    const s = raw == null ? "" : String(raw).trim()
+    if (!s) return false
+    if (!s.includes("T") && !/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      if (/^\d{1,2}:\d{2}:\d{2}/.test(s)) return true
+      if (/^\d{1,2}:\d{2}$/.test(s)) return false
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return false
+    if (/T00:00:00(?:\.0+)?(?:Z|[+-]|$)/.test(s)) {
+      return false
+    }
+    if (/T\d{2}:\d{2}:\d{2}/.test(s)) return true
+    if (/\.\d+/.test(s)) return true
+    if (/T\d{2}:\d{2}(?:Z|[+-]|$)/.test(s)) return false
+    return true
+  }
+  return inspect(start) && inspect(end)
+}
 
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
+/** Format hold length; ≥24h shows days + hours only (e.g. 2d 5h, 7d 0h). */
+export function formatHoldDurationSeconds(
+  totalSeconds: number,
+  opts?: { allowSubMinuteSeconds?: boolean }
+): string | null {
+  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return null
+  const allowSubMinute = opts?.allowSubMinuteSeconds ?? true
+  const whole = Math.floor(totalSeconds)
+
+  if (whole === 0) return "0s"
+  if (whole < 60) {
+    if (!allowSubMinute) return null
+    return `${whole}s`
+  }
+
+  const hours = Math.floor(whole / 3600)
+  const minutes = Math.floor((whole % 3600) / 60)
+  const seconds = whole % 60
 
   if (hours >= 24) {
     const days = Math.floor(hours / 24)
     const remHours = hours % 24
     return `${days}d ${remHours}h`
-  }
-
-  if (hours === 0 && minutes === 0) {
-    return "0m"
   }
 
   if (hours === 0) {
@@ -96,8 +127,12 @@ export function formatHoldDurationFromTimes(
 ): string | null {
   if (!start || !end) return null
   const diff = +new Date(String(end)) - +new Date(String(start))
-  if (!Number.isFinite(diff) || diff <= 0) return null
-  return formatHoldDurationSeconds(Math.floor(diff / 1000))
+  if (!Number.isFinite(diff) || diff < 0) return null
+  if (diff === 0) return formatHoldDurationSeconds(0)
+  const allowSubMinute = timestampsSupportSecondPrecision(start, end)
+  return formatHoldDurationSeconds(Math.floor(diff / 1000), {
+    allowSubMinuteSeconds: allowSubMinute,
+  })
 }
 
 export function hasTradePriceValue(value: unknown): boolean {

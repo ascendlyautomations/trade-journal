@@ -3,11 +3,13 @@
 import { useEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { useUserProfile } from "@/lib/useUserProfile"
+import { shouldOfferStripeCheckout } from "@/lib/monetizationConfig"
 import {
   isAllowedPathWithoutSubscription,
   isSubscriptionGateSuspended,
   needsSubscriptionCheckout,
 } from "@/lib/subscriptionAccess"
+import { fetchServerTraxProActive } from "@/lib/fetchServerTraxProActive"
 import {
   buildCreatorRedeemPath,
   getPendingCreatorCode,
@@ -34,13 +36,31 @@ export default function SubscriptionGateShell({
     if (!needsSubscriptionCheckout(profile)) return
     if (isAllowedPathWithoutSubscription(pathname)) return
 
-    const pendingCreatorCode = getPendingCreatorCode()
-    if (pendingCreatorCode) {
-      router.replace(buildCreatorRedeemPath(pendingCreatorCode))
-      return
-    }
+    let cancelled = false
+    void (async () => {
+      const serverTraxProActive = await fetchServerTraxProActive()
+      if (cancelled) return
+      if (
+        !shouldOfferStripeCheckout({
+          profileNeedsCheckout: true,
+          serverTraxProActive,
+        })
+      ) {
+        return
+      }
 
-    router.replace("/finish-trial")
+      const pendingCreatorCode = getPendingCreatorCode()
+      if (pendingCreatorCode) {
+        router.replace(buildCreatorRedeemPath(pendingCreatorCode))
+        return
+      }
+
+      router.replace("/finish-trial")
+    })()
+
+    return () => {
+      cancelled = true
+    }
   }, [loading, user, profile, pathname, router, membershipReconciling])
 
   return <>{children}</>

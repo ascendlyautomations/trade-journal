@@ -153,8 +153,7 @@ struct TradeHistoryFilterSheet: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
-            .scrollContentBackground(.hidden)
-            .background(colors.groupedBackground.ignoresSafeArea())
+            .experienceTradeTraxsFormStyle(pageBackground: true)
             .experienceNavigationTitle("Filters")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

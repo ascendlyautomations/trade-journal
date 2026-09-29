@@ -149,7 +149,7 @@ struct RecordPayoutFlowView: View {
         }
         .listRowSeparatorTint(colors.separator)
         .scrollDismissesKeyboard(.interactively)
-        .experienceDashboardGroupedRows()
+        .experienceTradeTraxsFormStyle(pageBackground: false)
     }
 
     private var confirmStep: some View {

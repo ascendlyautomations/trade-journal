@@ -132,8 +132,7 @@ struct CreateRoomView: View {
                     }
                 }
             }
-            .scrollContentBackground(.hidden)
-            .experienceDashboardGroupedRows()
+            .experienceTradeTraxsFormStyle(pageBackground: false)
             .disabled(viewModel.isSubmitting)
             .scrollDismissesKeyboard(.interactively)
         }
@@ -315,12 +314,26 @@ struct CreateRoomView: View {
                 Form {
                     Section {
                         RoomChannelPostingPermissionPicker(allowMembersChat: binding.allowMembersChat)
+                            .listRowInsets(
+                                EdgeInsets(
+                                    top: CreateRoomChannelPermissionsLayout.rowTopInset,
+                                    leading: ExperienceSpacing.md,
+                                    bottom: ExperienceSpacing.sm,
+                                    trailing: ExperienceSpacing.md
+                                )
+                            )
                     } footer: {
                         Text("These settings are enforced by the messaging system for this sub-room only.")
                     }
                 }
                 .scrollContentBackground(.hidden)
-                .experienceDashboardGroupedRows()
+                .listSectionSpacing(CreateRoomChannelPermissionsLayout.sectionSpacing)
+                .contentMargins(
+                    .top,
+                    CreateRoomChannelPermissionsLayout.scrollContentTopMargin,
+                    for: .scrollContent
+                )
+                .experienceTradeTraxsFormStyle(pageBackground: false)
                 .experienceScreenBackground()
                 .experienceNavigationTitle(binding.wrappedValue.name.isEmpty ? "Permissions" : binding.wrappedValue.name)
                 .toolbar {
@@ -461,4 +474,11 @@ struct CreateRoomView: View {
         guard let image = await ImageCropSelectionSupport.loadUIImage(from: item) else { return }
         cropSourceImage = image
     }
+}
+
+/// Tighter sheet chrome — less space between the nav header and “WHO CAN POST”.
+private enum CreateRoomChannelPermissionsLayout {
+    static let scrollContentTopMargin = ExperienceSpacing.xxs
+    static let sectionSpacing = ExperienceSpacing.xxs
+    static let rowTopInset = ExperienceSpacing.xxs
 }

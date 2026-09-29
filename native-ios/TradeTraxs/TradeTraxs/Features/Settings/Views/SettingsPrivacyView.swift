@@ -76,10 +76,7 @@ struct SettingsPrivacyView: View {
                 Text("Block users to stop messaging and hide their content where applicable. Mute turns off notifications for a conversation.")
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
-        .background(colors.groupedBackground.ignoresSafeArea())
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .experienceNavigationTitle("Privacy")
         .overlay {
             if viewModel.isProfileLoading || viewModel.isLoadingLists {

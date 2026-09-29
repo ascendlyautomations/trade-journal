@@ -108,10 +108,7 @@ struct SettingsAccountView: View {
                 .disabled(viewModel.isDeletingAccount)
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
-        .background(colors.groupedBackground.ignoresSafeArea())
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .experienceNavigationTitle("Account")
         .overlay {
             if viewModel.isLoading || viewModel.isDeletingAccount {
@@ -276,10 +273,7 @@ struct SettingsSecurityView: View {
                     .experienceStyle(.footnote, color: colors.secondaryText)
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
-        .background(colors.groupedBackground.ignoresSafeArea())
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .experienceNavigationTitle("Security")
         .onAppear { viewModel.loadIfNeeded() }
         .accessibilityIdentifier("settings.security")

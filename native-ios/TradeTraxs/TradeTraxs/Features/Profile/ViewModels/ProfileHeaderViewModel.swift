@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 import SwiftUI
 
 /// Screen-facing façade over ``ProfileContentStore`` for the unified Profile header.
@@ -110,7 +111,10 @@ final class ProfileHeaderViewModel {
 
     func openSettings() {
         ExperienceHaptics.play(.selection)
-        navigationCoordinator.pushProfile(.settings(.home))
+        #if DEBUG
+        AppLog.navigation.debug("settings.toolbar.tapped source=profileHeader")
+        #endif
+        navigationCoordinator.pushProfileSettingsHome(source: "profileHeader")
     }
 
     func openEditProfile() {

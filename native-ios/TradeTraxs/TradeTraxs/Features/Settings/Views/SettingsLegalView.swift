@@ -30,10 +30,7 @@ struct SettingsLegalView: View {
                 Text("Opens the latest version on the TradeTraxs website.")
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
-        .scrollContentBackground(.hidden)
-        .background(colors.groupedBackground.ignoresSafeArea())
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .experienceNavigationTitle(route.title)
         .accessibilityIdentifier("settings.legal.\(route.rawValue)")
     }

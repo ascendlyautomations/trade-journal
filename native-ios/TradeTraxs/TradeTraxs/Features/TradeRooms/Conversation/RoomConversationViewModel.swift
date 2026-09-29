@@ -47,6 +47,10 @@ final class RoomConversationViewModel {
     private(set) var sharedReels: [ReelID: Reel] = [:]
     private(set) var sharedAchievements: [AchievementID: Achievement] = [:]
     private(set) var unavailableSharedContentKeys: Set<String> = []
+    let scrollCoordinator = ConversationScrollCoordinator()
+    typealias InitialScrollPhase = ConversationThreadInitialScrollPhase
+    private(set) var initialScrollPhase: InitialScrollPhase = .pending
+    private(set) var richContentHydrationCount = 0
     private(set) var activePresenceMembers: [RoomActivePresenceMember] = []
     var showsActivePresenceSheet = false
     var pendingDeleteMessage: ConversationBubbleItem?
@@ -447,10 +451,11 @@ final class RoomConversationViewModel {
         guard channelID != selectedChannelID else { return }
         ExperienceHaptics.play(.selection)
         persistActiveChannelCache(scrollAnchor: messages.last?.id)
+        resetThreadScrollPosition()
         selectedChannelID = channelID
         if let cached = channelCaches[channelID], cached.isLoaded {
             apply(cache: cached)
-            pendingScrollMessageID = cached.scrollAnchorMessageID
+            notifyScrollContentApplied(isBootstrap: false)
         } else {
             replaceMessages([])
             nextOlderCursor = nil
@@ -461,6 +466,12 @@ final class RoomConversationViewModel {
     }
 
     func loadOlderIfNeeded() async {
+        guard isInitialScrollConfirmed else {
+#if DEBUG
+            ConversationScrollDiagnostics.logPaginationBlocked(reason: "initial-scroll-not-confirmed")
+#endif
+            return
+        }
         guard hasMoreOlder, !isLoadingOlder, phase == .loaded else { return }
         guard let channel = selectedChannel else {
             hasMoreOlder = false
@@ -472,17 +483,21 @@ final class RoomConversationViewModel {
         }
         isLoadingOlder = true
         defer { isLoadingOlder = false }
+        if let anchor = messages.first?.id {
+            beginPagination(anchorMessageID: anchor)
+        }
         do {
             var page = PageRequest(limit: 40)
             page.cursor = nextOlderCursor
             let result = try await rooms.messages(roomID: roomID, channel: channel, page: page)
             let mapped = result.items.map(RoomMessageMapping.displayMessage)
-            commitMessages(mapped)
+            commitMessages(mapped, recordScrollEvents: false)
             await hydrateSenders(for: mapped)
             nextOlderCursor = result.nextCursor
             hasMoreOlder = result.nextCursor != nil
             persistActiveChannelCache(scrollAnchor: nil)
-            await hydrateSharedContent(from: mapped)
+            hydrateSharedContent(from: mapped)
+            recordPaginationApplied()
         } catch {
             // Soft-fail older page.
         }
@@ -647,6 +662,7 @@ final class RoomConversationViewModel {
         )
         commitMessages([optimistic])
         sendStates[tempID] = .sending
+        recordOutgoingScrollEvent(messageID: tempID)
 
         if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) || roomID.rawValue.hasPrefix("dev-") {
             sendStates[tempID] = .sent
@@ -717,8 +733,12 @@ final class RoomConversationViewModel {
     }
 
     func sharedAchievement(for message: Message) -> Achievement? {
-        guard case .achievementPost(let id) = message.sharedContent else { return nil }
-        return sharedAchievements[AchievementID(id.rawValue)]
+        guard case .achievementPost(let postReference) = message.sharedContent else { return nil }
+        return SharedContentEntityPresentation.resolvedAchievement(
+            forPostReference: postReference,
+            detailCache: detailCache,
+            sharedAchievements: sharedAchievements
+        )
     }
 
     func isSharedContentUnavailable(_ message: Message) -> Bool {
@@ -1033,6 +1053,7 @@ final class RoomConversationViewModel {
 
     private func performInitialLoad() async {
         phase = .loading
+        resetThreadScrollPosition()
         // Web optimistic clear when the room is selected — badge drops before history finishes.
         if isMember || isOwner {
             inboxStore.markRoomRead(roomID: roomID)
@@ -1075,6 +1096,11 @@ final class RoomConversationViewModel {
                 let bootstrapped = await loadFromRoomBootstrap(rpc: rpc, viewerID: viewer)
                 if bootstrapped {
                     // RPC bootstrap applied — skip fragmented REST shell load.
+                } else if hydratedFromDisk,
+                          ConversationThreadSessionStore.openThreadNeedsFullBootstrap(messageCount: messages.count),
+                          let channelID = selectedChannelID
+                {
+                    try await fetchChannelMessages(channelID)
                 } else if hydratedFromDisk, membership == nil {
                     SocialPersistedCacheCoordinator.invalidateRoomSnapshot(viewerID: viewer, roomID: roomID)
                     channelCaches = [:]
@@ -1093,7 +1119,7 @@ final class RoomConversationViewModel {
             phase = .loaded
             if !messages.isEmpty {
                 await hydrateSenders(for: messages)
-                await hydrateSharedContent(from: messages)
+                hydrateSharedContent(from: messages)
             }
             startRealtime()
             startOutboundSharedContentObserver()
@@ -1176,6 +1202,7 @@ final class RoomConversationViewModel {
 
         if let selectedChannelID, let cache = channelCaches[selectedChannelID] {
             apply(cache: cache)
+            notifyScrollContentApplied(isBootstrap: true)
             await hydrateSenders(for: cache.messages)
         }
         applyPendingDeepLinkFocusHighlight()
@@ -1254,6 +1281,7 @@ final class RoomConversationViewModel {
 
         if let selectedChannelID, let cache = channelCaches[selectedChannelID] {
             apply(cache: cache)
+            notifyScrollContentApplied(isBootstrap: true)
             await hydrateSenders(for: cache.messages)
         }
         applyPendingDeepLinkFocusHighlight()
@@ -1293,8 +1321,9 @@ final class RoomConversationViewModel {
             )
             channelCaches[applied.selectedChannelID] = cache
             apply(cache: cache)
+            notifyScrollContentApplied(isBootstrap: true)
             await hydrateSenders(for: cache.messages)
-            await hydrateSharedContent(from: cache.messages)
+            hydrateSharedContent(from: cache.messages)
             applyPendingDeepLinkFocusHighlight()
             if let last = cache.messages.last {
                 patchInboxPreview(with: last)
@@ -1342,8 +1371,9 @@ final class RoomConversationViewModel {
             channelCaches[applied.selectedChannelID] = cache
             if canViewMessages {
                 apply(cache: cache)
+                notifyScrollContentApplied(isBootstrap: true)
                 await hydrateSenders(for: cache.messages)
-                await hydrateSharedContent(from: cache.messages)
+                hydrateSharedContent(from: cache.messages)
                 applyPendingDeepLinkFocusHighlight()
                 if let last = cache.messages.last {
                     patchInboxPreview(with: last)
@@ -1520,6 +1550,7 @@ final class RoomConversationViewModel {
                 channelCaches[channelID] = cache
                 if selectedChannelID == channelID {
                     apply(cache: cache)
+                    notifyScrollContentApplied(isBootstrap: true)
                 }
                 await hydrateSenders(for: sorted)
                 return
@@ -1555,9 +1586,10 @@ final class RoomConversationViewModel {
         channelCaches[channelID] = cache
         if selectedChannelID == channelID {
             apply(cache: cache)
+            notifyScrollContentApplied(isBootstrap: true)
         }
         await hydrateSenders(for: sorted)
-        await hydrateSharedContent(from: sorted)
+        hydrateSharedContent(from: sorted)
         if let last = sorted.last, channelID == selectedChannelID {
             patchInboxPreview(with: last)
         }
@@ -1614,6 +1646,7 @@ final class RoomConversationViewModel {
         channelCaches = restoredCaches
         if let selectedChannelID, let cache = channelCaches[selectedChannelID] {
             apply(cache: cache)
+            notifyScrollContentApplied(isBootstrap: false)
         }
     }
 
@@ -1665,44 +1698,72 @@ final class RoomConversationViewModel {
         guard case .room(let deliveredRoomID, let channelID) = payload.destination,
               deliveredRoomID == roomID
         else { return }
-        if let channelID, selectedChannelID != channelID { return }
-        commitMessages([payload.message])
-        await hydrateSharedContent(from: [payload.message])
-        persistActiveChannelCache(scrollAnchor: messages.last?.id)
+
+        let targetChannelID = channelID ?? RoomChannelID(payload.message.conversationID.rawValue)
+        if let snapshot = payload.hydrationSnapshot {
+            applySharedContentSnapshot(snapshot)
+        }
+        mergeOutboundMessage(payload.message, intoChannel: targetChannelID)
+
+        guard selectedChannelID == targetChannelID else { return }
+        hydrateSharedContent(from: [payload.message])
     }
 
-    private func hydrateSharedContent(from messages: [Message]) async {
-        guard !messages.isEmpty else { return }
-        sharedContentHydrationBacklog.append(contentsOf: messages)
-        if let existing = sharedContentHydrationTask {
-            await existing.value
-            return
-        }
-        sharedContentHydrationTask = Task { @MainActor in
-            defer { sharedContentHydrationTask = nil }
-            while !sharedContentHydrationBacklog.isEmpty {
-                let batch = sharedContentHydrationBacklog
-                sharedContentHydrationBacklog = []
-                await performSharedContentHydration(from: batch)
-            }
-        }
-        await sharedContentHydrationTask?.value
+    private func applySharedContentSnapshot(_ snapshot: SharedContentHydrator.Snapshot) {
+        for (id, trade) in snapshot.sharedTrades { sharedTrades[id] = trade }
+        for (id, post) in snapshot.sharedPosts { sharedPosts[id] = post }
+        for (id, reel) in snapshot.sharedReels { sharedReels[id] = reel }
+        for (id, achievement) in snapshot.sharedAchievements { sharedAchievements[id] = achievement }
+        unavailableSharedContentKeys.formUnion(snapshot.unavailableSharedContentKeys)
     }
 
-    private func performSharedContentHydration(from messages: [Message]) async {
-        guard !messages.isEmpty else { return }
-
-        let probe = SharedContentHydrationProbe.Session(surface: .tradeRoom)
-        let context = SharedContentHydrator.Context(
-            detailCache: detailCache,
-            feedSessionStore: FeedSessionStore.shared,
-            viewerID: viewerID,
-            tradesRepo: tradesRepo,
-            feedRepo: feedRepo,
-            achievementsRepo: achievementsRepo,
-            profilesRepo: profiles
+    private func mergeOutboundMessage(_ message: Message, intoChannel channelID: RoomChannelID) {
+        guard let viewerID else { return }
+        var cache = channelCaches[channelID] ?? ChannelThreadCache(
+            messages: [],
+            nextOlderCursor: nil,
+            hasMoreOlder: true,
+            scrollAnchorMessageID: nil,
+            isLoaded: true
         )
+        cache.messages = ConversationMessageMerge.mergeMessages(
+            existing: cache.messages,
+            incoming: [message],
+            viewerID: viewerID
+        )
+        cache.isLoaded = true
+        cache.scrollAnchorMessageID = message.id
+        channelCaches[channelID] = cache
 
+        if selectedChannelID == channelID {
+            apply(cache: cache)
+        }
+        persistRoomSnapshotToDisk()
+    }
+
+    private func messageBelongsToActiveChannel(_ message: Message) -> Bool {
+        guard let selectedChannelID else { return false }
+        if message.conversationID.rawValue == selectedChannelID.rawValue {
+            return true
+        }
+        if let channel = selectedChannel, channel.isGeneral,
+           message.conversationID.rawValue == roomID.rawValue
+        {
+            return true
+        }
+        return false
+    }
+
+    private func hydrateSharedContent(from messages: [Message]) {
+        guard !messages.isEmpty else { return }
+        primeSharedContentFromCaches(messages: messages)
+        enqueueSharedContentNetworkHydration(messages: messages)
+    }
+
+    private func primeSharedContentFromCaches(messages: [Message]) {
+        guard !messages.isEmpty else { return }
+        let probe = SharedContentHydrationProbe.Session(surface: .tradeRoom)
+        let context = sharedContentHydratorContext()
         SharedContentHydrator.primeFromCaches(
             messages: messages,
             sharedTrades: &sharedTrades,
@@ -1713,7 +1774,39 @@ final class RoomConversationViewModel {
             context: context,
             probe: probe
         )
+    }
 
+    private func enqueueSharedContentNetworkHydration(messages: [Message]) {
+        sharedContentHydrationBacklog.append(contentsOf: messages)
+        guard sharedContentHydrationTask == nil else { return }
+        sharedContentHydrationTask = Task { @MainActor in
+            defer { sharedContentHydrationTask = nil }
+            while !sharedContentHydrationBacklog.isEmpty {
+                let batch = sharedContentHydrationBacklog
+                sharedContentHydrationBacklog = []
+                await performSharedContentNetworkHydration(from: batch)
+            }
+        }
+    }
+
+    private func sharedContentHydratorContext() -> SharedContentHydrator.Context {
+        SharedContentHydrator.Context(
+            detailCache: detailCache,
+            feedSessionStore: FeedSessionStore.shared,
+            viewerID: viewerID,
+            tradesRepo: tradesRepo,
+            feedRepo: feedRepo,
+            achievementsRepo: achievementsRepo,
+            profilesRepo: profiles
+        )
+    }
+
+    private func performSharedContentNetworkHydration(from messages: [Message]) async {
+        guard !messages.isEmpty else { return }
+        richContentHydrationCount += 1
+        defer { richContentHydrationCount -= 1 }
+        let probe = SharedContentHydrationProbe.Session(surface: .tradeRoom)
+        let context = sharedContentHydratorContext()
         let hydrated = await SharedContentHydrator.hydrateMissing(
             messages: messages,
             snapshot: SharedContentHydrator.Snapshot(
@@ -1731,6 +1824,46 @@ final class RoomConversationViewModel {
         sharedReels = hydrated.sharedReels
         sharedAchievements = hydrated.sharedAchievements
         unavailableSharedContentKeys = hydrated.unavailableSharedContentKeys
+        persistSharedContentNetworkResults(hydrated, messages: messages, context: context)
+    }
+
+    private func persistSharedContentNetworkResults(
+        _ snapshot: SharedContentHydrator.Snapshot,
+        messages: [Message],
+        context: SharedContentHydrator.Context
+    ) {
+        guard let viewerID = context.viewerID else { return }
+        for (_, post) in snapshot.sharedPosts {
+            SocialEntityPersistedCacheCoordinator.savePost(post, viewerID: viewerID, source: .share)
+        }
+        for (_, reel) in snapshot.sharedReels {
+            SocialEntityPersistedCacheCoordinator.saveReel(reel, viewerID: viewerID, source: .share)
+        }
+        var persistedAchievementIDs = Set<AchievementID>()
+        for message in messages {
+            guard case .achievementPost(let postReference) = message.sharedContent else { continue }
+            guard let achievement = SharedContentEntityPresentation.resolvedAchievement(
+                forPostReference: postReference,
+                detailCache: context.detailCache,
+                sharedAchievements: snapshot.sharedAchievements
+            ) else { continue }
+            guard persistedAchievementIDs.insert(achievement.id).inserted else { continue }
+            SocialEntityPersistedCacheCoordinator.saveAchievement(
+                achievement,
+                viewerID: viewerID,
+                source: .share,
+                messagePostReference: postReference
+            )
+        }
+        for (_, trade) in snapshot.sharedTrades {
+            if let summary = context.detailCache.tradeSummary(id: trade.id) {
+                SocialEntityPersistedCacheCoordinator.saveTradeSummary(
+                    summary,
+                    viewerID: viewerID,
+                    source: .share
+                )
+            }
+        }
     }
 
     fileprivate func repairMissedRoomMessagesAfterReconnect() async {
@@ -1817,13 +1950,14 @@ final class RoomConversationViewModel {
             }
         }
         guard let incoming = merged else { return }
+        guard messageBelongsToActiveChannel(incoming) else { return }
 
         let beforeIDs = Set(messages.map(\.id))
         commitMessages([incoming])
         let addedPeerMessage = incoming.senderProfileID != viewerID && !beforeIDs.contains(incoming.id)
         await hydrateSenders(for: [incoming])
         persistActiveChannelCache(scrollAnchor: messages.last?.id)
-        await hydrateSharedContent(from: [incoming])
+        hydrateSharedContent(from: [incoming])
         patchInboxPreview(with: incoming)
 #if DEBUG
         MessagingRealtimeDebugLog.roomInsert(
@@ -1838,7 +1972,8 @@ final class RoomConversationViewModel {
     }
 
     /// Sole write path for thread rows — web `mergeMessages` semantics.
-    private func commitMessages(_ incoming: [Message]) {
+    private func commitMessages(_ incoming: [Message], recordScrollEvents: Bool = true) {
+        let previousIDs = Set(messages.map(\.id))
         let previousTempIDs = Set(
             messages
                 .map(\.id)
@@ -1854,6 +1989,8 @@ final class RoomConversationViewModel {
         for tempID in previousTempIDs where !remainingIDs.contains(tempID) {
             sendStates.removeValue(forKey: tempID)
         }
+        guard recordScrollEvents else { return }
+        recordIncomingScrollEvents(incoming: filteredIncoming, previousIDs: previousIDs)
     }
 
     private func replaceMessages(_ incoming: [Message]) {
@@ -1918,6 +2055,7 @@ final class RoomConversationViewModel {
         )
         commitMessages([optimistic])
         sendStates[tempID] = .sending
+        recordOutgoingScrollEvent(messageID: tempID)
 
         if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) || roomID.rawValue.hasPrefix("dev-") {
             sendStates[tempID] = .sent
@@ -2011,6 +2149,7 @@ final class RoomConversationViewModel {
         )
         commitMessages([optimistic])
         sendStates[tempID] = .sending
+        recordOutgoingScrollEvent(messageID: tempID)
 
         if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) || roomID.rawValue.hasPrefix("dev-") {
             sendStates[tempID] = .sent
@@ -2419,7 +2558,9 @@ final class RoomConversationViewModel {
         var items: [ConversationTimelineItem] = []
         let calendar = Calendar.current
         var lastDay: DateComponents?
-        for (index, message) in messages.enumerated() {
+        let shareCaptions = SharedContentMessageSupport.bundleShareCaptions(in: messages)
+        let visibleMessages = messages.filter { !shareCaptions.hiddenMessageIDs.contains($0.id) }
+        for (index, message) in visibleMessages.enumerated() {
             let day = calendar.dateComponents([.year, .month, .day], from: message.createdAt)
             if day != lastDay {
                 let key = "\(day.year ?? 0)-\(day.month ?? 0)-\(day.day ?? 0)"
@@ -2431,8 +2572,8 @@ final class RoomConversationViewModel {
                 )
                 lastDay = day
             }
-            let previous = index > 0 ? messages[index - 1] : nil
-            let next = index + 1 < messages.count ? messages[index + 1] : nil
+            let previous = index > 0 ? visibleMessages[index - 1] : nil
+            let next = index + 1 < visibleMessages.count ? visibleMessages[index + 1] : nil
             let isOutgoing = message.senderProfileID == viewerID
             let startsSenderGroup = ConversationThreadSupport.tradeRoomStartsSenderGroup(
                 message: message,
@@ -2458,7 +2599,8 @@ final class RoomConversationViewModel {
                         ),
                         showsOwnerBadge: room?.ownerProfileID == message.senderProfileID,
                         startsSenderGroup: startsSenderGroup,
-                        addsSenderGroupTopInset: previous != nil && startsSenderGroup
+                        addsSenderGroupTopInset: previous != nil && startsSenderGroup,
+                        shareUserCaption: shareCaptions.captionByShareID[message.id]
                     )
                 )
             )
@@ -2475,6 +2617,139 @@ final class RoomConversationViewModel {
     private func isAlreadyPendingJoinError(_ error: Error) -> Bool {
         let message = ConversationThreadSupport.message(for: error).lowercased()
         return message.contains("pending") || message.contains("already")
+    }
+
+    var scrollScopeConversationID: ConversationID {
+        ConversationThreadScrollSupport.roomChannelScrollScope(
+            roomID: resolvedRoomID,
+            channelID: selectedChannelID
+        )
+    }
+
+    var isInitialScrollConfirmed: Bool { initialScrollPhase == .confirmed }
+
+    var isInitialScrollPinningBottom: Bool {
+        initialScrollPhase == .positioning || initialScrollPhase == .settling
+    }
+
+    var hasPendingRichContentLayout: Bool {
+        ConversationThreadScrollSupport.hasPendingRichContentLayout(
+            messages: messages,
+            richContentHydrationCount: richContentHydrationCount,
+            unavailableKeys: unavailableSharedContentKeys,
+            isPresentationResolved: { isSharedContentPresentationResolved($0) }
+        )
+    }
+
+    func resetThreadScrollPosition() {
+        initialScrollPhase = .pending
+        scrollCoordinator.resetForConversation(scrollScopeConversationID)
+    }
+
+    func beginInitialScrollPositioning() {
+        guard initialScrollPhase == .pending, !messages.isEmpty else { return }
+        initialScrollPhase = .positioning
+#if DEBUG
+        ConversationScrollDiagnostics.logInitialScrollPhase(
+            "positioning",
+            conversationID: scrollScopeConversationID,
+            messageCount: messages.count,
+            newestMessageID: newestMessageID
+        )
+#endif
+    }
+
+    func beginInitialScrollSettling() {
+        guard initialScrollPhase == .positioning else { return }
+        initialScrollPhase = .settling
+#if DEBUG
+        ConversationScrollDiagnostics.logInitialScrollPhase(
+            "settling",
+            conversationID: scrollScopeConversationID,
+            messageCount: messages.count,
+            newestMessageID: newestMessageID,
+            pendingRichLayout: hasPendingRichContentLayout
+        )
+#endif
+    }
+
+    func confirmInitialScrollPosition(userInitiatedRelease: Bool = false) {
+        guard initialScrollPhase == .positioning || initialScrollPhase == .settling else { return }
+        initialScrollPhase = .confirmed
+        scrollCoordinator.completeInitialScrollPosition(conversationID: scrollScopeConversationID)
+#if DEBUG
+        ConversationScrollDiagnostics.logInitialScrollPhase(
+            userInitiatedRelease ? "confirmed-user-release" : "confirmed",
+            conversationID: scrollScopeConversationID,
+            messageCount: messages.count,
+            newestMessageID: newestMessageID,
+            pendingRichLayout: hasPendingRichContentLayout
+        )
+#endif
+    }
+
+    func confirmInitialScrollPositionForEmptyThread() {
+        guard showsEmpty, phase == .loaded else { return }
+        initialScrollPhase = .confirmed
+        scrollCoordinator.completeInitialScrollPosition(conversationID: scrollScopeConversationID)
+    }
+
+    func beginPagination(anchorMessageID: MessageID) {
+        guard isInitialScrollConfirmed else { return }
+        scrollCoordinator.beginPagination(
+            anchorMessageID: anchorMessageID,
+            conversationID: scrollScopeConversationID
+        )
+    }
+
+    func notifyScrollContentApplied(isBootstrap: Bool) {
+        let event: ConversationScrollCoordinator.Event = isBootstrap
+            ? .bootstrapApplied(newestMessageID: newestMessageID, isEmpty: messages.isEmpty)
+            : .cacheApplied(newestMessageID: newestMessageID, isEmpty: messages.isEmpty)
+        scrollCoordinator.handle(event, conversationID: scrollScopeConversationID)
+    }
+
+    func recordIncomingScrollEvents(incoming: [Message], previousIDs: Set<MessageID>) {
+        for message in incoming {
+            guard !previousIDs.contains(message.id) else { continue }
+            guard !ConversationMessageMerge.isOptimisticMessageID(message.id) else { continue }
+            guard message.senderProfileID != viewerID else { continue }
+            scrollCoordinator.handle(
+                .incomingMessageInserted(messageID: message.id),
+                conversationID: scrollScopeConversationID
+            )
+        }
+    }
+
+    func recordOutgoingScrollEvent(messageID: MessageID) {
+        scrollCoordinator.handle(
+            .outgoingMessageInserted(messageID: messageID),
+            conversationID: scrollScopeConversationID
+        )
+    }
+
+    func recordOptimisticScrollConfirmation(from: MessageID, to: MessageID) {
+        scrollCoordinator.handle(
+            .optimisticConfirmed(from: from, to: to),
+            conversationID: scrollScopeConversationID
+        )
+    }
+
+    func recordPaginationApplied() {
+        scrollCoordinator.handle(
+            .paginationApplied,
+            conversationID: scrollScopeConversationID
+        )
+    }
+
+    func isSharedContentPresentationResolved(_ message: Message) -> Bool {
+        if message.kind == .tradeShare || message.attachments.first?.tradeID != nil {
+            return sharedTrade(for: message) != nil
+        }
+        if sharedPost(for: message) != nil { return true }
+        if sharedReel(for: message) != nil { return true }
+        if sharedAchievement(for: message) != nil { return true }
+        return false
     }
 }
 

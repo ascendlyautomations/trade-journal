@@ -32,6 +32,12 @@ final class TradeRoomsHomeViewModel {
     private(set) var popularItems: [ExploreRoomSuggestion] = []
     private(set) var discoveryPhase: Phase = .idle
     private(set) var discoveryErrorMessage: String?
+    private(set) var isLoadingMoreDiscovery = false
+
+    private static let discoveryInitialLimit = 20
+    private static let discoveryPageIncrement = 20
+    private static let discoveryMaxLimit = 50
+    private var allScopeDiscoveryLimit = discoveryInitialLimit
 
     private let messages: any MessageRepository
     private let rooms: any RoomRepository
@@ -181,11 +187,21 @@ final class TradeRoomsHomeViewModel {
     }
 
     var suggestedDiscoverableRooms: [ExploreRoomSuggestion] {
-        filteredDiscoverable(from: suggestedItems, section: "suggested")
+        sortedForAllScopeIfNeeded(
+            filteredDiscoverable(from: suggestedItems, section: "suggested")
+        )
     }
 
     var popularDiscoverableRooms: [ExploreRoomSuggestion] {
-        filteredDiscoverable(from: popularItems, section: "popular")
+        sortedForAllScopeIfNeeded(
+            filteredDiscoverable(from: popularItems, section: "popular")
+        )
+    }
+
+    var canLoadMoreAllScopeDiscovery: Bool {
+        activeDiscoveryScope == .all
+            && allScopeDiscoveryLimit < Self.discoveryMaxLimit
+            && !isLoadingMoreDiscovery
     }
 
     var discoverableRooms: [ExploreRoomSuggestion] {
@@ -272,7 +288,23 @@ final class TradeRoomsHomeViewModel {
         guard discoveryScope != scope else { return }
         ExperienceHaptics.play(.selection)
         discoveryScope = scope
+        resetAllScopeDiscoveryLimitIfNeeded(for: scope)
         Task { await loadHomeBootstrap(forceNetwork: true) }
+    }
+
+    func loadMoreAllScopeDiscoveryIfNeeded(currentRoomID: RoomID) async {
+        guard activeDiscoveryScope == .all else { return }
+        guard canLoadMoreAllScopeDiscovery else { return }
+        guard currentRoomID == allScopeDiscoveryPaginationAnchorRoomID else { return }
+        let nextLimit = min(
+            allScopeDiscoveryLimit + Self.discoveryPageIncrement,
+            Self.discoveryMaxLimit
+        )
+        guard nextLimit > allScopeDiscoveryLimit else { return }
+        isLoadingMoreDiscovery = true
+        defer { isLoadingMoreDiscovery = false }
+        allScopeDiscoveryLimit = nextLimit
+        await loadHomeBootstrap(forceNetwork: true)
     }
 
     func openDiscoveryRoom(_ room: ExploreRoomSuggestion) {
@@ -390,6 +422,9 @@ final class TradeRoomsHomeViewModel {
     }
 
     func refresh() async {
+        if activeDiscoveryScope == .all {
+            allScopeDiscoveryLimit = Self.discoveryInitialLimit
+        }
         await performLoad(forceNetwork: true)
     }
 
@@ -548,6 +583,32 @@ final class TradeRoomsHomeViewModel {
         #endif
     }
 
+    /// Last row in the All-scope discovery scroll (Suggested, then Popular).
+    private var allScopeDiscoveryPaginationAnchorRoomID: RoomID? {
+        if !popularDiscoverableRooms.isEmpty {
+            return popularDiscoverableRooms.last?.id
+        }
+        return suggestedDiscoverableRooms.last?.id
+    }
+
+    private func sortedForAllScopeIfNeeded(_ rooms: [ExploreRoomSuggestion]) -> [ExploreRoomSuggestion] {
+        guard activeDiscoveryScope == .all else { return rooms }
+        return TradeRoomDiscoveryMemberCountSort.sorted(rooms)
+    }
+
+    private func resetAllScopeDiscoveryLimitIfNeeded(for scope: TradeRoomDiscoveryScope) {
+        if scope == .all {
+            allScopeDiscoveryLimit = Self.discoveryInitialLimit
+        }
+    }
+
+    private func bootstrapFetchLimit(for scope: TradeRoomDiscoveryScope) -> Int {
+        if scope == .all {
+            return allScopeDiscoveryLimit
+        }
+        return Self.discoveryInitialLimit
+    }
+
     private func filteredDiscoverable(
         from source: [ExploreRoomSuggestion],
         section: String
@@ -611,7 +672,10 @@ final class TradeRoomsHomeViewModel {
                 )
             } else {
                 let bootstrapScope = discoveryScope.bootstrapCacheScope
-                bootstrap = (try? await explore.tradeRoomsHomeBootstrap(scope: bootstrapScope, limit: 20))
+                bootstrap = (try? await explore.tradeRoomsHomeBootstrap(
+                    scope: bootstrapScope,
+                    limit: bootstrapFetchLimit(for: bootstrapScope)
+                ))
                     ?? TradeRoomsFixtures.homeBootstrap(viewerID: sessionViewer, scope: bootstrapScope)
             }
             SessionTradeRoomsDiscoveryStore.shared.seed(bootstrap, for: sessionViewer)
@@ -635,12 +699,16 @@ final class TradeRoomsHomeViewModel {
             let bootstrapSource: RoomDiscoveryProbe.DisplayedSource = forceNetwork
                 ? .refresh
                 : (hadFreshCache ? .cache : .network)
+            let fetchLimit = bootstrapFetchLimit(for: cacheScope)
             let bootstrap = try await SessionTradeRoomsDiscoveryStore.shared.coalesce(
                 viewerID: sessionViewer,
                 scope: cacheScope,
                 forceNetwork: forceNetwork
-            ) { [explore, cacheScope] in
-                try await explore.tradeRoomsHomeBootstrap(scope: cacheScope, limit: 20)
+            ) { [explore, cacheScope, fetchLimit] in
+                try await explore.tradeRoomsHomeBootstrap(
+                    scope: cacheScope,
+                    limit: fetchLimit
+                )
             }
             guard isHostingTabActive else {
 #if DEBUG

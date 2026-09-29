@@ -21,6 +21,7 @@ struct ExperienceSurfaceModifier: ViewModifier {
     var elevate: ElevationToken = .flat
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     func body(content: Content) -> some View {
@@ -44,25 +45,25 @@ struct ExperienceSurfaceModifier: ViewModifier {
         case .elevatedCard:
             colors.backgroundElevated
         case .sheet:
-            if reduceTransparency {
+            if colorScheme == .dark || reduceTransparency {
                 colors.sheetBackground
             } else {
                 Rectangle().fill(ExperienceMaterials.sheet.material)
             }
         case .materialRegular:
-            if reduceTransparency {
+            if colorScheme == .dark || reduceTransparency {
                 colors.surfacePrimary
             } else {
                 Rectangle().fill(ExperienceMaterials.sheet.material)
             }
         case .navigationBar, .toolbar:
-            if reduceTransparency {
+            if colorScheme == .dark || reduceTransparency {
                 colors.navigationBackground
             } else {
                 Rectangle().fill(ExperienceMaterials.navBar.material)
             }
         case .tabBar, .materialChrome:
-            if reduceTransparency {
+            if colorScheme == .dark || reduceTransparency {
                 colors.tabBarBackground
             } else {
                 Rectangle().fill(ExperienceMaterials.tabBar.material)

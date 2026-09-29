@@ -26,5 +26,45 @@ enum ConversationThreadDiagnostics {
             "thread.cache reopen messages=\(messages, privacy: .public) cursor=\(cursor ?? "nil", privacy: .public)"
         )
     }
+
+    static func logOpenPipeline(
+        conversationID: String,
+        stage: String,
+        remoteReturned: Int?,
+        requestedPageSize: Int?,
+        cursor: String?,
+        grdbOrDiskStored: Int?,
+        grdbOrDiskQueried: Int?,
+        viewModelBefore: Int? = nil,
+        viewModelAfter: Int? = nil,
+        viewModelCount: Int? = nil,
+        renderedCount: Int?,
+        hasMoreOlder: Bool?,
+        oldestMessageID: String? = nil,
+        newestMessageID: String? = nil,
+        initialScrollPhase: String? = nil,
+        remoteMessageIDsSample: String? = nil
+    ) {
+        let vmAfter = viewModelAfter ?? viewModelCount
+        let vmBefore = viewModelBefore ?? viewModelCount
+        logger.debug(
+            """
+            thread.open conversation=\(conversationID, privacy: .public) stage=\(stage, privacy: .public) \
+            remote=\(remoteReturned.map(String.init) ?? "nil", privacy: .public) \
+            remoteIDs=\(remoteMessageIDsSample ?? "nil", privacy: .public) \
+            pageSize=\(requestedPageSize.map(String.init) ?? "nil", privacy: .public) \
+            cursor=\(cursor ?? "nil", privacy: .public) \
+            diskStored=\(grdbOrDiskStored.map(String.init) ?? "nil", privacy: .public) \
+            diskQueried=\(grdbOrDiskQueried.map(String.init) ?? "nil", privacy: .public) \
+            viewModelBefore=\(vmBefore.map(String.init) ?? "nil", privacy: .public) \
+            viewModelAfter=\(vmAfter.map(String.init) ?? "nil", privacy: .public) \
+            rendered=\(renderedCount.map(String.init) ?? "nil", privacy: .public) \
+            oldest=\(oldestMessageID ?? "nil", privacy: .public) \
+            newest=\(newestMessageID ?? "nil", privacy: .public) \
+            initialScroll=\(initialScrollPhase ?? "nil", privacy: .public) \
+            hasMoreOlder=\(hasMoreOlder.map { $0 ? "true" : "false" } ?? "nil", privacy: .public)
+            """
+        )
+    }
 }
 #endif

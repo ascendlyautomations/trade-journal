@@ -34,6 +34,11 @@ export type AdminAnalyticsBundle = {
     usersPerDay: DailyCountPoint[]
     tradesPerDay: DailyCountPoint[]
     postsPerDay: DailyCountPoint[]
+    activeUsersPerDay?: DailyCountPoint[]
+    reelsPerDay?: DailyCountPoint[]
+    commentsPerDay?: DailyCountPoint[]
+    likesPerDay?: DailyCountPoint[]
+    followsPerDay?: DailyCountPoint[]
   }
 }
 
@@ -68,6 +73,11 @@ function readSeriesObject(j: Record<string, unknown>): AdminAnalyticsBundle["ser
     usersPerDay: parseSeries(o.usersPerDay),
     tradesPerDay: parseSeries(o.tradesPerDay),
     postsPerDay: parseSeries(o.postsPerDay),
+    activeUsersPerDay: parseSeries(o.activeUsersPerDay),
+    reelsPerDay: parseSeries(o.reelsPerDay),
+    commentsPerDay: parseSeries(o.commentsPerDay),
+    likesPerDay: parseSeries(o.likesPerDay),
+    followsPerDay: parseSeries(o.followsPerDay),
   }
 }
 

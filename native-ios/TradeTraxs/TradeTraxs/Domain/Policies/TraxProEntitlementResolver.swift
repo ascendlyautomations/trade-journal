@@ -8,6 +8,7 @@ nonisolated enum TraxProEntitlementSource: String, Hashable, Codable, Sendable {
     case manual
     case creator
     case earlyAccess
+    case launchAccess = "launch_access"
 }
 
 nonisolated struct TraxProEntitlementInputs: Hashable, Sendable {

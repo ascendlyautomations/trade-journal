@@ -342,7 +342,55 @@ final class FeedExperienceTests: XCTestCase {
         XCTAssertEqual(strip.map(\.id.rawValue), ["mine-new", "other"])
     }
 
+    func testFeedScopeSessionStoreSharedAcrossContentFilters() async {
+        let userID = UserID(FeedFixtures.viewerID.rawValue)
+        FeedScopeSessionStore.shared.invalidate()
+        FeedScopePreferenceStore.clearSavedScope(for: userID)
+        FeedSessionStore.shared.invalidate()
+        let cache = DetailPresentationCache()
+        let engagement = EngagementStore(repository: FeedStubInteractionRepository())
+        let coordinator = NavigationCoordinator(store: NavigationStore())
+        let viewModel = FeedScreenViewModel(
+            feed: FeedStubFeedRepository(),
+            trades: FeedStubTradeRepository(),
+            profiles: FeedStubProfileRepository(),
+            achievements: FeedStubAchievementRepository(),
+            session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
+            detailCache: cache,
+            engagementStore: engagement,
+            vaultStore: VaultStore.testInstance(),
+            navigationCoordinator: coordinator
+        )
+
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+
+        viewModel.setScope(.following)
+        await waitFor { viewModel.scope == .following && viewModel.isQueryReloadInProgress == false }
+
+        viewModel.setContentFilter(.trades)
+        await waitFor { viewModel.contentFilter == .trades && viewModel.isQueryReloadInProgress == false }
+        XCTAssertEqual(viewModel.scope, .following)
+
+        viewModel.setContentFilter(.posts)
+        await waitFor { viewModel.contentFilter == .posts && viewModel.isQueryReloadInProgress == false }
+        XCTAssertEqual(viewModel.scope, .following)
+
+        viewModel.setScope(.global)
+        await waitFor { viewModel.scope == .global && viewModel.isQueryReloadInProgress == false }
+
+        viewModel.setContentFilter(.clips)
+        await waitFor { viewModel.contentFilter == .clips && viewModel.isQueryReloadInProgress == false }
+        XCTAssertEqual(viewModel.scope, .global)
+
+        FeedScopeSessionStore.shared.invalidate()
+        FeedScopePreferenceStore.clearSavedScope(for: userID)
+    }
+
     func testScopeAndContentFilterRemainIndependent() async {
+        let userID = UserID(FeedFixtures.viewerID.rawValue)
+        FeedScopeSessionStore.shared.invalidate()
+        FeedScopePreferenceStore.clearSavedScope(for: userID)
         let cache = DetailPresentationCache()
         let engagement = EngagementStore(repository: FeedStubInteractionRepository())
         let navigationStore = NavigationStore()

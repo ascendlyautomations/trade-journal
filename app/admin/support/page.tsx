@@ -16,6 +16,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   bug: "Bug",
   account: "Account",
   billing: "Billing",
+  broker_integration: "Broker Integration",
   csv_import: "CSV Import",
   feature_request: "Feature Request",
   general: "General",

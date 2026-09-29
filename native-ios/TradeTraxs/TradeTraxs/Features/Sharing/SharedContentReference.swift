@@ -207,4 +207,108 @@ nonisolated enum SharedContentMessageSupport {
         default: return nil
         }
     }
+
+    /// True for internal share rows (Post / Trade / Achievement / Reel) in DM + Trade Room bubbles.
+    static func isInternallySharedContent(_ message: Message) -> Bool {
+        if message.sharedContent != nil { return true }
+        switch message.kind {
+        case .tradeShare, .feedPostShare, .profilePostShare, .achievementPostShare, .reelShare:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Optional sender note attached to a structured share — not structured JSON / placeholders.
+    static func userWrittenMessage(for message: Message) -> String? {
+        guard isInternallySharedContent(message) else { return nil }
+        return normalizedUserWrittenBody(message.body)
+    }
+
+    static func normalizedUserWrittenBody(_ body: String?) -> String? {
+        let trimmed = body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return nil }
+        if SharedContentRoomMessageSupport.decode(from: trimmed) != nil { return nil }
+        if StoryShareMessageSupport.decode(from: trimmed) != nil { return nil }
+        if StoryReplyMessageSupport.decode(from: trimmed) != nil { return nil }
+        if isPlaceholderShareBody(trimmed) { return nil }
+        return trimmed
+    }
+
+    static func isPlaceholderShareBody(_ body: String) -> Bool {
+        let normalized = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch normalized {
+        case "Shared a trade", "Shared a post", "Shared a clip", "Shared an achievement":
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Plain-text companion row bundled visually below a structured share (web + native share flows).
+    static func isCompanionTextMessage(_ message: Message) -> Bool {
+        guard message.replyToMessageID == nil else { return false }
+        switch message.kind {
+        case .text:
+            break
+        case .media, .voice, .storyReply, .storyShare, .system:
+            return false
+        case .tradeShare, .feedPostShare, .profilePostShare, .achievementPostShare, .reelShare:
+            return false
+        }
+        if message.sharedContent != nil { return false }
+        if !message.attachments.isEmpty { return false }
+        return normalizedUserWrittenBody(message.body) != nil
+    }
+
+    private static let shareCompanionMaxInterval: TimeInterval = 120
+
+    struct ShareCaptionBundling: Sendable {
+        var captionByShareID: [MessageID: String] = [:]
+        var hiddenMessageIDs: Set<MessageID> = []
+    }
+
+    /// Pairs optional sender notes with share rows (card-first layout); hides consumed text rows.
+    static func bundleShareCaptions(in messages: [Message]) -> ShareCaptionBundling {
+        var result = ShareCaptionBundling()
+
+        for index in messages.indices {
+            let share = messages[index]
+            guard isInternallySharedContent(share) else { continue }
+            if let inline = userWrittenMessage(for: share) {
+                result.captionByShareID[share.id] = inline
+            }
+            if result.captionByShareID[share.id] == nil,
+               index + 1 < messages.count
+            {
+                let next = messages[index + 1]
+                if isCompanionTextMessage(next),
+                   next.senderProfileID == share.senderProfileID,
+                   abs(next.createdAt.timeIntervalSince(share.createdAt)) <= shareCompanionMaxInterval
+                {
+                    if let caption = normalizedUserWrittenBody(next.body) {
+                        result.captionByShareID[share.id] = caption
+                        result.hiddenMessageIDs.insert(next.id)
+                    }
+                }
+            }
+        }
+
+        for index in messages.indices {
+            let share = messages[index]
+            guard isInternallySharedContent(share), result.captionByShareID[share.id] == nil else { continue }
+            guard index > 0 else { continue }
+            let previous = messages[index - 1]
+            guard !result.hiddenMessageIDs.contains(previous.id),
+                  isCompanionTextMessage(previous),
+                  previous.senderProfileID == share.senderProfileID,
+                  abs(share.createdAt.timeIntervalSince(previous.createdAt)) <= shareCompanionMaxInterval,
+                  let caption = normalizedUserWrittenBody(previous.body)
+            else { continue }
+            result.captionByShareID[share.id] = caption
+            result.hiddenMessageIDs.insert(previous.id)
+        }
+
+        return result
+    }
 }

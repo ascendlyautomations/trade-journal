@@ -5,6 +5,8 @@ import {
   loadActiveAppleSubscriptionForUser,
   type AppleSubscriptionRow,
 } from "./appleSubscription.ts"
+import { launchAccessGrantApplies } from "./monetizationConfig.ts"
+import { loadLaunchAccessPolicy } from "./server/monetizationConfig.ts"
 import { isProActive } from "./subscription.ts"
 
 export const TRAXPRO_ENTITLEMENT_PROFILE_COLUMNS =
@@ -23,6 +25,7 @@ export type TraxProEntitlementSource =
   | "manual"
   | "creator"
   | "early_access"
+  | "launch_access"
 
 export type TraxProEntitlementSnapshot = {
   traxProActive: boolean
@@ -35,6 +38,11 @@ export type TraxProEntitlementSnapshot = {
   currentPeriodEndsAt: string | null
   cancelAtPeriodEnd: boolean
   appleExpiresAt: string | null
+  /** When access ends. Null means the grant has no scheduled expiry (manual, creator, lifetime). */
+  accessExpiresAt: string | null
+  issuedAt: string
+  appleSubscriptionStatus: string | null
+  appleRevokedAt: string | null
 }
 
 function resolveStripeLikeSource(
@@ -99,19 +107,65 @@ export function isTraxProActive(
   return isAppleSubscriptionActive(appleSubscription)
 }
 
+export function resolveEntitlementAccessExpiresAt(input: {
+  source: TraxProEntitlementSource
+  traxProActive: boolean
+  trialEndsAt: string | null
+  currentPeriodEndsAt: string | null
+  appleExpiresAt: string | null
+  earlyAccessEndsAt?: string | null
+}): string | null {
+  if (!input.traxProActive) return null
+  switch (input.source) {
+    case "apple":
+      return input.appleExpiresAt
+    case "stripe":
+      return input.trialEndsAt ?? input.currentPeriodEndsAt
+    case "early_access":
+      return input.earlyAccessEndsAt ?? null
+    case "manual":
+    case "creator":
+    case "launch_access":
+    case "none":
+      return null
+    default:
+      return null
+  }
+}
+
 export function buildTraxProEntitlementSnapshot(
   profile: TraxProEntitlementProfile | null,
-  appleSubscription: AppleSubscriptionRow | null
+  appleSubscription: AppleSubscriptionRow | null,
+  options?: {
+    launchAccess?: {
+      launchAccessMode?: "none" | "created_before_cutoff" | null
+      launchAccessCutoffAt?: string | null
+    } | null
+    profileCreatedAt?: string | null
+    issuedAt?: Date
+  }
 ): TraxProEntitlementSnapshot {
-  const traxProActive = isTraxProActive(profile, appleSubscription)
-  const source = traxProActive
+  let traxProActive = isTraxProActive(profile, appleSubscription)
+  let source: TraxProEntitlementSource = traxProActive
     ? resolveTraxProEntitlementSource(profile, appleSubscription)
     : "none"
+
+  if (
+    !traxProActive &&
+    launchAccessGrantApplies(options?.profileCreatedAt, options?.launchAccess)
+  ) {
+    traxProActive = true
+    source = "launch_access"
+  }
 
   const billingInterval =
     (traxProActive && source === "apple"
       ? appleSubscription?.billing_interval
       : profile?.billing_interval) ?? null
+
+  const trialEndsAt = profile?.trial_end ?? null
+  const currentPeriodEndsAt = profile?.current_period_end ?? null
+  const appleExpiresAt = appleSubscription?.expires_at ?? null
 
   return {
     traxProActive,
@@ -120,10 +174,21 @@ export function buildTraxProEntitlementSnapshot(
     appleSubscription,
     billingInterval,
     subscriptionStatus: profile?.subscription_status ?? null,
-    trialEndsAt: profile?.trial_end ?? null,
-    currentPeriodEndsAt: profile?.current_period_end ?? null,
+    trialEndsAt,
+    currentPeriodEndsAt,
     cancelAtPeriodEnd: profile?.cancel_at_period_end === true,
-    appleExpiresAt: appleSubscription?.expires_at ?? null,
+    appleExpiresAt,
+    accessExpiresAt: resolveEntitlementAccessExpiresAt({
+      source,
+      traxProActive,
+      trialEndsAt,
+      currentPeriodEndsAt,
+      appleExpiresAt,
+      earlyAccessEndsAt: profile?.early_access_ends_at ?? null,
+    }),
+    issuedAt: (options?.issuedAt ?? new Date()).toISOString(),
+    appleSubscriptionStatus: appleSubscription?.status ?? null,
+    appleRevokedAt: appleSubscription?.revoked_at ?? null,
   }
 }
 
@@ -134,23 +199,30 @@ export async function loadTraxProEntitlementSnapshot(
   | { ok: true; snapshot: TraxProEntitlementSnapshot }
   | { ok: false; reason: string }
 > {
-  const { data: profile, error } = await supabase
+  const { data: profileRow, error } = await supabase
     .from("profiles")
-    .select(TRAXPRO_ENTITLEMENT_PROFILE_COLUMNS)
+    .select(`${TRAXPRO_ENTITLEMENT_PROFILE_COLUMNS},created_at`)
     .eq("id", userId)
-    .single<TraxProEntitlementProfile>()
+    .single()
 
-  if (error || !profile) {
+  if (error || !profileRow) {
     return { ok: false, reason: "Could not load profile" }
   }
 
+  const createdAt =
+    profileRow.created_at != null ? String(profileRow.created_at) : null
+  const profile = profileRow as TraxProEntitlementProfile
   const appleSubscription = await loadActiveAppleSubscriptionForUser(
     supabase,
     userId
   )
+  const launchAccess = await loadLaunchAccessPolicy(supabase)
 
   return {
     ok: true,
-    snapshot: buildTraxProEntitlementSnapshot(profile, appleSubscription),
+    snapshot: buildTraxProEntitlementSnapshot(profile, appleSubscription, {
+      launchAccess,
+      profileCreatedAt: createdAt,
+    }),
   }
 }

@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 /// Stack-scoped navigation actions for views rendered inside a tab `NavigationStack`.
 ///
@@ -19,26 +20,72 @@ struct StackNavigation {
 
     static func home(store: NavigationStore) -> StackNavigation {
         StackNavigation { route in
-            store.paths.home.append(.settings(route))
+            appendSettingsRoute(route, to: &store.paths.home, stack: "home") { .settings($0) }
         }
     }
 
     static func feed(store: NavigationStore) -> StackNavigation {
         StackNavigation { route in
-            store.paths.feed.append(.settings(route))
+            appendSettingsRoute(route, to: &store.paths.feed, stack: "feed") { .settings($0) }
         }
     }
 
     static func messages(store: NavigationStore) -> StackNavigation {
         StackNavigation { route in
-            store.paths.messages.append(.settings(route))
+            appendSettingsRoute(route, to: &store.paths.messages, stack: "messages") { .settings($0) }
         }
     }
 
     static func profile(store: NavigationStore) -> StackNavigation {
         StackNavigation { route in
-            store.paths.profile.append(.settings(route))
+            appendSettingsRoute(route, to: &store.paths.profile, stack: "profile") { .settings($0) }
         }
+    }
+
+    private static func appendSettingsRoute<Route: Hashable>(
+        _ settingsRoute: SettingsRoute,
+        to path: inout [Route],
+        stack: String,
+        make: (SettingsRoute) -> Route
+    ) {
+        let next = make(settingsRoute)
+        if path.last == next {
+            logSettingsPush(settingsRoute: settingsRoute, stack: stack, skippedDuplicate: true, depth: path.count)
+            return
+        }
+        if settingsRoute == .home {
+            let home = make(.home)
+            if let existingIndex = path.lastIndex(of: home) {
+                path = Array(path.prefix(existingIndex + 1))
+                logSettingsPush(
+                    settingsRoute: settingsRoute,
+                    stack: stack,
+                    skippedDuplicate: true,
+                    depth: path.count
+                )
+                return
+            }
+        }
+        path.append(next)
+        logSettingsPush(settingsRoute: settingsRoute, stack: stack, skippedDuplicate: false, depth: path.count)
+    }
+
+    private static func logSettingsPush(
+        settingsRoute: SettingsRoute,
+        stack: String,
+        skippedDuplicate: Bool,
+        depth: Int
+    ) {
+        #if DEBUG
+        AppLog.navigation.debug(
+            """
+            settings.stack.push route=\(settingsRoute.rawValue, privacy: .public) \
+            stack=\(stack, privacy: .public) \
+            duplicateSkip=\(skippedDuplicate, privacy: .public) \
+            depth=\(depth, privacy: .public)
+            """
+        )
+        #endif
     }
 }
 

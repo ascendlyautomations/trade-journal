@@ -95,8 +95,11 @@ struct RoomInfoView: View {
 
             Section {
                 membersRow
+                    .experienceDashboardListRow()
                 inviteLinkRow
+                    .experienceDashboardListRow()
                 ownerRow
+                    .experienceDashboardListRow()
             }
 
             if viewModel.canManageRoom {
@@ -104,12 +107,14 @@ struct RoomInfoView: View {
                     Button("Trade Room Settings") {
                         viewModel.openRoomSettings()
                     }
+                    .experienceDashboardListRow()
                 }
             } else if viewModel.isMember {
                 Section {
                     Button("Leave Room", role: .destructive) {
                         viewModel.showsLeaveConfirmation = true
                     }
+                    .experienceDashboardListRow()
                 }
             }
 
@@ -124,6 +129,7 @@ struct RoomInfoView: View {
                             presenter: appEnvironment.contentReportPresenter
                         )
                     }
+                    .experienceDashboardListRow()
                 }
             }
 
@@ -131,12 +137,12 @@ struct RoomInfoView: View {
                 Section {
                     Text(statusMessage)
                         .experienceStyle(.footnote, color: colors.secondaryText)
+                        .experienceDashboardListRow()
                 }
             }
         }
-        .listStyle(.insetGrouped)
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .listSectionSpacing(ExperienceSpacing.sm)
-        .scrollContentBackground(.hidden)
     }
 
     private var roomHeader: some View {

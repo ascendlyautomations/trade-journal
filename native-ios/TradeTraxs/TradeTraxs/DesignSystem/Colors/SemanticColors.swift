@@ -127,9 +127,11 @@ extension SemanticColorPalette {
     var disabled: Color { textQuaternary }
     var focus: Color { accent }
 
-    /// Incoming DM / Trade Room bubble fill — slightly darker than the screen
-    /// so bubbles separate cleanly (same family as segmented-control track / `fillPrimary`).
-    var incomingMessageBubble: Color { fillPrimary }
+    /// Incoming DM / Trade Room bubble fill.
+    /// Light: `fillPrimary`. Dark: `fillSecondary` (same blue-gray family as voice/story incoming bubbles).
+    var incomingMessageBubble: Color {
+        Color.experience(lightHex: 0xE8EEF4, darkHex: 0x1C2733)
+    }
 
     // MARK: - TradeTraxs promotion aliases (all themes map to semantic fields)
 

@@ -158,8 +158,7 @@ struct WithdrawalFlowView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
-        .experienceDashboardGroupedRows()
+        .experienceInsetGroupedListStyle(pageBackground: false)
         .listRowSeparatorTint(colors.separator)
         .listSectionSpacing(ExperienceSpacing.xs)
     }
@@ -207,7 +206,7 @@ struct WithdrawalFlowView: View {
         .listRowSeparatorTint(colors.separator)
         .listSectionSpacing(ExperienceSpacing.xs)
         .scrollDismissesKeyboard(.interactively)
-        .experienceDashboardGroupedRows()
+        .experienceTradeTraxsFormStyle(pageBackground: false)
         .experienceArrowBackToolbarButton {
             selectedAccountID = nil
         }

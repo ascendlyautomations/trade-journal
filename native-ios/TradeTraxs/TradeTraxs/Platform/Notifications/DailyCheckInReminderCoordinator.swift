@@ -1,6 +1,6 @@
 import Foundation
 
-/// Keeps weekday daily check-in local notifications aligned with authoritative store state.
+/// Keeps weekday daily check-in local notifications aligned with device preference + authorization.
 @MainActor
 final class DailyCheckInReminderCoordinator {
     static let shared = DailyCheckInReminderCoordinator()
@@ -21,12 +21,9 @@ final class DailyCheckInReminderCoordinator {
 
         let authorization = await SystemNotificationAuthorization.currentStatus()
         let preferenceEnabled = DailyCheckInReminderPreferences.isEnabled
-        let store = TraderDailyCheckInStore.shared
 
         await DailyCheckInReminderScheduler.sync(
-            isEnabled: preferenceEnabled && authorization.isEnabled,
-            isTodayCompleted: store.isCompletedToday,
-            todayDateKey: store.todayDateKey
+            isEnabled: preferenceEnabled && authorization.isEnabled
         )
     }
 

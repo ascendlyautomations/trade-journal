@@ -48,9 +48,7 @@ struct AddTradePsychologySheet: View {
                     psychologyNotesEditor
                 }
             }
-            .scrollContentBackground(.hidden)
-            .experienceDashboardGroupedRows()
-            .background(colors.groupedBackground.ignoresSafeArea())
+            .experienceTradeTraxsFormStyle(pageBackground: true)
             .experienceNavigationTitle("Trade Psychology")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

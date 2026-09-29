@@ -185,6 +185,40 @@ enum SocialPersistedCacheCoordinator {
         SocialDiskCache.removeRoomSnapshot(viewerID: viewerID, roomID: roomID)
     }
 
+    /// Merge outbound rows into a cached room channel thread (share sheet + open room).
+    static func patchRoomChannelMessages(
+        viewerID: ProfileID,
+        roomID: RoomID,
+        channelID: RoomChannelID,
+        incoming: [Message]
+    ) {
+        guard !incoming.isEmpty,
+              var blob = SocialDiskCache.loadRoomSnapshot(viewerID: viewerID, roomID: roomID)
+        else { return }
+
+        let key = channelID.rawValue
+        var thread = blob.channelThreads[key] ?? SocialDiskCache.RoomChannelThreadBlob(
+            channelID: key,
+            messages: [],
+            nextOlderCursor: nil,
+            hasMoreOlder: true,
+            isLoaded: true
+        )
+        thread.messages = ConversationMessageMerge.mergeMessages(
+            existing: thread.messages,
+            incoming: incoming,
+            viewerID: viewerID
+        )
+        if thread.messages.count > SocialDiskCache.maxMessagesPerRoomChannel {
+            thread.messages = Array(thread.messages.suffix(SocialDiskCache.maxMessagesPerRoomChannel))
+        }
+        thread.isLoaded = true
+        blob.channelThreads[key] = thread
+        blob.savedAt = Date()
+        blob.lastAccessedAt = Date()
+        SocialDiskCache.saveRoomSnapshot(blob)
+    }
+
     // MARK: - Activity
 
     @discardableResult

@@ -321,7 +321,7 @@ final class BrokerImportFlowModel {
             action = .reconnect
         case .retryable:
             action = BrokerSyncFailureResolution.isSyncInProgress(response) ? .syncInProgress : .retry
-        case .importFailed:
+        case .importFailed, .noAvailableTradeHistory:
             action = .dismiss
         }
         fail(

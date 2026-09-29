@@ -2,102 +2,100 @@ import Foundation
 import OSLog
 import UserNotifications
 
-/// Local daily trade-import reminders at fixed Eastern times (DST-aware).
+/// Local trade-import reminders — Mon–Fri 11:15 AM and 4:00 PM Eastern only.
 enum TradeImportReminderScheduler {
-    static let morningIdentifier = "trade-import-reminder:1115-et"
-    static let afternoonIdentifier = "trade-import-reminder:1600-et"
     static let identifierPrefix = "trade-import-reminder:"
+
+    /// Legacy daily-repeat identifiers (removed on sync).
+    static let legacyIdentifiers = [
+        "trade-import-reminder:1115-et",
+        "trade-import-reminder:1600-et",
+    ]
 
     static let notificationType = "trade_import_reminder"
 
-    static let easternTimeZone = TimeZone(identifier: "America/New_York")!
+    static let notificationTitle = "TradeTraxs"
+    static let notificationBody = "Did you import any trades today?"
 
-    static let morningTitle = "TradeTraxs"
-    static let morningBody = "Made any trades today? Don't forget to add or import them."
+    private static let morningHour = 11
+    private static let morningMinute = 15
+    private static let afternoonHour = 16
+    private static let afternoonMinute = 0
 
-    static let afternoonTitle = "TradeTraxs"
-    static let afternoonBody = "Import your trades today and keep your journal up to date."
-
-    struct Slot: Equatable, Sendable {
-        var identifier: String
-        var hour: Int
-        var minute: Int
-        var title: String
-        var body: String
+    static var plannedWeekdayRequests: [WeekdayEasternReminderSupport.PlannedRequest] {
+        WeekdayEasternReminderSupport.plannedRequests(
+            identifierPrefix: identifierPrefix,
+            timeLabel: "1115",
+            hour: morningHour,
+            minute: morningMinute
+        )
+        + WeekdayEasternReminderSupport.plannedRequests(
+            identifierPrefix: identifierPrefix,
+            timeLabel: "1600",
+            hour: afternoonHour,
+            minute: afternoonMinute
+        )
     }
 
-    static let slots: [Slot] = [
-        Slot(
-            identifier: morningIdentifier,
-            hour: 11,
-            minute: 15,
-            title: morningTitle,
-            body: morningBody
-        ),
-        Slot(
-            identifier: afternoonIdentifier,
-            hour: 16,
-            minute: 0,
-            title: afternoonTitle,
-            body: afternoonBody
-        ),
-    ]
-
-    static var easternCalendar: Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = easternTimeZone
-        return calendar
+    static var canonicalIdentifiers: [String] {
+        plannedWeekdayRequests.map(\.identifier)
     }
 
     @MainActor
     static func sync(isEnabled: Bool) async {
         let center = UNUserNotificationCenter.current()
         let pending = await center.pendingNotificationRequests()
-        let existingIDs = pending
-            .map(\.identifier)
-            .filter { $0.hasPrefix(identifierPrefix) }
-
-        if !existingIDs.isEmpty {
-            center.removePendingNotificationRequests(withIdentifiers: existingIDs)
+        let pendingIDSet = Set(pending.map(\.identifier))
+        var removeIDs: [String] = pendingIDSet.filter { shouldRemove(identifier: $0) }
+        for legacy in legacyIdentifiers where pendingIDSet.contains(legacy) {
+            removeIDs.append(legacy)
+        }
+        removeIDs = Array(Set(removeIDs))
+        if !removeIDs.isEmpty {
+            center.removePendingNotificationRequests(withIdentifiers: removeIDs)
         }
 
         guard isEnabled else { return }
 
-        for slot in slots {
-            var components = DateComponents()
-            components.timeZone = easternTimeZone
-            components.hour = slot.hour
-            components.minute = slot.minute
-
+        for request in plannedWeekdayRequests {
             let content = UNMutableNotificationContent()
-            content.title = slot.title
-            content.body = slot.body
+            content.title = notificationTitle
+            content.body = notificationBody
             content.userInfo = ["type": notificationType]
 
+            let components = WeekdayEasternReminderSupport.dateComponents(
+                weekday: request.weekday,
+                hour: request.hour,
+                minute: request.minute
+            )
             let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
-            let request = UNNotificationRequest(
-                identifier: slot.identifier,
+            let notification = UNNotificationRequest(
+                identifier: request.identifier,
                 content: content,
                 trigger: trigger
             )
             do {
-                try await center.add(request)
+                try await center.add(notification)
             } catch {
                 AppLog.notifications.error(
-                    "Trade import reminder schedule failed for \(slot.identifier, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                    "Trade import reminder schedule failed for \(request.identifier, privacy: .public): \(error.localizedDescription, privacy: .public)"
                 )
             }
         }
+    }
+
+    static func shouldRemove(identifier: String) -> Bool {
+        identifier.hasPrefix(identifierPrefix)
     }
 
     @MainActor
     static func cancelAll() async {
         let center = UNUserNotificationCenter.current()
         let pending = await center.pendingNotificationRequests()
-        let ids = pending
-            .map(\.identifier)
-            .filter { $0.hasPrefix(identifierPrefix) }
-        guard !ids.isEmpty else { return }
-        center.removePendingNotificationRequests(withIdentifiers: ids)
+        let ids = pending.map(\.identifier).filter { shouldRemove(identifier: $0) }
+        var all = Set(ids)
+        all.formUnion(legacyIdentifiers)
+        guard !all.isEmpty else { return }
+        center.removePendingNotificationRequests(withIdentifiers: Array(all))
     }
 }

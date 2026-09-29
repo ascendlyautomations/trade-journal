@@ -236,7 +236,7 @@ struct ManageAccountEditorView: View {
                 }
             }
         }
-        .experienceDashboardGroupedRows()
+        .experienceTradeTraxsFormStyle(pageBackground: false)
         .experienceNavigationTitle(title)
         .scrollDismissesKeyboard(.interactively)
         .toolbar {

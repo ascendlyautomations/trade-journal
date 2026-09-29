@@ -31,5 +31,9 @@ export async function GET(req: Request) {
     cancelAtPeriodEnd: snapshot.cancelAtPeriodEnd,
     appleExpiresAt: snapshot.appleExpiresAt,
     appleProductId: snapshot.appleSubscription?.product_id ?? null,
+    accessExpiresAt: snapshot.accessExpiresAt,
+    issuedAt: snapshot.issuedAt,
+    appleSubscriptionStatus: snapshot.appleSubscriptionStatus,
+    appleRevokedAt: snapshot.appleRevokedAt,
   })
 }

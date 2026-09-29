@@ -81,6 +81,9 @@ struct SharedPostMessageCard: View {
                         Text(author.displayName)
                             .experienceStyle(.caption, color: secondaryTextColor)
                             .lineLimit(1)
+                        if author.isCreator {
+                            TradeTraxsVerifiedBadge(size: .inline)
+                        }
                     }
                 }
 
@@ -170,9 +173,14 @@ struct SharedReelMessageCard: View {
                 }
 
                 if let author {
-                    Text(author.displayName)
-                        .experienceStyle(.caption, color: secondaryTextColor)
-                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Text(author.displayName)
+                            .experienceStyle(.caption, color: secondaryTextColor)
+                            .lineLimit(1)
+                        if author.isCreator {
+                            TradeTraxsVerifiedBadge(size: .inline)
+                        }
+                    }
                 }
 
                 if let caption = reel.caption?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -246,9 +254,14 @@ struct SharedAchievementMessageCard: View {
                     .lineLimit(2)
 
                 if let author {
-                    Text(author.displayName)
-                        .experienceStyle(.caption, color: secondaryTextColor)
-                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Text(author.displayName)
+                            .experienceStyle(.caption, color: secondaryTextColor)
+                            .lineLimit(1)
+                        if author.isCreator {
+                            TradeTraxsVerifiedBadge(size: .inline)
+                        }
+                    }
                 }
 
                 if let details = achievement.description?.trimmingCharacters(in: .whitespacesAndNewlines),

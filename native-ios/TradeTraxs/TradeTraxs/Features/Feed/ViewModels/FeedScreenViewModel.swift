@@ -91,7 +91,8 @@ final class FeedScreenViewModel {
     var visibleEntries: [FeedTimelineEntry] { state.cachedVisibleEntries }
     var visibleEntryIDs: [String] { state.cachedVisibleEntryIDs }
     var showsEmpty: Bool {
-        state.showsEmpty
+        reconcileSharedFeedScopeWithState()
+        return state.showsEmpty
     }
 
     var isQueryReloadInProgress: Bool {
@@ -99,8 +100,8 @@ final class FeedScreenViewModel {
     }
 
     var scope: FeedScope {
-        get { state.scope }
-        set { state.scope = newValue }
+        reconcileSharedFeedScopeWithState()
+        return state.scope
     }
 
     var contentFilter: FeedContentFilter {
@@ -184,12 +185,14 @@ final class FeedScreenViewModel {
 
     /// Following-scope edge — refresh timeline without postgres_changes author watches.
     func reconcileFollowingAfterRelationshipChange() async {
+        reconcileSharedFeedScopeWithState()
         guard state.scope == .following, state.didBootstrap else { return }
         applyBlockedAuthorsToLoadedFeed(persist: true)
         await refresh(trigger: .followingChanged)
     }
 
     func refresh(trigger: FeedLoadTrigger) async {
+        reconcileSharedFeedScopeWithState()
         cancelInFlightLoads()
         bootstrapGeneration &+= 1
         let generation = bootstrapGeneration
@@ -255,6 +258,7 @@ final class FeedScreenViewModel {
         guard state.cachedVisibleEntries.last?.id == currentID else { return }
         guard paginationTask == nil else { return }
 
+        reconcileSharedFeedScopeWithState()
         let generation = bootstrapGeneration
         let queryScope = state.scope
         let queryFilter = state.contentFilter
@@ -312,12 +316,17 @@ final class FeedScreenViewModel {
 #endif
 
     func setScope(_ next: FeedScope) {
+        reconcileSharedFeedScopeWithState()
         guard state.scope != next else { return }
         ExperienceHaptics.play(.selection)
         state.scope = next
+        if let viewerID = state.viewerID {
+            FeedScopeSessionStore.shared.setScope(next, for: viewerID)
+        }
         Task {
             if let userID = await session.currentUserID {
                 FeedScopePreferenceStore.save(next, for: userID)
+                FeedScopeSessionStore.shared.setScope(next, for: ProfileID(userID.rawValue))
             }
         }
         if next == .global {
@@ -326,7 +335,7 @@ final class FeedScreenViewModel {
         cancelInFlightLoads()
         bootstrapGeneration &+= 1
         let generation = bootstrapGeneration
-        hydrateFilterSnapshotFromSessionStore()
+        hydrateFilterSnapshotFromSessionStore(clearTimelineOnCacheMiss: true)
         prepareQueryReload(resetEntriesPhase: false)
         state.isQueryReloadInProgress = true
         bootstrapTask = Task {
@@ -339,11 +348,12 @@ final class FeedScreenViewModel {
     func userSelectedContentFilter(_ next: FeedContentFilter) {
         guard state.contentFilter != next else { return }
         ExperienceHaptics.play(.selection)
+        reconcileSharedFeedScopeWithState()
         state.contentFilter = next
         cancelInFlightLoads()
         bootstrapGeneration &+= 1
         let generation = bootstrapGeneration
-        hydrateFilterSnapshotFromSessionStore()
+        hydrateFilterSnapshotFromSessionStore(clearTimelineOnCacheMiss: true)
         prepareQueryReload(resetEntriesPhase: false)
         state.isQueryReloadInProgress = true
         bootstrapTask = Task {
@@ -513,6 +523,7 @@ final class FeedScreenViewModel {
     }
 
     private func persistFeedFirstPage() {
+        reconcileSharedFeedScopeWithState()
         guard let viewerID = state.viewerID else { return }
         FeedPersistedCacheCoordinator.persistFirstPage(
             viewerID: viewerID,
@@ -582,10 +593,53 @@ final class FeedScreenViewModel {
             state.scope = .global
             return
         }
-        state.scope = await FeedInitialScopeResolver.resolvedInitialScope(
+        state.scope = await FeedScopeSessionStore.shared.resolvedInitialScope(
             userID: userID,
             profileStore: currentUserProfile
         )
+    }
+
+    /// Keeps ``FeedScopeSessionStore`` and ``FeedState.scope`` aligned for all queries and cache keys.
+    private func reconcileSharedFeedScopeWithState() {
+        if ExploreModeSupport.usesLiveCommunityFeed {
+            let exploreScope = ExploreModeSupport.feedScope
+            if state.scope != exploreScope {
+                state.scope = exploreScope
+            }
+            return
+        }
+        guard let viewerID = state.viewerID else { return }
+        if let shared = FeedScopeSessionStore.shared.scope(for: viewerID) {
+            applySharedScopeToState(shared)
+            return
+        }
+        FeedScopeSessionStore.shared.setScope(state.scope, for: viewerID)
+    }
+
+    private func applySharedScopeToState(_ shared: FeedScope) {
+        guard state.scope != shared else { return }
+        state.scope = shared
+        if shared == .global {
+            state.stories = []
+        }
+    }
+
+    private func bindViewerScopedFeedScopeIfNeeded(viewerID: ProfileID) {
+        if let shared = FeedScopeSessionStore.shared.scope(for: viewerID) {
+            applySharedScopeToState(shared)
+        } else {
+            FeedScopeSessionStore.shared.setScope(state.scope, for: viewerID)
+        }
+    }
+
+    private func ensureSharedFeedScopeBeforeBootstrapQuery() async {
+        guard !ExploreModeSupport.skipsAuthenticatedViewerServices else { return }
+        guard let userID = await session.currentUserID else { return }
+        let viewerID = ProfileID(userID.rawValue)
+        if state.viewerID == nil {
+            state.viewerID = viewerID
+        }
+        bindViewerScopedFeedScopeIfNeeded(viewerID: viewerID)
     }
 
     private func cancelInFlightLoads() {
@@ -613,7 +667,8 @@ final class FeedScreenViewModel {
     }
 
     /// Synchronously apply session cache / sibling-filter rows before a scoped reload.
-    private func hydrateFilterSnapshotFromSessionStore() {
+    private func hydrateFilterSnapshotFromSessionStore(clearTimelineOnCacheMiss: Bool = false) {
+        reconcileSharedFeedScopeWithState()
         guard let viewerID = state.viewerID else { return }
         let resolved = FeedSessionStore.shared.resolvedEntries(
             viewerID: viewerID,
@@ -633,7 +688,15 @@ final class FeedScreenViewModel {
             cachedCount: resolved.entries.count,
             knownEmpty: knownEmpty
         )
-        guard !resolved.entries.isEmpty else { return }
+        guard !resolved.entries.isEmpty else {
+            if clearTimelineOnCacheMiss {
+                publishFeedEntries([])
+                if state.scope == .global {
+                    state.stories = []
+                }
+            }
+            return
+        }
         MainThreadWorkProbe.measure("feed.rows.transform", surface: "feed") {
             publishFeedEntries(FeedBlockedAuthorsFilter.shared.filterEntries(resolved.entries))
         }
@@ -728,6 +791,7 @@ final class FeedScreenViewModel {
     /// First-page network delta after Realtime reconnect — no pagination reset.
     private func performReconnectHeadReconcile(generation: UInt64) async {
         guard BackendV2FeatureFlags.isEnabled(.feed), let rpc else { return }
+        reconcileSharedFeedScopeWithState()
         let guestPublicFeed = ExploreModeSupport.skipsAuthenticatedViewerServices
         let resolvedScope = state.scope
         let resolvedFilter = state.contentFilter
@@ -794,6 +858,11 @@ final class FeedScreenViewModel {
     ) async {
         FeedLoadProbe.record(trigger)
         let activeGeneration = generation ?? bootstrapGeneration
+        if resetting, (queryCursor ?? (resetting ? nil : state.nextCursor)) == nil {
+            await ensureSharedFeedScopeBeforeBootstrapQuery()
+        } else {
+            reconcileSharedFeedScopeWithState()
+        }
         let resolvedScope = queryScope ?? state.scope
         let resolvedFilter = queryFilter ?? state.contentFilter
         let resolvedCursor = resetting ? nil : (queryCursor ?? state.nextCursor)
@@ -1241,6 +1310,7 @@ final class FeedScreenViewModel {
     }
 
     private func syncViewerStoryStoreIfNeeded() {
+        reconcileSharedFeedScopeWithState()
         guard state.scope == .following, let viewerID = state.viewerID else { return }
         ViewerActiveStoryStore.shared.sync(viewerID: viewerID, stories: state.stories)
     }

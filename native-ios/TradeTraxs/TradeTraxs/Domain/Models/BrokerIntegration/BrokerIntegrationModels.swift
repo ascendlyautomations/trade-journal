@@ -422,10 +422,12 @@ nonisolated struct TradovateSyncSummaryPayload: Codable, Sendable {
     var persistCalled: Bool?
     var error: String?
     var errorCode: String?
+    var syncOutcome: String?
 
     enum CodingKeys: String, CodingKey {
         case ok
         case status
+        case syncOutcome
         case tradesCreated
         case tradesUpdated
         case newTradeIds
@@ -483,6 +485,7 @@ nonisolated struct TradovateSyncSummaryPayload: Codable, Sendable {
         errorCode =
             try container.decodeIfPresent(String.self, forKey: .errorCode)
             ?? snake.decodeIfPresent(String.self, forKey: .error_code)
+        syncOutcome = try container.decodeIfPresent(String.self, forKey: .syncOutcome)
     }
 }
 

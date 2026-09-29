@@ -14,10 +14,15 @@ struct ExploreTraderListRow: View {
         HStack(alignment: .center, spacing: ExperienceSpacing.md) {
             ExploreProfileAvatarView(profile: profile, imagePipeline: imagePipeline, diameter: 40)
             VStack(alignment: .leading, spacing: 2) {
-                Text(profile.displayName)
-                    .experienceStyle(.subheadline, color: colors.primaryText)
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(profile.displayName)
+                        .experienceStyle(.subheadline, color: colors.primaryText)
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+                    if profile.isCreator {
+                        TradeTraxsVerifiedBadge(size: .inline)
+                    }
+                }
                 Text("@\(profile.username)")
                     .experienceStyle(.caption, color: colors.secondaryText)
                     .lineLimit(1)

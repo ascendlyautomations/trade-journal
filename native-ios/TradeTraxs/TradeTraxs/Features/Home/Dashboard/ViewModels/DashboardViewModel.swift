@@ -70,6 +70,7 @@ final class DashboardViewModel {
     private var aggregateChartSelectionToken: UInt64 = 0
     private var aggregateChartHydrateTask: Task<Void, Never>?
     private var dashboardGRDBBackgroundReconcileScheduled = false
+    private var equityChartOverlayRetryScheduled = false
     private var analyticsReconciliationObserver: NSObjectProtocol?
 
     private final class LiveBox {
@@ -157,6 +158,7 @@ final class DashboardViewModel {
         accountFilter = .all
         pendingHistoryBackfill = false
         dashboardGRDBBackgroundReconcileScheduled = false
+        equityChartOverlayRetryScheduled = false
         phase = .idle
     }
 
@@ -236,7 +238,7 @@ final class DashboardViewModel {
     /// Present only when a single prop-firm account is selected.
     var propFirmStatus: PropFirmStatusSnapshot? {
         guard let account = selectedAccount, account.isPropFirmAccount else { return nil }
-        let trades = tradeInputs.map(\.trade)
+        let trades = accountScopedTrades(for: account.id)
         let cycles = payoutCyclesByAccount[account.id] ?? []
         return PropFirmStatusSnapshot.build(
             account: account,
@@ -278,13 +280,34 @@ final class DashboardViewModel {
         if usesDashboardAnalyticsV3, !selectedChartOverlayLoaded, !equityHeroShowsAccountValue {
             return heroSummary.netPnL
         }
-        return DashboardEquityHeroPresentation.headlineValue(
-            showsAccountValue: equityHeroShowsAccountValue,
-            timeframeCurrentEquity: heroSummary.currentEquity,
-            authoritativeBalance: equityHeroAuthoritativeBalance,
-            lifetimeRealizedPnL: equityHeroLifetimeRealizedPnL,
-            startingBalance: equityHeroAccountStartingBalance
+        guard equityHeroShowsAccountValue, let account = selectedAccount else {
+            return heroSummary.currentEquity
+        }
+        let starting = equityHeroAccountStartingBalance ?? 0
+        let lifetimeResolved = lifetimeRealizedPnLWithSource(for: account.id)
+        let lifetime = lifetimeResolved.lifetime
+        let replayCount = accountScopedTrades(for: account.id).count
+        let propSnapshot = propFirmStatus
+        let displayed = AccountTrackedBalanceSupport.dashboardAccountBalance(
+            account: account,
+            startingBalance: starting,
+            lifetimeRealizedPnL: lifetime,
+            propFirmSnapshot: propSnapshot,
+            manualPayoutEntries: manualPayoutEntries(for: account.id),
+            propFirmTradeReplayCount: replayCount
         )
+        #if DEBUG
+        logDashboardAccountBalanceAudit(
+            account: account,
+            starting: starting,
+            lifetime: lifetime,
+            lifetimeSource: lifetimeResolved.source,
+            propFirmReplayBalance: propSnapshot?.currentBalance,
+            replayCount: replayCount,
+            displayed: displayed
+        )
+        #endif
+        return displayed
     }
 
     var equityHeroChartPoints: [ProfileStatisticsMetrics.EquityPoint] {
@@ -297,24 +320,6 @@ final class DashboardViewModel {
         return DashboardEquityHeroPresentation.chartPoints(
             chartSummary.equityData,
             propStartingBalance: equityHeroAccountStartingBalance
-        )
-    }
-
-    /// Payout-aware tracked balance (prop cycles or live manual ledger).
-    private var equityHeroAuthoritativeBalance: Decimal? {
-        guard let account = selectedAccount else { return nil }
-        if account.isPropFirmAccount {
-            return propFirmStatus?.currentBalance
-        }
-        guard AccountTrackedBalanceSupport.usesManualLedgerForTrackedBalance(account: account) else {
-            return nil
-        }
-        let starting = equityHeroAccountStartingBalance ?? 0
-        let entries = manualPayoutEntries(for: account.id)
-        return AccountTrackedBalanceSupport.ledgerTrackedBalance(
-            startingBalance: starting,
-            lifetimeRealizedPnL: equityHeroLifetimeRealizedPnL,
-            payoutEntries: entries
         )
     }
 
@@ -337,57 +342,80 @@ final class DashboardViewModel {
     }
 
     private var equityHeroLifetimeRealizedPnL: Decimal {
+        guard case .account(let id) = accountFilter else { return 0 }
+        return lifetimeRealizedPnL(for: id)
+    }
+
+    /// Cumulative realized P&L for one account — bootstrap metrics when available, else cached trades.
+    private func lifetimeRealizedPnL(for accountID: TradingAccountID) -> Decimal {
+        lifetimeRealizedPnLWithSource(for: accountID).0
+    }
+
+    private func lifetimeRealizedPnLWithSource(
+        for accountID: TradingAccountID
+    ) -> (lifetime: Decimal, source: String) {
         if usesDashboardAnalyticsV3,
            let bootstrap = analyticsV3Bootstrap,
-           case .account(let id) = accountFilter,
            let lifetime = DashboardAnalyticsMapper.lifetimeRealizedPnL(
                in: bootstrap,
-               accountID: id,
-               accountCharts: chartOverlayIncludingAllPreset()
+               accountID: accountID,
+               accountCharts: nil
            )
         {
-            return lifetime
+            return (lifetime, "analyticsV3Bootstrap.all")
         }
-        guard case .account = accountFilter else { return 0 }
-        let trades = DashboardChartMetrics.filteredTrades(
-            from: tradeInputs,
-            accountFilter: accountFilter,
-            dateRange: .all,
-            now: Date()
+        return (lifetimeRealizedPnLFromTradeInputs(accountID: accountID), "tradeInputs.all")
+    }
+
+    #if DEBUG
+    private func logDashboardAccountBalanceAudit(
+        account: TradingAccount,
+        starting: Decimal,
+        lifetime: Decimal,
+        lifetimeSource: String,
+        propFirmReplayBalance: Decimal?,
+        replayCount: Int,
+        displayed: Decimal
+    ) {
+        let expectedFromInputs = starting + lifetime
+        DashboardAccountBalanceAudit.log(
+            DashboardAccountBalanceAudit.Context(
+                accountID: account.id,
+                accountMode: account.mode,
+                accountCategory: account.category,
+                startingBalance: starting,
+                lifetimeRealizedPnL: lifetime,
+                lifetimeSource: lifetimeSource,
+                propFirmReplayBalance: propFirmReplayBalance,
+                propFirmTradeReplayCount: replayCount,
+                tradeInputCountForAccount: replayCount,
+                expectedBalance: expectedFromInputs,
+                displayedBalance: displayed,
+                usesAnalyticsV3: usesDashboardAnalyticsV3
+            )
         )
-        return trades.reduce(Decimal(0)) { partial, input in
-            partial + (input.realizedPnL?.amount ?? 0)
+    }
+    #endif
+
+    private func lifetimeRealizedPnLFromTradeInputs(accountID: TradingAccountID) -> Decimal {
+        accountScopedTrades(for: accountID).reduce(into: Decimal.zero) { partial, trade in
+            partial += trade.realizedPnL?.amount ?? 0
         }
     }
 
-    /// Charts for the selected filter, including the `all` preset when cached (lifetime P&L).
-    private func chartOverlayIncludingAllPreset() -> [String: AnalyticsDashboardChartsPresetV1]? {
-        switch accountFilter {
-        case .all:
-            return nil
-        case .account(let id):
-            if let cached = DashboardAnalyticsAccountChartsStore.shared.charts(
-                accountID: id,
-                revision: analyticsV3Revision
-            ) {
-                return cached
-            }
-            return chartOverlayForFilter()
-        }
+    private func accountScopedTrades(for accountID: TradingAccountID) -> [Trade] {
+        DashboardChartMetrics.filteredTrades(
+            from: tradeInputs,
+            accountFilter: .account(accountID),
+            dateRange: .all,
+            now: Date()
+        )
     }
 
     private var selectedChartOverlayLoaded: Bool {
         guard usesDashboardAnalyticsV3 else { return true }
-        switch accountFilter {
-        case .all:
-            return DashboardAnalyticsAggregateChartsStore.shared
-                .availability(revision: analyticsV3Revision)
-                .isLoaded
-        case .account(let id):
-            return DashboardAnalyticsAccountChartsStore.shared
-                .availability(accountID: id, revision: analyticsV3Revision)
-                .isLoaded
-        }
+        guard let overlay = rawChartOverlayForFilter() else { return false }
+        return DashboardAnalyticsChartsSupport.chartsReadyForPresentation(overlay)
     }
 
     private var selectedAccountChartsLoaded: Bool {
@@ -482,6 +510,7 @@ final class DashboardViewModel {
             if let profileID {
                 Task { await startRealtime(profileID: profileID) }
             }
+            ensureEquityChartOverlayIfNeeded()
             return
         }
         if coldLoadFinished {
@@ -491,6 +520,19 @@ final class DashboardViewModel {
         loadGeneration &+= 1
         let generation = loadGeneration
         loadTask = Task { await performLoad(generation: generation) }
+    }
+
+    /// Lazy V3 equity curve — re-request chart overlay when the dashboard becomes visible before hydration finished or after a failed/cancelled fetch.
+    func ensureEquityChartOverlayIfNeeded() {
+        guard usesDashboardAnalyticsV3, analyticsV3Bootstrap != nil, profileID != nil else { return }
+        reconcileStaleChartLoadingStateIfNeeded()
+        if !needsEquityChartOverlayFetch {
+            return
+        }
+        if case .loaded = selectedAccountChartsAvailability {
+            dropSelectedChartOverlayCacheIfStale()
+        }
+        scheduleChartHydrationWithRetryIfNeeded()
     }
 
     func refresh() async {
@@ -617,6 +659,8 @@ final class DashboardViewModel {
     func setAccountFilter(_ filter: DashboardAccountFilter) {
         guard accountFilter != filter else { return }
         ExperienceHaptics.play(.selection)
+        lastAccountScopedSummary = nil
+        lastAccountScopedFilter = nil
         accountFilter = filter
         equityChartSummary = nil
         equityChartAccountFilter = nil
@@ -639,7 +683,7 @@ final class DashboardViewModel {
             if usesDashboardAnalyticsGRDB, analyticsV3Bootstrap != nil {
                 DashboardAnalyticsGRDBProbe.logNetworkAvoided(reason: "account_metrics_local")
             }
-            scheduleChartHydration()
+            scheduleChartHydrationWithRetryIfNeeded()
         }
     }
 
@@ -1521,6 +1565,10 @@ final class DashboardViewModel {
 
     private func chartOverlayForFilter() -> [String: AnalyticsDashboardChartsPresetV1]? {
         guard selectedChartOverlayLoaded else { return nil }
+        return rawChartOverlayForFilter()
+    }
+
+    private func rawChartOverlayForFilter() -> [String: AnalyticsDashboardChartsPresetV1]? {
         switch accountFilter {
         case .all:
             return DashboardAnalyticsAggregateChartsStore.shared.charts(revision: analyticsV3Revision)
@@ -1532,12 +1580,81 @@ final class DashboardViewModel {
         }
     }
 
+    private var needsEquityChartOverlayFetch: Bool {
+        guard usesDashboardAnalyticsV3, analyticsV3Bootstrap != nil else { return false }
+        switch selectedAccountChartsAvailability {
+        case .notRequested, .failed:
+            return true
+        case .loading:
+            return true
+        case .loaded:
+            guard let overlay = rawChartOverlayForFilter() else { return true }
+            return !DashboardAnalyticsChartsSupport.chartsReadyForPresentation(overlay)
+        }
+    }
+
+    private func reconcileStaleChartLoadingStateIfNeeded() {
+        guard case .loading = selectedAccountChartsAvailability else { return }
+        guard accountChartHydrateTask == nil, aggregateChartHydrateTask == nil else { return }
+        switch accountFilter {
+        case .all:
+            DashboardAnalyticsAggregateChartsStore.shared.dropCharts(revision: analyticsV3Revision)
+        case .account(let id):
+            DashboardAnalyticsAccountChartsStore.shared.markNotRequested(
+                accountID: id,
+                revision: analyticsV3Revision
+            )
+        }
+    }
+
+    private func dropSelectedChartOverlayCacheIfStale() {
+        guard let overlay = rawChartOverlayForFilter() else { return }
+        guard !DashboardAnalyticsChartsSupport.chartsReadyForPresentation(overlay) else { return }
+        switch accountFilter {
+        case .all:
+            DashboardAnalyticsAggregateChartsStore.shared.dropCharts(revision: analyticsV3Revision)
+        case .account(let id):
+            DashboardAnalyticsAccountChartsStore.shared.dropCharts(
+                accountID: id,
+                revision: analyticsV3Revision
+            )
+        }
+    }
+
+    private func scheduleChartHydrationWithRetryIfNeeded() {
+        scheduleChartHydration()
+        guard !equityChartOverlayRetryScheduled else { return }
+        let revision = analyticsV3Revision
+        let filter = accountFilter
+        equityChartOverlayRetryScheduled = true
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            guard let self else { return }
+            self.equityChartOverlayRetryScheduled = false
+            guard self.analyticsV3Revision == revision, self.accountFilter == filter else { return }
+            guard self.usesDashboardAnalyticsV3, self.analyticsV3Bootstrap != nil else { return }
+            guard self.needsEquityChartOverlayFetch else { return }
+            self.scheduleChartHydration()
+        }
+    }
+
     private func scheduleChartHydration() {
         scheduleAccountChartHydration()
         scheduleAggregateChartHydration()
     }
 
     private func scheduleAccountChartHydration() {
+        if case .account(let id) = accountFilter,
+           DashboardAnalyticsAccountChartsStore.shared.availability(
+            accountID: id,
+            revision: analyticsV3Revision
+           ) == .loading
+        {
+            DashboardAnalyticsAccountChartsStore.shared.markNotRequested(
+                accountID: id,
+                revision: analyticsV3Revision
+            )
+        }
         accountChartSelectionToken = DashboardAnalyticsAccountChartsCoordinator.bumpSelection()
         let token = accountChartSelectionToken
         accountChartHydrateTask?.cancel()
@@ -1547,6 +1664,11 @@ final class DashboardViewModel {
     }
 
     private func scheduleAggregateChartHydration() {
+        if accountFilter == .all,
+           DashboardAnalyticsAggregateChartsStore.shared.availability(revision: analyticsV3Revision) == .loading
+        {
+            DashboardAnalyticsAggregateChartsStore.shared.dropCharts(revision: analyticsV3Revision)
+        }
         aggregateChartSelectionToken = DashboardAnalyticsAggregateChartsCoordinator.bumpSelection()
         let token = aggregateChartSelectionToken
         aggregateChartHydrateTask?.cancel()
@@ -1577,7 +1699,19 @@ final class DashboardViewModel {
             viewerID: profileID,
             rpc: rpc
         )
-        guard applied else { return }
+        guard applied else {
+            if selectionToken == accountChartSelectionToken,
+               case .account(let current) = accountFilter,
+               current == id,
+               DashboardAnalyticsAccountChartsStore.shared.availability(
+                accountID: id,
+                revision: analyticsV3Revision
+               ) == .failed
+            {
+                scheduleChartHydrationWithRetryIfNeeded()
+            }
+            return
+        }
         guard selectionToken == accountChartSelectionToken else { return }
         guard case .account(let current) = accountFilter, current == id else { return }
         recompute()
@@ -1603,7 +1737,15 @@ final class DashboardViewModel {
             viewerID: profileID,
             rpc: rpc
         )
-        guard applied else { return }
+        guard applied else {
+            if selectionToken == aggregateChartSelectionToken,
+               accountFilter == .all,
+               DashboardAnalyticsAggregateChartsStore.shared.availability(revision: analyticsV3Revision) == .failed
+            {
+                scheduleChartHydrationWithRetryIfNeeded()
+            }
+            return
+        }
         guard selectionToken == aggregateChartSelectionToken else { return }
         guard accountFilter == .all else { return }
         recompute()
@@ -1637,6 +1779,7 @@ final class DashboardViewModel {
         }
 
         refreshEquityChartPresentation(bootstrap: bootstrap)
+        ensureEquityChartOverlayIfNeeded()
 
         let chartsOverlay = chartOverlayForFilter()
         #if DEBUG
@@ -1786,7 +1929,7 @@ final class DashboardViewModel {
             preset: DashboardAnalyticsMapper.presetKey(for: dateRange),
             elapsedMs: 0
         )
-        scheduleChartHydration()
+        scheduleChartHydrationWithRetryIfNeeded()
         #if DEBUG
         ColdLaunchSummaryProbe.markDashboardFirstRender(source: loadResult.source)
         #endif
@@ -1918,7 +2061,7 @@ final class DashboardViewModel {
                     recompute()
                 }
             }
-            scheduleChartHydration()
+            scheduleChartHydrationWithRetryIfNeeded()
             await startRealtime(profileID: profileID)
             return true
         } catch {
@@ -2453,7 +2596,7 @@ final class DashboardViewModel {
                 )
                 recompute()
             }
-            scheduleChartHydration()
+            scheduleChartHydrationWithRetryIfNeeded()
             scheduleDashboardGRDBBackgroundReconcile(profileID: profileID, generation: generation)
             await startRealtime(profileID: profileID)
             return true
@@ -2595,7 +2738,7 @@ final class DashboardViewModel {
                 payoutTotal = payout
             }
             recompute()
-            scheduleChartHydration()
+            scheduleChartHydrationWithRetryIfNeeded()
         } catch {
             // Preserve GRDB/JSON presentation when background reconcile fails.
         }

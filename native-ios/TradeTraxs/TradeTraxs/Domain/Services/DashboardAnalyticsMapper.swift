@@ -434,9 +434,6 @@ nonisolated enum DashboardAnalyticsMapper {
         accountID: TradingAccountID,
         accountCharts: [String: AnalyticsDashboardChartsPresetV1]? = nil
     ) -> Decimal? {
-        if let charts = accountCharts?["all"] {
-            return decimal(charts.equity.current_equity)
-        }
         if let bundle = bundle(
             in: bootstrap,
             accountFilter: .account(accountID),
@@ -444,6 +441,9 @@ nonisolated enum DashboardAnalyticsMapper {
             accountCharts: accountCharts
         ) {
             return DashboardAnalyticsComposer.ingredients(from: bundle.metrics).netPnL
+        }
+        if let charts = accountCharts?["all"] {
+            return decimal(charts.equity.current_equity)
         }
         return nil
     }
