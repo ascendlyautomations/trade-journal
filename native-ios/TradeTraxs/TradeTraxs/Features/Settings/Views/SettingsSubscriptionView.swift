@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SettingsSubscriptionView: View {
     @State private var viewModel: SettingsSubscriptionViewModel
+    @State private var showsIncludedDetails = false
+    @State private var showsTraxProBenefits = false
 
     @Environment(\.themeColors) private var colors
     @Environment(\.openURL) private var openURL
@@ -37,30 +39,24 @@ struct SettingsSubscriptionView: View {
                 }
             }
 
-            planSection
+            currentPlanSection
+            disclosuresSection
 
-            if viewModel.showsProMembership {
-                activeMembershipSection
+            if viewModel.showsManageSubscription {
+                manageSection
             }
 
-            if viewModel.showsReleaseIncludedPlanDetails {
-                releaseIncludedSection
-            }
-
-            if viewModel.showsFreePlanDetails, let status = viewModel.status {
-                freeLimitsSection(status: status)
-                traxProHighlightsSection
-                if viewModel.showsApplePurchaseSection {
-                    productsSection
-                    purchaseSection
-                    legalSection
-                }
+            if viewModel.showsApplePurchaseSection {
+                productsSection
+                legalSection
             }
 
             if viewModel.showsRestorePurchases {
                 restoreSection
             }
         }
+        .listSectionSpacing(ExperienceSpacing.xxs)
+        .environment(\.defaultMinListHeaderHeight, 0)
         .experienceInsetGroupedListStyle(pageBackground: true)
         .experienceNavigationTitle("Plan")
         .overlay {
@@ -69,6 +65,8 @@ struct SettingsSubscriptionView: View {
             }
         }
         .onAppear {
+            showsIncludedDetails = false
+            showsTraxProBenefits = false
             viewModel.loadIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { notification in
@@ -81,99 +79,215 @@ struct SettingsSubscriptionView: View {
         .accessibilityIdentifier("settings.subscription")
     }
 
-    private var planSection: some View {
+    private var currentPlanSection: some View {
         Section {
-            SettingsInfoRow(title: "Plan", value: viewModel.planTitle)
-            if let billingDetail = viewModel.billingDetail {
-                SettingsInfoRow(title: "Membership", value: billingDetail)
-            }
-            if let renewalDetail = viewModel.renewalDetail {
-                SettingsInfoRow(title: "Renewal", value: renewalDetail)
-            }
-        } footer: {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                if viewModel.isRefreshingEntitlements {
-                    HStack(spacing: ExperienceSpacing.xs) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("Updating plan…")
-                            .experienceStyle(.caption, color: colors.secondaryText)
+            HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                    Text(viewModel.planTitle)
+                        .experienceStyle(.headline, color: colors.primaryText)
+                    if viewModel.isRefreshingEntitlements {
+                        HStack(spacing: ExperienceSpacing.xs) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Updating plan…")
+                                .experienceStyle(.caption, color: colors.secondaryText)
+                        }
                     }
                 }
-                Text(viewModel.membershipSummaryFooter)
-            }
-        }
-    }
-
-    private var releaseIncludedSection: some View {
-        Section {
-            SettingsIntroBlock(
-                title: "Included with TradeTraxs",
-                message: "This release includes Trade AI, analytics, and journal features at no additional cost. No subscription is required to keep using the app."
-            )
-        }
-    }
-
-    private var activeMembershipSection: some View {
-        Section {
-            if viewModel.showsManageSubscription {
-                Button {
-                    Task { await viewModel.manageSubscription() }
-                } label: {
-                    SettingsPrimaryActionLabel(
-                        title: "Manage Subscription",
-                        systemImage: "arrow.up.right.square"
-                    )
+                Spacer(minLength: ExperienceSpacing.sm)
+                if !currentPlanAmount.isEmpty {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(currentPlanAmount)
+                            .experienceStyle(.headline, color: colors.primaryText)
+                            .multilineTextAlignment(.trailing)
+                        if let detail = currentPlanDetail {
+                            Text(detail)
+                                .experienceStyle(.caption, color: colors.secondaryText)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
                 }
-                .buttonStyle(.plain)
             }
+            .padding(.vertical, ExperienceSpacing.xxs)
+            .accessibilityElement(children: .combine)
         } header: {
-            Text("TraxPro")
+            sectionHeading("Your Current Plan")
         }
     }
 
-    private func freeLimitsSection(status: BillingStatus) -> some View {
-        Section {
-            if let trades = status.dailyTradeLimit {
-                SettingsInfoRow(title: "Daily trades", value: "\(trades)")
+    private var currentPlanAmount: String {
+        if viewModel.showsProMembership {
+            if let storePrice = currentStoreKitPrice {
+                return storePrice
             }
-            if let posts = status.dailyPostLimit {
-                SettingsInfoRow(title: "Daily posts", value: "\(posts)")
+            if let billing = compactBillingStatus {
+                return billing
             }
-            SettingsInfoRow(title: "Daily clips", value: "\(FreeTierPolicy.dailyReelLimit)")
-            if let messages = status.dailyMessageLimit {
-                SettingsInfoRow(title: "Daily messages", value: "\(messages)")
-            }
-            if let accounts = status.maxTradeEntryAccounts {
-                SettingsInfoRow(title: "Active accounts", value: "\(accounts)")
-            }
-        } header: {
-            Text("Included on Free")
-        } footer: {
-            Text("These limits apply to your current Free membership.")
+            return "Active"
+        }
+        if viewModel.planTitle == "Free" {
+            return "$0"
+        }
+        if viewModel.showsReleaseIncludedPlanDetails {
+            return "Included"
+        }
+        return ""
+    }
+
+    /// StoreKit `displayPrice` for the entitled product, only when that product is already loaded.
+    private var currentStoreKitPrice: String? {
+        guard let productID = viewModel.status?.appleProductID,
+              case .loaded(let products) = viewModel.productsState,
+              let product = products.first(where: { $0.id == productID }) else {
+            return nil
+        }
+        if let suffix = pricePeriodSuffix(for: viewModel.status?.billingInterval) {
+            return "\(product.displayPrice)/\(suffix)"
+        }
+        return product.displayPrice
+    }
+
+    private var compactBillingStatus: String? {
+        guard let detail = viewModel.billingDetail else { return nil }
+        let prefix = "Plan: "
+        if detail.hasPrefix(prefix) {
+            return String(detail.dropFirst(prefix.count))
+        }
+        return detail
+    }
+
+    private var currentPlanDetail: String? {
+        guard viewModel.showsProMembership else { return nil }
+        return viewModel.renewalDetail
+    }
+
+    private func pricePeriodSuffix(for interval: BillingInterval?) -> String? {
+        switch interval {
+        case .monthly:
+            return "mo"
+        case .sixMonth:
+            return "6 mo"
+        case .yearly:
+            return "yr"
+        case nil:
+            return nil
         }
     }
 
-    private var traxProHighlightsSection: some View {
-        Section {
-            SettingsIntroBlock(
-                title: "TraxPro",
-                message: "Unlock Trade AI, higher daily limits, more trading accounts, and advanced analytics."
-            )
-            ForEach(viewModel.traxProFeatureHighlights, id: \.self) { feature in
-                HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-                    Image(systemName: "sparkles")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(colors.accent)
-                        .frame(width: 20, alignment: .center)
-                        .padding(.top, 2)
-                    Text(feature)
+    private var includedDisclosureTitle: String {
+        if viewModel.showsProMembership {
+            return "What's Included in TraxPro"
+        }
+        if viewModel.planTitle == "Free" {
+            return "What's Included in Free"
+        }
+        return "What's Included"
+    }
+
+    @ViewBuilder
+    private var disclosuresSection: some View {
+        if viewModel.status != nil {
+            Section {
+                disclosureRow(
+                    title: includedDisclosureTitle,
+                    isExpanded: showsIncludedDetails,
+                    accessibilityID: "settings.subscription.included"
+                ) {
+                    showsIncludedDetails.toggle()
+                } content: {
+                    includedDetails
+                }
+
+                if viewModel.showsFreePlanDetails {
+                    disclosureRow(
+                        title: "With TraxPro",
+                        isExpanded: showsTraxProBenefits,
+                        accessibilityID: "settings.subscription.traxproBenefits"
+                    ) {
+                        showsTraxProBenefits.toggle()
+                    } content: {
+                        proBenefitList
+                    }
+                }
+            }
+        }
+    }
+
+    private func disclosureRow<Content: View>(
+        title: String,
+        isExpanded: Bool,
+        accessibilityID: String,
+        toggle: @escaping () -> Void,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            Button {
+                withAnimation(ExperienceMotion.navigation) {
+                    toggle()
+                }
+            } label: {
+                HStack(spacing: ExperienceSpacing.sm) {
+                    Text(title)
                         .experienceStyle(.body, color: colors.primaryText)
+                    Spacer(minLength: ExperienceSpacing.xs)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(colors.tertiaryText)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
-                .padding(.vertical, ExperienceSpacing.xxs)
+                .contentShape(Rectangle())
             }
-        } header: {
-            Text("TraxPro Includes")
+            .buttonStyle(.plain)
+            .accessibilityIdentifier(accessibilityID)
+
+            if isExpanded {
+                content()
+            }
+        }
+        .padding(.vertical, ExperienceSpacing.xxs)
+    }
+
+    @ViewBuilder
+    private var includedDetails: some View {
+        if viewModel.showsProMembership {
+            proBenefitList
+        } else if viewModel.showsFreePlanDetails, let status = viewModel.status {
+            freeLimitList(status)
+        } else if viewModel.showsReleaseIncludedPlanDetails {
+            Text("This release includes Trade AI, analytics, and journal features at no additional cost.")
+                .experienceStyle(.footnote, color: colors.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var proBenefitList: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            benefitRow(
+                title: "Trades",
+                detail: "No daily trade limit."
+            )
+            benefitRow(
+                title: "Trading accounts",
+                detail: "No limit on active trading accounts."
+            )
+            benefitRow(
+                title: "Advanced analytics",
+                detail: "Advanced psychology and analytics tools."
+            )
+            benefitRow(
+                title: "Trade AI",
+                detail: "Trade AI analysis on your trades."
+            )
+        }
+    }
+
+    private func freeLimitList(_ status: BillingStatus) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            featureRow(title: "Trades", detail: "\(dailyTrades(status)) a day")
+            featureRow(title: "Posts", detail: "\(dailyPosts(status)) a day")
+            featureRow(title: "Clips", detail: "\(FreeTierPolicy.dailyReelLimit) a day")
+            featureRow(title: "Messages", detail: "\(dailyMessages(status)) a day")
+            featureRow(title: "Accounts", detail: "\(activeAccounts(status)) active")
         }
     }
 
@@ -187,51 +301,15 @@ struct SettingsSubscriptionView: View {
                     Text("Loading plans…")
                         .experienceStyle(.footnote, color: colors.secondaryText)
                 }
-                .padding(.vertical, ExperienceSpacing.xs)
+                .padding(.vertical, ExperienceSpacing.xxs)
             case .failed:
                 SettingsInlineError(message: "Couldn't load App Store plans right now.") {
                     viewModel.retryLoadProducts()
                 }
             case .loaded(let products):
                 ForEach(products) { product in
-                    Button {
-                        viewModel.selectProduct(product.id)
-                    } label: {
-                        HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
-                            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                                Text(product.displayName)
-                                    .experienceStyle(.body, color: colors.primaryText)
-                                Text("\(product.displayPrice) / \(product.subscriptionPeriodLabel)")
-                                    .experienceStyle(.footnote, color: colors.secondaryText)
-                                if let offer = product.introductoryOfferSummary {
-                                    Text(offer)
-                                        .experienceStyle(.footnote, color: colors.secondaryText)
-                                }
-                            }
-                            Spacer(minLength: ExperienceSpacing.sm)
-                            Image(systemName: viewModel.selectedProduct?.id == product.id ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(
-                                    viewModel.selectedProduct?.id == product.id ? colors.accent : colors.tertiaryText
-                                )
-                        }
-                        .padding(.vertical, ExperienceSpacing.xs)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("settings.subscription.product.\(product.id)")
+                    planCard(product)
                 }
-            }
-        } header: {
-            Text("Choose a Plan")
-        } footer: {
-            Text("Prices are shown by the App Store for your region.")
-        }
-    }
-
-    @ViewBuilder
-    private var purchaseSection: some View {
-        if case .loaded = viewModel.productsState {
-            Section {
                 Button {
                     Task { await viewModel.purchaseSelectedPlan() }
                 } label: {
@@ -245,13 +323,61 @@ struct SettingsSubscriptionView: View {
                             .fontWeight(.semibold)
                         Spacer()
                     }
-                    .padding(.vertical, ExperienceSpacing.xs)
+                    .padding(.vertical, ExperienceSpacing.xxs)
                 }
                 .disabled(viewModel.isPrimaryActionDisabled)
                 .accessibilityIdentifier("settings.subscription.subscribe")
-            } footer: {
+            }
+        } header: {
+            sectionHeading("Choose Your Plan")
+        } footer: {
+            if case .loaded = viewModel.productsState {
                 Text(SubscriptionPresentationPolicy.autoRenewDisclosure(selectedProduct: viewModel.selectedProduct))
             }
+        }
+    }
+
+    private func planCard(_ product: StoreKitTraxProProduct) -> some View {
+        let isSelected = viewModel.selectedProduct?.id == product.id
+        return Button {
+            viewModel.selectProduct(product.id)
+        } label: {
+            HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                    Text(planDuration(product))
+                        .experienceStyle(.subheadline, color: colors.primaryText)
+                    Text(product.displayPrice)
+                        .experienceStyle(.headline, color: colors.primaryText)
+                    if let offer = product.introductoryOfferSummary {
+                        Text(offer)
+                            .experienceStyle(.caption, color: colors.secondaryText)
+                    }
+                }
+                Spacer(minLength: ExperienceSpacing.sm)
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.body)
+                    .foregroundStyle(isSelected ? colors.accent : colors.tertiaryText)
+            }
+            .frame(minHeight: 44, alignment: .center)
+            .padding(.vertical, ExperienceSpacing.xxs)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(isSelected ? colors.accent.opacity(0.12) : nil)
+        .accessibilityIdentifier("settings.subscription.product.\(product.id)")
+    }
+
+    private var manageSection: some View {
+        Section {
+            Button {
+                Task { await viewModel.manageSubscription() }
+            } label: {
+                SettingsPrimaryActionLabel(
+                    title: "Manage Subscription",
+                    systemImage: "arrow.up.right.square"
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -259,8 +385,6 @@ struct SettingsSubscriptionView: View {
         Section {
             legalLink(title: "Terms of Use", url: LegalDocuments.terms)
             legalLink(title: "Privacy Policy", url: LegalDocuments.privacy)
-        } header: {
-            Text("Legal")
         }
     }
 
@@ -277,8 +401,43 @@ struct SettingsSubscriptionView: View {
             .buttonStyle(.plain)
             .disabled(viewModel.actionState == .restoring || viewModel.actionState == .purchasing)
             .accessibilityIdentifier("settings.subscription.restore")
-        } footer: {
-            Text("Restores App Store purchases for the signed-in Apple ID on this device.")
+        }
+    }
+
+    private func sectionHeading(_ title: String) -> some View {
+        Text(title)
+            .experienceStyle(.footnote, color: colors.secondaryText)
+            .textCase(nil)
+    }
+
+    private func featureRow(title: String, detail: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
+            Image(systemName: "checkmark")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(colors.accent)
+                .frame(width: 14, alignment: .center)
+            Text(title)
+                .experienceStyle(.subheadline, color: colors.primaryText)
+            Spacer(minLength: ExperienceSpacing.xs)
+            Text(detail)
+                .experienceStyle(.caption, color: colors.secondaryText)
+        }
+    }
+
+    private func benefitRow(title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+            Image(systemName: "checkmark")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(colors.accent)
+                .frame(width: 14, alignment: .center)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .experienceStyle(.subheadline, color: colors.primaryText)
+                Text(detail)
+                    .experienceStyle(.caption, color: colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -289,5 +448,26 @@ struct SettingsSubscriptionView: View {
             SettingsNavigationRow(title: title, showsChevron: true)
         }
         .buttonStyle(.plain)
+    }
+
+    private func dailyTrades(_ status: BillingStatus) -> Int {
+        status.dailyTradeLimit ?? FreeTierPolicy.dailyTradeLimit
+    }
+
+    private func dailyPosts(_ status: BillingStatus) -> Int {
+        status.dailyPostLimit ?? FreeTierPolicy.dailyPostLimit
+    }
+
+    private func dailyMessages(_ status: BillingStatus) -> Int {
+        status.dailyMessageLimit ?? FreeTierPolicy.dailyDirectMessageLimit
+    }
+
+    private func activeAccounts(_ status: BillingStatus) -> Int {
+        status.maxTradeEntryAccounts ?? FreeTierPolicy.maxTradeEntryAccounts
+    }
+
+    private func planDuration(_ product: StoreKitTraxProProduct) -> String {
+        let label = product.subscriptionPeriodLabel
+        return label == "Subscription" ? product.displayName : label
     }
 }

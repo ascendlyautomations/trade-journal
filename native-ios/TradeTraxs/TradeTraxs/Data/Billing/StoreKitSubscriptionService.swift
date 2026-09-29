@@ -59,12 +59,22 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
 
     func loadProducts() async throws -> [StoreKitTraxProProduct] {
         guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else {
-            logStoreKitProducts(requested: [], loaded: [])
+            logStoreKitProducts(requested: [], loaded: [], loadError: "paywall disabled")
             return []
         }
         let ids = TraxProProductConfiguration.allProductIDs
-        let products = try await Product.products(for: ids)
-        logStoreKitProducts(requested: ids, loaded: products.map(\.id))
+        let products: [Product]
+        do {
+            products = try await Product.products(for: ids)
+        } catch {
+            logStoreKitProducts(requested: ids, loaded: [], loadError: String(describing: error))
+            throw error
+        }
+        logStoreKitProducts(
+            requested: ids,
+            loaded: products.map(\.id),
+            loadError: products.isEmpty ? "StoreKit returned no products" : "none"
+        )
         let sorted = products.sorted { lhs, rhs in
             Self.sortOrder(for: lhs.id) < Self.sortOrder(for: rhs.id)
         }
@@ -252,13 +262,14 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
         }
     }
 
-    private func logStoreKitProducts(requested: [String], loaded: [String]) {
+    private func logStoreKitProducts(requested: [String], loaded: [String], loadError: String) {
         #if DEBUG
         print(
             """
             [StoreKit]
             requestedProducts=\(requested)
             loadedProducts=\(loaded)
+            loadError=\(loadError)
             """
         )
         #endif

@@ -20,6 +20,13 @@ nonisolated struct DefaultBillingRepository: BillingRepository, MonetizationConf
 
     func refreshMonetizationConfiguration(for profileID: ProfileID) async {
         let userID = profileID.rawValue
+        await MonetizationConfigRefreshFlight.shared.run(userID: userID) { [self] in
+            await self.fetchAndApplyMonetizationConfiguration(for: profileID)
+        }
+    }
+
+    private func fetchAndApplyMonetizationConfiguration(for profileID: ProfileID) async -> Bool {
+        let userID = profileID.rawValue
         MonetizationRuntimeConfiguration.shared.restoreCache(userID: userID)
         guard let entitlementClient else {
             logMonetizationConfig(
@@ -29,7 +36,7 @@ nonisolated struct DefaultBillingRepository: BillingRepository, MonetizationConf
                 effectivePaywall: MonetizationRuntimeConfiguration.shared.iosPaywallEnabled,
                 source: "noClient"
             )
-            return
+            return false
         }
         do {
             let config = try await entitlementClient.fetchMonetizationConfig()
@@ -48,6 +55,7 @@ nonisolated struct DefaultBillingRepository: BillingRepository, MonetizationConf
                 effectivePaywall: config.iosPaywallEnabled,
                 source: source
             )
+            return true
         } catch {
             // Keep the restored cache, or false when there is no cache.
             logMonetizationConfig(
@@ -57,6 +65,7 @@ nonisolated struct DefaultBillingRepository: BillingRepository, MonetizationConf
                 effectivePaywall: MonetizationRuntimeConfiguration.shared.iosPaywallEnabled,
                 source: "fetchFailed \(monetizationConfigFailureLabel(error))"
             )
+            return false
         }
     }
 

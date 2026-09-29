@@ -140,6 +140,7 @@ final class SettingsSubscriptionViewModel {
         if let cached = SessionBillingEntitlementStore.shared.status {
             status = cached
         }
+        logSubscriptionScreen()
         Task { await refreshAll(reloadProducts: true) }
     }
 
@@ -267,11 +268,15 @@ final class SettingsSubscriptionViewModel {
         }
 
         await reconcileEntitlements(profileID: ProfileID(userID.rawValue))
-        if IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled,
-           reloadProducts, showsFreePlanDetails
-        {
+        logSubscriptionScreen()
+        let shouldLoadProducts = IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled
+            && reloadProducts
+            && showsFreePlanDetails
+        logProductLoadStarted(shouldLoadProducts)
+        if shouldLoadProducts {
             await loadProductsIfNeeded(force: false)
         }
+        logRenderedPlans()
     }
 
     private func reconcileEntitlements(profileID: ProfileID? = nil) async {
@@ -321,5 +326,50 @@ final class SettingsSubscriptionViewModel {
         } catch {
             productsState = .failed
         }
+    }
+
+    private func logSubscriptionScreen() {
+        #if DEBUG
+        let source = status?.entitlementSource.rawValue ?? "unavailable"
+        let isPro = status?.hasTraxProAccess == true
+        print(
+            """
+            [Subscription]
+            screenAppeared=true
+            effectivePaywall=\(IosSubscriptionReleaseConfiguration.iosPaywallEnabled)
+            entitlementSource=\(source)
+            isPro=\(isPro)
+            shouldOfferApplePurchase=\(showsFreePlanDetails)
+            """
+        )
+        #endif
+    }
+
+    private func logProductLoadStarted(_ started: Bool) {
+        #if DEBUG
+        print(
+            """
+            [Subscription]
+            loadStarted=\(started)
+            """
+        )
+        #endif
+    }
+
+    private func logRenderedPlans() {
+        #if DEBUG
+        let rendered: [String]
+        if showsApplePurchaseSection, case .loaded(let products) = productsState {
+            rendered = products.map(\.id)
+        } else {
+            rendered = []
+        }
+        print(
+            """
+            [Subscription]
+            renderedPlans=\(rendered)
+            """
+        )
+        #endif
     }
 }
