@@ -64,10 +64,10 @@ export default function AdminUpdatesPage() {
 
   useEffect(() => {
     ;(async () => {
-      const admin = await getCurrentAdminCheckResult()
-      setAllowed(admin.ok)
+      const check = await getCurrentAdminCheckResult()
+      setAllowed(check.isAdmin)
       setChecking(false)
-      if (admin.ok) {
+      if (check.isAdmin) {
         try {
           await load()
         } catch (e) {

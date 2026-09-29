@@ -146,7 +146,7 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
 
     func presentOfferCodeRedemption() async throws {
         guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else { return }
-        guard let scene = Self.foregroundWindowScene() else {
+        guard let scene = await StoreKitSubscriptionWindowScene.foreground() else {
             throw AppError.unknown(message: "Offer code redemption is unavailable right now.")
         }
         try await AppStore.presentOfferCodeRedeemSheet(in: scene)
@@ -187,13 +187,6 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
                 "StoreKit transaction update failed: \(error.localizedDescription, privacy: .public)"
             )
         }
-    }
-
-    nonisolated private static func foregroundWindowScene() -> UIWindowScene? {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first(where: { $0.activationState == .foregroundActive })
-            ?? UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
     }
 
     nonisolated private static func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
@@ -301,6 +294,16 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
         case .yearly: return 2
         case .none: return 99
         }
+    }
+}
+
+@MainActor
+enum StoreKitSubscriptionWindowScene {
+    static func foreground() -> UIWindowScene? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first(where: { $0.activationState == .foregroundActive })
+            ?? UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
     }
 }
 
