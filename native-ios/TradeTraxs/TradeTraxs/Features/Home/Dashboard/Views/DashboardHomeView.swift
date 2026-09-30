@@ -163,7 +163,8 @@ struct DashboardHomeView: View {
         .onChange(of: BrokerIntegrationMutationStore.shared.revision) { _, _ in
             brokerImportEligibilityStore.refresh(fromUserAction: true)
         }
-        .onChange(of: tabIsActive) { _, isActive in
+        .onChange(of: tabIsActive, initial: true) { _, isActive in
+            viewModel.setHomeTabActive(isActive)
             guard isActive, brokerImportEligibilityStore.isReady else { return }
             brokerImportEligibilityStore.refreshIfStale(fromUserAction: false)
         }

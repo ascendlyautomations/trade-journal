@@ -75,7 +75,10 @@ private struct PickedPhotoTransferable: Transferable {
 }
 
 /// ImageIO / UIKit decode — safe off MainActor (Transferable import runs on a background executor).
-private nonisolated enum PhotosPickerImageDecoder {
+nonisolated enum PhotosPickerImageDecoder {
+    /// Sharp enough for crop/zoom before ~1440px uploads — avoids 12k×12k decode buffers.
+    static let pickerDecodeMaxPixelSize = 4096
+
     enum Stage: String, Sendable {
         case transferableLoad = "transferableLoad"
         case dataFallback = "dataFallback"
@@ -118,7 +121,7 @@ private nonisolated enum PhotosPickerImageDecoder {
         let thumbOptions: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: 12_000,
+            kCGImageSourceThumbnailMaxPixelSize: pickerDecodeMaxPixelSize,
             kCGImageSourceShouldCacheImmediately: true,
         ]
         if let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOptions as CFDictionary) {

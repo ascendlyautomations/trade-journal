@@ -43,6 +43,14 @@ final class ExperienceChromeTests: XCTestCase {
         ExperienceNavigationBarAppearance.configureArrowOnlyBackButtons()
     }
 
+    func testOpaqueBarChromeAppearanceConfigures() {
+        ExperienceNavigationBarAppearance.configureOpaqueBarChrome()
+    }
+
+    func testDefaultBarChromeAppearanceConfigures() {
+        ExperienceNavigationBarAppearance.configureDefaultBarChrome()
+    }
+
     func testExperienceAppChromeModifierBuilds() {
         let view = Text("shell").experienceAppChrome().experienceScreenBackground()
         XCTAssertNotNil(view)

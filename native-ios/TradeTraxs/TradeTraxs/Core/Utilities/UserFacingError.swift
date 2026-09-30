@@ -52,7 +52,42 @@ nonisolated struct UserFacingError: Sendable, Equatable {
         if let auth = error as? AuthenticationError {
             return map(auth).message
         }
+        if error is DecodingError {
+            return "Unable to load this content. Please try again."
+        }
+        if let urlError = error as? URLError {
+            return map(urlError).message
+        }
         return map(AppError.unknown(message: error.localizedDescription)).message
+    }
+
+    private static func map(_ error: URLError) -> UserFacingError {
+        switch error.code {
+        case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed:
+            return UserFacingError(
+                title: "You're offline",
+                message: "Check your connection and try again.",
+                action: .retry
+            )
+        case .timedOut:
+            return UserFacingError(
+                title: "Request timed out",
+                message: "The server took too long to respond.",
+                action: .retry
+            )
+        case .cancelled:
+            return UserFacingError(
+                title: "Cancelled",
+                message: "The operation was cancelled.",
+                action: .dismiss
+            )
+        default:
+            return UserFacingError(
+                title: "Something went wrong",
+                message: "Unable to connect. Check your connection and try again.",
+                action: .retry
+            )
+        }
     }
 
     /// Strips Swift dumps, PostgREST bodies, and transport prefixes from unknown paths.
@@ -81,6 +116,30 @@ nonisolated struct UserFacingError: Sendable, Equatable {
         }
         if ProEntitlementResponseSanitizer.containsPurchaseSteering(trimmed) {
             return TraxProFeatureMessaging.featureRequired
+        }
+        if lowered.contains("couldn't be read because it isn't in the correct format")
+            || lowered.contains("data couldn't be read")
+            || lowered.contains("decoding error")
+            || lowered.hasPrefix("the operation couldn't be completed")
+        {
+            return "Unable to load this content. Please try again."
+        }
+        if lowered.contains("html instead of json")
+            || lowered.contains("<!doctype")
+            || lowered.contains("deploy the latest web app")
+            || lowered.contains("platform updates api")
+            || lowered.contains("http 404")
+            || lowered.contains("http 5")
+        {
+            return "Unable to load updates. Please try again."
+        }
+        if lowered.contains("reconnect")
+            || lowered.contains("tradovate connection")
+            || lowered.contains("rithmic connection")
+            || lowered.contains("sign in to tradovate")
+            || lowered.contains("broker connection")
+        {
+            return trimmed
         }
         return trimmed
     }

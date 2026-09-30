@@ -6,7 +6,7 @@ import Foundation
 /// `/storage/v1/render/image/public/{bucket}/path?width=&quality=&resize=`.
 nonisolated enum StorageImageTransform {
     /// Bump when feed render query params change so image caches miss stale cropped bytes.
-    static let feedDisplayCacheRevision = 2
+    static let feedDisplayCacheRevision = 3
     /// Bump when profile grid render params change.
     static let profileGridCacheRevision = 1
 
@@ -35,32 +35,25 @@ nonisolated enum StorageImageTransform {
         return (components.string ?? url.absoluteString).lowercased()
     }
 
+    /// Object/public URL for full-resolution delivery (optimized `/opt/` assets, not legacy giants).
+    static func deliveryObjectURL(for url: URL) -> URL {
+        guard isSupabaseStoragePublicURL(url) else { return url }
+        return objectPublicBaseURL(for: url)
+    }
+
     static func optimizedURL(for url: URL, preset: Preset) -> URL {
         guard isSupabaseStoragePublicURL(url) else { return url }
 
-        if StorageOptimizedMedia.isOptimizedStorageURL(url) {
-            let objectURL = StorageOptimizedMedia.objectPublicURL(from: url)
-            #if DEBUG
-            StorageOptimizedMedia.logDelivery(
-                url: objectURL,
-                assetPolicy: "optimizedObject",
-                delivery: "object",
-                preset: String(describing: preset)
-            )
-            #endif
-            return objectURL
-        }
+        let objectBase = objectPublicBaseURL(for: url)
+        let renderBase = objectBase.absoluteString.replacingOccurrences(
+            of: objectPublic,
+            with: renderPublic
+        ).split(separator: "?").first.map(String.init)
+            ?? objectBase.absoluteString
 
-        let renderBase: String
-        if url.path.contains(renderPublic) {
-            renderBase = url.absoluteString.split(separator: "?").first.map(String.init) ?? url.absoluteString
-        } else {
-            renderBase = url.absoluteString.replacingOccurrences(
-                of: objectPublic,
-                with: renderPublic
-            ).split(separator: "?").first.map(String.init)
-                ?? url.absoluteString
-        }
+        let assetPolicy = StorageOptimizedMedia.isOptimizedStorageURL(objectBase)
+            ? "optimizedObject"
+            : "legacy"
 
         var query = URLComponents(string: renderBase)?.queryItems ?? []
         query.removeAll()
@@ -111,12 +104,19 @@ nonisolated enum StorageImageTransform {
         #if DEBUG
         StorageOptimizedMedia.logDelivery(
             url: transformed,
-            assetPolicy: "legacy",
+            assetPolicy: assetPolicy,
             delivery: "transform",
             preset: String(describing: preset)
         )
         #endif
         return transformed
+    }
+
+    private static func objectPublicBaseURL(for url: URL) -> URL {
+        if url.path.contains(renderPublic) {
+            return StorageOptimizedMedia.objectPublicURL(from: url)
+        }
+        return url
     }
 
     static func preset(for purpose: ImagePurpose, delivery: ImageDeliveryQuality) -> Preset? {

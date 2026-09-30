@@ -41,41 +41,23 @@ nonisolated enum CSVTradeBuilder {
         fileName: String,
         headers: [String],
         rows: [[String: String]],
-        format: CSVFileFormat,
+        format: CSVFileFormat? = nil,
         mappings: [CSVColumnMapping]? = nil
     ) -> CSVParseSummary {
         var trades: [CSVParsedTrade] = []
         var failures: [CSVParseRowFailure] = []
 
+        let isTradovateFile = rows.first.map { isTradovate($0) } ?? false
+        let summaryFormat = format ?? detectFormat(headers: headers, firstRow: rows.first)
+
         for (index, row) in rows.enumerated() {
             let rowNumber = index + 2
-            let result: Result<CSVParsedTrade, RowError>
-            switch format {
-            case .tradovate:
-                result = parseTradovate(row: row, rowNumber: rowNumber)
-            case .tradezella:
-                result = parseTradeZella(row: row, rowNumber: rowNumber)
-            case .enteredExited:
-                result = parseEnteredExited(row: row, rowNumber: rowNumber)
-            case .flexible:
-                let fields: [CSVLogicalField: String]
-                if let mappings {
-                    fields = applyMappings(row: row, mappings: mappings)
-                } else {
-                    fields = CSVHeaderAliases.mapHeadersToFields(row)
-                }
-                if fields.isEmpty {
-                    result = .failure(
-                        RowError(
-                            message: "No recognized columns. Check headers match Date, Symbol, Direction, PnL, etc."
-                        )
-                    )
-                } else {
-                    result = parseFlexible(fields: fields, rowNumber: rowNumber)
-                }
-            case .screenshot:
-                result = .failure(RowError(message: "Screenshot imports use the screenshot pipeline, not CSV parsing."))
-            }
+            let result = parseRow(
+                row: row,
+                rowNumber: rowNumber,
+                isTradovateFile: isTradovateFile,
+                mappings: mappings
+            )
 
             switch result {
             case .success(let trade):
@@ -86,7 +68,7 @@ nonisolated enum CSVTradeBuilder {
         }
 
         #if DEBUG
-        print("[CSV] detected format=\(format.rawValue)")
+        print("[CSV] detected format=\(summaryFormat.rawValue)")
         print(
             "[CSV] normalized headers=\(headers.map { CSVHeaderAliases.normalizeHeaderKey($0) }.joined(separator: " | "))"
         )
@@ -99,7 +81,7 @@ nonisolated enum CSVTradeBuilder {
         #endif
         print("[CSV] rows parsed")
         return CSVParseSummary(
-            format: format,
+            format: summaryFormat,
             fileName: fileName,
             totalRows: rows.count,
             successCount: trades.count,
@@ -108,6 +90,45 @@ nonisolated enum CSVTradeBuilder {
             trades: trades,
             failures: failures
         )
+    }
+
+    /// Web `buildTradesFromParsedCsv` row dispatch.
+    private static func parseRow(
+        row: [String: String],
+        rowNumber: Int,
+        isTradovateFile: Bool,
+        mappings: [CSVColumnMapping]?
+    ) -> Result<CSVParsedTrade, RowError> {
+        if isTradovateFile {
+            return parseTradovate(row: row, rowNumber: rowNumber)
+        }
+        if let mappings {
+            let fields = applyMappings(row: row, mappings: mappings)
+            if fields.isEmpty {
+                return .failure(
+                    RowError(
+                        message: "No recognized columns. Check headers match Date, Symbol, Direction, PnL, etc."
+                    )
+                )
+            }
+            return parseFlexible(fields: fields, rowNumber: rowNumber)
+        }
+        let zellaNorm = normalizeRowKeysForTradeZella(row)
+        if isTradeZellaShaped(zellaNorm) {
+            return parseTradeZella(row: row, rowNumber: rowNumber)
+        }
+        if isEnteredExited(row) {
+            return parseEnteredExited(row: row, rowNumber: rowNumber)
+        }
+        let fields = CSVHeaderAliases.mapHeadersToFields(row)
+        if fields.isEmpty {
+            return .failure(
+                RowError(
+                    message: "No recognized columns. Check headers match Date, Symbol, Direction, PnL, etc."
+                )
+            )
+        }
+        return parseFlexible(fields: fields, rowNumber: rowNumber)
     }
 
     static func needsManualMapping(summary: CSVParseSummary) -> Bool {
@@ -138,8 +159,18 @@ nonisolated enum CSVTradeBuilder {
         return false
     }
 
-    private static func isTradeZella(_ row: [String: String]) -> Bool {
-        let keys = Set(row.keys.map { $0.lowercased().trimmingCharacters(in: .whitespacesAndNewlines) })
+    private static func normalizeRowKeysForTradeZella(_ row: [String: String]) -> [String: String] {
+        var out: [String: String] = [:]
+        for (key, value) in row {
+            let k = key.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            if !k.isEmpty { out[k] = value }
+        }
+        return out
+    }
+
+    /// Web `isTradeZellaShapedRow` — header keys only.
+    private static func isTradeZellaShaped(_ normalized: [String: String]) -> Bool {
+        let keys = Set(normalized.keys)
         if keys.contains("open date") && keys.contains("close date") { return true }
         if keys.contains("instrument"),
            keys.contains("p&l") || keys.contains("net p&l") || keys.contains("gross p&l")
@@ -154,6 +185,10 @@ nonisolated enum CSVTradeBuilder {
         }
         if keys.contains("reward ratio") && keys.contains("open date") { return true }
         return false
+    }
+
+    private static func isTradeZella(_ row: [String: String]) -> Bool {
+        isTradeZellaShaped(normalizeRowKeysForTradeZella(row))
     }
 
     private static func isEnteredExited(_ row: [String: String]) -> Bool {
@@ -175,6 +210,9 @@ nonisolated enum CSVTradeBuilder {
             in: row,
             aliases: ["sellPrice", "sell price", "exit price", "exit"]
         )
+        if entryRaw == nil || exitRaw == nil {
+            return .failure(RowError(message: "Tradovate row missing buy/sell price"))
+        }
         let entry = CSVNumericParser.parse(entryRaw)
         let exit = CSVNumericParser.parse(exitRaw)
         if entryRaw != nil, entry == nil {
@@ -217,33 +255,22 @@ nonisolated enum CSVTradeBuilder {
             aliases: ["soldTimestamp", "sold timestamp", "exit time"]
         )
         let sideRaw = CSVHeaderAliases.cell(in: row, aliases: ["side", "direction", "action"])
+        let durationRaw = CSVHeaderAliases.cell(
+            in: row,
+            aliases: ["duration", "trade duration", "hold time", "time in trade", "hold"]
+        )
 
-        let boughtResolved = resolveTradovateTimestamp(
-            raw: boughtTsRaw,
-            fieldName: "boughtTimestamp"
-        )
-        let soldResolved = resolveTradovateTimestamp(
-            raw: soldTsRaw,
-            fieldName: "soldTimestamp"
-        )
-        let boughtOpt: Date?
-        let soldOpt: Date?
-        switch (boughtResolved, soldResolved) {
-        case (.failure(let error), _), (_, .failure(let error)):
-            return .failure(error)
-        case (.success(let bought), .success(let sold)):
-            boughtOpt = bought
-            soldOpt = sold
-        }
+        let boughtOpt = resolveTradovateTimestamp(raw: boughtTsRaw)
+        let soldOpt = resolveTradovateTimestamp(raw: soldTsRaw)
         let now = Date()
         let bought = boughtOpt ?? now
         let sold = soldOpt ?? bought
-        let normalized = normalizeEntryExit(
+        let normalized = CSVEntryExitNormalization.normalize(
             entry: bought,
             exit: sold,
             entryPrice: entry,
             exitPrice: exit,
-            swapPrices: true
+            swapPricesWhenReordering: true
         )
         let side = normalizeDirection(sideRaw)
             ?? inferSide(entry: normalized.entryPrice, exit: normalized.exitPrice)
@@ -251,11 +278,25 @@ nonisolated enum CSVTradeBuilder {
 
         var points: Decimal?
         if let ep = normalized.entryPrice, let xp = normalized.exitPrice {
-            points = directionalPoints(side: side, entry: ep, exit: xp)
+            var computed = directionalPoints(side: side, entry: ep, exit: xp)
+            let tickSizeRaw = CSVHeaderAliases.cell(
+                in: row,
+                aliases: ["_tickSize", "tickSize", "tick size"]
+            )
+            if let tickSizeRaw, let tickSize = CSVNumericParser.parseDouble(tickSizeRaw), tickSize > 0 {
+                computed = Decimal(roundPointsToTickSize(
+                    NSDecimalNumber(decimal: computed).doubleValue,
+                    tickSize: tickSize
+                ))
+            }
+            points = computed
         }
-        let rr = parseRR(
-            CSVHeaderAliases.cell(in: row, aliases: ["rr", "r:r", "risk reward", "reward ratio"])
-        )
+        let rr = parseRR(CSVHeaderAliases.rrCell(in: row))
+
+        var durationSeconds = normalized.durationSeconds
+        if durationSeconds == nil, let durationRaw {
+            durationSeconds = CSVDurationParsing.parse(durationRaw)
+        }
 
         var warnings: [String] = []
         if ticker.isEmpty { warnings.append("Missing Symbol") }
@@ -275,7 +316,8 @@ nonisolated enum CSVTradeBuilder {
                 rr: rr,
                 points: points,
                 notes: "",
-                warnings: warnings
+                warnings: warnings,
+                durationSeconds: durationSeconds
             )
         )
     }
@@ -329,13 +371,17 @@ nonisolated enum CSVTradeBuilder {
         let exitTimeRaw = value(["close time"])
         let entryAt = combineDateTimeUTC(date: entryDate ?? baseRaw, time: entryTimeRaw) ?? baseDate
         let exitAt = combineDateTimeUTC(date: exitDate ?? baseRaw, time: exitTimeRaw) ?? entryAt
-        let normalized = normalizeExplicitEntryExit(
-            entry: entryAt,
-            exit: exitAt,
+        let now = Date()
+        let entryResolved = entryAt.timeIntervalSince1970.isFinite ? entryAt : now
+        let exitResolved = exitAt.timeIntervalSince1970.isFinite ? exitAt : entryResolved
+        let normalized = CSVEntryExitNormalization.normalize(
+            entry: entryResolved,
+            exit: exitResolved,
             entryPrice: entryPrice,
-            exitPrice: exitPrice
+            exitPrice: exitPrice,
+            swapPricesWhenReordering: false
         )
-        let rr = parseRR(value(["reward ratio", "rr", "r:r"]))
+        let rr = parseRR(CSVHeaderAliases.rrCell(in: row))
         let points = CSVNumericParser.parse(value(["points"]))
         var warnings: [String] = []
         if symbolRaw.isEmpty { warnings.append("Missing Symbol") }
@@ -354,7 +400,8 @@ nonisolated enum CSVTradeBuilder {
                 rr: rr,
                 points: points,
                 notes: "",
-                warnings: warnings
+                warnings: warnings,
+                durationSeconds: normalized.durationSeconds
             )
         )
     }
@@ -404,25 +451,13 @@ nonisolated enum CSVTradeBuilder {
             )
         }
         #endif
-        let normalized = normalizeExplicitEntryExit(
+        let normalized = CSVEntryExitNormalization.normalize(
             entry: entry,
             exit: exit,
             entryPrice: entryPrice,
-            exitPrice: exitPrice
+            exitPrice: exitPrice,
+            swapPricesWhenReordering: false
         )
-        #if DEBUG
-        if exit <= entry {
-            let durationSeconds = Int(normalized.exit.timeIntervalSince(normalized.entry).rounded())
-            print(
-                """
-                [CSV_TIME_TRACE]
-                normalizedEntry=\(normalized.entry)
-                normalizedExit=\(normalized.exit)
-                durationSeconds=\(durationSeconds)
-                """
-            )
-        }
-        #endif
         let side = normalizeDirection(
             CSVHeaderAliases.cell(in: row, aliases: CSVHeaderAliases.enteredExitedDirection)
         ) ?? inferSide(entry: normalized.entryPrice, exit: normalized.exitPrice) ?? .short
@@ -444,10 +479,11 @@ nonisolated enum CSVTradeBuilder {
                 entryAt: normalized.entry,
                 exitAt: normalized.exit,
                 pnl: pnl,
-                rr: parseRR(CSVHeaderAliases.cell(in: row, aliases: ["rr", "r:r", "reward ratio"])),
+                rr: parseRR(CSVHeaderAliases.rrCell(in: row)),
                 points: nil,
                 notes: "",
-                warnings: warnings
+                warnings: warnings,
+                durationSeconds: normalized.durationSeconds
             )
         )
     }
@@ -492,7 +528,11 @@ nonisolated enum CSVTradeBuilder {
             guard let c = CSVNumericParser.parse(raw), c >= 0 else {
                 return .failure(RowError(message: "Invalid contracts/qty: \"\(raw)\""))
             }
-            contracts = c == 0 ? 1 : c
+            let cInt = NSDecimalNumber(decimal: c).intValue
+            guard Decimal(cInt) == c else {
+                return .failure(RowError(message: "Invalid contracts/qty: \"\(raw)\""))
+            }
+            contracts = c == 0 ? 1 : Decimal(max(0, cInt))
         }
 
         var entryAt = dateIso
@@ -503,12 +543,18 @@ nonisolated enum CSVTradeBuilder {
         if let t = fields[.exitTime], let merged = combineLocalDateTime(date: dateIso, time: t) {
             exitAt = merged
         }
-        let normalized = normalizeExplicitEntryExit(
+        let normalized = CSVEntryExitNormalization.normalize(
             entry: entryAt,
             exit: exitAt,
             entryPrice: entryN,
-            exitPrice: exitN
+            exitPrice: exitN,
+            swapPricesWhenReordering: false
         )
+
+        var durationSeconds = normalized.durationSeconds
+        if durationSeconds == nil, let durationText = fields[.duration] {
+            durationSeconds = CSVDurationParsing.parse(durationText)
+        }
 
         var notesParts: [String] = []
         if let n = fields[.notes], !n.isEmpty { notesParts.append(sanitizeNotes(n)) }
@@ -545,7 +591,8 @@ nonisolated enum CSVTradeBuilder {
                 csvAccountName: fields[.accountName],
                 csvAccountID: fields[.accountID],
                 csvAccountSize: fields[.accountSize],
-                sessionOverride: fields[.session]
+                sessionOverride: fields[.session],
+                durationSeconds: durationSeconds
             )
         )
     }
@@ -585,7 +632,8 @@ nonisolated enum CSVTradeBuilder {
         csvAccountName: String? = nil,
         csvAccountID: String? = nil,
         csvAccountSize: String? = nil,
-        sessionOverride: String? = nil
+        sessionOverride: String? = nil,
+        durationSeconds explicitDuration: Int? = nil
     ) -> CSVParsedTrade {
         let status: CSVTradeParseStatus
         if symbol.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -617,7 +665,7 @@ nonisolated enum CSVTradeBuilder {
             csvAccountName: csvAccountName,
             csvAccountID: csvAccountID,
             csvAccountSize: csvAccountSize,
-            durationSeconds: {
+            durationSeconds: explicitDuration ?? {
                 guard let exitAt else { return nil }
                 let seconds = Int(exitAt.timeIntervalSince(entryAt))
                 return seconds > 0 ? seconds : nil
@@ -687,66 +735,26 @@ nonisolated enum CSVTradeBuilder {
         return s
     }
 
-    private struct NormalizedTimes {
-        var entry: Date
-        var exit: Date
-        var entryPrice: Decimal?
-        var exitPrice: Decimal?
-    }
-
-    /// Tradovate buy/sell timestamps may arrive out of order — swap to chronological execution.
-    private static func normalizeEntryExit(
-        entry: Date,
-        exit: Date,
-        entryPrice: Decimal?,
-        exitPrice: Decimal?,
-        swapPrices: Bool
-    ) -> NormalizedTimes {
-        if exit < entry {
-            return NormalizedTimes(
-                entry: exit,
-                exit: entry,
-                entryPrice: swapPrices ? exitPrice : entryPrice,
-                exitPrice: swapPrices ? entryPrice : exitPrice
-            )
-        }
-        return NormalizedTimes(entry: entry, exit: exit, entryPrice: entryPrice, exitPrice: exitPrice)
-    }
-
-    /// Explicit entry/exit columns (Golden, TopStep, flexible time fields): never swap open/close.
-    /// When exit clock time is earlier on the trade date, roll exit to the next calendar day (session crossed midnight).
-    private static func normalizeExplicitEntryExit(
-        entry: Date,
-        exit: Date,
-        entryPrice: Decimal?,
-        exitPrice: Decimal?
-    ) -> NormalizedTimes {
-        var adjustedExit = exit
-        if adjustedExit <= entry,
-           let rolled = Calendar.current.date(byAdding: .day, value: 1, to: adjustedExit)
-        {
-            adjustedExit = rolled
-        }
-        return NormalizedTimes(
-            entry: entry,
-            exit: adjustedExit,
-            entryPrice: entryPrice,
-            exitPrice: exitPrice
-        )
-    }
-
-    /// Tradovate Performance exports: missing/blank → `nil` (caller may fallback); present invalid → failure.
-    private static func resolveTradovateTimestamp(
-        raw: String?,
-        fieldName: String
-    ) -> Result<Date?, RowError> {
-        guard let raw else { return .success(nil) }
+    /// Web Tradovate: missing/blank/unparseable → nil (caller falls back to `now`).
+    private static func resolveTradovateTimestamp(raw: String?) -> Date? {
+        guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return .success(nil) }
-        guard let parsed = parseDate(trimmed) else {
-            return .failure(RowError(message: "Invalid \(fieldName): \"\(trimmed)\""))
-        }
-        return .success(parsed)
+        if trimmed.isEmpty { return nil }
+        return parseDate(trimmed)
+    }
+
+    /// Web `roundPointsToTickSize`.
+    private static func roundPointsToTickSize(_ points: Double, tickSize: Double) -> Double {
+        guard tickSize.isFinite, tickSize > 0 else { return points }
+        let tickString = String(tickSize)
+        let decimals: Int = {
+            guard let dot = tickString.firstIndex(of: ".") else { return 0 }
+            return tickString.distance(from: tickString.index(after: dot), to: tickString.endIndex)
+        }()
+        let snapped = (points / tickSize).rounded() * tickSize
+        let precision = min(decimals + 2, 8)
+        let factor = pow(10.0, Double(precision))
+        return (snapped * factor).rounded() / factor
     }
 
     private static func parseDate(_ raw: String?) -> Date? {

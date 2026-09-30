@@ -28,7 +28,11 @@ final class FollowListViewModel {
     private let navigationCoordinator: NavigationCoordinator
 
     private var loadTask: Task<Void, Never>?
+    private var loadMoreTask: Task<Void, Never>?
     private var hasLoaded = false
+    private var nextCursor: String?
+    private var hasMorePages = false
+    private(set) var isLoadingMore = false
     private var viewerID: ProfileID?
     private var inFlightFollow: Set<ProfileID> = []
 
@@ -79,9 +83,18 @@ final class FollowListViewModel {
 
     func refresh() async {
         loadTask?.cancel()
+        loadMoreTask?.cancel()
+        nextCursor = nil
+        hasMorePages = false
         isRefreshing = true
         await performLoad(forceNetwork: true)
         isRefreshing = false
+    }
+
+    func loadMoreIfNeeded(currentProfileID: ProfileID) {
+        guard hasMorePages, !isLoadingMore, loadMoreTask == nil else { return }
+        guard let last = items.last?.id, last == currentProfileID else { return }
+        loadMoreTask = Task { await performLoadMore() }
     }
 
     func openProfile(_ profile: Profile) {
@@ -138,7 +151,7 @@ final class FollowListViewModel {
         let userID = await session.currentUserID
         viewerID = userID.map { ProfileID($0.rawValue) }
 
-        if !forceNetwork, let cached = cachedList() {
+        if !forceNetwork, let cached = cachedList(), !cached.isEmpty {
             items = cached
             viewerFollowingIDs = detailCache.viewerFollowingIDs() ?? []
             hasLoaded = true
@@ -148,6 +161,11 @@ final class FollowListViewModel {
             }
             loadTask = nil
             return
+        }
+
+        if forceNetwork {
+            nextCursor = nil
+            hasMorePages = false
         }
 
         if items.isEmpty {
@@ -164,20 +182,23 @@ final class FollowListViewModel {
 
         do {
             let page: CursorPage<Profile>
+            let request = PageRequest(cursor: nil, limit: FollowListPagination.pageSize)
             switch kind {
             case .followers:
                 page = try await profiles.followers(
                     of: listOwnerID,
-                    page: PageRequest(limit: 500)
+                    page: request
                 )
             case .following:
                 page = try await profiles.following(
                     of: listOwnerID,
-                    page: PageRequest(limit: 500)
+                    page: request
                 )
             }
             guard !Task.isCancelled else { return }
             items = page.items
+            nextCursor = page.nextCursor
+            hasMorePages = page.nextCursor != nil
             seedListCache(page.items)
             hasLoaded = true
             phase = .loaded
@@ -189,6 +210,43 @@ final class FollowListViewModel {
             }
         }
         loadTask = nil
+    }
+
+    private func performLoadMore() async {
+        guard hasMorePages, let cursor = nextCursor, !cursor.isEmpty else {
+            loadMoreTask = nil
+            return
+        }
+        guard !ProfileSectionSupport.isLocalDevelopmentProfile(listOwnerID) else {
+            loadMoreTask = nil
+            return
+        }
+        isLoadingMore = true
+        defer {
+            isLoadingMore = false
+            loadMoreTask = nil
+        }
+        do {
+            let request = PageRequest(cursor: cursor, limit: FollowListPagination.pageSize)
+            let page: CursorPage<Profile>
+            switch kind {
+            case .followers:
+                page = try await profiles.followers(of: listOwnerID, page: request)
+            case .following:
+                page = try await profiles.following(of: listOwnerID, page: request)
+            }
+            guard !Task.isCancelled else { return }
+            var seen = Set(items.map(\.id))
+            for profile in page.items where !seen.contains(profile.id) {
+                items.append(profile)
+                seen.insert(profile.id)
+            }
+            nextCursor = page.nextCursor
+            hasMorePages = page.nextCursor != nil
+            seedListCache(items)
+        } catch {
+            // Keep existing rows — user can retry by scrolling again.
+        }
     }
 
     private func loadViewerFollowing(forceNetwork: Bool) async {
@@ -224,7 +282,10 @@ final class FollowListViewModel {
             return
         }
         do {
-            let page = try await profiles.following(of: viewerID, page: PageRequest(limit: 500))
+            let page = try await profiles.following(
+                of: viewerID,
+                page: PageRequest(limit: FollowListPagination.pageSize)
+            )
             let ids = Set(page.items.map(\.id))
             viewerFollowingIDs = ids
             detailCache.seedViewerFollowingIDs(ids)

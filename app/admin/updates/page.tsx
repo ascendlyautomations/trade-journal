@@ -13,14 +13,12 @@ import {
 } from "@/lib/platformUpdateDestinations"
 import {
   createAdminPlatformUpdate,
-  deleteAdminPlatformUpdateDraft,
+  deleteAdminPlatformUpdate,
   fetchAdminPlatformUpdates,
   patchAdminPlatformUpdate,
   publishAdminPlatformUpdate,
   type AdminPlatformUpdate,
 } from "@/lib/platformUpdatesClient"
-
-type ComposerMode = "create" | "edit"
 
 const emptyForm = {
   title: "",
@@ -28,23 +26,6 @@ const emptyForm = {
   category: "announcement" as PlatformUpdateCategoryId,
   destination: "whats_new" as PlatformUpdateDestinationId,
   sendPush: false,
-  schedule: false,
-  localPublishAt: "",
-}
-
-function toUtcIsoFromLocalInput(localValue: string): string | null {
-  if (!localValue.trim()) return null
-  const d = new Date(localValue)
-  if (Number.isNaN(d.getTime())) return null
-  return d.toISOString()
-}
-
-function formatLocalInput(iso: string | null): string {
-  if (!iso) return ""
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ""
-  const pad = (n: number) => String(n).padStart(2, "0")
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 export default function AdminUpdatesPage() {
@@ -57,6 +38,8 @@ export default function AdminUpdatesPage() {
   const [confirmPublish, setConfirmPublish] = useState(false)
   const [busy, setBusy] = useState(false)
   const [publishNotice, setPublishNotice] = useState<string | null>(null)
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
+  const [deleteTargetPublished, setDeleteTargetPublished] = useState(false)
 
   const load = useCallback(async () => {
     const rows = await fetchAdminPlatformUpdates()
@@ -78,20 +61,13 @@ export default function AdminUpdatesPage() {
     })()
   }, [load])
 
-  const grouped = useMemo(() => {
-    const upcomingAlerts = updates
-      .filter((u) => u.status === "scheduled")
-      .sort((a, b) => {
-        const ta = a.publishAt ? new Date(a.publishAt).getTime() : 0
-        const tb = b.publishAt ? new Date(b.publishAt).getTime() : 0
-        return ta - tb
-      })
-    return {
-      upcomingAlerts,
+  const grouped = useMemo(
+    () => ({
       drafts: updates.filter((u) => u.status === "draft"),
       published: updates.filter((u) => u.status === "published"),
-    }
-  }, [updates])
+    }),
+    [updates]
+  )
 
   function startCreate() {
     setEditingId(null)
@@ -99,7 +75,7 @@ export default function AdminUpdatesPage() {
   }
 
   function startEdit(row: AdminPlatformUpdate) {
-    if (row.status === "published") return
+    if (row.status !== "draft") return
     setEditingId(row.id)
     setForm({
       title: row.title,
@@ -107,44 +83,37 @@ export default function AdminUpdatesPage() {
       category: row.category,
       destination: row.destination,
       sendPush: row.sendPush,
-      schedule: row.status === "scheduled",
-      localPublishAt: formatLocalInput(row.publishAt),
     })
   }
 
-  async function saveDraftOrSchedule() {
+  async function persistDraftId(): Promise<string> {
+    if (editingId) {
+      await patchAdminPlatformUpdate(editingId, {
+        title: form.title,
+        body: form.body,
+        category: form.category,
+        destination: form.destination,
+        sendPush: form.sendPush,
+      })
+      return editingId
+    }
+    const created = await createAdminPlatformUpdate({
+      title: form.title,
+      body: form.body,
+      category: form.category,
+      destination: form.destination,
+      sendPush: form.sendPush,
+    })
+    setEditingId(created.id)
+    return created.id
+  }
+
+  async function saveDraft() {
     setBusy(true)
     setError(null)
     try {
-      const publishAt = form.schedule
-        ? toUtcIsoFromLocalInput(form.localPublishAt)
-        : null
-      if (form.schedule && !publishAt) {
-        throw new Error("Choose a valid schedule date and time.")
-      }
-      if (editingId) {
-        await patchAdminPlatformUpdate(editingId, {
-          title: form.title,
-          body: form.body,
-          category: form.category,
-          destination: form.destination,
-          sendPush: form.sendPush,
-          status: form.schedule ? "scheduled" : "draft",
-          publishAt,
-        })
-      } else {
-        await createAdminPlatformUpdate({
-          title: form.title,
-          body: form.body,
-          category: form.category,
-          destination: form.destination,
-          sendPush: form.sendPush,
-          status: form.schedule ? "scheduled" : "draft",
-          publishAt,
-        })
-      }
+      await persistDraftId()
       await load()
-      startCreate()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed")
     } finally {
@@ -153,12 +122,12 @@ export default function AdminUpdatesPage() {
   }
 
   async function runPublish() {
-    if (!editingId) return
     setBusy(true)
     setError(null)
     setPublishNotice(null)
     try {
-      const result = await publishAdminPlatformUpdate(editingId)
+      const id = await persistDraftId()
+      const result = await publishAdminPlatformUpdate(id)
       setConfirmPublish(false)
       await load()
       startCreate()
@@ -182,7 +151,7 @@ export default function AdminUpdatesPage() {
         if (d.incomplete) {
           setPublishNotice(
             (prev) =>
-              `${prev ?? ""} Broadcast still sending (large audience) — resume via cron when enabled.`.trim()
+              `${prev ?? ""} Broadcast still sending (large audience).`.trim()
           )
         }
       } else {
@@ -236,7 +205,7 @@ export default function AdminUpdatesPage() {
 
         <section className="rounded-xl border border-white/10 bg-black/20 p-4 space-y-4">
           <h2 className="text-lg font-semibold">
-            {editingId ? "Edit update" : "New update"}
+            {editingId ? "Edit draft" : "New update"}
           </h2>
           <div className="grid gap-3 md:grid-cols-2">
             <label className="block text-sm">
@@ -302,46 +271,23 @@ export default function AdminUpdatesPage() {
             />
             Send push notification to all registered iOS devices
           </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.schedule}
-              onChange={(e) => setForm({ ...form, schedule: e.target.checked })}
-            />
-            Schedule for later (otherwise save as draft)
-          </label>
-          {form.schedule && (
-            <label className="block text-sm">
-              Publish at (your local timezone)
-              <input
-                type="datetime-local"
-                className="mt-1 w-full max-w-xs rounded-lg border border-white/10 bg-black/30 px-3 py-2"
-                value={form.localPublishAt}
-                onChange={(e) =>
-                  setForm({ ...form, localPublishAt: e.target.value })
-                }
-              />
-            </label>
-          )}
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               disabled={busy}
               className="rounded-lg bg-white/10 px-4 py-2 text-sm font-medium hover:bg-white/20 disabled:opacity-50"
-              onClick={() => void saveDraftOrSchedule()}
+              onClick={() => void saveDraft()}
             >
-              {form.schedule ? "Save schedule" : "Save draft"}
+              Save draft
             </button>
-            {editingId && !form.schedule && (
-              <button
-                type="button"
-                disabled={busy}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50"
-                onClick={() => setConfirmPublish(true)}
-              >
-                Publish now
-              </button>
-            )}
+            <button
+              type="button"
+              disabled={busy}
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50"
+              onClick={() => setConfirmPublish(true)}
+            >
+              {form.sendPush ? "Publish & Send" : "Publish now"}
+            </button>
             <button
               type="button"
               className="rounded-lg px-4 py-2 text-sm text-gray-300 hover:bg-white/5"
@@ -377,104 +323,79 @@ export default function AdminUpdatesPage() {
           )}
         </section>
 
-        <UpcomingAlertsSection
-          rows={grouped.upcomingAlerts}
-          onEdit={startEdit}
-          onCancel={async (id) => {
-            await patchAdminPlatformUpdate(id, { status: "cancelled" })
-            await load()
-          }}
-        />
         <UpdateSection
           title="Drafts"
           rows={grouped.drafts}
           onEdit={startEdit}
-          onDelete={async (id) => {
-            await deleteAdminPlatformUpdateDraft(id)
-            await load()
+          onDelete={(id) => {
+            void (async () => {
+              await deleteAdminPlatformUpdate(id)
+              if (editingId === id) startCreate()
+              await load()
+            })()
           }}
         />
-        <UpdateSection title="Published" rows={grouped.published} published />
+        <UpdateSection
+          title="Published"
+          rows={grouped.published}
+          published
+          onDelete={(id) => {
+            setDeleteTargetId(id)
+            setDeleteTargetPublished(true)
+          }}
+        />
+
+        {deleteTargetPublished && deleteTargetId && (
+          <div
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center"
+            role="dialog"
+            aria-labelledby="delete-update-title"
+          >
+            <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#0f172a] p-4 shadow-xl">
+              <h3 id="delete-update-title" className="text-lg font-semibold text-white">
+                Delete Update?
+              </h3>
+              <p className="mt-2 text-sm text-gray-300">
+                This will permanently remove this announcement from What&apos;s New for all
+                users.
+              </p>
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg px-4 py-2 text-sm text-gray-300 hover:bg-white/5"
+                  onClick={() => {
+                    setDeleteTargetId(null)
+                    setDeleteTargetPublished(false)
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500"
+                  onClick={() =>
+                    void (async () => {
+                      const id = deleteTargetId
+                      setDeleteTargetId(null)
+                      setDeleteTargetPublished(false)
+                      try {
+                        await deleteAdminPlatformUpdate(id)
+                        if (editingId === id) startCreate()
+                        await load()
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : "Delete failed")
+                      }
+                    })()
+                  }
+                >
+                  Delete Update
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
-  )
-}
-
-function previewBody(text: string, max = 140) {
-  const t = text.replace(/\s+/g, " ").trim()
-  if (!t) return "—"
-  return t.length > max ? `${t.slice(0, max)}…` : t
-}
-
-function UpcomingAlertsSection({
-  rows,
-  onEdit,
-  onCancel,
-}: {
-  rows: AdminPlatformUpdate[]
-  onEdit: (row: AdminPlatformUpdate) => void
-  onCancel: (id: string) => Promise<void>
-}) {
-  return (
-    <section className="space-y-3">
-      <h2 className="text-lg font-semibold text-blue-200">Upcoming Alerts</h2>
-      {rows.length === 0 ? (
-        <p className="text-sm text-gray-500">No upcoming alerts</p>
-      ) : (
-        <ul className="space-y-2">
-          {rows.map((row) => (
-            <li
-              key={row.id}
-              className="rounded-lg border border-amber-500/20 bg-black/20 px-3 py-2.5 text-sm"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0 flex-1 space-y-1">
-                  <p className="font-semibold text-white">{row.title}</p>
-                  <p className="line-clamp-2 text-xs text-gray-400">
-                    {previewBody(row.body)}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    {PLATFORM_UPDATE_CATEGORY_LABELS[row.category]}
-                    {row.publishAt && (
-                      <>
-                        {" · "}
-                        <span className="text-amber-200/90">
-                          {new Date(row.publishAt).toLocaleString(undefined, {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          })}
-                        </span>
-                      </>
-                    )}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Opens to {PLATFORM_UPDATE_DESTINATION_LABELS[row.destination]}
-                    {" · "}
-                    Push {row.sendPush ? "ON" : "OFF"}
-                  </p>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <button
-                    type="button"
-                    className="rounded bg-white/10 px-2 py-1 text-xs"
-                    onClick={() => onEdit(row)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded bg-amber-500/20 px-2 py-1 text-xs text-amber-100"
-                    onClick={() => void onCancel(row.id)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   )
 }
 
@@ -483,14 +404,12 @@ function UpdateSection({
   rows,
   onEdit,
   onDelete,
-  onCancel,
   published,
 }: {
   title: string
   rows: AdminPlatformUpdate[]
   onEdit?: (row: AdminPlatformUpdate) => void
-  onDelete?: (id: string) => Promise<void>
-  onCancel?: (id: string) => Promise<void>
+  onDelete?: (id: string) => void | Promise<void>
   published?: boolean
 }) {
   if (!rows.length) return null
@@ -516,7 +435,7 @@ function UpdateSection({
                     Published {new Date(row.publishedAt).toLocaleString()}
                   </p>
                 )}
-                {published && row.broadcast && (
+                {published && row.broadcast && row.sendPush && (
                   <p className="mt-1 text-xs text-gray-400">
                     Broadcast: {row.broadcast.status} · attempted{" "}
                     {row.broadcast.attemptedCount} · success{" "}
@@ -539,18 +458,10 @@ function UpdateSection({
                   <button
                     type="button"
                     className="rounded bg-red-500/20 px-2 py-1 text-xs text-red-200"
-                    onClick={() => void onDelete(row.id)}
+                    aria-label="Delete update"
+                    onClick={() => onDelete(row.id)}
                   >
                     Delete
-                  </button>
-                )}
-                {onCancel && (
-                  <button
-                    type="button"
-                    className="rounded bg-amber-500/20 px-2 py-1 text-xs"
-                    onClick={() => void onCancel(row.id)}
-                  >
-                    Cancel
                   </button>
                 )}
               </div>

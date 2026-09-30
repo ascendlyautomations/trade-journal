@@ -20,6 +20,7 @@ struct VaultButton: View {
         }
         .buttonStyle(.plain)
         .engagementActionRowContainer()
+        .engagementMinimumTapTarget()
         .accessibilityLabel(isVaulted ? "Manage in Vault" : "Add to Vault")
         .accessibilityIdentifier("interaction.vault.\(ref.contentType.rawValue).\(ref.contentID)")
     }

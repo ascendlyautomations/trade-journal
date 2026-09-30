@@ -11,7 +11,22 @@ enum StorageUploadProgressTransport {
             .appendingPathComponent("storage-upload-\(UUID().uuidString).bin")
         try body.write(to: tempURL, options: .atomic)
         defer { try? FileManager.default.removeItem(at: tempURL) }
+        return try await upload(
+            request: request,
+            fileURL: tempURL,
+            uploadPayloadBytes: body.count,
+            progressJobID: progressJobID,
+            deleteFileWhenComplete: false
+        )
+    }
 
+    static func upload(
+        request: URLRequest,
+        fileURL: URL,
+        uploadPayloadBytes: Int,
+        progressJobID: String,
+        deleteFileWhenComplete: Bool = false
+    ) async throws -> (Data, URLResponse) {
         var uploadRequest = request
         uploadRequest.httpBody = nil
         uploadRequest.httpBodyStream = nil
@@ -24,12 +39,15 @@ enum StorageUploadProgressTransport {
             path: location.path,
             method: uploadRequest.httpMethod ?? "POST",
             request: uploadRequest,
-            uploadPayloadBytes: body.count
+            uploadPayloadBytes: uploadPayloadBytes
         )
 
         let session = URLSession.shared
         return try await withCheckedThrowingContinuation { continuation in
-            let task = session.uploadTask(with: uploadRequest, fromFile: tempURL) { data, response, error in
+            let task = session.uploadTask(with: uploadRequest, fromFile: fileURL) { data, response, error in
+                if deleteFileWhenComplete {
+                    try? FileManager.default.removeItem(at: fileURL)
+                }
                 let payload = data ?? Data()
                 if let http = response as? HTTPURLResponse {
                     StorageUploadDiagnostics.logResponse(

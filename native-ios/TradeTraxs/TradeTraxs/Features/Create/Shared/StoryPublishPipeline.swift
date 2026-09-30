@@ -79,11 +79,19 @@ enum StoryPublishPipeline {
         onProgress?(0.08)
         _ = try await StoryMediaDuration.validatedDurationSeconds(at: fileURL)
 
-        let uploadData = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
-        guard !uploadData.isEmpty else {
-            throw AppError.unknown(message: "Couldn't read this video.")
+        let prepared = try await StoryVideoPreparation.prepareForUpload(
+            from: fileURL,
+            contentType: contentType
+        ) { value in
+            onProgress?(0.08 + value * 0.55)
         }
-        guard uploadData.count <= maxStoryVideoBytes else {
+        defer {
+            if prepared.fileURL != fileURL {
+                MediaVideoPreparation.cleanupTemporaryFile(at: prepared.fileURL)
+            }
+        }
+
+        guard prepared.byteCount > 0, prepared.byteCount <= maxStoryVideoBytes else {
             throw AppError.unknown(message: "Video must be 15 MB or smaller.")
         }
 
@@ -94,13 +102,13 @@ enum StoryPublishPipeline {
             storagePath = StorageOptimizedMedia.objectPath(prefix: authorID.rawValue, fileExtension: "mp4")
         }
 
-        onProgress?(0.15)
-        let uploaded = try await uploadService.upload(
-            UploadRequest(
+        onProgress?(0.68)
+        let uploaded = try await uploadService.uploadFile(
+            UploadFileRequest(
                 bucket: StorageBucket.stories.rawValue,
                 path: storagePath,
-                data: uploadData,
-                contentType: contentType,
+                fileURL: prepared.fileURL,
+                contentType: prepared.contentType,
                 purpose: nil
             )
         )

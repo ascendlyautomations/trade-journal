@@ -14,6 +14,11 @@ struct ExploreTraderCard: View {
     let onToggleFollow: () -> Void
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var usesCompactLayout: Bool {
+        dynamicTypeSize < .accessibility1
+    }
 
     private let cardWidth: CGFloat = 148
     private let cardHeight: CGFloat = Self.railHeight
@@ -44,20 +49,20 @@ struct ExploreTraderCard: View {
                                 TradeTraxsVerifiedBadge(size: .inline)
                             }
                         }
-                        .frame(height: nameRowHeight, alignment: .center)
+                        .frame(height: usesCompactLayout ? nameRowHeight : nil, alignment: .center)
 
                         fixedTextRow(
                             text: "@\(profile.username)",
                             role: .caption,
                             color: colors.secondaryText,
-                            height: usernameRowHeight
+                            height: usesCompactLayout ? usernameRowHeight : nil
                         )
 
                         fixedOptionalRow(
                             text: ProfileDisplay.suggestedTraderExperienceLine(for: profile),
                             role: .caption2,
                             color: colors.tertiaryText,
-                            height: detailRowHeight
+                            height: usesCompactLayout ? detailRowHeight : nil
                         )
                     }
                 }
@@ -68,7 +73,7 @@ struct ExploreTraderCard: View {
             followButton
         }
         .padding(ExperienceSpacing.sm)
-        .frame(width: cardWidth, height: cardHeight, alignment: .topLeading)
+        .frame(width: cardWidth, height: usesCompactLayout ? cardHeight : nil, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
                 .fill(colors.surfacePrimary)
@@ -121,6 +126,7 @@ struct ExploreTraderCard: View {
                     }
                 }
                 .contentShape(Rectangle())
+                .frame(minHeight: ExperienceAccessibility.minTouchTarget)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(
@@ -135,7 +141,7 @@ struct ExploreTraderCard: View {
         font: Font? = nil,
         role: TypographyRole? = nil,
         color: Color,
-        height: CGFloat
+        height: CGFloat?
     ) -> some View {
         Group {
             if let font {
@@ -147,8 +153,9 @@ struct ExploreTraderCard: View {
                     .experienceStyle(role, color: color)
             }
         }
-        .lineLimit(1)
+        .lineLimit(usesCompactLayout ? 1 : 2)
         .truncationMode(.tail)
+        .fixedSize(horizontal: false, vertical: !usesCompactLayout)
         .frame(height: height, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -157,12 +164,13 @@ struct ExploreTraderCard: View {
         text: String?,
         role: TypographyRole,
         color: Color,
-        height: CGFloat
+        height: CGFloat?
     ) -> some View {
         Text(text?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? text! : " ")
             .experienceStyle(role, color: color)
-            .lineLimit(1)
+            .lineLimit(usesCompactLayout ? 1 : 2)
             .truncationMode(.tail)
+            .fixedSize(horizontal: false, vertical: !usesCompactLayout)
             .opacity(text?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? 1 : 0)
             .frame(height: height, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)

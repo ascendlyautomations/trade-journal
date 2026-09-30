@@ -28,7 +28,7 @@ struct MainTabShellView: View {
             }
         }
         .tabViewStyle(.tabBarOnly)
-        .experienceAppChrome()
+        .experienceAppChrome(usesFeedOpaqueChrome: store.selectedTab == .feed)
         .safeAreaInset(edge: .top, spacing: 0) {
             if showsDemoExperienceChrome {
                 HStack(spacing: 0) {
@@ -81,6 +81,7 @@ struct MainTabShellView: View {
             defer { MainThreadOperationTracker.pop("tab.select.\(tab.rawValue)") }
             AuthenticatedLaunchPhasing.noteActiveTab(tab)
             OwnerAccountFilterDropdownController.shared.dismiss()
+            syncFeedScopedBarChrome(isFeedTab: tab == .feed)
         }
         .onChange(of: ContentMutationStore.shared.revision) { _, _ in
             guard let profileID = currentUserProfile.profile?.id else { return }
@@ -95,6 +96,7 @@ struct MainTabShellView: View {
             viewerStoryStore.reconcileExpired()
         }
         .onAppear {
+            syncFeedScopedBarChrome(isFeedTab: store.selectedTab == .feed)
             guard let profileID = currentUserProfile.profile?.id else { return }
             viewerStoryStore.reconcileFromFeedCache(viewerID: profileID)
             viewerStoryStore.reconcileExpired()
@@ -169,6 +171,11 @@ struct MainTabShellView: View {
                 coordinator.selectTab(newValue)
             }
         )
+    }
+
+    private func syncFeedScopedBarChrome(isFeedTab: Bool) {
+        ExperienceNavigationBarAppearance.usesFeedOpaqueChrome = isFeedTab
+        ExperienceNavigationBarAppearance.syncShellBarChrome()
     }
 }
 

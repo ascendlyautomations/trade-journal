@@ -35,6 +35,8 @@ enum EngagementActionRowMetrics {
     static let actionContainerSide: CGFloat = 32
     static let iconCountSpacing: CGFloat = 4
     static let rowHeight: CGFloat = 32
+    /// Minimum tappable area without enlarging visible icons.
+    static let minimumTapSide: CGFloat = 44
 }
 
 /// SF Symbol identity for the shared engagement action row.
@@ -128,5 +130,14 @@ struct EngagementActionRowLabel: View {
 extension View {
     func engagementActionRowContainer() -> some View {
         EngagementActionRowContainer { self }
+    }
+
+    func engagementMinimumTapTarget(alignment: Alignment = .center) -> some View {
+        frame(
+            minWidth: EngagementActionRowMetrics.minimumTapSide,
+            minHeight: EngagementActionRowMetrics.minimumTapSide,
+            alignment: alignment
+        )
+        .contentShape(Rectangle())
     }
 }

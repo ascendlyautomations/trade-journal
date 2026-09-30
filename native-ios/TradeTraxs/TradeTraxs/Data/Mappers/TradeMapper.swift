@@ -21,7 +21,11 @@ nonisolated enum TradeMapper: DTOMapper {
         guard let entryAt else { throw MappingError.missingField("entry_time") }
 
         let side = mapSide(dto.direction)
-        let mode = mapMode(dto.trade_mode ?? dto.mode ?? dto.account_type)
+        let mode = mapExecutionMode(
+            tradeMode: dto.trade_mode,
+            mode: dto.mode,
+            accountType: dto.account_type
+        )
         let quantity = DecimalParser.parseFlexible(dto.contracts) ?? 0
         let visibility: ContentVisibility = (dto.is_public == true) ? .public : .private
         let createdAt = ISO8601.date(from: dto.created_at) ?? entryAt
@@ -92,7 +96,10 @@ nonisolated enum TradeMapper: DTOMapper {
             isInitialImport: dto.is_initial_import,
             importSource: mapImportSource(dto.import_source),
             importFingerprint: dto.import_fingerprint,
-            accountMode: TradingAccountMode.parseWireValue(dto.account_type ?? dto.mode),
+            accountMode: mapDenormalizedAccountMode(
+                accountType: dto.account_type,
+                mode: dto.mode
+            ),
             publicAccountBadge: publicBadge,
             createdAt: createdAt,
             updatedAt: createdAt
@@ -348,6 +355,36 @@ nonisolated enum TradeMapper: DTOMapper {
         default:
             return .live
         }
+    }
+
+    /// Execution context — `trade_mode` first; never treat account status (`eval`, `funded`) as execution mode.
+    static func mapExecutionMode(tradeMode: String?, mode: String?, accountType: String?) -> TradeMode {
+        if let raw = normalizedWireValue(tradeMode) {
+            return mapMode(raw)
+        }
+        if let raw = normalizedWireValue(mode) {
+            if mapDenormalizedAccountMode(accountType: nil, mode: raw) != nil {
+                return .live
+            }
+            return mapMode(raw)
+        }
+        if let raw = normalizedWireValue(accountType) {
+            if mapDenormalizedAccountMode(accountType: raw, mode: nil) != nil {
+                return .live
+            }
+            return mapMode(raw)
+        }
+        return .live
+    }
+
+    /// Account status on the trade row — mirrors web `account_type ?? mode` badge semantics.
+    static func mapDenormalizedAccountMode(accountType: String?, mode: String?) -> TradingAccountMode? {
+        TradingAccountMode.parseWireValue(accountType) ?? TradingAccountMode.parseWireValue(mode)
+    }
+
+    private static func normalizedWireValue(_ raw: String?) -> String? {
+        let trimmed = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

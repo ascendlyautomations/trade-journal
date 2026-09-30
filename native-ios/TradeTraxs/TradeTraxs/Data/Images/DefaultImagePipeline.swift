@@ -234,57 +234,43 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
             storage: storage
         ) {
             let preset = StorageImageTransform.preset(for: purpose, delivery: deliveryQuality)
+            let objectURL = StorageImageTransform.deliveryObjectURL(for: url)
             let fetchURL: URL
             if let preset {
                 fetchURL = StorageImageTransform.optimizedURL(for: url, preset: preset)
             } else {
-                fetchURL = url
+                fetchURL = objectURL
             }
 
-            do {
-                tieredCache?.markDiskEligible(key: cacheKey)
-                let data = try await fetchURLWithTransientRetry(fetchURL, request: request)
-                #if DEBUG
-                let mediaID = reference.id.split(separator: "/").last.map(String.init) ?? reference.id
-                MediaLoadDiagnostics.log(
-                    contentType: "image/\(purpose.rawValue)",
-                    mediaID: String(mediaID.prefix(48)),
-                    source: .feedImage,
-                    role: .image,
-                    urlIdentity: StorageImageTransform.urlIdentity(for: fetchURL),
-                    byteCount: data.count,
-                    cacheHit: false
-                )
-                logFetchAudit(
-                    request: request,
-                    cacheKey: cacheKey,
-                    cacheHit: cacheHit,
-                    data: data,
-                    objectURL: url,
-                    fetchURL: fetchURL.absoluteString,
-                    preset: preset
-                )
-                #endif
-                return data
-            } catch {
-                if fetchURL != url, !Self.shouldSkipTransformFallback(for: error) {
-                    let data = try await fetchURLWithTransientRetry(url, request: request)
-                    #if DEBUG
-                    logFetchAudit(
-                        request: request,
-                        cacheKey: cacheKey,
-                        cacheHit: cacheHit,
-                        data: data,
-                        objectURL: url,
-                        fetchURL: url.absoluteString,
-                        preset: nil,
-                        transformFallback: true
-                    )
-                    #endif
-                    return data
-                }
-                throw error
-            }
+            tieredCache?.markDiskEligible(key: cacheKey)
+            let data = try await fetchStorageImageWithFallback(
+                objectURL: objectURL,
+                primaryURL: fetchURL,
+                preset: preset,
+                request: request
+            )
+            #if DEBUG
+            let mediaID = reference.id.split(separator: "/").last.map(String.init) ?? reference.id
+            MediaLoadDiagnostics.log(
+                contentType: "image/\(purpose.rawValue)",
+                mediaID: String(mediaID.prefix(48)),
+                source: .feedImage,
+                role: .image,
+                urlIdentity: StorageImageTransform.urlIdentity(for: fetchURL),
+                byteCount: data.count,
+                cacheHit: false
+            )
+            logFetchAudit(
+                request: request,
+                cacheKey: cacheKey,
+                cacheHit: cacheHit,
+                data: data,
+                objectURL: url,
+                fetchURL: fetchURL.absoluteString,
+                preset: preset
+            )
+            #endif
+            return data
         }
 
         let data = try await downloadService.download(
@@ -347,6 +333,41 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
         )
     }
     #endif
+
+    /// Transform → optimized object (when `/opt/`) → legacy object only for detail/full-res contexts.
+    private func fetchStorageImageWithFallback(
+        objectURL: URL,
+        primaryURL: URL,
+        preset: StorageImageTransform.Preset?,
+        request: ImageRequest
+    ) async throws -> Data {
+        do {
+            return try await fetchURLWithTransientRetry(primaryURL, request: request)
+        } catch {
+            guard preset != nil, !Self.shouldSkipTransformFallback(for: error) else {
+                throw error
+            }
+
+            let optimizedObject = StorageOptimizedMedia.isOptimizedStorageURL(objectURL) ? objectURL : nil
+            if let optimizedObject, primaryURL != optimizedObject {
+                do {
+                    return try await fetchURLWithTransientRetry(optimizedObject, request: request)
+                } catch {
+                    // Continue to detail-only original fallback below.
+                }
+            }
+
+            switch request.deliveryQuality {
+            case .fullResolution, .feedDetail:
+                if primaryURL != objectURL {
+                    return try await fetchURLWithTransientRetry(objectURL, request: request)
+                }
+            case .feedDisplay, .profileGrid:
+                break
+            }
+            throw error
+        }
+    }
 
     private func fetchURLWithTransientRetry(_ url: URL, request: ImageRequest) async throws -> Data {
         let maximumAttempts = 3

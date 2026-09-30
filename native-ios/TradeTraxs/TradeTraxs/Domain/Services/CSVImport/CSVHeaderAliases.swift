@@ -54,6 +54,16 @@ nonisolated enum CSVHeaderAliases {
         }
     }
 
+    /// Web `getCsvRrCellFromRow` — RR only when a recognized RR column has content.
+    static func rrCell(in row: [String: String]) -> String? {
+        for (rawKey, val) in row {
+            guard resolveField(for: rawKey) == .rr else { continue }
+            let s = val.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !s.isEmpty { return s }
+        }
+        return nil
+    }
+
     // MARK: - Alias tables (web `buildHeaderAliasMap`)
 
     private static let aliasMap: [String: CSVLogicalField] = {
@@ -91,11 +101,10 @@ nonisolated enum CSVHeaderAliases {
                 "volume", "lots", "shares", "units", "position size",
             ],
             .points: ["points", "net points", "tick gain", "ticks"],
-            .rr: [
-                "rr", "r r", "risk reward", "risk reward ratio", "reward risk",
-                "r multiple", "r multiple ratio", "r", "reward ratio", "realized rr", "riskreward",
-            ],
+            .rr: Self.rrHeaderAliases,
             .session: ["session", "market session", "trading session"],
+            .accountType: ["account type", "acct type"],
+            .mode: ["mode", "account mode", "trading mode"],
             .accountName: [
                 "account", "account name", "firm", "broker", "prop firm", "prop account",
                 "funded account", "workspace", "login",
@@ -112,12 +121,12 @@ nonisolated enum CSVHeaderAliases {
             .swap: ["swap", "swap fee", "overnight fee", "financing"],
             .notes: ["notes", "comment", "description", "remarks"],
             .entryTime: [
-                "entry time", "entrytime", "entered at", "enteredat", "entered at",
+                "entry time", "entrytime", "entered at", "enteredat", "entered_at",
                 "open time", "open datetime", "opendatetime", "start time", "time in",
                 "entry timestamp", "in time",
             ],
             .exitTime: [
-                "exit time", "exittime", "exited at", "exitedat", "exited at",
+                "exit time", "exittime", "exited at", "exitedat", "exited_at",
                 "close time", "close datetime", "closedatetime", "end time", "time out",
                 "exit timestamp", "out time",
             ],
@@ -131,6 +140,13 @@ nonisolated enum CSVHeaderAliases {
         }
         return map
     }()
+
+    /// Web `CSV_RR_HEADER_ALIASES`.
+    static let rrHeaderAliases: [String] = [
+        "RR", "R:R", "Risk Reward", "Risk:Reward", "Risk/Reward",
+        "Risk Reward Ratio", "Reward Risk", "R Multiple", "R-Multiple",
+        "R Multiple Ratio", "R", "reward ratio", "realized rr", "riskreward",
+    ]
 
     static let enteredAtAliases = [
         "EnteredAt", "entered at", "entered_at", "entry time", "EntryTime", "entrytime",

@@ -152,8 +152,7 @@ enum ReelPublishPipeline {
             )
         }
 
-        let videoData = try Data(contentsOf: resolved.fileURL, options: [.mappedIfSafe])
-        guard videoData.count <= MediaVideoPreparation.maxFinalUploadBytes else {
+        guard resolved.byteCount <= MediaVideoPreparation.maxFinalUploadBytes else {
             throw AppError.unknown(message: "Videos must be 100 MB or smaller.")
         }
 
@@ -164,15 +163,15 @@ enum ReelPublishPipeline {
         ReelPublishDiagnostics.logVideoUploadStarted(
             publishID: publishID,
             objectIdentity: videoPath,
-            byteCount: videoData.count
+            byteCount: resolved.byteCount
         )
         let videoRef: MediaReference
         do {
-            videoRef = try await uploadService.upload(
-                UploadRequest(
+            videoRef = try await uploadService.uploadFile(
+                UploadFileRequest(
                     bucket: StorageBucket.reels.rawValue,
                     path: videoPath,
-                    data: videoData,
+                    fileURL: resolved.fileURL,
                     contentType: "video/mp4",
                     purpose: nil,
                     cacheControl: reelVideoCacheControl

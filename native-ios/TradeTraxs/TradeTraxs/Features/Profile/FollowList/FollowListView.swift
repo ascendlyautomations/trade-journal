@@ -119,6 +119,11 @@ struct FollowListView: View {
                         onToggleFollow: { viewModel.toggleFollow(for: profile) },
                         onRemove: { viewModel.requestRemove(profile) }
                     )
+                    .onAppear {
+                        if viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            viewModel.loadMoreIfNeeded(currentProfileID: profile.id)
+                        }
+                    }
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(colors.backgroundPrimary)
                     .listRowSeparator(.hidden)

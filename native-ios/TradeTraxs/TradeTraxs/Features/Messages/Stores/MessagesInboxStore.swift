@@ -25,6 +25,9 @@ final class MessagesInboxStore {
     /// True after the first member-rooms hydration (Messages or Trade Rooms home).
     private(set) var hasLoadedRooms = false
     private(set) var lastLoadedAt: Date?
+    private(set) var inboxNextCursor: String?
+    private(set) var inboxHasMore = false
+    private(set) var isLoadingMoreInbox = false
 
     /// Optimistic mute overrides until the next inbox bootstrap; server state via `conversation_member_preferences`.
     private var mutedConversationIDs: Set<ConversationID> = []
@@ -69,6 +72,35 @@ final class MessagesInboxStore {
     /// Web `sortConversationsDesc` order with hidden rows removed.
     var visibleConversations: [Conversation] {
         conversations.filter { !hiddenConversationIDs.contains($0.id) }
+    }
+
+    /// Bounded `inbox-dms` postgres_changes filter — recent rows only.
+    var conversationIDsForRealtimeWatch: [String] {
+        MessagingInboxPagination.conversationIDsForRealtimeWatch(
+            visibleConversations,
+            alwaysInclude: activeConversationID
+        )
+    }
+
+    func applyInboxPagination(nextCursor: String?, hasMore: Bool) {
+        inboxNextCursor = nextCursor
+        inboxHasMore = hasMore
+    }
+
+    func resetInboxPagination() {
+        inboxNextCursor = nil
+        inboxHasMore = false
+        isLoadingMoreInbox = false
+    }
+
+    func setLoadingMoreInbox(_ loading: Bool) {
+        isLoadingMoreInbox = loading
+    }
+
+    /// First authoritative page — replaces list (refresh / cold bootstrap).
+    func replaceConversationsFromBootstrapFirstPage(_ incoming: [Conversation]) {
+        resetInboxPagination()
+        replaceConversations(incoming)
     }
 
     var hasPendingConversationDeletes: Bool {
@@ -670,6 +702,7 @@ final class MessagesInboxStore {
         hasLoaded = false
         hasLoadedRooms = false
         lastLoadedAt = nil
+        resetInboxPagination()
         mutedConversationIDs = []
         pinnedConversationIDs = []
         mutedRoomIDs = []

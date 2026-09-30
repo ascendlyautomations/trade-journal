@@ -7,7 +7,6 @@ import {
   type PlatformUpdateCategoryId,
   type PlatformUpdateDestinationId,
 } from "@/lib/platformUpdateDestinations"
-import { deliverPlatformUpdateBroadcastNow } from "@/lib/server/platformUpdates/broadcastWorker"
 
 export type PlatformUpdateRecord = {
   id: string
@@ -174,7 +173,7 @@ export async function publishPlatformUpdateNow(params: {
       updated_at: nowIso,
     })
     .eq("id", params.updateId)
-    .in("status", ["draft", "scheduled"])
+    .in("status", ["draft"])
     .select("*")
     .maybeSingle()
 
@@ -206,38 +205,4 @@ export async function publishPlatformUpdateNow(params: {
   }
 
   return { ok: true, update: row, broadcastId }
-}
-
-export async function publishDueScheduledPlatformUpdates(
-  supabase: SupabaseClient<Database>
-): Promise<{ published: number }> {
-  const nowIso = new Date().toISOString()
-  const { data: due, error } = await supabase
-    .from("platform_updates")
-    .select("id, created_by")
-    .eq("status", "scheduled")
-    .lte("publish_at", nowIso)
-    .order("publish_at", { ascending: true })
-    .limit(10)
-
-  if (error) {
-    console.error("[platform-updates] due query failed", error)
-    return { published: 0 }
-  }
-
-  let published = 0
-  for (const row of due ?? []) {
-    const result = await publishPlatformUpdateNow({
-      supabase,
-      updateId: String(row.id),
-      adminUserId: String(row.created_by ?? ""),
-    })
-    if (result.ok) {
-      published += 1
-      if (result.broadcastId) {
-        await deliverPlatformUpdateBroadcastNow(result.broadcastId)
-      }
-    }
-  }
-  return { published }
 }

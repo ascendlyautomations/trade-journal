@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // when the OS still exposes that preference (iPad historically; harmless on iPhone).
         UserDefaults.standard.register(defaults: ["UseFloatingTabBar": false])
         ExperienceNavigationBarAppearance.configureArrowOnlyBackButtons()
+        ExperienceNavigationBarAppearance.configureDefaultBarChrome()
         StartupTrace.event("AppDelegate.didFinishLaunching")
         AppLog.application.info("AppDelegate.didFinishLaunching")
         pushNotifications?.bindIfNeeded()

@@ -114,7 +114,9 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
 
     func tradeRoomsHomeBootstrap(
         scope: TradeRoomDiscoveryScope,
-        limit: Int
+        limit: Int,
+        suggestedCursor: String? = nil,
+        popularCursor: String? = nil
     ) async throws -> TradeRoomsHomeBootstrap {
         let capped = max(1, min(limit, 50))
         struct Meta: Decodable {
@@ -126,19 +128,26 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
             var your_rooms: [DiscoveryRoomRow]?
             var suggested: [DiscoveryRoomRow]?
             var popular: [DiscoveryRoomRow]?
+            var suggested_next_cursor: String?
+            var popular_next_cursor: String?
         }
         struct Payload: Decodable {
             var meta: Meta?
             var data: DataBlock?
         }
 
-        let body = try JSONSerialization.data(
-            withJSONObject: [
-                "p_limit": capped,
-                "p_scope": scope.rpcValue,
-            ],
-            options: []
-        )
+        var params: [String: Any] = [
+            "p_limit": capped,
+            "p_scope": scope.rpcValue,
+        ]
+        if let suggestedCursor, !suggestedCursor.isEmpty {
+            params["p_suggested_cursor"] = suggestedCursor
+        }
+        if let popularCursor, !popularCursor.isEmpty {
+            params["p_popular_cursor"] = popularCursor
+        }
+        let body = try JSONSerialization.data(withJSONObject: params, options: [])
+
         let data = try await supabase.database.rpcData(
             functionName: BackendV2Versioning.RPCName.tradeRoomsHomeBootstrap.rawValue,
             parametersJSON: body
@@ -162,7 +171,9 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
             scope: scope,
             yourRooms: yourRooms,
             suggested: suggested,
-            popular: popular
+            popular: popular,
+            suggestedNextCursor: payload.data?.suggested_next_cursor,
+            popularNextCursor: payload.data?.popular_next_cursor
         )
     }
 

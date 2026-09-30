@@ -19,6 +19,7 @@ struct ShareButton: View {
         }
         .buttonStyle(.plain)
         .engagementActionRowContainer()
+        .engagementMinimumTapTarget()
         .accessibilityLabel("Share")
         .accessibilityIdentifier("interaction.share")
     }

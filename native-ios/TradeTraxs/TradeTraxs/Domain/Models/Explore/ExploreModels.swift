@@ -180,6 +180,8 @@ nonisolated struct TradeRoomsHomeBootstrap: Hashable, Sendable {
     var yourRooms: [ExploreRoomSuggestion]
     var suggested: [ExploreRoomSuggestion]
     var popular: [ExploreRoomSuggestion]
+    var suggestedNextCursor: String?
+    var popularNextCursor: String?
 }
 
 /// All / Your Rooms / Official (+ Community for RPC) filter for Trade Rooms discovery.

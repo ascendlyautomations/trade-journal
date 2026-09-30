@@ -31,6 +31,7 @@ struct LikeButton: View {
         }
         .buttonStyle(.plain)
         .engagementActionRowContainer()
+        .engagementMinimumTapTarget()
         .accessibilityLabel(snap.viewerHasLiked ? "Unlike" : "Like")
         .accessibilityValue("\(snap.likeCount)")
         .accessibilityIdentifier("interaction.like.\(target.kind.rawValue).\(target.id)")

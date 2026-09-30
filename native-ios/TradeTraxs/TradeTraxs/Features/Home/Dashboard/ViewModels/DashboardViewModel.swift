@@ -72,6 +72,11 @@ final class DashboardViewModel {
     private var dashboardGRDBBackgroundReconcileScheduled = false
     private var equityChartOverlayRetryScheduled = false
     private var analyticsReconciliationObserver: NSObjectProtocol?
+    /// Home tab selected — offscreen Dashboard must not run chart overlay RPC work.
+    private var isHomeTabActive = true
+    private var pendingChartOverlayRefreshAfterInactive = false
+    /// One remote hydrate attempt per revision + account scope; prevents drop/refetch loops.
+    private var chartOverlayFetchSettledSelectionKey: String?
 
     private final class LiveBox {
         weak var model: DashboardViewModel?
@@ -159,7 +164,30 @@ final class DashboardViewModel {
         pendingHistoryBackfill = false
         dashboardGRDBBackgroundReconcileScheduled = false
         equityChartOverlayRetryScheduled = false
+        isHomeTabActive = true
+        pendingChartOverlayRefreshAfterInactive = false
+        chartOverlayFetchSettledSelectionKey = nil
         phase = .idle
+    }
+
+    /// Bound from ``DashboardHomeView`` via ``Environment/tabIsActive`` — gates chart overlay RPC work.
+    func setHomeTabActive(_ active: Bool) {
+        guard isHomeTabActive != active else { return }
+        isHomeTabActive = active
+        if !active {
+            accountChartHydrateTask?.cancel()
+            aggregateChartHydrateTask?.cancel()
+            accountChartHydrateTask = nil
+            aggregateChartHydrateTask = nil
+            equityChartOverlayRetryScheduled = false
+            if needsEquityChartOverlayFetch(ignoreSettlement: true) {
+                pendingChartOverlayRefreshAfterInactive = true
+            }
+            return
+        }
+        guard pendingChartOverlayRefreshAfterInactive else { return }
+        pendingChartOverlayRefreshAfterInactive = false
+        ensureEquityChartOverlayIfNeeded()
     }
 
     func openPsychologyAnalytics(highlightSection: String? = nil) {
@@ -525,12 +553,18 @@ final class DashboardViewModel {
     /// Lazy V3 equity curve — re-request chart overlay when the dashboard becomes visible before hydration finished or after a failed/cancelled fetch.
     func ensureEquityChartOverlayIfNeeded() {
         guard usesDashboardAnalyticsV3, analyticsV3Bootstrap != nil, profileID != nil else { return }
-        reconcileStaleChartLoadingStateIfNeeded()
-        if !needsEquityChartOverlayFetch {
+        guard isHomeTabActive else {
+            if needsEquityChartOverlayFetch(ignoreSettlement: true) {
+                pendingChartOverlayRefreshAfterInactive = true
+            }
             return
         }
-        if case .loaded = selectedAccountChartsAvailability {
-            dropSelectedChartOverlayCacheIfStale()
+        reconcileStaleChartLoadingStateIfNeeded()
+        if case .loading = selectedAccountChartsAvailability {
+            return
+        }
+        if !needsEquityChartOverlayFetch() {
+            return
         }
         scheduleChartHydrationWithRetryIfNeeded()
     }
@@ -579,7 +613,7 @@ final class DashboardViewModel {
                 detailCache: detailCache
             )
             analyticsV3Bootstrap = applied.bootstrap
-            analyticsV3Revision = applied.revision
+            assignAnalyticsV3Revision(applied.revision)
             recompute()
         } catch {
             DashboardAnalyticsGRDBProbe.logFallback(reason: "reconciliation_apply_error")
@@ -659,6 +693,7 @@ final class DashboardViewModel {
     func setAccountFilter(_ filter: DashboardAccountFilter) {
         guard accountFilter != filter else { return }
         ExperienceHaptics.play(.selection)
+        resetChartOverlayFetchSettlement()
         lastAccountScopedSummary = nil
         lastAccountScopedFilter = nil
         accountFilter = filter
@@ -679,11 +714,8 @@ final class DashboardViewModel {
             }
         }
         recompute()
-        if usesDashboardAnalyticsV3 {
-            if usesDashboardAnalyticsGRDB, analyticsV3Bootstrap != nil {
-                DashboardAnalyticsGRDBProbe.logNetworkAvoided(reason: "account_metrics_local")
-            }
-            scheduleChartHydrationWithRetryIfNeeded()
+        if usesDashboardAnalyticsV3, usesDashboardAnalyticsGRDB, analyticsV3Bootstrap != nil {
+            DashboardAnalyticsGRDBProbe.logNetworkAvoided(reason: "account_metrics_local")
         }
     }
 
@@ -1580,8 +1612,36 @@ final class DashboardViewModel {
         }
     }
 
-    private var needsEquityChartOverlayFetch: Bool {
+    private func currentChartOverlaySelectionKey() -> String {
+        let accountScope: String = switch accountFilter {
+        case .all: "all"
+        case .account(let id): id.rawValue.lowercased()
+        }
+        return "\(analyticsV3Revision)|\(accountScope)"
+    }
+
+    private func resetChartOverlayFetchSettlement() {
+        chartOverlayFetchSettledSelectionKey = nil
+    }
+
+    private func assignAnalyticsV3Revision(_ revision: Int64) {
+        if analyticsV3Revision != revision {
+            resetChartOverlayFetchSettlement()
+        }
+        analyticsV3Revision = revision
+    }
+
+    private func markChartOverlayFetchSettledForCurrentSelection() {
+        chartOverlayFetchSettledSelectionKey = currentChartOverlaySelectionKey()
+    }
+
+    private func needsEquityChartOverlayFetch(ignoreSettlement: Bool = false) -> Bool {
         guard usesDashboardAnalyticsV3, analyticsV3Bootstrap != nil else { return false }
+        if !ignoreSettlement,
+           chartOverlayFetchSettledSelectionKey == currentChartOverlaySelectionKey()
+        {
+            return false
+        }
         switch selectedAccountChartsAvailability {
         case .notRequested, .failed:
             return true
@@ -1622,6 +1682,8 @@ final class DashboardViewModel {
     }
 
     private func scheduleChartHydrationWithRetryIfNeeded() {
+        guard needsEquityChartOverlayFetch() else { return }
+        if case .loading = selectedAccountChartsAvailability { return }
         scheduleChartHydration()
         guard !equityChartOverlayRetryScheduled else { return }
         let revision = analyticsV3Revision
@@ -1633,17 +1695,36 @@ final class DashboardViewModel {
             self.equityChartOverlayRetryScheduled = false
             guard self.analyticsV3Revision == revision, self.accountFilter == filter else { return }
             guard self.usesDashboardAnalyticsV3, self.analyticsV3Bootstrap != nil else { return }
-            guard self.needsEquityChartOverlayFetch else { return }
+            guard self.needsEquityChartOverlayFetch(ignoreSettlement: true) else { return }
+            self.resetChartOverlayFetchSettlement()
             self.scheduleChartHydration()
         }
     }
 
     private func scheduleChartHydration() {
+        guard isHomeTabActive else {
+            if needsEquityChartOverlayFetch(ignoreSettlement: true) {
+                pendingChartOverlayRefreshAfterInactive = true
+            }
+            return
+        }
+        if case .loading = selectedAccountChartsAvailability { return }
         scheduleAccountChartHydration()
         scheduleAggregateChartHydration()
     }
 
     private func scheduleAccountChartHydration() {
+        if let accountChartHydrateTask, !accountChartHydrateTask.isCancelled {
+            return
+        }
+        if case .account(let id) = accountFilter,
+           case .loading = DashboardAnalyticsAccountChartsStore.shared.availability(
+            accountID: id,
+            revision: analyticsV3Revision
+           )
+        {
+            return
+        }
         if case .account(let id) = accountFilter,
            DashboardAnalyticsAccountChartsStore.shared.availability(
             accountID: id,
@@ -1664,10 +1745,13 @@ final class DashboardViewModel {
     }
 
     private func scheduleAggregateChartHydration() {
+        if let aggregateChartHydrateTask, !aggregateChartHydrateTask.isCancelled {
+            return
+        }
         if accountFilter == .all,
-           DashboardAnalyticsAggregateChartsStore.shared.availability(revision: analyticsV3Revision) == .loading
+           case .loading = DashboardAnalyticsAggregateChartsStore.shared.availability(revision: analyticsV3Revision)
         {
-            DashboardAnalyticsAggregateChartsStore.shared.dropCharts(revision: analyticsV3Revision)
+            return
         }
         aggregateChartSelectionToken = DashboardAnalyticsAggregateChartsCoordinator.bumpSelection()
         let token = aggregateChartSelectionToken
@@ -1699,6 +1783,18 @@ final class DashboardViewModel {
             viewerID: profileID,
             rpc: rpc
         )
+        defer {
+            if selectionToken == accountChartSelectionToken,
+               case .account(let current) = accountFilter,
+               current == id,
+               DashboardAnalyticsAccountChartsStore.shared.availability(
+                accountID: id,
+                revision: analyticsV3Revision
+               ) != .loading
+            {
+                markChartOverlayFetchSettledForCurrentSelection()
+            }
+        }
         guard applied else {
             if selectionToken == accountChartSelectionToken,
                case .account(let current) = accountFilter,
@@ -1714,6 +1810,11 @@ final class DashboardViewModel {
         }
         guard selectionToken == accountChartSelectionToken else { return }
         guard case .account(let current) = accountFilter, current == id else { return }
+        markChartOverlayFetchSettledIfHydrationComplete(
+            selectionToken: selectionToken,
+            aggregateSelectionToken: nil,
+            accountID: id
+        )
         recompute()
     }
 
@@ -1737,6 +1838,14 @@ final class DashboardViewModel {
             viewerID: profileID,
             rpc: rpc
         )
+        defer {
+            if selectionToken == aggregateChartSelectionToken,
+               accountFilter == .all,
+               DashboardAnalyticsAggregateChartsStore.shared.availability(revision: analyticsV3Revision) != .loading
+            {
+                markChartOverlayFetchSettledForCurrentSelection()
+            }
+        }
         guard applied else {
             if selectionToken == aggregateChartSelectionToken,
                accountFilter == .all,
@@ -1748,7 +1857,39 @@ final class DashboardViewModel {
         }
         guard selectionToken == aggregateChartSelectionToken else { return }
         guard accountFilter == .all else { return }
+        markChartOverlayFetchSettledIfHydrationComplete(
+            selectionToken: nil,
+            aggregateSelectionToken: selectionToken,
+            accountID: nil
+        )
         recompute()
+    }
+
+    private func markChartOverlayFetchSettledIfHydrationComplete(
+        selectionToken: UInt64?,
+        aggregateSelectionToken: UInt64?,
+        accountID: TradingAccountID?
+    ) {
+        if let aggregateSelectionToken,
+           aggregateSelectionToken == aggregateChartSelectionToken,
+           accountFilter == .all,
+           DashboardAnalyticsAggregateChartsStore.shared.availability(revision: analyticsV3Revision) != .loading
+        {
+            markChartOverlayFetchSettledForCurrentSelection()
+            return
+        }
+        if let selectionToken,
+           let accountID,
+           selectionToken == accountChartSelectionToken,
+           case .account(let current) = accountFilter,
+           current == accountID,
+           DashboardAnalyticsAccountChartsStore.shared.availability(
+            accountID: accountID,
+            revision: analyticsV3Revision
+           ) != .loading
+        {
+            markChartOverlayFetchSettledForCurrentSelection()
+        }
     }
 
     private func recomputeFromAnalyticsV3(bootstrap: AnalyticsDashboardBootstrapV3) {
@@ -1910,7 +2051,7 @@ final class DashboardViewModel {
             detailCache: detailCache
         )
         analyticsV3Bootstrap = applied.bootstrap
-        analyticsV3Revision = applied.revision
+        assignAnalyticsV3Revision(applied.revision)
         apply(trades: [], accounts: applied.accounts, profileID: profileID)
         if let payout = applied.payoutTotal {
             payoutTotal = payout
@@ -1929,7 +2070,6 @@ final class DashboardViewModel {
             preset: DashboardAnalyticsMapper.presetKey(for: dateRange),
             elapsedMs: 0
         )
-        scheduleChartHydrationWithRetryIfNeeded()
         #if DEBUG
         ColdLaunchSummaryProbe.markDashboardFirstRender(source: loadResult.source)
         #endif
@@ -1969,7 +2109,7 @@ final class DashboardViewModel {
             )
             guard canCommit(profileID: profileID, generation: generation) else { return false }
             analyticsV3Bootstrap = applied.bootstrap
-            analyticsV3Revision = applied.revision
+            assignAnalyticsV3Revision(applied.revision)
             apply(trades: [], accounts: applied.accounts, profileID: profileID)
             if let payout = applied.payoutTotal {
                 payoutTotal = payout
@@ -2061,7 +2201,6 @@ final class DashboardViewModel {
                     recompute()
                 }
             }
-            scheduleChartHydrationWithRetryIfNeeded()
             await startRealtime(profileID: profileID)
             return true
         } catch {
@@ -2083,6 +2222,7 @@ final class DashboardViewModel {
 
     private func scheduleAnalyticsV3RefreshAfterMutation() {
         dashboardGRDBBackgroundReconcileScheduled = false
+        resetChartOverlayFetchSettlement()
         DashboardAnalyticsAccountChartsStore.shared.invalidate()
         DashboardAnalyticsAggregateChartsStore.shared.invalidate()
         Task { [weak self] in
@@ -2546,7 +2686,7 @@ final class DashboardViewModel {
             )
             guard canCommit(profileID: profileID, generation: generation) else { return false }
             analyticsV3Bootstrap = applied.bootstrap
-            analyticsV3Revision = applied.revision
+            assignAnalyticsV3Revision(applied.revision)
             apply(trades: [], accounts: applied.accounts, profileID: profileID)
             if let payout = applied.payoutTotal {
                 payoutTotal = payout
@@ -2596,7 +2736,6 @@ final class DashboardViewModel {
                 )
                 recompute()
             }
-            scheduleChartHydrationWithRetryIfNeeded()
             scheduleDashboardGRDBBackgroundReconcile(profileID: profileID, generation: generation)
             await startRealtime(profileID: profileID)
             return true
@@ -2733,12 +2872,11 @@ final class DashboardViewModel {
                 detailCache: detailCache
             )
             analyticsV3Bootstrap = applied.bootstrap
-            analyticsV3Revision = applied.revision
+            assignAnalyticsV3Revision(applied.revision)
             if let payout = applied.payoutTotal {
                 payoutTotal = payout
             }
             recompute()
-            scheduleChartHydrationWithRetryIfNeeded()
         } catch {
             // Preserve GRDB/JSON presentation when background reconcile fails.
         }

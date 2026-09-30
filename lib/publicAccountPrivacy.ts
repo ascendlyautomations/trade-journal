@@ -20,9 +20,39 @@ export const TRADE_ACCOUNT_PUBLIC_STRIP_KEYS = [
   "account_size",
 ] as const
 
+/** Owner-only journal / psychology fields — never on {@link TRADES_PUBLIC_READ_RELATION}. */
+export const TRADE_JOURNAL_PRIVATE_KEYS = [
+  "notes",
+  "psychology_notes",
+  "strategy",
+  "emotion",
+  "exit_emotion",
+  "confidence",
+  "followed_plan",
+  "mistake_type",
+  "reviewed",
+  "execution_rating",
+  "top_confluences",
+  "news_event",
+  "ai_feedback",
+  "ai_feedback_created_at",
+  "import_source",
+  "import_fingerprint",
+  "broker_connection_id",
+  "broker_enrichment_status",
+  "broker_integration_account_id",
+  "broker_lifecycle_id",
+  "last_broker_sync_at",
+  "is_initial_import",
+  "source_account_id",
+] as const
+
+/** PostgREST relation for non-owner reads of public trades (RLS-safe projection). */
+export const TRADES_PUBLIC_READ_RELATION = "trades_public_read" as const
+
 /**
- * Trade columns safe for non-owner SELECT (no account_name, account_id, account_size).
- * Includes fields needed for public cards, feed, profile analytics, and modals.
+ * Trade columns safe for non-owner SELECT (no account identifiers, no journal fields).
+ * Must stay aligned with `public.trades_public_read` view columns.
  */
 export const PUBLIC_TRADE_SELECT = [
   "id",
@@ -37,13 +67,13 @@ export const PUBLIC_TRADE_SELECT = [
   "session",
   "ticker",
   "direction",
-  "strategy",
   "trade_type",
-  "notes",
   "public_description",
   "is_public",
   "is_pinned",
   "image_url",
+  "image_crop",
+  "image_display_mode",
   "entry_time",
   "exit_time",
   "entry_price",
@@ -52,16 +82,10 @@ export const PUBLIC_TRADE_SELECT = [
   "duration_text",
   "account_type",
   "mode",
-  "confidence",
-  "emotion",
-  "followed_plan",
-  "mistake_type",
   "market_condition",
   "timeframe",
-  "news_event",
-  "psychology_notes",
-  "reviewed",
   "trade_mode",
+  "first_published_at",
   "copied_account_ids",
   "copy_trading_group_id",
 ].join(", ")
@@ -129,6 +153,17 @@ export function tradeSelectForViewer(isOwner: boolean): string {
   return isOwner ? TRADES_APP_SELECT : PUBLIC_TRADE_SELECT
 }
 
+export function tradeRelationForViewer(isOwner: boolean): "trades" | typeof TRADES_PUBLIC_READ_RELATION {
+  return isOwner ? "trades" : TRADES_PUBLIC_READ_RELATION
+}
+
+/** Profile trade lists that filter `is_public = true` for visitors. */
+export function tradeListRelationForProfileViewer(
+  isOwner: boolean
+): "trades" | typeof TRADES_PUBLIC_READ_RELATION {
+  return isOwner ? "trades" : TRADES_PUBLIC_READ_RELATION
+}
+
 /** Human-readable badge label from account_type / mode only (never account_name). */
 export function formatPublicAccountTypeLabel(
   raw: string | null | undefined
@@ -164,6 +199,9 @@ export function sanitizeTradeForViewer<T extends Record<string, unknown>>(
   if (!trade || options.isOwner) return trade
   const out = { ...trade } as T
   for (const key of TRADE_ACCOUNT_PUBLIC_STRIP_KEYS) {
+    delete (out as Record<string, unknown>)[key]
+  }
+  for (const key of TRADE_JOURNAL_PRIVATE_KEYS) {
     delete (out as Record<string, unknown>)[key]
   }
   return out

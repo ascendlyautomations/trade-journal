@@ -37,7 +37,7 @@ enum TradovateBrokerOAuthSession {
                 return .cancelled
             }
             BrokerOAuthDebugLog.error(type: String(describing: type(of: error)))
-            return .error(reason: error.localizedDescription)
+            return .error(reason: UserFacingError.message(for: error))
         }
     }
 }

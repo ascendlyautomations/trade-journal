@@ -45,6 +45,7 @@ import {
 } from "@/lib/inputTradeDateTime"
 import { tradeFormHasFutureDate, csvTradesHaveFutureDate, isDateAfterToday } from "@/lib/tradeDateValidation"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
+import { rpcTradeOwnerRead } from "@/lib/tradeOwnerRead"
 import { profilePath } from "@/lib/profileRoutes"
 import { hasStoredTradePoints } from "@/lib/resolveTradePoints"
 import { parseOptionalRr } from "@/lib/tradeRr"
@@ -1506,7 +1507,7 @@ export default function InputTradeForm({
     const { data: newTradeData, error } = await supabase
       .from("trades")
       .insert([tradeData])
-      .select()
+      .select("id")
       .single()
 
     if (error) {
@@ -1517,8 +1518,13 @@ export default function InputTradeForm({
       throw new Error(handleSupabaseError(error))
     }
 
-    if (newTradeData) {
-      prependTradeInCache(userId, newTradeData)
+    if (newTradeData?.id) {
+      const fullRow =
+        (await rpcTradeOwnerRead(supabase, String(newTradeData.id))) ?? {
+          ...tradeData,
+          id: newTradeData.id,
+        }
+      prependTradeInCache(userId, fullRow)
       devLog("[InputTradeForm] trade created", {
         tradeId: newTradeData.id,
         isPublic,

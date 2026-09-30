@@ -111,9 +111,16 @@ nonisolated struct GuestPublicExploreRepository: ExploreRepository, @unchecked S
 
     func tradeRoomsHomeBootstrap(
         scope: TradeRoomDiscoveryScope,
-        limit: Int
+        limit: Int,
+        suggestedCursor: String?,
+        popularCursor: String?
     ) async throws -> TradeRoomsHomeBootstrap {
-        try await live.tradeRoomsHomeBootstrap(scope: scope, limit: limit)
+        try await live.tradeRoomsHomeBootstrap(
+            scope: scope,
+            limit: limit,
+            suggestedCursor: suggestedCursor,
+            popularCursor: popularCursor
+        )
     }
 }
 

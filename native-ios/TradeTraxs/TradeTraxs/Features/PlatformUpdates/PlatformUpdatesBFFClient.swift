@@ -31,16 +31,12 @@ enum PlatformUpdatesBFFClient {
             return AppError.unknown(message: message)
         }
         if response.statusCode == 404 {
-            return AppError.unknown(
-                message: "Platform updates API is not available (HTTP 404). Deploy the latest web app to Vercel."
-            )
+            return AppError.unknown(message: "Unable to load updates. Please try again.")
         }
         let prefix = response.data.prefix(64)
         if prefix.starts(with: Data("<!DOCTYPE".utf8)) || prefix.starts(with: Data("<html".utf8)) {
-            return AppError.unknown(
-                message: "Platform updates API returned HTML instead of JSON (HTTP \(response.statusCode)). Deploy the latest web app to Vercel."
-            )
+            return AppError.unknown(message: "Unable to load updates. Please try again.")
         }
-        return AppError.unknown(message: "Platform updates request failed (HTTP \(response.statusCode)).")
+        return AppError.unknown(message: "Unable to load updates. Please try again.")
     }
 }

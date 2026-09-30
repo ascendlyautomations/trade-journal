@@ -20,6 +20,8 @@ nonisolated struct TradeSummary: Sendable, Equatable, Hashable, Identifiable, Co
     var thumbnail: MediaReference?
     var imageDisplayMode: TradeScreenshotDisplayMode
     var mode: TradeMode
+    /// Denormalized `trades.account_type` / `trades.mode` — not execution `trade_mode`.
+    var accountMode: TradingAccountMode? = nil
     var publicAccountBadge: String?
     var durationSeconds: Int?
     var durationText: String?

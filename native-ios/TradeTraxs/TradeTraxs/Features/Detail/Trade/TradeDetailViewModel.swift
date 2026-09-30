@@ -267,7 +267,7 @@ final class TradeDetailViewModel {
         trade = seed
         if let accountID = seed.accountID {
             let cachedName = cache.accountName(for: accountID)
-            accountMode = cache.accountMode(for: accountID)
+            accountMode = resolveAccountMode(for: seed)
             accountSize = cache.accountSize(for: accountID)
             switch experience {
             case .journal:
@@ -284,6 +284,8 @@ final class TradeDetailViewModel {
                 }
                 accountNumber = nil
             }
+        } else {
+            accountMode = seed.accountMode
         }
         if images.isEmpty, let thumb = seed.thumbnail {
             images = [
@@ -333,8 +335,7 @@ final class TradeDetailViewModel {
                         : raw
                 }
                 if accountMode == nil {
-                    accountMode = ProfileTradeFixtures.accountModes()[accountID]
-                        ?? cache.accountMode(for: accountID)
+                    accountMode = resolveAccountMode(for: trade)
                 }
                 if accountSize == nil, experience == .journal, isOwner {
                     accountSize = ProfileTradeFixtures.accountSizes()[accountID]
@@ -460,7 +461,13 @@ final class TradeDetailViewModel {
     }
 
     private func resolveAccountMetadata(for trade: Trade) async {
-        guard let accountID = trade.accountID else { return }
+        guard let accountID = trade.accountID else {
+            if accountMode == nil {
+                accountMode = trade.accountMode
+            }
+            didResolveAccountMetadata = true
+            return
+        }
 
         if accountName == nil, let cached = cache.accountName(for: accountID) {
             accountName = experience == .social
@@ -475,8 +482,13 @@ final class TradeDetailViewModel {
         if experience == .journal, isOwner, accountNumber == nil {
             accountNumber = cache.accountNumber(for: accountID)
         }
-        if accountMode == nil, let cached = cache.accountMode(for: accountID) {
+        if accountMode == nil, let cached = cache.accountMode(for: accountID),
+           cache.hasAccounts(for: trade.ownerProfileID)
+        {
             accountMode = cached
+        }
+        if accountMode == nil {
+            accountMode = trade.accountMode
         }
         if accountSize == nil, let cached = cache.accountSize(for: accountID) {
             accountSize = cached
@@ -484,6 +496,9 @@ final class TradeDetailViewModel {
 
         guard isOwner, experience == .journal else {
             accountNumber = nil
+            if accountMode == nil {
+                accountMode = trade.accountMode
+            }
             didResolveAccountMetadata = true
             return
         }
@@ -529,6 +544,17 @@ final class TradeDetailViewModel {
         if accountSize == nil {
             accountSize = cache.accountSize(for: accountID)
         }
+    }
+
+    /// Linked `accounts.mode` for the trade owner when cached; otherwise denormalized trade fields.
+    private func resolveAccountMode(for trade: Trade) -> TradingAccountMode? {
+        if let accountID = trade.accountID,
+           cache.hasAccounts(for: trade.ownerProfileID),
+           let cached = cache.accountMode(for: accountID)
+        {
+            return cached
+        }
+        return trade.accountMode
     }
 
     private func loadAuthorAvatar() async {

@@ -7,6 +7,11 @@ struct ExploreRoomCard: View {
     let onOpen: () -> Void
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var usesCompactLayout: Bool {
+        dynamicTypeSize < .accessibility1
+    }
 
     private let avatarSize: CGFloat = 52
 
@@ -40,7 +45,7 @@ struct ExploreRoomCard: View {
                     if let descriptionPreview {
                         Text(descriptionPreview)
                             .experienceStyle(.caption, color: colors.secondaryText)
-                            .lineLimit(2)
+                            .lineLimit(usesCompactLayout ? 2 : 4)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 

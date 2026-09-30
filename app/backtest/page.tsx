@@ -20,7 +20,7 @@ import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { tradeAnalysisHref } from "@/lib/tradeAnalysisNavigation"
 import { getDemoBacktestTrades } from "@/lib/demo/demoBacktest"
 import { DEMO_PROFILE } from "@/lib/demo/fixtures"
-import { TRADES_APP_SELECT } from "@/lib/publicAccountPrivacy"
+import { rpcTradesOwnerRows } from "@/lib/tradeOwnerRead"
 import { mapProjectedRows } from "@/lib/supabaseProjectedQuery"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { SkeletonBacktestPageContent } from "../components/ui/skeletons"
@@ -98,19 +98,15 @@ export default function BacktestPage() {
       setShareProfile(profileRow ?? null)
     }
 
-    const { data, error } = await supabase
-      .from("trades")
-      .select(TRADES_APP_SELECT)
-      .eq("user_id", user.id)
-      .eq("mode", "backtest")
-      .order("created_at", { ascending: false })
-      .overrideTypes<Record<string, unknown>[], { merge: false }>()
-
-    if (!error) {
-      setTrades(
-        mapProjectedRows(data, (row) => row as BacktestTrade)
+    const { rows } = await rpcTradesOwnerRows(supabase)
+    const data = rows
+      .filter((row) => String(row.mode ?? "").toLowerCase() === "backtest")
+      .sort(
+        (a, b) =>
+          String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""))
       )
-    }
+
+    setTrades(mapProjectedRows(data, (row) => row as BacktestTrade))
     setLoading(false)
   }
 

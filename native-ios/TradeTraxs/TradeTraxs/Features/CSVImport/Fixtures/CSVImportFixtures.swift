@@ -74,4 +74,21 @@ nonisolated enum CSVImportFixtures {
     \(goldenMathAuditHeader)
     2026-02-03,MNQ,Long,50,21400,21410,1,22:50:00,00:14:00,1,10,Asia,Trend,audit,,0,0
     """
+
+    /// Shared header; row 1 flexible, row 2 Entered/Exited (web per-row dispatch).
+    static let mixedNonTradovateCSV = """
+    Date,Symbol,Direction,PnL,EnteredAt,ExitedAt,EntryPrice,ExitPrice,Qty,Side
+    2026-01-15,NQ,Long,100,,,,,,
+    2026-01-15,MNQ,,200,2026-02-01 09:30:00,2026-02-01 09:35:00,21400,21410,2,Long
+    """
+
+    static let quotedCommaCSV = """
+    symbol,buyPrice,sellPrice,qty,pnl,boughtTimestamp,soldTimestamp
+    "MNQ,M6",4348.4,4348.1,1,"$(3.00)",05/05/2026 20:11:36,05/05/2026 20:11:40
+    """
+
+    static let flexibleWithDurationCSV = """
+    Date,Symbol,Direction,PnL,Duration
+    2026-01-15,NQ,Long,50,0:44:00
+    """
 }

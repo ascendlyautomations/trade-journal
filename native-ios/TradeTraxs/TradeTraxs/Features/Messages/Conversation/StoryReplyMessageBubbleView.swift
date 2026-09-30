@@ -48,7 +48,7 @@ struct StoryReplyMessageBubbleView: View {
         HStack(spacing: ExperienceSpacing.sm) {
             storyThumbnail
             Text(StoryReplyMessageSupport.contextLabel(payload: payload, viewerProfileID: viewerProfileID))
-                .experienceStyle(.caption, color: isOutgoing ? colors.onAccent.opacity(0.88) : colors.secondaryText)
+                .experienceStyle(.caption, color: isOutgoing ? colors.onAccent.opacity(0.92) : colors.secondaryText)
                 .fontWeight(.medium)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)

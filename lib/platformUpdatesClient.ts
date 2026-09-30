@@ -68,8 +68,6 @@ export async function createAdminPlatformUpdate(input: {
   category: PlatformUpdateCategoryId
   destination: PlatformUpdateDestinationId
   sendPush: boolean
-  status: "draft" | "scheduled"
-  publishAt?: string | null
 }): Promise<AdminPlatformUpdate> {
   const res = await fetch("/api/admin/platform-updates", {
     method: "POST",
@@ -83,8 +81,6 @@ export async function createAdminPlatformUpdate(input: {
       category: input.category,
       destination: input.destination,
       sendPush: input.sendPush,
-      status: input.status,
-      publishAt: input.publishAt ?? null,
     }),
   })
   const json = await parseJson(res)
@@ -109,7 +105,7 @@ export async function patchAdminPlatformUpdate(
   return json.update as AdminPlatformUpdate
 }
 
-export async function deleteAdminPlatformUpdateDraft(id: string): Promise<void> {
+export async function deleteAdminPlatformUpdate(id: string): Promise<void> {
   const res = await fetch(`/api/admin/platform-updates/${id}`, {
     method: "DELETE",
     headers: { ...(await supabaseBearerHeaders()) },
@@ -119,6 +115,9 @@ export async function deleteAdminPlatformUpdateDraft(id: string): Promise<void> 
     throw new Error(String(json.error ?? "Delete failed"))
   }
 }
+
+/** @deprecated Use deleteAdminPlatformUpdate */
+export const deleteAdminPlatformUpdateDraft = deleteAdminPlatformUpdate
 
 export async function publishAdminPlatformUpdate(id: string): Promise<{
   publishSucceeded: boolean

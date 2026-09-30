@@ -35,9 +35,8 @@ final class TradeRoomsHomeViewModel {
     private(set) var isLoadingMoreDiscovery = false
 
     private static let discoveryInitialLimit = 20
-    private static let discoveryPageIncrement = 20
-    private static let discoveryMaxLimit = 50
-    private var allScopeDiscoveryLimit = discoveryInitialLimit
+    private var suggestedNextCursor: String?
+    private var popularNextCursor: String?
 
     private let messages: any MessageRepository
     private let rooms: any RoomRepository
@@ -200,8 +199,8 @@ final class TradeRoomsHomeViewModel {
 
     var canLoadMoreAllScopeDiscovery: Bool {
         activeDiscoveryScope == .all
-            && allScopeDiscoveryLimit < Self.discoveryMaxLimit
             && !isLoadingMoreDiscovery
+            && (suggestedNextCursor != nil || popularNextCursor != nil)
     }
 
     var discoverableRooms: [ExploreRoomSuggestion] {
@@ -288,23 +287,84 @@ final class TradeRoomsHomeViewModel {
         guard discoveryScope != scope else { return }
         ExperienceHaptics.play(.selection)
         discoveryScope = scope
-        resetAllScopeDiscoveryLimitIfNeeded(for: scope)
+        suggestedNextCursor = nil
+        popularNextCursor = nil
         Task { await loadHomeBootstrap(forceNetwork: true) }
     }
 
     func loadMoreAllScopeDiscoveryIfNeeded(currentRoomID: RoomID) async {
         guard activeDiscoveryScope == .all else { return }
-        guard canLoadMoreAllScopeDiscovery else { return }
-        guard currentRoomID == allScopeDiscoveryPaginationAnchorRoomID else { return }
-        let nextLimit = min(
-            allScopeDiscoveryLimit + Self.discoveryPageIncrement,
-            Self.discoveryMaxLimit
-        )
-        guard nextLimit > allScopeDiscoveryLimit else { return }
+        guard !isLoadingMoreDiscovery else { return }
+        if let last = suggestedDiscoverableRooms.last?.id,
+           last == currentRoomID,
+           suggestedNextCursor != nil
+        {
+            await loadMoreDiscoveryPage(section: .suggested)
+            return
+        }
+        if let last = popularDiscoverableRooms.last?.id,
+           last == currentRoomID,
+           popularNextCursor != nil
+        {
+            await loadMoreDiscoveryPage(section: .popular)
+        }
+    }
+
+    private func loadMoreDiscoveryPage(section: TradeRoomDiscoveryMode) async {
+        guard section == .suggested || section == .popular else { return }
+        guard let viewerID else { return }
         isLoadingMoreDiscovery = true
         defer { isLoadingMoreDiscovery = false }
-        allScopeDiscoveryLimit = nextLimit
-        await loadHomeBootstrap(forceNetwork: true)
+        do {
+            let bootstrap = try await explore.tradeRoomsHomeBootstrap(
+                scope: .all,
+                limit: Self.discoveryInitialLimit,
+                suggestedCursor: section == .suggested ? suggestedNextCursor : nil,
+                popularCursor: section == .popular ? popularNextCursor : nil
+            )
+            applyDiscoveryPagination(from: bootstrap)
+            if section == .suggested {
+                suggestedItems = mergeDiscoveryRows(existing: suggestedItems, incoming: bootstrap.suggested)
+            } else {
+                popularItems = mergeDiscoveryRows(existing: popularItems, incoming: bootstrap.popular)
+            }
+            _ = reconcileYourRoomsWithMembership()
+            logDisplayedIfChanged(source: .network)
+            _ = viewerID
+        } catch {
+            discoveryErrorMessage = ProfileSectionSupport.message(for: error)
+        }
+    }
+
+    private func mergeDiscoveryRows(
+        existing: [ExploreRoomSuggestion],
+        incoming: [ExploreRoomSuggestion]
+    ) -> [ExploreRoomSuggestion] {
+        var seen = Set(existing.map(\.id))
+        var merged = existing
+        for row in incoming where !seen.contains(row.id) {
+            merged.append(row)
+            seen.insert(row.id)
+        }
+        for row in incoming {
+            if let index = merged.firstIndex(where: { $0.id == row.id }) {
+                merged[index] = row
+            }
+        }
+        return merged
+    }
+
+    private func applyDiscoveryPagination(from bootstrap: TradeRoomsHomeBootstrap) {
+        if let next = bootstrap.suggestedNextCursor, !next.isEmpty {
+            suggestedNextCursor = next
+        } else {
+            suggestedNextCursor = nil
+        }
+        if let next = bootstrap.popularNextCursor, !next.isEmpty {
+            popularNextCursor = next
+        } else {
+            popularNextCursor = nil
+        }
     }
 
     func openDiscoveryRoom(_ room: ExploreRoomSuggestion) {
@@ -422,9 +482,8 @@ final class TradeRoomsHomeViewModel {
     }
 
     func refresh() async {
-        if activeDiscoveryScope == .all {
-            allScopeDiscoveryLimit = Self.discoveryInitialLimit
-        }
+        suggestedNextCursor = nil
+        popularNextCursor = nil
         await performLoad(forceNetwork: true)
     }
 
@@ -596,16 +655,8 @@ final class TradeRoomsHomeViewModel {
         return TradeRoomDiscoveryMemberCountSort.sorted(rooms)
     }
 
-    private func resetAllScopeDiscoveryLimitIfNeeded(for scope: TradeRoomDiscoveryScope) {
-        if scope == .all {
-            allScopeDiscoveryLimit = Self.discoveryInitialLimit
-        }
-    }
-
     private func bootstrapFetchLimit(for scope: TradeRoomDiscoveryScope) -> Int {
-        if scope == .all {
-            return allScopeDiscoveryLimit
-        }
+        _ = scope
         return Self.discoveryInitialLimit
     }
 
@@ -760,6 +811,7 @@ final class TradeRoomsHomeViewModel {
             yourRoomsItems = bootstrap.yourRooms
             suggestedItems = bootstrap.suggested
             popularItems = bootstrap.popular
+            applyDiscoveryPagination(from: bootstrap)
         }
 
         _ = reconcileYourRoomsWithMembership()

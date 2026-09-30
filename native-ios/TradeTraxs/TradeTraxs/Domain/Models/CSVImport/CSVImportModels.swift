@@ -42,6 +42,8 @@ nonisolated enum CSVLogicalField: String, Hashable, Codable, Sendable, CaseItera
     case entryTime
     case exitTime
     case duration
+    case accountType = "account_type"
+    case mode
 
     var id: String { rawValue }
 
@@ -68,6 +70,8 @@ nonisolated enum CSVLogicalField: String, Hashable, Codable, Sendable, CaseItera
         case .entryTime: return "Entry Time"
         case .exitTime: return "Exit Time"
         case .duration: return "Duration"
+        case .accountType: return "Account Type"
+        case .mode: return "Mode"
         }
     }
 

@@ -83,7 +83,9 @@ enum MessagingBootstrap: ScreenBootstrap {
             )
         }
 
-        async let conversationsTask = context.messages.conversations(page: PageRequest(limit: 100))
+        async let conversationsTask = context.messages.conversations(
+            page: PageRequest(limit: MessagingInboxPagination.pageSize)
+        )
         async let roomsTask = SessionMemberRoomsStore.shared.memberRooms(
             for: viewer,
             repository: context.rooms,
@@ -94,6 +96,10 @@ enum MessagingBootstrap: ScreenBootstrap {
         let (memberRooms, roomUnread, roomActivityAt) = try await roomsTask
 
         context.inboxStore.replaceConversations(conversationResult.items)
+        context.inboxStore.applyInboxPagination(
+            nextCursor: conversationResult.nextCursor,
+            hasMore: conversationResult.nextCursor != nil
+        )
         context.inboxStore.replaceRooms(memberRooms, activityAt: roomActivityAt, unread: roomUnread)
 
         SessionProfileStore.shared.seed(

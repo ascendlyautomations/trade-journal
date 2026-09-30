@@ -972,7 +972,7 @@ final class GlobalUploadCoordinator {
             let videoBytes: Int64 = {
                 if checkpoint.reelVideoPublicURL != nil { return 0 }
                 if let resolvedReel {
-                    return Int64((try? Data(contentsOf: resolvedReel.fileURL).count) ?? tradeUploadByteEstimate(spec))
+                    return Int64(resolvedReel.byteCount)
                 }
                 return 0
             }()
@@ -1062,8 +1062,7 @@ final class GlobalUploadCoordinator {
             }
 
             if let resolvedReel, checkpoint.reelVideoPublicURL == nil, let snapshot = spec.reelSnapshot {
-                let videoData = try Data(contentsOf: resolvedReel.fileURL, options: [.mappedIfSafe])
-                guard videoData.count <= MediaVideoPreparation.maxFinalUploadBytes else {
+                guard resolvedReel.byteCount <= MediaVideoPreparation.maxFinalUploadBytes else {
                     throw AppError.unknown(message: "Videos must be 100 MB or smaller.")
                 }
                 let videoPath = checkpoint.reelVideoStoragePath
@@ -1072,11 +1071,11 @@ final class GlobalUploadCoordinator {
                 persistTradeRetry(jobID: jobID, spec: spec, services: services, checkpoint: checkpoint)
                 await UploadProgressRelay.shared.setActiveSegment(jobID: jobID, segmentID: "reelVideo")
                 let videoRef = try await UploadProgressContext.$jobID.withValue(jobID) {
-                    try await services.uploadService.upload(
-                        UploadRequest(
+                    try await services.uploadService.uploadFile(
+                        UploadFileRequest(
                             bucket: StorageBucket.reels.rawValue,
                             path: videoPath,
-                            data: videoData,
+                            fileURL: resolvedReel.fileURL,
                             contentType: "video/mp4",
                             purpose: nil,
                             cacheControl: "31536000"

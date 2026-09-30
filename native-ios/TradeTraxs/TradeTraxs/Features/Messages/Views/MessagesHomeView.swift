@@ -239,6 +239,13 @@ struct MessagesHomeView: View {
                     ForEach(displayedDirectMessageItems) { item in
                         conversationButton(item)
                             .listRowBackground(colors.backgroundPrimary)
+                            .onAppear {
+                                if item.id == displayedDirectMessageItems.last?.id,
+                                   directMessagesSectionExpanded || !showsDirectMessagesSectionToggle
+                                {
+                                    Task { await viewModel.loadMoreInboxIfNeeded() }
+                                }
+                            }
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 dmTrailingActions(item)
                             }
@@ -272,6 +279,7 @@ struct MessagesHomeView: View {
             }
         }
         .experienceInsetGroupedListStyle(pageBackground: false)
+        .scrollDismissesKeyboard(.interactively)
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: viewModel.searchText)
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: orderSignature)
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: inboxStore.activityRevision)

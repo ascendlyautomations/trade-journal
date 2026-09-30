@@ -11,9 +11,10 @@ import {
 import { formatPostedTimestamp } from "@/lib/formatRelativeTime"
 import {
   PUBLIC_TRADE_SELECT,
-  TRADES_APP_SELECT,
+  TRADES_PUBLIC_READ_RELATION,
   sanitizeTradeForViewer,
 } from "@/lib/publicAccountPrivacy"
+import { rpcTradeOwnerRead } from "@/lib/tradeOwnerRead"
 import { SHARED_TRADE_UNAVAILABLE } from "@/lib/sharedContentNavigation"
 import { supabase } from "@/lib/supabaseClient"
 import { asJsonObject } from "@/lib/supabaseProjectedQuery"
@@ -128,7 +129,7 @@ export default function SharedTradeMessageCard({
 
     void (async () => {
       const { data } = await supabase
-        .from("trades")
+        .from(TRADES_PUBLIC_READ_RELATION)
         .select(PUBLIC_TRADE_SELECT)
         .eq("id", resolvedTradeId)
         .maybeSingle()
@@ -144,12 +145,7 @@ export default function SharedTradeMessageCard({
 
       let resolved = tradeRow
       if (isOwner) {
-        const { data: full } = await supabase
-          .from("trades")
-          .select(TRADES_APP_SELECT)
-          .eq("id", resolvedTradeId)
-          .maybeSingle()
-          .overrideTypes<Record<string, unknown> | null, { merge: false }>()
+        const full = await rpcTradeOwnerRead(supabase, resolvedTradeId)
         resolved = asJsonObject(full) ?? tradeRow
       }
 

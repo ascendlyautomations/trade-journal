@@ -20,8 +20,10 @@ import {
 } from "@/lib/formatDisplay"
 import {
   sanitizeTradeForViewer,
+  tradeRelationForViewer,
   tradeSelectForViewer,
 } from "@/lib/publicAccountPrivacy"
+import { rpcTradeOwnerRead } from "@/lib/tradeOwnerRead"
 import { resolveTradePoints } from "@/lib/resolveTradePoints"
 import ContentMediaPreview from "@/app/components/ContentMediaPreview"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
@@ -91,24 +93,25 @@ export default function TradeDetailPageClient({
       const sessionUserId = session?.user?.id
       setUserId(sessionUserId)
 
-      // Probe ownership with a light select, then fetch full row for the viewer.
-      const { data: ownershipRow } = await supabase
-        .from("trades")
-        .select("user_id")
-        .eq("id", tradeId)
-        .maybeSingle()
-
       const isOwner =
         sessionUserId != null &&
-        ownershipRow?.user_id != null &&
-        String(sessionUserId) === String(ownershipRow.user_id)
+        (
+          await supabase
+            .from("trades")
+            .select("user_id")
+            .eq("id", tradeId)
+            .eq("user_id", sessionUserId)
+            .maybeSingle()
+        ).data != null
 
-      const { data, error } = await supabase
-        .from("trades")
-        .select(tradeSelectForViewer(isOwner))
-        .eq("id", tradeId)
-        .maybeSingle()
-        .overrideTypes<Record<string, unknown> | null, { merge: false }>()
+      const { data, error } = isOwner
+        ? { data: await rpcTradeOwnerRead(supabase, tradeId), error: null }
+        : await supabase
+            .from(tradeRelationForViewer(isOwner))
+            .select(tradeSelectForViewer(isOwner))
+            .eq("id", tradeId)
+            .maybeSingle()
+            .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
       if (cancelled) return
 

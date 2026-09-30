@@ -710,6 +710,7 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         page: PageRequest
     ) async throws -> CursorPage<Profile> {
         struct Edge: Codable {
+            var id: String?
             var follower_id: String?
             var following_id: String?
             var created_at: String?
@@ -718,8 +719,8 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         let edges: [Edge] = try await supabase.database.select(
             Edge.self,
             from: table,
-            query: SupabaseQuery.page(page) + [
-                SupabaseQuery.select("\(profileKey),created_at"),
+            query: SupabaseQuery.createdAtIDPage(page) + [
+                SupabaseQuery.select("id,\(profileKey),created_at"),
                 SupabaseQuery.eq(foreignKey, profileID.rawValue),
             ]
         )
@@ -759,7 +760,12 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         let items = orderedIDs.compactMap { byID[$0] }
         return CursorPage(
             items: items,
-            nextCursor: SupabaseQuery.nextCursor(items: edges, limit: page.limit) { $0.created_at }
+            nextCursor: SupabaseQuery.nextCreatedAtIDCursor(
+                items: edges,
+                limit: page.limit,
+                createdAt: { $0.created_at },
+                id: { $0.id ?? "" }
+            )
         )
     }
 

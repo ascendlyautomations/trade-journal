@@ -42,37 +42,60 @@ extension View {
         menuSize: @escaping (MessageID) -> CGSize,
         @ViewBuilder menu: @escaping (MessageID) -> Menu
     ) -> some View {
-        overlayPreferenceValue(MessageBubbleActionMenuAnchorKey.self) { anchors in
-            if let messageID = activeMessageID.wrappedValue,
-               let anchor = anchors[messageID.rawValue] {
-                GeometryReader { geometry in
-                    let anchorFrame = geometry[anchor.anchor]
-                    ZStack {
-                        Color.black.opacity(0.001)
-                            .ignoresSafeArea()
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                activeMessageID.wrappedValue = nil
-                            }
-                            .accessibilityHidden(true)
-
-                        MessageBubbleActionMenuHost(
-                            anchorFrame: anchorFrame,
-                            isOutgoing: anchor.isOutgoing,
-                            containerSize: geometry.size,
-                            safeInsets: geometry.safeAreaInsets,
-                            fallbackSize: menuSize(messageID),
-                            menu: menu(messageID)
-                        )
-                    }
-                }
-                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
-            }
-        }
-        .animation(
-            ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: false),
-            value: activeMessageID.wrappedValue
+        modifier(
+            MessageBubbleActionMenuOverlayModifier(
+                activeMessageID: activeMessageID,
+                menuSize: menuSize,
+                menu: menu
+            )
         )
+    }
+}
+
+private struct MessageBubbleActionMenuOverlayModifier<Menu: View>: ViewModifier {
+    @Binding var activeMessageID: MessageID?
+    let menuSize: (MessageID) -> CGSize
+    @ViewBuilder let menu: (MessageID) -> Menu
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .overlayPreferenceValue(MessageBubbleActionMenuAnchorKey.self) { anchors in
+                if let messageID = activeMessageID,
+                   let anchor = anchors[messageID.rawValue] {
+                    GeometryReader { geometry in
+                        let anchorFrame = geometry[anchor.anchor]
+                        ZStack {
+                            Color.black.opacity(0.001)
+                                .ignoresSafeArea()
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    activeMessageID = nil
+                                }
+                                .accessibilityHidden(true)
+
+                            MessageBubbleActionMenuHost(
+                                anchorFrame: anchorFrame,
+                                isOutgoing: anchor.isOutgoing,
+                                containerSize: geometry.size,
+                                safeInsets: geometry.safeAreaInsets,
+                                fallbackSize: menuSize(messageID),
+                                menu: menu(messageID)
+                            )
+                        }
+                    }
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .opacity.combined(with: .scale(scale: 0.96, anchor: .top))
+                    )
+                }
+            }
+            .animation(
+                ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
+                value: activeMessageID
+            )
     }
 }
 

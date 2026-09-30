@@ -187,6 +187,8 @@ import {
   PUBLIC_TRADE_SELECT,
   sanitizeTradeForViewer,
   sanitizeTradesForViewer,
+  tradeListRelationForProfileViewer,
+  tradeRelationForViewer,
   tradeSelectForViewer,
 } from "@/lib/publicAccountPrivacy"
 import {
@@ -869,7 +871,7 @@ function ProfilePageContent() {
 
       // Inclusive range end fetches pageSize + 1 rows to detect hasMore.
       const { data, error } = await supabase
-        .from("trades")
+        .from(tradeListRelationForProfileViewer(isOwner))
         .select(tradeSelectForViewer(isOwner))
         .eq("user_id", forProfileId)
         .eq("is_public", true)
@@ -901,7 +903,7 @@ function ProfilePageContent() {
         return getDemoProfileTrades(forProfileId, currentUserId)
       }
       const { data, error } = await supabase
-        .from("trades")
+        .from(tradeListRelationForProfileViewer(isOwner))
         .select(tradeSelectForViewer(isOwner))
         .eq("user_id", forProfileId)
         .eq("is_public", true)
@@ -923,8 +925,10 @@ function ProfilePageContent() {
     if (isDemoModeActive() && isDemoProfileId(forProfileId)) {
       return getDemoProfileTrades(forProfileId, currentUserId)
     }
+    const isOwner =
+      currentUserId != null && String(currentUserId) === String(forProfileId)
     const { data, error } = await supabase
-      .from("trades")
+      .from(tradeListRelationForProfileViewer(isOwner))
       .select(PROFILE_SUMMARY_TRADE_SELECT)
       .eq("user_id", forProfileId)
       .eq("is_public", true)
@@ -3398,7 +3402,7 @@ function ProfilePageContent() {
         const isOwner =
           currentUserId != null && String(currentUserId) === String(profile.id)
         const { data, error } = await supabase
-          .from("trades")
+          .from(tradeRelationForViewer(isOwner))
           .select(isOwner ? "*" : PUBLIC_TRADE_SELECT)
           .eq("id", tradeId)
           .eq("user_id", profile.id)

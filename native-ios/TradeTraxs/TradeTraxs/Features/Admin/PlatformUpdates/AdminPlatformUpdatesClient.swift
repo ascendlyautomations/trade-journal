@@ -76,6 +76,26 @@ enum AdminPlatformUpdatesClient {
         _ = try PlatformUpdatesBFFClient.decodeSuccess(SinglePayload.self, transport: transport, response: response)
     }
 
+    static func delete(transport: SupabaseTransport, id: String) async throws {
+        let response = try await transport.send(
+            host: .bff,
+            path: "/api/admin/platform-updates/\(id)",
+            method: .delete,
+            requiresAuthentication: true
+        )
+        struct OkPayload: Decodable {
+            var ok: Bool?
+            var error: String?
+        }
+        guard (200 ... 299).contains(response.statusCode) else {
+            throw PlatformUpdatesBFFClient.bffFailure(from: response)
+        }
+        let decoded = try transport.decoder.decode(OkPayload.self, from: response)
+        if decoded.ok != true {
+            throw AppError.unknown(message: decoded.error ?? "Delete failed.")
+        }
+    }
+
     static func publish(transport: SupabaseTransport, id: String) async throws {
         let response = try await transport.send(
             host: .bff,

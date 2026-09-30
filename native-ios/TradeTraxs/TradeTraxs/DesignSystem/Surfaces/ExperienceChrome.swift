@@ -8,15 +8,26 @@ import SwiftUI
 /// - Page content is inset exactly once by NavigationStack / TabView — never manually
 ///   re-padded with device-specific status-bar / home-indicator constants.
 struct ExperienceAppChromeModifier: ViewModifier {
+    var usesFeedOpaqueChrome: Bool
     @Environment(\.themeColors) private var colors
 
     func body(content: Content) -> some View {
-        content
-            .toolbarBackground(colors.navigationBackground, for: .navigationBar)
-            .toolbarBackground(colors.tabBarBackground, for: .tabBar)
-            .toolbarBackgroundVisibility(.visible, for: .navigationBar, .tabBar)
-            .modifier(ExperienceScrollEdgeChromeModifier())
-            .experienceKeyboardDismissOnTapOutside()
+        Group {
+            if usesFeedOpaqueChrome {
+                content
+                    .toolbarBackground(colors.navigationBackground, for: .navigationBar)
+                    .toolbarBackground(colors.tabBarBackground, for: .tabBar)
+                    .toolbarBackgroundVisibility(.visible, for: .navigationBar, .tabBar)
+                    .modifier(ExperienceScrollEdgeChromeModifier())
+            } else {
+                content
+                    .toolbarBackground(colors.navigationBackground, for: .navigationBar)
+                    .toolbarBackground(colors.tabBarBackground, for: .tabBar)
+                    .toolbarBackgroundVisibility(.visible, for: .navigationBar, .tabBar)
+                    .modifier(ExperienceScrollEdgeChromeModifier())
+            }
+        }
+        .experienceKeyboardDismissOnTapOutside()
     }
 }
 
@@ -66,8 +77,8 @@ struct ExperienceScrollEmbeddedSectionFillModifier: ViewModifier {
 
 extension View {
     /// Apply once at the authenticated shell (``MainTabShellView``).
-    func experienceAppChrome() -> some View {
-        modifier(ExperienceAppChromeModifier())
+    func experienceAppChrome(usesFeedOpaqueChrome: Bool = false) -> some View {
+        modifier(ExperienceAppChromeModifier(usesFeedOpaqueChrome: usesFeedOpaqueChrome))
     }
 
     /// Page fill behind NavigationStack content — background ignores safe areas;

@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation"
 import InputTradeForm from "../components/InputTradeForm"
 import { formatEST } from "@/lib/formatEST"
 import { useToast } from "@/app/components/ui"
-import { TRADES_APP_SELECT } from "@/lib/publicAccountPrivacy"
+import { rpcTradesOwnerRows } from "@/lib/tradeOwnerRead"
 import { mapProjectedRows } from "@/lib/supabaseProjectedQuery"
 import { useUserProfile } from "@/lib/useUserProfile"
 
@@ -41,14 +41,17 @@ export default function ReviewPage() {
   }, [currentPage, trades])
 
   const fetchTrades = useCallback(async () => {
-    const { data } = await supabase
-      .from("trades")
-      .select(TRADES_APP_SELECT)
-      .eq("user_id", user?.id)
-      .eq("is_initial_import", true)
-      .eq("reviewed", false)
-      .order("created_at", { ascending: true })
-      .overrideTypes<Record<string, unknown>[], { merge: false }>()
+    const { rows } = await rpcTradesOwnerRows(supabase)
+    const data = rows
+      .filter(
+        (row) =>
+          row.is_initial_import === true &&
+          row.reviewed === false
+      )
+      .sort(
+        (a, b) =>
+          String(a.created_at ?? "").localeCompare(String(b.created_at ?? ""))
+      )
 
     const nextTrades = mapProjectedRows(
       data,

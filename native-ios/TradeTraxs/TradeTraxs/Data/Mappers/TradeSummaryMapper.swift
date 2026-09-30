@@ -11,7 +11,15 @@ nonisolated enum TradeSummaryMapper {
         }
         let createdAt = ISO8601.date(from: wire.created_at) ?? entryAt
         let side = TradeMapper.mapSide(wire.direction)
-        let mode = TradeMapper.mapMode(wire.trade_mode ?? wire.mode ?? wire.account_type)
+        let mode = TradeMapper.mapExecutionMode(
+            tradeMode: wire.trade_mode,
+            mode: wire.mode,
+            accountType: wire.account_type
+        )
+        let accountMode = TradeMapper.mapDenormalizedAccountMode(
+            accountType: wire.account_type,
+            mode: wire.mode
+        )
         let visibility: ContentVisibility = (wire.is_public?.value == true) ? .public : .private
         let badge = PublicTradeAccountBadge.label(
             tradeMode: wire.mode,
@@ -38,6 +46,7 @@ nonisolated enum TradeSummaryMapper {
             ),
             imageDisplayMode: TradeScreenshotDisplayMode.resolve(wire.image_display_mode),
             mode: mode,
+            accountMode: accountMode,
             publicAccountBadge: badge,
             durationSeconds: flexDecimal(wire.duration_seconds).map {
                 Int(truncating: NSDecimalNumber(decimal: $0))
@@ -65,6 +74,7 @@ nonisolated enum TradeSummaryMapper {
             thumbnail: detail.thumbnail,
             imageDisplayMode: detail.imageDisplayMode,
             mode: detail.mode,
+            accountMode: detail.accountMode,
             publicAccountBadge: detail.publicAccountBadge,
             durationSeconds: detail.durationSeconds,
             durationText: detail.durationText
@@ -169,6 +179,7 @@ nonisolated enum TradeSummaryMapper {
             thumbnail: trade.thumbnail,
             imageDisplayMode: trade.imageDisplayMode,
             mode: trade.mode,
+            accountMode: trade.accountMode,
             publicAccountBadge: trade.publicAccountBadge,
             durationSeconds: trade.durationSeconds,
             durationText: trade.durationText
@@ -225,7 +236,7 @@ nonisolated enum TradeSummaryMapper {
             isInitialImport: nil,
             importSource: nil,
             importFingerprint: nil,
-            accountMode: nil,
+            accountMode: summary.accountMode,
             publicAccountBadge: summary.publicAccountBadge,
             createdAt: summary.createdAt,
             updatedAt: summary.createdAt

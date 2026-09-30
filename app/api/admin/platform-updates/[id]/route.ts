@@ -48,8 +48,6 @@ type PatchBody = {
   category?: string
   destination?: string
   sendPush?: boolean
-  status?: "draft" | "scheduled" | "cancelled"
-  publishAt?: string | null
 }
 
 export async function PATCH(req: Request, context: RouteContext) {
@@ -62,9 +60,9 @@ export async function PATCH(req: Request, context: RouteContext) {
   if (!existing) {
     return Response.json({ error: "Not found" }, { status: 404 })
   }
-  if (existing.status === "published" || existing.status === "cancelled") {
+  if (existing.status !== "draft") {
     return Response.json(
-      { error: "Published updates cannot be edited." },
+      { error: "Only draft updates can be edited." },
       { status: 409 }
     )
   }
@@ -86,19 +84,14 @@ export async function PATCH(req: Request, context: RouteContext) {
 
   const body = raw as PatchBody
 
-  const nextStatus =
-    body.status ??
-    (existing.status as "draft" | "scheduled" | "cancelled")
-
   const merged = {
     title: body.title ?? existing.title,
     body: body.body ?? existing.body,
     category: body.category ?? existing.category,
     destination: body.destination ?? existing.destination,
     send_push: body.sendPush ?? existing.send_push,
-    status: nextStatus,
-    publish_at:
-      body.publishAt !== undefined ? body.publishAt : existing.publish_at,
+    status: "draft" as const,
+    publish_at: null,
   }
 
   const validation = validatePlatformUpdateInput({
@@ -107,8 +100,6 @@ export async function PATCH(req: Request, context: RouteContext) {
     category: merged.category,
     destination: merged.destination,
     send_push: merged.send_push,
-    status: merged.status === "scheduled" ? "scheduled" : undefined,
-    publish_at: merged.status === "scheduled" ? merged.publish_at : null,
   })
   if (validation) {
     return Response.json({ error: validation }, { status: 400 })
@@ -129,12 +120,12 @@ export async function PATCH(req: Request, context: RouteContext) {
       category: merged.category,
       destination: merged.destination,
       send_push: merged.send_push === true,
-      status: merged.status,
-      publish_at: merged.status === "scheduled" ? merged.publish_at : null,
+      status: "draft",
+      publish_at: null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", updateId)
-    .in("status", ["draft", "scheduled"])
+    .eq("status", "draft")
     .select("*")
     .single()
 
@@ -153,14 +144,22 @@ export async function DELETE(req: Request, context: RouteContext) {
   if (auth.error) return auth.error
 
   const { id } = await context.params
-  const { error } = await supabaseServiceRole
+  const updateId = id.trim()
+  const { data, error } = await supabaseServiceRole
     .from("platform_updates")
     .delete()
-    .eq("id", id.trim())
-    .eq("status", "draft")
+    .eq("id", updateId)
+    .in("status", ["draft", "published"])
+    .select("id")
 
   if (error) {
     return Response.json({ error: error.message }, { status: 500 })
+  }
+  if (!data?.length) {
+    return Response.json(
+      { error: "Update not found or cannot be deleted." },
+      { status: 404 }
+    )
   }
   return Response.json({ ok: true })
 }

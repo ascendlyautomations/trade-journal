@@ -12,7 +12,7 @@ import {
   seedAccountsCache,
   seedTradesCache,
 } from "@/lib/appDataCache"
-import { TRADES_APP_SELECT } from "@/lib/publicAccountPrivacy"
+import { rpcTradesOwnerRows } from "@/lib/tradeOwnerRead"
 import { excludeBacktestTrades } from "@/lib/tradeModeFilters"
 import type { DashboardBootstrapProviding } from "./adapters.ts"
 import {
@@ -74,20 +74,12 @@ export class DashboardRestBootstrapRepository
       .eq("user_id", uid)
     if (accountId) accountsQuery = accountsQuery.eq("id", accountId)
 
-    let tradesQuery = this.client
-      .from("trades")
-      .select(TRADES_APP_SELECT)
-      .eq("user_id", uid)
-      .order("created_at", { ascending: false })
-      .limit(DASHBOARD_TRADE_LIMIT)
-    if (accountId) tradesQuery = tradesQuery.eq("account_id", accountId)
-
-    const [accountsRes, tradesRes, countRes, payoutRes] = await Promise.all([
+    const [accountsRes, ownerRowsResult, countRes, payoutRes] = await Promise.all([
       accountsQuery.overrideTypes<
         DashboardBootstrapV1["data"]["accounts"],
         { merge: false }
       >(),
-      tradesQuery.overrideTypes<TableRow<"trades">[], { merge: false }>(),
+      rpcTradesOwnerRows(this.client, { limit: DASHBOARD_TRADE_LIMIT }),
       this.client
         .from("trades")
         .select("id", { count: "exact", head: true })
@@ -99,11 +91,18 @@ export class DashboardRestBootstrapRepository
     ])
 
     if (accountsRes.error) throw accountsRes.error
-    if (tradesRes.error) throw tradesRes.error
+    if (ownerRowsResult.error) throw ownerRowsResult.error
 
     const accounts = accountsRes.data ?? []
-    const trade_window = mapProjectedRows(
-      tradesRes.data,
+    let trade_window = ownerRowsResult.rows
+    if (accountId) {
+      const aid = accountId.trim()
+      trade_window = trade_window.filter(
+        (row) => String(row.account_id ?? "").trim() === aid
+      )
+    }
+    trade_window = mapProjectedRows(
+      trade_window,
       (row) => row as TableRow<"trades">
     )
     const eligible = excludeBacktestTrades(

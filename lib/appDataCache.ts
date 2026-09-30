@@ -2,9 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { isDemoUserId } from "./demo/constants"
 import { DEMO_ACCOUNTS, DEMO_TRADES } from "./demo/fixtures"
 import {
+  TRADES_ANALYTICS_FIELDS,
   TRADES_ANALYTICS_SELECT,
   TRADES_APP_SELECT,
 } from "./publicAccountPrivacy"
+import { rpcTradesOwnerRows } from "./tradeOwnerRead"
 import { isNativeIos } from "./nativePlatform"
 import {
   persistDashboardAccounts,
@@ -699,6 +701,14 @@ export function isAnalyticsHistoryComplete(
  *
  * Auth warm / generic prefetch must NOT call this — only explicit consumers.
  */
+function pickTradeAnalyticsProjection(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const key of TRADES_ANALYTICS_FIELDS) {
+    if (key in row) out[key] = row[key]
+  }
+  return out
+}
+
 export async function ensureFullTradesHistory(
   supabase: SupabaseClient,
   userId: string
@@ -723,18 +733,11 @@ export async function ensureFullTradesHistory(
   if (existing) return existing
 
   const promise = (async () => {
-    const { data, error } = await supabase
-      .from("trades")
-      .select(TRADES_APP_SELECT)
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-
+    const { rows: ownerRows, error } = await rpcTradesOwnerRows(supabase)
     if (error) {
-      // Leave the recent window in place; next ensureTradesLoaded can retry.
       return getCachedTrades(userId) ?? (EMPTY_TRADES as any[])
     }
-
-    const fetched = data?.length ? data : (EMPTY_TRADES as any[])
+    const fetched = ownerRows.length ? ownerRows : (EMPTY_TRADES as any[])
     const current = tradesByUser.get(userId)?.data ?? []
     const merged = mergeAnalyticsSnapshot(current, fetched)
     const next = overlayBrokerPatches(
@@ -791,17 +794,13 @@ export async function ensureAnalyticsTradesHistory(
   if (existing) return existing
 
   const promise = (async () => {
-    const { data, error } = await supabase
-      .from("trades")
-      .select(TRADES_ANALYTICS_SELECT)
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-
+    const { rows: ownerRows, error } = await rpcTradesOwnerRows(supabase)
     if (error) {
       return getCachedTrades(userId) ?? (EMPTY_TRADES as any[])
     }
-
-    const fetched = data?.length ? data : (EMPTY_TRADES as any[])
+    const fetched = ownerRows.length
+      ? ownerRows.map((row) => pickTradeAnalyticsProjection(row))
+      : (EMPTY_TRADES as any[])
     const currentEntry = tradesByUser.get(userId)
     const current = currentEntry?.data ?? []
     const merged = mergeAnalyticsSnapshot(current, fetched)
@@ -861,12 +860,9 @@ export async function ensureRichTradeRowsByIds(
     const richRows: any[] = []
     for (let i = 0; i < missing.length; i += chunkSize) {
       const chunk = missing.slice(i, i + chunkSize)
-      const { data, error } = await supabase
-        .from("trades")
-        .select(TRADES_APP_SELECT)
-        .in("id", chunk)
-      if (error || !data?.length) continue
-      richRows.push(...data)
+      const { rows: chunkRows } = await rpcTradesOwnerRows(supabase, { tradeIds: chunk })
+      if (!chunkRows.length) continue
+      richRows.push(...chunkRows)
     }
     const latest = tradesByUser.get(userId)
     const merged = mergeTradeRowsById(latest?.data ?? [], richRows)
@@ -1038,12 +1034,9 @@ export async function ensureTradesLoaded(
   if (!wasLoading) notify()
 
   // Stage 1: recent trades only — UI becomes interactive sooner.
-  const { data, error } = await supabase
-    .from("trades")
-    .select(TRADES_APP_SELECT)
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(INITIAL_TRADES_LIMIT)
+  const { rows: ownerRows, error } = await rpcTradesOwnerRows(supabase, {
+    limit: INITIAL_TRADES_LIMIT,
+  })
 
   // A failed fetch must never be cached as a valid empty history — that makes
   // a trade-owning user look like a 0-trade user (false empty dashboard).
@@ -1071,7 +1064,7 @@ export async function ensureTradesLoaded(
     return previousData
   }
 
-  const fetched = data?.length ? data : (EMPTY_TRADES as any[])
+  const fetched = ownerRows.length ? ownerRows : (EMPTY_TRADES as any[])
   const windowCoversAll = fetched.length < INITIAL_TRADES_LIMIT
   const willFetchFull = wantFullHistory && !windowCoversAll
   const analyticsAlready =

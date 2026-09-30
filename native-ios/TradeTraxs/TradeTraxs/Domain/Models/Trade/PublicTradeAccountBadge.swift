@@ -6,10 +6,10 @@ import Foundation
 /// Never uses account name, account number, or private account metadata.
 nonisolated enum PublicTradeAccountBadge {
     static func label(tradeMode: String?, accountType: String?) -> String? {
-        if let fromMode = classifyTradingMode(tradeMode) {
-            return fromMode
+        if let fromType = classifyTradingMode(accountType) {
+            return fromType
         }
-        return classifyTradingMode(accountType)
+        return classifyTradingMode(tradeMode)
     }
 
     static func label(for trade: Trade) -> String? {

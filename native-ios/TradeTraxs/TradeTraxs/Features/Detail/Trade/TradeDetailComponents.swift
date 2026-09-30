@@ -115,6 +115,24 @@ struct TradeDetailQuickStatsSection: View {
             VStack(spacing: TradeDetailLayout.groupSpacing) {
                 TradeDetailCompactStatRow(cells: [
                     TradeDetailStatCell(
+                        label: "P&L",
+                        value: TradeDisplay.pnlText(trade.realizedPnL),
+                        valueColor: pnlTone
+                    ),
+                    TradeDetailStatCell(
+                        label: "RR",
+                        value: TradeDisplay.compactRRText(trade.riskReward) ?? "—"
+                    ),
+                    TradeDetailStatCell(
+                        label: "Contracts",
+                        value: TradeDisplay.contractsText(for: trade.quantity)
+                    ),
+                ])
+
+                TradeDetailStatDivider()
+
+                TradeDetailCompactStatRow(cells: [
+                    TradeDetailStatCell(
                         label: "Entry",
                         value: TradeDisplay.priceText(trade.entryPrice),
                         subtitle: TradeDisplay.entryExecutionTimeText(for: trade)
@@ -125,25 +143,7 @@ struct TradeDetailQuickStatsSection: View {
                         subtitle: TradeDisplay.exitExecutionTimeText(for: trade)
                     ),
                     TradeDetailStatCell(
-                        label: "Contracts",
-                        value: TradeDisplay.contractsText(trade.quantity)
-                    ),
-                ])
-
-                TradeDetailStatDivider()
-
-                TradeDetailCompactStatRow(cells: [
-                    TradeDetailStatCell(
-                        label: "P&L",
-                        value: TradeDisplay.pnlText(trade.realizedPnL),
-                        valueColor: pnlTone
-                    ),
-                    TradeDetailStatCell(
-                        label: "RR",
-                        value: TradeDisplay.compactRRText(trade.riskReward) ?? "—"
-                    ),
-                    TradeDetailStatCell(
-                        label: "Hold",
+                        label: "Duration",
                         value: TradeDisplay.holdDuration(for: trade) ?? "—"
                     ),
                 ])
@@ -406,12 +406,19 @@ struct TradeDetailJournalSection: View {
     }
 
     private var noteBodies: [String] {
-        notes
-            .map { $0.body.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+        if isOwner {
+            return notes
+                .map { $0.body.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        if let caption = trade.publicCaption?.trimmingCharacters(in: .whitespacesAndNewlines), !caption.isEmpty {
+            return [caption]
+        }
+        return []
     }
 
     private var detailRows: [(String, String)] {
+        guard isOwner else { return [] }
         var rows: [(String, String)] = []
         if let setup = trade.strategy?.trimmingCharacters(in: .whitespacesAndNewlines), !setup.isEmpty {
             rows.append(("Setup", setup))

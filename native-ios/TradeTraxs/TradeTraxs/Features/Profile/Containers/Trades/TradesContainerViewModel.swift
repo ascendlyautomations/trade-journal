@@ -802,6 +802,12 @@ nonisolated enum TradeDisplay {
         return NumberDisplay.decimal(value, minimumFractionDigits: 0, maximumFractionDigits: 8)
     }
 
+    /// Quick stats — em dash when contracts were absent on the wire (mapped as zero).
+    static func contractsText(for quantity: Decimal) -> String {
+        guard quantity != 0 else { return "—" }
+        return contractsText(quantity)
+    }
+
     static func durationText(entryAt: Date, exitAt: Date?) -> String? {
         guard let exitAt, exitAt >= entryAt else { return nil }
         let seconds = Int(exitAt.timeIntervalSince(entryAt).rounded(.down))

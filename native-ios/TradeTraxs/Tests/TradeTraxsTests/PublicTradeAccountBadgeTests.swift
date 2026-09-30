@@ -21,7 +21,11 @@ final class PublicTradeAccountBadgeTests: XCTestCase {
         XCTAssertNil(PublicTradeAccountBadge.label(tradeMode: "unknown_mode", accountType: nil))
     }
 
-    func testModePreferredOverAccountTypeCategory() {
+    func testAccountTypePreferredOverModeForBadge() {
+        XCTAssertEqual(
+            PublicTradeAccountBadge.label(tradeMode: "live", accountType: "evaluation"),
+            "Eval"
+        )
         XCTAssertEqual(
             PublicTradeAccountBadge.label(tradeMode: "eval", accountType: "Prop Firm"),
             "Eval"

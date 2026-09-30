@@ -247,7 +247,7 @@ private struct ContextualTourOverlay: View {
             .fill(Color.black.opacity(0.55), style: FillStyle(eoFill: true))
             .frame(width: size.width, height: size.height, alignment: .topLeading)
             .animation(
-                reduceMotion ? nil : ContextualTourMotion.spotlightAnimation(reduceMotion: false),
+                reduceMotion ? nil : ContextualTourMotion.spotlightAnimation(reduceMotion: reduceMotion),
                 value: hole
             )
             .id(reduceMotion ? coordinator.stepIndex : 0)

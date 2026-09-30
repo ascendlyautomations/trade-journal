@@ -20,6 +20,13 @@ nonisolated protocol SupabaseStorageProviding: Sendable {
         contentType: String,
         cacheControl: String?
     ) async throws -> String
+    func upload(
+        bucket: String,
+        path: String,
+        fileURL: URL,
+        contentType: String,
+        cacheControl: String?
+    ) async throws -> String
     func download(bucket: String, path: String) async throws -> Data
     func delete(bucket: String, path: String) async throws
 }
@@ -159,6 +166,81 @@ nonisolated struct LiveSupabaseStorageProvider: SupabaseStorageProviding {
                 throw AppError.unknown(message: "Upload failed.")
             }
         } else {
+            _ = try await transport.send(
+                host: .supabaseStorage,
+                path: "/storage/v1/object/\(bucket)/\(cleaned)",
+                method: .post,
+                headers: headers,
+                body: data
+            )
+        }
+        return cleaned
+    }
+
+    func upload(
+        bucket: String,
+        path: String,
+        fileURL: URL,
+        contentType: String,
+        cacheControl: String? = nil
+    ) async throws -> String {
+        let payloadBytes = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        guard payloadBytes > 0 else {
+            throw AppError.unknown(message: "Could not read upload file.")
+        }
+        let cleaned = path.hasPrefix("/") ? String(path.dropFirst()) : path
+        var headers = [
+            "Content-Type": contentType,
+            "x-upsert": "true",
+        ]
+        if let cacheControl, !cacheControl.isEmpty {
+            headers["cache-control"] = "max-age=\(cacheControl)"
+        }
+        if let jobID = UploadProgressContext.jobID {
+            let endpoint = Endpoint(
+                host: .supabaseStorage,
+                path: "/storage/v1/object/\(bucket)/\(cleaned)",
+                method: .post,
+                queryItems: [],
+                headers: headers,
+                requiresAuthentication: true
+            )
+            let built = try transport.requestBuilder.makeRequest(endpoint: endpoint, body: Data())
+            let authenticated = try await transport.prepareRequest(built)
+            var uploadRequest = authenticated.urlRequest
+            uploadRequest.httpBody = nil
+            uploadRequest.httpBodyStream = nil
+
+            var attempt = 1
+            let maxAttempts = 3
+            while true {
+                let (responseData, urlResponse) = try await StorageUploadProgressTransport.upload(
+                    request: uploadRequest,
+                    fileURL: fileURL,
+                    uploadPayloadBytes: payloadBytes,
+                    progressJobID: jobID
+                )
+                if let http = urlResponse as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) {
+                    break
+                }
+                let status = (urlResponse as? HTTPURLResponse)?.statusCode ?? -1
+                let supabaseCode = StorageUploadDiagnostics.parseSupabaseCode(from: responseData)
+                if attempt < maxAttempts, Self.isRetriableStorageUpload(status: status, supabaseCode: supabaseCode) {
+                    attempt += 1
+                    try await Task.sleep(nanoseconds: UInt64(min(attempt, 3)) * 500_000_000)
+                    continue
+                }
+                if let mapped = NetworkErrorMapper().map(
+                    data: responseData,
+                    response: urlResponse,
+                    error: nil
+                ) {
+                    throw SupabaseErrorMapping.mapNetwork(mapped)
+                }
+                throw AppError.unknown(message: "Upload failed.")
+            }
+        } else {
+            let data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
             _ = try await transport.send(
                 host: .supabaseStorage,
                 path: "/storage/v1/object/\(bucket)/\(cleaned)",
@@ -2347,6 +2429,17 @@ private nonisolated struct UnconfiguredObjectStorageAdapter: SupabaseStorageProv
         cacheControl: String? = nil
     ) async throws -> String {
         _ = (bucket, path, data, contentType, cacheControl)
+        throw AppError.authentication(.notConfigured)
+    }
+
+    func upload(
+        bucket: String,
+        path: String,
+        fileURL: URL,
+        contentType: String,
+        cacheControl: String? = nil
+    ) async throws -> String {
+        _ = (bucket, path, fileURL, contentType, cacheControl)
         throw AppError.authentication(.notConfigured)
     }
 

@@ -31,6 +31,7 @@ final class MessagingDomain {
     private var roomUnreadTask: Task<Void, Never>?
     private var roomReadCursorTask: Task<Void, Never>?
     private var inboxMessagesTask: Task<Void, Never>?
+    private var loadMoreTask: Task<Void, Never>?
     private var readCursorRealtimeConsumer: RealtimeRouteConsumerHandle?
     private var roomUnreadRealtimeConsumer: RealtimeRouteConsumerHandle?
     private var roomReadCursorRealtimeConsumer: RealtimeRouteConsumerHandle?
@@ -74,8 +75,30 @@ final class MessagingDomain {
         await refreshHome()
     }
 
-    /// Inbox is not cursor-paginated at the home layer.
-    func loadMore() async {}
+    /// Inbox is cursor-paginated via V2 bootstrap when `.messages` RPC is enabled.
+    func loadMore() async {
+        guard BackendV2FeatureFlags.isEnabled(.messages), let rpc, let detailCache else {
+            await loadMoreLegacyREST()
+            return
+        }
+        guard let viewerID = state.viewerID else { return }
+        guard inboxStore.inboxHasMore, !inboxStore.isLoadingMoreInbox else { return }
+        if let existing = loadMoreTask {
+            await existing.value
+            return
+        }
+        let generation = loadGeneration
+        let task = Task { [generation] in
+            await self.performInboxLoadMore(
+                viewerID: viewerID,
+                rpc: rpc,
+                generation: generation
+            )
+        }
+        loadMoreTask = task
+        await task.value
+        loadMoreTask = nil
+    }
 
     /// Prefer ``retainRealtime`` / ``releaseRealtime`` from overlapping homes.
     func subscribeRealtime() {
@@ -220,6 +243,8 @@ final class MessagingDomain {
         bootstrapTask = nil
         catchUpTask?.cancel()
         catchUpTask = nil
+        loadMoreTask?.cancel()
+        loadMoreTask = nil
         revalidationTask?.cancel()
         revalidationTask = nil
         stopRealtime()
@@ -241,6 +266,57 @@ final class MessagingDomain {
     }
 
     // MARK: - Private bootstrap
+
+    private func performInboxLoadMore(
+        viewerID: ProfileID,
+        rpc: any RPCClient,
+        generation: UInt64
+    ) async {
+        guard let detailCache else { return }
+        do {
+            _ = try await MessagingBootstrapLoader.loadInboxNextPage(
+                viewerID: viewerID,
+                rpc: rpc,
+                inboxStore: inboxStore,
+                detailCache: detailCache,
+                loadGeneration: generation,
+                currentGeneration: { [weak self] in self?.loadGeneration ?? 0 }
+            )
+            guard generation == loadGeneration else { return }
+            await syncStateFromInbox()
+        } catch {
+            return
+        }
+    }
+
+    private func loadMoreLegacyREST() async {
+        guard let messages, let profiles, let session, let detailCache else { return }
+        guard inboxStore.inboxHasMore, !inboxStore.isLoadingMoreInbox else { return }
+        guard let viewer = await session.currentUserID.map({ ProfileID($0.rawValue) }) else { return }
+        inboxStore.setLoadingMoreInbox(true)
+        defer { inboxStore.setLoadingMoreInbox(false) }
+        do {
+            let page = try await messages.conversations(
+                page: PageRequest(
+                    cursor: inboxStore.inboxNextCursor,
+                    limit: MessagingInboxPagination.pageSize
+                )
+            )
+            inboxStore.mergeConversationsFromBootstrap(page.items)
+            inboxStore.applyInboxPagination(
+                nextCursor: page.nextCursor,
+                hasMore: page.nextCursor != nil
+            )
+            SessionProfileStore.shared.seed(page.embeddedProfiles, detailCache: detailCache)
+            for profile in page.embeddedProfiles {
+                peerProfiles[profile.id] = profile
+            }
+            _ = viewer
+            await syncStateFromInbox()
+        } catch {
+            return
+        }
+    }
 
     private func makeContext(forceNetwork: Bool) -> MessagingBootstrap.Context? {
         guard let messages, let rooms, let profiles, let session, let detailCache else {
@@ -767,7 +843,7 @@ final class MessagingDomain {
     ) async {
         guard let realtimeHub, let messages else { return }
         guard inboxMessagesTask == nil else { return }
-        let conversationIDs = inboxStore.conversations.map(\.id.rawValue)
+        let conversationIDs = inboxStore.conversationIDsForRealtimeWatch
         guard !conversationIDs.isEmpty else { return }
 
         inboxMessagesTask = Task { [weak self] in

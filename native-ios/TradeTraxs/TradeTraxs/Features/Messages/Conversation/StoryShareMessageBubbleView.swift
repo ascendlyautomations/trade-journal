@@ -24,7 +24,7 @@ struct StoryShareMessageBubbleView: View {
                     Text("View Story")
                         .experienceStyle(
                             .caption,
-                            color: isOutgoing ? colors.onAccent.opacity(0.82) : colors.accent
+                            color: isOutgoing ? colors.onAccent.opacity(0.9) : colors.accent
                         )
                         .fontWeight(.medium)
                 }

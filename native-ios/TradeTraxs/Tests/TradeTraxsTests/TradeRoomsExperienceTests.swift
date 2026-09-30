@@ -739,9 +739,13 @@ private struct TradeRoomsStubExploreRepository: ExploreRepository {
     func searchRooms(query: String, limit: Int) async throws -> [ExploreRoomSuggestion] { [] }
     func tradeRoomsHomeBootstrap(
         scope: TradeRoomDiscoveryScope,
-        limit: Int
+        limit: Int,
+        suggestedCursor: String?,
+        popularCursor: String?
     ) async throws -> TradeRoomsHomeBootstrap {
-        TradeRoomsFixtures.homeBootstrap(scope: scope)
+        _ = suggestedCursor
+        _ = popularCursor
+        return TradeRoomsFixtures.homeBootstrap(scope: scope)
     }
 }
 
@@ -771,9 +775,13 @@ private struct TradeRoomsFilteringExploreRepository: ExploreRepository {
     func searchRooms(query: String, limit: Int) async throws -> [ExploreRoomSuggestion] { [] }
     func tradeRoomsHomeBootstrap(
         scope: TradeRoomDiscoveryScope,
-        limit: Int
+        limit: Int,
+        suggestedCursor: String?,
+        popularCursor: String?
     ) async throws -> TradeRoomsHomeBootstrap {
-        TradeRoomsHomeBootstrap(
+        _ = suggestedCursor
+        _ = popularCursor
+        return TradeRoomsHomeBootstrap(
             viewerID: nil,
             scope: scope,
             yourRooms: [],

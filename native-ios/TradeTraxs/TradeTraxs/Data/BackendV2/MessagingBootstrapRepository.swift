@@ -9,7 +9,11 @@ nonisolated struct MessagingRpcBootstrapRepository: MessagesBootstrapProviding {
     }
 
     func loadMessagesBootstrap() async throws -> MessagesBootstrapV1 {
-        try await loadMessagesBootstrap(cursor: nil, limit: 40, markNotificationsRead: true)
+        try await loadMessagesBootstrap(
+            cursor: nil,
+            limit: MessagingInboxPagination.pageSize,
+            markNotificationsRead: true
+        )
     }
 
     func loadMessagesBootstrap(
@@ -45,13 +49,21 @@ nonisolated struct MessagingCatchUpRpcRepository {
         self.client = BackendV2RPCClient(transport: rpc)
     }
 
-    func loadCatchUp(limit: Int = 40) async throws -> MessagesBootstrapV1 {
+    func loadCatchUp(limit: Int = MessagingInboxPagination.pageSize) async throws -> MessagesBootstrapV1 {
         struct Args: Encodable {
             var p_limit: Int
+            var p_cursor: String?
+            var p_mark_message_notifications_read: Bool
         }
-        let body = try JSONEncoder().encode(Args(p_limit: limit))
+        let body = try JSONEncoder().encode(
+            Args(
+                p_limit: limit,
+                p_cursor: nil,
+                p_mark_message_notifications_read: false
+            )
+        )
         let value = try await client.call(
-            .messagingCatchUp,
+            .messaging,
             argumentsJSON: body,
             as: MessagesBootstrapV1.self,
             options: BackendV2RPCCallOptions(
@@ -184,12 +196,19 @@ enum MessagingBootstrapLoader {
                 viewerID: viewerID.rawValue,
                 rpc: rpc,
                 flightKey: flightKey,
+                cursor: nil,
                 markNotificationsRead: markNotificationsRead
             )
             guard currentGeneration() == loadGeneration, !Task.isCancelled else {
                 throw CancellationError()
             }
-            try MessagingBootstrapApplier.apply(bootstrap, inboxStore: inboxStore, detailCache: detailCache)
+            let replaceExisting = !hadLoadedBeforeRPC || forceNetwork
+            try MessagingBootstrapApplier.apply(
+                bootstrap,
+                inboxStore: inboxStore,
+                detailCache: detailCache,
+                replaceExisting: replaceExisting
+            )
             SafeInboxLog.bootstrapCompleted(
                 owner: owner,
                 loadGeneration: loadGeneration,
@@ -263,12 +282,62 @@ enum MessagingBootstrapLoader {
             throw CancellationError()
         }
         try MessagingBootstrapApplier.apply(bootstrap, inboxStore: inboxStore, detailCache: detailCache)
+        if inboxStore.conversations.count <= bootstrap.data.conversations.count {
+            MessagingBootstrapApplier.applyPagination(from: bootstrap, inboxStore: inboxStore)
+        }
 #if DEBUG
         SocialCacheProbe.recordInboxNetworkCatchup(
             rows: bootstrap.data.conversations.count,
             fullBootstrap: false
         )
 #endif
+        return LoadResult(bootstrap: bootstrap, rpcRequestCount: 1)
+    }
+
+    @MainActor
+    static func loadInboxNextPage(
+        viewerID: ProfileID,
+        rpc: any RPCClient,
+        inboxStore: MessagesInboxStore,
+        detailCache: DetailPresentationCache,
+        loadGeneration: UInt64,
+        currentGeneration: @escaping () -> UInt64
+    ) async throws -> LoadResult {
+        guard BackendV2FeatureFlags.isEnabled(.messages) else {
+            throw LoaderError.flagOff
+        }
+        guard inboxStore.inboxHasMore, let cursor = inboxStore.inboxNextCursor else {
+            throw CancellationError()
+        }
+        guard !inboxStore.isLoadingMoreInbox else {
+            throw CancellationError()
+        }
+        inboxStore.setLoadingMoreInbox(true)
+        defer { inboxStore.setLoadingMoreInbox(false) }
+
+        let rpcName = BackendV2Versioning.RPCName.messaging.rawValue
+        if await BackendV2RpcAvailability.shared.isUnavailable(rpcName: rpcName, viewerID: viewerID.rawValue) {
+            throw LoaderError.rpcUnavailable
+        }
+        await SessionNetworkGate.shared.awaitReady()
+
+        let flightKey = BackendV2FlightKeys.messaging(viewerID: viewerID.rawValue, cursor: cursor)
+        let bootstrap = try await fetchFullRPC(
+            viewerID: viewerID.rawValue,
+            rpc: rpc,
+            flightKey: flightKey,
+            cursor: cursor,
+            markNotificationsRead: false
+        )
+        guard currentGeneration() == loadGeneration, !Task.isCancelled else {
+            throw CancellationError()
+        }
+        try MessagingBootstrapApplier.apply(
+            bootstrap,
+            inboxStore: inboxStore,
+            detailCache: detailCache,
+            replaceExisting: false
+        )
         return LoadResult(bootstrap: bootstrap, rpcRequestCount: 1)
     }
 
@@ -302,14 +371,16 @@ enum MessagingBootstrapLoader {
         viewerID: String,
         rpc: any RPCClient,
         flightKey: String,
+        cursor: String?,
         markNotificationsRead: Bool
     ) async throws -> MessagesBootstrapV1 {
+        _ = viewerID
         let data = try await BootstrapTransportTimeout.run {
             try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {
                 let repo = MessagingRpcBootstrapRepository(rpc: rpc)
                 let value = try await repo.loadMessagesBootstrap(
-                    cursor: nil,
-                    limit: 40,
+                    cursor: cursor,
+                    limit: MessagingInboxPagination.pageSize,
                     markNotificationsRead: markNotificationsRead
                 )
                 return try JSONEncoder().encode(value)
@@ -327,7 +398,7 @@ enum MessagingBootstrapLoader {
         let data = try await BootstrapTransportTimeout.run {
             try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {
                 let repo = MessagingCatchUpRpcRepository(rpc: rpc)
-                let value = try await repo.loadCatchUp(limit: 40)
+                let value = try await repo.loadCatchUp(limit: MessagingInboxPagination.pageSize)
                 return try JSONEncoder().encode(value)
             }
         }

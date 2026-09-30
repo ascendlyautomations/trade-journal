@@ -163,6 +163,11 @@ final class MessagesHomeViewModel {
         isRefreshing = false
     }
 
+    func loadMoreInboxIfNeeded() async {
+        await domain.loadMore()
+        syncFromDomain()
+    }
+
     func openConversation(_ item: DirectMessageInboxItem) {
         ExperienceHaptics.play(.selection)
 #if DEBUG

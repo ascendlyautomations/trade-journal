@@ -24,7 +24,9 @@ nonisolated protocol ExploreRepository: Sendable {
     /// Single-call home bootstrap — Your Rooms + Suggested + Popular with is_owner/is_member.
     func tradeRoomsHomeBootstrap(
         scope: TradeRoomDiscoveryScope,
-        limit: Int
+        limit: Int,
+        suggestedCursor: String?,
+        popularCursor: String?
     ) async throws -> TradeRoomsHomeBootstrap
 
     /// Public room name/slug search via `search_public_trade_rooms`.
@@ -46,14 +48,18 @@ extension ExploreRepository {
 
     func tradeRoomsHomeBootstrap(
         scope: TradeRoomDiscoveryScope,
-        limit: Int
+        limit: Int,
+        suggestedCursor: String? = nil,
+        popularCursor: String? = nil
     ) async throws -> TradeRoomsHomeBootstrap {
         TradeRoomsHomeBootstrap(
             viewerID: nil,
             scope: scope,
             yourRooms: [],
             suggested: try await popularRooms(limit: limit),
-            popular: try await popularRooms(limit: limit)
+            popular: try await popularRooms(limit: limit),
+            suggestedNextCursor: nil,
+            popularNextCursor: nil
         )
     }
 }

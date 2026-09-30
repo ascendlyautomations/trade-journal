@@ -7,6 +7,7 @@ struct ExploreHomeView: View {
     private let imagePipeline: any ImagePipeline
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     init(
         data: DataEnvironment,
@@ -189,7 +190,7 @@ struct ExploreHomeView: View {
                 }
                 .padding(.horizontal, ExperienceSpacing.md)
             }
-            .frame(height: ExploreTraderCard.railHeight)
+            .frame(height: dynamicTypeSize.isAccessibilitySize ? nil : ExploreTraderCard.railHeight)
             .padding(.bottom, ExperienceSpacing.xs)
             .accessibilityIdentifier("explore.traders.rail")
         }

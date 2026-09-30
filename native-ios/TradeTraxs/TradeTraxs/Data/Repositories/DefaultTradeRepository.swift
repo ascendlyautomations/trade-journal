@@ -18,11 +18,14 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
     }
 
     func trade(id: TradeID) async throws -> Trade {
+        if let ownerDto = try await fetchOwnerTradeDTO(id: id.rawValue) {
+            return try TradeMapper.mapToDomain(ownerDto)
+        }
         let dto: TradeDTO.Trade = try await supabase.database.selectOne(
             TradeDTO.Trade.self,
-            from: "trades",
+            from: TradeDTO.tradesPublicReadTable,
             query: [
-                SupabaseQuery.select(TradeDTO.ownerJournalSelect),
+                SupabaseQuery.select(TradeDTO.publicSocialSelect),
                 SupabaseQuery.eq("id", id.rawValue),
             ]
         )
@@ -34,12 +37,16 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         guard !unique.isEmpty else { return [] }
         var items: [Trade] = []
         items.reserveCapacity(unique.count)
-        for chunk in unique.chunked(into: 80) {
+        let ownedRows = try await fetchOwnerTradeDTOs(ids: unique)
+        items.append(contentsOf: Self.mapTradesSkippingFailures(ownedRows))
+        let ownedIds = Set(ownedRows.compactMap(\.id))
+        let remaining = unique.filter { !ownedIds.contains($0) }
+        for chunk in remaining.chunked(into: 80) {
             let rows: [TradeDTO.Trade] = try await supabase.database.select(
                 TradeDTO.Trade.self,
-                from: "trades",
+                from: TradeDTO.tradesPublicReadTable,
                 query: [
-                    SupabaseQuery.select(TradeDTO.ownerJournalSelect),
+                    SupabaseQuery.select(TradeDTO.publicSocialSelect),
                     SupabaseQuery.isIn("id", chunk),
                 ]
             )
@@ -63,21 +70,58 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         return try await RepositoryRequestFlight.shared.coalesce(
             key: key,
             resource: "trades.owned"
-        ) { [supabase] in
+        ) { [supabase, session] in
+            let viewerID = await session.currentUserID
+            let isSelf = viewerID?.rawValue == profileID.rawValue
+            let relation = (publicOnly || !isSelf)
+                ? TradeDTO.tradesPublicReadTable
+                : "trades"
+            let selectColumns = publicOnly || !isSelf
+                ? TradeDTO.publicSocialSelect
+                : TradeDTO.profileListSelect
+
+            if !publicOnly, isSelf {
+                struct Params: Encodable {
+                    var p_trade_ids: [String]?
+                    var p_limit: Int?
+                }
+                let limit = max(page.limit, 1)
+                let data = try await supabase.database.rpcData(
+                    functionName: "rpc_v1_trades_owner_rows",
+                    parametersJSON: try JSONEncoder().encode(
+                        Params(p_trade_ids: nil, p_limit: limit)
+                    )
+                )
+                let rows = try Self.decodeOwnerTradeDTOs(from: data)
+                let filtered = accountID.map { aid in
+                    rows.filter { $0.account_id == aid.rawValue }
+                } ?? rows
+                let items = Self.mapTradesSkippingFailures(filtered)
+                return CursorPage(
+                    items: items,
+                    nextCursor: SupabaseQuery.nextCreatedAtIDCursor(
+                        items: filtered,
+                        limit: page.limit,
+                        createdAt: { $0.created_at },
+                        id: { $0.id }
+                    )
+                )
+            }
+
             var query = SupabaseQuery.createdAtIDPage(page) + [
-                SupabaseQuery.select(publicOnly ? TradeDTO.profileListSelect : "*"),
+                SupabaseQuery.select(selectColumns),
                 SupabaseQuery.eq("user_id", profileID.rawValue),
             ]
             if publicOnly {
                 // Mirror web Profile: `.eq("is_public", true)`.
                 query.append(SupabaseQuery.eq("is_public", "true"))
             }
-            if let accountID {
+            if let accountID, isSelf, !publicOnly {
                 query.append(SupabaseQuery.eq("account_id", accountID.rawValue))
             }
             let rows: [TradeDTO.Trade] = try await supabase.database.select(
                 TradeDTO.Trade.self,
-                from: "trades",
+                from: relation,
                 query: query
             )
             // Soft-skip malformed rows — never fail the entire Profile list (web soft-empty).
@@ -101,23 +145,81 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         entryTo: Date,
         limit: Int
     ) async throws -> [Trade] {
+        let viewerID = await session.currentUserID
+        let isSelf = viewerID?.rawValue == profileID.rawValue
+        if isSelf {
+            struct Params: Encodable {
+                var p_trade_ids: [String]?
+                var p_limit: Int?
+            }
+            let data = try await supabase.database.rpcData(
+                functionName: "rpc_v1_trades_owner_rows",
+                parametersJSON: try JSONEncoder().encode(Params(p_trade_ids: nil, p_limit: nil))
+            )
+            var rows = try Self.decodeOwnerTradeDTOs(from: data)
+            if let accountID {
+                rows = rows.filter { $0.account_id == accountID.rawValue }
+            }
+            rows = rows.filter { row in
+                guard let raw = row.entry_time, let date = ISO8601.date(from: raw) else { return false }
+                return date >= entryFrom && date <= entryTo
+            }
+            rows.sort { ($0.entry_time ?? "") < ($1.entry_time ?? "") }
+            if rows.count > limit {
+                rows = Array(rows.prefix(limit))
+            }
+            return Self.mapTradesSkippingFailures(rows)
+        }
+
         var query: [URLQueryItem] = [
-            SupabaseQuery.select(TradeDTO.profileListSelect),
+            SupabaseQuery.select(TradeDTO.publicSocialSelect),
             SupabaseQuery.eq("user_id", profileID.rawValue),
             URLQueryItem(name: "entry_time", value: "gte.\(ISO8601.string(from: entryFrom))"),
             URLQueryItem(name: "entry_time", value: "lte.\(ISO8601.string(from: entryTo))"),
             URLQueryItem(name: "order", value: "entry_time.asc"),
             URLQueryItem(name: "limit", value: String(limit)),
         ]
-        if let accountID {
-            query.append(SupabaseQuery.eq("account_id", accountID.rawValue))
-        }
         let rows: [TradeDTO.Trade] = try await supabase.database.select(
             TradeDTO.Trade.self,
-            from: "trades",
+            from: TradeDTO.tradesPublicReadTable,
             query: query
         )
         return Self.mapTradesSkippingFailures(rows)
+    }
+
+    private func fetchOwnerTradeDTO(id: String) async throws -> TradeDTO.Trade? {
+        struct Params: Encodable { var p_trade_id: String }
+        let data = try await supabase.database.rpcData(
+            functionName: "rpc_v1_trade_owner_read",
+            parametersJSON: try JSONEncoder().encode(Params(p_trade_id: id))
+        )
+        return try Self.decodeOwnerTradeDTO(from: data)
+    }
+
+    private func fetchOwnerTradeDTOs(ids: [String]) async throws -> [TradeDTO.Trade] {
+        struct Params: Encodable {
+            var p_trade_ids: [String]?
+            var p_limit: Int?
+        }
+        let data = try await supabase.database.rpcData(
+            functionName: "rpc_v1_trades_owner_rows",
+            parametersJSON: try JSONEncoder().encode(Params(p_trade_ids: ids, p_limit: nil))
+        )
+        return try Self.decodeOwnerTradeDTOs(from: data)
+    }
+
+    private static func decodeOwnerTradeDTO(from data: Data) throws -> TradeDTO.Trade? {
+        let trimmed = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if trimmed.isEmpty || trimmed == "null" { return nil }
+        return try JSONDecoder().decode(TradeDTO.Trade.self, from: data)
+    }
+
+    private static func decodeOwnerTradeDTOs(from data: Data) throws -> [TradeDTO.Trade] {
+        let trimmed = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if trimmed.isEmpty || trimmed == "[]" { return [] }
+        return try JSONDecoder().decode([TradeDTO.Trade].self, from: data)
     }
 
     func tradeHistory(
@@ -484,16 +586,9 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
     }
 
     func notes(for tradeID: TradeID) async throws -> [TradeNote] {
-        let rows: [TradeDTO.Trade] = try await supabase.database.select(
-            TradeDTO.Trade.self,
-            from: "trades",
-            query: [
-                SupabaseQuery.select("id,notes,created_at"),
-                SupabaseQuery.eq("id", tradeID.rawValue),
-            ]
-        )
-        guard let note = rows.first?.notes, !note.isEmpty else { return [] }
-        let created = ISO8601.date(from: rows.first?.created_at) ?? Date()
+        guard let row = try await fetchOwnerTradeDTO(id: tradeID.rawValue) else { return [] }
+        guard let note = row.notes, !note.isEmpty else { return [] }
+        let created = ISO8601.date(from: row.created_at) ?? Date()
         return [
             TradeNote(
                 id: TradeNoteID(tradeID.rawValue),

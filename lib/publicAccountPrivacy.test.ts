@@ -54,11 +54,35 @@ describe("publicAccountPrivacy", () => {
   })
 
   it("public select omits account identifiers", () => {
-    assert.ok(!PUBLIC_TRADE_SELECT.includes("account_name"))
-    assert.ok(!PUBLIC_TRADE_SELECT.includes("account_id"))
-    assert.ok(!PUBLIC_TRADE_SELECT.includes("account_size"))
-    assert.ok(!PUBLIC_TRADE_SELECT.includes("post_to_feed"))
-    assert.ok(PUBLIC_TRADE_SELECT.includes("account_type"))
+    const columns = PUBLIC_TRADE_SELECT.split(",").map((c) => c.trim())
+    assert.ok(!columns.includes("account_name"))
+    assert.ok(!columns.includes("account_id"))
+    assert.ok(!columns.includes("account_size"))
+    assert.ok(!columns.includes("post_to_feed"))
+    assert.ok(columns.includes("account_type"))
+  })
+
+  it("public select omits owner journal fields", () => {
+    assert.ok(!PUBLIC_TRADE_SELECT.includes("notes"))
+    assert.ok(!PUBLIC_TRADE_SELECT.includes("psychology_notes"))
+    assert.ok(!PUBLIC_TRADE_SELECT.includes("strategy"))
+    assert.ok(!PUBLIC_TRADE_SELECT.includes("emotion"))
+  })
+
+  it("strips journal fields for non-owners", () => {
+    const trade = {
+      id: "1",
+      notes: "secret",
+      psychology_notes: "private",
+      strategy: "breakout",
+      account_type: "live",
+    }
+    const sanitized = sanitizeTradeForViewer(trade, { isOwner: false })
+    assert.ok(sanitized)
+    assert.equal(sanitized.notes, undefined)
+    assert.equal(sanitized.psychology_notes, undefined)
+    assert.equal(sanitized.strategy, undefined)
+    assert.equal(sanitized.account_type, "live")
   })
 })
 export {}

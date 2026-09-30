@@ -102,5 +102,6 @@ final class ThemeManager {
 
     private func publishAnchor() {
         ThemePaletteAnchor.current = colors
+        ExperienceNavigationBarAppearance.syncShellBarChrome(colors: colors)
     }
 }

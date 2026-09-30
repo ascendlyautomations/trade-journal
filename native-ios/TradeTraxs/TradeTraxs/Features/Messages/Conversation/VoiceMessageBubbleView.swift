@@ -14,7 +14,7 @@ struct VoiceMessageBubbleView: View {
             Button(action: togglePlayback) {
                 Image(systemName: playButtonSymbol)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(isOutgoing ? Color.white : colors.accent)
+                    .foregroundStyle(isOutgoing ? colors.onAccent : colors.accent)
                     .frame(width: 28, height: 28)
             }
             .buttonStyle(.plain)
@@ -33,7 +33,7 @@ struct VoiceMessageBubbleView: View {
 
             Text(displayDuration)
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundStyle(isOutgoing ? Color.white.opacity(0.92) : colors.secondaryText)
+                .foregroundStyle(isOutgoing ? colors.onAccent.opacity(0.92) : colors.secondaryText)
                 .frame(minWidth: 36, alignment: .trailing)
         }
         .padding(.horizontal, ExperienceSpacing.sm)
@@ -92,7 +92,7 @@ struct VoiceMessageBubbleView: View {
 
     private func barColor(filled: Bool) -> Color {
         if isOutgoing {
-            return filled ? Color.white : Color.white.opacity(0.35)
+            return filled ? colors.onAccent : colors.onAccent.opacity(0.38)
         }
         return filled ? colors.accent : colors.accent.opacity(0.25)
     }

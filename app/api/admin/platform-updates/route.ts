@@ -38,8 +38,6 @@ type CreateBody = {
   category?: string
   destination?: string
   sendPush?: boolean
-  status?: "draft" | "scheduled"
-  publishAt?: string | null
 }
 
 export async function POST(req: Request) {
@@ -53,15 +51,12 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid JSON" }, { status: 400 })
   }
 
-  const status = body.status === "scheduled" ? "scheduled" : "draft"
   const validation = validatePlatformUpdateInput({
     title: body.title,
     body: body.body,
     category: body.category,
     destination: body.destination,
     send_push: body.sendPush,
-    status,
-    publish_at: body.publishAt ?? null,
   })
   if (validation) {
     return Response.json({ error: validation }, { status: 400 })
@@ -83,8 +78,8 @@ export async function POST(req: Request) {
       category: body.category,
       destination: body.destination,
       send_push: body.sendPush === true,
-      status,
-      publish_at: status === "scheduled" ? body.publishAt : null,
+      status: "draft",
+      publish_at: null,
       created_by: auth.adminUser.id,
       updated_at: now,
     })

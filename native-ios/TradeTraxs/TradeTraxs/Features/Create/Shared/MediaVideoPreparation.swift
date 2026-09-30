@@ -5,16 +5,46 @@ import UniformTypeIdentifiers
 
 /// Web `lib/reelVideo.ts` limits — inspect, delivery-optimize, thumbnail, upload-ready output.
 enum MediaVideoPreparation {
-    nonisolated static let maxDurationSeconds = 90
+    struct Limits: Sendable {
+        var maxDurationSeconds: Int
+        var maxFinalUploadBytes: Int
+        var maxSourceFileBytes: Int
+        var durationLimitMessage: String
+        var sourceTooLargeMessage: String
+        var compressionFailedMessage: String
+        var preparedTooLargeMessage: String
+
+        nonisolated static let reel = Limits(
+            maxDurationSeconds: 90,
+            maxFinalUploadBytes: 100 * 1024 * 1024,
+            maxSourceFileBytes: 500 * 1024 * 1024,
+            durationLimitMessage: "Clips must be 90 seconds (1 minute 30 seconds) or less.",
+            sourceTooLargeMessage: "This video is too large to process on device. Try a shorter clip.",
+            compressionFailedMessage: "Couldn't prepare this video. Try another clip or record again.",
+            preparedTooLargeMessage: "Prepared video is still too large. Try a shorter clip."
+        )
+
+        nonisolated static let story = Limits(
+            maxDurationSeconds: StoryMediaDuration.maxVideoDurationSeconds,
+            maxFinalUploadBytes: 15 * 1024 * 1024,
+            maxSourceFileBytes: 120 * 1024 * 1024,
+            durationLimitMessage: StoryMediaDuration.durationExceededMessage,
+            sourceTooLargeMessage: "This video is too large to process for a story.",
+            compressionFailedMessage: "Couldn't prepare this video for your story. Try another clip.",
+            preparedTooLargeMessage: "Video must be 15 MB or smaller."
+        )
+    }
+
+    nonisolated static let maxDurationSeconds = Limits.reel.maxDurationSeconds
     /// Final optimized upload must remain below this ceiling.
-    nonisolated static let maxFileBytes = 100 * 1024 * 1024
+    nonisolated static let maxFileBytes = Limits.reel.maxFinalUploadBytes
     nonisolated static let maxFinalUploadBytes = maxFileBytes
     /// Generous pre-compression source ceiling — large camera originals may compress below final limit.
-    nonisolated static let maxSourceFileBytes = 500 * 1024 * 1024
+    nonisolated static let maxSourceFileBytes = Limits.reel.maxSourceFileBytes
     nonisolated static let maxCaptionLength = 2200
-    nonisolated static let durationLimitMessage = "Clips must be 90 seconds (1 minute 30 seconds) or less."
-    nonisolated static let sourceTooLargeMessage = "This video is too large to process on device. Try a shorter clip."
-    nonisolated static let compressionFailedMessage = "Couldn't prepare this video. Try another clip or record again."
+    nonisolated static let durationLimitMessage = Limits.reel.durationLimitMessage
+    nonisolated static let sourceTooLargeMessage = Limits.reel.sourceTooLargeMessage
+    nonisolated static let compressionFailedMessage = Limits.reel.compressionFailedMessage
 
     private static let acceptedExtensions: Set<String> = ["mp4", "mov", "m4v"]
     private static let acceptedTypes: Set<UTType> = [.mpeg4Movie, .quickTimeMovie, .movie]
@@ -35,7 +65,11 @@ enum MediaVideoPreparation {
         return acceptedTypes.contains(where: { type.conforms(to: $0) })
     }
 
-    static func validateSourceFile(url: URL, contentType: String?) throws {
+    static func validateSourceFile(
+        url: URL,
+        contentType: String?,
+        limits: Limits = .reel
+    ) throws {
         guard isAcceptedVideo(url: url, contentType: contentType) else {
             throw AppError.unknown(message: "Clips support MP4 and MOV videos only.")
         }
@@ -44,8 +78,8 @@ enum MediaVideoPreparation {
         guard size > 0 else {
             throw AppError.unknown(message: "Could not read this video file.")
         }
-        guard size <= maxSourceFileBytes else {
-            throw AppError.unknown(message: sourceTooLargeMessage)
+        guard size <= limits.maxSourceFileBytes else {
+            throw AppError.unknown(message: limits.sourceTooLargeMessage)
         }
     }
 
@@ -54,10 +88,11 @@ enum MediaVideoPreparation {
     static func prepareLocalVideo(
         from sourceURL: URL,
         contentType: String?,
+        limits: Limits = .reel,
         onProgress: ((Double) -> Void)? = nil
     ) async throws -> PreparedLocalVideo {
         try Task.checkCancellation()
-        try validateSourceFile(url: sourceURL, contentType: contentType)
+        try validateSourceFile(url: sourceURL, contentType: contentType, limits: limits)
 
         let ext = sourceURL.pathExtension.isEmpty ? "mov" : sourceURL.pathExtension
         let stagedSource = FileManager.default.temporaryDirectory
@@ -74,7 +109,7 @@ enum MediaVideoPreparation {
             )
         } catch {
             try? FileManager.default.removeItem(at: stagedSource)
-            throw mapPreparationError(error, fallback: compressionFailedMessage)
+            throw mapPreparationError(error, fallback: limits.compressionFailedMessage, limits: limits)
         }
 
         VideoCompressionDiagnostics.logSource(
@@ -86,9 +121,9 @@ enum MediaVideoPreparation {
             codec: profile.videoCodec
         )
 
-        guard profile.durationSeconds <= maxDurationSeconds else {
+        guard profile.durationSeconds <= limits.maxDurationSeconds else {
             try? FileManager.default.removeItem(at: stagedSource)
-            throw AppError.unknown(message: durationLimitMessage)
+            throw AppError.unknown(message: limits.durationLimitMessage)
         }
 
         let assessmentTarget = VideoDeliveryExporter.deliveryTarget(for: profile)
@@ -129,7 +164,7 @@ enum MediaVideoPreparation {
             )
         } catch {
             try? FileManager.default.removeItem(at: stagedSource)
-            throw mapPreparationError(error, fallback: compressionFailedMessage)
+            throw mapPreparationError(error, fallback: limits.compressionFailedMessage, limits: limits)
         }
 
         let deliveryFileInfo = VideoTranscodeFailureDiagnostics.outputFileInfo(at: deliveryURL)
@@ -165,13 +200,13 @@ enum MediaVideoPreparation {
             }
             try? FileManager.default.removeItem(at: stagedSource)
             try? FileManager.default.removeItem(at: deliveryURL)
-            throw AppError.unknown(message: compressionFailedMessage)
+            throw AppError.unknown(message: limits.compressionFailedMessage)
         }
 
-        guard outputProfile.fileBytes <= maxFinalUploadBytes else {
+        guard outputProfile.fileBytes <= limits.maxFinalUploadBytes else {
             try? FileManager.default.removeItem(at: stagedSource)
             try? FileManager.default.removeItem(at: deliveryURL)
-            throw AppError.unknown(message: "Prepared video is still too large. Try a shorter clip.")
+            throw AppError.unknown(message: limits.preparedTooLargeMessage)
         }
 
         var finalURL = deliveryURL
@@ -218,14 +253,14 @@ enum MediaVideoPreparation {
                 }
                 try? FileManager.default.removeItem(at: stagedSource)
                 try? FileManager.default.removeItem(at: deliveryURL)
-                throw mapPreparationError(error, fallback: compressionFailedMessage)
+                throw mapPreparationError(error, fallback: limits.compressionFailedMessage, limits: limits)
             }
             try? FileManager.default.removeItem(at: stagedSource)
         }
 
-        guard finalProfile.fileBytes <= maxFinalUploadBytes else {
+        guard finalProfile.fileBytes <= limits.maxFinalUploadBytes else {
             try? FileManager.default.removeItem(at: finalURL)
-            throw AppError.unknown(message: "Prepared video is still too large. Try a shorter clip.")
+            throw AppError.unknown(message: limits.preparedTooLargeMessage)
         }
 
         VideoCompressionDiagnostics.logOutput(
@@ -250,7 +285,7 @@ enum MediaVideoPreparation {
         )
         guard thumb != nil else {
             try? FileManager.default.removeItem(at: finalURL)
-            throw AppError.unknown(message: compressionFailedMessage)
+            throw AppError.unknown(message: limits.compressionFailedMessage)
         }
 
         #if DEBUG
@@ -313,16 +348,20 @@ enum MediaVideoPreparation {
         }
     }
 
-    private static func mapPreparationError(_ error: Error, fallback: String) -> AppError {
+    private static func mapPreparationError(
+        _ error: Error,
+        fallback: String,
+        limits: Limits = .reel
+    ) -> AppError {
         if Task.isCancelled {
             return AppError.unknown(message: "Video preparation was cancelled.")
         }
         if let failure = error as? VideoPreparationFailure {
             switch failure {
             case .durationExceeded:
-                return AppError.unknown(message: durationLimitMessage)
+                return AppError.unknown(message: limits.durationLimitMessage)
             case .sourceTooLarge:
-                return AppError.unknown(message: sourceTooLargeMessage)
+                return AppError.unknown(message: limits.sourceTooLargeMessage)
             case .cancelled:
                 return AppError.unknown(message: "Video preparation was cancelled.")
             case .unsupportedVideo:

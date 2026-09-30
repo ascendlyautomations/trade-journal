@@ -6,7 +6,8 @@ enum MessagingBootstrapApplier {
     static func apply(
         _ bootstrap: MessagesBootstrapV1,
         inboxStore: MessagesInboxStore,
-        detailCache: DetailPresentationCache
+        detailCache: DetailPresentationCache,
+        replaceExisting: Bool = false
     ) throws {
         try bootstrap.validateContractVersion()
 
@@ -26,7 +27,21 @@ enum MessagingBootstrapApplier {
         let mapped = bootstrap.data.conversations.compactMap {
             mapConversation($0, viewerID: viewerID, mutedIDs: mutedIDs)
         }
-        inboxStore.mergeConversationsFromBootstrap(mapped)
+        if replaceExisting {
+            inboxStore.resetInboxPagination()
+            inboxStore.replaceConversations(mapped)
+        } else {
+            inboxStore.mergeConversationsFromBootstrap(mapped)
+        }
+        applyPagination(from: bootstrap, inboxStore: inboxStore)
+    }
+
+    static func applyPagination(from bootstrap: MessagesBootstrapV1, inboxStore: MessagesInboxStore) {
+        let hasMore = bootstrap.data.page_meta.has_more
+        inboxStore.applyInboxPagination(
+            nextCursor: hasMore ? bootstrap.data.next_cursor : nil,
+            hasMore: hasMore
+        )
     }
 
     private static func mapConversation(

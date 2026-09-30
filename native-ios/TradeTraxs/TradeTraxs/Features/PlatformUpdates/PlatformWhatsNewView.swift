@@ -15,9 +15,11 @@ struct PlatformWhatsNewView: View {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let errorMessage {
-                Text(errorMessage)
-                    .experienceStyle(.footnote, color: colors.error)
-                    .padding(ExperienceSpacing.md)
+                ExperienceErrorState(
+                    title: "Unable to load updates",
+                    message: errorMessage,
+                    onRetry: { Task { await load() } }
+                )
             } else if updates.isEmpty {
                 Text("No updates yet.")
                     .experienceStyle(.body, color: colors.secondaryText)
@@ -65,15 +67,16 @@ struct PlatformWhatsNewView: View {
 
     private func load() async {
         isLoading = true
+        errorMessage = nil
         defer { isLoading = false }
         guard let transport = data.supabase.transport else {
-            errorMessage = "Could not load updates."
+            errorMessage = "Unable to load updates. Please try again."
             return
         }
         do {
             updates = try await PlatformWhatsNewClient.fetchPublished(transport: transport)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = UserFacingError.message(for: error)
         }
     }
 
