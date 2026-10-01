@@ -34,6 +34,7 @@ final class RoomInfoViewModel {
 
     private let rooms: any RoomRepository
     private let uploadService: any UploadService
+    private let objectStorage: (any ObjectStorageProviding)?
     private let profiles: any ProfileRepository
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
@@ -47,6 +48,7 @@ final class RoomInfoViewModel {
         roomID: RoomID,
         rooms: any RoomRepository,
         uploadService: any UploadService,
+        objectStorage: (any ObjectStorageProviding)? = nil,
         profiles: any ProfileRepository,
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
@@ -57,6 +59,7 @@ final class RoomInfoViewModel {
         self.roomID = roomID
         self.rooms = rooms
         self.uploadService = uploadService
+        self.objectStorage = objectStorage
         self.profiles = profiles
         self.session = session
         self.detailCache = detailCache
@@ -66,8 +69,11 @@ final class RoomInfoViewModel {
     }
 
     var inviteLink: String {
-        let slug = room?.slug ?? roomID.rawValue
-        return "https://www.tradetraxs.com/rooms/\(slug)"
+        let slug = (room?.slug ?? roomID.rawValue)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = slug.isEmpty ? roomID.rawValue : slug
+        let encoded = key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? key
+        return "https://www.tradetraxs.com/room/\(encoded)"
     }
 
     var displayedMemberCount: Int? {
@@ -126,13 +132,16 @@ final class RoomInfoViewModel {
     }
 
     func saveDetails() async {
-        guard canManageRoom, let management = rooms as? any RoomManagementRepository else { return }
+        guard canManageRoom, !isSavingDetails, let management = rooms as? any RoomManagementRepository else { return }
         isSavingDetails = true
         defer { isSavingDetails = false }
+        let previousImage = room?.image?.id
+        var uploadedPath: String?
         do {
             var imageURL: String?
             if let imageData = pendingImageData {
-                let path = StorageOptimizedMedia.objectPath(prefix: "room-images", fileExtension: "jpg")
+                let prefix = viewerID.map { "\($0.rawValue)/room-images" } ?? "room-images"
+                let path = StorageOptimizedMedia.objectPath(prefix: prefix, fileExtension: "jpg")
                 let reference = try await uploadService.upload(
                     UploadRequest(
                         bucket: "avatars",
@@ -142,13 +151,14 @@ final class RoomInfoViewModel {
                         purpose: .profileAvatar
                     )
                 )
+                uploadedPath = reference.id
                 imageURL = reference.id
-                pendingImageData = nil
-                pendingImagePreview = nil
             }
             let trimmedName = editName.trimmingCharacters(in: .whitespacesAndNewlines)
             let trimmedDescription = editDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let baseRoom = room else { return }
+            guard let baseRoom = room else {
+                throw AppError.unknown(message: "Couldn't save room details.")
+            }
             let channels = (try? await rooms.channels(roomID: roomID)) ?? []
             var configuration = TradeRoomConfiguration(room: baseRoom, channels: channels)
             if !trimmedName.isEmpty {
@@ -164,15 +174,33 @@ final class RoomInfoViewModel {
                 request: RoomUpdateRequest(configuration: configuration)
             )
             room = updated
+            pendingImageData = nil
+            pendingImagePreview = nil
             RoomMetadataSync.apply(
                 updated,
                 inboxStore: inboxStore,
                 detailCache: detailCache,
                 viewerID: viewerID
             )
+            if uploadedPath != nil, let objectStorage {
+                await OwnedMediaStorageCleanup.removeReplacedObject(
+                    previous: previousImage,
+                    current: updated.image?.id,
+                    fallbackBucket: "avatars",
+                    storage: objectStorage
+                )
+            }
             statusMessage = "Room details saved."
             ExperienceHaptics.play(.success)
         } catch {
+            if let uploadedPath, let objectStorage {
+                await OwnedMediaStorageCleanup.removeReplacedObject(
+                    previous: uploadedPath,
+                    current: nil,
+                    fallbackBucket: "avatars",
+                    storage: objectStorage
+                )
+            }
             statusMessage = ConversationThreadSupport.message(for: error)
             ExperienceHaptics.play(.error)
         }

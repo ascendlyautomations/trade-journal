@@ -70,9 +70,6 @@ struct LeaderboardScreenView: View {
                     .padding(.horizontal, ExperienceSpacing.md)
                     .accessibilityIdentifier("leaderboard.timeframe.fallback")
             }
-
-            ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.leaderboard)
-                .padding(.horizontal, ExperienceSpacing.md)
         }
         .accessibilityIdentifier("leaderboard.filters.pinned")
     }

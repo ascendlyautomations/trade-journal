@@ -58,8 +58,11 @@ final class ProfileHeaderViewModel {
     }
 
     var shareURL: URL? {
-        guard let username = profile?.username, !username.isEmpty else { return nil }
-        return URL(string: "https://www.tradetraxs.com/\(username)")
+        let username = profile?.username.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !username.isEmpty,
+              let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+        else { return nil }
+        return URL(string: "https://www.tradetraxs.com/profile/\(encoded)")
     }
 
     var shareText: String {

@@ -2,12 +2,12 @@ import Testing
 @testable import TradeTraxs
 
 struct UserSubmissionSupportTests {
-    @Test func storagePathMatchesWebConvention() {
+    @Test func storagePathIsOwnerScoped() {
         let path = SubmissionScreenshotUpload.storageObjectPath(
             userID: "user-abc",
             prefix: "support"
         )
-        #expect(path.hasPrefix("support/user-abc/opt/"))
+        #expect(path.hasPrefix("user-abc/support/opt/"))
         #expect(path.hasSuffix(".jpg"))
     }
 

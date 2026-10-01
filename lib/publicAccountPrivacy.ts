@@ -153,11 +153,25 @@ export function tradeSelectForViewer(isOwner: boolean): string {
   return isOwner ? TRADES_APP_SELECT : PUBLIC_TRADE_SELECT
 }
 
-export function tradeRelationForViewer(isOwner: boolean): "trades" | typeof TRADES_PUBLIC_READ_RELATION {
+export function tradeRelationForViewer(isOwner: true): "trades"
+export function tradeRelationForViewer(isOwner: false): typeof TRADES_PUBLIC_READ_RELATION
+export function tradeRelationForViewer(
+  isOwner: boolean
+): "trades" | typeof TRADES_PUBLIC_READ_RELATION
+export function tradeRelationForViewer(
+  isOwner: boolean
+): "trades" | typeof TRADES_PUBLIC_READ_RELATION {
   return isOwner ? "trades" : TRADES_PUBLIC_READ_RELATION
 }
 
 /** Profile trade lists that filter `is_public = true` for visitors. */
+export function tradeListRelationForProfileViewer(isOwner: true): "trades"
+export function tradeListRelationForProfileViewer(
+  isOwner: false
+): typeof TRADES_PUBLIC_READ_RELATION
+export function tradeListRelationForProfileViewer(
+  isOwner: boolean
+): "trades" | typeof TRADES_PUBLIC_READ_RELATION
 export function tradeListRelationForProfileViewer(
   isOwner: boolean
 ): "trades" | typeof TRADES_PUBLIC_READ_RELATION {

@@ -22,6 +22,7 @@ enum ReelPublishPipeline {
         feed: any FeedRepository,
         uploadService: any UploadService,
         objectStorage: any ObjectStorageProviding,
+        onInserted: (@MainActor (Reel) -> Void)? = nil,
         onProgress: ((Double) -> Void)? = nil
     ) async throws -> Reel {
         onProgress?(0.1)
@@ -68,8 +69,13 @@ enum ReelPublishPipeline {
         )
 
         ReelPublishDiagnostics.logDatabaseInsertStarted(publishID: publishID)
+        var insertedReel: Reel?
         do {
             let inserted = try await feed.createReel(provisional)
+            insertedReel = inserted
+            await MainActor.run {
+                onInserted?(inserted)
+            }
             ReelPublishDiagnostics.logDatabaseInsertCompleted(
                 publishID: publishID,
                 reelID: inserted.id.rawValue
@@ -89,16 +95,17 @@ enum ReelPublishPipeline {
                 stage: "databaseInsert",
                 error: error
             )
-            // Best-effort orphan cleanup (web does not; we try).
-            try? await objectStorage.delete(
-                bucket: StorageBucket.reels.rawValue,
-                path: uploaded.videoStoragePath
-            )
-            if let thumbPath = uploaded.thumbnailStoragePath {
+            if insertedReel == nil {
                 try? await objectStorage.delete(
                     bucket: StorageBucket.reels.rawValue,
-                    path: thumbPath
+                    path: uploaded.videoStoragePath
                 )
+                if let thumbPath = uploaded.thumbnailStoragePath {
+                    try? await objectStorage.delete(
+                        bucket: StorageBucket.reels.rawValue,
+                        path: thumbPath
+                    )
+                }
             }
             throw error
         }
@@ -206,15 +213,24 @@ enum ReelPublishPipeline {
                 publishID: publishID,
                 objectIdentity: path
             )
-            let ref = try await uploadService.upload(
-                UploadRequest(
-                    bucket: StorageBucket.reels.rawValue,
-                    path: path,
-                    data: jpeg,
-                    contentType: "image/jpeg",
-                    purpose: .reelThumbnail
+            let ref: MediaReference
+            do {
+                ref = try await uploadService.upload(
+                    UploadRequest(
+                        bucket: StorageBucket.reels.rawValue,
+                        path: path,
+                        data: jpeg,
+                        contentType: "image/jpeg",
+                        purpose: .reelThumbnail
+                    )
                 )
-            )
+            } catch {
+                try? await objectStorage.delete(
+                    bucket: StorageBucket.reels.rawValue,
+                    path: videoRef.id
+                )
+                throw error
+            }
             ReelPublishDiagnostics.logThumbnailUploadCompleted(
                 publishID: publishID,
                 statusCode: 200

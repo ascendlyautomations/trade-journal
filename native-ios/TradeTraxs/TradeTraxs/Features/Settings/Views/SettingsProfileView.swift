@@ -99,7 +99,7 @@ struct SettingsProfileView: View {
                     viewModel.save()
                 }
                 .fontWeight(.semibold)
-                .disabled(viewModel.profile == nil)
+                .disabled(viewModel.profile == nil || viewModel.isSaving)
                 .accessibilityIdentifier("settings.profile.save")
             }
         }

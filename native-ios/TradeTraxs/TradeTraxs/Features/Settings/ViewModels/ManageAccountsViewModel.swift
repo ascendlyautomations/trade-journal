@@ -464,6 +464,7 @@ final class ManageAccountsViewModel {
     // MARK: - Private
 
     private func mutate(_ work: () async throws -> Void) async -> Bool {
+        guard !isSaving else { return false }
         formError = nil
         isSaving = true
         defer { isSaving = false }

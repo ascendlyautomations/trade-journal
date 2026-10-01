@@ -171,7 +171,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             return Self.mapTradesSkippingFailures(rows)
         }
 
-        var query: [URLQueryItem] = [
+        let query: [URLQueryItem] = [
             SupabaseQuery.select(TradeDTO.publicSocialSelect),
             SupabaseQuery.eq("user_id", profileID.rawValue),
             URLQueryItem(name: "entry_time", value: "gte.\(ISO8601.string(from: entryFrom))"),
@@ -557,11 +557,42 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
     }
 
     func delete(id: TradeID) async throws {
+        struct TradeMedia: Decodable, Sendable { var image_url: String? }
+        struct ReelMedia: Decodable, Sendable {
+            var video_url: String?
+            var thumbnail_url: String?
+        }
+        let tradeRows: [TradeMedia]? = try? await supabase.database.select(
+            TradeMedia.self,
+            from: "trades",
+            query: [
+                SupabaseQuery.select("image_url"),
+                SupabaseQuery.eq("id", id.rawValue),
+                URLQueryItem(name: "limit", value: "1"),
+            ]
+        )
+        let reelRows: [ReelMedia]? = try? await supabase.database.select(
+            ReelMedia.self,
+            from: "reels",
+            query: [
+                SupabaseQuery.select("video_url,thumbnail_url"),
+                SupabaseQuery.eq("trade_id", id.rawValue),
+            ]
+        )
         struct Params: Encodable { var p_trade_id: String }
         let data = try JSONEncoder().encode(Params(p_trade_id: id.rawValue))
         _ = try await supabase.database.rpcData(
             functionName: "delete_own_trade",
             parametersJSON: data
+        )
+        var urls: [String?] = [tradeRows?.first?.image_url]
+        for reel in reelRows ?? [] {
+            urls.append(reel.video_url)
+            urls.append(reel.thumbnail_url)
+        }
+        await OwnedMediaStorageCleanup.removePublicObjects(
+            urls: urls,
+            storage: supabase.storage
         )
     }
 

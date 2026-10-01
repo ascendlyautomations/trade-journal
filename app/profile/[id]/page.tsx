@@ -870,14 +870,24 @@ function ProfilePageContent() {
       }
 
       // Inclusive range end fetches pageSize + 1 rows to detect hasMore.
-      const { data, error } = await supabase
-        .from(tradeListRelationForProfileViewer(isOwner))
-        .select(tradeSelectForViewer(isOwner))
-        .eq("user_id", forProfileId)
-        .eq("is_public", true)
-        .order("created_at", { ascending: false })
-        .range(offset, offset + pageSize)
-        .overrideTypes<Record<string, unknown>[], { merge: false }>()
+      // Branch so .from() receives one relation: tables and views are separate overloads.
+      const { data, error } = isOwner
+        ? await supabase
+            .from(tradeListRelationForProfileViewer(true))
+            .select(tradeSelectForViewer(true))
+            .eq("user_id", forProfileId)
+            .eq("is_public", true)
+            .order("created_at", { ascending: false })
+            .range(offset, offset + pageSize)
+            .overrideTypes<Record<string, unknown>[], { merge: false }>()
+        : await supabase
+            .from(tradeListRelationForProfileViewer(false))
+            .select(tradeSelectForViewer(false))
+            .eq("user_id", forProfileId)
+            .eq("is_public", true)
+            .order("created_at", { ascending: false })
+            .range(offset, offset + pageSize)
+            .overrideTypes<Record<string, unknown>[], { merge: false }>()
 
       if (error) {
         console.error("profile trades page fetch:", error)
@@ -902,13 +912,21 @@ function ProfilePageContent() {
       if (isDemoModeActive() && isDemoProfileId(forProfileId)) {
         return getDemoProfileTrades(forProfileId, currentUserId)
       }
-      const { data, error } = await supabase
-        .from(tradeListRelationForProfileViewer(isOwner))
-        .select(tradeSelectForViewer(isOwner))
-        .eq("user_id", forProfileId)
-        .eq("is_public", true)
-        .order("created_at", { ascending: false })
-        .overrideTypes<Record<string, unknown>[], { merge: false }>()
+      const { data, error } = isOwner
+        ? await supabase
+            .from(tradeListRelationForProfileViewer(true))
+            .select(tradeSelectForViewer(true))
+            .eq("user_id", forProfileId)
+            .eq("is_public", true)
+            .order("created_at", { ascending: false })
+            .overrideTypes<Record<string, unknown>[], { merge: false }>()
+        : await supabase
+            .from(tradeListRelationForProfileViewer(false))
+            .select(tradeSelectForViewer(false))
+            .eq("user_id", forProfileId)
+            .eq("is_public", true)
+            .order("created_at", { ascending: false })
+            .overrideTypes<Record<string, unknown>[], { merge: false }>()
 
       if (error) {
         console.error("profile analytics trades fetch:", error)
@@ -927,12 +945,19 @@ function ProfilePageContent() {
     }
     const isOwner =
       currentUserId != null && String(currentUserId) === String(forProfileId)
-    const { data, error } = await supabase
-      .from(tradeListRelationForProfileViewer(isOwner))
-      .select(PROFILE_SUMMARY_TRADE_SELECT)
-      .eq("user_id", forProfileId)
-      .eq("is_public", true)
-      .order("created_at", { ascending: false })
+    const { data, error } = isOwner
+      ? await supabase
+          .from(tradeListRelationForProfileViewer(true))
+          .select(PROFILE_SUMMARY_TRADE_SELECT)
+          .eq("user_id", forProfileId)
+          .eq("is_public", true)
+          .order("created_at", { ascending: false })
+      : await supabase
+          .from(tradeListRelationForProfileViewer(false))
+          .select(PROFILE_SUMMARY_TRADE_SELECT)
+          .eq("user_id", forProfileId)
+          .eq("is_public", true)
+          .order("created_at", { ascending: false })
     if (error) {
       console.error("profile summary fetch:", error)
       return []
@@ -3401,14 +3426,23 @@ function ProfilePageContent() {
       if (!trade) {
         const isOwner =
           currentUserId != null && String(currentUserId) === String(profile.id)
-        const { data, error } = await supabase
-          .from(tradeRelationForViewer(isOwner))
-          .select(isOwner ? "*" : PUBLIC_TRADE_SELECT)
-          .eq("id", tradeId)
-          .eq("user_id", profile.id)
-          .eq("is_public", true)
-          .maybeSingle()
-          .overrideTypes<Record<string, unknown> | null, { merge: false }>()
+        const { data, error } = isOwner
+          ? await supabase
+              .from(tradeRelationForViewer(true))
+              .select("*")
+              .eq("id", tradeId)
+              .eq("user_id", profile.id)
+              .eq("is_public", true)
+              .maybeSingle()
+              .overrideTypes<Record<string, unknown> | null, { merge: false }>()
+          : await supabase
+              .from(tradeRelationForViewer(false))
+              .select(PUBLIC_TRADE_SELECT)
+              .eq("id", tradeId)
+              .eq("user_id", profile.id)
+              .eq("is_public", true)
+              .maybeSingle()
+              .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
         const tradeRow = asJsonObject(data)
         if (error || !tradeRow) {

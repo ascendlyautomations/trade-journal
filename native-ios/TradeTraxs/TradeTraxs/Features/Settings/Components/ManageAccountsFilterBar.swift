@@ -14,7 +14,7 @@ struct ManageAccountsFilterBar: View {
                 Button {
                     viewModel.setPropFirmFilter(.all)
                 } label: {
-                    filterRow("All Prop Firms", selected: viewModel.propFirmFilter == .all)
+                    filterRow("All Accounts", selected: viewModel.propFirmFilter == .all)
                 }
                 if !viewModel.availablePropFirms.isEmpty {
                     Divider()
@@ -51,8 +51,6 @@ struct ManageAccountsFilterBar: View {
                     }
                 }
             }
-
-            Spacer(minLength: 0)
 
             filterMenu(
                 title: "Sort: \(viewModel.sort.menuTitle)",

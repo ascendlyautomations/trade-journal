@@ -2,6 +2,9 @@
 
 export const COOKIE_CONSENT_STORAGE_KEY = "tradetraxs_cookie_consent_v1"
 
+/** Dispatched on `window` when the user saves a cookie consent choice. */
+export const COOKIE_CONSENT_CHANGED_EVENT = "tradetraxs:cookie-consent-changed"
+
 export type CookieConsentChoice = "all" | "essential"
 
 export type CookieConsentRecord = {
@@ -49,6 +52,7 @@ export function saveCookieConsent(choice: CookieConsentChoice): CookieConsentRec
   }
   if (typeof window !== "undefined") {
     window.localStorage.setItem(COOKIE_CONSENT_STORAGE_KEY, JSON.stringify(record))
+    window.dispatchEvent(new CustomEvent(COOKIE_CONSENT_CHANGED_EVENT))
   }
   return record
 }

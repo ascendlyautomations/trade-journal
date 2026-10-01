@@ -158,10 +158,11 @@ export const COOKIE_POLICY_SECTIONS: LegalSection[] = [
           cookies, scripts, or similar technologies.
         </p>
         <p>
-          Where required, we ask for your consent before treating analytics as enabled. If you
-          choose <strong>Essential Only</strong> in our cookie banner, we record that analytics
-          preferences are disabled even if some analytics scripts are still loaded for core
-          operation. We use your stored preference to guide future analytics implementations.
+          We ask for your consent before loading optional analytics. If you choose{" "}
+          <strong>Accept All</strong>, Vercel Analytics and Speed Insights may load on the website.
+          If you choose <strong>Essential Only</strong>, or before you make a choice, those optional
+          analytics scripts do not load. Your choice is stored in browser local storage and applies
+          on future visits until you clear it or change it through the cookie banner.
         </p>
       </>
     ),

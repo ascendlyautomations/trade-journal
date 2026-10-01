@@ -12,7 +12,8 @@ enum StoryPublishPipeline {
         uploadService: any UploadService,
         objectStorage: any ObjectStorageProviding,
         predeterminedStoragePath: String? = nil,
-        onProgress: ((Double) -> Void)? = nil
+        onProgress: ((Double) -> Void)? = nil,
+        onPrepared: ((_ publicURL: String, _ storagePath: String) -> Void)? = nil
     ) async throws -> Story {
         onProgress?(0.08)
 
@@ -49,20 +50,13 @@ enum StoryPublishPipeline {
         )?.absoluteString ?? uploaded.id
 
         onProgress?(0.85)
-        do {
-            let story = try await feed.createStory(
-                userID: authorID,
-                imageURL: publicURL
-            )
-            onProgress?(1)
-            return story
-        } catch {
-            try? await objectStorage.delete(
-                bucket: StorageBucket.stories.rawValue,
-                path: uploaded.id
-            )
-            throw error
-        }
+        onPrepared?(publicURL, uploaded.id)
+        let story = try await feed.createStory(
+            userID: authorID,
+            imageURL: publicURL
+        )
+        onProgress?(1)
+        return story
     }
 
     static func publishVideo(
@@ -74,7 +68,8 @@ enum StoryPublishPipeline {
         uploadService: any UploadService,
         objectStorage: any ObjectStorageProviding,
         predeterminedStoragePath: String? = nil,
-        onProgress: ((Double) -> Void)? = nil
+        onProgress: ((Double) -> Void)? = nil,
+        onPrepared: ((_ publicURL: String, _ storagePath: String) -> Void)? = nil
     ) async throws -> Story {
         onProgress?(0.08)
         _ = try await StoryMediaDuration.validatedDurationSeconds(at: fileURL)
@@ -120,19 +115,37 @@ enum StoryPublishPipeline {
         )?.absoluteString ?? uploaded.id
 
         onProgress?(0.85)
+        onPrepared?(publicURL, uploaded.id)
+        let story = try await feed.createStory(
+            userID: authorID,
+            imageURL: publicURL
+        )
+        onProgress?(1)
+        return story
+    }
+
+    enum ExistingStoryLookup {
+        case found(Story)
+        case absent
+        case unavailable(Error)
+    }
+
+    /// Matches a story already stored for this upload. A failed lookup is not treated as absence.
+    static func lookupExistingStory(
+        imageURL: String,
+        authorID: ProfileID,
+        feed: any FeedRepository
+    ) async -> ExistingStoryLookup {
         do {
-            let story = try await feed.createStory(
-                userID: authorID,
-                imageURL: publicURL
-            )
-            onProgress?(1)
-            return story
+            let stories = try await feed.allActiveStories(for: authorID)
+            if let match = stories.first(where: { story in
+                story.authorProfileID == authorID && story.media.id == imageURL
+            }) {
+                return .found(match)
+            }
+            return .absent
         } catch {
-            try? await objectStorage.delete(
-                bucket: StorageBucket.stories.rawValue,
-                path: uploaded.id
-            )
-            throw error
+            return .unavailable(error)
         }
     }
 

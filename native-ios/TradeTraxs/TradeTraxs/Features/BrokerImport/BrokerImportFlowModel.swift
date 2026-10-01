@@ -185,6 +185,8 @@ final class BrokerImportFlowModel {
                 BrokerSyncPresentation.reconnectRequiredMessage(provider: .tradovate),
                 action: .reconnect
             )
+        case .syncUnavailable:
+            fail(BrokerSyncPresentation.temporaryFailureMessage(), action: .retry)
         case .syncCompleted(let response):
             await finishWithSyncResponse(response, target: target, data: data)
         }

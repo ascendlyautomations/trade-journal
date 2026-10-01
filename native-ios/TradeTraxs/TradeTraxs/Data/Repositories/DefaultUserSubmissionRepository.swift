@@ -59,12 +59,18 @@ nonisolated struct DefaultUserSubmissionRepository: UserSubmissionRepository {
             viewed: false
         )
 
-        let row: IDRow = try await supabase.database.insert(
-            body,
-            into: "support_tickets",
-            query: [SupabaseQuery.select("id")],
-            returning: IDRow.self
-        )
+        let row: IDRow
+        do {
+            row = try await supabase.database.insert(
+                body,
+                into: "support_tickets",
+                query: [SupabaseQuery.select("id")],
+                returning: IDRow.self
+            )
+        } catch {
+            await deleteUploadedScreenshot(screenshotURL)
+            throw error
+        }
         await notifyAdmin(type: "support_ticket", recordID: row.id)
     }
 
@@ -104,12 +110,18 @@ nonisolated struct DefaultUserSubmissionRepository: UserSubmissionRepository {
             status: "open"
         )
 
-        let row: IDRow = try await supabase.database.insert(
-            body,
-            into: "feedback_submissions",
-            query: [SupabaseQuery.select("id")],
-            returning: IDRow.self
-        )
+        let row: IDRow
+        do {
+            row = try await supabase.database.insert(
+                body,
+                into: "feedback_submissions",
+                query: [SupabaseQuery.select("id")],
+                returning: IDRow.self
+            )
+        } catch {
+            await deleteUploadedScreenshot(screenshotURL)
+            throw error
+        }
         await notifyAdmin(type: "feedback_submission", recordID: row.id)
     }
 
@@ -157,12 +169,18 @@ nonisolated struct DefaultUserSubmissionRepository: UserSubmissionRepository {
             status: "open"
         )
 
-        let row: IDRow = try await supabase.database.insert(
-            body,
-            into: "bug_reports",
-            query: [SupabaseQuery.select("id")],
-            returning: IDRow.self
-        )
+        let row: IDRow
+        do {
+            row = try await supabase.database.insert(
+                body,
+                into: "bug_reports",
+                query: [SupabaseQuery.select("id")],
+                returning: IDRow.self
+            )
+        } catch {
+            await deleteUploadedScreenshot(screenshotURL)
+            throw error
+        }
         await notifyAdmin(type: "bug_report", recordID: row.id)
     }
 
@@ -200,6 +218,14 @@ nonisolated struct DefaultUserSubmissionRepository: UserSubmissionRepository {
         } catch {
             throw UserSubmissionError.screenshotUpload(error.localizedDescription)
         }
+    }
+
+    private func deleteUploadedScreenshot(_ url: String?) async {
+        guard let url else { return }
+        await OwnedMediaStorageCleanup.removePublicObjects(
+            urls: [url],
+            storage: supabase.storage
+        )
     }
 
     private func notifyAdmin(type: String, recordID: String) async {

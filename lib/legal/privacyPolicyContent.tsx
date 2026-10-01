@@ -98,7 +98,7 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
         <p>
           When you create an account, we collect the information needed to authenticate you and
           operate your profile. You may sign up with email and password or, where enabled, third-party
-          sign-in such as Google.
+          sign-in such as Google or Sign in with Apple.
         </p>
         <p>
           You control certain profile settings, including whether your profile is public or private.
@@ -121,7 +121,8 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
           whether individual trades or posts are public or private.
         </p>
         <p>
-          When you voluntarily connect a supported broker or trading platform (such as Tradovate),
+          When you voluntarily connect a supported broker or trading platform (such as Tradovate or
+          Rithmic),
           we may receive and process data you authorize through that integration, including broker
           or platform user identifiers, trading account identifiers and account information, orders,
           positions, executions or fills, transaction or trading history, balances or related account
@@ -132,17 +133,19 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
           authorized integration.
         </p>
         <p>
-          Supported broker connections use authorization mechanisms such as OAuth where offered.
-          You authenticate with the broker or platform; TradeTraxs does not ask you to provide your
-          Tradovate password for the OAuth-based Tradovate integration and does not need or store
-          that password through that flow. To maintain an authorized connection, we may securely
-          store authorization tokens or similar credentials server-side. Access is limited to
-          permissions you grant through the integration. You may disconnect supported broker
+          Supported broker connections may use OAuth or other authorization mechanisms offered by the
+          provider. For OAuth-based integrations (such as Tradovate), you authenticate with the
+          broker or platform and TradeTraxs does not need or store your broker login password for
+          that flow. For integrations that require broker login credentials you provide in the
+          Service (such as Rithmic), we store those credentials encrypted on our servers solely to
+          maintain the connection you authorized. To maintain authorized connections, we may also
+          securely store authorization tokens or similar credentials server-side. Access is limited
+          to permissions you grant through the integration. You may disconnect supported broker
           integrations where the Service provides that control. Disconnecting stops future
           synchronization but does not automatically delete trading data already imported into
-          TradeTraxs unless you delete it through available TradeTraxs controls. The initial
-          Tradovate integration is intended for journal and data synchronization; it is not
-          intended to authorize TradeTraxs to place trades on your behalf.
+          TradeTraxs unless you delete it through available TradeTraxs controls. Supported broker
+          integrations are intended for journal and data synchronization; they are not intended to
+          authorize TradeTraxs to place trades on your behalf.
         </p>
         <p>
           Unless you share content publicly or with other users through the Service, your private
@@ -157,10 +160,10 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
           login credentials you type or paste into TradeTraxs (for example in support messages,
           posts, or CSV attachments). TradeTraxs does not need your broker password to operate
           manual journaling or CSV import, and the OAuth-based Tradovate connection does not use
-          your Tradovate password. That is different from authorization tokens or similar
-          credentials stored securely on our servers solely to maintain an integration you
-          authorized—we do not treat those server-side tokens as something you should manually
-          submit or share.
+          your Tradovate password. That is different from broker login credentials or authorization
+          tokens stored encrypted on our servers solely to maintain an integration you
+          authorized—we do not treat those server-side secrets as something you should paste into
+          support messages, posts, or unrelated fields.
         </p>
       </>
     ),
@@ -171,9 +174,11 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
     content: (
       <>
         <p>
-          Content you publish, including feed posts, clips, trade shares, comments, profile posts,
-          photos, videos, voice messages, direct messages, and Trade Room participation, may be
-          visible to other users according to your settings and the feature you use.
+          Content you publish, including feed posts, clips, stories, achievements, trade shares,
+          comments, profile posts, photos, videos, voice messages, direct messages, Vault saves,
+          and Trade Room participation, may be visible to other users according to your settings and
+          the feature you use. Vault and private trades are intended for your personal use unless
+          you share them through public features.
         </p>
         <p>
           Public content may be displayed on leaderboards, explore pages, or other public areas of
@@ -203,9 +208,11 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
           </li>
         </ul>
         <p>
-          These tools may collect pseudonymous identifiers, page views, referrers, device/browser
-          characteristics, and performance timings. We use this data in aggregate to improve the
-          Service, not to sell your personal trading journal as a standalone product.
+          On the website, Vercel Analytics and Speed Insights load only if you choose{" "}
+          <strong>Accept All</strong> in our cookie banner. These tools may collect pseudonymous
+          identifiers, page views, referrers, device/browser characteristics, and performance
+          timings. We use this data in aggregate to improve the Service, not to sell your personal
+          trading journal as a standalone product.
         </p>
       </>
     ),
@@ -226,7 +233,8 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
           </li>
           <li>
             <strong>Analytics cookies/scripts</strong>, used by Vercel Analytics and Speed Insights
-            as described above.
+            on the website when you choose <strong>Accept All</strong> in our cookie banner (see our{" "}
+            <Link href="/cookie-policy">Cookie Policy</Link>).
           </li>
         </ul>
         <p>
@@ -292,6 +300,11 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
           purposes only, not financial advice. Do not submit information you do not want processed
           for that purpose.
         </p>
+        <p>
+          TradeTraxs does not use your content to train general-purpose machine learning models.
+          When you use AI features, processing is performed through third-party AI providers (such
+          as OpenAI) under their applicable API and privacy terms, in addition to this policy.
+        </p>
       </>
     ),
   },
@@ -314,8 +327,8 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
             applicable.
           </li>
           <li>
-            <strong>Apple</strong>, App Store subscription purchase processing and subscription
-            management for TraxPro on iOS.
+            <strong>Apple</strong>, Sign in with Apple (where enabled), App Store subscription
+            purchase processing, and subscription management for TraxPro on iOS.
           </li>
           <li>
             <strong>Vercel</strong>, hosting, deployment, analytics, and speed insights (website).
@@ -329,8 +342,9 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
             described above.
           </li>
           <li>
-            <strong>Brokers and trading platforms</strong>, such as Tradovate when you choose to
-            connect an account. Those providers authenticate you and may transmit trading data to
+            <strong>Brokers and trading platforms</strong>, such as Tradovate or Rithmic when you
+            choose to connect an account. Those providers authenticate you and may transmit trading
+            data to
             TradeTraxs according to their terms, APIs, and the permissions you grant. Listing a
             provider here does not imply that the provider endorses TradeTraxs.
           </li>
@@ -411,10 +425,12 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
         <p>
           Account deletion removes or cleans up most account-linked content, including trades,
           posts, clips, profile data, storage files, push notification tokens, and Apple
-          subscription entitlement records stored for your account. Direct messages and Trade Room
-          messages you sent may be <strong>anonymized</strong> (sender identity removed) rather
-          than deleted from other participants&apos; threads so conversation history remains
-          coherent for recipients. Content reports, moderation records, and certain billing or
+          subscription entitlement records stored for your account. Direct messages you sent in
+          one-to-one conversations may be <strong>anonymized</strong> (sender identity removed)
+          rather than deleted from the other participant&apos;s thread. Trade Room messages you
+          posted are generally <strong>deleted</strong> from rooms when your account is deleted,
+          which may remove those messages from other members&apos; room history. Content reports,
+          moderation records, and certain billing or
           fraud-prevention records may be retained as needed for safety, legal, or accounting
           obligations. Deleting your TradeTraxs account does <strong>not</strong> automatically
           cancel an Apple App Store subscription.

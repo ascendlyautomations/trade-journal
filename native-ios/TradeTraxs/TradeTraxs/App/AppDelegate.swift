@@ -29,8 +29,19 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         ExperienceNavigationBarAppearance.configureDefaultBarChrome()
         StartupTrace.event("AppDelegate.didFinishLaunching")
         AppLog.application.info("AppDelegate.didFinishLaunching")
+        // The notification-center delegate must exist before launch returns.
+        // SwiftUI onAppear is too late for a cold-start tap.
+        if pushNotifications == nil {
+            let environment = AppLaunchController.shared.environment
+            pushNotifications = environment.pushNotifications
+            lifecycle = environment.lifecycle
+            environment.lifecycle.pushNotifications = environment.pushNotifications
+        }
         pushNotifications?.bindIfNeeded()
 
+        if let url = launchOptions?[.url] as? URL {
+            LaunchUniversalLinkInbox.capture(url)
+        }
         if let remote = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
             // Cold-start tap is also delivered via UNUserNotificationCenterDelegate;
             // keep a breadcrumb for diagnostics only.
@@ -61,6 +72,28 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) {
         pushNotifications?.handleForegroundRemoteNotification(userInfo: userInfo)
         completionHandler(.newData)
+    }
+
+    func application(
+        _ application: UIApplication,
+        open url: URL,
+        options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+    ) -> Bool {
+        _ = options
+        LaunchUniversalLinkInbox.capture(url)
+        return false
+    }
+
+    func application(
+        _ application: UIApplication,
+        continue userActivity: NSUserActivity,
+        restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void
+    ) -> Bool {
+        _ = restorationHandler
+        if userActivity.activityType == NSUserActivityTypeBrowsingWeb, let url = userActivity.webpageURL {
+            LaunchUniversalLinkInbox.capture(url)
+        }
+        return false
     }
 
     func applicationWillTerminate(_ application: UIApplication) {

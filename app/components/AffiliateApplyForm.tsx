@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import {
   useEffect,
   useImperativeHandle,
@@ -233,7 +234,12 @@ function AffiliateApplyFormInner(
           {title}
         </h2>
         <p className="mt-1 text-xs text-gray-400">
-          Status updates appear on this page and in Settings → Affiliate.
+          Status updates appear on this page and in Settings → Affiliate. By submitting, you agree to
+          our{" "}
+          <Link href="/affiliate-terms" className="text-blue-300 hover:text-blue-200">
+            Affiliate Terms
+          </Link>
+          .
         </p>
 
         {prefillFrom?.status === "pending" && prefillFrom.has_edited ? (

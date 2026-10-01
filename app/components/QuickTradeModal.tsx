@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { supabase } from "@/lib/supabaseClient"
+import { fetchProfileOwnerPrivateFields } from "@/lib/profileOwnerPrivateFields"
 import {
   getESTDate,
 } from "@/lib/inputTradeDateTime"
@@ -336,12 +337,11 @@ export default function QuickTradeModal({
     }
     const { data } = await supabase
       .from("profiles")
-      .select(
-        "is_pro, subscription_status, locked_account_type, username, avatar_url"
-      )
+      .select("is_pro, subscription_status, username, avatar_url")
       .eq("id", uid)
       .maybeSingle()
-    setPlanProfile(data ?? null)
+    const privateFields = await fetchProfileOwnerPrivateFields(supabase)
+    setPlanProfile({ ...(data ?? {}), ...(privateFields ?? {}) })
   }, [contextProfile])
 
   function clearEphemeralTradeFields() {

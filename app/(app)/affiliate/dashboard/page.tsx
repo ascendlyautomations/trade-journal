@@ -286,9 +286,16 @@ export default function AffiliateDashboard() {
           ) : hasAffiliateAccess ? (
             <>
               <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-                <h1 className="text-2xl font-bold text-blue-300 sm:text-3xl">
-                  Affiliate Dashboard
-                </h1>
+                <div>
+                  <h1 className="text-2xl font-bold text-blue-300 sm:text-3xl">
+                    Affiliate Dashboard
+                  </h1>
+                  <p className="mt-1 text-xs text-gray-400">
+                    <Link href="/affiliate-terms" className="text-blue-300 hover:text-blue-200">
+                      Affiliate Terms
+                    </Link>
+                  </p>
+                </div>
                 <div className="flex items-center gap-2">
                   {(showApplyCta || isPending) && (
                     <button

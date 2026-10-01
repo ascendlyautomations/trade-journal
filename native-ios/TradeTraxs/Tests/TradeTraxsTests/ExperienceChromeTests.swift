@@ -23,6 +23,14 @@ final class ExperienceChromeTests: XCTestCase {
         XCTAssertTrue(description?.localizedCaseInsensitiveContains("photo library") == true)
     }
 
+    func testInfoPlistCameraUsageCoversStoriesClipsAndTrades() {
+        let description = Bundle.main.object(forInfoDictionaryKey: "NSCameraUsageDescription") as? String
+        XCTAssertNotNil(description)
+        XCTAssertTrue(description?.localizedCaseInsensitiveContains("stories") == true)
+        XCTAssertTrue(description?.localizedCaseInsensitiveContains("clips") == true)
+        XCTAssertTrue(description?.localizedCaseInsensitiveContains("trade") == true)
+    }
+
     func testInfoPlistDoesNotRequestPhotoLibraryAddUsageDescription() {
         XCTAssertNil(Bundle.main.object(forInfoDictionaryKey: "NSPhotoLibraryAddUsageDescription"))
     }

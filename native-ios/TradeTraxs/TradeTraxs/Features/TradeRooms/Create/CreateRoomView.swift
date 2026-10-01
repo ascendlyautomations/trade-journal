@@ -37,6 +37,7 @@ struct CreateRoomView: View {
                 uploadService: data.uploadService,
                 session: data.session,
                 detailCache: data.detailCache,
+                objectStorage: data.objectStorage,
                 onDismiss: onDismiss,
                 onCreated: onCreated
             )

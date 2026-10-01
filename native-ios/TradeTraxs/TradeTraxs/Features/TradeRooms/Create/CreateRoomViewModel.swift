@@ -30,6 +30,7 @@ final class CreateRoomViewModel {
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
     private let inboxStore: MessagesInboxStore
+    private let objectStorage: (any ObjectStorageProviding)?
     private let onDismiss: () -> Void
     private let onCreated: (TradeRoom) -> Void
 
@@ -44,6 +45,7 @@ final class CreateRoomViewModel {
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
         inboxStore: MessagesInboxStore? = nil,
+        objectStorage: (any ObjectStorageProviding)? = nil,
         onDismiss: @escaping () -> Void,
         onCreated: @escaping (TradeRoom) -> Void
     ) {
@@ -53,6 +55,7 @@ final class CreateRoomViewModel {
         self.session = session
         self.detailCache = detailCache
         self.inboxStore = inboxStore ?? .shared
+        self.objectStorage = objectStorage
         self.onDismiss = onDismiss
         self.onCreated = onCreated
     }
@@ -197,7 +200,10 @@ final class CreateRoomViewModel {
             if let imageData {
                 isUploadingImage = true
                 defer { isUploadingImage = false }
-                let path = StorageOptimizedMedia.objectPath(prefix: "room-images", fileExtension: "jpg")
+                let path = StorageOptimizedMedia.objectPath(
+                    prefix: "\(viewerID.rawValue)/room-images",
+                    fileExtension: "jpg"
+                )
                 let reference = try await uploadService.upload(
                     UploadRequest(
                         bucket: "avatars",
@@ -221,6 +227,15 @@ final class CreateRoomViewModel {
             onDismiss()
             onCreated(room)
         } catch {
+            if let uploaded = configuration.imageURL, imageData != nil, let objectStorage {
+                await OwnedMediaStorageCleanup.removeReplacedObject(
+                    previous: uploaded,
+                    current: nil,
+                    fallbackBucket: "avatars",
+                    storage: objectStorage
+                )
+                configuration.imageURL = nil
+            }
             formError = ConversationThreadSupport.message(for: error)
             ExperienceHaptics.play(.error)
             phase = .ready

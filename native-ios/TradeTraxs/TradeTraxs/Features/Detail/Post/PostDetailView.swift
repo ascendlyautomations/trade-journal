@@ -75,7 +75,18 @@ struct PostDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(viewModel.deleteErrorMessage ?? "This can’t be undone.")
+            Text("This can’t be undone.")
+        }
+        .alert(
+            "Couldn't delete post",
+            isPresented: Binding(
+                get: { viewModel.deleteErrorMessage != nil },
+                set: { if !$0 { viewModel.clearDeleteError() } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(viewModel.deleteErrorMessage ?? "")
         }
         .accessibilityIdentifier("detail.post.root")
     }

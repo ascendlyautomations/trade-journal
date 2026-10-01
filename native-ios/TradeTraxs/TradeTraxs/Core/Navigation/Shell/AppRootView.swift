@@ -19,13 +19,19 @@ struct AppRootView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appEnvironment) private var appEnvironment
     @Bindable private var launchController = AppLaunchController.shared
+    @Bindable private var passwordRecovery = PasswordRecoveryModel.shared
     @State private var isLaunchBootstrapping = true
 
     var body: some View {
         Group {
             authRootContent
         }
-        .onAppear { StartupTrace.event("rootBodyFirstEvaluation") }
+        .onAppear {
+            StartupTrace.event("rootBodyFirstEvaluation")
+            for url in LaunchUniversalLinkInbox.drain() {
+                handleIncomingURL(url)
+            }
+        }
         .applyThemeEnvironment(themeManager.themeEnvironment)
         // Root fill only — do not also apply bar chrome here (owned by MainTabShellView)
         // so safe-area insets are not compensated twice.
@@ -133,6 +139,22 @@ struct AppRootView: View {
         .onOpenURL { url in
             handleIncomingURL(url)
         }
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { passwordRecovery.isPresented },
+                set: { presented in
+                    if !presented { passwordRecovery.dismiss() }
+                }
+            )
+        ) {
+            NavigationStack {
+                SetNewPasswordView(
+                    model: passwordRecovery,
+                    authenticationCoordinator: authenticationCoordinator
+                )
+            }
+            .interactiveDismissDisabled(passwordRecovery.isSaving)
+        }
         .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
             guard let url = activity.webpageURL else { return }
             handleIncomingURL(url)
@@ -177,6 +199,11 @@ struct AppRootView: View {
                     authenticatedShell
                 } else {
                     SplashView()
+                        .task(id: navigation.store.sessionPhase) {
+                            // A deep link must not own startup. If the shell was already
+                            // entered, put it back. Cold start no-ops until session restore.
+                            navigation.coordinator.restoreAuthenticatedShellAfterDeepLink()
+                        }
                 }
 
             case .unauthenticated, .failure, .authenticating:
@@ -293,6 +320,7 @@ struct AppRootView: View {
             authenticationCoordinator: authenticationCoordinator,
             currentUserProfile: currentUserProfile
         )
+        .onAppear { DeepLinkLaunchTrace.event("shell.ready", detail: "main") }
         .id(authenticationManager.state.session?.userID.rawValue ?? "signed-out")
         .ownerAccountFilterDropdownOverlay()
         .contextualTourHost(
@@ -642,6 +670,7 @@ struct AppRootView: View {
             using: navigation.coordinator,
             store: navigation.store
         )
+        passwordRecovery.consumeInbox()
     }
 
     private func sheetTitle(_ destination: SheetDestination) -> String {

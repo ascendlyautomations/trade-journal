@@ -27,6 +27,7 @@ final class SettingsProfileViewModel {
     private(set) var avatarPreview: UIImage?
     private(set) var avatarUploadError: String?
     private(set) var isUploadingAvatar = false
+    private(set) var isSaving = false
 
     private(set) var usernameChangeCount = 0
     private var persistedUsername = ""
@@ -99,7 +100,7 @@ final class SettingsProfileViewModel {
     }
 
     func save() {
-        guard let profile else { return }
+        guard let profile, !isSaving else { return }
         errorMessage = nil
         usernameError = nil
 
@@ -142,7 +143,9 @@ final class SettingsProfileViewModel {
             traderType: traderTypeForUpdate
         )
 
+        isSaving = true
         Task {
+            defer { isSaving = false }
             do {
                 let updated = try await profiles.updateProfileSettings(update)
                 if usernameChanged,
@@ -211,13 +214,14 @@ final class SettingsProfileViewModel {
     }
 
     func persistCroppedAvatar(_ image: UIImage) {
+        guard !isUploadingAvatar else { return }
         avatarUploadError = nil
         avatarPreview = image
         guard let profile else { return }
-        profileStore?.installLocalAvatar(image, avatarID: profile.avatar?.id ?? "pending-avatar")
 
         guard let uploadService, let objectStorage else {
             avatarUploadError = "Photo upload isn't available right now."
+            avatarPreview = nil
             return
         }
 
@@ -228,10 +232,12 @@ final class SettingsProfileViewModel {
         }
 
         let profileID = profile.id
+        let previousAvatarURL = profile.avatar?.id
 
         isUploadingAvatar = true
         Task {
             defer { isUploadingAvatar = false }
+            var uploadedURL: String?
             do {
                 let avatarURL = try await ProfileAvatarUpload.upload(
                     jpegData: jpegData,
@@ -240,14 +246,36 @@ final class SettingsProfileViewModel {
                     objectStorage: objectStorage,
                     supabaseURL: supabaseURL
                 )
-                guard var updatedProfile = self.profile else { return }
+                uploadedURL = avatarURL
+                guard var updatedProfile = self.profile else {
+                    await OwnedMediaStorageCleanup.removeReplacedObject(
+                        previous: avatarURL,
+                        current: nil,
+                        storage: objectStorage
+                    )
+                    avatarPreview = nil
+                    return
+                }
                 updatedProfile.avatar = MediaReference(id: avatarURL, kind: .image, altText: nil)
                 let saved = try await profiles.updateProfile(updatedProfile)
+                await OwnedMediaStorageCleanup.removeReplacedObject(
+                    previous: previousAvatarURL,
+                    current: avatarURL,
+                    storage: objectStorage
+                )
                 commitConfirmedProfileMutation(saved, localAvatar: image)
                 avatarPreview = nil
                 SaveSuccessConfirmationCenter.shared.present(SaveSuccessToastMessage.profileUpdated)
                 ExperienceHaptics.play(.success)
             } catch {
+                avatarPreview = nil
+                if let uploadedURL {
+                    await OwnedMediaStorageCleanup.removeReplacedObject(
+                        previous: uploadedURL,
+                        current: nil,
+                        storage: objectStorage
+                    )
+                }
                 avatarUploadError = ProfileOnboardingErrorMapping.avatarUploadMessage(for: error)
                 ExperienceHaptics.play(.warning)
             }

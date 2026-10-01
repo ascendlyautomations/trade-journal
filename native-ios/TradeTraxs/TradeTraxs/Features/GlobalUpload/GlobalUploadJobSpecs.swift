@@ -84,6 +84,11 @@ struct ReelUploadSpec: Sendable {
     var preparationTaskID: String?
 }
 
+/// Remembers a clip row that already exists so retry verifies it instead of inserting another.
+struct ReelUploadCheckpoint: Sendable, Equatable {
+    var savedReelID: ReelID?
+}
+
 struct PostUploadSpec: Sendable {
     var authorID: ProfileID
     var bodyText: String
@@ -108,6 +113,10 @@ struct StoryUploadSpec: Sendable {
 
 struct StoryUploadCheckpoint: Sendable, Equatable {
     var uploadedImagePublicURL: String?
+    var uploadedImageStoragePath: String?
+    var savedStoryID: StoryID?
+    /// Set only after a lookup confirms no story row uses the uploaded media.
+    var insertConfirmedAbsent = false
 }
 
 struct AchievementUploadCheckpoint: Sendable, Equatable {

@@ -86,9 +86,23 @@ export async function fetchAchievementPostById(
     return null
   }
 
-  if (!data) return null
+  if (data) return normalizeAchievementFeedItem(data as Record<string, unknown>)
 
-  return normalizeAchievementFeedItem(data as Record<string, unknown>)
+  // Detail share can pass `achievements.id`. Feed links pass `achievement_posts.id`.
+  const byAchievement = await client
+    .from("achievement_posts")
+    .select(FEED_ACHIEVEMENT_POSTS_SELECT)
+    .eq("achievement_id", id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (byAchievement.error) {
+    console.error("fetchAchievementPostById:", byAchievement.error)
+    return null
+  }
+  if (!byAchievement.data) return null
+  return normalizeAchievementFeedItem(byAchievement.data as Record<string, unknown>)
 }
 
 export function achievementPostOwnerUserId(post: {

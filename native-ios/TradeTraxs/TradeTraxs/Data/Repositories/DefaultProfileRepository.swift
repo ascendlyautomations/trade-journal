@@ -539,9 +539,23 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
     }
 
     func deleteWallPost(id: PostID) async throws {
+        struct Row: Decodable, Sendable { var image_url: String? }
+        let rows: [Row]? = try? await supabase.database.select(
+            Row.self,
+            from: "profile_posts",
+            query: [
+                SupabaseQuery.select("image_url"),
+                SupabaseQuery.eq("id", id.rawValue),
+                URLQueryItem(name: "limit", value: "1"),
+            ]
+        )
         try await supabase.database.delete(
             from: "profile_posts",
             query: [SupabaseQuery.eq("id", id.rawValue)]
+        )
+        await OwnedMediaStorageCleanup.removePublicObjects(
+            urls: [rows?.first?.image_url],
+            storage: supabase.storage
         )
     }
 

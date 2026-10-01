@@ -2,7 +2,7 @@ import Foundation
 
 /// Inbox bootstrap pagination + Realtime watch window (V2 RPC cursor).
 enum MessagingInboxPagination {
-    static let pageSize = 40
+    nonisolated static let pageSize = 40
     /// Recent inbox rows subscribed on `inbox-dms` — not every paginated historical row.
     static let realtimeWatchConversationCount = 40
 

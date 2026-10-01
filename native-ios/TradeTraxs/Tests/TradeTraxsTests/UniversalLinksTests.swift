@@ -65,6 +65,7 @@ final class UniversalLinksTests: XCTestCase {
 
     @MainActor
     func testPendingUniversalLinkAfterAuth() {
+        DeepLinkLaunchTrace.resetDuplicateGuardForTesting()
         let store = NavigationStore(state: .initial)
         let coordinator = NavigationCoordinator(store: store)
         let router = DeepLinkRouter()
@@ -76,5 +77,152 @@ final class UniversalLinksTests: XCTestCase {
         coordinator.markAuthenticated()
         XCTAssertEqual(store.selectedTab, .home)
         XCTAssertEqual(store.paths.home, [.tradeDetail(TradeID("pending-1"))])
+        XCTAssertEqual(store.sessionPhase, .authenticated)
+    }
+
+    @MainActor
+    func testWarmUniversalLinkRoutesWithoutLeavingAuthenticatedShell() {
+        DeepLinkLaunchTrace.resetDuplicateGuardForTesting()
+        let store = NavigationStore(state: .initial)
+        let coordinator = NavigationCoordinator(store: store)
+        let router = DeepLinkRouter()
+        coordinator.markAuthenticated()
+
+        let url = URL(string: "https://www.tradetraxs.com/trade/warm-1")!
+        XCTAssertTrue(router.route(url: url, using: coordinator, store: store))
+        XCTAssertEqual(store.sessionPhase, .authenticated)
+        XCTAssertNil(store.pendingAfterAuth)
+        XCTAssertEqual(store.paths.home, [.tradeDetail(TradeID("warm-1"))])
+    }
+
+    @MainActor
+    func testColdUniversalLinkStaysPendingUntilSessionRestore() {
+        DeepLinkLaunchTrace.resetDuplicateGuardForTesting()
+        let store = NavigationStore(state: .initial)
+        let coordinator = NavigationCoordinator(store: store)
+        let router = DeepLinkRouter()
+
+        let url = URL(string: "https://www.tradetraxs.com/profile/cold-user")!
+        XCTAssertTrue(router.route(url: url, using: coordinator, store: store))
+        XCTAssertEqual(store.sessionPhase, .unauthenticated)
+        XCTAssertEqual(store.pendingAfterAuth?.asAppDestination, .feed(.profile(ProfileID("cold-user"))))
+
+        coordinator.markAuthenticated()
+        XCTAssertEqual(store.sessionPhase, .authenticated)
+        XCTAssertNil(store.pendingAfterAuth)
+        XCTAssertEqual(store.paths.feed, [.profile(ProfileID("cold-user"))])
+    }
+
+    @MainActor
+    func testLoggedOutUniversalLinkPreservesDestination() {
+        DeepLinkLaunchTrace.resetDuplicateGuardForTesting()
+        let store = NavigationStore(state: .initial)
+        let coordinator = NavigationCoordinator(store: store)
+        let router = DeepLinkRouter()
+
+        let url = URL(string: "https://www.tradetraxs.com/post/logged-out-post")!
+        XCTAssertTrue(router.route(url: url, using: coordinator, store: store))
+        XCTAssertEqual(store.sessionPhase, .unauthenticated)
+        XCTAssertEqual(store.pendingAfterAuth?.asAppDestination, .feed(.post(PostID("logged-out-post"))))
+        XCTAssertTrue(store.paths.feed.isEmpty)
+    }
+
+    @MainActor
+    func testAuthenticatedAuthRouteDoesNotDemoteShell() {
+        DeepLinkLaunchTrace.resetDuplicateGuardForTesting()
+        let store = NavigationStore(state: .initial)
+        let coordinator = NavigationCoordinator(store: store)
+        let router = DeepLinkRouter()
+        coordinator.markAuthenticated()
+
+        let url = URL(string: "https://www.tradetraxs.com/login")!
+        XCTAssertTrue(router.route(url: url, using: coordinator, store: store))
+        XCTAssertEqual(store.sessionPhase, .authenticated)
+        XCTAssertNil(store.pendingAfterAuth)
+    }
+
+    @MainActor
+    func testUnsupportedUniversalLinkDoesNotBlockAuthenticatedShell() {
+        DeepLinkLaunchTrace.resetDuplicateGuardForTesting()
+        let store = NavigationStore(state: .initial)
+        let coordinator = NavigationCoordinator(store: store)
+        let router = DeepLinkRouter()
+        coordinator.markAuthenticated()
+
+        let url = URL(string: "https://www.tradetraxs.com/pricing")!
+        XCTAssertFalse(router.route(url: url, using: coordinator, store: store))
+        XCTAssertEqual(store.sessionPhase, .authenticated)
+        XCTAssertTrue(store.paths.home.isEmpty)
+        XCTAssertNil(store.pendingAfterAuth)
+    }
+
+    @MainActor
+    func testDeletedDestinationStillLeavesAuthenticatedShell() {
+        DeepLinkLaunchTrace.resetDuplicateGuardForTesting()
+        let store = NavigationStore(state: .initial)
+        let coordinator = NavigationCoordinator(store: store)
+        let router = DeepLinkRouter()
+        coordinator.markAuthenticated()
+
+        let url = URL(string: "https://www.tradetraxs.com/trade/deleted-trade")!
+        XCTAssertTrue(router.route(url: url, using: coordinator, store: store))
+        XCTAssertEqual(store.sessionPhase, .authenticated)
+        XCTAssertEqual(store.paths.home, [.tradeDetail(TradeID("deleted-trade"))])
+    }
+
+    @MainActor
+    func testDuplicateUniversalLinkDoesNotDemoteOrDoublePush() {
+        DeepLinkLaunchTrace.resetDuplicateGuardForTesting()
+        let store = NavigationStore(state: .initial)
+        let coordinator = NavigationCoordinator(store: store)
+        let router = DeepLinkRouter()
+        coordinator.markAuthenticated()
+
+        let url = URL(string: "https://www.tradetraxs.com/reel/reel-dup")!
+        XCTAssertTrue(router.route(url: url, using: coordinator, store: store))
+        XCTAssertTrue(router.route(url: url, using: coordinator, store: store))
+        XCTAssertEqual(store.sessionPhase, .authenticated)
+        XCTAssertEqual(store.paths.feed, [.reel(ReelID("reel-dup"))])
+    }
+
+    @MainActor
+    func testRepairRestoresShellAfterAuthRouteDemotion() {
+        let store = NavigationStore(state: .initial)
+        let coordinator = NavigationCoordinator(store: store)
+        coordinator.markAuthenticated()
+        coordinator.openAuth(.login)
+        XCTAssertEqual(store.sessionPhase, .unauthenticated)
+
+        coordinator.restoreAuthenticatedShellAfterDeepLink()
+        XCTAssertEqual(store.sessionPhase, .authenticated)
+    }
+
+    @MainActor
+    func testRepairDoesNotSkipSignInBeforeSessionRestore() {
+        let store = NavigationStore(state: .initial)
+        let coordinator = NavigationCoordinator(store: store)
+        coordinator.openAuth(.login)
+        coordinator.restoreAuthenticatedShellAfterDeepLink()
+        XCTAssertEqual(store.sessionPhase, .unauthenticated)
+    }
+
+    func testAchievementUniversalLinkParses() throws {
+        let url = try XCTUnwrap(URL(string: "https://www.tradetraxs.com/feed?achievement=ach-1"))
+        XCTAssertEqual(parser.parse(url: url), .feed(.achievement(AchievementID("ach-1"))))
+    }
+
+    func testAuthenticatedShellGateOnlyRepairsAfterShellEntry() {
+        XCTAssertFalse(AuthenticatedShellGate.shouldRepairShell(
+            didEnterAuthenticatedShell: false,
+            sessionPhase: .unauthenticated
+        ))
+        XCTAssertTrue(AuthenticatedShellGate.shouldRepairShell(
+            didEnterAuthenticatedShell: true,
+            sessionPhase: .unauthenticated
+        ))
+        XCTAssertFalse(AuthenticatedShellGate.shouldRepairShell(
+            didEnterAuthenticatedShell: true,
+            sessionPhase: .authenticated
+        ))
     }
 }

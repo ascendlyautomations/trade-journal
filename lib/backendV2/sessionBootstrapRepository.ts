@@ -8,6 +8,7 @@ import { ACCOUNTS_SELECT } from "@/lib/appDataCache"
 import { fetchTotalUnreadMessageCount } from "@/lib/messageUnread"
 import { fetchSocialNotificationUnreadCount } from "@/lib/socialNotificationUnreadCount"
 import { isProActive } from "@/lib/subscription"
+import { mergeOwnerPrivateProfileFields } from "@/lib/profileOwnerPrivateFields"
 import { APP_PROFILE_SELECT } from "@/lib/settingsProfileSync"
 import type { SessionBootstrapProviding } from "./adapters.ts"
 import {
@@ -175,7 +176,10 @@ export class SessionRestBootstrapRepository implements SessionBootstrapProviding
       throw profileRes.error ?? new Error("SessionRest: profile missing")
     }
 
-    const row = profileRes.data as Record<string, unknown>
+    const row = await mergeOwnerPrivateProfileFields(
+      this.client,
+      profileRes.data as Record<string, unknown>
+    )
     const sessionProfile = asSessionProfile(row)
     const pro = isProActive(sessionProfile)
     const early =

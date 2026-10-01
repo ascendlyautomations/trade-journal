@@ -451,6 +451,24 @@ final class AuthenticationManager {
         try await emailProvider.requestPasswordReset(email: email)
     }
 
+    /// Installs the recovery session after the password change. Does not create a profile.
+    func adoptRecoveredSession(_ session: AuthenticationSession) async throws {
+        restorationGeneration &+= 1
+        let authGeneration = AuthLifecycleGeneration.bump()
+        refreshCoordinator.cancel()
+        await AuthRefreshSingleFlight.shared.cancelAll()
+        try sessionManager.install(session)
+        await NetworkConcurrencyCoordinator.shared.markAuthenticatedSessionActive(
+            authGeneration: authGeneration
+        )
+        await SessionNetworkGate.shared.markReady()
+        applyAuthenticated(
+            session,
+            event: .signInSucceeded(userID: session.userID, provider: session.provider)
+        )
+        refreshCoordinator.schedule(for: session)
+    }
+
     func resendSignupConfirmation(email: String) async throws {
         if let error = validator.validateEmail(email) { throw error }
         try await emailProvider.resendSignupConfirmation(email: email)

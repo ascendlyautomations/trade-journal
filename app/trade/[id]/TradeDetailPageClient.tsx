@@ -107,8 +107,8 @@ export default function TradeDetailPageClient({
       const { data, error } = isOwner
         ? { data: await rpcTradeOwnerRead(supabase, tradeId), error: null }
         : await supabase
-            .from(tradeRelationForViewer(isOwner))
-            .select(tradeSelectForViewer(isOwner))
+            .from(tradeRelationForViewer(false))
+            .select(tradeSelectForViewer(false))
             .eq("id", tradeId)
             .maybeSingle()
             .overrideTypes<Record<string, unknown> | null, { merge: false }>()

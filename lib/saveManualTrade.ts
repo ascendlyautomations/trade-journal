@@ -4,6 +4,7 @@ import { getSessionFromDate } from "@/lib/getSession"
 import { buildDateTime } from "@/lib/inputTradeDateTime"
 import { prependTradeInCache } from "@/lib/appDataCache"
 import { isProActive } from "@/lib/subscription"
+import { fetchProfileOwnerPrivateFields } from "@/lib/profileOwnerPrivateFields"
 import { inferTradeDirectionFromPrices } from "@/lib/inferTradeDirection"
 import { parseOptionalRr } from "@/lib/tradeRr"
 import { assertAccountAllowsNewTrades } from "@/lib/freePlanAccountSlots"
@@ -120,18 +121,18 @@ export async function saveManualTrade(
 
   const { data: profileRow } = await client
     .from("profiles")
-    .select(
-      "is_pro, subscription_status, trial_end, locked_account_type, locked_account_size, locked_account_name, locked_account_number"
-    )
+    .select("is_pro, subscription_status, trial_end")
     .eq("id", userId)
     .maybeSingle()
+  const privateFields = await fetchProfileOwnerPrivateFields(client)
+  const profileForTrade = { ...(profileRow ?? {}), ...(privateFields ?? {}) }
 
-  const userIsPro = isProActive(profileRow)
+  const userIsPro = isProActive(profileForTrade)
   const accountResolved = await resolveRowAccount(
     client,
     userId,
     account,
-    profileRow,
+    profileForTrade,
     userIsPro
   )
   if (!accountResolved.ok) return accountResolved

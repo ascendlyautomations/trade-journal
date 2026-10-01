@@ -732,9 +732,18 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
     }
 
     func deleteStory(id: StoryID) async throws {
+        let media = try? await mediaURLs(
+            from: "stories",
+            id: id.rawValue,
+            columns: "image_url"
+        )
         try await supabase.database.delete(
             from: "stories",
             query: [SupabaseQuery.eq("id", id.rawValue)]
+        )
+        await OwnedMediaStorageCleanup.removePublicObjects(
+            urls: media ?? [],
+            storage: supabase.storage
         )
     }
 
@@ -862,10 +871,39 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         return reel
     }
 
+    /// Public media URLs on this row. A missing row returns an empty list.
+    private func mediaURLs(from table: String, id: String, columns: String) async throws -> [String?] {
+        struct Row: Decodable, Sendable {
+            var image_url: String?
+            var video_url: String?
+            var thumbnail_url: String?
+        }
+        let rows: [Row] = try await supabase.database.select(
+            Row.self,
+            from: table,
+            query: [
+                SupabaseQuery.select(columns),
+                SupabaseQuery.eq("id", id),
+                URLQueryItem(name: "limit", value: "1"),
+            ]
+        )
+        guard let row = rows.first else { return [] }
+        return [row.image_url, row.video_url, row.thumbnail_url]
+    }
+
     func deleteReel(id: ReelID) async throws {
+        let media = try? await mediaURLs(
+            from: "reels",
+            id: id.rawValue,
+            columns: "video_url,thumbnail_url"
+        )
         try await supabase.database.delete(
             from: "reels",
             query: [SupabaseQuery.eq("id", id.rawValue)]
+        )
+        await OwnedMediaStorageCleanup.removePublicObjects(
+            urls: media ?? [],
+            storage: supabase.storage
         )
     }
 

@@ -58,6 +58,10 @@ final class PostDetailViewModel {
         await performLoad(forceNetwork: true)
     }
 
+    func clearDeleteError() {
+        deleteErrorMessage = nil
+    }
+
     func deletePost() async -> Bool {
         guard isOwner, !isDeleting else { return false }
         isDeleting = true

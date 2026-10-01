@@ -23,10 +23,6 @@ export const COPYRIGHT_DMCA_SECTIONS: LegalSection[] = [
           videos, clips, posts, comments, and messages. We respond to valid copyright complaints and
           may remove or restrict access to material that infringes the rights of others.
         </p>
-        <p>
-          This policy is provided for informational purposes and does not constitute legal advice.
-          If you are unsure about your rights or obligations, consult qualified counsel.
-        </p>
       </>
     ),
   },

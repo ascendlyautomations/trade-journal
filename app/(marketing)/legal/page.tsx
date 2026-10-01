@@ -14,6 +14,12 @@ const LEGAL_DOCUMENTS = [
     href: "/terms",
   },
   {
+    title: "Affiliate Terms",
+    description:
+      "Rules for participating in the TradeTraxs Affiliate Program, including commissions and payouts.",
+    href: "/affiliate-terms",
+  },
+  {
     title: "Refund Policy",
     description:
       "How TradeTraxs handles subscription billing, cancellation, and refunds for paid plans.",
@@ -36,6 +42,12 @@ const LEGAL_DOCUMENTS = [
     description:
       "How to report copyright infringement, submit counter-notifications, and understand our repeat infringer policy.",
     href: "/copyright",
+  },
+  {
+    title: "Community Guidelines",
+    description:
+      "Rules for respectful participation in posts, trades, messages, Trade Rooms, and other community features.",
+    href: "/community-guidelines",
   },
 ] as const
 

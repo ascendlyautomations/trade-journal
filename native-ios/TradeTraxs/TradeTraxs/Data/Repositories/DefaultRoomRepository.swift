@@ -588,12 +588,30 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
     }
 
     func deleteMessage(roomID: RoomID, messageID: RoomMessageID) async throws {
+        struct Media: Decodable, Sendable {
+            var image_url: String?
+            var audio_url: String?
+        }
+        let mediaRows: [Media]? = try? await supabase.database.select(
+            Media.self,
+            from: "room_messages",
+            query: [
+                SupabaseQuery.select("image_url,audio_url"),
+                SupabaseQuery.eq("id", messageID.rawValue),
+                SupabaseQuery.eq("room_id", roomID.rawValue),
+                URLQueryItem(name: "limit", value: "1"),
+            ]
+        )
         try await supabase.database.delete(
             from: "room_messages",
             query: [
                 SupabaseQuery.eq("id", messageID.rawValue),
                 SupabaseQuery.eq("room_id", roomID.rawValue),
             ]
+        )
+        await OwnedMediaStorageCleanup.removePublicObjects(
+            urls: [mediaRows?.first?.image_url, mediaRows?.first?.audio_url],
+            storage: supabase.storage
         )
     }
 

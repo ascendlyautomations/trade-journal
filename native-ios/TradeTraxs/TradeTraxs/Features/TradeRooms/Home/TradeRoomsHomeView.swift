@@ -243,7 +243,6 @@ struct TradeRoomsHomeView: View {
                 }
             }
             .padding(.horizontal, ExperienceSpacing.md)
-            .padding(.top, ExperienceSpacing.xxs)
             .padding(.bottom, ExperienceSpacing.sm)
             .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: viewModel.searchText)
         }
@@ -258,6 +257,7 @@ struct TradeRoomsHomeView: View {
                 scope: viewModel.activeDiscoveryScope,
                 onSelect: { viewModel.selectDiscoveryScope($0) }
             )
+            .padding(.top, ExperienceSpacing.xs)
             .padding(.bottom, ExperienceSpacing.xxs)
 
             if viewModel.discoveryPhase == .loading,

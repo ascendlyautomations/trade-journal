@@ -7,7 +7,11 @@ export type ApnsAlertPayload = {
   title: string
   body: string
   href: string
-  badge: number
+  /**
+   * Omit to leave the icon badge unchanged. `0` clears it — do not use that
+   * for announcements that are not an unread-count update.
+   */
+  badge?: number
   notificationType: string
   /** iOS notification category for long-press actions. */
   category?: string
@@ -177,7 +181,9 @@ export async function sendApnsAlert(
         title: payload.title,
         body: payload.body,
       },
-      badge: Math.max(0, Math.floor(payload.badge)),
+      ...(typeof payload.badge === "number"
+        ? { badge: Math.max(0, Math.floor(payload.badge)) }
+        : {}),
       sound: "default",
       ...(payload.category ? { category: payload.category } : {}),
       ...(payload.threadId ? { "thread-id": payload.threadId } : {}),

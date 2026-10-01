@@ -29,7 +29,7 @@ struct SharedContentShareTarget: Identifiable, Equatable, Sendable {
         case .trade(let item, let summary):
             return SharedContentShareTarget(
                 reference: .feedPost(PostID(item.id)),
-                contentLink: .post(PostID(item.id)),
+                contentLink: .trade(summary.id),
                 shareTitle: "Share Trade",
                 externalShareText: "\(handle)'s trade on TradeTraxs",
                 roomTradeID: summary.id
@@ -55,7 +55,7 @@ struct SharedContentShareTarget: Identifiable, Equatable, Sendable {
             let suffix = title.isEmpty ? "an achievement" : "“\(title)”"
             return SharedContentShareTarget(
                 reference: .achievementPost(PostID(item.id)),
-                contentLink: .achievement(achievement.id),
+                contentLink: .achievement(AchievementID(item.id)),
                 shareTitle: "Share Achievement",
                 externalShareText: "\(handle) shared \(suffix) on TradeTraxs",
                 roomTradeID: nil

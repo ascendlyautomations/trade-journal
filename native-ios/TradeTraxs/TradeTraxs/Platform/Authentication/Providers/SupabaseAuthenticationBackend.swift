@@ -97,16 +97,74 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
     }
 
     func requestPasswordReset(email: String) async throws {
+        let verifier = NativeOAuthConfiguration.generateCodeVerifier()
+        let challenge = NativeOAuthConfiguration.codeChallenge(for: verifier)
+        try PasswordRecoveryVerifierStore.save(verifier)
         struct Body: Encodable {
             var email: String
+            var code_challenge: String
+            var code_challenge_method: String
         }
-        _ = try await transport.send(
-            host: .supabase,
-            path: "/auth/v1/recover",
-            method: .post,
-            body: try transport.encodeJSON(Body(email: email)),
+        do {
+            _ = try await transport.send(
+                host: .supabase,
+                path: "/auth/v1/recover",
+                method: .post,
+                queryItems: [
+                    URLQueryItem(name: "redirect_to", value: PasswordRecoveryLink.productionRedirectURL),
+                ],
+                body: try transport.encodeJSON(
+                    Body(
+                        email: email,
+                        code_challenge: challenge,
+                        code_challenge_method: "s256"
+                    )
+                ),
+                requiresAuthentication: false
+            )
+        } catch {
+            PasswordRecoveryVerifierStore.clear()
+            throw error
+        }
+    }
+
+    func verifyRecoveryTokenHash(_ tokenHash: String) async throws -> AuthenticationSession {
+        struct Body: Encodable {
+            var type: String
+            var token_hash: String
+        }
+        return try await tokenRequest(
+            path: "/auth/v1/verify",
+            query: [],
+            body: Body(type: "recovery", token_hash: tokenHash),
+            provider: .email,
             requiresAuthentication: false
         )
+    }
+
+    func updatePassword(accessToken: String, newPassword: String) async throws {
+        struct Body: Encodable {
+            var password: String
+        }
+        guard transport.isConfigured else { throw AuthenticationError.notConfigured }
+        let token = accessToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { throw AuthenticationError.sessionExpired }
+        do {
+            _ = try await transport.send(
+                host: .supabase,
+                path: "/auth/v1/user",
+                method: .put,
+                headers: ["Authorization": "Bearer \(token)"],
+                body: try transport.encodeJSON(Body(password: newPassword)),
+                requiresAuthentication: false
+            )
+        } catch let error as AppError {
+            throw mapPasswordUpdateError(error)
+        } catch let error as AuthenticationError {
+            throw error
+        } catch {
+            throw AuthenticationError.unknown("networkUnavailable")
+        }
     }
 
     func resendSignupConfirmation(email: String) async throws {
@@ -307,6 +365,42 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
             return provider == .email ? .invalidCredentials : .providerTokenInvalid(provider)
         }
         return .unknown(message ?? "Authentication failed.")
+    }
+
+    private func mapPasswordUpdateError(_ error: AppError) -> AuthenticationError {
+        if case .transport(let network) = error {
+            switch network {
+            case .connectivity, .timeout:
+                return .unknown("networkUnavailable")
+            case .cancelled:
+                return .cancelled
+            case .server(let code, _) where (500...599).contains(code):
+                return .unknown("serverUnavailable")
+            case .server(let code, let message):
+                return classifyPasswordUpdateBody(statusCode: code, message: message)
+            case .validation(let code, let message):
+                return classifyPasswordUpdateBody(statusCode: code, message: message)
+            case .unauthorized, .forbidden:
+                return .sessionExpired
+            default:
+                return .unknown("transport")
+            }
+        }
+        if case .authentication(let auth) = error {
+            return auth
+        }
+        return .unknown("transport")
+    }
+
+    private func classifyPasswordUpdateBody(statusCode: Int?, message: String?) -> AuthenticationError {
+        let body = message?.lowercased() ?? ""
+        if body.contains("same password") || body.contains("different from the old") {
+            return .invalidPassword
+        }
+        if statusCode == 401 || statusCode == 403 || body.contains("expired") || body.contains("invalid") {
+            return .sessionExpired
+        }
+        return .unknown("transport")
     }
 }
 

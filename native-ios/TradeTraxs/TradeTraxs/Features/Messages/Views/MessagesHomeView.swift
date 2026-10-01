@@ -214,7 +214,7 @@ struct MessagesHomeView: View {
                 Section("Pinned") {
                     ForEach(viewModel.pinnedItems) { item in
                         conversationButton(item)
-                            .listRowBackground(colors.backgroundPrimary)
+                            .messagesInboxConversationListRowStyle(colors: colors)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 dmTrailingActions(item)
                             }
@@ -238,7 +238,7 @@ struct MessagesHomeView: View {
                 Section("Direct Messages") {
                     ForEach(displayedDirectMessageItems) { item in
                         conversationButton(item)
-                            .listRowBackground(colors.backgroundPrimary)
+                            .messagesInboxConversationListRowStyle(colors: colors)
                             .onAppear {
                                 if item.id == displayedDirectMessageItems.last?.id,
                                    directMessagesSectionExpanded || !showsDirectMessagesSectionToggle
@@ -309,7 +309,7 @@ struct MessagesHomeView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .listRowBackground(colors.backgroundSecondary)
+        .messagesInboxConversationListRowStyle(colors: colors)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             roomTrailingActions(item)
         }
@@ -336,7 +336,7 @@ struct MessagesHomeView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
         }
         .buttonStyle(.plain)
-        .listRowBackground(colors.backgroundPrimary)
+        .messagesInboxConversationListRowStyle(colors: colors)
         .accessibilityLabel(expanded.wrappedValue ? "Show less" : "Show more")
     }
 
@@ -345,6 +345,8 @@ struct MessagesHomeView: View {
             viewModel.openConversation(item)
         } label: {
             ConversationRowView(item: item, imagePipeline: imagePipeline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -473,13 +475,26 @@ struct MessagesHomeView: View {
         ConversationRowView(item: item, imagePipeline: imagePipeline)
             .padding()
             .frame(width: 320)
-            .background(colors.backgroundPrimary)
+            .messagesInboxConversationPreviewBackground(colors: colors)
     }
 
     private func roomPreview(_ item: TradeRoomInboxItem) -> some View {
         TradeRoomInboxRowView(item: item, imagePipeline: imagePipeline)
             .padding()
             .frame(width: 320)
-            .background(colors.backgroundSecondary)
+            .messagesInboxConversationPreviewBackground(colors: colors)
+    }
+}
+
+// MARK: - Shared inbox row chrome (DM + Trade Room)
+
+private extension View {
+    /// Inset grouped list row — matches Direct Messages and Trade Rooms on Messages home.
+    func messagesInboxConversationListRowStyle(colors: SemanticColorPalette) -> some View {
+        listRowBackground(colors.backgroundPrimary)
+    }
+
+    func messagesInboxConversationPreviewBackground(colors: SemanticColorPalette) -> some View {
+        background(colors.backgroundPrimary)
     }
 }

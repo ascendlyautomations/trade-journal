@@ -8,6 +8,14 @@ final class ConversationExperienceTests: XCTestCase {
         BackendV2FeatureFlags.resetFlagsForTests()
     }
 
+    func testComposerKeyboardReturnSendsWithoutTreatingPasteAsSubmit() {
+        XCTAssertTrue(ComposerKeyboardSubmit.insertedReturn(from: "hello", to: "hello\n"))
+        XCTAssertTrue(ComposerKeyboardSubmit.insertedReturn(from: "hello", to: "hel\nlo"))
+        XCTAssertFalse(ComposerKeyboardSubmit.insertedReturn(from: "hello", to: "hello\n\n"))
+        XCTAssertFalse(ComposerKeyboardSubmit.insertedReturn(from: "hello", to: "hello\nthere"))
+        XCTAssertFalse(ComposerKeyboardSubmit.insertedReturn(from: "hello", to: "hello"))
+    }
+
     func testDaySeparatorLabels() {
         let calendar = Calendar(identifier: .gregorian)
         let today = Date()

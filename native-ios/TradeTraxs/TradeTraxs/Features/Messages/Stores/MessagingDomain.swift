@@ -77,7 +77,7 @@ final class MessagingDomain {
 
     /// Inbox is cursor-paginated via V2 bootstrap when `.messages` RPC is enabled.
     func loadMore() async {
-        guard BackendV2FeatureFlags.isEnabled(.messages), let rpc, let detailCache else {
+        guard BackendV2FeatureFlags.isEnabled(.messages), let rpc, detailCache != nil else {
             await loadMoreLegacyREST()
             return
         }
@@ -290,7 +290,7 @@ final class MessagingDomain {
     }
 
     private func loadMoreLegacyREST() async {
-        guard let messages, let profiles, let session, let detailCache else { return }
+        guard let messages, profiles != nil, let session, let detailCache else { return }
         guard inboxStore.inboxHasMore, !inboxStore.isLoadingMoreInbox else { return }
         guard let viewer = await session.currentUserID.map({ ProfileID($0.rawValue) }) else { return }
         inboxStore.setLoadingMoreInbox(true)

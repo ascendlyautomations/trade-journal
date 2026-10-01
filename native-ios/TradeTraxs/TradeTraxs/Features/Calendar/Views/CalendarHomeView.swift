@@ -110,6 +110,7 @@ struct CalendarHomeView: View {
                 }
             }
             .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.top, ExperienceSpacing.xs)
             .padding(.bottom, ExperienceSpacing.lg)
         }
     }

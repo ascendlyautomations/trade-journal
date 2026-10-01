@@ -106,4 +106,21 @@ final class BrokerSyncFailureResolutionTests: XCTestCase {
         let response = try decoder.decode(TradovateAccountSyncResponse.self, from: json)
         XCTAssertEqual(BrokerSyncFailureResolution.from(response), .retryable)
     }
+
+    func testSyncFailureAfterReconnectIsNotTreatedAsOAuthFailure() {
+        let oauth = BrokerTradovateReconnectImport.outcomeForThrownFailure(
+            stage: .authorization,
+            message: "Could not start Tradovate connection."
+        )
+        let sync = BrokerTradovateReconnectImport.outcomeForThrownFailure(
+            stage: .sync,
+            message: "The network connection was lost."
+        )
+        guard case .oauthFailed = oauth else {
+            return XCTFail("Authorization failure should stay an OAuth failure")
+        }
+        guard case .syncUnavailable = sync else {
+            return XCTFail("A sync transport failure should stay retryable")
+        }
+    }
 }

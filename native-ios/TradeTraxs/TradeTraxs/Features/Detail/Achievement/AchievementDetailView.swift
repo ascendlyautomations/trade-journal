@@ -141,7 +141,7 @@ struct AchievementDetailView: View {
                 },
                 vaultRef: VaultContentRef(
                     contentType: .achievement,
-                    contentID: engagementTarget(for: achievement).id
+                    contentID: achievement.id.rawValue
                 )
             )
 

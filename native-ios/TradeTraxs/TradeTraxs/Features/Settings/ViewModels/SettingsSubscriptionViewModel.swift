@@ -354,6 +354,7 @@ final class SettingsSubscriptionViewModel {
                 try? await storeKit.syncVerifiedTransactionsToServer()
             }
             let refreshed = try await billing.refreshEntitlements(for: profile)
+            guard await session.currentUserID?.rawValue == profile.rawValue else { return }
             status = refreshed
             SessionBillingEntitlementStore.shared.apply(refreshed)
             errorMessage = nil

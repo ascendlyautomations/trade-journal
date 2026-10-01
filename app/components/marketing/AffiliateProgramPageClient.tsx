@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import CompanyPageShell, { CompanySectionCard } from "@/app/components/marketing/CompanyPageShell"
 import AffiliateProgramCtaSection from "@/app/components/marketing/AffiliateProgramCtaSection"
 import AffiliateProgramHeroApplyButton from "@/app/components/marketing/AffiliateProgramHeroApplyButton"
@@ -64,6 +65,14 @@ export default function AffiliateProgramPageClient() {
           </CompanySectionCard>
 
           <AffiliateProgramCtaSection />
+
+          <p className="text-center text-xs text-gray-400">
+            Participation is subject to our{" "}
+            <Link href="/affiliate-terms" className="text-blue-300 hover:text-blue-200">
+              Affiliate Terms
+            </Link>
+            .
+          </p>
 
           <CompanySectionCard title="Why Join?">
             <ul className="list-disc space-y-2 pl-5">

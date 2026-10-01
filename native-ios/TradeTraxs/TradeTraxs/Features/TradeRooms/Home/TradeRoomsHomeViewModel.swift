@@ -35,6 +35,11 @@ final class TradeRoomsHomeViewModel {
     private(set) var isLoadingMoreDiscovery = false
 
     private static let discoveryInitialLimit = 20
+
+    private static func nonEmptyCursor(_ raw: String?) -> String? {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
     private var suggestedNextCursor: String?
     private var popularNextCursor: String?
 
@@ -322,11 +327,12 @@ final class TradeRoomsHomeViewModel {
                 suggestedCursor: section == .suggested ? suggestedNextCursor : nil,
                 popularCursor: section == .popular ? popularNextCursor : nil
             )
-            applyDiscoveryPagination(from: bootstrap)
             if section == .suggested {
                 suggestedItems = mergeDiscoveryRows(existing: suggestedItems, incoming: bootstrap.suggested)
+                suggestedNextCursor = Self.nonEmptyCursor(bootstrap.suggestedNextCursor)
             } else {
                 popularItems = mergeDiscoveryRows(existing: popularItems, incoming: bootstrap.popular)
+                popularNextCursor = Self.nonEmptyCursor(bootstrap.popularNextCursor)
             }
             _ = reconcileYourRoomsWithMembership()
             logDisplayedIfChanged(source: .network)

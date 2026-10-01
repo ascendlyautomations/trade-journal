@@ -1109,6 +1109,9 @@ final class FeedScreenViewModel {
                     if state.entries.isEmpty {
                         state.phase = .failed(FeedSupport.message(for: error))
                     }
+                    // A failed first attempt must stay settled. loadIfNeeded only
+                    // starts another initial bootstrap while didBootstrap is false.
+                    state.didBootstrap = true
                     return
                 }
             }
@@ -1207,6 +1210,7 @@ final class FeedScreenViewModel {
             } else {
                 state.phase = .loaded
             }
+            state.didBootstrap = true
         }
     }
 

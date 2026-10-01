@@ -27,6 +27,8 @@ final class ConversationViewModel {
     private(set) var subtitle: String?
     var draft = ""
     var isSending = false
+    /// Remote image URL already stored for an optimistic message, so retry does not upload again.
+    private var uploadedOutboundImageURLs: [MessageID: String] = [:]
     var showsTradePicker = false
     var deleteErrorMessage: String?
     var isSelectionMode = false
@@ -615,7 +617,19 @@ final class ConversationViewModel {
 
     func retry(_ item: ConversationBubbleItem) async {
         guard sendStates[item.id] == .failed else { return }
+        sendStates[item.id] = .sending
         let tempID = item.id
+        if ConversationMessageMerge.isOptimisticMessageID(tempID),
+           let uploadedURL = uploadedOutboundImageURLs[tempID]
+        {
+            await completeOptimisticSend(
+                tempID: tempID,
+                body: item.text ?? "",
+                imageURL: uploadedURL,
+                localImageData: nil
+            )
+            return
+        }
         if ConversationMessageMerge.isOptimisticMessageID(tempID),
            let localData = OptimisticOutboundImageStore.shared.jpegData(for: tempID)
         {
@@ -626,11 +640,90 @@ final class ConversationViewModel {
             )
             return
         }
+
+        let body = item.text ?? ""
+        let remoteImageURL = retryableRemoteImageURL(for: item)
+        switch await reconcileOptimisticDirectSend(
+            sentAt: item.message.createdAt,
+            body: body,
+            imageURL: remoteImageURL,
+            tradeID: item.message.kind == .tradeShare ? item.message.attachments.first?.tradeID : nil
+        ) {
+        case .matched(let reconciled):
+            commitMessages([reconciled], recordScrollEvents: false)
+            sendStates.removeValue(forKey: item.id)
+            sendStates[reconciled.id] = .sent
+            patchInbox(with: reconciled, source: "reconciledSend")
+            return
+        case .unavailable:
+            sendStates[item.id] = .failed
+            return
+        case .notOnServer:
+            break
+        }
+
+        if item.message.kind == .tradeShare, let trade = sharedTrade(for: item.message) {
+            removeMessage(id: item.id)
+            sendStates.removeValue(forKey: item.id)
+            await sendTrade(trade)
+            return
+        }
+
+        guard remoteImageURL != nil || !body.isEmpty else {
+            sendStates[item.id] = .failed
+            return
+        }
         removeMessage(id: item.id)
         sendStates.removeValue(forKey: item.id)
-        let imageURL = item.imageReference?.id
-        guard let imageURL, !OptimisticOutboundImageSupport.isOptimisticMediaID(imageURL) else { return }
-        await send(body: item.text ?? "", imageURL: imageURL, localImageData: nil)
+        await send(body: body, imageURL: remoteImageURL, localImageData: nil)
+    }
+
+    private func retryableRemoteImageURL(for item: ConversationBubbleItem) -> String? {
+        guard item.message.kind == .media,
+              let media = item.imageReference,
+              media.kind == .image,
+              !OptimisticOutboundImageSupport.isOptimisticMediaID(media.id)
+        else { return nil }
+        return media.id
+    }
+
+    private enum OutboundReconcile {
+        case matched(Message)
+        case notOnServer
+        case unavailable
+    }
+
+    /// Confirms a lost response before inserting another row.
+    private func reconcileOptimisticDirectSend(
+        sentAt: Date,
+        body: String,
+        imageURL: String?,
+        tradeID: TradeID?
+    ) async -> OutboundReconcile {
+        guard let viewerID else { return .unavailable }
+        do {
+            let page = try await messagesRepo.messages(
+                in: conversationID,
+                page: PageRequest(limit: 20)
+            )
+            if let match = page.items.first(where: { message in
+                guard message.senderProfileID == viewerID,
+                      abs(message.createdAt.timeIntervalSince(sentAt)) < 45
+                else { return false }
+                if let tradeID {
+                    return message.attachments.contains { $0.tradeID == tradeID }
+                }
+                if let imageURL {
+                    return message.attachments.contains { $0.media.id == imageURL }
+                }
+                return (message.body ?? "") == body
+            }) {
+                return .matched(match)
+            }
+            return .notOnServer
+        } catch {
+            return .unavailable
+        }
     }
 
     func reactionSummaries(for message: Message) -> [RoomMessageReactionSummary] {
@@ -2149,6 +2242,7 @@ final class ConversationViewModel {
             return
         }
 
+        var uploadedAudioPath: String?
         do {
             let path = "\(viewerID.rawValue)/\(Int(Date().timeIntervalSince1970 * 1000)).m4a"
             let reference = try await uploadService.upload(
@@ -2159,6 +2253,7 @@ final class ConversationViewModel {
                     contentType: "audio/mp4"
                 )
             )
+            uploadedAudioPath = reference.id
             let resolvedURL: String
             if let publicURL = objectStorage.publicURL(
                 bucket: StorageBucket.messageAudio.rawValue,
@@ -2198,6 +2293,12 @@ final class ConversationViewModel {
             patchInbox(with: saved, source: "confirmedVoiceSend")
             ExperienceHaptics.play(.messageSent)
         } catch {
+            if let uploadedAudioPath {
+                try? await objectStorage.delete(
+                    bucket: StorageBucket.messageAudio.rawValue,
+                    path: uploadedAudioPath
+                )
+            }
             sendStates[tempID] = .failed
             ExperienceHaptics.play(.error)
         }
@@ -2296,6 +2397,9 @@ final class ConversationViewModel {
                     uploadService: uploadService,
                     objectStorage: objectStorage
                 )
+                if let resolvedImageURL {
+                    uploadedOutboundImageURLs[tempID] = resolvedImageURL
+                }
             }
 
             let payload = Message(
@@ -2324,6 +2428,7 @@ final class ConversationViewModel {
             )
             commitMessages([saved], recordScrollEvents: false)
             OptimisticOutboundImageStore.shared.remove(messageID: tempID)
+            uploadedOutboundImageURLs.removeValue(forKey: tempID)
             sendStates.removeValue(forKey: tempID)
             sendStates[saved.id] = .sent
             patchInbox(with: saved, source: "confirmedSend")

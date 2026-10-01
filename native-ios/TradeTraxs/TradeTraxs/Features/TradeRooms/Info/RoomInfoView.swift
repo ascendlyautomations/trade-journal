@@ -22,6 +22,7 @@ struct RoomInfoView: View {
                 roomID: roomID,
                 rooms: data.rooms,
                 uploadService: data.uploadService,
+                objectStorage: data.objectStorage,
                 profiles: data.profiles,
                 session: data.session,
                 detailCache: data.detailCache,

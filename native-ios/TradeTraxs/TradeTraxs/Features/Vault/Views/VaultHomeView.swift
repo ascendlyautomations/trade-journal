@@ -32,8 +32,7 @@ struct VaultHomeView: View {
             .padding(.vertical, ExperienceSpacing.md)
         }
         .experienceScreenBackground()
-        .navigationTitle("Vault")
-        .navigationBarTitleDisplayMode(.large)
+        .experienceNavigationTitle("Vault")
         .refreshable {
             await viewModel.refresh(store: vaultStore)
         }

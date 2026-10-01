@@ -39,6 +39,7 @@ final class ExploreViewModel {
     private var viewerID: ProfileID?
     private var bootstrapTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
+    private var searchGeneration: UInt64 = 0
     private var enrichTask: Task<Void, Never>?
     private var hydrateTask: Task<Void, Never>?
     private var inFlightFollow: Set<ProfileID> = []
@@ -90,7 +91,7 @@ final class ExploreViewModel {
     var canLoadMoreTraders: Bool { store.tradersNextCursor != nil }
 
     var isSearching: Bool {
-        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
     }
 
     var showsSearchEmpty: Bool {
@@ -135,6 +136,8 @@ final class ExploreViewModel {
 
     func searchChanged() {
         searchTask?.cancel()
+        searchGeneration &+= 1
+        let generation = searchGeneration
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard query.count >= 2 else {
             searchPeople = []
@@ -173,8 +176,8 @@ final class ExploreViewModel {
         searchPhase = .searching
         searchTask = Task {
             try? await Task.sleep(nanoseconds: 300_000_000)
-            guard !Task.isCancelled else { return }
-            await performSearch(query: query)
+            guard !Task.isCancelled, generation == searchGeneration else { return }
+            await performSearch(query: query, generation: generation)
         }
     }
 
@@ -576,7 +579,7 @@ final class ExploreViewModel {
         hydrateTask = nil
     }
 
-    private func performSearch(query: String) async {
+    private func performSearch(query: String, generation: UInt64) async {
         do {
             async let peoplePage = search.search(
                 query: query,
@@ -587,7 +590,7 @@ final class ExploreViewModel {
             async let rooms = explore.searchRooms(query: query, limit: 12)
             let page = try await peoplePage
             let roomHits = (try? await rooms) ?? []
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, generation == searchGeneration else { return }
 
             let profileIDs = page.items.compactMap { item -> ProfileID? in
                 guard item.kind == .profile, let id = item.profileID, id != viewerID else { return nil }
@@ -662,11 +665,12 @@ final class ExploreViewModel {
                 confirmedAbsent: &searchConfirmedAbsent
             )
             store.updateAvatarConfirmedAbsent(searchConfirmedAbsent)
+            guard !Task.isCancelled, generation == searchGeneration else { return }
             searchPeople = hydratedPeople
             searchRooms = roomHits
             searchPhase = .idle
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, generation == searchGeneration else { return }
             searchPhase = .failed(UserFacingError.message(for: error))
         }
     }

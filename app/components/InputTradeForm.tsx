@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
+import { fetchProfileOwnerPrivateFields } from "@/lib/profileOwnerPrivateFields"
 import type { TableUpdate } from "@/lib/supabaseTypes"
 import { uploadContentImageToStorage } from "@/lib/contentImagePipeline"
 import { CONTENT_IMAGE_V2_PRESET } from "@/lib/contentImageV2"
@@ -373,14 +374,16 @@ export default function InputTradeForm({
     const { data: lockedRow } = await supabase
       .from("profiles")
       .select(
-        "is_pro, subscription_status, trial_end, locked_account_type, locked_account_size, locked_account_name, locked_account_number, username, avatar_url, last_csv_import_at"
+        "is_pro, subscription_status, trial_end, username, avatar_url, last_csv_import_at"
       )
       .eq("id", uid)
       .maybeSingle()
+    const privateFields = await fetchProfileOwnerPrivateFields(supabase)
 
     const prof = {
       ...fromContext,
       ...(lockedRow ?? {}),
+      ...(privateFields ?? {}),
     }
     setPlanProfile(Object.keys(prof).length ? prof : null)
 

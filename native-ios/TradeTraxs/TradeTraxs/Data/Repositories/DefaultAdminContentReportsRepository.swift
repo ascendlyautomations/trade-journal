@@ -57,10 +57,17 @@ nonisolated struct DefaultAdminContentReportsRepository: AdminContentReportsRepo
             reviewed_at: AdminContentReportParsingISO.string(from: Date()),
             reviewed_by: reviewerID.rawValue
         )
-        try await supabase.database.update(
+        struct UpdatedID: Decodable {
+            var id: String
+        }
+        _ = try await supabase.database.update(
             patch,
             table: "content_reports",
-            query: [URLQueryItem(name: "id", value: "eq.\(reportID)")]
+            query: [
+                URLQueryItem(name: "id", value: "eq.\(reportID)"),
+                URLQueryItem(name: "select", value: "id"),
+            ],
+            returning: UpdatedID.self
         )
     }
 }

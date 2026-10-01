@@ -114,10 +114,37 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
           <li>Any other media or text you submit.</li>
         </ul>
         <p>
+          For purposes of these Terms, we distinguish content you intentionally make available to
+          others through public product features (&quot;Public Content&quot;) from content that is
+          not intentionally published publicly (&quot;Private / Non-Public Content&quot;).
+        </p>
+        <p>
+          <strong>Public Content</strong> includes, for example, feed posts, public trades, reels
+          and clips, achievements, stories, and other content you publish so it can be viewed by
+          other users or in public areas of the Service according to your settings.
+        </p>
+        <p>
+          <strong>Private / Non-Public Content</strong> includes, for example, private journal
+          entries, private trades, direct messages, private or limited-audience messages, and other
+          content that is not intentionally published publicly through the Service.
+        </p>
+        <p>
           By submitting User Content, you grant {LEGAL_ENTITY_NAME} a worldwide, non-exclusive,
-          royalty-free license to host, store, reproduce, display, distribute, and adapt it solely
-          to operate, improve, and promote the Service, including showing public content to other
-          users as you direct through product features.
+          royalty-free license to host, store, reproduce, display, distribute, and adapt your User
+          Content as needed to provide, secure, moderate, support, and legally operate the Service.
+          This license applies to both Public Content and Private / Non-Public Content for those
+          operational purposes.
+        </p>
+        <p>
+          For <strong>Public Content</strong>, the license also includes displaying and distributing
+          that content to other users as you direct through product features, and using publicly
+          posted Public Content to promote TradeTraxs (including on TradeTraxs marketing channels
+          and social media), in each case only to the extent reasonably necessary to operate and
+          promote the Service.
+        </p>
+        <p>
+          We do <strong>not</strong> use Private / Non-Public Content for advertising or promotional
+          purposes outside the Service.
         </p>
         <p>You further represent that your User Content:</p>
         <ul>
@@ -262,21 +289,17 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
       <>
         <p>
           TradeTraxs may offer referral or affiliate programs that allow eligible users to earn
-          commissions for qualified referrals. Participation requires approval and is subject to
-          separate program rules presented in the Service.
+          commissions for qualified referrals. Participation requires approval and is governed by
+          our <Link href="/affiliate-terms">Affiliate Terms</Link>, which are incorporated into
+          these Terms by reference.
         </p>
-        <p>If you participate, you agree to:</p>
+        <p>If you participate, you agree to comply with the Affiliate Terms, including requirements to:</p>
         <ul>
           <li>Disclose affiliate relationships where required by law (including FTC guidelines);</li>
           <li>Not use spam, misleading claims, or prohibited bidding on our trademarks;</li>
-          <li>Provide accurate tax and payout information for Stripe Connect or other payout methods;</li>
-          <li>Accept that commissions, payout thresholds, and eligibility are determined by us and may change; and</li>
+          <li>Provide accurate tax and payout information for Stripe Connect or other payout methods; and</li>
           <li>Accept that fraudulent referrals may result in forfeiture of earnings and termination.</li>
         </ul>
-        <p>
-          Affiliate payouts are processed according to program terms and applicable tax laws. We are
-          not responsible for third-party payout delays outside our control.
-        </p>
       </>
     ),
   },
@@ -348,7 +371,8 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
         </p>
         <p>
           Where available, you may voluntarily connect supported brokers or trading platforms (such
-          as Tradovate). By connecting, you authorize TradeTraxs to access the account and trading
+          as Tradovate or Rithmic). By connecting, you authorize TradeTraxs to access the account
+          and trading
           data permitted through that connection, which may include accounts, orders, positions,
           executions or fills, balances, and trading history. TradeTraxs uses synchronized data for
           journaling, analytics, reporting, and related product functionality—not as investment
@@ -364,8 +388,8 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
         <p>
           Connecting a broker or platform does <strong>not</strong> make TradeTraxs a broker,
           dealer, exchange, investment adviser, or custodian, and TradeTraxs does not hold brokerage
-          funds. The Tradovate integration is read and data-sync oriented and is not intended to
-          execute or place trades on your behalf. You are responsible for complying with your
+          funds. Supported broker integrations are read and data-sync oriented and are not intended
+          to execute or place trades on your behalf. You are responsible for complying with your
           broker or platform agreements and applicable rules. You may disconnect supported
           integrations where the Service provides that control.
         </p>
@@ -399,7 +423,8 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
         <p>
           The Service integrates with third parties such as Supabase, Stripe, Apple (App Store
           billing on iOS), Google sign-in, Vercel, AI providers, and—when you connect an
-          account—brokers or trading platforms such as Tradovate. Your use of those services may be
+          account—brokers or trading platforms such as Tradovate or Rithmic. Your use of those
+          services may be
           subject to their terms. We are not responsible for third-party services outside our
           reasonable control, including broker APIs, authentication flows, or data feeds.
         </p>

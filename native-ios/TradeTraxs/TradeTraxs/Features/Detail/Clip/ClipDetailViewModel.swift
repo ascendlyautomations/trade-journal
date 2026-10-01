@@ -78,8 +78,11 @@ final class ClipDetailViewModel {
         }
     }
 
+    private var suspendedPlayback = false
+
     func suspendPlayback(reason: String) {
         guard let player else { return }
+        suspendedPlayback = true
         player.pause()
         player.isMuted = true
         player.volume = 0
@@ -87,6 +90,17 @@ final class ClipDetailViewModel {
         #if DEBUG
         print("[VIDEO_PLAYBACK] owner=clipDetail action=stop reason=\(reason)")
         #endif
+    }
+
+    /// Background and tab changes mute the player. Restore sound, and continue
+    /// only when the clip had not already finished.
+    func resumePlaybackAfterBackground() {
+        guard suspendedPlayback, let player else { return }
+        suspendedPlayback = false
+        player.isMuted = false
+        player.volume = 1
+        guard !didReachEnd else { return }
+        player.playImmediately(atRate: 1)
     }
 
     func loadIfNeeded() {
@@ -102,9 +116,16 @@ final class ClipDetailViewModel {
     func replay() {
         guard let player else { return }
         ExperienceHaptics.play(.selection)
+        suspendedPlayback = false
         didReachEnd = false
+        player.isMuted = false
+        player.volume = 1
         player.seek(to: .zero)
         player.playImmediately(atRate: 1)
+    }
+
+    func clearDeleteError() {
+        deleteErrorMessage = nil
     }
 
     func deleteReel() async -> Bool {

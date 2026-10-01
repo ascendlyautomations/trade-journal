@@ -32,6 +32,8 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
     private var loadGeneration: UInt64 = 0
     /// True until the first successful gate resolve for this authenticated session.
     private var requiresAuthoritativeResolve = true
+    /// Cancelled resolves must not leave the root on splash. One automatic retry, then failure UI.
+    private var cancelledResolveRetries = 0
 
     init(
         profiles: any ProfileRepository,
@@ -68,6 +70,7 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
         snapshot = nil
         loadGeneration &+= 1
         requiresAuthoritativeResolve = true
+        cancelledResolveRetries = 0
         OAuthProfileOnboardingNameStore.resetAll()
     }
 
@@ -90,7 +93,15 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
         generation = loadGeneration
         resolveTask = Task { [weak self] in
             await self?.performResolve(forceNetwork: forceNetwork, generation: generation)
-            await MainActor.run { self?.resolveTask = nil }
+            await MainActor.run {
+                guard let self else { return }
+                self.resolveTask = nil
+                // A cancelled resolve used to stick on `.idle` because the SwiftUI task id
+                // does not change. Retry once, then show the existing failure screen.
+                if case .idle = self.phase, self.cancelledResolveRetries == 1 {
+                    self.resolveIfNeeded(forceNetwork: forceNetwork)
+                }
+            }
         }
     }
 
@@ -233,11 +244,14 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
             }
 
             guard generation == loadGeneration, !Task.isCancelled else {
-                if case .resolving = phase { phase = .idle }
+                if generation == loadGeneration {
+                    abandonCancelledResolve()
+                }
                 return
             }
 
             snapshot = onboardingSnapshot
+            cancelledResolveRetries = 0
             if sessionBootstrapPath == .cache_display_only {
                 requiresAuthoritativeResolve = true
             } else if sessionBootstrapRpcCount > 0 || forceNetwork {
@@ -252,7 +266,9 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
             }
             _ = profile
         } catch is CancellationError {
-            if case .resolving = phase { phase = .idle }
+            if generation == loadGeneration {
+                abandonCancelledResolve()
+            }
         } catch {
             let message = UserFacingError.message(for: error)
             if requiresAuthoritativeResolve,
@@ -315,6 +331,21 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
             } else {
                 phase = .complete
             }
+        }
+    }
+
+    private func abandonCancelledResolve() {
+        switch phase {
+        case .complete, .required, .brokerOnboarding, .connectivityBlocked, .failed:
+            return
+        case .idle, .resolving:
+            break
+        }
+        cancelledResolveRetries += 1
+        if cancelledResolveRetries <= 1 {
+            phase = .idle
+        } else {
+            phase = .failed("Couldn't finish opening TradeTraxs.")
         }
     }
 

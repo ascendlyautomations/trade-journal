@@ -511,6 +511,60 @@ final class FeedExperienceTests: XCTestCase {
         XCTAssertEqual(viewModel.entries.count, entryCount)
     }
 
+    func testFailedInitialBootstrapSettlesUntilExplicitRefresh() async {
+        FeedSessionStore.shared.invalidate()
+        BackendV2FeatureFlags.setFlagForTests(.feed, enabled: true)
+        defer { BackendV2FeatureFlags.resetFlagsForTests() }
+        FeedLoadProbe.resetForTesting()
+
+        let rpc = CountingFailingFeedRPCClient(
+            message: "42501 permission denied for table trades"
+        )
+        let viewModel = FeedScreenViewModel(
+            feed: FeedStubFeedRepository(),
+            trades: FeedStubTradeRepository(),
+            profiles: FeedStubProfileRepository(),
+            achievements: FeedStubAchievementRepository(),
+            session: FeedStubSession(userID: "viewer-feed-failure-loop"),
+            detailCache: DetailPresentationCache(),
+            engagementStore: EngagementStore(repository: FeedStubInteractionRepository()),
+            vaultStore: VaultStore.testInstance(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
+            rpc: rpc
+        )
+
+        viewModel.loadIfNeeded()
+        await waitFor {
+            viewModel.state.didBootstrap && viewModel.phase != .idle && viewModel.phase != .loading
+        }
+
+        if case .failed = viewModel.phase {
+        } else {
+            XCTFail("Expected failed phase, got \(viewModel.phase)")
+        }
+        let callsAfterFailure = rpc.callCount
+        XCTAssertEqual(callsAfterFailure, 1)
+        XCTAssertEqual(FeedLoadProbe.recordedTriggers, [.initial])
+
+        viewModel.loadIfNeeded()
+        try? await Task.sleep(nanoseconds: 80_000_000)
+        XCTAssertEqual(rpc.callCount, callsAfterFailure)
+        XCTAssertEqual(FeedLoadProbe.recordedTriggers, [.initial])
+        if case .failed = viewModel.phase {
+        } else {
+            XCTFail("Expected failed phase to remain, got \(viewModel.phase)")
+        }
+
+        await viewModel.refresh()
+        XCTAssertEqual(rpc.callCount, callsAfterFailure + 1)
+        XCTAssertEqual(FeedLoadProbe.recordedTriggers, [.initial, .pullRefresh])
+        XCTAssertTrue(viewModel.state.didBootstrap)
+        if case .failed = viewModel.phase {
+        } else {
+            XCTFail("Expected refresh failure to stay failed, got \(viewModel.phase)")
+        }
+    }
+
     func testGlobalScopeBootstrapClearsStories() async {
         let viewModel = FeedScreenViewModel(
             feed: FeedStubFeedRepository(),
@@ -1021,4 +1075,36 @@ private struct FeedStubInteractionRepository: InteractionRepository {
         commentID: CommentID,
         on target: InteractionTarget
     ) async throws {}
+}
+
+private final class CountingFailingFeedRPCClient: RPCClient, @unchecked Sendable {
+    let message: String
+    private let lock = NSLock()
+    private var calls = 0
+
+    init(message: String) {
+        self.message = message
+    }
+
+    var callCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return calls
+    }
+
+    func call(functionName: String, parameters: [String: String]) async throws -> Data {
+        record()
+        throw BackendV2RPCError.transport(message)
+    }
+
+    func call(functionName: String, jsonBody: Data) async throws -> Data {
+        record()
+        throw BackendV2RPCError.transport(message)
+    }
+
+    private func record() {
+        lock.lock()
+        calls += 1
+        lock.unlock()
+    }
 }

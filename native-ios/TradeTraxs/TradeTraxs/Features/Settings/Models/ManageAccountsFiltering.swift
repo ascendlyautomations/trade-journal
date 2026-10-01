@@ -8,7 +8,7 @@ enum ManageAccountsFiltering {
 
         var menuTitle: String {
             switch self {
-            case .all: return "All Prop Firms"
+            case .all: return "All Accounts"
             case .firm(let name): return name
             }
         }

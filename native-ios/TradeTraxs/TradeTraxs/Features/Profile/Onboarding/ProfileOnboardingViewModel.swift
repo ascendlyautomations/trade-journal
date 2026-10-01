@@ -143,13 +143,14 @@ final class ProfileOnboardingViewModel {
         defer { isSubmitting = false }
 
         let normalizedUsername = ProfileUsernamePolicy.normalize(username)
+        var uploadedAvatarThisAttempt: String?
 
         do {
             var avatarURL = existingAvatarURL
             if let pendingAvatarData, !skipPendingAvatar {
                 do {
                     avatarURL = try await uploadAvatar(pendingAvatarData)
-                    self.pendingAvatarData = nil
+                    uploadedAvatarThisAttempt = avatarURL
                 } catch {
                     ProfileOnboardingErrorMapping.debugStage("avatar.upload", error: error)
                     avatarUploadError = ProfileOnboardingErrorMapping.avatarUploadMessage(for: error)
@@ -190,8 +191,17 @@ final class ProfileOnboardingViewModel {
                 snapshot: completedSnapshot,
                 avatarPreview: avatarPreview
             )
+            pendingAvatarData = nil
+            existingAvatarURL = avatarURL
             ExperienceHaptics.play(.success)
         } catch {
+            if let uploadedAvatarThisAttempt, uploadedAvatarThisAttempt != existingAvatarURL {
+                await OwnedMediaStorageCleanup.removeReplacedObject(
+                    previous: uploadedAvatarThisAttempt,
+                    current: nil,
+                    storage: objectStorage
+                )
+            }
             ProfileOnboardingErrorMapping.debugStage("completeProfileOnboarding", error: error)
             if ProfileUsernamePolicy.isProfilesUsernameConflict(error) {
                 usernameError = ProfileOnboardingErrorMapping.usernameConflictMessage

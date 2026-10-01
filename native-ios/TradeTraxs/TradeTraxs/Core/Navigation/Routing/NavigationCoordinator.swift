@@ -9,6 +9,8 @@ import OSLog
 final class NavigationCoordinator {
     private let store: NavigationStore
     private var eventHandler: ((NavigationEvent) -> Void)?
+    /// True after a real authenticated shell entry. Deep-link repair must not run before that.
+    private var didEnterAuthenticatedShell = false
 
     init(store: NavigationStore, eventHandler: ((NavigationEvent) -> Void)? = nil) {
         self.store = store
@@ -71,6 +73,7 @@ final class NavigationCoordinator {
         store.paths.messages = []
         store.paths.profile = []
         store.pendingAfterAuth = nil
+        didEnterAuthenticatedShell = false
     }
 
     /// Marks the session authenticated and applies any pending deep link.
@@ -84,11 +87,15 @@ final class NavigationCoordinator {
             store.paths.profile = snapshot.profilePath
         }
         store.sessionPhase = .authenticated
+        didEnterAuthenticatedShell = true
         store.paths.resetAuth(to: .login)
         emit(.sessionPhaseChanged(.authenticated))
+        DeepLinkLaunchTrace.event("shell.ready")
         if let pending = store.pendingAfterAuth {
             store.pendingAfterAuth = nil
+            DeepLinkLaunchTrace.event("pending.consumed", detail: String(describing: pending.asAppDestination))
             open(pending.asAppDestination)
+            DeepLinkLaunchTrace.event("navigation.executed", detail: "pendingAfterAuth")
         } else if snapshot == nil, !store.restoresLastContentTab {
             store.selectedTab = .home
         }
@@ -103,6 +110,7 @@ final class NavigationCoordinator {
         store.selectedTab = .home
         store.previousContentTab = .home
         store.pendingAfterAuth = nil
+        didEnterAuthenticatedShell = false
         emit(.sessionPhaseChanged(.unauthenticated))
         if clearPersistedNavigation {
             // Caller clears restorer via NavigationEnvironment when appropriate.
@@ -166,10 +174,23 @@ final class NavigationCoordinator {
 
     func stashForAuthentication(_ destination: AppDestination) {
         store.pendingAfterAuth = PendingDestination(destination: destination)
-        if store.sessionPhase != .unauthenticated {
-            store.sessionPhase = .unauthenticated
-            store.paths.resetAuth(to: .login)
-            emit(.sessionPhaseChanged(.unauthenticated))
+        DeepLinkLaunchTrace.event("pending.queued", detail: String(describing: destination))
+        // Do not demote sessionPhase. A queued link must not hide an authenticated shell.
+    }
+
+    /// Puts an already-restored session back on the shell after a deep link demoted navigation.
+    /// No-ops until ``markAuthenticated`` has run, so cold start still waits for session restore.
+    func restoreAuthenticatedShellAfterDeepLink() {
+        guard didEnterAuthenticatedShell else { return }
+        guard store.sessionPhase != .authenticated else { return }
+        store.sessionPhase = .authenticated
+        emit(.sessionPhaseChanged(.authenticated))
+        DeepLinkLaunchTrace.event("shell.repaired")
+        if let pending = store.pendingAfterAuth {
+            store.pendingAfterAuth = nil
+            DeepLinkLaunchTrace.event("pending.consumed", detail: String(describing: pending.asAppDestination))
+            open(pending.asAppDestination)
+            DeepLinkLaunchTrace.event("navigation.executed", detail: "pendingAfterRepair")
         }
     }
 

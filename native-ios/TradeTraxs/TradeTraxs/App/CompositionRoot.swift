@@ -429,6 +429,12 @@ enum CompositionRoot {
         authentication.manager.appleRevocationCredentialHandler = { code in
             await appleRevocationClient.register(authorizationCode: code)
         }
+        PasswordRecoveryModel.shared.configure(
+            client: LivePasswordRecoveryClient(backend: authBackend),
+            adoptSession: { session in
+                try await authentication.manager.adoptRecoveredSession(session)
+            }
+        )
         InboxMarkReadCoordinator.shared.configure(
             messages: data.messages,
             rooms: data.rooms,
@@ -545,6 +551,9 @@ enum CompositionRoot {
                 do {
                     let refreshed = try await data.billing.refreshEntitlements(for: profileID)
                     await MainActor.run {
+                        guard sessionManager.currentSession?.userID.rawValue == profileID.rawValue else {
+                            return
+                        }
                         SessionBillingEntitlementStore.shared.apply(refreshed)
                         NotificationCenter.default.post(
                             name: .billingEntitlementsDidRefresh,

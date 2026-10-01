@@ -4,12 +4,13 @@ import UIKit
 nonisolated enum SubmissionScreenshotUpload {
     static let maxImageBytes = 15 * 1024 * 1024
 
-    /// Web-parity path: `{prefix}/{userId}/opt/{timestamp}.jpg` (see `optimizedStorageObjectPath` on web).
+    /// Owner-scoped path: `{userId}/{prefix}/opt/{timestamp}.jpg`.
+    /// Screenshots insert policy requires the first folder to be `auth.uid()`.
     static func storageObjectPath(userID: String, prefix: String) -> String {
         let trimmedUser = userID.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedPrefix = prefix.trimmingCharacters(in: .whitespacesAndNewlines)
         let timestamp = Int(Date().timeIntervalSince1970 * 1000)
-        return "\(trimmedPrefix)/\(trimmedUser)/opt/\(timestamp).jpg"
+        return "\(trimmedUser)/\(trimmedPrefix)/opt/\(timestamp).jpg"
     }
 
     static func uploadJPEG(

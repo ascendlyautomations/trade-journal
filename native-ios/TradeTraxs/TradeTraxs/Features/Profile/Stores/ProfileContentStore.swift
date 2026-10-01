@@ -342,7 +342,7 @@ final class ProfileContentStore {
         let userID = await session.currentUserID
         viewerID = userID.map { ProfileID($0.rawValue) }
 
-        let profileID: ProfileID
+        var profileID: ProfileID
         switch target {
         case .currentUser:
             guard let viewerID else {
@@ -356,6 +356,26 @@ final class ProfileContentStore {
             profileID = viewerID
         case .profile(let id):
             profileID = id
+        }
+
+        // Shared links use `/profile/{username}`. Repository reads are keyed by profiles.id.
+        if case .profile = target, !ProfileIdentitySanitizer.isUUIDLike(profileID.rawValue) {
+            do {
+                let resolved = try await profiles.profile(username: profileID.rawValue)
+                profileID = resolved.id
+            } catch is CancellationError {
+                loadTask = nil
+                return
+            } catch {
+                if profile == nil {
+                    phase = .failed
+                }
+                errorMessage = UserFacingError.map(
+                    error as? AppError ?? AppError.unknown(message: error.localizedDescription)
+                ).message
+                loadTask = nil
+                return
+            }
         }
 
         resolvedProfileID = profileID
@@ -390,8 +410,9 @@ final class ProfileContentStore {
         }
 
         do {
-            async let profileTask = profiles.profile(id: profileID)
-            async let statsTask = profiles.stats(for: profileID)
+            let requestedProfileID = profileID
+            async let profileTask = profiles.profile(id: requestedProfileID)
+            async let statsTask = profiles.stats(for: requestedProfileID)
             let (loadedProfile, loadedStats) = try await (profileTask, statsTask)
             guard !Task.isCancelled else { return }
 

@@ -462,6 +462,20 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         guard let userID = await session.currentUserID else {
             throw AppError.domain(.permission(.notAuthenticated))
         }
+        struct Media: Decodable, Sendable {
+            var image_url: String?
+            var audio_url: String?
+        }
+        let mediaRows: [Media]? = try? await supabase.database.select(
+            Media.self,
+            from: "messages",
+            query: [
+                SupabaseQuery.select("image_url,audio_url"),
+                SupabaseQuery.eq("id", messageID.rawValue),
+                SupabaseQuery.eq("sender_id", userID.rawValue),
+                URLQueryItem(name: "limit", value: "1"),
+            ]
+        )
         let body = DMDeleteForEveryoneBody(deleted_for_everyone: true)
         AppLog.networking.info(
             """
@@ -486,6 +500,10 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
                 message=\(SafeInboxLog.hash(messageID.rawValue), privacy: .public) \
                 status=204
                 """
+            )
+            await OwnedMediaStorageCleanup.removePublicObjects(
+                urls: [mediaRows?.first?.image_url, mediaRows?.first?.audio_url],
+                storage: supabase.storage
             )
         } catch {
             AppLog.networking.error(

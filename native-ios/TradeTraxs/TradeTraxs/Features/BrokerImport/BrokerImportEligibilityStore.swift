@@ -134,8 +134,13 @@ final class BrokerImportEligibilityStore {
         guard let userID = await session?.currentUserID?.rawValue else {
             throw NetworkError.unauthorized
         }
+        let generation = loadGeneration
         await SessionNetworkGate.shared.awaitReady()
         let response = try await broker.importEligibility()
+        let stillSignedIn = await session?.currentUserID?.rawValue == userID
+        guard generation == loadGeneration, stillSignedIn else {
+            throw CancellationError()
+        }
         persistedViewerID = userID
         apply(response)
         lastSuccessfulFetchAt = Date()

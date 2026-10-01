@@ -103,6 +103,7 @@ final class ManageRoomViewModel {
 
     private let rooms: any RoomManagementRepository
     private let uploadService: any UploadService
+    private let objectStorage: (any ObjectStorageProviding)?
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
     private let tagStore: SessionRoomMemberTagsStore
@@ -116,6 +117,7 @@ final class ManageRoomViewModel {
         roomID: RoomID,
         rooms: any RoomManagementRepository,
         uploadService: any UploadService,
+        objectStorage: (any ObjectStorageProviding)? = nil,
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator? = nil,
@@ -126,6 +128,7 @@ final class ManageRoomViewModel {
         self.roomID = roomID
         self.rooms = rooms
         self.uploadService = uploadService
+        self.objectStorage = objectStorage
         self.session = session
         self.detailCache = detailCache
         self.navigationCoordinator = navigationCoordinator
@@ -264,7 +267,7 @@ final class ManageRoomViewModel {
     }
 
     func saveDetails() async {
-        guard canManageRoom else { return }
+        guard canManageRoom, !isSavingDetails else { return }
         isSavingDetails = true
 
         let rollbackConfiguration = editConfiguration
@@ -272,8 +275,10 @@ final class ManageRoomViewModel {
         let rollbackPendingData = pendingImageData
         let rollbackMarksRemoval = marksImageForRemoval
         let rollbackSavedReference = savedImageReference
+        let previousImage = savedImageReference?.id
 
         defer { isSavingDetails = false }
+        var uploadedPath: String?
         do {
             var configuration = editConfiguration
 
@@ -282,7 +287,8 @@ final class ManageRoomViewModel {
             }
 
             if let imageData = pendingImageData {
-                let path = StorageOptimizedMedia.objectPath(prefix: "room-images", fileExtension: "jpg")
+                let prefix = viewerID.map { "\($0.rawValue)/room-images" } ?? "room-images"
+                let path = StorageOptimizedMedia.objectPath(prefix: prefix, fileExtension: "jpg")
                 let reference = try await uploadService.upload(
                     UploadRequest(
                         bucket: "avatars",
@@ -292,6 +298,7 @@ final class ManageRoomViewModel {
                         purpose: .profileAvatar
                     )
                 )
+                uploadedPath = reference.id
                 configuration.imageURL = reference.id
             }
 
@@ -310,9 +317,25 @@ final class ManageRoomViewModel {
                 detailCache: detailCache,
                 viewerID: viewerID
             )
+            if (uploadedPath != nil || rollbackMarksRemoval), let objectStorage {
+                await OwnedMediaStorageCleanup.removeReplacedObject(
+                    previous: previousImage,
+                    current: updated.image?.id,
+                    fallbackBucket: "avatars",
+                    storage: objectStorage
+                )
+            }
             statusMessage = "Room details saved."
             ExperienceHaptics.play(.success)
         } catch {
+            if let uploadedPath, let objectStorage {
+                await OwnedMediaStorageCleanup.removeReplacedObject(
+                    previous: uploadedPath,
+                    current: nil,
+                    fallbackBucket: "avatars",
+                    storage: objectStorage
+                )
+            }
             editConfiguration = rollbackConfiguration
             pendingImagePreview = rollbackPendingPreview
             pendingImageData = rollbackPendingData

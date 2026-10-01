@@ -695,6 +695,14 @@ final class BrokerIntegrationsViewModel {
             break
         case .oauthFailed(let message):
             presentMessage(message ?? "Tradovate connection failed.", error: true)
+        case .syncUnavailable:
+            importReconnectPrompt = nil
+            importRetryPrompt = ImportReconnectPrompt(
+                provider: .tradovate,
+                connectionId: connectionId,
+                mappingId: mappingId
+            )
+            presentMessage(BrokerSyncPresentation.temporaryFailureMessage(), error: true)
         case .syncCompleted(let response):
             await refreshAll()
             await applyImportSyncResponse(

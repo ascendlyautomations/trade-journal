@@ -15,8 +15,11 @@ struct MessageComposerBar: View {
     var onSendTrade: (() -> Void)?
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.scenePhase) private var scenePhase
     @FocusState private var focused: Bool
     @State private var photoItem: PhotosPickerItem?
+    @State private var keyboardSendScheduled = false
+    @State private var showsMicrophoneSettings = false
     @StateObject private var voiceRecorder = VoiceMessageRecorder()
 
     var body: some View {
@@ -40,6 +43,20 @@ struct MessageComposerBar: View {
         .onChange(of: voiceRecorder.completedRecording?.url) { _, _ in
             guard let completed = voiceRecorder.completedRecording else { return }
             onSendVoice?(completed.url, completed.duration)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background {
+                voiceRecorder.handleEnteredBackground()
+            }
+        }
+        .alert("Microphone access is off", isPresented: $showsMicrophoneSettings) {
+            Button("Not Now", role: .cancel) {}
+            Button("Settings") {
+                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                UIApplication.shared.open(url)
+            }
+        } message: {
+            Text("Turn on microphone access in Settings to send voice messages.")
         }
         .experienceFormFocusSync($focused)
     }
@@ -84,9 +101,11 @@ struct MessageComposerBar: View {
                 .focused($focused)
                 .submitLabel(.send)
                 .disabled(!isEnabled)
-                .onSubmit {
-                    guard canSendText, isEnabled else { return }
-                    onSend()
+                .onSubmit(submitFromKeyboard)
+                .onChange(of: draft) { previous, updated in
+                    guard ComposerKeyboardSubmit.insertedReturn(from: previous, to: updated) else { return }
+                    draft = previous
+                    submitFromKeyboard()
                 }
                 .accessibilityIdentifier("conversation.composer.field")
 
@@ -107,7 +126,12 @@ struct MessageComposerBar: View {
                 .accessibilityIdentifier("conversation.composer.send")
             } else if onSendVoice != nil {
                 Button {
-                    Task { _ = await voiceRecorder.start() }
+                    Task {
+                        let result = await voiceRecorder.start()
+                        if result.showSettings {
+                            showsMicrophoneSettings = true
+                        }
+                    }
                 } label: {
                     Image(systemName: "mic.fill")
                         .font(.system(size: 20, weight: .semibold))
@@ -163,10 +187,40 @@ struct MessageComposerBar: View {
         !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Vertical `TextField` reports the Send key as an inserted newline and may also call submit.
+    /// Both routes use the same `onSend` closure as the on-screen button, once per key press.
+    private func submitFromKeyboard() {
+        guard !keyboardSendScheduled else { return }
+        guard canSendText, isEnabled, !isSending else { return }
+        keyboardSendScheduled = true
+        onSend()
+        Task { @MainActor in
+            keyboardSendScheduled = false
+        }
+    }
+
     private func sendPickedPhoto(_ item: PhotosPickerItem) async {
         guard let data = try? await item.loadTransferable(type: Data.self),
               let image = UIImage(data: data)
         else { return }
         onSendImage(image)
+    }
+}
+
+enum ComposerKeyboardSubmit {
+    /// True when `updated` is `previous` plus one newline. Pasted multiline text is not a submit.
+    static func insertedReturn(from previous: String, to updated: String) -> Bool {
+        guard updated.count == previous.count + 1 else { return false }
+        var previousIndex = previous.startIndex
+        var updatedIndex = updated.startIndex
+        while previousIndex < previous.endIndex,
+              updatedIndex < updated.endIndex,
+              previous[previousIndex] == updated[updatedIndex] {
+            previous.formIndex(after: &previousIndex)
+            updated.formIndex(after: &updatedIndex)
+        }
+        guard updatedIndex < updated.endIndex, updated[updatedIndex] == "\n" else { return false }
+        updated.formIndex(after: &updatedIndex)
+        return previous[previousIndex...] == updated[updatedIndex...]
     }
 }

@@ -77,6 +77,7 @@ final class AuthenticationCoordinator {
             correlation: correlation,
             generation: generation
         )
+        DeepLinkLaunchTrace.event("session.restore.started")
         await authenticationManager.restoreSession()
         guard generation == restoreGeneration else {
             AuthFlowTracer.trace(
@@ -94,6 +95,7 @@ final class AuthenticationCoordinator {
             correlation: correlation,
             generation: generation
         )
+        DeepLinkLaunchTrace.event("session.restore.completed")
     }
 
     func retrySessionValidation() async {

@@ -91,6 +91,8 @@ struct ComposeChooserView: View {
                 Button("Close", action: onClose)
             }
         }
+        .toolbarBackground(colors.groupedBackground, for: .navigationBar)
+        .toolbarBackgroundVisibility(.visible, for: .navigationBar)
         .accessibilityIdentifier("compose.chooser")
     }
 

@@ -84,12 +84,16 @@ struct ClipDetailView: View {
             viewModel.tearDown()
         }
         .onChange(of: tabIsActive) { _, isActive in
-            if !isActive {
+            if isActive, scenePhase == .active {
+                viewModel.resumePlaybackAfterBackground()
+            } else {
                 viewModel.suspendPlayback(reason: "tabChanged")
             }
         }
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase != .active {
+            if newPhase == .active, tabIsActive {
+                viewModel.resumePlaybackAfterBackground()
+            } else if newPhase != .active {
                 viewModel.suspendPlayback(reason: "appBackgrounded")
             }
         }
@@ -105,7 +109,18 @@ struct ClipDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(viewModel.deleteErrorMessage ?? "This can’t be undone.")
+            Text("This can’t be undone.")
+        }
+        .alert(
+            "Couldn't delete clip",
+            isPresented: Binding(
+                get: { viewModel.deleteErrorMessage != nil },
+                set: { if !$0 { viewModel.clearDeleteError() } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(viewModel.deleteErrorMessage ?? "")
         }
         .accessibilityIdentifier("detail.clip.root")
     }

@@ -17,6 +17,7 @@ import {
 } from "@/lib/tradeAccountDisplay"
 
 import { ACCOUNTS_SELECT } from "./appDataCache"
+import { fetchProfileOwnerPrivateFields } from "./profileOwnerPrivateFields"
 
 export type TradingAccountPropFirmRules = {
   consistency: number | null
@@ -397,11 +398,15 @@ export async function syncTradesAfterAccountRename(
     profileUpdate.locked_account_size = fields.account_size
   }
 
+  const privateFields = await fetchProfileOwnerPrivateFields(client)
+  if (privateFields?.locked_account_id !== accountId) {
+    return null
+  }
+
   const { error: profileErr } = await client
     .from("profiles")
     .update(profileUpdate)
     .eq("id", userId)
-    .eq("locked_account_id", accountId)
 
   if (profileErr) {
     return new Error(profileErr.message)

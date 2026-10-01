@@ -13,6 +13,7 @@ import DemoAppShell from "./components/demo/DemoAppShell"
 import AppChrome from "./components/AppChrome"
 import MarketingNavbarRoot from "./components/MarketingNavbarRoot"
 import CookieConsentBanner from "./components/CookieConsentBanner"
+import MobileWebOpenAppBanner from "./components/MobileWebOpenAppBanner"
 import ScrollLockRouteReset from "./components/ScrollLockRouteReset"
 import SubscriptionGateShell from "./components/SubscriptionGateShell"
 import FreePlanAccountSlotShell from "./components/FreePlanAccountSlotShell"
@@ -179,6 +180,7 @@ export default async function RootLayout({
                     <MarketingNavbarRoot />
                     <AppChrome>{children}</AppChrome>
                     <CookieConsentBanner />
+                    <MobileWebOpenAppBanner />
                     </FreePlanAccountSlotShell>
                   </SubscriptionGateShell>
                 </DemoAppShell>

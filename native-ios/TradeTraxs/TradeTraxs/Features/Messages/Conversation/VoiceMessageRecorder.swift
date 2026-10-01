@@ -4,10 +4,14 @@ import Foundation
 
 @MainActor
 final class VoiceMessageRecorder: ObservableObject {
-    enum Phase: Equatable {
+    nonisolated enum Phase: Equatable {
         case idle
         case recording
-        case denied
+    }
+
+    struct StartResult: Equatable, Sendable {
+        var started: Bool
+        var showSettings: Bool
     }
 
     @Published private(set) var phase: Phase = .idle
@@ -18,12 +22,27 @@ final class VoiceMessageRecorder: ObservableObject {
     private var timer: Timer?
     private var outputURL: URL?
 
-    func start() async -> Bool {
-        guard phase == .idle else { return false }
+    /// Recording blocks another start. A denial stays idle so the next tap
+    /// re-reads the system permission after the user changes Settings.
+    nonisolated static func canStart(from phase: Phase) -> Bool {
+        phase != .recording
+    }
+
+    nonisolated static func needsSettingsPrompt(permission: AVAudioApplication.recordPermission) -> Bool {
+        permission == .denied
+    }
+
+    func start() async -> StartResult {
+        guard Self.canStart(from: phase) else {
+            return StartResult(started: false, showSettings: false)
+        }
+        let showSettings = Self.needsSettingsPrompt(
+            permission: AVAudioApplication.shared.recordPermission
+        )
         let granted = await requestPermission()
         guard granted else {
-            phase = .denied
-            return false
+            phase = .idle
+            return StartResult(started: false, showSettings: showSettings)
         }
 
         do {
@@ -41,16 +60,21 @@ final class VoiceMessageRecorder: ObservableObject {
             ]
             let recorder = try AVAudioRecorder(url: url, settings: settings)
             recorder.isMeteringEnabled = true
-            guard recorder.record() else { return false }
+            guard recorder.record() else {
+                cleanupRecording()
+                phase = .idle
+                return StartResult(started: false, showSettings: false)
+            }
             self.recorder = recorder
             outputURL = url
             elapsed = 0
             phase = .recording
             startTimer()
-            return true
+            return StartResult(started: true, showSettings: false)
         } catch {
             cleanupRecording()
-            return false
+            phase = .idle
+            return StartResult(started: false, showSettings: false)
         }
     }
 
@@ -58,6 +82,13 @@ final class VoiceMessageRecorder: ObservableObject {
         cleanupRecording()
         phase = .idle
         elapsed = 0
+    }
+
+    /// The app has no audio background mode, so a suspended recording cannot
+    /// keep the microphone. Leave the composer instead of a frozen recording bar.
+    func handleEnteredBackground() {
+        guard phase == .recording else { return }
+        cancel()
     }
 
     func finish() -> (url: URL, duration: TimeInterval)? {

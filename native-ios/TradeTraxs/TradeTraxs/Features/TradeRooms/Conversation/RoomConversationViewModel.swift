@@ -36,6 +36,8 @@ final class RoomConversationViewModel {
     private(set) var highlightedMessageID: MessageID?
     var draft = ""
     var isSending = false
+    /// Remote image URL already stored for an optimistic message, so retry does not upload again.
+    private var uploadedOutboundImageURLs: [MessageID: String] = [:]
     var showsTradePicker = false
     private(set) var tradePickerSummaries: [TradeSummary] = []
     var tradePickerTrades: [Trade] {
@@ -836,6 +838,20 @@ final class RoomConversationViewModel {
         defer { retryingMessageIDs.remove(item.id) }
 
         if ConversationMessageMerge.isOptimisticMessageID(item.id),
+           let uploadedURL = uploadedOutboundImageURLs[item.id],
+           let channelID = selectedChannelID
+        {
+            await completeOptimisticRoomImageSend(
+                tempID: item.id,
+                body: item.text ?? "",
+                imageURL: uploadedURL,
+                localImageData: nil,
+                channelID: channelID,
+                optimistic: item.message
+            )
+            return
+        }
+        if ConversationMessageMerge.isOptimisticMessageID(item.id),
            let localData = OptimisticOutboundImageStore.shared.jpegData(for: item.id),
            let channelID = selectedChannelID
         {
@@ -849,28 +865,57 @@ final class RoomConversationViewModel {
             return
         }
 
-        if let channelID = selectedChannelID,
-           let reconciled = await reconcileOptimisticSend(
-               tempID: item.id,
-               sentAt: item.message.createdAt,
-               content: item.text ?? item.message.body,
-               channelID: channelID
-           )
-        {
-            commitMessages([reconciled])
-            OptimisticOutboundImageStore.shared.remove(messageID: item.id)
+        let body = item.text ?? ""
+        let reconcileContent = item.message.kind == .tradeShare
+            ? "Shared a trade"
+            : (item.text ?? item.message.body)
+        if let channelID = selectedChannelID {
+            switch await reconcileOptimisticSend(
+                tempID: item.id,
+                sentAt: item.message.createdAt,
+                content: reconcileContent,
+                channelID: channelID
+            ) {
+            case .matched(let reconciled):
+                commitMessages([reconciled])
+                OptimisticOutboundImageStore.shared.remove(messageID: item.id)
+                uploadedOutboundImageURLs.removeValue(forKey: item.id)
+                sendStates.removeValue(forKey: item.id)
+                sendStates[reconciled.id] = .sent
+                persistActiveChannelCache(scrollAnchor: reconciled.id)
+                patchInboxPreview(with: reconciled)
+                return
+            case .unavailable:
+                sendStates[item.id] = .failed
+                return
+            case .notOnServer:
+                break
+            }
+        }
+
+        if item.message.kind == .tradeShare, let trade = sharedTrade(for: item.message) {
+            removeMessage(id: item.id)
             sendStates.removeValue(forKey: item.id)
-            sendStates[reconciled.id] = .sent
-            persistActiveChannelCache(scrollAnchor: reconciled.id)
-            patchInboxPreview(with: reconciled)
+            let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
+            await sendTradeSummary(summary)
             return
         }
 
+        let remoteImageURL: String? = {
+            guard item.message.kind == .media,
+                  let media = item.imageReference,
+                  media.kind == .image,
+                  !OptimisticOutboundImageSupport.isOptimisticMediaID(media.id)
+            else { return nil }
+            return media.id
+        }()
+        guard remoteImageURL != nil || !body.isEmpty else {
+            sendStates[item.id] = .failed
+            return
+        }
         removeMessage(id: item.id)
         sendStates.removeValue(forKey: item.id)
-        let imageURL = item.imageReference?.id
-        guard let imageURL, !OptimisticOutboundImageSupport.isOptimisticMediaID(imageURL) else { return }
-        await send(body: item.text ?? "", imageURL: imageURL, localImageData: nil)
+        await send(body: body, imageURL: remoteImageURL, localImageData: nil)
     }
 
     func toggleMute() {
@@ -2064,6 +2109,7 @@ final class RoomConversationViewModel {
             return
         }
 
+        var uploadedAudioPath: String?
         do {
             let path = "\(viewerID.rawValue)/rooms/\(Int(Date().timeIntervalSince1970 * 1000)).m4a"
             let reference = try await uploadService.upload(
@@ -2074,6 +2120,7 @@ final class RoomConversationViewModel {
                     contentType: "audio/mp4"
                 )
             )
+            uploadedAudioPath = reference.id
             let resolvedURL: String
             if let publicURL = objectStorage.publicURL(
                 bucket: StorageBucket.messageAudio.rawValue,
@@ -2105,6 +2152,12 @@ final class RoomConversationViewModel {
             patchInboxPreview(with: saved)
             ExperienceHaptics.play(.messageSent)
         } catch {
+            if let uploadedAudioPath {
+                try? await objectStorage.delete(
+                    bucket: StorageBucket.messageAudio.rawValue,
+                    path: uploadedAudioPath
+                )
+            }
             await handleSendFailure(
                 tempID: tempID,
                 optimistic: optimistic,
@@ -2228,6 +2281,9 @@ final class RoomConversationViewModel {
                     uploadService: uploadService,
                     objectStorage: objectStorage
                 )
+                if let resolvedImageURL {
+                    uploadedOutboundImageURLs[tempID] = resolvedImageURL
+                }
             }
 
             let content: String = {
@@ -2263,6 +2319,7 @@ final class RoomConversationViewModel {
             let saved = RoomMessageMapping.displayMessage(from: savedRoom)
             commitMessages([saved])
             OptimisticOutboundImageStore.shared.remove(messageID: tempID)
+            uploadedOutboundImageURLs.removeValue(forKey: tempID)
             sendStates.removeValue(forKey: tempID)
             sendStates[saved.id] = .sent
             persistActiveChannelCache(scrollAnchor: saved.id)
@@ -2294,13 +2351,19 @@ final class RoomConversationViewModel {
         return NetworkTaskCancellation.mapIfCancelled(error) != nil
     }
 
+    private enum OutboundReconcile {
+        case matched(Message)
+        case notOnServer
+        case unavailable
+    }
+
     private func reconcileOptimisticSend(
         tempID: MessageID,
         sentAt: Date,
         content: String?,
         channelID: RoomChannelID
-    ) async -> Message? {
-        guard let viewerID else { return nil }
+    ) async -> OutboundReconcile {
+        guard let viewerID else { return .unavailable }
         let normalizedContent = content ?? ""
         do {
             let channel = channels.first { $0.id == channelID }
@@ -2326,12 +2389,12 @@ final class RoomConversationViewModel {
                     messageID: match.id.rawValue
                 )
                 #endif
-                return RoomMessageMapping.displayMessage(from: match)
+                return .matched(RoomMessageMapping.displayMessage(from: match))
             }
+            return .notOnServer
         } catch {
-            // Soft-fail — caller may mark failed or retry.
+            return .unavailable
         }
-        return nil
     }
 
     private func handleSendFailure(
@@ -2345,7 +2408,7 @@ final class RoomConversationViewModel {
             sendStates.removeValue(forKey: tempID)
             return
         }
-        if let reconciled = await reconcileOptimisticSend(
+        if case .matched(let reconciled) = await reconcileOptimisticSend(
             tempID: tempID,
             sentAt: optimistic.createdAt,
             content: content,
@@ -2353,6 +2416,7 @@ final class RoomConversationViewModel {
         ) {
             commitMessages([reconciled])
             OptimisticOutboundImageStore.shared.remove(messageID: tempID)
+            uploadedOutboundImageURLs.removeValue(forKey: tempID)
             sendStates.removeValue(forKey: tempID)
             sendStates[reconciled.id] = .sent
             persistActiveChannelCache(scrollAnchor: reconciled.id)

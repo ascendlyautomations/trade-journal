@@ -40,6 +40,7 @@ struct ManageRoomView: View {
                 roomID: roomID,
                 rooms: data.rooms as! any RoomManagementRepository,
                 uploadService: data.uploadService,
+                objectStorage: data.objectStorage,
                 session: data.session,
                 detailCache: data.detailCache,
                 navigationCoordinator: navigationCoordinator,

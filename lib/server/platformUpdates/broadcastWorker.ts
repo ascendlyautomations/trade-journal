@@ -262,7 +262,6 @@ async function processOneBroadcast(broadcast: BroadcastRow): Promise<{
         title: update.title,
         body: update.body,
         href,
-        badge: 0,
         notificationType: "platform_update",
       })
 

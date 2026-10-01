@@ -11,7 +11,7 @@ final class GlobalUploadCoordinator {
     var isQueuePresented = false
 
     private var tasks: [String: Task<Void, Never>] = [:]
-    private var retryReel: [String: (ReelUploadSpec, GlobalUploadServices)] = [:]
+    private var retryReel: [String: (ReelUploadSpec, GlobalUploadServices, ReelUploadCheckpoint)] = [:]
     private var retryPost: [String: (PostUploadSpec, GlobalUploadServices, PostUploadCheckpoint)] = [:]
     private var retryStory: [String: (StoryUploadSpec, GlobalUploadServices, StoryUploadCheckpoint)] = [:]
     private var retryAchievement: [String: (AchievementUploadSpec, GlobalUploadServices, AchievementUploadCheckpoint)] = [:]
@@ -96,7 +96,7 @@ final class GlobalUploadCoordinator {
                 showsSuccessFlash: false
             )
         )
-        retryReel[jobID] = (spec, services)
+        retryReel[jobID] = (spec, services, ReelUploadCheckpoint())
         startTask(jobID: jobID, kind: .reel, intent: .enqueue) { [weak self] generation in
             await self?.runReel(jobID: jobID, spec: spec, services: services, runGeneration: generation)
         }
@@ -277,7 +277,13 @@ final class GlobalUploadCoordinator {
         )
         retryStory[jobID] = (storySpec, services, StoryUploadCheckpoint())
         startTask(jobID: jobID, kind: .story, intent: .enqueue) { [weak self] generation in
-            await self?.runStory(jobID: jobID, spec: storySpec, services: services, runGeneration: generation)
+            await self?.runStory(
+                jobID: jobID,
+                spec: storySpec,
+                services: services,
+                checkpoint: StoryUploadCheckpoint(),
+                runGeneration: generation
+            )
         }
         return jobID
     }
@@ -286,7 +292,7 @@ final class GlobalUploadCoordinator {
         guard jobs.first(where: { $0.id == jobID })?.phase == .failed else { return }
         terminalJobIDs.remove(jobID)
         completedGenerations.removeValue(forKey: jobID)
-        if let (spec, services) = retryReel[jobID] {
+        if let (spec, services, _) = retryReel[jobID] {
             updateJob(jobID) { job in
                 job.phase = .preparing
                 job.progress = nil
@@ -315,14 +321,20 @@ final class GlobalUploadCoordinator {
             }
             return
         }
-        if let (spec, services, _) = retryStory[jobID] {
+        if let (spec, services, checkpoint) = retryStory[jobID] {
             updateJob(jobID) { job in
                 job.phase = .preparing
                 job.progress = nil
                 job.errorMessage = nil
             }
             startTask(jobID: jobID, kind: .story, intent: .retry) { [weak self] generation in
-                await self?.runStory(jobID: jobID, spec: spec, services: services, runGeneration: generation)
+                await self?.runStory(
+                    jobID: jobID,
+                    spec: spec,
+                    services: services,
+                    checkpoint: checkpoint,
+                    runGeneration: generation
+                )
             }
             return
         }
@@ -372,7 +384,34 @@ final class GlobalUploadCoordinator {
             finalizeCompletedJob(jobID: jobID, runGeneration: generation, kind: kind)
             return
         }
+        if jobs.first(where: { $0.id == jobID })?.phase == .failed {
+            scheduleFailedJobStorageCleanup(jobID: jobID)
+        }
         cancelActiveJob(jobID: jobID, kind: kind, cancelSource: "GlobalUploadCoordinator.remove")
+    }
+
+    /// Best-effort. Dismissal returns immediately; deletion cannot block the queue.
+    private func scheduleFailedJobStorageCleanup(jobID: String) {
+        let post = retryPost[jobID].map { $0.2 }
+        let achievement = retryAchievement[jobID].map { $0.2 }
+        let trade = retryTrade[jobID].map { $0.2 }
+        let story = retryStory[jobID].map { $0.2 }
+        let objects = FailedUploadDismissalCleanup.orphanedObjects(
+            post: post,
+            achievement: achievement,
+            trade: trade,
+            story: story
+        )
+        let storage = retryPost[jobID]?.1.objectStorage
+            ?? retryAchievement[jobID]?.1.objectStorage
+            ?? retryTrade[jobID]?.1.objectStorage
+            ?? retryStory[jobID]?.1.objectStorage
+        guard let storage, !objects.isEmpty else { return }
+        Task { @MainActor in
+            for object in objects {
+                try? await storage.delete(bucket: object.bucket, path: object.path)
+            }
+        }
     }
 
     private func cancelActiveJob(jobID: String, kind: UploadJobKind, cancelSource: String) {
@@ -409,7 +448,7 @@ final class GlobalUploadCoordinator {
     }
 
     private func releasePendingUploadResources() {
-        for (_, (spec, _)) in retryReel {
+        for (_, (spec, _, _)) in retryReel {
             cleanupReelFiles(spec.snapshot.asDraft)
         }
     }
@@ -506,6 +545,12 @@ final class GlobalUploadCoordinator {
                     author: spec.authorID,
                     tradeID: spec.snapshot.linkedTradeID
                 )
+            } else if let savedReelID = retryReel[jobID]?.2.savedReelID {
+                reel = try await verifySavedReel(
+                    id: savedReelID,
+                    authorID: spec.authorID,
+                    feed: services.feed
+                )
             } else {
                 reel = try await UploadProgressContext.$jobID.withValue(jobID) {
                     try await ReelPublishPipeline.publish(
@@ -517,6 +562,9 @@ final class GlobalUploadCoordinator {
                         feed: services.feed,
                         uploadService: services.uploadService,
                         objectStorage: services.objectStorage,
+                        onInserted: { inserted in
+                            self.rememberInsertedReel(jobID: jobID, reelID: inserted.id)
+                        },
                         onProgress: { value in
                             Task { @MainActor [weak self] in
                                 self?.updateJob(jobID) { job in
@@ -670,9 +718,11 @@ final class GlobalUploadCoordinator {
         jobID: String,
         spec: StoryUploadSpec,
         services: GlobalUploadServices,
+        checkpoint: StoryUploadCheckpoint,
         runGeneration: UInt64
     ) async {
         guard jobRunIsLive(jobID: jobID, generation: runGeneration, stage: "runStory.entry") else { return }
+        var checkpoint = checkpoint
         await registerProgress(jobID: jobID, phase: .uploading) { [weak self] fraction in
             self?.updateJob(jobID) { job in
                 job.phase = .uploading
@@ -692,59 +742,31 @@ final class GlobalUploadCoordinator {
                     createdAt: Date(),
                     viewerHasSeen: false
                 )
-            } else {
-                story = try await UploadProgressContext.$jobID.withValue(jobID) {
-                    if let videoURL = spec.localVideoFileURL {
-                        return try await StoryPublishPipeline.publishVideo(
-                            fileURL: videoURL,
-                            contentType: spec.contentType,
-                            originalFileName: spec.originalFileName ?? "story.mp4",
-                            authorID: spec.authorID,
-                            feed: services.feed,
-                            uploadService: services.uploadService,
-                            objectStorage: services.objectStorage,
-                            predeterminedStoragePath: spec.storagePath
-                        ) { [weak self] progress in
-                            Task { @MainActor in
-                                self?.updateJob(jobID) { job in
-                                    if progress < 0.85 {
-                                        job.phase = .uploading
-                                        job.progress = 0.1 + progress * 0.75
-                                    } else {
-                                        job.phase = .publishing
-                                        job.progress = 0.85 + (progress - 0.85) * 1.0
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    guard let imageData = spec.imageData else {
-                        throw AppError.unknown(message: "Missing story media.")
-                    }
-                    return try await StoryPublishPipeline.publish(
-                        imageData: imageData,
-                        contentType: spec.contentType,
-                        originalFileName: spec.originalFileName ?? "story.jpg",
-                        authorID: spec.authorID,
-                        feed: services.feed,
-                        uploadService: services.uploadService,
-                        objectStorage: services.objectStorage,
-                        predeterminedStoragePath: spec.storagePath
-                    ) { [weak self] progress in
-                        Task { @MainActor in
-                            self?.updateJob(jobID) { job in
-                                if progress < 0.85 {
-                                    job.phase = .uploading
-                                    job.progress = 0.1 + progress * 0.75
-                                } else {
-                                    job.phase = .publishing
-                                    job.progress = 0.85 + (progress - 0.85) * 1.0
-                                }
-                            }
-                        }
-                    }
+            } else if let savedID = checkpoint.savedStoryID {
+                guard let existing = try await services.feed.story(id: savedID),
+                      existing.authorProfileID == spec.authorID
+                else {
+                    throw AppError.unknown(message: "Published story could not be verified.")
                 }
+                story = existing
+            } else if let publicURL = checkpoint.uploadedImagePublicURL {
+                story = try await insertStoryIfAbsent(
+                    jobID: jobID,
+                    spec: spec,
+                    services: services,
+                    publicURL: publicURL
+                )
+            } else {
+                story = try await publishStoryMedia(
+                    jobID: jobID,
+                    spec: spec,
+                    services: services
+                )
             }
+            checkpoint = retryStory[jobID]?.2 ?? checkpoint
+            checkpoint.savedStoryID = story.id
+            checkpoint.insertConfirmedAbsent = false
+            persistStoryRetry(jobID: jobID, spec: spec, services: services, checkpoint: checkpoint)
             services.detailCache.seed(story)
             ContentMutationStore.shared.noteStoryCreated(story)
             storySuccessHandlers[jobID]?(story)
@@ -754,6 +776,184 @@ final class GlobalUploadCoordinator {
             await failJob(jobID: jobID, error: error, runGeneration: runGeneration)
         }
         await UploadProgressRelay.shared.unregister(jobID: jobID)
+    }
+
+    private func publishStoryMedia(
+        jobID: String,
+        spec: StoryUploadSpec,
+        services: GlobalUploadServices
+    ) async throws -> Story {
+        let prepared = StoryPreparedMedia()
+        let onPrepared: (String, String) -> Void = { publicURL, storagePath in
+            prepared.publicURL = publicURL
+            prepared.storagePath = storagePath
+        }
+        do {
+            let created = try await UploadProgressContext.$jobID.withValue(jobID) {
+                if let videoURL = spec.localVideoFileURL {
+                    return try await StoryPublishPipeline.publishVideo(
+                        fileURL: videoURL,
+                        contentType: spec.contentType,
+                        originalFileName: spec.originalFileName ?? "story.mp4",
+                        authorID: spec.authorID,
+                        feed: services.feed,
+                        uploadService: services.uploadService,
+                        objectStorage: services.objectStorage,
+                        predeterminedStoragePath: spec.storagePath,
+                        onProgress: { [weak self] progress in
+                            Task { @MainActor in
+                                self?.updateJob(jobID) { job in
+                                    guard job.phase != .completed, job.phase != .failed else { return }
+                                    if progress < 0.85 {
+                                        job.phase = .uploading
+                                        job.progress = 0.1 + progress * 0.75
+                                    } else {
+                                        job.phase = .publishing
+                                        job.progress = 0.85 + (progress - 0.85) * 1.0
+                                    }
+                                }
+                            }
+                        },
+                        onPrepared: onPrepared
+                    )
+                }
+                guard let imageData = spec.imageData else {
+                    throw AppError.unknown(message: "Missing story media.")
+                }
+                return try await StoryPublishPipeline.publish(
+                    imageData: imageData,
+                    contentType: spec.contentType,
+                    originalFileName: spec.originalFileName ?? "story.jpg",
+                    authorID: spec.authorID,
+                    feed: services.feed,
+                    uploadService: services.uploadService,
+                    objectStorage: services.objectStorage,
+                    predeterminedStoragePath: spec.storagePath,
+                    onProgress: { [weak self] progress in
+                        Task { @MainActor in
+                            self?.updateJob(jobID) { job in
+                                guard job.phase != .completed, job.phase != .failed else { return }
+                                if progress < 0.85 {
+                                    job.phase = .uploading
+                                    job.progress = 0.1 + progress * 0.75
+                                } else {
+                                    job.phase = .publishing
+                                    job.progress = 0.85 + (progress - 0.85) * 1.0
+                                }
+                            }
+                        }
+                    },
+                    onPrepared: onPrepared
+                )
+            }
+            rememberPreparedStoryMedia(prepared, jobID: jobID, spec: spec, services: services)
+            return created
+        } catch {
+            rememberPreparedStoryMedia(prepared, jobID: jobID, spec: spec, services: services)
+            guard let publicURL = retryStory[jobID]?.2.uploadedImagePublicURL else { throw error }
+            switch await StoryPublishPipeline.lookupExistingStory(
+                imageURL: publicURL,
+                authorID: spec.authorID,
+                feed: services.feed
+            ) {
+            case .found(let existing):
+                var saved = retryStory[jobID]?.2 ?? StoryUploadCheckpoint()
+                saved.savedStoryID = existing.id
+                saved.insertConfirmedAbsent = false
+                persistStoryRetry(jobID: jobID, spec: spec, services: services, checkpoint: saved)
+                return existing
+            case .absent:
+                var saved = retryStory[jobID]?.2 ?? StoryUploadCheckpoint()
+                saved.insertConfirmedAbsent = true
+                persistStoryRetry(jobID: jobID, spec: spec, services: services, checkpoint: saved)
+                throw error
+            case .unavailable:
+                throw error
+            }
+        }
+    }
+
+    private func rememberPreparedStoryMedia(
+        _ prepared: StoryPreparedMedia,
+        jobID: String,
+        spec: StoryUploadSpec,
+        services: GlobalUploadServices
+    ) {
+        guard let publicURL = prepared.publicURL else { return }
+        var saved = retryStory[jobID]?.2 ?? StoryUploadCheckpoint()
+        saved.uploadedImagePublicURL = publicURL
+        saved.uploadedImageStoragePath = prepared.storagePath
+        persistStoryRetry(jobID: jobID, spec: spec, services: services, checkpoint: saved)
+    }
+
+    /// Inserts only after a lookup confirms this media has no story row.
+    private func insertStoryIfAbsent(
+        jobID: String,
+        spec: StoryUploadSpec,
+        services: GlobalUploadServices,
+        publicURL: String
+    ) async throws -> Story {
+        switch await StoryPublishPipeline.lookupExistingStory(
+            imageURL: publicURL,
+            authorID: spec.authorID,
+            feed: services.feed
+        ) {
+        case .found(let existing):
+            var saved = retryStory[jobID]?.2 ?? StoryUploadCheckpoint()
+            saved.savedStoryID = existing.id
+            saved.insertConfirmedAbsent = false
+            persistStoryRetry(jobID: jobID, spec: spec, services: services, checkpoint: saved)
+            return existing
+        case .unavailable(let error):
+            throw error
+        case .absent:
+            var saved = retryStory[jobID]?.2 ?? StoryUploadCheckpoint()
+            saved.insertConfirmedAbsent = true
+            persistStoryRetry(jobID: jobID, spec: spec, services: services, checkpoint: saved)
+        }
+
+        do {
+            let created = try await services.feed.createStory(userID: spec.authorID, imageURL: publicURL)
+            var saved = retryStory[jobID]?.2 ?? StoryUploadCheckpoint()
+            saved.savedStoryID = created.id
+            saved.insertConfirmedAbsent = false
+            persistStoryRetry(jobID: jobID, spec: spec, services: services, checkpoint: saved)
+            return created
+        } catch {
+            switch await StoryPublishPipeline.lookupExistingStory(
+                imageURL: publicURL,
+                authorID: spec.authorID,
+                feed: services.feed
+            ) {
+            case .found(let existing):
+                var saved = retryStory[jobID]?.2 ?? StoryUploadCheckpoint()
+                saved.savedStoryID = existing.id
+                saved.insertConfirmedAbsent = false
+                persistStoryRetry(jobID: jobID, spec: spec, services: services, checkpoint: saved)
+                return existing
+            case .absent:
+                var saved = retryStory[jobID]?.2 ?? StoryUploadCheckpoint()
+                saved.insertConfirmedAbsent = true
+                persistStoryRetry(jobID: jobID, spec: spec, services: services, checkpoint: saved)
+                throw error
+            case .unavailable:
+                throw error
+            }
+        }
+    }
+
+    private final class StoryPreparedMedia: @unchecked Sendable {
+        var publicURL: String?
+        var storagePath: String?
+    }
+
+    private func persistStoryRetry(
+        jobID: String,
+        spec: StoryUploadSpec,
+        services: GlobalUploadServices,
+        checkpoint: StoryUploadCheckpoint
+    ) {
+        retryStory[jobID] = (spec, services, checkpoint)
     }
 
     private func runAchievement(
@@ -794,7 +994,7 @@ final class GlobalUploadCoordinator {
             } else if let imageData = spec.imageData, !imageData.isEmpty {
                 updateJob(jobID) { $0.phase = .uploading; $0.progress = 0.05 }
                 let path = StorageOptimizedMedia.objectPath(
-                    prefix: "achievements/\(spec.authorID.rawValue)",
+                    prefix: "\(spec.authorID.rawValue)/achievements",
                     fileExtension: "jpg"
                 )
                 let reference = try await UploadProgressContext.$jobID.withValue(jobID) {
@@ -1182,6 +1382,11 @@ final class GlobalUploadCoordinator {
                     }
                     editPreviousTrade = previous
                     trade = try await trades.update(id: tradeID, draft: draft, previous: previous)
+                    await OwnedMediaStorageCleanup.removeReplacedObject(
+                        previous: previous.thumbnail?.id,
+                        current: draft.imageURL,
+                        storage: services.objectStorage
+                    )
                     checkpoint.savedTradeID = trade.id
                     checkpoint.publicFeedPostCompleted = socialPostRequested
                     persistTradeRetry(jobID: jobID, spec: spec, services: services, checkpoint: checkpoint)
@@ -1279,6 +1484,24 @@ final class GlobalUploadCoordinator {
             await failJob(jobID: jobID, error: error, runGeneration: runGeneration)
         }
         await UploadProgressRelay.shared.unregister(jobID: jobID)
+    }
+
+    private func rememberInsertedReel(jobID: String, reelID: ReelID) {
+        guard var entry = retryReel[jobID] else { return }
+        entry.2.savedReelID = reelID
+        retryReel[jobID] = entry
+    }
+
+    private func verifySavedReel(
+        id: ReelID,
+        authorID: ProfileID,
+        feed: any FeedRepository
+    ) async throws -> Reel {
+        let verified = try await feed.reel(id: id)
+        guard verified.reel.authorProfileID == authorID else {
+            throw AppError.unknown(message: "Published clip could not be verified.")
+        }
+        return verified.reel
     }
 
     private func persistPostRetry(
