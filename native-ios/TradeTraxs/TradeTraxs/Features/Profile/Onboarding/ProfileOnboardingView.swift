@@ -337,17 +337,18 @@ struct ProfileOnboardingView: View {
             Text("Trader Type")
                 .experienceStyle(.caption, color: colors.secondaryText)
 
-            HStack(spacing: ExperienceSpacing.xs) {
-                ForEach([TraderType.futures, .options, .investor], id: \.self) { type in
+            HStack(spacing: ExperienceSpacing.xxs) {
+                ForEach(TraderType.profileSelectableCases, id: \.self) { type in
                     ExperienceChip(
                         title: type.rawValue,
-                        isSelected: viewModel.traderType == type
+                        isSelected: viewModel.traderType == type,
+                        compact: true
                     ) {
                         viewModel.traderType = type
                     }
                 }
             }
-            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, ExperienceSpacing.xxs)
         .accessibilityElement(children: .contain)
@@ -355,14 +356,15 @@ struct ProfileOnboardingView: View {
 
     private var tradingStyleRow: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            Text("Trading Style")
+            Text(ProfileTradingStyleField.label)
                 .experienceStyle(.caption, color: colors.secondaryText)
 
-            TextField("e.g. Scalping, swing, investor…", text: $viewModel.tradingStyle)
+            TextField(ProfileTradingStyleField.placeholder, text: $viewModel.tradingStyle)
                 .textInputAutocapitalization(.words)
-                    .padding(.vertical, ExperienceSpacing.xxs)
+                .padding(.vertical, ExperienceSpacing.xxs)
         }
         .padding(.vertical, ExperienceSpacing.xxs)
+        .accessibilityIdentifier("profile.onboarding.tradingStyle")
     }
 
     private var startedTradingRow: some View {

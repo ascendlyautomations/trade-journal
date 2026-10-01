@@ -325,6 +325,20 @@ struct HomeNavigationStack: View {
                 navigationCoordinator: coordinator,
                 data: appEnvironment.data
             )
+        case .followers(let profileID):
+            FollowListView(
+                kind: .followers,
+                listOwnerID: profileID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .following(let profileID):
+            FollowListView(
+                kind: .following,
+                listOwnerID: profileID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         case .room(let roomID):
             RoomConversationView(
                 roomID: roomID,
@@ -425,6 +439,8 @@ struct HomeNavigationStack: View {
         case .post: return "Post"
         case .reel: return "Clip"
         case .otherProfile: return "Profile"
+        case .followers: return "Followers"
+        case .following: return "Following"
         case .room: return "Trade Room"
         case .rooms: return "Trade Rooms"
         case .affiliate: return "Affiliate"
@@ -489,6 +505,20 @@ struct FeedNavigationStack: View {
                 currentUserProfile: appEnvironment.currentUserProfile,
                 navigationCoordinator: coordinator,
                 data: appEnvironment.data
+            )
+        case .followers(let profileID):
+            FollowListView(
+                kind: .followers,
+                listOwnerID: profileID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .following(let profileID):
+            FollowListView(
+                kind: .following,
+                listOwnerID: profileID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
             )
         case .rooms:
             TradeRoomsHomeView(
@@ -570,6 +600,8 @@ struct FeedNavigationStack: View {
         case .trade: return "Trade"
         case .achievement: return "Achievement"
         case .profile: return "Profile"
+        case .followers: return "Followers"
+        case .following: return "Following"
         case .explore: return "Explore"
         case .suggestedTraders: return "Suggested Traders"
         case .leaderboard: return "Leaderboards"
@@ -627,6 +659,26 @@ struct MessagesNavigationStack: View {
                 currentUserProfile: appEnvironment.currentUserProfile,
                 navigationCoordinator: coordinator,
                 data: appEnvironment.data
+            )
+        case .followers(let profileID):
+            FollowListView(
+                kind: .followers,
+                listOwnerID: profileID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .following(let profileID):
+            FollowListView(
+                kind: .following,
+                listOwnerID: profileID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .rooms:
+            TradeRoomsHomeView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator,
+                navigationHost: .messages
             )
         case .room(let roomID):
             RoomConversationView(
@@ -700,6 +752,9 @@ struct MessagesNavigationStack: View {
         case .sharedReel: return "Shared Clip"
         case .sharedAchievement: return "Shared Achievement"
         case .profile: return "Profile"
+        case .followers: return "Followers"
+        case .following: return "Following"
+        case .rooms: return "Trade Rooms"
         case .room: return "Trade Room"
         case .roomMembers: return "Members"
         case .roomInfo: return "Room Info"

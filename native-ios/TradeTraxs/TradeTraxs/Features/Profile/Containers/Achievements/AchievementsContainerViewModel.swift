@@ -138,9 +138,8 @@ final class AchievementsContainerViewModel {
     }
 
     func openAchievement(_ achievement: Achievement) {
-        ExperienceHaptics.play(.selection)
         detailCache.seed(achievement)
-        navigationCoordinator.open(.profile(.achievement(achievement.id)))
+        navigationCoordinator.pushAchievementDetail(achievement.id)
     }
 
     func addAchievement() {

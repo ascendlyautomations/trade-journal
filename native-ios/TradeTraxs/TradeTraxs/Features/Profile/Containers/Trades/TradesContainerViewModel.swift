@@ -294,9 +294,8 @@ final class TradesContainerViewModel {
     }
 
     func openTrade(_ summary: TradeSummary) {
-        ExperienceHaptics.play(.selection)
         detailCache.seedPresentationSeed(DetailPresentationSeed(summary: summary))
-        navigationCoordinator.open(.profile(.trade(summary.id)))
+        navigationCoordinator.pushSocialTrade(summary.id, cache: detailCache)
     }
 
     func addTrade() {

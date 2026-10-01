@@ -242,7 +242,7 @@ final class NavigationCoordinator {
             InboxMarkReadCoordinator.shared.prepareOpenConversation(conversationID)
         case .room(let roomID):
             InboxMarkReadCoordinator.shared.prepareOpenRoom(roomID)
-        case .roomMembers, .roomInfo, .manageRoom, .roomSettings, .sharedTrade, .sharedPost, .sharedReel, .sharedAchievement, .profile, .settings:
+        case .roomMembers, .roomInfo, .manageRoom, .roomSettings, .sharedTrade, .sharedPost, .sharedReel, .sharedAchievement, .profile, .followers, .following, .rooms, .settings:
             break
         }
         let pathBefore = store.paths.messages.count
@@ -422,6 +422,57 @@ final class NavigationCoordinator {
             pushMessages(.profile(profileID))
         case .profile:
             pushProfile(.otherProfile(profileID))
+        case .create:
+            break
+        }
+    }
+
+    /// Followers for the profile already on the active tab stack. Does not switch tabs.
+    func pushFollowers(_ profileID: ProfileID) {
+        ExperienceHaptics.play(.selection)
+        switch store.selectedTab {
+        case .home:
+            pushHome(.followers(profileID))
+        case .feed:
+            pushFeed(.followers(profileID))
+        case .messages:
+            pushMessages(.followers(profileID))
+        case .profile:
+            pushProfile(.followers(profileID))
+        case .create:
+            break
+        }
+    }
+
+    /// Following for the profile already on the active tab stack. Does not switch tabs.
+    func pushFollowing(_ profileID: ProfileID) {
+        ExperienceHaptics.play(.selection)
+        switch store.selectedTab {
+        case .home:
+            pushHome(.following(profileID))
+        case .feed:
+            pushFeed(.following(profileID))
+        case .messages:
+            pushMessages(.following(profileID))
+        case .profile:
+            pushProfile(.following(profileID))
+        case .create:
+            break
+        }
+    }
+
+    /// Trade Rooms home for the stack that is already showing a profile.
+    func pushTradeRoomsHome() {
+        ExperienceHaptics.play(.selection)
+        switch store.selectedTab {
+        case .home:
+            pushHome(.rooms)
+        case .feed:
+            pushFeed(.rooms)
+        case .messages:
+            pushMessages(.rooms)
+        case .profile:
+            pushProfile(.rooms)
         case .create:
             break
         }

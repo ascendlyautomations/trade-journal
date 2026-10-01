@@ -161,6 +161,107 @@ final class NavigationStackBehaviorTests: XCTestCase {
         XCTAssertEqual(store.paths.profile.count, 1)
     }
 
+    func testOtherProfileChildDestinationsStayOnTheLaunchingStack() {
+        let store = NavigationStore()
+        store.sessionPhase = .authenticated
+        store.selectedTab = .feed
+        let coordinator = NavigationCoordinator(store: store)
+        let userA = ProfileID("user-a")
+        let userB = ProfileID("user-b")
+        let roomID = RoomID("room-a")
+
+        coordinator.pushFeed(.profile(userA))
+        coordinator.pushFollowers(userA)
+        XCTAssertEqual(store.selectedTab, .feed)
+        XCTAssertEqual(store.paths.feed, [.profile(userA), .followers(userA)])
+        XCTAssertTrue(store.paths.profile.isEmpty)
+
+        simulateSystemBack(&store.paths.feed)
+        XCTAssertEqual(store.paths.feed, [.profile(userA)])
+
+        coordinator.pushFollowing(userA)
+        simulateSystemBack(&store.paths.feed)
+        XCTAssertEqual(store.paths.feed, [.profile(userA)])
+
+        coordinator.pushRoom(roomID)
+        simulateSystemBack(&store.paths.feed)
+        XCTAssertEqual(store.paths.feed, [.profile(userA)])
+
+        store.paths.feed = [.explore]
+        coordinator.pushFeed(.profile(userA))
+        coordinator.pushFollowers(userA)
+        simulateSystemBack(&store.paths.feed)
+        XCTAssertEqual(store.paths.feed, [.explore, .profile(userA)])
+
+        store.paths.feed = [.profile(userA), .followers(userA)]
+        coordinator.pushOtherProfile(userB)
+        XCTAssertEqual(
+            store.paths.feed,
+            [.profile(userA), .followers(userA), .profile(userB)]
+        )
+        simulateSystemBack(&store.paths.feed)
+        XCTAssertEqual(store.paths.feed, [.profile(userA), .followers(userA)])
+        simulateSystemBack(&store.paths.feed)
+        XCTAssertEqual(store.paths.feed, [.profile(userA)])
+
+        store.selectedTab = .home
+        store.paths.home = [.otherProfile(userA)]
+        coordinator.pushFollowers(userA)
+        coordinator.pushTradeRoomsHome()
+        XCTAssertEqual(store.selectedTab, .home)
+        XCTAssertEqual(store.paths.home, [.otherProfile(userA), .followers(userA), .rooms])
+        simulateSystemBack(&store.paths.home)
+        simulateSystemBack(&store.paths.home)
+        XCTAssertEqual(store.paths.home, [.otherProfile(userA)])
+
+        store.selectedTab = .messages
+        store.paths.messages = [.profile(userA)]
+        coordinator.pushFollowing(userA)
+        coordinator.pushRoom(roomID)
+        XCTAssertEqual(store.selectedTab, .messages)
+        XCTAssertEqual(store.paths.messages, [.profile(userA), .following(userA), .room(roomID)])
+        XCTAssertTrue(store.paths.profile.isEmpty)
+    }
+
+    func testOwnProfileChildDestinationsPopToProfileRoot() {
+        let store = NavigationStore()
+        store.sessionPhase = .authenticated
+        store.selectedTab = .profile
+        let coordinator = NavigationCoordinator(store: store)
+        let me = ProfileID("me")
+
+        coordinator.pushFollowers(me)
+        coordinator.pushFollowing(me)
+        coordinator.pushTradeRoomsHome()
+        XCTAssertEqual(store.selectedTab, .profile)
+        XCTAssertEqual(store.paths.profile, [.followers(me), .following(me), .rooms])
+        XCTAssertTrue(store.paths.feed.isEmpty)
+
+        simulateSystemBack(&store.paths.profile)
+        simulateSystemBack(&store.paths.profile)
+        simulateSystemBack(&store.paths.profile)
+        XCTAssertTrue(store.paths.profile.isEmpty)
+    }
+
+    func testTabSwitchPreservesOtherProfileStack() {
+        let store = NavigationStore()
+        store.sessionPhase = .authenticated
+        store.selectedTab = .feed
+        let coordinator = NavigationCoordinator(store: store)
+        let userA = ProfileID("user-a")
+
+        coordinator.pushFeed(.profile(userA))
+        coordinator.pushFollowers(userA)
+        coordinator.selectTab(.profile)
+        coordinator.pushProfile(.activity)
+        coordinator.selectTab(.feed)
+
+        XCTAssertEqual(store.paths.feed, [.profile(userA), .followers(userA)])
+        XCTAssertEqual(store.paths.profile, [.activity])
+        simulateSystemBack(&store.paths.feed)
+        XCTAssertEqual(store.paths.feed, [.profile(userA)])
+    }
+
     func testLogoutClearsAllPaths() {
         let store = NavigationStore()
         store.sessionPhase = .authenticated

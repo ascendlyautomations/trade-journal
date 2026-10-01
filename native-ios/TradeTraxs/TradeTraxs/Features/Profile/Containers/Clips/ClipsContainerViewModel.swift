@@ -227,9 +227,8 @@ final class ClipsContainerViewModel {
     }
 
     func openClip(_ reel: Reel) {
-        ExperienceHaptics.play(.selection)
         detailCache.seed(reel)
-        navigationCoordinator.open(.profile(.reel(reel.id)))
+        navigationCoordinator.pushReelDetail(reel.id)
     }
 
     func addClip() {

@@ -98,13 +98,13 @@ final class FollowListViewModel {
     }
 
     func openProfile(_ profile: Profile) {
-        ExperienceHaptics.play(.selection)
         if profile.id == viewerID {
+            ExperienceHaptics.play(.selection)
             navigationCoordinator.open(.tab(.profile))
             navigationCoordinator.open(.popToRoot(.profile))
             return
         }
-        navigationCoordinator.open(.profile(.otherProfile(profile.id)))
+        navigationCoordinator.pushOtherProfile(profile.id)
     }
 
     func isFollowing(_ profile: Profile) -> Bool {

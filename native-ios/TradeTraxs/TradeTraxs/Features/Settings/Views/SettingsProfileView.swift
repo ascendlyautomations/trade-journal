@@ -62,10 +62,11 @@ struct SettingsProfileView: View {
 
             Section {
                 traderTypeRow
-                SettingsLabeledField(title: "Trading Style") {
-                    TextField("e.g. Scalper, Swing", text: $viewModel.draftTradingStyle)
+                SettingsLabeledField(title: ProfileTradingStyleField.label) {
+                    TextField(ProfileTradingStyleField.placeholder, text: $viewModel.draftTradingStyle)
                         .textInputAutocapitalization(.words)
                 }
+                .accessibilityIdentifier("settings.profile.tradingStyle")
                 SettingsLabeledField(title: "Primary Market") {
                     TextField("e.g. Futures, Options", text: $viewModel.draftPrimaryMarket)
                         .textInputAutocapitalization(.words)
@@ -199,17 +200,18 @@ struct SettingsProfileView: View {
             Text("Trader Type")
                 .experienceStyle(.footnote, color: colors.secondaryText)
 
-            HStack(spacing: ExperienceSpacing.xs) {
-                ForEach([TraderType.futures, .options, .investor], id: \.self) { type in
+            HStack(spacing: ExperienceSpacing.xxs) {
+                ForEach(TraderType.profileSelectableCases, id: \.self) { type in
                     ExperienceChip(
                         title: type.rawValue,
-                        isSelected: viewModel.draftTraderType == type
+                        isSelected: viewModel.draftTraderType == type,
+                        compact: true
                     ) {
                         viewModel.setTraderType(type)
                     }
                 }
             }
-            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .accessibilityIdentifier("settings.profile.traderType")
     }
@@ -245,7 +247,7 @@ struct SettingsProfileView: View {
             } else {
                 Text(ProfileUsernamePolicy.formatHint)
                     .experienceStyle(.caption2, color: colors.tertiaryText)
-                Text("Remaining changes: \(viewModel.remainingUsernameChanges)")
+                Text("Remaining username changes: \(viewModel.remainingUsernameChanges)")
                     .experienceStyle(.caption2, color: colors.tertiaryText)
             }
         }

@@ -579,9 +579,17 @@ final class ProfileExperienceTests: XCTestCase {
         XCTAssertEqual(TraderType.parse("Futures"), .futures)
         XCTAssertEqual(TraderType.parse("Options"), .options)
         XCTAssertEqual(TraderType.parse("Investor"), .investor)
+        XCTAssertEqual(TraderType.parse("Forex"), .forex)
         XCTAssertEqual(TraderType.parse("futures"), .futures)
+        XCTAssertEqual(TraderType.parse("forex"), .forex)
         XCTAssertNil(TraderType.parse("swing"))
         XCTAssertEqual(TraderType.futures.rawValue, "Futures")
+        XCTAssertEqual(TraderType.profileSelectableCases, [.futures, .options, .investor, .forex])
+    }
+
+    func testProfileTradingStyleFieldCopy() {
+        XCTAssertEqual(ProfileTradingStyleField.label, "Trading Style / Strategy")
+        XCTAssertEqual(ProfileTradingStyleField.placeholder, "e.g. scalping, Supply & Demand, ICT/SMC")
     }
 
     func testCurrentUserProfileStoreLoadsOnce() async throws {

@@ -1,4 +1,4 @@
-export const TRADER_TYPE_OPTIONS = ["Futures", "Options", "Investor"] as const
+export const TRADER_TYPE_OPTIONS = ["Futures", "Options", "Investor", "Forex"] as const
 
 export type TraderType = (typeof TRADER_TYPE_OPTIONS)[number]
 

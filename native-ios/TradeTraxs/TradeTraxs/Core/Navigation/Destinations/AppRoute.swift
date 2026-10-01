@@ -44,6 +44,10 @@ enum HomeRoute: Hashable, Codable, Sendable {
     case post(PostID)
     case reel(ReelID)
     case otherProfile(ProfileID)
+    /// Followers list for the profile currently on this stack.
+    case followers(ProfileID)
+    /// Following list for the profile currently on this stack.
+    case following(ProfileID)
     case room(RoomID)
     case rooms
     case affiliate
@@ -59,6 +63,10 @@ enum FeedRoute: Hashable, Codable, Sendable {
     case trade(TradeID)
     case achievement(AchievementID)
     case profile(ProfileID)
+    /// Followers list for the profile currently on this stack.
+    case followers(ProfileID)
+    /// Following list for the profile currently on this stack.
+    case following(ProfileID)
     case explore
     case suggestedTraders
     case leaderboard
@@ -80,6 +88,11 @@ enum MessagesRoute: Hashable, Codable, Sendable {
     case sharedReel(ReelID)
     case sharedAchievement(AchievementID)
     case profile(ProfileID)
+    /// Followers list for the profile currently on this stack.
+    case followers(ProfileID)
+    /// Following list for the profile currently on this stack.
+    case following(ProfileID)
+    case rooms
     case room(RoomID)
     case roomMembers(RoomID)
     case roomInfo(RoomID)

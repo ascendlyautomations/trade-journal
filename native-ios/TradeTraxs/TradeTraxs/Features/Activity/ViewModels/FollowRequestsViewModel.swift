@@ -48,7 +48,7 @@ final class FollowRequestsViewModel {
     }
 
     func openProfile(_ profileID: ProfileID) {
-        navigationCoordinator.open(.profile(.otherProfile(profileID)))
+        navigationCoordinator.pushOtherProfile(profileID)
     }
 
     func approve(_ id: FollowRequestID) {

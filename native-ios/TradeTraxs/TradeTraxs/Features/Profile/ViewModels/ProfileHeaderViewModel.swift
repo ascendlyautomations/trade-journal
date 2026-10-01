@@ -132,14 +132,12 @@ final class ProfileHeaderViewModel {
 
     func openFollowers() {
         guard let profileID = store.resolvedProfileID ?? store.profile?.id else { return }
-        ExperienceHaptics.play(.selection)
-        navigationCoordinator.open(.profile(.followers(profileID)))
+        navigationCoordinator.pushFollowers(profileID)
     }
 
     func openFollowing() {
         guard let profileID = store.resolvedProfileID ?? store.profile?.id else { return }
-        ExperienceHaptics.play(.selection)
-        navigationCoordinator.open(.profile(.following(profileID)))
+        navigationCoordinator.pushFollowing(profileID)
     }
 
     func followAction() {
@@ -198,14 +196,12 @@ final class ProfileHeaderViewModel {
 
     func openTradeRoom() {
         guard let room = store.ownedTradeRoom else { return }
-        ExperienceHaptics.play(.selection)
-        navigationCoordinator.open(.profile(.room(room.id)))
+        navigationCoordinator.pushRoom(room.id)
     }
 
     func createTradeRoom() {
-        ExperienceHaptics.play(.selection)
         TradeRoomCreationIntent.shared.requestCreateFromProfile()
-        navigationCoordinator.open(.profile(.rooms))
+        navigationCoordinator.pushTradeRoomsHome()
     }
 
     func openViewerStory(_ story: Story) {

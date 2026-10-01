@@ -1,10 +1,14 @@
 import Foundation
 
-/// Web `TRADER_TYPE_OPTIONS` — stored/displayed as title case (`Futures`, `Options`, `Investor`).
+/// Web `TRADER_TYPE_OPTIONS` — stored/displayed as title case (`Futures`, `Options`, `Investor`, `Forex`).
 nonisolated enum TraderType: String, Hashable, Codable, Sendable {
     case futures = "Futures"
     case options = "Options"
     case investor = "Investor"
+    case forex = "Forex"
+
+    /// Profile onboarding and Settings chip order.
+    static let profileSelectableCases: [TraderType] = [.futures, .options, .investor, .forex]
 
     /// Accepts web title-case and legacy lowercase raw values.
     static func parse(_ raw: String?) -> TraderType? {
@@ -14,6 +18,7 @@ nonisolated enum TraderType: String, Hashable, Codable, Sendable {
         case "futures": return .futures
         case "options": return .options
         case "investor": return .investor
+        case "forex": return .forex
         default: return nil
         }
     }

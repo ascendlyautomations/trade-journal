@@ -294,19 +294,18 @@ final class ProfileScreenViewModel {
     }
 
     func openPinnedItem(_ item: ProfilePinnedItem) {
-        ExperienceHaptics.play(.selection)
         switch item.contentType {
         case .trade:
             if let id = item.tradeID {
-                navigationCoordinator.open(.profile(.trade(id)))
+                navigationCoordinator.pushSocialTrade(id)
             }
         case .profilePost:
             if let id = item.postID {
-                navigationCoordinator.open(.profile(.post(id)))
+                navigationCoordinator.pushPostDetail(id)
             }
         case .achievement:
             if let id = item.achievementID {
-                navigationCoordinator.open(.profile(.achievement(id)))
+                navigationCoordinator.pushAchievementDetail(id)
             }
         }
     }

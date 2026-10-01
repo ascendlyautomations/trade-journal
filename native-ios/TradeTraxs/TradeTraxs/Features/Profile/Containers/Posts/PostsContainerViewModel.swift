@@ -208,9 +208,8 @@ final class PostsContainerViewModel {
     }
 
     func openPost(_ post: Post) {
-        ExperienceHaptics.play(.selection)
         detailCache.seed(post)
-        navigationCoordinator.open(.profile(.post(post.id)))
+        navigationCoordinator.pushPostDetail(post.id)
     }
 
     func addPost() {

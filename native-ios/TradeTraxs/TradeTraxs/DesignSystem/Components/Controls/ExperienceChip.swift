@@ -21,6 +21,8 @@ struct ExperienceTag: View {
 struct ExperienceChip: View {
     let title: String
     var isSelected: Bool = false
+    /// Tighter padding and type for dense rows (e.g. profile trader type).
+    var compact: Bool = false
     var action: (() -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
@@ -32,11 +34,13 @@ struct ExperienceChip: View {
         } label: {
             Text(title)
                 .experienceStyle(
-                    .callout,
+                    compact ? .caption : .callout,
                     color: isSelected ? colors.onAccent : colors.primaryText
                 )
-                .padding(.horizontal, ExperienceSpacing.sm)
-                .padding(.vertical, ExperienceSpacing.xs)
+                .lineLimit(1)
+                .minimumScaleFactor(compact ? 0.9 : 1)
+                .padding(.horizontal, compact ? ExperienceSpacing.xs : ExperienceSpacing.sm)
+                .padding(.vertical, compact ? ExperienceSpacing.xxs : ExperienceSpacing.xs)
                 .background(isSelected ? colors.accent : colors.fillSecondary)
                 .clipShape(Capsule())
         }
