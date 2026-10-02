@@ -160,7 +160,7 @@ struct PayoutsScreenView: View {
                 .experienceStyle(.headline, color: colors.primaryText)
                 .padding(.horizontal, ExperienceSpacing.md)
 
-            LazyVStack(spacing: 0) {
+            VStack(spacing: 0) {
                 ForEach(items) { item in
                     withdrawalRowLink(item: item, account: accountsByID[item.accountID])
                     if item.id != items.last?.id {
@@ -188,8 +188,17 @@ struct PayoutsScreenView: View {
         .padding(.vertical, ExperienceSpacing.xxs)
         .background(colors.backgroundPrimary)
 
-        if navigationCoordinator != nil {
-            NavigationLink(value: HomeRoute.withdrawalDetail(item.id)) {
+        if let data, let navigationCoordinator {
+            // Destination link stays on the current stack. Settings hosts this screen
+            // on SettingsRoute, which does not register HomeRoute destinations, so a
+            // HomeRoute value link never opened the detail.
+            NavigationLink {
+                WithdrawalDetailView(
+                    historyItemID: item.id,
+                    data: data,
+                    navigationCoordinator: navigationCoordinator
+                )
+            } label: {
                 row
             }
             .buttonStyle(.plain)

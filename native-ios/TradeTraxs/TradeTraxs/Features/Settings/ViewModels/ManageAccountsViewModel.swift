@@ -364,18 +364,32 @@ final class ManageAccountsViewModel {
         return ok ? createdEntryID : nil
     }
 
+    /// Updates the existing ledger row. Amount changes flow through the same sum used for
+    /// tracked balance — this does not insert a second withdrawal.
     func updatePayout(
         entryID: AccountPayoutEntryID,
         accountID: TradingAccountID,
-        draft: AccountPayoutEntryDraft
+        draft: AccountPayoutEntryDraft,
+        image: PayoutEntryImageWrite = .unchanged
     ) async -> Bool {
         await mutate {
             guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
-            let updated = try await trades.updatePayoutEntry(id: entryID, draft: draft)
+            let updated = try await trades.updatePayoutEntry(id: entryID, draft: draft, image: image)
             WithdrawalsHistoryStore.shared.replaceLedgerEntry(updated, profileID: viewerID)
             AccountMutationStore.shared.notePayoutRecorded(accountID: accountID)
             ExperienceHaptics.play(.success)
         }
+    }
+
+    /// Fills accounts from the session cache already used by the Withdrawals list.
+    func seedWithdrawalsAccountsFromSessionCache() {
+        guard accounts.isEmpty,
+              let profileID = WithdrawalsHistoryStore.shared.profileID,
+              let cached = SessionAccountsStore.shared.cached(for: profileID),
+              !cached.isEmpty
+        else { return }
+        viewerID = profileID
+        accounts = Self.sorted(cached)
     }
 
     func deletePayout(entryID: AccountPayoutEntryID, accountID: TradingAccountID) async -> Bool {

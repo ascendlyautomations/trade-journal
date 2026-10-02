@@ -159,6 +159,7 @@ nonisolated enum TradeDTO {
         var amount: FlexibleNumber?
         var payout_date: String?
         var note: String?
+        var image_url: String?
         var created_at: String?
         var updated_at: String?
     }
@@ -175,6 +176,26 @@ nonisolated enum TradeDTO {
         var amount: Double?
         var payout_date: String?
         var note: String?
+        var image_url: String?
+        /// When false, `image_url` is omitted so a note or amount save cannot clear the picture.
+        var includeImage = false
+
+        enum CodingKeys: String, CodingKey {
+            case amount
+            case payout_date
+            case note
+            case image_url
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(amount, forKey: .amount)
+            try container.encodeIfPresent(payout_date, forKey: .payout_date)
+            try container.encode(note, forKey: .note)
+            if includeImage {
+                try container.encode(image_url, forKey: .image_url)
+            }
+        }
     }
 
     struct InsertBody: Encodable, Sendable {
@@ -221,6 +242,11 @@ nonisolated enum TradeDTO {
         var is_initial_import: Bool? = nil
         var import_source: String? = nil
         var import_fingerprint: String? = nil
+        /// Set only for copy-group journal rows. Omitted on ordinary inserts.
+        var trade_mode: String? = nil
+        var source_account_id: String? = nil
+        var copied_account_ids: [String]? = nil
+        var copy_trading_group_id: String? = nil
     }
 
     /// Mirrors web `InputTradeForm` save/update journal + psychology columns.

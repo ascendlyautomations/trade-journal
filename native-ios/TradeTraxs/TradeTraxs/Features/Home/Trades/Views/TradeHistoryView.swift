@@ -237,8 +237,7 @@ struct TradeHistoryView: View {
                 }
             }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
+        .experiencePlainListStyle()
     }
 
     private var chipStrip: some View {

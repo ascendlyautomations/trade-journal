@@ -92,6 +92,7 @@ export type Database = {
           amount: number
           created_at: string
           id: string
+          image_url: string | null
           note: string | null
           payout_date: string
           updated_at: string
@@ -102,6 +103,7 @@ export type Database = {
           amount: number
           created_at?: string
           id?: string
+          image_url?: string | null
           note?: string | null
           payout_date: string
           updated_at?: string
@@ -112,6 +114,7 @@ export type Database = {
           amount?: number
           created_at?: string
           id?: string
+          image_url?: string | null
           note?: string | null
           payout_date?: string
           updated_at?: string

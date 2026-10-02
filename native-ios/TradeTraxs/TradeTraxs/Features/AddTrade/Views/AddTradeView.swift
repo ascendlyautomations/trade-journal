@@ -50,6 +50,10 @@ struct AddTradeView: View {
                 objectStorage: data.objectStorage,
                 uploadServices: data.globalUploadServices(),
                 imagePipeline: data.imagePipeline,
+                copyTradingGroups: DefaultCopyTradingGroupRepository(
+                    supabase: data.supabase,
+                    session: data.session
+                ),
                 mode: mode,
                 onDismiss: onDismiss
             )
@@ -361,22 +365,51 @@ struct AddTradeView: View {
             }
 
             Section {
-                accountPicker
+                if viewModel.showsCopyGroupPicker {
+                    Picker("Copy Trading Group", selection: Binding(
+                        get: { viewModel.selectedCopyGroupID ?? "" },
+                        set: { newValue in
+                            viewModel.selectCopyGroup(newValue.isEmpty ? nil : newValue)
+                        }
+                    )) {
+                        Text("None")
+                            .foregroundStyle(colors.tertiaryText)
+                            .tag("")
+                        ForEach(viewModel.copyGroups) { group in
+                            Text(group.name)
+                                .foregroundStyle(colors.primaryText)
+                                .tag(group.id)
+                        }
+                    }
+                    .accessibilityIdentifier("addTrade.copyGroup")
+                    .addTradeFormRow()
+                    if let group = viewModel.selectedCopyGroup {
+                        let count = viewModel.resolvedCopyAccounts(group).count
+                        Text("Journals this trade on \(count) linked account\(count == 1 ? "" : "s").")
+                            .experienceStyle(.caption, color: colors.secondaryText)
+                            .addTradeFormRow()
+                    }
+                }
+                if viewModel.selectedCopyGroup == nil {
+                    accountPicker
+                        .addTradeFormRow()
+                }
                 if let accountError = viewModel.fieldErrors[.account] {
                     Text(accountError)
                         .foregroundStyle(colors.loss)
                         .font(.footnote)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .listRowInsets(AddTradeFormLayout.rowInsets)
+                        .addTradeFormRow()
                         .accessibilityIdentifier("addTrade.accountError")
                 }
                 instrumentRow
+                    .addTradeFormRow()
                 Picker("Direction", selection: $viewModel.side) {
                     Text("Long").tag(TradeSide.long)
                     Text("Short").tag(TradeSide.short)
                 }
                 .pickerStyle(.segmented)
-                .listRowInsets(AddTradeFormLayout.rowInsets)
+                .addTradeFormRow()
                 .accessibilityLabel("Trade direction")
             } header: {
                 addTradeSectionHeader("Trade")
@@ -1094,6 +1127,14 @@ private enum AddTradeFormLayout {
         bottom: ExperienceSpacing.lg / 4,
         trailing: 0
     )
+}
+
+private extension View {
+    /// Matches Manage Account / Add Trade pickers — cool grouped row lift in dark mode (not system brown).
+    func addTradeFormRow() -> some View {
+        experienceDashboardListRow()
+            .listRowInsets(AddTradeFormLayout.rowInsets)
+    }
 }
 
 // MARK: - Instrument picker

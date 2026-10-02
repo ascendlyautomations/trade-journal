@@ -124,6 +124,7 @@ final class DetailExperienceTests: XCTestCase {
         let list = AchievementsContainerViewModel(
             profileID: profileID,
             achievements: environment.data.achievements,
+            session: environment.data.session,
             navigationCoordinator: environment.navigation.coordinator,
             detailCache: environment.data.detailCache
         )
@@ -144,7 +145,8 @@ final class DetailExperienceTests: XCTestCase {
             profiles: environment.data.profiles,
             session: environment.data.session,
             imagePipeline: environment.data.imagePipeline,
-            cache: environment.data.detailCache
+            cache: environment.data.detailCache,
+            navigationCoordinator: environment.navigation.coordinator
         )
         viewModel.loadIfNeeded()
         for _ in 0..<20 {

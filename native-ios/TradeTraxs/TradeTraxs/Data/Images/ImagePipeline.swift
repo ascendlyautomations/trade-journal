@@ -2,7 +2,7 @@ import Foundation
 
 /// Controls whether feed-sized Supabase render URLs are used at fetch time.
 nonisolated enum ImageDeliveryQuality: String, Sendable {
-    /// Supabase `/render/image/` transforms matching web feed presets.
+    /// Supabase object/public delivery matching web feed presets (no transforms).
     case feedDisplay
     /// Compact profile grid thumbnails (~256px) — not full feed thumb width.
     case profileGrid

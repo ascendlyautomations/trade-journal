@@ -20,7 +20,7 @@ import { optimizedStorageObjectPath } from "./storageOptimizedMedia"
 /** Legacy crop preset still used by avatars, stories, chat, rooms, and support. */
 export const CONTENT_IMAGE_CROP_PRESET: ImageCropPresetId = "content"
 
-/** Storage transform preset used when rendering content images in cards and modals. */
+/** Display preset id for StorageImage (delivery is always object/public; sizing is upload-time). */
 export const CONTENT_IMAGE_DISPLAY_PRESET = "feed-thumb" as const
 
 /** Post-crop compression — identical for trades, achievements, and other content uploads. */

@@ -493,7 +493,7 @@ export default function CsvImportPanel({
               )
             }
 
-            const ins = await supabase.from("trades").insert(rowsToInsert)
+            const ins = await supabase.from("trades").insert(rowsToInsert).select("id")
             error = ins.error
           }
 

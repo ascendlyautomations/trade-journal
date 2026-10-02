@@ -257,7 +257,11 @@ struct HomeNavigationStack: View {
                 navigationCoordinator: coordinator
             )
         case .achievementDetail(let achievementID):
-            AchievementDetailView(achievementID: achievementID, data: appEnvironment.data)
+            AchievementDetailView(
+                achievementID: achievementID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         case .report(let reportID):
             if PsychologyReportPeriodRef.parse(reportID: reportID) != nil {
                 PsychologyReportDetailView(reportID: reportID, data: appEnvironment.data)
@@ -498,7 +502,11 @@ struct FeedNavigationStack: View {
                 navigationCoordinator: coordinator
             )
         case .achievement(let achievementID):
-            AchievementDetailView(achievementID: achievementID, data: appEnvironment.data)
+            AchievementDetailView(
+                achievementID: achievementID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         case .profile(let profileID):
             ProfileView(
                 profileID: profileID,
@@ -731,7 +739,8 @@ struct MessagesNavigationStack: View {
         case .sharedAchievement(let achievementID):
             AchievementDetailView(
                 achievementID: achievementID,
-                data: appEnvironment.data
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
             )
         case .settings(let settingsRoute):
             SettingsDestinationView(
@@ -817,7 +826,11 @@ struct ProfileNavigationStack: View {
                 navigationCoordinator: coordinator
             )
         case .achievement(let achievementID):
-            AchievementDetailView(achievementID: achievementID, data: appEnvironment.data)
+            AchievementDetailView(
+                achievementID: achievementID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         case .followers(let profileID):
             FollowListView(
                 kind: .followers,

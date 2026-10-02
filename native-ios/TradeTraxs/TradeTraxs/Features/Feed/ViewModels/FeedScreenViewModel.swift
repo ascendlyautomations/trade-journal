@@ -236,6 +236,26 @@ final class FeedScreenViewModel {
         persistFeedFirstPage()
     }
 
+    func applyAchievementRemoval(achievementID: AchievementID) {
+        let postIDRawValues = Set(
+            detailCache.achievementPostIDs(for: achievementID).map(\.rawValue)
+        )
+        guard state.entries.contains(where: {
+            matchesAchievement($0, achievementID: achievementID, postIDRawValues: postIDRawValues)
+        }) else { return }
+        state.entries.removeAll {
+            matchesAchievement($0, achievementID: achievementID, postIDRawValues: postIDRawValues)
+        }
+        rebuildVisibleEntriesCache()
+        if let viewerID = state.viewerID {
+            SocialEntityPersistedCacheCoordinator.removeAchievement(
+                id: achievementID,
+                viewerID: viewerID
+            )
+        }
+        persistFeedFirstPage()
+    }
+
     private func matchesPost(_ entry: FeedTimelineEntry, postID: PostID) -> Bool {
         if case .post(_, let post) = entry { return post.id == postID }
         return entry.id == postID.rawValue
@@ -244,6 +264,20 @@ final class FeedScreenViewModel {
     private func matchesReel(_ entry: FeedTimelineEntry, reelID: ReelID) -> Bool {
         if case .clip(_, let reel) = entry { return reel.id == reelID }
         return entry.id == reelID.rawValue
+    }
+
+    private func matchesAchievement(
+        _ entry: FeedTimelineEntry,
+        achievementID: AchievementID,
+        postIDRawValues: Set<String>
+    ) -> Bool {
+        if case .achievement(_, let achievement) = entry {
+            return achievement.id == achievementID
+        }
+        if entry.item.achievementID == achievementID {
+            return true
+        }
+        return postIDRawValues.contains(entry.id)
     }
 
     /// Standard lifecycle — pages using the last visible entry when available.

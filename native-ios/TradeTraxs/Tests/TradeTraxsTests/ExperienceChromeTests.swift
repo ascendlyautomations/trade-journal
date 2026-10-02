@@ -59,6 +59,10 @@ final class ExperienceChromeTests: XCTestCase {
         ExperienceNavigationBarAppearance.configureDefaultBarChrome()
     }
 
+    func testGroupedListAppearanceSyncConfigures() {
+        ExperienceGroupedListAppearance.sync()
+    }
+
     func testExperienceAppChromeModifierBuilds() {
         let view = Text("shell").experienceAppChrome().experienceScreenBackground()
         XCTAssertNotNil(view)

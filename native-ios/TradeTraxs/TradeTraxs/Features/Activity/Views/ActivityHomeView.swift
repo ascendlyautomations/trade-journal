@@ -198,7 +198,6 @@ struct ActivityHomeView: View {
                 }
             }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
+        .experiencePlainListStyle()
     }
 }

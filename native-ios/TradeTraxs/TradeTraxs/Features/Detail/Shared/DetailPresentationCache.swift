@@ -539,6 +539,20 @@ final class DetailPresentationCache {
         posts[id] = nil
     }
 
+    func achievementPostIDs(for achievementID: AchievementID) -> [PostID] {
+        achievementIDByPostID.compactMap { postID, canonical in
+            canonical == achievementID ? postID : nil
+        }
+    }
+
+    func removeAchievement(id: AchievementID) {
+        achievements[id] = nil
+        feedEngagementTargetByAchievementID[id] = nil
+        for postID in achievementPostIDs(for: id) {
+            achievementIDByPostID.removeValue(forKey: postID)
+        }
+    }
+
     func removeReel(id: ReelID) {
         if let reel = reels[id], let tradeID = reel.linkedTradeID {
             reelIDByLinkedTradeID.removeValue(forKey: tradeID)

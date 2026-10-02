@@ -191,8 +191,7 @@ struct FollowListView: View {
                 }
             }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
+        .experiencePlainListStyle()
         .animation(
             ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
             value: viewModel.visibleItems.map(\.id)

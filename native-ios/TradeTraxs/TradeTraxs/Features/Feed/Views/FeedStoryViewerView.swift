@@ -57,29 +57,13 @@ struct FeedStoryViewerView: View {
                 }
             }
         }
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Close", action: closeViewer)
-                    .foregroundStyle(.white)
-            }
-            if viewModel.phase == .loaded {
-                ToolbarItem(placement: .topBarTrailing) {
-                    DetailOverflowMenu(
-                        isOwner: viewModel.isOwner,
-                        shareTitle: "Share Story",
-                        onShare: viewModel.story == nil ? nil : { showsShareSheet = true },
-                        onCopyLink: {
-                            DetailOverflowActions.copyLink(.story(viewModel.storyID))
-                        },
-                        onReport: storyReportAction,
-                        deleteTitle: "Delete Story",
-                        onDelete: viewModel.isOwner ? { showsDeleteConfirm = true } : nil,
-                        accessibilityIdentifier: "feed.story.overflow"
-                    )
-                    .foregroundStyle(.white)
-                }
-            }
-        }
+        .toolbar(.hidden, for: .navigationBar)
+        .experienceSwipeToDismiss(
+            isEnabled: canSwipeToDismiss,
+            distanceThreshold: 72,
+            velocityThreshold: 650,
+            onDismiss: closeViewer
+        )
         .confirmationDialog(
             "Delete Story?",
             isPresented: $showsDeleteConfirm,
@@ -143,6 +127,10 @@ struct FeedStoryViewerView: View {
         .accessibilityIdentifier("feed.story.viewer")
     }
 
+    private var canSwipeToDismiss: Bool {
+        !viewModel.isDeleting && !isReplyFocused
+    }
+
     private func closeViewer() {
         viewModel.dismissViewer()
     }
@@ -165,57 +153,80 @@ struct FeedStoryViewerView: View {
 
     @ViewBuilder
     private func storyContent(_ story: Story) -> some View {
-        VStack(spacing: 0) {
-            header(for: story)
-                .padding(.horizontal, ExperienceSpacing.md)
-                .padding(.top, ExperienceSpacing.sm)
-                .padding(.bottom, ExperienceSpacing.sm)
-
-            ZStack {
-                StoryPlaybackMediaView(
-                    reference: story.media,
-                    imagePipeline: imagePipeline,
-                    objectStorage: data.objectStorage,
-                    player: viewModel.playback.player,
-                    isVideo: viewModel.isVideoStory
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .id(story.id)
-                .storyHoldToPause(isEnabled: !isReplyFocused) { holding in
-                    viewModel.setHoldPaused(holding)
-                }
-
-                storyTapNavigationOverlay
-            }
+        ZStack {
+            StoryPlaybackMediaView(
+                reference: story.media,
+                imagePipeline: imagePipeline,
+                objectStorage: data.objectStorage,
+                player: viewModel.playback.player,
+                isVideo: viewModel.isVideoStory
+            )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .id(story.id)
+            .storyHoldToPause(isEnabled: !isReplyFocused) { holding in
+                viewModel.setHoldPaused(holding)
+            }
 
-            if viewModel.showReplyComposer {
-                StoryReplyInputView(
-                    text: $replyText,
-                    isFocused: $isReplyFocused,
-                    isSending: viewModel.isSendingReply,
-                    onSend: {
-                        Task {
-                            let draft = replyText
-                            let sent = await viewModel.sendStoryReply(text: draft)
-                            if sent {
-                                replyText = ""
-                                isReplyFocused = false
+            storyTapNavigationOverlay
+
+            VStack(spacing: 0) {
+                storyInfoOverlay(for: story)
+                Spacer(minLength: 0)
+                if viewModel.showReplyComposer {
+                    StoryReplyInputView(
+                        text: $replyText,
+                        isFocused: $isReplyFocused,
+                        isSending: viewModel.isSendingReply,
+                        onSend: {
+                            Task {
+                                let draft = replyText
+                                let sent = await viewModel.sendStoryReply(text: draft)
+                                if sent {
+                                    replyText = ""
+                                    isReplyFocused = false
+                                }
                             }
                         }
-                    }
-                )
+                    )
+                }
             }
+            .safeAreaPadding(.bottom)
+
+            VStack {
+                HStack {
+                    Spacer(minLength: 0)
+                    storyOverflowMenu
+                }
+                .padding(.horizontal, ExperienceSpacing.md)
+                Spacer(minLength: 0)
+            }
+            .safeAreaPadding(.top, ExperienceSpacing.xxs)
         }
-        .safeAreaPadding(.bottom)
-        .simultaneousGesture(storyDragGesture)
+        .simultaneousGesture(storyHorizontalDragGesture)
     }
 
-    private var storyDragGesture: some Gesture {
+    @ViewBuilder
+    private var storyOverflowMenu: some View {
+        DetailOverflowMenu(
+            isOwner: viewModel.isOwner,
+            shareTitle: "Share Story",
+            onShare: viewModel.story == nil ? nil : { showsShareSheet = true },
+            onCopyLink: {
+                DetailOverflowActions.copyLink(.story(viewModel.storyID))
+            },
+            onReport: storyReportAction,
+            deleteTitle: "Delete Story",
+            onDelete: viewModel.isOwner ? { showsDeleteConfirm = true } : nil,
+            accessibilityIdentifier: "feed.story.overflow"
+        )
+        .foregroundStyle(.white)
+        .symbolRenderingMode(.monochrome)
+    }
+
+    private var storyHorizontalDragGesture: some Gesture {
         StoryViewerDragGestureSupport.dragGesture(
             isReplyFocused: isReplyFocused,
             canOpenReplyComposer: viewModel.showReplyComposer,
-            onSwipeDown: closeViewer,
             onSwipeUp: { isReplyFocused = true },
             onSwipeLeft: { viewModel.goNextAuthor() },
             onSwipeRight: { viewModel.goPreviousAuthor() }
@@ -227,13 +238,13 @@ struct FeedStoryViewerView: View {
             HStack(spacing: 0) {
                 Color.clear
                     .contentShape(Rectangle())
-                    .frame(width: proxy.size.width * 0.38)
+                    .frame(width: proxy.size.width * 0.35)
                     .onTapGesture { viewModel.goPreviousSlide() }
                     .accessibilityLabel("Previous story")
 
                 Color.clear
                     .contentShape(Rectangle())
-                    .frame(width: proxy.size.width * 0.62)
+                    .frame(width: proxy.size.width * 0.65)
                     .onTapGesture { viewModel.goNextSlide() }
                     .accessibilityLabel("Next story")
             }
@@ -241,7 +252,7 @@ struct FeedStoryViewerView: View {
         .allowsHitTesting(!isReplyFocused)
     }
 
-    private func header(for story: Story) -> some View {
+    private func storyInfoOverlay(for story: Story) -> some View {
         let profile = viewModel.author
         return HStack(spacing: ExperienceSpacing.sm) {
             if let profile {
@@ -256,7 +267,12 @@ struct FeedStoryViewerView: View {
                 Text(MessagesInboxSupport.relativeTimestamp(story.createdAt))
                     .experienceStyle(.caption, color: .white.opacity(0.7))
             }
-            Spacer(minLength: 0)
+            Spacer(minLength: ExperienceAccessibility.minTouchTarget)
         }
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.top, ExperienceSpacing.xs)
+        .padding(.bottom, ExperienceSpacing.sm)
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .combine)
     }
 }

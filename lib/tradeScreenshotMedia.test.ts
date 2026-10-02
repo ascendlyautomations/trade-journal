@@ -1,47 +1,42 @@
 import { test } from "node:test"
 import { optimizeStorageImageUrl } from "./optimizedStorageImage.ts"
 import assert from "node:assert/strict"
+import { assertNoSupabaseStorageTransformUrl } from "./supabaseStorageTransformGuard.ts"
 
 const SAMPLE =
   "https://example.supabase.co/storage/v1/object/public/trades/abc/screenshot.png"
 
-test("feed-thumb and profile trade cards share one transform URL", () => {
+test("feed-thumb and profile trade cards use object URLs only", () => {
   const feedUrl = optimizeStorageImageUrl(SAMPLE, "feed-thumb")
   assert.ok(feedUrl)
-  assert.match(feedUrl, /width=640/)
-  assert.match(feedUrl, /quality=75/)
-  assert.doesNotMatch(feedUrl, /width=800/)
-  assert.doesNotMatch(feedUrl, /resize=/)
+  assert.match(feedUrl, /\/storage\/v1\/object\/public\//)
+  assertNoSupabaseStorageTransformUrl(feedUrl!)
+  assert.doesNotMatch(feedUrl!, /width=/)
+  assert.doesNotMatch(feedUrl!, /resize=/)
 })
 
-test("feed cards resize with contain and do not cover-crop", () => {
+test("feed cards use object URLs without transform query params", () => {
   const cardUrl = optimizeStorageImageUrl(SAMPLE, "feed-card")
   assert.ok(cardUrl)
-  assert.match(cardUrl, /width=1440/)
-  assert.match(cardUrl, /height=1080/)
-  assert.match(cardUrl, /resize=contain/)
-  assert.match(cardUrl, /quality=75/)
-  assert.doesNotMatch(cardUrl, /resize=cover/)
+  assertNoSupabaseStorageTransformUrl(cardUrl!)
+  assert.doesNotMatch(cardUrl!, /width=/)
+  assert.doesNotMatch(cardUrl!, /resize=/)
 
   const detailUrl = optimizeStorageImageUrl(SAMPLE, "feed-detail")
   assert.ok(detailUrl)
-  assert.match(detailUrl, /width=1280/)
-  assert.doesNotMatch(detailUrl, /resize=/)
-  assert.doesNotMatch(detailUrl, /height=/)
+  assertNoSupabaseStorageTransformUrl(detailUrl!)
+  assert.doesNotMatch(detailUrl!, /width=/)
 })
 
-test("achievement gallery cards contain the full image", () => {
+test("achievement gallery cards use object URLs only", () => {
   const cardUrl = optimizeStorageImageUrl(SAMPLE, "achievement-card")
   assert.ok(cardUrl)
-  assert.match(cardUrl, /width=960/)
-  assert.match(cardUrl, /height=720/)
-  assert.match(cardUrl, /resize=contain/)
-  assert.doesNotMatch(cardUrl, /resize=cover/)
+  assertNoSupabaseStorageTransformUrl(cardUrl!)
+  assert.doesNotMatch(cardUrl!, /resize=/)
 
   const detailUrl = optimizeStorageImageUrl(SAMPLE, "feed-detail")
   assert.ok(detailUrl)
-  assert.match(detailUrl, /width=1280/)
-  assert.doesNotMatch(detailUrl, /resize=/)
+  assertNoSupabaseStorageTransformUrl(detailUrl!)
 })
 
 test("feed-thumb URL is stable for browser cache reuse", () => {

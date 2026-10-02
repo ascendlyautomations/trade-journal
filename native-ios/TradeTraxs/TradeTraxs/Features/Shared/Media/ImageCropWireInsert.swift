@@ -166,19 +166,17 @@ nonisolated enum ImageCropWireInsert {
         }
     }
 
+    /// Inserts the owner row and returns its id.
+    ///
+    /// `return=representation` without a column list is `RETURNING *`. After table SELECT
+    /// was revoked, that raises 42501 even though INSERT for `user_id = auth.uid()` is allowed.
+    /// Only `id` is requested here. The caller loads the full row with `rpc_v1_trade_owner_read`.
     static func insertTradeRow(
         supabase: SupabaseInfrastructure,
         body: TradeDTO.InsertBody
-    ) async throws -> TradeDTO.Trade {
+    ) async throws -> String {
         do {
-            PostPublishProbe.logDatabaseInsertStarted(table: "trades", payloadKeys: ["trades"])
-            let dto: TradeDTO.Trade = try await supabase.database.insert(
-                body,
-                into: "trades",
-                returning: TradeDTO.Trade.self
-            )
-            PostPublishProbe.logDatabaseInsertSucceeded(table: "trades")
-            return dto
+            return try await insertTradeID(supabase: supabase, body: body)
         } catch {
             guard body.image_crop != nil,
                   ContentImagePresentationCodec.isMissingImageCropColumnError(error)
@@ -191,13 +189,23 @@ nonisolated enum ImageCropWireInsert {
             )
             var fallback = body
             fallback.image_crop = nil
-            let dto: TradeDTO.Trade = try await supabase.database.insert(
-                fallback,
-                into: "trades",
-                returning: TradeDTO.Trade.self
-            )
-            PostPublishProbe.logDatabaseInsertSucceeded(table: "trades")
-            return dto
+            return try await insertTradeID(supabase: supabase, body: fallback)
         }
+    }
+
+    private static func insertTradeID(
+        supabase: SupabaseInfrastructure,
+        body: TradeDTO.InsertBody
+    ) async throws -> String {
+        struct IDRow: Decodable { var id: String }
+        PostPublishProbe.logDatabaseInsertStarted(table: "trades", payloadKeys: ["trades"])
+        let row: IDRow = try await supabase.database.insert(
+            body,
+            into: "trades",
+            query: [URLQueryItem(name: "select", value: "id")],
+            returning: IDRow.self
+        )
+        PostPublishProbe.logDatabaseInsertSucceeded(table: "trades")
+        return row.id
     }
 }

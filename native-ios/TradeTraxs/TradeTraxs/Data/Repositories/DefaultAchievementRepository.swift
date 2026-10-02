@@ -107,6 +107,32 @@ nonisolated struct DefaultAchievementRepository: AchievementRepository {
         return try await fetchAchievementRow(id: AchievementID(achievementID))
     }
 
+    func delete(id: AchievementID) async throws {
+        struct Row: Codable, Sendable {
+            var image_url: String?
+            var user_id: String?
+        }
+        let row: Row? = try? await supabase.database.selectOne(
+            Row.self,
+            from: "achievements",
+            query: [
+                SupabaseQuery.select("image_url,user_id"),
+                SupabaseQuery.eq("id", id.rawValue),
+            ]
+        )
+        try await supabase.database.delete(
+            from: "achievements",
+            query: [SupabaseQuery.eq("id", id.rawValue)]
+        )
+        await OwnedMediaStorageCleanup.removePublicObjects(
+            urls: [row?.image_url],
+            storage: supabase.storage
+        )
+        if let userID = row?.user_id?.trimmingCharacters(in: .whitespacesAndNewlines), !userID.isEmpty {
+            RepositoryRequestFlight.shared.invalidate(prefix: "achievements.list:\(userID)")
+        }
+    }
+
     func save(_ achievement: Achievement, metadata: JSONValue?) async throws -> Achievement {
         let kind = achievement.kind.rawValue
         let imageCrop = achievement.image?.imagePresentation

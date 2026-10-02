@@ -299,6 +299,7 @@ final class ProfileShellViewModel {
                 achievements = AchievementsContainerViewModel(
                     profileID: profileID,
                     achievements: data.achievements,
+                    session: data.session,
                     rpc: data.rpc,
                     navigationCoordinator: navigationCoordinator,
                     detailCache: data.detailCache,

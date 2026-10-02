@@ -122,9 +122,7 @@ struct SharedContentShareRecipientPickerView: View {
                     }
                 }
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .experienceDashboardGroupedRows()
+            .experiencePlainListStyle()
             .listRowSeparatorTint(colors.separator)
             .scrollDismissesKeyboard(.interactively)
         }

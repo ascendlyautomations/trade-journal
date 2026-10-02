@@ -62,6 +62,7 @@ struct StoryShareSheet: View {
                     .accessibilityIdentifier("storyShare.external")
                 }
             }
+            .experienceInsetGroupedListStyle(pageBackground: true)
             .experienceScreenBackground()
             .navigationTitle("Share Story")
             .navigationBarTitleDisplayMode(.inline)

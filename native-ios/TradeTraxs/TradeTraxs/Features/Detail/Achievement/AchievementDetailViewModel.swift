@@ -16,6 +16,8 @@ final class AchievementDetailViewModel {
     private(set) var author: Profile?
     private(set) var authorAvatar: Image?
     private(set) var isOwner = false
+    private(set) var isDeleting = false
+    private(set) var deleteErrorMessage: String?
 
     let achievementID: AchievementID
 
@@ -24,6 +26,7 @@ final class AchievementDetailViewModel {
     private let session: any SessionProviding
     private let imagePipeline: any ImagePipeline
     private let cache: DetailPresentationCache
+    private let navigationCoordinator: NavigationCoordinator
     private var loadTask: Task<Void, Never>?
 
     init(
@@ -32,7 +35,8 @@ final class AchievementDetailViewModel {
         profiles: any ProfileRepository,
         session: any SessionProviding,
         imagePipeline: any ImagePipeline,
-        cache: DetailPresentationCache
+        cache: DetailPresentationCache,
+        navigationCoordinator: NavigationCoordinator
     ) {
         self.achievementID = achievementID
         self.achievements = achievements
@@ -40,6 +44,7 @@ final class AchievementDetailViewModel {
         self.session = session
         self.imagePipeline = imagePipeline
         self.cache = cache
+        self.navigationCoordinator = navigationCoordinator
     }
 
     var authorDisplayName: String { DetailAuthorPresentation.displayName(for: author) }
@@ -54,6 +59,34 @@ final class AchievementDetailViewModel {
     func refresh() async {
         loadTask?.cancel()
         await performLoad(forceNetwork: true)
+    }
+
+    func clearDeleteError() {
+        deleteErrorMessage = nil
+    }
+
+    func deleteAchievement() async -> Bool {
+        guard isOwner, !isDeleting, let achievement else { return false }
+        isDeleting = true
+        deleteErrorMessage = nil
+        defer { isDeleting = false }
+        do {
+            try await OwnerAchievementDeletionService.deleteOwnedAchievement(
+                achievementID: achievement.id,
+                owner: achievement.ownerProfileID,
+                previous: achievement,
+                achievements: achievements,
+                session: session,
+                detailCache: cache
+            )
+            ExperienceHaptics.play(.success)
+            navigationCoordinator.pop()
+            return true
+        } catch {
+            deleteErrorMessage = ProfileSectionSupport.message(for: error)
+            ExperienceHaptics.play(.warning)
+            return false
+        }
     }
 
     private func performLoad(forceNetwork: Bool = false) async {

@@ -151,6 +151,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
     case subscription
     case tradingAccounts = "trading-accounts"
     case brokerIntegrations = "broker-integrations"
+    case copyTradingAccounts = "copy-trading-accounts"
     case payouts
     case privacy
     case privacyBlockedAccounts = "privacy-blocked-accounts"
@@ -188,6 +189,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
         case .subscription: return "Plan"
         case .tradingAccounts: return "Manage Accounts"
         case .brokerIntegrations: return "Broker Integrations"
+        case .copyTradingAccounts: return "Copy Trading Accounts"
         case .payouts: return "Withdrawals"
         case .privacy: return "Privacy"
         case .privacyBlockedAccounts: return "Blocked Accounts"
@@ -215,8 +217,10 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
         let key = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if let exact = SettingsRoute(rawValue: key) { return exact }
         switch key {
-        case "rules", "dashboard-risk", "copy-trading-groups", "prop-firm":
+        case "rules", "dashboard-risk", "prop-firm":
             return .tradingAccounts
+        case "copy-trading-groups", "copy-trading-accounts":
+            return .copyTradingAccounts
         case "messages":
             return .notificationsMessages
         case "terms", "terms-of-service":

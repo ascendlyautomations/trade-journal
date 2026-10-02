@@ -826,12 +826,14 @@ nonisolated enum AccountPayoutEntryMapper {
             throw MappingError.missingField("payout_date")
         }
         let note = dto.note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let imageURL = dto.image_url?.trimmingCharacters(in: .whitespacesAndNewlines)
         return AccountPayoutEntry(
             id: AccountPayoutEntryID(id),
             accountID: TradingAccountID(accountID),
             amount: Money(amount: amount, currencyCode: "USD"),
             payoutDate: payoutDate,
-            note: (note?.isEmpty == false) ? note : nil
+            note: (note?.isEmpty == false) ? note : nil,
+            imageURL: (imageURL?.isEmpty == false) ? imageURL : nil
         )
     }
 
@@ -859,7 +861,10 @@ nonisolated enum AccountPayoutEntryMapper {
         )
     }
 
-    static func updateBody(from draft: AccountPayoutEntryDraft) throws -> TradeDTO.AccountPayoutEntryUpdateBody {
+    static func updateBody(
+        from draft: AccountPayoutEntryDraft,
+        image: PayoutEntryImageWrite = .unchanged
+    ) throws -> TradeDTO.AccountPayoutEntryUpdateBody {
         let amountDigits = NumericInputFieldSupport.plainNumericString(from: draft.amountDigits)
         guard let amount = NumericInputFieldSupport.parse(amountDigits, style: .unsignedCurrency), amount > 0 else {
             throw AppError.unknown(message: "Enter a payout amount greater than zero.")
@@ -870,10 +875,29 @@ nonisolated enum AccountPayoutEntryMapper {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         formatter.dateFormat = "yyyy-MM-dd"
+        let imageURL: String?
+        let includeImage: Bool
+        switch image {
+        case .unchanged:
+            imageURL = nil
+            includeImage = false
+        case .set(let url):
+            let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                throw AppError.unknown(message: "Couldn't save that picture.")
+            }
+            imageURL = trimmed
+            includeImage = true
+        case .clear:
+            imageURL = nil
+            includeImage = true
+        }
         return TradeDTO.AccountPayoutEntryUpdateBody(
             amount: NSDecimalNumber(decimal: amount).doubleValue,
             payout_date: formatter.string(from: draft.payoutDate),
-            note: note.isEmpty ? nil : note
+            note: note.isEmpty ? nil : note,
+            image_url: imageURL,
+            includeImage: includeImage
         )
     }
 }

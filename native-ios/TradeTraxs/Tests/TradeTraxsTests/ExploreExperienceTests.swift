@@ -92,6 +92,95 @@ final class ExploreExperienceTests: XCTestCase {
         XCTAssertGreaterThan(richScore, bareScore)
     }
 
+    func testRankingPrefersProfilePictureWhenScoreMatches() {
+        let sharedCreated = Date(timeIntervalSince1970: 1_700_000_000)
+        let withAvatar = Profile(
+            id: ProfileID("avatar-first"),
+            userID: UserID("avatar-first"),
+            username: "withpic",
+            displayName: "With Pic",
+            bio: "Bio",
+            avatar: MediaReference(id: "https://cdn.example.com/a.jpg", kind: .image, altText: nil),
+            traderType: .futures,
+            tradingStyle: nil,
+            primaryMarket: nil,
+            startedTradingAt: nil,
+            isPrivate: false,
+            isCreator: false,
+            createdAt: sharedCreated
+        )
+        let withoutAvatar = Profile(
+            id: ProfileID("no-avatar"),
+            userID: UserID("no-avatar"),
+            username: "nopic",
+            displayName: "No Pic",
+            bio: "Bio",
+            avatar: nil,
+            traderType: .futures,
+            tradingStyle: nil,
+            primaryMarket: nil,
+            startedTradingAt: nil,
+            isPrivate: false,
+            isCreator: false,
+            createdAt: sharedCreated
+        )
+        XCTAssertEqual(
+            ExploreTraderRanking.score(profile: withAvatar),
+            ExploreTraderRanking.score(profile: withoutAvatar)
+        )
+        let ranked = ExploreTraderRanking.rank(
+            profiles: [withoutAvatar, withAvatar],
+            excluding: [],
+            limit: 2,
+            minScore: 1
+        )
+        XCTAssertEqual(ranked.map(\.id), [withAvatar.id, withoutAvatar.id])
+    }
+
+    func testRankingKeepsHigherScoreAboveAvatarOnlyBoost() {
+        let lowWithAvatar = Profile(
+            id: ProfileID("low-avatar"),
+            userID: UserID("low-avatar"),
+            username: "lowav",
+            displayName: "Low",
+            bio: nil,
+            avatar: MediaReference(id: "https://cdn.example.com/l.jpg", kind: .image, altText: nil),
+            traderType: nil,
+            tradingStyle: nil,
+            primaryMarket: nil,
+            startedTradingAt: nil,
+            isPrivate: false,
+            isCreator: false,
+            createdAt: .now
+        )
+        let highWithoutAvatar = Profile(
+            id: ProfileID("high-no-avatar"),
+            userID: UserID("high-no-avatar"),
+            username: "highno",
+            displayName: "High",
+            bio: "Filled out",
+            avatar: nil,
+            traderType: .futures,
+            tradingStyle: "Swing",
+            primaryMarket: "ES",
+            startedTradingAt: .now,
+            isPrivate: false,
+            isCreator: false,
+            createdAt: .now
+        )
+        XCTAssertGreaterThan(
+            ExploreTraderRanking.score(profile: highWithoutAvatar),
+            ExploreTraderRanking.score(profile: lowWithAvatar)
+        )
+        let ranked = ExploreTraderRanking.rank(
+            profiles: [lowWithAvatar, highWithoutAvatar],
+            excluding: [],
+            limit: 2,
+            minScore: 1
+        )
+        XCTAssertEqual(ranked.first?.id, highWithoutAvatar.id)
+    }
+
     func testRankingExcludesPrivateSelfAndLowScore() {
         let viewer = ExploreFixtures.viewerID
         let privateProfile = Profile(

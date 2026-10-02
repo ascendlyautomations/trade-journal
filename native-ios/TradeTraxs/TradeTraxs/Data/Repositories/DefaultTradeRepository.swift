@@ -187,6 +187,13 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         return Self.mapTradesSkippingFailures(rows)
     }
 
+    private func savedOwnerTrade(id: String) async throws -> Trade {
+        guard let dto = try await fetchOwnerTradeDTO(id: id) else {
+            throw AppError.unknown(message: "Couldn't save trade. Check your connection and try again.")
+        }
+        return try TradeMapper.mapToDomain(dto)
+    }
+
     private func fetchOwnerTradeDTO(id: String) async throws -> TradeDTO.Trade? {
         struct Params: Encodable { var p_trade_id: String }
         let data = try await supabase.database.rpcData(
@@ -426,55 +433,107 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
     }
 
     func save(_ draft: TradeDraft) async throws -> Trade {
+        if draft.copyTradingPlan != nil {
+            guard let source = try await saveCopyTraded(draft).first else {
+                throw AppError.unknown(message: "Copy trading group has no linked accounts.")
+            }
+            return source
+        }
         guard let userID = await session.currentUserID else {
             throw AppError.domain(.permission(.notAuthenticated))
         }
         let body = TradeMapper.insertBody(from: draft, userID: userID)
-        let dto = try await ImageCropWireInsert.insertTradeRow(
+        let tradeID = try await ImageCropWireInsert.insertTradeRow(
             supabase: supabase,
             body: body
         )
-        let trade = try TradeMapper.mapToDomain(dto)
-
-        // Web `saveManualTrade`: public trades also create a `posts` row for the feed.
-        if draft.visibility == .public {
-            let imageCrop = ContentImagePresentationCodec.encodeJSONValue(draft.imageCrop)
-            let post = ImageCropWireInsert.TradePublicPostInsertBody(
-                user_id: userID.rawValue,
-                trade_id: trade.id.rawValue,
-                image_url: draft.imageURL,
-                image_crop: imageCrop,
-                pnl: draft.realizedPnL.map { NSDecimalNumber(decimal: $0.amount).doubleValue },
-                rr: draft.riskReward.map { NSDecimalNumber(decimal: $0).doubleValue },
-                caption: draft.publicCaption?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
-                includeImageCropKey: draft.imageCrop != nil
-            )
-            do {
-                try await ImageCropWireInsert.insertPublicTradePost(
-                    supabase: supabase,
-                    body: post
-                )
-            } catch {
-                // Trade already exists — surface post failure without rolling back the journal row
-                // (same soft-failure class as web logging; user still has the trade).
-                PostPublishProbe.logFailed(stage: .databaseInsert, error: error)
-                AppLog.networking.error(
-                    "Public trade post insert failed — \(String(describing: error), privacy: .public)"
-                )
-            }
-        }
+        let trade = try await savedOwnerTrade(id: tradeID)
+        try await insertPublicPostIfNeeded(draft: draft, trade: trade, userID: userID)
         return trade
+    }
+
+    func saveCopyTraded(_ draft: TradeDraft) async throws -> [Trade] {
+        guard let plan = draft.copyTradingPlan, !plan.accounts.isEmpty else {
+            throw AppError.unknown(message: "Copy trading group has no linked accounts.")
+        }
+        guard let userID = await session.currentUserID else {
+            throw AppError.domain(.permission(.notAuthenticated))
+        }
+        let pnl = draft.realizedPnL?.amount ?? 0
+        let stamps = CopyTradingTradeFanout.rows(
+            groupID: plan.groupID,
+            orderedAccountIDs: plan.accounts.map(\.accountID.rawValue),
+            pnl: pnl
+        )
+        let accountsByID = Dictionary(uniqueKeysWithValues: plan.accounts.map { ($0.accountID.rawValue, $0) })
+        var saved: [Trade] = []
+        saved.reserveCapacity(stamps.count)
+        for stamp in stamps {
+            guard let account = accountsByID[stamp.accountID] else { continue }
+            var memberDraft = draft
+            memberDraft.copyTradingPlan = nil
+            memberDraft.accountID = account.accountID
+            memberDraft.accountName = account.name
+            memberDraft.accountSizeLabel = account.sizeLabel
+            memberDraft.accountModeLabel = account.modeLabel
+            memberDraft.accountCategoryLabel = account.categoryLabel
+            memberDraft.ownerAccountNumber = account.accountNumber
+            memberDraft.ownerAccountCategory = account.category
+            memberDraft.ownerAccountMode = account.mode
+            memberDraft.mode = .copyTraded
+            var body = TradeMapper.insertBody(from: memberDraft, userID: userID)
+            body.trade_mode = stamp.tradeMode
+            body.source_account_id = stamp.sourceAccountID
+            body.copied_account_ids = stamp.copiedAccountIDs
+            body.copy_trading_group_id = stamp.groupID
+            let tradeID = try await ImageCropWireInsert.insertTradeRow(supabase: supabase, body: body)
+            let trade = try await savedOwnerTrade(id: tradeID)
+            try await insertPublicPostIfNeeded(draft: memberDraft, trade: trade, userID: userID)
+            saved.append(trade)
+        }
+        if saved.isEmpty {
+            throw AppError.unknown(message: "Copy trading group has no linked accounts.")
+        }
+        return saved
+    }
+
+    private func insertPublicPostIfNeeded(draft: TradeDraft, trade: Trade, userID: UserID) async throws {
+        guard draft.visibility == .public else { return }
+        let imageCrop = ContentImagePresentationCodec.encodeJSONValue(draft.imageCrop)
+        let post = ImageCropWireInsert.TradePublicPostInsertBody(
+            user_id: userID.rawValue,
+            trade_id: trade.id.rawValue,
+            image_url: draft.imageURL,
+            image_crop: imageCrop,
+            pnl: draft.realizedPnL.map { NSDecimalNumber(decimal: $0.amount).doubleValue },
+            rr: draft.riskReward.map { NSDecimalNumber(decimal: $0).doubleValue },
+            caption: draft.publicCaption?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
+            includeImageCropKey: draft.imageCrop != nil
+        )
+        do {
+            try await ImageCropWireInsert.insertPublicTradePost(
+                supabase: supabase,
+                body: post
+            )
+        } catch {
+            PostPublishProbe.logFailed(stage: .databaseInsert, error: error)
+            AppLog.networking.error(
+                "Public trade post insert failed — \(String(describing: error), privacy: .public)"
+            )
+        }
     }
 
     func update(_ trade: Trade) async throws -> Trade {
         let body = try TradeMapper.mapToDTO(trade)
-        let dto: TradeDTO.Trade = try await supabase.database.update(
+        try await supabase.database.update(
             body,
             table: "trades",
-            query: [SupabaseQuery.eq("id", trade.id.rawValue)],
-            returning: TradeDTO.Trade.self
+            query: [
+                SupabaseQuery.eq("id", trade.id.rawValue),
+                SupabaseQuery.eq("user_id", trade.ownerProfileID.rawValue),
+            ]
         )
-        return try TradeMapper.mapToDomain(dto)
+        return try await savedOwnerTrade(id: trade.id.rawValue)
     }
 
     func update(id: TradeID, draft: TradeDraft, previous: Trade) async throws -> Trade {
@@ -485,15 +544,13 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         #if DEBUG
         TradeUpdateDiagnostics.logUpdateAttempt(tradeID: id, body: body)
         #endif
-        _ = try await supabase.database.update(
+        try await supabase.database.update(
             body,
             table: "trades",
             query: [
-                SupabaseQuery.select(TradeDTO.ownerJournalSelect),
                 SupabaseQuery.eq("id", id.rawValue),
                 SupabaseQuery.eq("user_id", userID.rawValue),
-            ],
-            returning: TradeDTO.Trade.self
+            ]
         )
         // Authoritative read — same select as Trade Detail / list seeds (PATCH representation can omit columns).
         let trade = try await trade(id: id)
@@ -751,7 +808,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
                 var account_name: String
                 var account_size: String?
             }
-            _ = try? await supabase.database.update(
+            try? await supabase.database.update(
                 TradeLabels(
                     account_name: account.name,
                     account_size: {
@@ -760,8 +817,10 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
                     }()
                 ),
                 table: "trades",
-                query: [SupabaseQuery.eq("account_id", id.rawValue)],
-                returning: TradeDTO.Trade.self
+                query: [
+                    SupabaseQuery.eq("account_id", id.rawValue),
+                    SupabaseQuery.eq("user_id", ownerID.rawValue),
+                ]
             )
             return account
         } catch {
@@ -820,7 +879,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             TradeDTO.AccountPayoutEntryRow.self,
             from: "account_payout_entries",
             query: [
-                SupabaseQuery.select("id,account_id,user_id,amount,payout_date,note,created_at,updated_at"),
+                SupabaseQuery.select("id,account_id,user_id,amount,payout_date,note,image_url,created_at,updated_at"),
                 SupabaseQuery.isIn("account_id", unique),
                 URLQueryItem(name: "order", value: "payout_date.desc,id.desc"),
             ]
@@ -848,9 +907,10 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
 
     func updatePayoutEntry(
         id: AccountPayoutEntryID,
-        draft: AccountPayoutEntryDraft
+        draft: AccountPayoutEntryDraft,
+        image: PayoutEntryImageWrite
     ) async throws -> AccountPayoutEntry {
-        let body = try AccountPayoutEntryMapper.updateBody(from: draft)
+        let body = try AccountPayoutEntryMapper.updateBody(from: draft, image: image)
         let row: TradeDTO.AccountPayoutEntryRow = try await supabase.database.update(
             body,
             table: "account_payout_entries",

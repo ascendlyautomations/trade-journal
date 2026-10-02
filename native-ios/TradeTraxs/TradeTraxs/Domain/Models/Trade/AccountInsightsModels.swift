@@ -7,12 +7,23 @@ nonisolated struct AccountPayoutEntry: Hashable, Codable, Sendable, Identifiable
     var amount: Money
     var payoutDate: Date
     var note: String?
+    /// Owner screenshot on `account_payout_entries.image_url`. Omitted from public profile insights.
+    var imageURL: String? = nil
+}
+
+/// How an edit writes `image_url`. `.unchanged` omits the column so a note-only save keeps the picture.
+nonisolated enum PayoutEntryImageWrite: Hashable, Sendable {
+    case unchanged
+    case set(String)
+    case clear
 }
 
 nonisolated struct AccountPayoutEntryDraft: Hashable, Codable, Sendable {
     var amountDigits: String
     var payoutDate: Date
     var note: String
+    /// Saved picture URL when editing. Not written until ``PayoutEntryImageWrite`` says so.
+    var imageURL: String? = nil
 }
 
 /// Whitelisted public profile account card (`rpc_v1_profile_account_insights`).

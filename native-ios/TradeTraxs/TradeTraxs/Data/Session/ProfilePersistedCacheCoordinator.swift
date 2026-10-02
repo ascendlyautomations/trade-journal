@@ -243,6 +243,16 @@ enum ProfilePersistedCacheCoordinator {
         )
     }
 
+    static func removeAchievement(id: AchievementID, owner: ProfileID, viewerID: ProfileID) {
+        SocialEntityPersistedCacheCoordinator.removeAchievement(id: id, viewerID: viewerID)
+        removeSectionItem(
+            viewerID: viewerID,
+            ownerID: owner,
+            match: { (item: Achievement) in item.id == id },
+            section: \.achievements
+        )
+    }
+
     static func patchProfileHeader(
         viewerID: ProfileID,
         targetProfileID: ProfileID,

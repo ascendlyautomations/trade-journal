@@ -437,7 +437,15 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
     private func decodeBrokerAccountSync(from response: HTTPResponse, context: String) throws -> TradovateAccountSyncResponse {
         let status = response.statusCode
         BrokerSyncDebugLog.syncHTTP(path: context, status: status, bytes: response.data.count)
-        guard status == 200 || status == 400 || status == 409 else {
+        if BrokerSyncFailureResolution.payloadContainsSyncSummary(response.data) {
+            do {
+                return try transport.decoder.decode(TradovateAccountSyncResponse.self, from: response)
+            } catch {
+                BrokerIntegrationDebugLog.decodeFailure(context: context, detail: String(describing: error))
+                throw AppError.unknown(message: brokerDecodeUserMessage)
+            }
+        }
+        guard status == 200 || status == 400 || status == 409 || (200 ... 299).contains(status) else {
             throw brokerError(from: response, fallback: "Broker request failed (\(status)).")
         }
         do {

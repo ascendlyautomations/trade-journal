@@ -18,6 +18,8 @@ final class TradesContainerViewModel {
     var sort: ProfileTradesSort = .newest
     var sharePayload: SharePayload?
     var pendingDelete: TradeSummary?
+    var deleteErrorMessage: String?
+    private(set) var deletingTradeID: TradeID?
 
     private let profileID: ProfileID
     private let trades: any TradeRepository
@@ -327,21 +329,25 @@ final class TradesContainerViewModel {
     }
 
     func requestDelete(_ summary: TradeSummary) {
-        guard isOwner else { return }
+        guard isOwner, deletingTradeID == nil else { return }
         ExperienceHaptics.play(.warning)
         TradeDeleteConfirmationPresenter.scheduleConfirmation { [weak self] in
             self?.pendingDelete = summary
         }
     }
 
+    func isDeletingTrade(_ id: TradeID) -> Bool {
+        deletingTradeID == id
+    }
+
     func confirmDelete() async {
-        guard isOwner, let summary = pendingDelete else { return }
+        guard isOwner, deletingTradeID == nil, let summary = pendingDelete else { return }
         pendingDelete = nil
+        deletingTradeID = summary.id
+        deleteErrorMessage = nil
+        defer { deletingTradeID = nil }
         let previous = TradeSummaryMapper.previewTrade(from: summary)
         let owner = summary.ownerProfileID
-        let removedIndex = items.firstIndex { $0.id == summary.id }
-        items.removeAll { $0.id == summary.id }
-        updateStateForVisibleItems()
         do {
             try await OwnerTradeDeletionService.deleteOwnedTrade(
                 tradeID: summary.id,
@@ -353,15 +359,8 @@ final class TradesContainerViewModel {
                 tradeDetailRepository: tradeDetailRepository
             )
             ExperienceHaptics.play(.success)
-            updateStateForVisibleItems()
         } catch {
-            if let removedIndex {
-                items.insert(summary, at: min(removedIndex, items.count))
-            } else {
-                items.insert(summary, at: 0)
-            }
-            updateStateForVisibleItems()
-            paginationErrorMessage = ProfileSectionSupport.message(for: error)
+            deleteErrorMessage = ProfileSectionSupport.message(for: error)
             ExperienceHaptics.play(.warning)
         }
     }

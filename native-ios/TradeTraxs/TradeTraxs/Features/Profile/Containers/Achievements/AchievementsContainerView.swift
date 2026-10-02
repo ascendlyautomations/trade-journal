@@ -30,6 +30,13 @@ struct AchievementsContainerView: View {
                         onOpen: { viewModel.openAchievement(achievement) },
                         isOwner: viewModel.isOwner,
                         onReport: reportAction(for: achievement),
+                        onDelete: viewModel.isOwner
+                            ? {
+                                guard !viewModel.isDeletingAchievement(achievement.id) else { return }
+                                viewModel.requestDelete(achievement)
+                            }
+                            : nil,
+                        isDeleteInProgress: viewModel.isDeletingAchievement(achievement.id),
                         profilePin: profilePin,
                         isProfilePinned: isProfilePinned(achievement)
                     )
@@ -54,6 +61,34 @@ struct AchievementsContainerView: View {
                 viewModel.prefetchEngagement(for: displayItems.map(\.id))
             }
             .accessibilityIdentifier("profile.achievements.list")
+        }
+        .confirmationDialog(
+            "Delete Achievement?",
+            isPresented: Binding(
+                get: { viewModel.pendingDelete != nil },
+                set: { if !$0 { viewModel.pendingDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Achievement", role: .destructive) {
+                Task { await viewModel.confirmDelete() }
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.pendingDelete = nil
+            }
+        } message: {
+            Text("This permanently removes the achievement.")
+        }
+        .alert(
+            "Couldn't delete achievement",
+            isPresented: Binding(
+                get: { viewModel.deleteErrorMessage != nil },
+                set: { if !$0 { viewModel.deleteErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { viewModel.deleteErrorMessage = nil }
+        } message: {
+            Text(viewModel.deleteErrorMessage ?? "")
         }
     }
 

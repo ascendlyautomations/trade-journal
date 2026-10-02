@@ -8,6 +8,8 @@ struct ProfileAchievementCard: View {
     let onOpen: () -> Void
     var isOwner: Bool = true
     var onReport: (() -> Void)? = nil
+    var onDelete: (() -> Void)? = nil
+    var isDeleteInProgress: Bool = false
     var profilePin: ProfilePinCallbacks? = nil
     var isProfilePinned: Bool = false
 
@@ -104,6 +106,8 @@ struct ProfileAchievementCard: View {
             ContentOverflowMenu(
                 isOwner: isOwner,
                 onReport: onReport,
+                deleteTitle: "Delete Achievement",
+                onDelete: isOwner && !isDeleteInProgress ? onDelete : nil,
                 onPin: profilePin.map { pin in
                     {
                         pin.requestPin(

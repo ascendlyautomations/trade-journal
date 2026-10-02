@@ -225,6 +225,8 @@ struct FeedHomeView: View {
                 viewModel.applyPostRemoval(postID: postID)
             case .reelDeleted(let reelID):
                 viewModel.applyReelRemoval(reelID: reelID)
+            case .achievementDeleted(let achievementID):
+                viewModel.applyAchievementRemoval(achievementID: achievementID)
             default:
                 Task { await viewModel.refresh(trigger: .contentMutation) }
             }
@@ -279,7 +281,7 @@ struct FeedHomeView: View {
             onSelect: { viewModel.userSelectedContentFilter($0) }
         )
         .padding(.horizontal, ExperienceSpacing.md)
-        .padding(.top, 4)
+        .padding(.top, ExperienceSpacing.sm)
         .padding(.bottom, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {

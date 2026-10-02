@@ -12,6 +12,7 @@ import { uploadContentImageToStorage } from "@/lib/contentImagePipeline"
 import { createMonotonicReporter } from "@/lib/uploadProgress/reportProgress"
 import type { UploadProgressOptions } from "@/lib/uploadProgress/types"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
+import { rpcTradeOwnerRead } from "@/lib/tradeOwnerRead"
 import { hapticSuccess } from "@/lib/nativeHaptics"
 
 export type ManualTradeAccount = {
@@ -253,19 +254,29 @@ export async function saveManualTrade(
     is_public: input.isPublic,
   }
 
-  const { data: newTradeData, error } = await client
+  const { data: inserted, error } = await client
     .from("trades")
     .insert([tradeData])
-    .select()
+    .select("id")
     .single()
 
-  if (error) {
+  if (error || !inserted?.id) {
     console.error("[saveManualTrade] insert error:", error)
     return {
       ok: false,
       code: "save",
-      message: toUserFacingErrorMessage(error),
-      error,
+      message: toUserFacingErrorMessage(error ?? new Error("Trade was not created.")),
+      error: error ?? new Error("Trade was not created."),
+    }
+  }
+
+  const newTradeData = await rpcTradeOwnerRead(client, String(inserted.id))
+  if (!newTradeData) {
+    return {
+      ok: false,
+      code: "save",
+      message: "Couldn't save trade. Check your connection and try again.",
+      error: new Error("Owner trade read failed after insert."),
     }
   }
 

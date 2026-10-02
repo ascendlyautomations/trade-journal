@@ -26,6 +26,8 @@ nonisolated protocol TradeRepository: Sendable {
         page: PageRequest
     ) async throws -> CursorPage<Trade>
     func save(_ draft: TradeDraft) async throws -> Trade
+    /// Web `insertCopyTradedTrades` — one journal row per linked account. Returns the source row first.
+    func saveCopyTraded(_ draft: TradeDraft) async throws -> [Trade]
     func update(_ trade: Trade) async throws -> Trade
     /// Web `InputTradeForm` edit path — draft fields + preserve `created_at` / sync public post.
     func update(id: TradeID, draft: TradeDraft, previous: Trade) async throws -> Trade
@@ -61,7 +63,8 @@ nonisolated protocol TradeRepository: Sendable {
     ) async throws -> AccountPayoutEntry
     func updatePayoutEntry(
         id: AccountPayoutEntryID,
-        draft: AccountPayoutEntryDraft
+        draft: AccountPayoutEntryDraft,
+        image: PayoutEntryImageWrite
     ) async throws -> AccountPayoutEntry
     func deletePayoutEntry(id: AccountPayoutEntryID) async throws
     /// Prop-firm payout cycle history — `account_payout_cycles`.
@@ -82,6 +85,11 @@ nonisolated protocol TradeRepository: Sendable {
 }
 
 extension TradeRepository {
+    /// Stubs journal a single row. Production inserts one row per linked account.
+    func saveCopyTraded(_ draft: TradeDraft) async throws -> [Trade] {
+        [try await save(draft)]
+    }
+
     /// Default: sequential singles (tests / incomplete backends). Production overrides with `in.()`.
     func trades(ids: [TradeID]) async throws -> [Trade] {
         var result: [Trade] = []
@@ -174,7 +182,8 @@ extension TradeRepository {
 
     func updatePayoutEntry(
         id: AccountPayoutEntryID,
-        draft: AccountPayoutEntryDraft
+        draft: AccountPayoutEntryDraft,
+        image: PayoutEntryImageWrite
     ) async throws -> AccountPayoutEntry {
         throw AppError.notImplemented(feature: "updatePayoutEntry")
     }

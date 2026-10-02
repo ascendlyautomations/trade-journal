@@ -104,6 +104,8 @@ struct SettingsDestinationView: View {
                     data: data,
                     navigationCoordinator: navigationCoordinator
                 )
+            case .copyTradingAccounts:
+                CopyTradingAccountsView(data: data)
             case .payouts:
                 PayoutsScreenView(data: data, navigationCoordinator: navigationCoordinator)
             case .privacy:

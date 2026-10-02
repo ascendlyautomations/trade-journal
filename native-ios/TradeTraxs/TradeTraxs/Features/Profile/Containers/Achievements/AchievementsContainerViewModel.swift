@@ -7,9 +7,13 @@ final class AchievementsContainerViewModel {
     private(set) var state: ProfileSectionLoadState = .idle
     private(set) var items: [Achievement] = []
     private(set) var nextCursor: String?
+    var pendingDelete: Achievement?
+    private(set) var deletingAchievementID: AchievementID?
+    var deleteErrorMessage: String?
 
     private let profileID: ProfileID
     private let achievements: any AchievementRepository
+    private let session: any SessionProviding
     private let rpc: (any RPCClient)?
     private let navigationCoordinator: NavigationCoordinator
     private let detailCache: DetailPresentationCache
@@ -32,6 +36,7 @@ final class AchievementsContainerViewModel {
     init(
         profileID: ProfileID,
         achievements: any AchievementRepository,
+        session: any SessionProviding,
         rpc: (any RPCClient)? = nil,
         navigationCoordinator: NavigationCoordinator,
         detailCache: DetailPresentationCache,
@@ -40,6 +45,7 @@ final class AchievementsContainerViewModel {
     ) {
         self.profileID = profileID
         self.achievements = achievements
+        self.session = session
         self.rpc = rpc
         self.navigationCoordinator = navigationCoordinator
         self.detailCache = detailCache
@@ -146,6 +152,53 @@ final class AchievementsContainerViewModel {
         navigationCoordinator.openCompose(.achievement)
     }
 
+    func noteDeleteSucceeded(id: AchievementID) {
+        items.removeAll { $0.id == id }
+        detailCache.removeAchievement(id: id)
+        state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+        prefetchEngagement(for: items.map(\.id))
+        if viewerIsOwner {
+            OwnerProfileOptimisticStore.shared.syncOwnerAchievementsState(items)
+        }
+    }
+
+    func requestDelete(_ achievement: Achievement) {
+        guard isOwner, deletingAchievementID == nil else { return }
+        ExperienceHaptics.play(.warning)
+        TradeDeleteConfirmationPresenter.scheduleConfirmation { [weak self] in
+            self?.pendingDelete = achievement
+        }
+    }
+
+    func isDeletingAchievement(_ id: AchievementID) -> Bool {
+        deletingAchievementID == id
+    }
+
+    func confirmDelete() async {
+        guard isOwner, deletingAchievementID == nil, let achievement = pendingDelete else { return }
+        pendingDelete = nil
+        deletingAchievementID = achievement.id
+        deleteErrorMessage = nil
+        defer { deletingAchievementID = nil }
+        do {
+            try await OwnerAchievementDeletionService.deleteOwnedAchievement(
+                achievementID: achievement.id,
+                owner: achievement.ownerProfileID,
+                previous: achievement,
+                achievements: achievements,
+                session: session,
+                detailCache: detailCache
+            )
+            if items.contains(where: { $0.id == achievement.id }) {
+                noteDeleteSucceeded(id: achievement.id)
+            }
+            ExperienceHaptics.play(.success)
+        } catch {
+            deleteErrorMessage = ProfileSectionSupport.message(for: error)
+            ExperienceHaptics.play(.warning)
+        }
+    }
+
     private func cancelLoadMore(reason: String) {
         paginationGeneration &+= 1
         loadMoreTask?.cancel()
@@ -199,6 +252,7 @@ final class AchievementsContainerViewModel {
                 $0.ownerProfileID == profileID
             }
             items = OwnerProfileOptimisticStore.merging(overlay: overlay, into: pageItems)
+                .filter { !OwnerProfileOptimisticStore.shared.deletedAchievementIDs.contains($0.id) }
             nextCursor = cursor
             detailCache.seed(achievements: items)
             hasLoaded = true

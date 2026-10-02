@@ -15,11 +15,8 @@ struct StoryEditorView: View {
     @State private var draggingTextOverlayID: UUID?
     @State private var isOverStoryTrashZone = false
     @State private var storyTrashZoneEntered = false
-    @State private var storyTrashZoneFrame: CGRect = .zero
 
     @Environment(\.themeColors) private var colors
-
-    private static let editorCoordinateSpace = "storyEditor"
 
     init(
         sourceImage: UIImage,
@@ -53,8 +50,6 @@ struct StoryEditorView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .coordinateSpace(name: Self.editorCoordinateSpace)
-        .onPreferenceChange(StoryTrashZoneFrameKey.self) { storyTrashZoneFrame = $0 }
         .experienceScreenBackground()
         .experienceFormFocusSync($textFieldFocused)
         .accessibilityIdentifier("storyEditor.root")
@@ -68,10 +63,6 @@ struct StoryEditorView: View {
                 .accessibilityIdentifier("storyEditor.cancel")
 
             Spacer()
-
-            if draggingTextOverlayID != nil {
-                storyTrashDeleteTarget
-            }
 
             Button {
                 viewModel.beginAddingText()
@@ -89,22 +80,22 @@ struct StoryEditorView: View {
     private var storyTrashDeleteTarget: some View {
         Image(systemName: "trash.fill")
             .font(.system(size: isOverStoryTrashZone ? 22 : 18, weight: .semibold))
-            .foregroundStyle(isOverStoryTrashZone ? colors.loss : colors.secondaryText)
-            .frame(width: 44, height: 44)
+            .foregroundStyle(isOverStoryTrashZone ? colors.textInverse : colors.primaryText)
+            .frame(
+                width: StoryTextDragDeleteMetrics.iconSize,
+                height: StoryTextDragDeleteMetrics.iconSize
+            )
             .background(
                 Circle()
-                    .fill(isOverStoryTrashZone ? colors.loss.opacity(0.18) : colors.surfaceSecondary.opacity(0.6))
+                    .fill(isOverStoryTrashZone ? colors.loss : colors.surfaceSecondary.opacity(0.92))
             )
-            .scaleEffect(isOverStoryTrashZone ? 1.12 : 1)
-            .animation(.easeOut(duration: 0.15), value: isOverStoryTrashZone)
-            .background {
-                GeometryReader { proxy in
-                    Color.clear.preference(
-                        key: StoryTrashZoneFrameKey.self,
-                        value: proxy.frame(in: .named(Self.editorCoordinateSpace))
-                    )
-                }
+            .overlay {
+                Circle()
+                    .stroke(isOverStoryTrashZone ? colors.loss : colors.border, lineWidth: isOverStoryTrashZone ? 3 : 1)
             }
+            .scaleEffect(isOverStoryTrashZone ? 1.18 : 1)
+            .animation(.easeOut(duration: 0.15), value: isOverStoryTrashZone)
+            .allowsHitTesting(false)
             .accessibilityLabel("Delete text overlay")
             .accessibilityIdentifier("storyEditor.trashTarget")
     }
@@ -155,29 +146,18 @@ struct StoryEditorView: View {
                             viewModel.beginEditingSelectedText()
                             textFieldFocused = true
                         },
-                        dragCoordinateSpaceName: Self.editorCoordinateSpace,
                         onOverlayDragBegan: {
                             draggingTextOverlayID = overlay.id
                             storyTrashZoneEntered = false
                             isOverStoryTrashZone = false
                         },
-                        onOverlayDragLocation: { location in
+                        onOverlayDragLocation: { center in
                             guard draggingTextOverlayID == overlay.id else { return }
-                            let overTrash = StoryTextDragDeleteMetrics.expandedHitZone(storyTrashZoneFrame)
-                                .contains(location)
-                            if overTrash, !storyTrashZoneEntered {
-                                ExperienceHaptics.play(.impactLight)
-                                storyTrashZoneEntered = true
-                            } else if !overTrash {
-                                storyTrashZoneEntered = false
-                            }
-                            isOverStoryTrashZone = overTrash
+                            updateTrashHover(center: center, canvasSize: canvasSize)
                         },
-                        onOverlayDragEnded: { location in
+                        onOverlayDragEnded: { center in
                             guard draggingTextOverlayID == overlay.id else { return }
-                            let shouldDelete = StoryTextDragDeleteMetrics.expandedHitZone(storyTrashZoneFrame)
-                                .contains(location)
-                            if shouldDelete {
+                            if StoryTextDragDeleteMetrics.containsElementCenter(center, canvasSize: canvasSize) {
                                 viewModel.deleteOverlay(id: overlay.id)
                             }
                             draggingTextOverlayID = nil
@@ -196,6 +176,13 @@ struct StoryEditorView: View {
                     )
             }
             .experienceElevation(.low)
+            .overlay(alignment: .topTrailing) {
+                if draggingTextOverlayID != nil {
+                    storyTrashDeleteTarget
+                        .padding(.top, StoryTextDragDeleteMetrics.canvasInset)
+                        .padding(.trailing, StoryTextDragDeleteMetrics.canvasInset)
+                }
+            }
             .contentShape(Rectangle())
             .onTapGesture {
                 if !viewModel.isEditingText {
@@ -362,6 +349,17 @@ struct StoryEditorView: View {
                 )
         }
     }
+
+    private func updateTrashHover(center: CGPoint, canvasSize: CGSize) {
+        let overTrash = StoryTextDragDeleteMetrics.containsElementCenter(center, canvasSize: canvasSize)
+        if overTrash, !storyTrashZoneEntered {
+            ExperienceHaptics.play(.impactLight)
+            storyTrashZoneEntered = true
+        } else if !overTrash {
+            storyTrashZoneEntered = false
+        }
+        isOverStoryTrashZone = overTrash
+    }
 }
 
 private enum StoryTextTransformMetrics {
@@ -369,20 +367,33 @@ private enum StoryTextTransformMetrics {
     static let minimumHitSize = CGSize(width: 96, height: 64)
 }
 
-private enum StoryTextDragDeleteMetrics {
-    static let trashHitOutset: CGFloat = 28
+/// Trash hit testing in the story canvas coordinate space.
+///
+/// `DragGesture.location` stays in the overlay's local space after `.position` and
+/// `.rotationEffect`, so it cannot be compared with a frame measured on the editor.
+/// The element's center uses the same canvas points as `.position`.
+enum StoryTextDragDeleteMetrics {
+    static let iconSize: CGFloat = 44
+    static let canvasInset: CGFloat = 10
+    /// Extra space around the visible icon. The element center only needs to enter this zone.
+    static let hitOutset: CGFloat = 44
 
-    static func expandedHitZone(_ frame: CGRect) -> CGRect {
-        guard frame.width > 0, frame.height > 0 else { return .zero }
-        return frame.insetBy(dx: -trashHitOutset, dy: -trashHitOutset)
+    static func visibleIconFrame(canvasSize: CGSize) -> CGRect {
+        CGRect(
+            x: canvasSize.width - canvasInset - iconSize,
+            y: canvasInset,
+            width: iconSize,
+            height: iconSize
+        )
     }
-}
 
-private struct StoryTrashZoneFrameKey: PreferenceKey {
-    static var defaultValue: CGRect = .zero
+    static func hitZone(canvasSize: CGSize) -> CGRect {
+        visibleIconFrame(canvasSize: canvasSize).insetBy(dx: -hitOutset, dy: -hitOutset)
+    }
 
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-        value = nextValue()
+    static func containsElementCenter(_ center: CGPoint, canvasSize: CGSize) -> Bool {
+        guard canvasSize.width > 0, canvasSize.height > 0 else { return false }
+        return hitZone(canvasSize: canvasSize).contains(center)
     }
 }
 
@@ -396,7 +407,6 @@ private struct StoryTextOverlayView: View {
     let onScale: (CGFloat) -> Void
     let onRotation: (CGFloat) -> Void
     let onEdit: () -> Void
-    var dragCoordinateSpaceName: String = "storyEditor"
     var onOverlayDragBegan: (() -> Void)?
     var onOverlayDragLocation: ((CGPoint) -> Void)?
     var onOverlayDragEnded: ((CGPoint) -> Void)?
@@ -476,7 +486,7 @@ private struct StoryTextOverlayView: View {
     }
 
     private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 0, coordinateSpace: .named(dragCoordinateSpaceName))
+        DragGesture(minimumDistance: 0)
             .onChanged { value in
                 onSelect()
                 if dragStartCenter == nil {
@@ -484,24 +494,37 @@ private struct StoryTextOverlayView: View {
                     onOverlayDragBegan?()
                 }
                 guard let start = dragStartCenter else { return }
-                let proposed = CGPoint(
-                    x: start.x + value.translation.width / canvasSize.width,
-                    y: start.y + value.translation.height / canvasSize.height
+                let clamped = clampedNormalizedCenter(
+                    CGPoint(
+                        x: start.x + value.translation.width / max(canvasSize.width, 1),
+                        y: start.y + value.translation.height / max(canvasSize.height, 1)
+                    )
                 )
-                onMove(clampedNormalizedCenter(proposed))
-                onOverlayDragLocation?(value.location)
+                onMove(clamped)
+                onOverlayDragLocation?(canvasPoint(for: clamped))
             }
             .onEnded { value in
-                if dragStartCenter == nil {
-                    onSelect()
-                } else if hypot(value.translation.width, value.translation.height) < 4 {
-                    onSelect()
-                    onOverlayDragEnded?(value.location)
+                let moved = hypot(value.translation.width, value.translation.height) >= 4
+                if let start = dragStartCenter, moved {
+                    let clamped = clampedNormalizedCenter(
+                        CGPoint(
+                            x: start.x + value.translation.width / max(canvasSize.width, 1),
+                            y: start.y + value.translation.height / max(canvasSize.height, 1)
+                        )
+                    )
+                    onOverlayDragEnded?(canvasPoint(for: clamped))
                 } else {
-                    onOverlayDragEnded?(value.location)
+                    onSelect()
                 }
                 dragStartCenter = nil
             }
+    }
+
+    private func canvasPoint(for normalizedCenter: CGPoint) -> CGPoint {
+        CGPoint(
+            x: normalizedCenter.x * canvasSize.width,
+            y: normalizedCenter.y * canvasSize.height
+        )
     }
 
     /// Keeps a usable portion of the element on canvas without locking the center away from edges.

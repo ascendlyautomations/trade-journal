@@ -252,6 +252,7 @@ export async function upsertReconstructedBrokerTrades(
         .update(patch)
         .eq("id", existingTradeId)
         .eq("user_id", params.userId)
+        .select("id")
       if (!error) {
         tradesUpdated += 1
         updatedTradeIds.push(existingTradeId)

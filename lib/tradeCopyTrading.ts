@@ -5,6 +5,7 @@ import { assertAccountAllowsNewTrades } from "./freePlanAccountSlots"
 import type { TradingAccountListItem } from "./tradingAccounts"
 import { isCopyTradedMode } from "./tradeMode"
 import { toUserFacingErrorMessage, USER_FACING_ERROR_MESSAGES } from "./userFacingError"
+import { rpcTradesOwnerRows } from "./tradeOwnerRead"
 
 export function isCopyTradedTrade(
   trade: {
@@ -144,7 +145,7 @@ export async function insertCopyTradedTrades({
   const { data: insertedTrades, error } = await client
     .from("trades")
     .insert(rows)
-    .select()
+    .select("id")
 
   if (error) {
     console.error("[insertCopyTradedTrades] insert error:", error)
@@ -157,7 +158,11 @@ export async function insertCopyTradedTrades({
     }
   }
 
-  const trades = (insertedTrades ?? []) as Record<string, unknown>[]
+  const insertedIDs = (insertedTrades ?? [])
+    .map((row) => (row.id ? String(row.id) : ""))
+    .filter(Boolean)
+  const owned = await rpcTradesOwnerRows(client, { tradeIds: insertedIDs })
+  const trades = owned.rows.length > 0 ? owned.rows : insertedIDs.map((id) => ({ id }))
   for (const trade of trades) {
     prependTradeInCache(userId, trade)
   }

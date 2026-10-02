@@ -35,7 +35,7 @@ type StorageImageProps = Omit<
 }
 
 /**
- * Lazy-loaded storage image with Supabase transform sizing and original URL fallback.
+ * Lazy-loaded storage image — Supabase object/public URLs only (no Storage transforms).
  */
 export default function StorageImage({
   src,

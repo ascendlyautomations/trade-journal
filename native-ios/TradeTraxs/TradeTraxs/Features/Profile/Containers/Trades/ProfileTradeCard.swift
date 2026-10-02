@@ -14,7 +14,8 @@ struct ProfileTradeCard: View {
         onOpen: @escaping () -> Void,
         onShare: @escaping () -> Void,
         onEdit: @escaping () -> Void,
-        onDelete: @escaping () -> Void,
+        onDelete: (() -> Void)? = nil,
+        isDeleteInProgress: Bool = false,
         onReport: (() -> Void)? = nil,
         profilePin: ProfilePinCallbacks? = nil,
         isProfilePinned: Bool = false
@@ -29,6 +30,7 @@ struct ProfileTradeCard: View {
             onShare: onShare,
             onEdit: onEdit,
             onDelete: onDelete,
+            isDeleteInProgress: isDeleteInProgress,
             onReport: onReport,
             profilePin: profilePin,
             isProfilePinned: isProfilePinned
@@ -41,7 +43,8 @@ struct ProfileTradeCard: View {
     let onOpen: () -> Void
     let onShare: () -> Void
     let onEdit: () -> Void
-    let onDelete: () -> Void
+    let onDelete: (() -> Void)?
+    var isDeleteInProgress: Bool = false
     var onReport: (() -> Void)? = nil
     var profilePin: ProfilePinCallbacks? = nil
     var isProfilePinned: Bool = false
@@ -55,7 +58,8 @@ struct ProfileTradeCard: View {
         onOpen: @escaping () -> Void,
         onShare: @escaping () -> Void,
         onEdit: @escaping () -> Void,
-        onDelete: @escaping () -> Void,
+        onDelete: (() -> Void)? = nil,
+        isDeleteInProgress: Bool = false,
         onReport: (() -> Void)? = nil,
         profilePin: ProfilePinCallbacks? = nil,
         isProfilePinned: Bool = false
@@ -69,6 +73,7 @@ struct ProfileTradeCard: View {
         self.onShare = onShare
         self.onEdit = onEdit
         self.onDelete = onDelete
+        self.isDeleteInProgress = isDeleteInProgress
         self.onReport = onReport
         self.profilePin = profilePin
         self.isProfilePinned = isProfilePinned
@@ -144,8 +149,10 @@ struct ProfileTradeCard: View {
             ContentOverflowMenu(
                 isOwner: showsOwnerActions,
                 onReport: onReport,
+                editTitle: "Edit Trade",
+                deleteTitle: "Delete Trade",
                 onEdit: showsOwnerActions ? onEdit : nil,
-                onDelete: showsOwnerActions ? onDelete : nil,
+                onDelete: showsOwnerActions && !isDeleteInProgress ? onDelete : nil,
                 onPin: profilePin.map { pin in
                     {
                         pin.requestPin(
@@ -173,8 +180,10 @@ struct ProfileTradeCard: View {
             Button("Open", action: onOpen)
             Button("Share", systemImage: "square.and.arrow.up", action: onShare)
             if showsOwnerActions {
-                Button("Edit", systemImage: "square.and.pencil", action: onEdit)
-                Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
+                Button("Edit Trade", systemImage: "square.and.pencil", action: onEdit)
+                if !isDeleteInProgress, let onDelete {
+                    Button("Delete Trade", systemImage: "trash", role: .destructive, action: onDelete)
+                }
             }
         } preview: {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {

@@ -70,6 +70,27 @@ final class StoryEditorTests: XCTestCase {
         XCTAssertEqual(Double(viewModel.canvas.textOverlays.first?.scale ?? 0), 0.5, accuracy: 0.001)
     }
 
+    func testTrashHitZoneIsLargerThanTheIconAndUsesCanvasCoordinates() {
+        let canvas = CGSize(width: 360, height: 640)
+        let icon = StoryTextDragDeleteMetrics.visibleIconFrame(canvasSize: canvas)
+        let zone = StoryTextDragDeleteMetrics.hitZone(canvasSize: canvas)
+
+        XCTAssertEqual(icon.width, StoryTextDragDeleteMetrics.iconSize)
+        XCTAssertGreaterThan(zone.width, icon.width)
+        XCTAssertGreaterThan(zone.height, icon.height)
+        XCTAssertTrue(zone.contains(icon))
+
+        let besideIcon = CGPoint(x: icon.minX - 20, y: icon.midY)
+        XCTAssertFalse(icon.contains(besideIcon))
+        XCTAssertTrue(StoryTextDragDeleteMetrics.containsElementCenter(besideIcon, canvasSize: canvas))
+
+        let canvasCenter = CGPoint(x: canvas.width / 2, y: canvas.height / 2)
+        XCTAssertFalse(StoryTextDragDeleteMetrics.containsElementCenter(canvasCenter, canvasSize: canvas))
+
+        let iconCenter = CGPoint(x: icon.midX, y: icon.midY)
+        XCTAssertTrue(StoryTextDragDeleteMetrics.containsElementCenter(iconCenter, canvasSize: canvas))
+    }
+
     private func makeSolidImage(size: CGSize) -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: size)
         return renderer.image { context in

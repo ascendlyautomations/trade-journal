@@ -53,6 +53,17 @@ struct TradesContainerView: View {
         } message: {
             Text("This action cannot be undone.")
         }
+        .alert(
+            "Couldn't delete trade",
+            isPresented: Binding(
+                get: { viewModel.deleteErrorMessage != nil },
+                set: { if !$0 { viewModel.deleteErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { viewModel.deleteErrorMessage = nil }
+        } message: {
+            Text(viewModel.deleteErrorMessage ?? "")
+        }
     }
 
     private var displayItems: [TradeSummary] {
@@ -91,7 +102,13 @@ struct TradesContainerView: View {
                             onOpen: { viewModel.openTrade(summary) },
                             onShare: { viewModel.shareTrade(summary) },
                             onEdit: { viewModel.editTrade(summary) },
-                            onDelete: { viewModel.requestDelete(summary) },
+                            onDelete: viewModel.showsOwnerActions
+                                ? {
+                                    guard !viewModel.isDeletingTrade(summary.id) else { return }
+                                    viewModel.requestDelete(summary)
+                                }
+                                : nil,
+                            isDeleteInProgress: viewModel.isDeletingTrade(summary.id),
                             onReport: reportAction(for: summary),
                             profilePin: profilePin,
                             isProfilePinned: isProfilePinned(summary)

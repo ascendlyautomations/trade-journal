@@ -199,6 +199,9 @@ struct DeepLinkParser: DeepLinkParsing {
         if first == "broker-integrations" {
             return .settingsStack([.home, .tradingAccounts, .brokerIntegrations])
         }
+        if first == "copy-trading-accounts" || first == "copy-trading-groups" {
+            return .settingsStack([.home, .tradingAccounts, .copyTradingAccounts])
+        }
         guard let route = SettingsRoute.fromDeepLinkSegment(first) else {
             return .settingsStack([.home])
         }

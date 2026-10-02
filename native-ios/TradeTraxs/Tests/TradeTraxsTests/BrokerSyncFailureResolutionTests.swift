@@ -28,8 +28,16 @@ final class BrokerSyncFailureResolutionTests: XCTestCase {
         let response = try decoder.decode(TradovateAccountSyncResponse.self, from: json)
         XCTAssertEqual(BrokerSyncFailureResolution.from(response), .reconnectRequired)
         XCTAssertEqual(
-            BrokerSyncPresentation.reconnectPrimaryActionTitle(),
-            "Reconnect Account"
+            BrokerSyncPresentation.reconnectPrimaryActionTitle(provider: .tradovate),
+            "Reconnect Tradovate"
+        )
+        XCTAssertEqual(
+            BrokerSyncFailureResolution.importFailureAction(for: .reconnectRequired, response: response),
+            .reconnect
+        )
+        XCTAssertEqual(
+            BrokerSyncFailureResolution.importFailureAction(for: .retryable, response: response),
+            .retry
         )
     }
 
@@ -105,6 +113,102 @@ final class BrokerSyncFailureResolutionTests: XCTestCase {
         """.data(using: .utf8)!
         let response = try decoder.decode(TradovateAccountSyncResponse.self, from: json)
         XCTAssertEqual(BrokerSyncFailureResolution.from(response), .retryable)
+        XCTAssertEqual(
+            BrokerSyncFailureResolution.importFailureAction(for: .retryable, response: response),
+            .syncInProgress
+        )
+    }
+
+    func testReconnectRequiredFromTokenRefreshFailureCategory() throws {
+        let json = """
+        {
+          "ok": false,
+          "connectionId": "c1",
+          "mappingId": "m1",
+          "code": "BROKER_SYNC_FAILED",
+          "failureCategory": "token_refresh_failure",
+          "summary": {
+            "ok": false,
+            "status": "error",
+            "tradesCreated": 0,
+            "tradesUpdated": 0,
+            "newTradeIds": [],
+            "updatedTradeIds": [],
+            "errorCode": "sync_failed",
+            "error": "Tradovate authorization expired."
+          },
+          "accounts": []
+        }
+        """.data(using: .utf8)!
+        let response = try decoder.decode(TradovateAccountSyncResponse.self, from: json)
+        XCTAssertEqual(BrokerSyncFailureResolution.from(response), .reconnectRequired)
+        XCTAssertEqual(
+            BrokerSyncFailureResolution.importFailureAction(for: .reconnectRequired, response: response),
+            .reconnect
+        )
+    }
+
+    func testReconnectRequiredFromUnauthorizedSummaryCode() throws {
+        let json = """
+        {
+          "ok": false,
+          "connectionId": "c1",
+          "mappingId": "m1",
+          "summary": {
+            "ok": false,
+            "status": "error",
+            "tradesCreated": 0,
+            "tradesUpdated": 0,
+            "newTradeIds": [],
+            "updatedTradeIds": [],
+            "errorCode": "unauthorized"
+          },
+          "accounts": []
+        }
+        """.data(using: .utf8)!
+        let response = try decoder.decode(TradovateAccountSyncResponse.self, from: json)
+        XCTAssertTrue(BrokerSyncFailureResolution.isReconnectRequired(response))
+    }
+
+    func testProviderUnavailableRemainsRetryable() throws {
+        let json = """
+        {
+          "ok": false,
+          "connectionId": "c1",
+          "mappingId": "m1",
+          "code": "BROKER_TEMPORARILY_UNAVAILABLE",
+          "summary": {
+            "ok": false,
+            "status": "error",
+            "tradesCreated": 0,
+            "tradesUpdated": 0,
+            "newTradeIds": [],
+            "updatedTradeIds": [],
+            "errorCode": "provider_unavailable"
+          },
+          "accounts": []
+        }
+        """.data(using: .utf8)!
+        let response = try decoder.decode(TradovateAccountSyncResponse.self, from: json)
+        XCTAssertEqual(BrokerSyncFailureResolution.from(response), .retryable)
+        XCTAssertEqual(
+            BrokerSyncFailureResolution.importFailureAction(for: .retryable, response: response),
+            .retry
+        )
+    }
+
+    func testSyncSummaryPayloadDetection() throws {
+        let json = """
+        {
+          "ok": false,
+          "connectionId": "c1",
+          "mappingId": "m1",
+          "summary": { "ok": false, "status": "error", "tradesCreated": 0, "tradesUpdated": 0, "newTradeIds": [], "updatedTradeIds": [] },
+          "accounts": []
+        }
+        """.data(using: .utf8)!
+        XCTAssertTrue(BrokerSyncFailureResolution.payloadContainsSyncSummary(json))
+        XCTAssertFalse(BrokerSyncFailureResolution.payloadContainsSyncSummary("{}".data(using: .utf8)!))
     }
 
     func testSyncFailureAfterReconnectIsNotTreatedAsOAuthFailure() {

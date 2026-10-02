@@ -27,6 +27,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         UserDefaults.standard.register(defaults: ["UseFloatingTabBar": false])
         ExperienceNavigationBarAppearance.configureArrowOnlyBackButtons()
         ExperienceNavigationBarAppearance.configureDefaultBarChrome()
+        ExperienceGroupedListAppearance.sync()
         StartupTrace.event("AppDelegate.didFinishLaunching")
         AppLog.application.info("AppDelegate.didFinishLaunching")
         // The notification-center delegate must exist before launch returns.

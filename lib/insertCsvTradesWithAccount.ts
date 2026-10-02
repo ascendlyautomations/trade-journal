@@ -83,5 +83,5 @@ export async function insertCsvTradesWithAccount(
       ? { isInitialImport: insertOptions.isInitialImport }
       : {}),
   })
-  return client.from("trades").insert(rows)
+  return client.from("trades").insert(rows).select("id")
 }

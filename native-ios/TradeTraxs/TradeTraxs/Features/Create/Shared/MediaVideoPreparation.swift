@@ -149,7 +149,7 @@ enum MediaVideoPreparation {
         onProgress?(0.05)
 
         var transcodeMetrics: VideoDeliveryExporter.TranscodeMetrics?
-        let deliveryURL: URL
+        var deliveryURL: URL?
         do {
             deliveryURL = try await VideoDeliveryExporter.produceDeliveryVideo(
                 from: sourceAsset,
@@ -162,130 +162,60 @@ enum MediaVideoPreparation {
                     onProgress?(0.05 + (value * 0.85))
                 }
             )
+            if let deliveryURL {
+                let deliveryFileInfo = VideoTranscodeFailureDiagnostics.outputFileInfo(at: deliveryURL)
+                VideoTranscodeDiagnostics.logExportWithSessionReturned(
+                    outputURL: deliveryURL,
+                    fileBytes: deliveryFileInfo.bytes
+                )
+            }
         } catch {
-            try? FileManager.default.removeItem(at: stagedSource)
-            throw mapPreparationError(error, fallback: limits.compressionFailedMessage, limits: limits)
+            VideoPrepareDiagnostics.logOptimizationFallback(reason: "exportFailed \(error)")
         }
-
-        let deliveryFileInfo = VideoTranscodeFailureDiagnostics.outputFileInfo(at: deliveryURL)
-        VideoTranscodeDiagnostics.logExportWithSessionReturned(
-            outputURL: deliveryURL,
-            fileBytes: deliveryFileInfo.bytes
-        )
 
         try Task.checkCancellation()
 
-        let deliveryAsset = AVURLAsset(url: deliveryURL)
-        let outputProfile: VideoDeliveryExporter.SourceProfile
-        VideoPrepareDiagnostics.logValidationStarted(output: deliveryURL.lastPathComponent)
-        do {
-            outputProfile = try await VideoDeliveryExporter.validateOutput(
-                asset: deliveryAsset,
-                fileURL: deliveryURL,
-                expectedDurationSeconds: profile.durationSeconds,
-                sourceFrameRate: profile.frameRate,
-                targetFrameRate: target.outputFrameRate,
-                transcodeMetrics: transcodeMetrics
-            )
-            VideoPrepareDiagnostics.logValidationCompleted(
-                bytes: outputProfile.fileBytes,
-                durationSeconds: outputProfile.durationSeconds,
-                fps: outputProfile.frameRate
-            )
-        } catch {
-            if case VideoPreparationFailure.outputValidationFailed = error {
-                // Detailed reason already logged inside validateOutput.
-            } else {
-                VideoPrepareDiagnostics.logValidationFailed(reason: "\(error)")
-            }
-            try? FileManager.default.removeItem(at: stagedSource)
-            try? FileManager.default.removeItem(at: deliveryURL)
-            throw AppError.unknown(message: limits.compressionFailedMessage)
-        }
+        let resolved = try await resolvePreparedVideoFile(
+            sourceAsset: sourceAsset,
+            stagedSource: stagedSource,
+            sourceProfile: profile,
+            deliveryURL: deliveryURL,
+            transcodeMetrics: transcodeMetrics,
+            target: target,
+            assessmentTarget: assessmentTarget,
+            decisionReason: reason,
+            limits: limits
+        )
 
-        guard outputProfile.fileBytes <= limits.maxFinalUploadBytes else {
-            try? FileManager.default.removeItem(at: stagedSource)
+        if let deliveryURL, deliveryURL != resolved.fileURL {
             try? FileManager.default.removeItem(at: deliveryURL)
-            throw AppError.unknown(message: limits.preparedTooLargeMessage)
         }
-
-        var finalURL = deliveryURL
-        var finalProfile = outputProfile
-        if outputProfile.fileBytes >= profile.fileBytes,
-           VideoDeliveryExporter.isDeliveryCompatibleVideo(profile: profile, target: assessmentTarget)
-        {
-            try? FileManager.default.removeItem(at: deliveryURL)
-            if profile.isMP4Container {
-                finalURL = stagedSource
-                finalProfile = profile
-            } else {
-                var remuxMetrics: VideoDeliveryExporter.TranscodeMetrics?
-                let remuxed = try await VideoDeliveryExporter.produceDeliveryVideo(
-                    from: sourceAsset,
-                    sourceURL: stagedSource,
-                    profile: profile,
-                    mode: .remux,
-                    target: target,
-                    transcodeMetrics: &remuxMetrics,
-                    onProgress: nil
-                )
-                try? FileManager.default.removeItem(at: stagedSource)
-                finalURL = remuxed
-                finalProfile = try await VideoDeliveryExporter.inspectSource(
-                    asset: AVURLAsset(url: remuxed),
-                    fileURL: remuxed
-                )
-            }
-        } else {
-            VideoPrepareDiagnostics.logTranscodeEffectivenessValidationStarted()
-            do {
-                try VideoDeliveryExporter.validateTranscodeEffectiveness(
-                    source: profile,
-                    output: outputProfile,
-                    decisionReason: reason
-                )
-                VideoPrepareDiagnostics.logTranscodeEffectivenessValidationCompleted()
-            } catch {
-                if case VideoPreparationFailure.compressionFailed = error {
-                    // Detailed reason logged when effectiveness check fails.
-                } else {
-                    VideoPrepareDiagnostics.logTranscodeEffectivenessValidationFailed(reason: "\(error)")
-                }
-                try? FileManager.default.removeItem(at: stagedSource)
-                try? FileManager.default.removeItem(at: deliveryURL)
-                throw mapPreparationError(error, fallback: limits.compressionFailedMessage, limits: limits)
-            }
+        if stagedSource != resolved.fileURL {
             try? FileManager.default.removeItem(at: stagedSource)
-        }
-
-        guard finalProfile.fileBytes <= limits.maxFinalUploadBytes else {
-            try? FileManager.default.removeItem(at: finalURL)
-            throw AppError.unknown(message: limits.preparedTooLargeMessage)
         }
 
         VideoCompressionDiagnostics.logOutput(
             sourceFPS: profile.frameRate,
             targetFPS: target.outputFrameRate,
-            outputFPS: outputProfile.frameRate,
+            outputFPS: resolved.profile.frameRate,
             sourceDuration: profile.durationSeconds,
-            outputDuration: outputProfile.durationSeconds,
+            outputDuration: resolved.profile.durationSeconds,
             sourceBytes: profile.fileBytes,
-            outputBytes: finalProfile.fileBytes,
+            outputBytes: resolved.profile.fileBytes,
             sourceBitrate: VideoDeliveryExporter.effectiveBitrate(for: profile),
-            outputBitrate: finalProfile.estimatedBitrate,
+            outputBitrate: resolved.profile.estimatedBitrate,
             outputFrameCount: transcodeMetrics?.outputVideoFrameCount
         )
 
         onProgress?(0.92)
 
-        let finalAsset = AVURLAsset(url: finalURL)
+        let finalAsset = AVURLAsset(url: resolved.fileURL)
         let thumb = await generateThumbnail(
             for: finalAsset,
-            durationSeconds: finalProfile.durationSeconds
+            durationSeconds: resolved.profile.durationSeconds
         )
-        guard thumb != nil else {
-            try? FileManager.default.removeItem(at: finalURL)
-            throw AppError.unknown(message: limits.compressionFailedMessage)
+        if thumb == nil {
+            VideoPrepareDiagnostics.logOptimizationFallback(reason: "thumbnailGenerationFailed")
         }
 
         #if DEBUG
@@ -297,10 +227,10 @@ enum MediaVideoPreparation {
         onProgress?(1)
 
         return PreparedLocalVideo(
-            fileURL: finalURL,
-            contentType: "video/mp4",
-            byteCount: finalProfile.fileBytes,
-            durationSeconds: finalProfile.durationSeconds,
+            fileURL: resolved.fileURL,
+            contentType: resolved.contentType,
+            byteCount: resolved.profile.fileBytes,
+            durationSeconds: resolved.profile.durationSeconds,
             thumbnailJPEG: thumb?.jpegData(compressionQuality: 0.9),
             thumbnailImage: thumb
         )
@@ -326,6 +256,187 @@ enum MediaVideoPreparation {
     }
 
     // MARK: - Private
+
+    private struct ResolvedPreparedVideoFile: Sendable {
+        var fileURL: URL
+        var profile: VideoDeliveryExporter.SourceProfile
+        var contentType: String
+    }
+
+    /// Compressed delivery when optimization checks pass; otherwise the staged import copy (or remux).
+    private static func resolvePreparedVideoFile(
+        sourceAsset: AVURLAsset,
+        stagedSource: URL,
+        sourceProfile: VideoDeliveryExporter.SourceProfile,
+        deliveryURL: URL?,
+        transcodeMetrics: VideoDeliveryExporter.TranscodeMetrics?,
+        target: VideoDeliveryExporter.DeliveryTarget,
+        assessmentTarget: VideoDeliveryExporter.DeliveryTarget,
+        decisionReason: String,
+        limits: Limits
+    ) async throws -> ResolvedPreparedVideoFile {
+        if let deliveryURL,
+           let compressed = try await acceptCompressedDeliveryIfEligible(
+            deliveryURL: deliveryURL,
+            sourceProfile: sourceProfile,
+            transcodeMetrics: transcodeMetrics,
+            target: target,
+            assessmentTarget: assessmentTarget,
+            decisionReason: decisionReason,
+            limits: limits
+           )
+        {
+            return compressed
+        }
+        return try await fallbackToImportedSource(
+            sourceAsset: sourceAsset,
+            stagedSource: stagedSource,
+            sourceProfile: sourceProfile,
+            target: target,
+            limits: limits
+        )
+    }
+
+    private static func acceptCompressedDeliveryIfEligible(
+        deliveryURL: URL,
+        sourceProfile: VideoDeliveryExporter.SourceProfile,
+        transcodeMetrics: VideoDeliveryExporter.TranscodeMetrics?,
+        target: VideoDeliveryExporter.DeliveryTarget,
+        assessmentTarget: VideoDeliveryExporter.DeliveryTarget,
+        decisionReason: String,
+        limits: Limits
+    ) async throws -> ResolvedPreparedVideoFile? {
+        VideoPrepareDiagnostics.logValidationStarted(output: deliveryURL.lastPathComponent)
+        let deliveryAsset = AVURLAsset(url: deliveryURL)
+        let outputProfile: VideoDeliveryExporter.SourceProfile
+        do {
+            outputProfile = try await VideoDeliveryExporter.validateOutput(
+                asset: deliveryAsset,
+                fileURL: deliveryURL,
+                expectedDurationSeconds: sourceProfile.durationSeconds,
+                sourceFrameRate: sourceProfile.frameRate,
+                targetFrameRate: target.outputFrameRate,
+                transcodeMetrics: transcodeMetrics
+            )
+            VideoPrepareDiagnostics.logValidationCompleted(
+                bytes: outputProfile.fileBytes,
+                durationSeconds: outputProfile.durationSeconds,
+                fps: outputProfile.frameRate
+            )
+        } catch {
+            VideoPrepareDiagnostics.logOptimizationFallback(reason: "compressedValidationFailed")
+            return nil
+        }
+
+        guard outputProfile.fileBytes <= limits.maxFinalUploadBytes else {
+            VideoPrepareDiagnostics.logOptimizationFallback(reason: "compressedExceedsUploadLimit")
+            return nil
+        }
+
+        if outputProfile.fileBytes >= sourceProfile.fileBytes,
+           VideoDeliveryExporter.isDeliveryCompatibleVideo(profile: sourceProfile, target: assessmentTarget)
+        {
+            VideoPrepareDiagnostics.logOptimizationFallback(reason: "compressedNotSmallerThanCompatibleSource")
+            return nil
+        }
+
+        VideoPrepareDiagnostics.logTranscodeEffectivenessValidationStarted()
+        do {
+            try VideoDeliveryExporter.validateTranscodeEffectiveness(
+                source: sourceProfile,
+                output: outputProfile,
+                decisionReason: decisionReason
+            )
+            VideoPrepareDiagnostics.logTranscodeEffectivenessValidationCompleted()
+        } catch {
+            VideoPrepareDiagnostics.logTranscodeEffectivenessValidationFailed(reason: "\(error)")
+            VideoPrepareDiagnostics.logOptimizationFallback(reason: "transcodeEffectivenessFailed")
+            return nil
+        }
+
+        return ResolvedPreparedVideoFile(
+            fileURL: deliveryURL,
+            profile: outputProfile,
+            contentType: "video/mp4"
+        )
+    }
+
+    private static func fallbackToImportedSource(
+        sourceAsset: AVURLAsset,
+        stagedSource: URL,
+        sourceProfile: VideoDeliveryExporter.SourceProfile,
+        target: VideoDeliveryExporter.DeliveryTarget,
+        limits: Limits
+    ) async throws -> ResolvedPreparedVideoFile {
+        guard isPlayableSourceProfile(sourceProfile, limits: limits) else {
+            throw AppError.unknown(message: limits.compressionFailedMessage)
+        }
+        guard sourceProfile.fileBytes <= limits.maxFinalUploadBytes else {
+            throw AppError.unknown(message: limits.preparedTooLargeMessage)
+        }
+
+        if sourceProfile.isMP4Container {
+            VideoPrepareDiagnostics.logOptimizationFallback(reason: "usingOriginalMP4")
+            return ResolvedPreparedVideoFile(
+                fileURL: stagedSource,
+                profile: sourceProfile,
+                contentType: mimeType(
+                    forExtension: stagedSource.pathExtension,
+                    fallback: "video/mp4"
+                )
+            )
+        }
+
+        var remuxMetrics: VideoDeliveryExporter.TranscodeMetrics?
+        do {
+            let remuxed = try await VideoDeliveryExporter.produceDeliveryVideo(
+                from: sourceAsset,
+                sourceURL: stagedSource,
+                profile: sourceProfile,
+                mode: .remux,
+                target: target,
+                transcodeMetrics: &remuxMetrics,
+                onProgress: nil
+            )
+            let remuxProfile = try await VideoDeliveryExporter.inspectSource(
+                asset: AVURLAsset(url: remuxed),
+                fileURL: remuxed
+            )
+            guard remuxProfile.fileBytes <= limits.maxFinalUploadBytes else {
+                try? FileManager.default.removeItem(at: remuxed)
+                throw AppError.unknown(message: limits.preparedTooLargeMessage)
+            }
+            VideoPrepareDiagnostics.logOptimizationFallback(reason: "usingRemuxedOriginal")
+            return ResolvedPreparedVideoFile(
+                fileURL: remuxed,
+                profile: remuxProfile,
+                contentType: "video/mp4"
+            )
+        } catch let app as AppError {
+            throw app
+        } catch {
+            VideoPrepareDiagnostics.logOptimizationFallback(reason: "remuxFailedUsingOriginalContainer")
+            return ResolvedPreparedVideoFile(
+                fileURL: stagedSource,
+                profile: sourceProfile,
+                contentType: mimeType(
+                    forExtension: stagedSource.pathExtension,
+                    fallback: "video/quicktime"
+                )
+            )
+        }
+    }
+
+    private static func isPlayableSourceProfile(
+        _ profile: VideoDeliveryExporter.SourceProfile,
+        limits: Limits
+    ) -> Bool {
+        profile.fileBytes > 0
+            && profile.durationSeconds > 0
+            && profile.durationSeconds <= limits.maxDurationSeconds
+            && profile.orientedSize.width > 0
+            && profile.orientedSize.height > 0
+    }
 
     private static func generateThumbnail(for asset: AVURLAsset, durationSeconds: Int) async -> UIImage? {
         let generator = AVAssetImageGenerator(asset: asset)

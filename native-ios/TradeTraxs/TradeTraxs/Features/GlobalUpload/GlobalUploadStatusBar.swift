@@ -89,7 +89,9 @@ struct GlobalUploadQueueSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .experienceInsetGroupedListStyle(pageBackground: true)
         }
+        .experienceSheetChrome()
     }
 }
 

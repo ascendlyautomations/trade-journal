@@ -153,7 +153,7 @@ struct TradingDayDetailView: View {
                         },
                         onShare: {},
                         onEdit: {},
-                        onDelete: {}
+                        onDelete: nil
                     )
                 }
             }

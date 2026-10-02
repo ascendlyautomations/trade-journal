@@ -92,6 +92,10 @@ nonisolated enum VideoPrepareDiagnostics {
     static func logTranscodeEffectivenessValidationFailed(reason: String) {
         log("transcodeEffectivenessValidationFailed reason=\(reason)")
     }
+
+    static func logOptimizationFallback(reason: String) {
+        log("optimizationFallback reason=\(reason)")
+    }
 }
 #else
 nonisolated enum VideoImportDiagnostics {
@@ -118,5 +122,6 @@ nonisolated enum VideoPrepareDiagnostics {
     static func logTranscodeEffectivenessValidationStarted() {}
     static func logTranscodeEffectivenessValidationCompleted() {}
     static func logTranscodeEffectivenessValidationFailed(reason: String) {}
+    static func logOptimizationFallback(reason: String) {}
 }
 #endif

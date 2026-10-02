@@ -38,9 +38,14 @@ export async function GET(req: Request) {
     ])
 
   const connectionCount = tradovateConnections.length + rithmicConnections.length
+  /** Matches iOS ``TradovateConnectionSummary/isActiveForBrokerUI`` — not OAuth `connected` alone. */
+  const isActiveForBrokerUI = (status: string) =>
+    status === "connected" ||
+    status === "reconnect_required" ||
+    status === "error"
   const hasSupportedConnection =
-    tradovateConnections.some((c) => c.connected) ||
-    rithmicConnections.some((c) => c.connected)
+    tradovateConnections.some((c) => isActiveForBrokerUI(c.status)) ||
+    rithmicConnections.some((c) => isActiveForBrokerUI(c.status))
   const hasLinkedAccount = importTargets.length > 0
   const canImportImmediately = hasLinkedAccount
   const needsAccountLinking = hasSupportedConnection && !hasLinkedAccount
@@ -59,8 +64,8 @@ export async function GET(req: Request) {
     canImportImmediately,
     needsAccountLinking,
     connectedProviders: {
-      tradovate: tradovateConnections.some((c) => c.connected),
-      rithmic: rithmicConnections.some((c) => c.connected),
+      tradovate: tradovateConnections.some((c) => isActiveForBrokerUI(c.status)),
+      rithmic: rithmicConnections.some((c) => isActiveForBrokerUI(c.status)),
     },
     linkedAccounts: linkedMappings.map((t) => ({
       provider: t.provider,

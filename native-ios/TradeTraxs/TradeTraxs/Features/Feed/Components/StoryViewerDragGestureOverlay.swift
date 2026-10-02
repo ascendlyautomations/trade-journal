@@ -4,10 +4,10 @@ enum StoryViewerDragGestureSupport {
     static let minimumDistance: CGFloat = 24
     static let directionThreshold: CGFloat = 48
 
+    /// Horizontal author paging and swipe-up for reply composer. Vertical dismiss uses ``experienceSwipeToDismiss``.
     static func dragGesture(
         isReplyFocused: Bool,
         canOpenReplyComposer: Bool,
-        onSwipeDown: @escaping () -> Void,
         onSwipeUp: @escaping () -> Void,
         onSwipeLeft: @escaping () -> Void,
         onSwipeRight: @escaping () -> Void
@@ -28,9 +28,7 @@ enum StoryViewerDragGestureSupport {
                     } else {
                         onSwipeRight()
                     }
-                } else if y > 0 {
-                    onSwipeDown()
-                } else if !isReplyFocused, canOpenReplyComposer {
+                } else if y < 0, !isReplyFocused, canOpenReplyComposer {
                     onSwipeUp()
                 }
             }
@@ -41,7 +39,6 @@ enum StoryViewerDragGestureSupport {
 struct StoryViewerDragGestureOverlay: View {
     var isEnabled: Bool
     var canOpenReplyComposer: Bool
-    var onSwipeDown: () -> Void
     var onSwipeUp: () -> Void
     var onSwipeLeft: () -> Void
     var onSwipeRight: () -> Void
@@ -53,7 +50,6 @@ struct StoryViewerDragGestureOverlay: View {
                 StoryViewerDragGestureSupport.dragGesture(
                     isReplyFocused: !isEnabled,
                     canOpenReplyComposer: canOpenReplyComposer,
-                    onSwipeDown: onSwipeDown,
                     onSwipeUp: onSwipeUp,
                     onSwipeLeft: onSwipeLeft,
                     onSwipeRight: onSwipeRight

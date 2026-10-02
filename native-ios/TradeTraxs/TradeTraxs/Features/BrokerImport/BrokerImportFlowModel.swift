@@ -18,6 +18,15 @@ final class BrokerImportFlowModel {
         case syncInProgress
         case reconnect
         case dismiss
+
+        init(_ kind: BrokerImportFailureKind) {
+            switch kind {
+            case .retry: self = .retry
+            case .syncInProgress: self = .syncInProgress
+            case .reconnect: self = .reconnect
+            case .dismiss: self = .dismiss
+            }
+        }
     }
 
     struct BrokerImportProgressSnapshot: Equatable {
@@ -36,6 +45,7 @@ final class BrokerImportFlowModel {
     private var activeTarget: BrokerImportEligibilityTarget?
     private var pendingTradovateConnectionId: String?
     private var pendingTradovateMappingId: String?
+    private var pendingTradovateSyncMode: TradovateSyncRequestMode = .preview
     private var stageAnimationTask: Task<Void, Never>?
     private var data: DataEnvironment?
 
@@ -48,6 +58,7 @@ final class BrokerImportFlowModel {
         activeTarget = target
         pendingTradovateConnectionId = nil
         pendingTradovateMappingId = nil
+        pendingTradovateSyncMode = .preview
         pendingRithmicPasswordTarget = nil
         isPresented = true
         Task { await runImport(target: target, rithmicPassword: rithmicPassword) }
@@ -99,8 +110,11 @@ final class BrokerImportFlowModel {
             activeTarget = nil
             pendingTradovateConnectionId = nil
             pendingTradovateMappingId = nil
+            pendingTradovateSyncMode = .preview
         }
     }
+
+    var activeImportProvider: BrokerIntegrationProvider? { activeTarget?.provider }
 
     // MARK: - Import execution
 
@@ -151,8 +165,6 @@ final class BrokerImportFlowModel {
         switch target.provider {
         case .rithmic:
             pendingRithmicPasswordTarget = target
-            isPresented = false
-            phase = .idle
         case .tradovate:
             Task { await reconnectTradovate(data: data, target: target) }
         }
@@ -172,14 +184,12 @@ final class BrokerImportFlowModel {
         let outcome = await BrokerTradovateReconnectImport.reconnectAndSync(
             broker: data.brokerIntegrations,
             connectionId: target.connectionId,
-            mappingId: target.mappingId
+            mappingId: target.mappingId,
+            syncMode: pendingTradovateSyncMode
         )
         switch outcome {
         case .cancelled:
-            fail(
-                BrokerSyncPresentation.reconnectRequiredMessage(provider: .tradovate),
-                action: .reconnect
-            )
+            close(reset: true)
         case .oauthFailed:
             fail(
                 BrokerSyncPresentation.reconnectRequiredMessage(provider: .tradovate),
@@ -188,8 +198,33 @@ final class BrokerImportFlowModel {
         case .syncUnavailable:
             fail(BrokerSyncPresentation.temporaryFailureMessage(), action: .retry)
         case .syncCompleted(let response):
-            await finishWithSyncResponse(response, target: target, data: data)
+            await finishAfterTradovateReconnect(response, target: target, data: data)
         }
+    }
+
+    private func finishAfterTradovateReconnect(
+        _ response: TradovateAccountSyncResponse,
+        target: BrokerImportEligibilityTarget,
+        data: DataEnvironment
+    ) async {
+        guard response.summary.ok else {
+            await handleSyncFailure(response, target: target)
+            return
+        }
+        if pendingTradovateSyncMode == .preview {
+            let previews = response.summary.importPreviewTrades
+            if previews.isEmpty {
+                setProgress(stage: .finalizing, progress: 1, processedCaption: nil)
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                phase = .upToDate
+                return
+            }
+            pendingTradovateConnectionId = target.connectionId
+            pendingTradovateMappingId = target.mappingId
+            phase = .awaitingTradovateConfirmation(previews)
+            return
+        }
+        await finishWithSyncResponse(response, target: target, data: data)
     }
 
     private func runTradovatePreviewImport(
@@ -197,6 +232,7 @@ final class BrokerImportFlowModel {
         target: BrokerImportEligibilityTarget
     ) async {
         let presentation = presentationLines(for: target)
+        pendingTradovateSyncMode = .preview
         do {
             let preview = try await performSyncWithIndeterminateProgress(
                 accountTitle: presentation.title,
@@ -243,6 +279,7 @@ final class BrokerImportFlowModel {
         let presentation = presentationLines(for: target)
         isPersistingTradovateImport = true
         defer { isPersistingTradovateImport = false }
+        pendingTradovateSyncMode = .import
         beginRunning(
             accountTitle: presentation.title,
             accountSubtitle: presentation.subtitle,
@@ -315,24 +352,17 @@ final class BrokerImportFlowModel {
         target: BrokerImportEligibilityTarget
     ) async {
         let resolution = BrokerSyncFailureResolution.from(response)
-        let action: BrokerImportFailureAction
-        switch resolution {
-        case .success:
-            action = .dismiss
-        case .reconnectRequired:
-            action = .reconnect
-        case .retryable:
-            action = BrokerSyncFailureResolution.isSyncInProgress(response) ? .syncInProgress : .retry
-        case .importFailed, .noAvailableTradeHistory:
-            action = .dismiss
-        }
+        let kind = BrokerSyncFailureResolution.importFailureAction(
+            for: resolution,
+            response: response
+        )
         fail(
-            BrokerSyncPresentation.message(
+            BrokerSyncPresentation.importFailureMessage(
                 for: response,
                 provider: target.provider,
                 resolution: resolution
             ),
-            action: action
+            action: BrokerImportFailureAction(kind)
         )
     }
 

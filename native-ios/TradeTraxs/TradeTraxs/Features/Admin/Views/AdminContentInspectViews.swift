@@ -31,8 +31,12 @@ enum AdminContentInspectViews {
             )
             .adminExperienceChrome()
         case .inspectAchievement(let achievementID):
-            AchievementDetailView(achievementID: achievementID, data: data)
-                .adminExperienceChrome()
+            AchievementDetailView(
+                achievementID: achievementID,
+                data: data,
+                navigationCoordinator: navigationCoordinator
+            )
+            .adminExperienceChrome()
         case .inspectProfile(let profileID):
             if let store = currentUserProfile {
                 ProfileView(

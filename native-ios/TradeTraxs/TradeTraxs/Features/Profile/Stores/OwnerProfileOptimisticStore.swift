@@ -21,6 +21,7 @@ final class OwnerProfileOptimisticStore {
     private(set) var achievements: [Achievement] = []
     private(set) var deletedPostIDs: Set<PostID> = []
     private(set) var deletedReelIDs: Set<ReelID> = []
+    private(set) var deletedAchievementIDs: Set<AchievementID> = []
 
     /// Weak so logout / tab teardown does not retain a dead screen.
     private weak var ownerScreen: ProfileScreenViewModel?
@@ -104,6 +105,14 @@ final class OwnerProfileOptimisticStore {
         revision += 1
     }
 
+    func noteAchievementDeleted(id: AchievementID, owner: ProfileID, previous: Achievement?) {
+        achievements.removeAll { $0.id == id }
+        deletedAchievementIDs.insert(id)
+        ownerScreen?.applyOptimisticAchievementRemoval(id: id, owner: owner, previous: previous)
+        ContentMutationStore.shared.noteAchievementDeleted(id)
+        revision += 1
+    }
+
     /// Merge overlays into a bootstrap / refresh snapshot (dedupe by id, overlay wins).
     func merging(into state: ProfileState) -> ProfileState {
         guard state.isOwner || ownerMatches(state.profileID) else { return state }
@@ -113,6 +122,7 @@ final class OwnerProfileOptimisticStore {
         next.clips = Self.merging(overlay: reels, into: next.clips)
             .filter { !deletedReelIDs.contains($0.id) }
         next.achievements = Self.merging(overlay: achievements, into: next.achievements)
+            .filter { !deletedAchievementIDs.contains($0.id) }
         return next
     }
 
@@ -122,6 +132,7 @@ final class OwnerProfileOptimisticStore {
         achievements = []
         deletedPostIDs = []
         deletedReelIDs = []
+        deletedAchievementIDs = []
         ownerScreen = nil
         revision = 0
     }

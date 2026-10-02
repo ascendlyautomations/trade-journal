@@ -95,7 +95,7 @@ struct StoryShareRecipientPickerView: View {
                     }
                 }
             }
-            .listStyle(.plain)
+            .experiencePlainListStyle()
             .overlay {
                 if viewModel.phase == .sending {
                     ProgressView("Sending…")

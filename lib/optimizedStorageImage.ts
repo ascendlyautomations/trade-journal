@@ -1,18 +1,22 @@
 /**
- * Supabase Storage image transforms — serve appropriately sized images
- * via /storage/v1/render/image/public/ (falls back to original URL on error).
+ * Supabase Storage delivery — object/public URLs only (no Image Transformations).
  *
- * Upload-time optimized assets (`/opt/` in the storage path) use object/public URLs only.
+ * Upload-time optimized assets (`/opt/` in the storage path) and legacy objects
+ * are both fetched via `/storage/v1/object/public/…`.
  */
 
 import {
   debugLogStorageImageDelivery,
   isOptimizedStorageObjectPath,
   toSupabaseObjectPublicUrl,
-} from "./storageOptimizedMedia"
+} from "./storageOptimizedMedia.ts"
+import {
+  assertNoSupabaseStorageTransformUrl,
+  supabaseStorageDeliveryUrl,
+  SUPABASE_STORAGE_RENDER_PUBLIC,
+} from "./supabaseStorageTransformGuard.ts"
 
 const STORAGE_OBJECT_PUBLIC = "/storage/v1/object/public/"
-const STORAGE_RENDER_PUBLIC = "/storage/v1/render/image/public/"
 
 export type StorageImagePreset =
   | "avatar"
@@ -37,68 +41,21 @@ type TransformOptions = {
   resize?: "cover" | "contain" | "fill"
 }
 
-const PRESET_TRANSFORMS: Record<
-  StorageImagePreset,
-  Required<Pick<TransformOptions, "quality">> &
-    Pick<TransformOptions, "width" | "height" | "resize">
-> = {
-  avatar: { width: 96, height: 96, quality: 80, resize: "cover" },
-  /** Shared Profile / non-feed card transform. Width-only uses Storage's default cover crop. */
-  "feed-thumb": { width: 640, quality: 75 },
-  /**
-   * Feed cards only. Fit inside a 2× desktop frame without cropping or stretching.
-   * Sources smaller than the box are not upscaled.
-   */
-  "feed-card": { width: 1440, height: 1080, quality: 75, resize: "contain" },
-  "feed-detail": { width: 1280, quality: 82 },
-  story: { width: 1080, quality: 80, resize: "contain" },
-  "reel-thumb": { width: 560, height: 996, quality: 75, resize: "cover" },
-  achievement: { width: 800, quality: 75 },
-  /**
-   * /achievements gallery cards only. Fit inside a compact 2× card box
-   * without cropping or stretching. Smaller originals are not upscaled.
-   */
-  "achievement-card": { width: 960, height: 720, quality: 75, resize: "contain" },
-  "trade-thumb": { width: 800, quality: 75 },
-  "message-preview": { width: 720, quality: 72, resize: "contain" },
-  "message-thumb": { width: 320, height: 320, quality: 70, resize: "cover" },
-  "message-story-thumb": {
-    width: 96,
-    height: 96,
-    quality: 68,
-    resize: "cover",
-  },
-  /** Trade Room header avatar — 96px @ q80 cover (2× for h-12). */
-  "room-thumb": { width: 96, height: 96, quality: 80, resize: "cover" },
-  /** Trade Room sidebar list avatar — 64px @ q80 cover (2× for h-8). */
-  "room-list-thumb": { width: 64, height: 64, quality: 80, resize: "cover" },
-}
-
 export function isSupabaseStoragePublicUrl(url: string): boolean {
   return (
-    url.includes(STORAGE_OBJECT_PUBLIC) || url.includes(STORAGE_RENDER_PUBLIC)
+    url.includes(STORAGE_OBJECT_PUBLIC) ||
+    url.includes(SUPABASE_STORAGE_RENDER_PUBLIC)
   )
 }
 
-/** Convert a Supabase public object URL to a render/transform URL. */
+/**
+ * @deprecated Supabase Storage transforms are disabled. Returns object/public URL.
+ */
 export function toSupabaseRenderUrl(
   url: string,
-  options: TransformOptions
+  _options: TransformOptions = {}
 ): string {
-  if (!isSupabaseStoragePublicUrl(url)) return url
-
-  const renderBase = url.includes(STORAGE_RENDER_PUBLIC)
-    ? url.split("?")[0]!
-    : url.replace(STORAGE_OBJECT_PUBLIC, STORAGE_RENDER_PUBLIC).split("?")[0]!
-
-  const params = new URLSearchParams()
-  if (options.width != null) params.set("width", String(options.width))
-  if (options.height != null) params.set("height", String(options.height))
-  if (options.quality != null) params.set("quality", String(options.quality))
-  if (options.resize) params.set("resize", options.resize)
-
-  const query = params.toString()
-  return query ? `${renderBase}?${query}` : renderBase
+  return supabaseStorageDeliveryUrl(url)
 }
 
 /** Infer 2× retina pixel size from Tailwind h-/w- utility (e.g. h-10 → 80px). */
@@ -113,17 +70,13 @@ export function inferAvatarPixelSize(className: string, fallback = 80): number {
 export function optimizeStorageImageUrl(
   src: string | null | undefined,
   preset: StorageImagePreset,
-  overrides?: Pick<TransformOptions, "width" | "height">
+  _overrides?: Pick<TransformOptions, "width" | "height">
 ): string | null {
   const raw = src != null ? String(src).trim() : ""
   if (!raw) return null
 
   if (raw.startsWith("/") && !raw.startsWith("//")) return raw
   if (raw.startsWith("http") && !isSupabaseStoragePublicUrl(raw)) return raw
-
-  const base = PRESET_TRANSFORMS[preset]
-  const width = overrides?.width ?? base.width
-  const height = overrides?.height ?? base.height
 
   const resolved =
     raw.startsWith("http") || isSupabaseStoragePublicUrl(raw) ? raw : null
@@ -132,41 +85,26 @@ export function optimizeStorageImageUrl(
 
   if (!isSupabaseStoragePublicUrl(resolved)) return resolved
 
-  if (isOptimizedStorageObjectPath(resolved)) {
-    const objectUrl = toSupabaseObjectPublicUrl(resolved)
-    debugLogStorageImageDelivery(objectUrl, "optimizedObject", "object", preset)
-    return objectUrl
-  }
-
-  const transformed = toSupabaseRenderUrl(resolved, {
-    width,
-    height,
-    quality: base.quality,
-    ...(base.resize ? { resize: base.resize } : {}),
-  })
-  debugLogStorageImageDelivery(transformed, "legacy", "transform", preset)
-  return transformed
+  const objectUrl = supabaseStorageDeliveryUrl(resolved)
+  const assetPolicy = isOptimizedStorageObjectPath(resolved)
+    ? "optimizedObject"
+    : "legacy"
+  debugLogStorageImageDelivery(objectUrl, assetPolicy, "object", preset)
+  assertNoSupabaseStorageTransformUrl(objectUrl, `preset=${preset}`)
+  return objectUrl
 }
 
 export function optimizeAvatarUrl(
   src: string | null | undefined,
-  displaySizePx?: number
+  _displaySizePx?: number
 ): string | null {
   const raw = normalizeImageSrc(src)
   if (!raw) return null
   if (!isSupabaseStoragePublicUrl(raw)) return raw
-
-  if (isOptimizedStorageObjectPath(raw)) {
-    const objectUrl = toSupabaseObjectPublicUrl(raw)
-    debugLogStorageImageDelivery(objectUrl, "optimizedObject", "object", "avatar")
-    return objectUrl
-  }
-
-  const pixelSize = displaySizePx ?? 80
-  return optimizeStorageImageUrl(raw, "avatar", {
-    width: pixelSize,
-    height: pixelSize,
-  })
+  const objectUrl = supabaseStorageDeliveryUrl(raw)
+  debugLogStorageImageDelivery(objectUrl, "optimizedObject", "object", "avatar")
+  assertNoSupabaseStorageTransformUrl(objectUrl, "avatar")
+  return objectUrl
 }
 
 export function normalizeImageSrc(src: string | null | undefined): string | null {

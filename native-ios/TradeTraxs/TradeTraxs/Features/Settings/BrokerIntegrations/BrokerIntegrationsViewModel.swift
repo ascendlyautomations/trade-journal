@@ -96,6 +96,7 @@ final class BrokerIntegrationsViewModel {
         var mappingId: String
         /// Rithmic password entry on the existing mapping. Other reconnects use the connection reconnect flow.
         var usesImportPasswordReauth: Bool = false
+        var tradovateSyncMode: TradovateSyncRequestMode = .preview
     }
 
     private(set) var importReconnectPrompt: ImportReconnectPrompt?
@@ -198,6 +199,7 @@ final class BrokerIntegrationsViewModel {
 
     private func performRefreshAll() async {
         phase = .loaded
+        importingMappingIds.removeAll()
 
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.refreshTradovateConnections() }
@@ -205,7 +207,28 @@ final class BrokerIntegrationsViewModel {
             group.addTask { await self.refreshRithmicCapabilities() }
         }
 
+        reconcileImportPromptsWithPersistedState()
         noteBrokerIntegrationChanged()
+    }
+
+    private func reconcileImportPromptsWithPersistedState() {
+        func isValid(_ prompt: ImportReconnectPrompt?) -> Bool {
+            guard let prompt else { return false }
+            return accounts(for: prompt.connectionId).contains { $0.id == prompt.mappingId }
+        }
+        if !isValid(importReconnectPrompt) {
+            importReconnectPrompt = nil
+        }
+        if !isValid(importRetryPrompt) {
+            importRetryPrompt = nil
+        }
+        if let prompt = importReconnectPrompt,
+           let connection = (tradovateConnections + rithmicConnections).first(where: { $0.id == prompt.connectionId }),
+           connection.connected,
+           connection.status == .connected
+        {
+            importReconnectPrompt = nil
+        }
     }
 
     private func refreshTradovateConnections() async {
@@ -388,10 +411,14 @@ final class BrokerIntegrationsViewModel {
                 rithmicSystemChoices = names
                 presentMessage(message, error: false)
             case .connected:
+                let reconnectedConnectionId = rithmicReconnectConnectionId
                 rithmicSystemChoices = []
                 rithmicReconnectConnectionId = nil
                 showsRithmicConnectSheet = false
                 await refreshAll()
+                if await resumeBrokerImportAfterRithmicReconnect(reconnectedConnectionId: reconnectedConnectionId) {
+                    return
+                }
                 presentMessage("Rithmic connected.", error: false)
             }
         } catch {
@@ -596,7 +623,8 @@ final class BrokerIntegrationsViewModel {
                         response,
                         provider: provider,
                         connectionId: connectionId,
-                        mappingId: mappingId
+                        mappingId: mappingId,
+                        tradovateSyncMode: .preview
                     )
                 }
             case .rithmic:
@@ -682,13 +710,55 @@ final class BrokerIntegrationsViewModel {
         pendingTradovateImportPreview = nil
     }
 
-    func reconnectTradovateAndImport(connectionId: String, mappingId: String) async {
+    func reconnectBrokerImport(from prompt: ImportReconnectPrompt) {
+        switch prompt.provider {
+        case .tradovate:
+            Task {
+                await reconnectTradovateAndImport(
+                    connectionId: prompt.connectionId,
+                    mappingId: prompt.mappingId
+                )
+            }
+        case .rithmic:
+            if prompt.usesImportPasswordReauth || !isRithmicConnectUIAvailable {
+                presentRithmicImportReauth(
+                    connectionId: prompt.connectionId,
+                    mappingId: prompt.mappingId
+                )
+            } else {
+                presentRithmicConnect(reconnectConnectionId: prompt.connectionId)
+            }
+        }
+    }
+
+    /// Retries the import that failed with reconnect-required after Rithmic reconnect on the same connection.
+    @discardableResult
+    private func resumeBrokerImportAfterRithmicReconnect(reconnectedConnectionId: String?) async -> Bool {
+        guard let prompt = importReconnectPrompt,
+              prompt.provider == .rithmic,
+              reconnectedConnectionId == prompt.connectionId
+        else { return false }
+        await importTrades(
+            provider: .rithmic,
+            connectionId: prompt.connectionId,
+            mappingId: prompt.mappingId
+        )
+        return true
+    }
+
+    func reconnectTradovateAndImport(
+        connectionId: String,
+        mappingId: String,
+        fallbackSyncMode: TradovateSyncRequestMode = .preview
+    ) async {
         importingMappingIds.insert(mappingId)
         defer { importingMappingIds.remove(mappingId) }
+        let syncMode = importReconnectPrompt?.tradovateSyncMode ?? fallbackSyncMode
         let outcome = await BrokerTradovateReconnectImport.reconnectAndSync(
             broker: broker,
             connectionId: connectionId,
-            mappingId: mappingId
+            mappingId: mappingId,
+            syncMode: syncMode
         )
         switch outcome {
         case .cancelled:
@@ -705,12 +775,42 @@ final class BrokerIntegrationsViewModel {
             presentMessage(BrokerSyncPresentation.temporaryFailureMessage(), error: true)
         case .syncCompleted(let response):
             await refreshAll()
-            await applyImportSyncResponse(
-                response,
-                provider: .tradovate,
-                connectionId: connectionId,
-                mappingId: mappingId
-            )
+            if syncMode == .preview {
+                if response.summary.ok {
+                    importReconnectPrompt = nil
+                    importRetryPrompt = nil
+                    if BrokerSyncFailureResolution.isNoAvailableTradeHistory(response) {
+                        showsTradovateNoTradeHistorySheet = true
+                        return
+                    }
+                    let previews = response.summary.importPreviewTrades
+                    if previews.isEmpty {
+                        presentMessage("No new trades to import.", error: false)
+                    } else {
+                        pendingTradovateImportPreview = PendingTradovateImportPreview(
+                            connectionId: connectionId,
+                            mappingId: mappingId,
+                            trades: previews
+                        )
+                        showsTradovateImportPreview = true
+                    }
+                } else {
+                    handleImportSyncFailure(
+                        response,
+                        provider: .tradovate,
+                        connectionId: connectionId,
+                        mappingId: mappingId,
+                        tradovateSyncMode: .preview
+                    )
+                }
+            } else {
+                await applyImportSyncResponse(
+                    response,
+                    provider: .tradovate,
+                    connectionId: connectionId,
+                    mappingId: mappingId
+                )
+            }
         }
     }
 
@@ -766,7 +866,8 @@ final class BrokerIntegrationsViewModel {
             response,
             provider: provider,
             connectionId: connectionId,
-            mappingId: mappingId
+            mappingId: mappingId,
+            tradovateSyncMode: .import
         )
     }
 
@@ -774,7 +875,8 @@ final class BrokerIntegrationsViewModel {
         _ response: TradovateAccountSyncResponse,
         provider: BrokerIntegrationProvider,
         connectionId: String,
-        mappingId: String
+        mappingId: String,
+        tradovateSyncMode: TradovateSyncRequestMode = .preview
     ) {
         let resolution = BrokerSyncFailureResolution.from(response)
         let message = BrokerSyncPresentation.message(
@@ -789,7 +891,8 @@ final class BrokerIntegrationsViewModel {
                 provider: provider,
                 connectionId: connectionId,
                 mappingId: mappingId,
-                usesImportPasswordReauth: response.summary.errorCode == "rithmic_password_required"
+                usesImportPasswordReauth: response.summary.errorCode == "rithmic_password_required",
+                tradovateSyncMode: tradovateSyncMode
             )
             presentMessage(message, error: true)
         case .retryable:
@@ -813,6 +916,52 @@ final class BrokerIntegrationsViewModel {
 
     func isImportingTrades(mappingId: String) -> Bool {
         importingMappingIds.contains(mappingId)
+    }
+
+    func showsManualImportActions(
+        connection: TradovateConnectionSummary,
+        account: BrokerIntegrationAccount
+    ) -> Bool {
+        BrokerImportActionAvailability.showsManualImportSection(connection: connection, account: account)
+    }
+
+    func resolvedImportReconnectPrompt(
+        provider: BrokerIntegrationProvider,
+        connection: TradovateConnectionSummary,
+        account: BrokerIntegrationAccount
+    ) -> ImportReconnectPrompt? {
+        if let prompt = importReconnectPrompt,
+           prompt.mappingId == account.id,
+           prompt.provider == provider
+        {
+            return prompt
+        }
+        guard BrokerImportActionAvailability.prefersReconnectAction(
+            connection: connection,
+            account: account,
+            sessionReconnectMappingId: nil
+        ) else { return nil }
+        return ImportReconnectPrompt(
+            provider: provider,
+            connectionId: connection.id,
+            mappingId: account.id,
+            tradovateSyncMode: .preview
+        )
+    }
+
+    func isImportBusy(for account: BrokerIntegrationAccount) -> Bool {
+        isImportingTrades(mappingId: account.id)
+            || BrokerImportActionAvailability.isSyncInProgressFromPersisted(account: account)
+    }
+
+    func manualImportActionTitle(
+        connection: TradovateConnectionSummary,
+        account: BrokerIntegrationAccount
+    ) -> String {
+        if BrokerImportActionAvailability.showsRetryImportLabel(connection: connection, account: account) {
+            return "Retry Import"
+        }
+        return "Import Trades"
     }
 
     func handleOAuthDeepLink(status: String?, reason: String?) async {

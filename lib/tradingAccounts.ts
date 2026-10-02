@@ -386,6 +386,7 @@ export async function syncTradesAfterAccountRename(
     .update(tradeUpdate)
     .eq("user_id", userId)
     .eq("account_id", accountId)
+    .select("id")
 
   if (tradesErr) {
     return new Error(tradesErr.message)

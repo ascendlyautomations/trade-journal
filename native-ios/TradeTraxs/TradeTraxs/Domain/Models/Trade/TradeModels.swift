@@ -286,4 +286,6 @@ nonisolated struct TradeDraft: Hashable, Codable, Sendable {
     var importSource: TradeImportSource? = nil
     /// Deterministic import fingerprint for idempotent re-import.
     var importFingerprint: String? = nil
+    /// Present only when journaling a copy trading group. Edit saves leave this nil.
+    var copyTradingPlan: CopyTradingSavePlan? = nil
 }

@@ -1334,6 +1334,7 @@ final class GlobalUploadCoordinator {
             draft.imageURL = imageURL
 
             var editPreviousTrade: Trade?
+            var copySiblings: [Trade] = []
             let trade: Trade
             if spec.authorID.rawValue.hasPrefix("dev.") {
                 switch spec.mode {
@@ -1390,6 +1391,16 @@ final class GlobalUploadCoordinator {
                     checkpoint.savedTradeID = trade.id
                     checkpoint.publicFeedPostCompleted = socialPostRequested
                     persistTradeRetry(jobID: jobID, spec: spec, services: services, checkpoint: checkpoint)
+                } else if draft.copyTradingPlan != nil {
+                    let created = try await trades.saveCopyTraded(draft)
+                    guard let primary = created.first else {
+                        throw AppError.unknown(message: "Copy trading group has no linked accounts.")
+                    }
+                    trade = primary
+                    copySiblings = Array(created.dropFirst())
+                    checkpoint.savedTradeID = trade.id
+                    checkpoint.publicFeedPostCompleted = socialPostRequested
+                    persistTradeRetry(jobID: jobID, spec: spec, services: services, checkpoint: checkpoint)
                 } else {
                     trade = try await trades.save(draft)
                     checkpoint.savedTradeID = trade.id
@@ -1429,6 +1440,9 @@ final class GlobalUploadCoordinator {
             }
 
             reconcileTradeAfterSave(trade, mode: spec.mode, previous: editPreviousTrade)
+            for sibling in copySiblings {
+                TradeJournalMutationStore.shared.noteCreated(sibling)
+            }
             if let accountID = spec.lastAccountID {
                 AddTradeViewModel.rememberLastAccountID(accountID)
             }

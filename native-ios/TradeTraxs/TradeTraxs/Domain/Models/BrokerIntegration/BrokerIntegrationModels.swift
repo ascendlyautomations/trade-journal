@@ -598,7 +598,12 @@ nonisolated struct BrokerImportEligibilityResponse: Codable, Sendable {
     }
 
     var resolvedHasSupportedConnection: Bool {
-        hasSupportedConnection ?? (connectionCount > 0)
+        BrokerImportActionAvailability.showsBrokerImportEntryPoint(
+            connectionCount: connectionCount,
+            linkedAccountCount: linkedAccountCount,
+            linkedAccounts: linkedAccounts,
+            apiHasSupportedConnection: hasSupportedConnection
+        )
     }
 
     var resolvedHasLinkedAccount: Bool {

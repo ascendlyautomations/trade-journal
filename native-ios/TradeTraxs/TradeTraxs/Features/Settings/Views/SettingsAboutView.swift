@@ -8,16 +8,11 @@ struct SettingsAboutView: View {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
     }
 
-    private var build: String {
-        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
-    }
-
     var body: some View {
         List {
             Section {
                 SettingsInfoRow(title: "App", value: "TradeTraxs")
                 SettingsInfoRow(title: "Version", value: version)
-                SettingsInfoRow(title: "Build", value: build)
             } footer: {
                 Text("You’re using the TradeTraxs iOS app.")
             }

@@ -38,7 +38,9 @@ struct VaultDestinationSheet: View {
             .onAppear {
                 store.loadFoldersIfNeeded()
             }
+            .experienceInsetGroupedListStyle(pageBackground: true)
         }
+        .experienceSheetChrome()
         .presentationDetents([.medium, .large])
     }
 

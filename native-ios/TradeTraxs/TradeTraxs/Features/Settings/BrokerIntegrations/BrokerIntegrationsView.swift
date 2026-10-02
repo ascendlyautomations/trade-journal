@@ -81,8 +81,18 @@ struct BrokerIntegrationsView: View {
                 Section {
                     Text(message)
                         .experienceStyle(.footnote, color: viewModel.actionIsError ? colors.primaryText : colors.secondaryText)
-                    if let retry = viewModel.importRetryPrompt, !viewModel.isImportingTrades(mappingId: retry.mappingId) {
-                        Button("Retry") {
+                    if let reconnect = viewModel.importReconnectPrompt,
+                       !viewModel.isImportingTrades(mappingId: reconnect.mappingId)
+                    {
+                        Button(BrokerSyncPresentation.reconnectPrimaryActionTitle(provider: reconnect.provider)) {
+                            viewModel.reconnectBrokerImport(from: reconnect)
+                        }
+                        .font(.footnote.weight(.semibold))
+                        .accessibilityIdentifier("brokerIntegrations.importReconnectBanner")
+                    } else if let retry = viewModel.importRetryPrompt,
+                              !viewModel.isImportingTrades(mappingId: retry.mappingId)
+                    {
+                        Button("Try Again") {
                             Task {
                                 await viewModel.importTrades(
                                     provider: retry.provider,
@@ -92,6 +102,7 @@ struct BrokerIntegrationsView: View {
                             }
                         }
                         .font(.footnote.weight(.semibold))
+                        .accessibilityIdentifier("brokerIntegrations.importRetryBanner")
                     }
                 }
             }
@@ -107,6 +118,7 @@ struct BrokerIntegrationsView: View {
         }
         .experienceInsetGroupedListStyle(pageBackground: true)
         .listSectionSpacing(BrokerIntegrationProviderOptionsLayout.listSectionSpacing)
+        .contentMargins(.top, ExperienceSpacing.xxs, for: .scrollContent)
         .experienceNavigationTitle("Broker Integrations")
         .searchable(text: $brokerSearchText, prompt: "Search brokers")
         .background {
@@ -531,7 +543,7 @@ struct BrokerIntegrationsView: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             Text(BrokerSyncPresentation.reconnectRequiredMessage(provider: provider))
                 .experienceStyle(.caption, color: colors.secondaryText)
-            Button(BrokerSyncPresentation.reconnectPrimaryActionTitle(), action: onReconnect)
+            Button(BrokerSyncPresentation.reconnectPrimaryActionTitle(provider: provider), action: onReconnect)
                 .font(.footnote)
                 .buttonStyle(.borderless)
                 .disabled(viewModel.isBrokerConnectionMutationActive)
@@ -590,43 +602,28 @@ struct BrokerIntegrationsView: View {
                     .experienceStyle(.caption, color: colors.secondaryText)
             }
 
-            if account.hasTradetraxsMapping,
-               connection.connected || viewModel.importReconnectPrompt?.mappingId == account.id
-            {
-                if let prompt = viewModel.importReconnectPrompt,
-                   prompt.mappingId == account.id,
-                   prompt.provider == provider
-                {
+            if viewModel.showsManualImportActions(connection: connection, account: account) {
+                if let prompt = viewModel.resolvedImportReconnectPrompt(
+                    provider: provider,
+                    connection: connection,
+                    account: account
+                ) {
                     VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                         Text(BrokerSyncPresentation.reconnectRequiredMessage(provider: provider))
                             .experienceStyle(.caption, color: colors.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                         Button {
-                            if provider == .tradovate {
-                                Task {
-                                    await viewModel.reconnectTradovateAndImport(
-                                        connectionId: prompt.connectionId,
-                                        mappingId: prompt.mappingId
-                                    )
-                                }
-                            } else if prompt.usesImportPasswordReauth || !viewModel.isRithmicConnectUIAvailable {
-                                viewModel.presentRithmicImportReauth(
-                                    connectionId: prompt.connectionId,
-                                    mappingId: prompt.mappingId
-                                )
-                            } else {
-                                viewModel.presentRithmicConnect(reconnectConnectionId: prompt.connectionId)
-                            }
+                            viewModel.reconnectBrokerImport(from: prompt)
                         } label: {
-                            if viewModel.isImportingTrades(mappingId: account.id) {
+                            if viewModel.isImportBusy(for: account) {
                                 Label("Reconnecting…", systemImage: "arrow.triangle.2.circlepath")
                             } else {
-                                Text(BrokerSyncPresentation.reconnectPrimaryActionTitle())
+                                Text(BrokerSyncPresentation.reconnectPrimaryActionTitle(provider: provider))
                             }
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
-                        .disabled(viewModel.isImportingTrades(mappingId: account.id))
+                        .disabled(viewModel.isImportBusy(for: account))
                         .accessibilityIdentifier("brokerIntegrations.reconnectAccount.\(account.id)")
                     }
                 } else {
@@ -639,15 +636,18 @@ struct BrokerIntegrationsView: View {
                             )
                         }
                     } label: {
-                        if viewModel.isImportingTrades(mappingId: account.id) {
+                        if viewModel.isImportBusy(for: account) {
                             Label("Importing…", systemImage: "arrow.triangle.2.circlepath")
                         } else {
-                            Label("Import Trades", systemImage: "square.and.arrow.down")
+                            Label(
+                                viewModel.manualImportActionTitle(connection: connection, account: account),
+                                systemImage: "square.and.arrow.down"
+                            )
                         }
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .disabled(viewModel.isImportingTrades(mappingId: account.id))
+                    .disabled(viewModel.isImportBusy(for: account))
                     .accessibilityIdentifier("brokerIntegrations.importTrades.\(account.id)")
                 }
             } else if !account.hasTradetraxsMapping, connection.connected {

@@ -20,7 +20,6 @@ nonisolated enum ExploreTraderRanking {
     ) -> Int {
         var score = 0
         if !profile.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { score += 1 }
-        if profile.avatar != nil { score += 2 }
         if let bio = profile.bio?.trimmingCharacters(in: .whitespacesAndNewlines), !bio.isEmpty {
             score += 2
         }
@@ -41,6 +40,13 @@ nonisolated enum ExploreTraderRanking {
         if let last = posts?.lastPostAt, isRecent(last, days: 30, now: now) { score += 1 }
 
         return score
+    }
+
+    /// Non-empty avatar URL/path — blank or missing counts as no profile picture.
+    static func hasValidProfilePicture(_ profile: Profile) -> Bool {
+        guard let avatar = profile.avatar else { return false }
+        let id = avatar.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !id.isEmpty
     }
 
     static func identityLine(for profile: Profile) -> String? {
@@ -86,15 +92,17 @@ nonisolated enum ExploreTraderRanking {
                     postSummaries[profile.id]?.lastPostAt?.timeIntervalSince1970 ?? 0,
                     profile.createdAt.timeIntervalSince1970
                 )
-                return (profile, score, activity)
+                let hasAvatar = hasValidProfilePicture(profile)
+                return (profile, score, hasAvatar, activity)
             }
             .filter { $0.1 >= minScore }
             .sorted { lhs, rhs in
                 if lhs.1 != rhs.1 { return lhs.1 > rhs.1 }
-                return lhs.2 > rhs.2
+                if lhs.2 != rhs.2 { return lhs.2 && !rhs.2 }
+                return lhs.3 > rhs.3
             }
             .prefix(limit)
-            .map { profile, score, _ in
+            .map { profile, score, _, _ in
                 ExploreTraderSuggestion(
                     profile: profile,
                     followerCount: followerCounts[profile.id] ?? 0,

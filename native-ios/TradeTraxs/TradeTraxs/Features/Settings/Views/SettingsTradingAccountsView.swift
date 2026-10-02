@@ -66,7 +66,15 @@ struct SettingsTradingAccountsView: View {
                     } label: {
                         brokerIntegrationsRow
                     }
+                    .experienceDashboardListRow()
                     .accessibilityIdentifier("settings.tradingAccounts.brokerIntegrations")
+                    NavigationLink {
+                        CopyTradingAccountsView(data: data)
+                    } label: {
+                        copyTradingAccountsRow
+                    }
+                    .experienceDashboardListRow()
+                    .accessibilityIdentifier("settings.tradingAccounts.copyTradingAccounts")
                 } header: {
                     Text("Broker Integrations")
                 }
@@ -271,6 +279,25 @@ struct SettingsTradingAccountsView: View {
                 Text("Broker Integrations")
                     .experienceStyle(.body, color: colors.primaryText)
                 Text("Connect & import trades")
+                    .experienceStyle(.caption, color: colors.secondaryText)
+            }
+            Spacer(minLength: ExperienceSpacing.xs)
+        }
+        .padding(.vertical, ExperienceSpacing.xxs)
+        .contentShape(Rectangle())
+    }
+
+    private var copyTradingAccountsRow: some View {
+        HStack(spacing: ExperienceSpacing.sm) {
+            Image(systemName: "square.on.square")
+                .font(.body.weight(.medium))
+                .foregroundStyle(colors.accent)
+                .frame(width: 28, alignment: .center)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Copy Trading Accounts")
+                    .experienceStyle(.body, color: colors.primaryText)
+                Text("Journal one trade across accounts")
                     .experienceStyle(.caption, color: colors.secondaryText)
             }
             Spacer(minLength: ExperienceSpacing.xs)

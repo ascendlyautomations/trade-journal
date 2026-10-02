@@ -28,6 +28,7 @@ enum BrokerTradovateReconnectImport {
         broker: BrokerIntegrationRepository,
         connectionId: String,
         mappingId: String,
+        syncMode: TradovateSyncRequestMode = .preview,
         apiEnvironment: String? = nil
     ) async -> Outcome {
         do {
@@ -55,7 +56,7 @@ enum BrokerTradovateReconnectImport {
             let response = try await broker.syncTradovateAccount(
                 connectionId: connectionId,
                 mappingId: mappingId,
-                mode: .import
+                mode: syncMode
             )
             BrokerSyncDebugLog.syncReport(
                 provider: .tradovate,

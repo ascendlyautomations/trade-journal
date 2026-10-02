@@ -736,6 +736,37 @@ final class ProfileScreenViewModel {
         }
     }
 
+    func applyOptimisticAchievementRemoval(
+        id: AchievementID,
+        owner: ProfileID,
+        previous: Achievement?
+    ) {
+        guard isOwnerTarget, matchesOwner(owner) else { return }
+        _ = previous
+        data.detailCache.removeAchievement(id: id)
+        Task { await persistMutationPatch { viewerID in
+            ProfilePersistedCacheCoordinator.removeAchievement(id: id, owner: owner, viewerID: viewerID)
+        } }
+        syncShellIfNeeded()
+        shellViewModel?.achievements?.noteDeleteSucceeded(id: id)
+        var next = state
+        next.achievements.removeAll { $0.id == id }
+        next.pinnedContent = ProfilePinnedMutation.remove(
+            contentType: .achievement,
+            contentID: id.rawValue,
+            from: next.pinnedContent
+        )
+        if var stats = next.stats {
+            stats.payoutTotal = Self.publicPayoutTotal(from: next.achievements)
+            next.stats = stats
+            data.detailCache.seed(stats: stats)
+        }
+        applyLocalState(next)
+        if let visible = shellViewModel?.achievements?.items {
+            syncAchievementsFromSection(visible)
+        }
+    }
+
     func applyJournalTradeDeletion(id: TradeID, owner: ProfileID) {
         guard isOwnerTarget, matchesOwner(owner) else { return }
         applyOptimisticPinnedRemoval(contentType: .trade, contentID: id.rawValue)

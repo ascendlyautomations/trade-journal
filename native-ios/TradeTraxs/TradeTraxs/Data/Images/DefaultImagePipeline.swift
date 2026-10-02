@@ -3,7 +3,7 @@ import ImageIO
 
 /// Production image pipeline: memory → disk → network (with in-flight coalescing).
 ///
-/// Feed surfaces use `/storage/v1/render/image/public/` transforms (web parity).
+/// Supabase delivery uses `/storage/v1/object/public/` only (web parity).
 /// Detail uses `.feedDetail` (1280px) by default; `.fullResolution` for deep zoom.
 nonisolated struct DefaultImagePipeline: ImagePipeline {
     private let cache: any ImageCaching
@@ -235,11 +235,10 @@ nonisolated struct DefaultImagePipeline: ImagePipeline {
         ) {
             let preset = StorageImageTransform.preset(for: purpose, delivery: deliveryQuality)
             let objectURL = StorageImageTransform.deliveryObjectURL(for: url)
-            let fetchURL: URL
-            if let preset {
-                fetchURL = StorageImageTransform.optimizedURL(for: url, preset: preset)
+            let fetchURL: URL = if let preset {
+                StorageImageTransform.optimizedURL(for: url, preset: preset)
             } else {
-                fetchURL = objectURL
+                objectURL
             }
 
             tieredCache?.markDiskEligible(key: cacheKey)

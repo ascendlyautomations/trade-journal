@@ -4,6 +4,7 @@ import SwiftUI
 struct AchievementDetailView: View {
     @State private var viewModel: AchievementDetailViewModel
     @State private var contentRevealed = false
+    @State private var showsDeleteConfirm = false
     private let imagePipeline: any ImagePipeline
     private let data: DataEnvironment
 
@@ -11,7 +12,11 @@ struct AchievementDetailView: View {
     @Environment(\.experienceTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(achievementID: AchievementID, data: DataEnvironment) {
+    init(
+        achievementID: AchievementID,
+        data: DataEnvironment,
+        navigationCoordinator: NavigationCoordinator
+    ) {
         _viewModel = State(
             initialValue: AchievementDetailViewModel(
                 achievementID: achievementID,
@@ -19,7 +24,8 @@ struct AchievementDetailView: View {
                 profiles: data.profiles,
                 session: data.session,
                 imagePipeline: data.imagePipeline,
-                cache: data.detailCache
+                cache: data.detailCache,
+                navigationCoordinator: navigationCoordinator
             )
         )
         self.imagePipeline = data.imagePipeline
@@ -63,6 +69,31 @@ struct AchievementDetailView: View {
                 contentRevealed = true
             }
         }
+        .confirmationDialog(
+            "Delete Achievement?",
+            isPresented: $showsDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Achievement", role: .destructive) {
+                Task {
+                    _ = await viewModel.deleteAchievement()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently removes the achievement.")
+        }
+        .alert(
+            "Couldn't delete achievement",
+            isPresented: Binding(
+                get: { viewModel.deleteErrorMessage != nil },
+                set: { if !$0 { viewModel.clearDeleteError() } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(viewModel.deleteErrorMessage ?? "")
+        }
         .accessibilityIdentifier("detail.achievement.root")
     }
 
@@ -83,6 +114,13 @@ struct AchievementDetailView: View {
                             contentLink: .achievement(achievement.id),
                             ownerProfileID: achievement.ownerProfileID,
                             shareText: "\(achievement.title) on TradeTraxs",
+                            deleteTitle: "Delete Achievement",
+                            onDelete: viewModel.isOwner && !viewModel.isDeleting
+                                ? {
+                                    ExperienceHaptics.play(.warning)
+                                    showsDeleteConfirm = true
+                                }
+                                : nil,
                             vaultRef: VaultContentRef(
                                 contentType: .achievement,
                                 contentID: achievement.id.rawValue

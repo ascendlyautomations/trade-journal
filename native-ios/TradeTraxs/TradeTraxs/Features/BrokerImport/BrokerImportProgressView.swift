@@ -164,8 +164,10 @@ struct BrokerImportProgressView: View {
             primaryTitle = "Retry"
             showsClose = true
         case .reconnect:
-            title = "Reconnect account"
-            primaryTitle = BrokerSyncPresentation.reconnectPrimaryActionTitle()
+            title = "Connection expired"
+            primaryTitle = BrokerSyncPresentation.reconnectPrimaryActionTitle(
+                provider: model.activeImportProvider ?? .tradovate
+            )
             showsClose = true
         case .dismiss:
             title = "Couldn't import trades"

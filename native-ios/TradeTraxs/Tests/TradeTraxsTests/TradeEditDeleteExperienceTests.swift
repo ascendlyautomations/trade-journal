@@ -5,6 +5,8 @@ import XCTest
 final class TradeEditDeleteExperienceTests: XCTestCase {
     override func tearDown() {
         TradeJournalMutationStore.shared.invalidate()
+        ContentMutationStore.shared.invalidate()
+        OwnerProfileOptimisticStore.shared.invalidate()
         SessionOwnerTradesStore.shared.invalidate()
         TradeHistorySessionStore.shared.invalidate()
         CalendarMonthSessionStore.shared.invalidate()
@@ -172,6 +174,119 @@ final class TradeEditDeleteExperienceTests: XCTestCase {
         }
     }
 
+    func testOwnerAchievementDeletionServiceUsesCanonicalAchievementID() async throws {
+        let owner = ProfileID("user.ach-delete-service")
+        let achievement = sampleAchievement(id: "ach-del-svc-1", owner: owner.rawValue)
+        let cache = DetailPresentationCache()
+        cache.seed(achievement)
+        let repository = DeleteTrackingAchievementRepository(seed: achievement)
+
+        try await OwnerAchievementDeletionService.deleteOwnedAchievement(
+            achievementID: achievement.id,
+            owner: owner,
+            previous: achievement,
+            achievements: repository,
+            session: EditTradeStubSession(userID: owner.rawValue),
+            detailCache: cache
+        )
+
+        XCTAssertEqual(repository.deleteCalls, [achievement.id])
+        XCTAssertNil(cache.achievement(id: achievement.id))
+        if case .achievementDeleted(let id) = ContentMutationStore.shared.latest {
+            XCTAssertEqual(id, achievement.id)
+        } else {
+            XCTFail("Expected achievementDeleted mutation")
+        }
+        XCTAssertTrue(OwnerProfileOptimisticStore.shared.deletedAchievementIDs.contains(achievement.id))
+    }
+
+    func testProfileAchievementsContainerDeleteUsesOwnerDeletionPath() async {
+        let owner = ProfileID("user.profile-ach-delete")
+        let achievement = sampleAchievement(id: "profile-ach-del-1", owner: owner.rawValue)
+        let cache = DetailPresentationCache()
+        cache.seed(achievement)
+        let repository = DeleteTrackingAchievementRepository(seed: achievement)
+        let environment = CompositionRoot.bootstrapAppEnvironment()
+        let viewModel = AchievementsContainerViewModel(
+            profileID: owner,
+            achievements: repository,
+            session: EditTradeStubSession(userID: owner.rawValue),
+            navigationCoordinator: environment.navigation.coordinator,
+            detailCache: cache,
+            viewerIsOwner: true
+        )
+        var snapshot = ProfileState(profileID: owner)
+        snapshot.isOwner = true
+        snapshot.achievements = [achievement]
+        snapshot.didLoadAchievements = true
+        viewModel.applyBootstrap(snapshot)
+        viewModel.pendingDelete = achievement
+        await viewModel.confirmDelete()
+        XCTAssertEqual(repository.deleteCalls, [achievement.id])
+        XCTAssertNil(cache.achievement(id: achievement.id))
+        XCTAssertTrue(viewModel.items.isEmpty)
+        XCTAssertNil(viewModel.deletingAchievementID)
+    }
+
+    func testAchievementDetailDeleteIgnoresDuplicateTapWhileDeleting() async {
+        let owner = ProfileID("user.ach-detail-delete")
+        let achievement = sampleAchievement(id: "ach-detail-del-1", owner: owner.rawValue)
+        let cache = DetailPresentationCache()
+        cache.seed(achievement)
+        let repository = SlowDeleteAchievementRepository(seed: achievement)
+        let environment = CompositionRoot.bootstrapAppEnvironment()
+        let viewModel = AchievementDetailViewModel(
+            achievementID: achievement.id,
+            achievements: repository,
+            profiles: environment.data.profiles,
+            session: EditTradeStubSession(userID: owner.rawValue),
+            imagePipeline: environment.data.imagePipeline,
+            cache: cache,
+            navigationCoordinator: environment.navigation.coordinator
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+
+        async let first: Bool = viewModel.deleteAchievement()
+        try? await Task.sleep(nanoseconds: 5_000_000)
+        let second = await viewModel.deleteAchievement()
+        _ = await first
+
+        XCTAssertEqual(repository.deleteCalls.count, 1)
+        XCTAssertFalse(second)
+    }
+
+    func testProfileTradesContainerDeleteUsesOwnerDeletionPath() async {
+        let owner = ProfileID("user.profile-delete")
+        let trade = sampleTrade(id: "profile-del-1", owner: owner.rawValue)
+        let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
+        let cache = DetailPresentationCache()
+        TradeJournalMutationStore.shared.configure(detailCache: cache)
+        cache.seed(trade)
+        let repository = DeleteTrackingTradeRepository(seed: trade)
+        let environment = CompositionRoot.bootstrapAppEnvironment()
+        let viewModel = TradesContainerViewModel(
+            profileID: owner,
+            trades: repository,
+            session: EditTradeStubSession(userID: owner.rawValue),
+            navigationCoordinator: environment.navigation.coordinator,
+            detailCache: cache,
+            tradeDetailRepository: environment.data.tradeDetailRepository,
+            isOwner: true
+        )
+        viewModel.pendingDelete = summary
+        await viewModel.confirmDelete()
+        XCTAssertEqual(repository.deleteCalls, [trade.id])
+        XCTAssertNil(cache.trade(id: trade.id))
+        XCTAssertNil(viewModel.deletingTradeID)
+        if case .deleted(let id, let deletedOwner) = TradeJournalMutationStore.shared.latest {
+            XCTAssertEqual(id, trade.id)
+            XCTAssertEqual(deletedOwner, owner)
+        } else {
+            XCTFail("Expected noteDeleted mutation")
+        }
+    }
+
     func testDeleteTradeNavigatesToTradesList() {
         let store = NavigationStore()
         store.sessionPhase = .authenticated
@@ -276,6 +391,26 @@ final class TradeEditDeleteExperienceTests: XCTestCase {
         """
     }
 
+    private func sampleAchievement(id: String, owner: String) -> Achievement {
+        Achievement(
+            id: AchievementID(id),
+            ownerProfileID: ProfileID(owner),
+            kind: .milestone,
+            title: "Test Achievement",
+            description: "Seed",
+            tier: .bronze,
+            value: nil,
+            valueText: nil,
+            firm: nil,
+            accountID: nil,
+            image: nil,
+            isPublic: true,
+            isFeatured: false,
+            sortOrder: 0,
+            achievedAt: Date()
+        )
+    }
+
     private func sampleTrade(id: String, owner: String) -> Trade {
         Trade(
             id: TradeID(id),
@@ -321,6 +456,73 @@ private struct EditTradeStubSession: SessionProviding {
     let userID: String?
     var currentUserID: UserID? { get async { userID.map { UserID($0) } } }
     var accessToken: String? { get async { userID == nil ? nil : "token" } }
+}
+
+private final class DeleteTrackingAchievementRepository: AchievementRepository, @unchecked Sendable {
+    private let seed: Achievement
+    private(set) var deleteCalls: [AchievementID] = []
+
+    init(seed: Achievement) { self.seed = seed }
+
+    func achievements(
+        for profileID: ProfileID,
+        page: PageRequest,
+        publicOnly: Bool
+    ) async throws -> CursorPage<Achievement> {
+        CursorPage(items: [seed], nextCursor: nil)
+    }
+
+    func achievement(id: AchievementID) async throws -> Achievement {
+        guard id == seed.id else { throw AppError.unknown(message: "missing") }
+        return seed
+    }
+
+    func save(_ achievement: Achievement, metadata: JSONValue?) async throws -> Achievement {
+        achievement
+    }
+
+    func delete(id: AchievementID) async throws {
+        deleteCalls.append(id)
+    }
+
+    func withdrawalAchievementLinks(for profileID: ProfileID) async throws -> [WithdrawalAchievementLinkRow] {
+        []
+    }
+}
+
+private final class SlowDeleteAchievementRepository: AchievementRepository, @unchecked Sendable {
+    private let tracking: DeleteTrackingAchievementRepository
+
+    var deleteCalls: [AchievementID] { tracking.deleteCalls }
+
+    init(seed: Achievement) {
+        tracking = DeleteTrackingAchievementRepository(seed: seed)
+    }
+
+    func achievements(
+        for profileID: ProfileID,
+        page: PageRequest,
+        publicOnly: Bool
+    ) async throws -> CursorPage<Achievement> {
+        try await tracking.achievements(for: profileID, page: page, publicOnly: publicOnly)
+    }
+
+    func achievement(id: AchievementID) async throws -> Achievement {
+        try await tracking.achievement(id: id)
+    }
+
+    func save(_ achievement: Achievement, metadata: JSONValue?) async throws -> Achievement {
+        try await tracking.save(achievement, metadata: metadata)
+    }
+
+    func delete(id: AchievementID) async throws {
+        try await Task.sleep(nanoseconds: 200_000_000)
+        try await tracking.delete(id: id)
+    }
+
+    func withdrawalAchievementLinks(for profileID: ProfileID) async throws -> [WithdrawalAchievementLinkRow] {
+        try await tracking.withdrawalAchievementLinks(for: profileID)
+    }
 }
 
 private final class DeleteTrackingTradeRepository: EditTradeStubRepository, @unchecked Sendable {

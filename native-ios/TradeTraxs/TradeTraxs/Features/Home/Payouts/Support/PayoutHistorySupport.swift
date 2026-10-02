@@ -15,6 +15,7 @@ nonisolated struct PayoutHistoryItem: Identifiable, Hashable, Sendable {
     var ledgerEntryID: AccountPayoutEntryID?
     var source: Source
     var note: String?
+    var imageURL: String? = nil
 
     var isEditable: Bool { ledgerEntryID != nil }
 }
@@ -42,7 +43,8 @@ nonisolated enum PayoutHistorySupport {
                         accountID: accountID,
                         ledgerEntryID: entry.id,
                         source: source,
-                        note: entry.note
+                        note: entry.note,
+                        imageURL: entry.imageURL
                     )
                 )
             }

@@ -219,7 +219,11 @@ nonisolated final class DemoTradeRepository: TradeRepository, @unchecked Sendabl
     ) async throws -> AccountPayoutEntry {
         throw DemoAuthRequired.error
     }
-    func updatePayoutEntry(id: AccountPayoutEntryID, draft: AccountPayoutEntryDraft) async throws -> AccountPayoutEntry {
+    func updatePayoutEntry(
+        id: AccountPayoutEntryID,
+        draft: AccountPayoutEntryDraft,
+        image: PayoutEntryImageWrite
+    ) async throws -> AccountPayoutEntry {
         throw DemoAuthRequired.error
     }
     func deletePayoutEntry(id: AccountPayoutEntryID) async throws { throw DemoAuthRequired.error }

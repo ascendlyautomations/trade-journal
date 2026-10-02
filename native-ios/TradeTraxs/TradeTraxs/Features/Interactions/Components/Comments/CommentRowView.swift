@@ -18,6 +18,7 @@ struct CommentRowView: View {
     var onReport: (() -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.appEnvironment) private var appEnvironment
 
     private var isPinnedTopLevel: Bool {
         CommentPinSemantics.isCommentPinned(comment)
@@ -25,10 +26,21 @@ struct CommentRowView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-            CommentAuthorAvatarView(
-                comment: comment,
-                imagePipeline: imagePipeline,
-                size: 32
+            Button {
+                ExperienceHaptics.play(.selection)
+                appEnvironment.navigation.coordinator.pushOtherProfile(comment.authorProfileID)
+            } label: {
+                CommentAuthorAvatarView(
+                    comment: comment,
+                    imagePipeline: imagePipeline,
+                    size: 32
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(authorAccessibilityName)
+            .accessibilityHint("View profile")
+            .accessibilityIdentifier(
+                "interaction.comment.avatar.\(comment.authorProfileID.rawValue)"
             )
 
             VStack(alignment: .leading, spacing: 4) {
@@ -115,14 +127,15 @@ struct CommentRowView: View {
         .accessibilityIdentifier("interaction.comment.row.\(comment.id.rawValue)")
     }
 
-    private var accessibilitySummary: String {
+    private var authorAccessibilityName: String {
         let author = comment.authorDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let named: String = {
-            if let author, !author.isEmpty { return author }
-            if let username = comment.authorUsername, !username.isEmpty { return "@\(username)" }
-            return "Trader"
-        }()
-        return "\(named). \(comment.body)"
+        if let author, !author.isEmpty { return author }
+        if let username = comment.authorUsername, !username.isEmpty { return "@\(username)" }
+        return "Trader"
+    }
+
+    private var accessibilitySummary: String {
+        "\(authorAccessibilityName). \(comment.body)"
     }
 }
 

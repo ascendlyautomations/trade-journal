@@ -97,6 +97,7 @@ final class AddTradeViewModel {
     private let objectStorage: any ObjectStorageProviding
     private let uploadServices: GlobalUploadServices
     private let imagePipeline: (any ImagePipeline)?
+    private let copyTradingGroups: (any CopyTradingGroupRepository)?
     private let onDismiss: () -> Void
 
     private var viewerID: ProfileID?
@@ -110,6 +111,8 @@ final class AddTradeViewModel {
     private var removeExistingScreenshot = false
     private var hydratedFingerprint: String?
     private static var lastAccountID: TradingAccountID?
+    private(set) var copyGroups: [CopyTradingGroup] = []
+    var selectedCopyGroupID: String?
 
     #if DEBUG
     private(set) var lastProbe: AddTradeLoadProbe.Snapshot?
@@ -125,6 +128,7 @@ final class AddTradeViewModel {
         objectStorage: any ObjectStorageProviding,
         uploadServices: GlobalUploadServices,
         imagePipeline: (any ImagePipeline)? = nil,
+        copyTradingGroups: (any CopyTradingGroupRepository)? = nil,
         mode: Mode = .create,
         onDismiss: @escaping () -> Void
     ) {
@@ -137,6 +141,7 @@ final class AddTradeViewModel {
         self.objectStorage = objectStorage
         self.uploadServices = uploadServices
         self.imagePipeline = imagePipeline
+        self.copyTradingGroups = copyTradingGroups
         self.mode = mode
         self.onDismiss = onDismiss
     }
@@ -350,7 +355,10 @@ final class AddTradeViewModel {
     func loadIfNeeded() {
         guard !hasLoadedAccounts else { return }
         hasLoadedAccounts = true
-        Task { await loadAccounts() }
+        Task {
+            await loadAccounts()
+            await loadCopyTradingGroupsIfNeeded()
+        }
     }
 
     func retryLoad() {
@@ -374,6 +382,35 @@ final class AddTradeViewModel {
     func clearAccountSelection() {
         selectedAccountID = nil
         fieldErrors[.account] = nil
+    }
+
+    var showsCopyGroupPicker: Bool {
+        !isEditing && !copyGroups.isEmpty
+    }
+
+    var selectedCopyGroup: CopyTradingGroup? {
+        guard !isEditing else { return nil }
+        return copyGroups.first(where: { $0.id == selectedCopyGroupID })
+    }
+
+    func resolvedCopyAccounts(_ group: CopyTradingGroup) -> [TradingAccount] {
+        let byID = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id.rawValue, $0) })
+        return group.accountIDs.compactMap { byID[$0] }
+    }
+
+    func selectCopyGroup(_ groupID: String?) {
+        selectedCopyGroupID = groupID
+        fieldErrors[.account] = nil
+        guard let group = selectedCopyGroup, let first = resolvedCopyAccounts(group).first else { return }
+        selectedAccountID = first.id
+        Self.lastAccountID = first.id
+    }
+
+    func loadCopyTradingGroupsIfNeeded() async {
+        guard !isEditing, copyGroups.isEmpty, let copyTradingGroups, let viewerID,
+              !viewerID.rawValue.hasPrefix("dev.")
+        else { return }
+        copyGroups = (try? await copyTradingGroups.groups(for: viewerID)) ?? []
     }
 
     func addExitTime() {
@@ -799,14 +836,23 @@ final class AddTradeViewModel {
             saveTask = nil
             return
         }
-        guard let account = selectedAccount else {
-            fieldErrors[.account] = "Choose Account."
+        let accountForSave: TradingAccount?
+        if let group = selectedCopyGroup {
+            accountForSave = resolvedCopyAccounts(group).first
+        } else {
+            accountForSave = selectedAccount
+        }
+        guard let account = accountForSave else {
+            fieldErrors[.account] = selectedCopyGroup == nil
+                ? "Choose Account."
+                : "This copy trading group has no linked accounts."
             phase = .ready
             saveTask = nil
             return
         }
+        let journalingCopyGroup = selectedCopyGroup != nil
         let keepOriginalAccount = isEditing && account.id == editingOriginalAccountID
-        guard account.canAddTrades || keepOriginalAccount else {
+        guard journalingCopyGroup || account.canAddTrades || keepOriginalAccount else {
             fieldErrors[.account] = "Choose Account."
             phase = .ready
             saveTask = nil
@@ -882,7 +928,7 @@ final class AddTradeViewModel {
         let holdDuration = includeExitTime
             ? TradeHoldDuration.compute(entryAt: entryAt, exitAt: exitAt)
             : nil
-        let draft = TradeDraft(
+        var draft = TradeDraft(
             accountID: account.id,
             accountName: account.name,
             accountSizeLabel: account.size.map { "\($0.amount)" },
@@ -920,6 +966,16 @@ final class AddTradeViewModel {
             imageURL: nil,
             imageCrop: nil
         )
+        if let group = selectedCopyGroup {
+            let members = resolvedCopyAccounts(group)
+            if !members.isEmpty {
+                draft.copyTradingPlan = CopyTradingSavePlan(
+                    groupID: group.id,
+                    accounts: members.map(copyStamp(for:))
+                )
+                draft.mode = .copyTraded
+            }
+        }
 
         let uploadMode: TradeSaveUploadMode = {
             if case .edit(let tradeID) = mode { return .edit(tradeID: tradeID) }
@@ -1087,7 +1143,11 @@ final class AddTradeViewModel {
             errors[.symbol] = "Symbol is required"
         }
         let keepOriginalAccount = isEditing && selectedAccountID == editingOriginalAccountID
-        if selectedAccountID == nil
+        if selectedCopyGroup != nil {
+            if resolvedCopyAccounts(selectedCopyGroup!).isEmpty {
+                errors[.account] = "This copy trading group has no linked accounts."
+            }
+        } else if selectedAccountID == nil
             || (selectedAccount?.canAddTrades != true && !keepOriginalAccount)
         {
             errors[.account] = "Choose Account."
@@ -1187,6 +1247,19 @@ final class AddTradeViewModel {
         case .sim: return .sim
         default: return .live
         }
+    }
+
+    private func copyStamp(for account: TradingAccount) -> CopyTradingAccountStamp {
+        CopyTradingAccountStamp(
+            accountID: account.id,
+            name: account.name,
+            sizeLabel: account.size.map { "\($0.amount)" },
+            modeLabel: account.mode.rawValue,
+            categoryLabel: account.category.rawValue,
+            accountNumber: account.accountNumber,
+            category: account.category,
+            mode: account.mode
+        )
     }
 
     private static func nilIfEmpty(_ raw: String) -> String? {

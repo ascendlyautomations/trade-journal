@@ -24,7 +24,13 @@ final class BrokerImportEligibilityStore {
     }
 
     var showsDashboardImportAction: Bool {
-        !optOut && hasSupportedConnection
+        guard !optOut else { return false }
+        return BrokerImportActionAvailability.showsBrokerImportEntryPoint(
+            connectionCount: connectionCount,
+            linkedAccountCount: linkedAccountCount,
+            linkedAccounts: linkedAccounts,
+            apiHasSupportedConnection: hasSupportedConnection
+        )
     }
 
     private var broker: (any BrokerIntegrationRepository)?
@@ -155,7 +161,8 @@ final class BrokerImportEligibilityStore {
         }
         if let lastSuccessfulFetchAt,
            Date().timeIntervalSince(lastSuccessfulFetchAt)
-            < BrokerImportEligibilityDiskCache.presentationSoftStaleSeconds
+            < BrokerImportEligibilityDiskCache.presentationSoftStaleSeconds,
+           showsDashboardImportAction || optOut
         {
             #if DEBUG
             AppLog.application.debug("dashboard.brokerImportEligibility.skipNetwork reason=freshCache")

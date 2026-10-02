@@ -9,6 +9,7 @@ import SwiftUI
 // | Use case | API |
 // |----------|-----|
 // | Settings / pickers (List) | `experienceInsetGroupedListStyle(pageBackground:)` |
+// | Plain List (Feed-style rows) | `experiencePlainListStyle()` |
 // | Form { Section { … } } | `experienceTradeTraxsFormStyle(pageBackground:)` |
 // | Bottom toolbars / chrome strips | `experienceChromeBarBackground()` |
 // | Floating panels (scrubbers, menus) | `experienceFloatingPanelBackground(in:)` |
@@ -20,6 +21,11 @@ extension View {
     /// Inset grouped `List` — cool row lift in dark mode; light mode unchanged.
     func experienceInsetGroupedListStyle(pageBackground: Bool = false) -> some View {
         modifier(ExperienceInsetGroupedListModifier(pageBackground: pageBackground))
+    }
+
+    /// Plain `List` on the semantic page canvas — Activity, Trades, share pickers, etc.
+    func experiencePlainListStyle() -> some View {
+        modifier(ExperiencePlainListModifier())
     }
 
     /// `Form` / grouped sections — same row treatment as inset grouped lists.
@@ -76,6 +82,7 @@ enum ExperienceThemedMaterial {
 
 private struct ExperienceInsetGroupedListModifier: ViewModifier {
     var pageBackground: Bool
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.themeColors) private var colors
 
     func body(content: Content) -> some View {
@@ -86,13 +93,28 @@ private struct ExperienceInsetGroupedListModifier: ViewModifier {
             .background {
                 if pageBackground {
                     colors.groupedBackground.ignoresSafeArea()
+                } else if colorScheme == .dark {
+                    colors.backgroundPrimary.ignoresSafeArea()
                 }
             }
     }
 }
 
+private struct ExperiencePlainListModifier: ViewModifier {
+    @Environment(\.themeColors) private var colors
+
+    func body(content: Content) -> some View {
+        content
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .experienceDashboardGroupedRows()
+            .background(colors.backgroundPrimary.ignoresSafeArea())
+    }
+}
+
 private struct ExperienceTradeTraxsFormModifier: ViewModifier {
     var pageBackground: Bool
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.themeColors) private var colors
 
     func body(content: Content) -> some View {
@@ -102,6 +124,8 @@ private struct ExperienceTradeTraxsFormModifier: ViewModifier {
             .background {
                 if pageBackground {
                     colors.groupedBackground.ignoresSafeArea()
+                } else if colorScheme == .dark {
+                    colors.backgroundPrimary.ignoresSafeArea()
                 }
             }
     }

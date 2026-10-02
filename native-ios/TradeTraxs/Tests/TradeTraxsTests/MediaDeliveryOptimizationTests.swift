@@ -2,14 +2,14 @@ import XCTest
 @testable import TradeTraxs
 
 final class MediaDeliveryOptimizationTests: XCTestCase {
-    func testOptimizedStorageFeedThumbUsesRenderTransformNotRawObject() {
+    func testFeedThumbDeliveryUsesObjectPublicNotRenderTransform() {
         let object = URL(
             string: "https://example.supabase.co/storage/v1/object/public/posts/user123/opt/photo.jpg"
         )!
         let thumb = StorageImageTransform.optimizedURL(for: object, preset: .feedThumb)
-        XCTAssertTrue(thumb.path.contains("/storage/v1/render/image/public/"))
-        XCTAssertTrue(thumb.absoluteString.contains("width=640"))
-        XCTAssertFalse(thumb.path.contains("/opt/") && !thumb.path.contains("render/image"))
+        XCTAssertTrue(thumb.path.contains("/storage/v1/object/public/"))
+        XCTAssertFalse(thumb.path.contains("/storage/v1/render/image/public/"))
+        XCTAssertFalse(thumb.absoluteString.contains("width="))
     }
 
     func testFullResolutionDeliverySkipsTransformPreset() {
@@ -17,18 +17,19 @@ final class MediaDeliveryOptimizationTests: XCTestCase {
         XCTAssertNil(StorageImageTransform.preset(for: .tradeScreenshot, delivery: .fullResolution))
     }
 
-    func testFeedDetailStillRequestsHigherWidthPreset() {
+    func testFeedDetailPresetStillMapsButDeliversObjectURL() {
         let preset = StorageImageTransform.preset(for: .postImage, delivery: .feedDetail)
         XCTAssertEqual(preset, .feedDetail)
         let object = URL(
             string: "https://example.supabase.co/storage/v1/object/public/posts/u/opt/x.jpg"
         )!
         let url = StorageImageTransform.optimizedURL(for: object, preset: .feedDetail)
-        XCTAssertTrue(url.absoluteString.contains("width=1280"))
+        XCTAssertTrue(url.path.contains("/storage/v1/object/public/"))
+        XCTAssertFalse(url.absoluteString.contains("width=1280"))
     }
 
-    func testFeedDisplayCacheRevisionBumpedForStableBuckets() {
-        XCTAssertEqual(StorageImageTransform.feedDisplayCacheRevision, 3)
+    func testFeedDisplayCacheRevisionBumpedForObjectDelivery() {
+        XCTAssertEqual(StorageImageTransform.feedDisplayCacheRevision, 4)
     }
 
     func testPhotosPickerDecodeCapPreventsTwelveKDecode() {

@@ -65,7 +65,7 @@ struct ProfileView: View {
 
         ScrollViewReader { tourProxy in
         ScrollView {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
                 ProfileHeaderView(
                     store: contentStore,
                     viewModel: headerViewModel
@@ -74,28 +74,32 @@ struct ProfileView: View {
                     .padding(.top, ExperienceSpacing.sm)
 
                 if let shellViewModel = screen.shellViewModel {
-                    ProfileSectionPicker(
-                        selection: Binding(
-                            get: { shellViewModel.selectedSection },
-                            set: { shellViewModel.select($0) }
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                        ProfileSectionPicker(
+                            selection: Binding(
+                                get: { shellViewModel.selectedSection },
+                                set: { shellViewModel.select($0) }
+                            )
                         )
-                    )
 
-                    ExperienceDivider()
-                        .padding(.horizontal, ExperienceSpacing.lg)
+                        ExperienceDivider()
+                            .padding(.horizontal, ExperienceSpacing.lg)
 
-                    sectionBody(shellViewModel)
-                        .environment(\.appEnvironment, appEnvironment)
+                        sectionBody(shellViewModel)
+                            .environment(\.appEnvironment, appEnvironment)
+                    }
                 } else if screen.state.phase == .loading && screen.state.profile == nil {
-                    ProfileSectionPicker(selection: .constant(.trades))
-                        .disabled(true)
-                        .opacity(ExperienceOpacity.disabled)
-                    ProfileSectionContainerChrome(
-                        section: .trades,
-                        state: .loading,
-                        onRetry: {},
-                        content: { EmptyView() }
-                    )
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                        ProfileSectionPicker(selection: .constant(.trades))
+                            .disabled(true)
+                            .opacity(ExperienceOpacity.disabled)
+                        ProfileSectionContainerChrome(
+                            section: .trades,
+                            state: .loading,
+                            onRetry: {},
+                            content: { EmptyView() }
+                        )
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

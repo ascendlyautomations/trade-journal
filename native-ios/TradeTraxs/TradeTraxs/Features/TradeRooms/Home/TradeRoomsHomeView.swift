@@ -257,7 +257,7 @@ struct TradeRoomsHomeView: View {
                 scope: viewModel.activeDiscoveryScope,
                 onSelect: { viewModel.selectDiscoveryScope($0) }
             )
-            .padding(.top, ExperienceSpacing.xs)
+            .padding(.top, ExperienceSpacing.sm)
             .padding(.bottom, ExperienceSpacing.xxs)
 
             if viewModel.discoveryPhase == .loading,

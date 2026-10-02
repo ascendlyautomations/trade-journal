@@ -6,6 +6,7 @@ import {
   optimizeStorageImageUrl,
   toSupabaseRenderUrl,
 } from "./optimizedStorageImage.ts"
+import { assertNoSupabaseStorageTransformUrl } from "./supabaseStorageTransformGuard.ts"
 
 const SAMPLE_OBJECT_URL =
   "https://abc.supabase.co/storage/v1/object/public/screenshots/user/trade.webp"
@@ -16,23 +17,23 @@ describe("optimizedStorageImage", () => {
     assert.equal(isSupabaseStoragePublicUrl("https://cdn.example.com/a.png"), false)
   })
 
-  it("converts object URL to render URL with transform params", () => {
+  it("toSupabaseRenderUrl normalizes to object URL (transforms disabled)", () => {
     const out = toSupabaseRenderUrl(SAMPLE_OBJECT_URL, {
       width: 800,
       quality: 75,
       resize: "contain",
     })
-    assert.ok(out.includes("/storage/v1/render/image/public/screenshots/"))
-    assert.ok(out.includes("width=800"))
-    assert.ok(out.includes("quality=75"))
-    assert.ok(out.includes("resize=contain"))
+    assert.ok(out.includes("/storage/v1/object/public/screenshots/"))
+    assertNoSupabaseStorageTransformUrl(out)
+    assert.ok(!out.includes("width=800"))
   })
 
-  it("optimizes trade thumb preset for supabase URLs", () => {
+  it("optimizes trade thumb preset to object URL", () => {
     const out = optimizeStorageImageUrl(SAMPLE_OBJECT_URL, "trade-thumb")
     assert.ok(out)
-    assert.ok(out.includes("render/image/public"))
-    assert.ok(out.includes("width=800"))
+    assert.ok(out.includes("/storage/v1/object/public/"))
+    assertNoSupabaseStorageTransformUrl(out!)
+    assert.ok(!out.includes("width=800"))
   })
 
   it("serves upload-optimized assets via object URLs without transforms", () => {
@@ -42,6 +43,15 @@ describe("optimizedStorageImage", () => {
     assert.ok(out)
     assert.ok(out.includes("/storage/v1/object/public/"))
     assert.ok(!out.includes("render/image/public"))
+  })
+
+  it("normalizes legacy render URLs in DB to object URLs", () => {
+    const legacyRender =
+      "https://abc.supabase.co/storage/v1/render/image/public/screenshots/user/trade.webp?width=800&quality=75"
+    const out = optimizeStorageImageUrl(legacyRender, "feed-thumb")
+    assert.ok(out)
+    assertNoSupabaseStorageTransformUrl(out!)
+    assert.ok(out.includes("/storage/v1/object/public/"))
   })
 
   it("passes through non-supabase http URLs unchanged", () => {

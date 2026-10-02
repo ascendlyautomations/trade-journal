@@ -52,6 +52,7 @@ enum ExperienceNavigationBarAppearance {
         } else {
             configureDefaultBarChrome(colors: colors)
         }
+        ExperienceGroupedListAppearance.sync(colors: colors)
     }
 
     /// Opaque nav + tab chrome — Feed tab only; matches ``SemanticColorPalette/navigationBackground``.
@@ -85,5 +86,20 @@ enum ExperienceNavigationBarAppearance {
         if #available(iOS 15.0, *) {
             tabBar.scrollEdgeAppearance = tab
         }
+    }
+}
+
+/// Process-wide UITableView / UICollectionView defaults for SwiftUI `List`.
+///
+/// System grouped list fills read warm brown in dark mode until TradeTraxs theme modifiers paint;
+/// syncing appearance at launch and on theme changes avoids a first-frame flash.
+enum ExperienceGroupedListAppearance {
+    static func sync(colors: SemanticColorPalette = ThemePaletteAnchor.current) {
+        let page = UIColor(colors.backgroundPrimary)
+        let separator = UIColor(colors.separator)
+
+        UITableView.appearance().backgroundColor = page
+        UICollectionView.appearance().backgroundColor = page
+        UITableView.appearance().separatorColor = separator
     }
 }

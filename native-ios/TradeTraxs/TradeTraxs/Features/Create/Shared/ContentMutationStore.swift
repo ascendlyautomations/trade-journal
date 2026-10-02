@@ -19,6 +19,7 @@ final class ContentMutationStore {
         case storyDeleted(StoryID)
         case postDeleted(PostID)
         case reelDeleted(ReelID)
+        case achievementDeleted(AchievementID)
     }
 
     private(set) var revision: Int = 0
@@ -91,6 +92,15 @@ final class ContentMutationStore {
         revision += 1
         pruneVaultReferences([
             VaultContentRef(contentType: .reel, contentID: id.rawValue),
+        ])
+    }
+
+    func noteAchievementDeleted(_ id: AchievementID) {
+        latest = .achievementDeleted(id)
+        latestAchievementID = id
+        revision += 1
+        pruneVaultReferences([
+            VaultContentRef(contentType: .achievement, contentID: id.rawValue),
         ])
     }
 

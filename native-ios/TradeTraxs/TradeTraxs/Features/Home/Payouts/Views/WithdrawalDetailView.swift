@@ -9,8 +9,14 @@ struct WithdrawalDetailView: View {
     @Bindable private var withdrawalsHistory = WithdrawalsHistoryStore.shared
     @Bindable private var linkStore = WithdrawalAchievementLinkStore.shared
     @State private var accountsViewModel: ManageAccountsViewModel
+    @State private var didFinishHydrate = false
+    @State private var showsEditor = false
+    @State private var editorDraft = AccountPayoutEntryDraft(amountDigits: "", payoutDate: .now, note: "")
+    @State private var confirmsDelete = false
+    @State private var imageOwnerID: String?
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.dismiss) private var dismiss
 
     init(
         historyItemID: String,
@@ -57,6 +63,9 @@ struct WithdrawalDetailView: View {
         Group {
             if let item = historyItem, let account {
                 detailContent(item: item, account: account)
+            } else if !didFinishHydrate {
+                ProgressView("Loading withdrawal…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ExperienceEmptyState(
                     icon: .payouts,
@@ -68,8 +77,44 @@ struct WithdrawalDetailView: View {
         .experienceScreenBackground()
         .experienceNavigationTitle(screenTitle)
         .toolbar(.hidden, for: .tabBar)
+        .toolbar {
+            if historyItem?.isEditable == true {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Edit") { beginEdit() }
+                        .accessibilityIdentifier("withdrawals.detail.edit")
+                }
+            }
+        }
+        .onAppear {
+            accountsViewModel.seedWithdrawalsAccountsFromSessionCache()
+        }
         .task {
             await hydrate()
+        }
+        .sheet(isPresented: $showsEditor) {
+            if let item = historyItem, let entryID = item.ledgerEntryID {
+                AccountPayoutEditorSheet(
+                    viewModel: accountsViewModel,
+                    accountID: item.accountID,
+                    editingEntryID: entryID,
+                    draft: $editorDraft,
+                    isPresented: $showsEditor,
+                    copy: .payoutHistory,
+                    imageStorage: data.objectStorage,
+                    imageOwnerID: imageOwnerID
+                )
+            }
+        }
+        .confirmationDialog(
+            "Delete this withdrawal?",
+            isPresented: $confirmsDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Withdrawal", role: .destructive) {
+                Task { await deleteCurrent() }
+            }
+        } message: {
+            Text("This removes the withdrawal and updates your account balance. It cannot be undone.")
         }
         .accessibilityIdentifier("withdrawals.detail.\(historyItemID)")
     }
@@ -79,10 +124,22 @@ struct WithdrawalDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
                 headerBlock(item: item, account: account)
+                if let cycle = cycle(for: item) {
+                    cycleFacts(cycle)
+                }
                 if let notes = trimmedNotes(item.note) {
                     notesBlock(notes)
                 }
+                if let imageURL = trimmedNotes(item.imageURL), let url = URL(string: imageURL) {
+                    pictureBlock(url)
+                }
                 achievementActionBlock(item: item, account: account)
+                if item.isEditable {
+                    Button("Delete Withdrawal", role: .destructive) {
+                        confirmsDelete = true
+                    }
+                    .accessibilityIdentifier("withdrawals.detail.delete")
+                }
             }
             .padding(.horizontal, ExperienceSpacing.md)
             .padding(.vertical, ExperienceSpacing.lg)
@@ -102,6 +159,55 @@ struct WithdrawalDetailView: View {
                 .experienceStyle(.subheadline, color: colors.tertiaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func cycleFacts(_ cycle: AccountPayoutCycle) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            if let before = cycle.balanceBeforePayout {
+                factRow("Balance before", DashboardViewModel.money(before))
+            }
+            if let after = cycle.balanceAfterPayout {
+                factRow("Balance after", DashboardViewModel.money(after))
+            }
+            if let behavior = cycle.drawdownBehavior {
+                factRow("Drawdown", behavior.title)
+            }
+            if let number = cycle.cycleNumber {
+                factRow("Cycle", "\(number)")
+            }
+        }
+    }
+
+    private func factRow(_ title: String, _ value: String) -> some View {
+        HStack {
+            Text(title)
+                .experienceStyle(.subheadline, color: colors.secondaryText)
+            Spacer(minLength: ExperienceSpacing.sm)
+            Text(value)
+                .experienceStyle(.subheadline, color: colors.primaryText)
+        }
+    }
+
+    private func pictureBlock(_ url: URL) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            Text("Picture")
+                .experienceStyle(.headline, color: colors.primaryText)
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                case .failure:
+                    Text("Picture unavailable")
+                        .experienceStyle(.footnote, color: colors.tertiaryText)
+                default:
+                    ProgressView()
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+        }
     }
 
     private func notesBlock(_ notes: String) -> some View {
@@ -170,11 +276,46 @@ struct WithdrawalDetailView: View {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    private func cycle(for item: PayoutHistoryItem) -> AccountPayoutCycle? {
+        guard item.source == .fundedCycle else { return nil }
+        let cycleID = item.id.replacingOccurrences(of: "cycle:", with: "")
+        return withdrawalsHistory.cyclesByAccount[item.accountID]?.first { $0.id == cycleID }
+    }
+
+    private func beginEdit() {
+        guard let item = historyItem, item.ledgerEntryID != nil else { return }
+        editorDraft = AccountPayoutEntryDraft(
+            amountDigits: NumericInputFieldSupport.seedEditingText(
+                from: item.amount,
+                style: .unsignedCurrency
+            ),
+            payoutDate: item.date,
+            note: item.note ?? "",
+            imageURL: item.imageURL
+        )
+        showsEditor = true
+    }
+
+    private func deleteCurrent() async {
+        guard let item = historyItem, let entryID = item.ledgerEntryID else { return }
+        let imageURL = item.imageURL
+        let deleted = await accountsViewModel.deletePayout(entryID: entryID, accountID: item.accountID)
+        guard deleted else { return }
+        await OwnedMediaStorageCleanup.removePublicObjects(
+            urls: [imageURL],
+            storage: data.objectStorage
+        )
+        dismiss()
+    }
+
     private func hydrate() async {
+        defer { didFinishHydrate = true }
         guard let userID = await data.session.currentUserID else { return }
+        imageOwnerID = userID.rawValue
         let profileID = ProfileID(userID.rawValue)
         withdrawalsHistory.bindProfile(profileID)
         withdrawalsHistory.hydrateFromSessionCaches(profileID: profileID)
+        accountsViewModel.seedWithdrawalsAccountsFromSessionCache()
         await accountsViewModel.ensureAccountsReadyForWithdrawals()
         await accountsViewModel.loadAllPayoutEntries()
         do {
