@@ -38,9 +38,26 @@ nonisolated struct ProfileAccountInsight: Hashable, Codable, Sendable, Identifia
 }
 
 enum TradingAccountDropdownFilter {
-    /// Accounts eligible for Add Trade / CSV import pickers.
+    /// Accounts offered in new-trade pickers: active and shown in dropdowns.
     static func selectableForNewTrades(_ accounts: [TradingAccount]) -> [TradingAccount] {
-        accounts.filter { $0.isActive && $0.canAddTrades && $0.showInAccountDropdowns }
+        accounts.filter { $0.isActive && $0.showInAccountDropdowns }
+    }
+
+    /// Add Trade account picker — visibility follows Settings “Display in account dropdowns”.
+    static func visibleForManualTradePicker(
+        from accounts: [TradingAccount],
+        preservingSelection selectedID: TradingAccountID?
+    ) -> [TradingAccount] {
+        var visible = accounts.filter { $0.isActive && $0.showInAccountDropdowns }
+        if let selectedID,
+           !visible.contains(where: { $0.id == selectedID }),
+           let selected = accounts.first(where: { $0.id == selectedID })
+        {
+            visible.append(selected)
+        }
+        return visible.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
     }
 
     /// Account filter menus — preserves a hidden-but-selected account in the menu.

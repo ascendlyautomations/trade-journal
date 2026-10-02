@@ -156,7 +156,7 @@ final class BrokerImportFlowModel {
                 await finishWithSyncResponse(response, target: target, data: data)
             }
         } catch {
-            fail(BrokerSyncPresentation.temporaryFailureMessage(), action: .retry)
+            failImportTransportError(for: target)
         }
     }
 
@@ -196,7 +196,10 @@ final class BrokerImportFlowModel {
                 action: .reconnect
             )
         case .syncUnavailable:
-            fail(BrokerSyncPresentation.temporaryFailureMessage(), action: .retry)
+            fail(
+                BrokerSyncPresentation.temporaryFailureMessage(),
+                action: failureAction(for: target, kind: .reconnect)
+            )
         case .syncCompleted(let response):
             await finishAfterTradovateReconnect(response, target: target, data: data)
         }
@@ -266,7 +269,7 @@ final class BrokerImportFlowModel {
             pendingTradovateMappingId = target.mappingId
             phase = .awaitingTradovateConfirmation(previews)
         } catch {
-            fail(BrokerSyncPresentation.temporaryFailureMessage(), action: .retry)
+            failImportTransportError(for: target)
         }
     }
 
@@ -310,7 +313,7 @@ final class BrokerImportFlowModel {
             pendingTradovateMappingId = nil
             await finishWithSyncResponse(response, target: target, data: data)
         } catch {
-            fail(BrokerSyncPresentation.temporaryFailureMessage(), action: .retry)
+            failImportTransportError(for: target)
         }
     }
 
@@ -325,7 +328,7 @@ final class BrokerImportFlowModel {
         }
         setProgress(stage: .finalizing, progress: 0.94, processedCaption: nil)
         guard let userID = await data.session.currentUserID else {
-            fail(BrokerSyncPresentation.temporaryFailureMessage(), action: .retry)
+            failImportTransportError(for: target)
             return
         }
         let owner = ProfileID(userID.rawValue)
@@ -354,7 +357,8 @@ final class BrokerImportFlowModel {
         let resolution = BrokerSyncFailureResolution.from(response)
         let kind = BrokerSyncFailureResolution.importFailureAction(
             for: resolution,
-            response: response
+            response: response,
+            provider: target.provider
         )
         fail(
             BrokerSyncPresentation.importFailureMessage(
@@ -362,8 +366,28 @@ final class BrokerImportFlowModel {
                 provider: target.provider,
                 resolution: resolution
             ),
-            action: BrokerImportFailureAction(kind)
+            action: failureAction(for: target, kind: kind)
         )
+    }
+
+    private func failImportTransportError(for target: BrokerImportEligibilityTarget) {
+        let kind = target.provider == .tradovate
+            ? BrokerSyncFailureResolution.tradovateLinkedImportTransportFailureAction()
+            : BrokerImportFailureKind.retry
+        fail(
+            BrokerSyncPresentation.temporaryFailureMessage(),
+            action: failureAction(for: target, kind: kind)
+        )
+    }
+
+    private func failureAction(
+        for target: BrokerImportEligibilityTarget,
+        kind: BrokerImportFailureKind
+    ) -> BrokerImportFailureAction {
+        if target.provider == .tradovate, kind != .dismiss {
+            return .reconnect
+        }
+        return BrokerImportFailureAction(kind)
     }
 
     // MARK: - Progress animation

@@ -2,7 +2,7 @@ import Foundation
 
 /// BFF client for verified StoreKit transaction synchronization.
 protocol AppleSubscriptionSyncClienting: Sendable {
-    func sync(transactionID: String) async throws -> AppleSubscriptionSyncResponse
+    func sync(transactionID: String, signedTransactionInfo: String) async throws -> AppleSubscriptionSyncResponse
     func fetchEntitlement() async throws -> BillingEntitlementResponse
     func fetchMonetizationConfig() async throws -> IosMonetizationConfigResponse
 }
@@ -32,6 +32,11 @@ struct IosMonetizationConfigResponse: Decodable, Sendable {
         case globalIosPaywallEnabled
         case accountIosPaywallOverride
     }
+}
+
+nonisolated struct AppleSubscriptionSyncRequest: Encodable, Equatable, Sendable {
+    var transactionId: String
+    var signedTransactionInfo: String
 }
 
 struct AppleSubscriptionSyncResponse: Decodable, Sendable {
@@ -67,12 +72,13 @@ struct AppleSubscriptionSyncClient: AppleSubscriptionSyncClienting {
         self.transport = transport
     }
 
-    func sync(transactionID: String) async throws -> AppleSubscriptionSyncResponse {
-        struct Body: Encodable {
-            var transactionId: String
-        }
-
-        let data = try transport.encodeJSON(Body(transactionId: transactionID))
+    func sync(transactionID: String, signedTransactionInfo: String) async throws -> AppleSubscriptionSyncResponse {
+        let data = try transport.encodeJSON(
+            AppleSubscriptionSyncRequest(
+                transactionId: transactionID,
+                signedTransactionInfo: signedTransactionInfo
+            )
+        )
         let response = try await transport.send(
             host: .bff,
             path: "/api/apple/subscription/sync",
@@ -81,6 +87,10 @@ struct AppleSubscriptionSyncClient: AppleSubscriptionSyncClienting {
             requiresAuthentication: true
         )
         guard (200 ... 299).contains(response.statusCode) else {
+            let serverMessage = Self.parseErrorMessage(from: response.data)
+            if let serverMessage, !serverMessage.isEmpty {
+                throw AppError.unknown(message: serverMessage)
+            }
             throw AppError.unknown(message: "Apple subscription sync failed (\(response.statusCode))")
         }
         return try transport.decoder.decode(AppleSubscriptionSyncResponse.self, from: response)
@@ -98,6 +108,17 @@ struct AppleSubscriptionSyncClient: AppleSubscriptionSyncClienting {
             throw AppError.unknown(message: "Billing entitlement fetch failed (\(response.statusCode))")
         }
         return try transport.decoder.decode(BillingEntitlementResponse.self, from: response)
+    }
+
+    private static func parseErrorMessage(from data: Data) -> String? {
+        struct ErrorBody: Decodable {
+            var error: String?
+            var code: String?
+        }
+        guard let body = try? JSONDecoder().decode(ErrorBody.self, from: data) else {
+            return nil
+        }
+        return body.error?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func fetchMonetizationConfig() async throws -> IosMonetizationConfigResponse {

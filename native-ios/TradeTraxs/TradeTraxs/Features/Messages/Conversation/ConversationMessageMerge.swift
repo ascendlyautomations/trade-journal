@@ -189,11 +189,16 @@ nonisolated enum ConversationMessageMerge {
 
     /// Comparable content fingerprint for optimistic ↔ server matching.
     static func contentKey(for message: Message) -> String {
-        if let body = message.body?.trimmingCharacters(in: .whitespacesAndNewlines), !body.isEmpty {
-            return body
-        }
         if let reference = message.sharedContent {
             return "shared:\(reference.stableKey)"
+        }
+        if message.kind == .tradeShare,
+           let tradeID = message.attachments.first?.tradeID ?? message.attachments.compactMap(\.tradeID).first
+        {
+            return "shared:\(SharedContentReference.trade(tradeID).stableKey)"
+        }
+        if let body = message.body?.trimmingCharacters(in: .whitespacesAndNewlines), !body.isEmpty {
+            return body
         }
         if let tradeID = message.attachments.first?.tradeID {
             return "trade:\(tradeID.rawValue)"

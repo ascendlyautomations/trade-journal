@@ -68,6 +68,6 @@ struct OwnerAccountDropdownPickerLabel: View {
     let account: TradingAccount
 
     var body: some View {
-        Text(TradingAccountDisplay.ownerDropdownLine(for: account))
+        Text(TradingAccountDisplay.ownerPickerLine(for: account))
     }
 }

@@ -20,6 +20,7 @@ const past = new Date(Date.now() - 86_400_000).toISOString()
 
 const flagsOff: MonetizationGlobalSettings = {
   iosPaywallEnabled: false,
+  webPaywallEnabled: false,
   entitlementEnforcementEnabled: false,
   launchAccessMode: "none",
   launchAccessCutoffAt: null,
@@ -49,6 +50,7 @@ describe("remote monetization flags", () => {
   it("defaults both flags false when config is missing", () => {
     assert.deepEqual(resolveEffectiveMonetizationFlags(null, null), {
       iosPaywallEnabled: false,
+      webPaywallEnabled: false,
       entitlementEnforcementEnabled: false,
     })
   })
@@ -56,6 +58,7 @@ describe("remote monetization flags", () => {
   it("keeps production flags false", () => {
     assert.deepEqual(resolveEffectiveMonetizationFlags(flagsOff, null), {
       iosPaywallEnabled: false,
+      webPaywallEnabled: false,
       entitlementEnforcementEnabled: false,
     })
   })
@@ -66,7 +69,11 @@ describe("remote monetization flags", () => {
         { ...flagsOff, iosPaywallEnabled: true },
         null
       ),
-      { iosPaywallEnabled: true, entitlementEnforcementEnabled: false }
+      {
+        iosPaywallEnabled: true,
+        webPaywallEnabled: false,
+        entitlementEnforcementEnabled: false,
+      }
     )
   })
 
@@ -76,11 +83,16 @@ describe("remote monetization flags", () => {
         {
           ...flagsOff,
           iosPaywallEnabled: true,
+          webPaywallEnabled: true,
           entitlementEnforcementEnabled: true,
         },
         null
       ),
-      { iosPaywallEnabled: true, entitlementEnforcementEnabled: true }
+      {
+        iosPaywallEnabled: true,
+        webPaywallEnabled: true,
+        entitlementEnforcementEnabled: true,
+      }
     )
   })
 
@@ -88,9 +100,14 @@ describe("remote monetization flags", () => {
     assert.deepEqual(
       resolveEffectiveMonetizationFlags(flagsOff, {
         iosPaywallEnabled: true,
+        webPaywallEnabled: null,
         entitlementEnforcementEnabled: null,
       }),
-      { iosPaywallEnabled: true, entitlementEnforcementEnabled: false }
+      {
+        iosPaywallEnabled: true,
+        webPaywallEnabled: false,
+        entitlementEnforcementEnabled: false,
+      }
     )
   })
 })

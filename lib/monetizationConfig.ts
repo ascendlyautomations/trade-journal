@@ -17,6 +17,7 @@ export type LaunchAccessMode = "none" | "created_before_cutoff"
 
 export type MonetizationGlobalSettings = {
   iosPaywallEnabled: boolean
+  webPaywallEnabled: boolean
   entitlementEnforcementEnabled: boolean
   launchAccessMode: LaunchAccessMode
   launchAccessCutoffAt: string | null
@@ -24,16 +25,19 @@ export type MonetizationGlobalSettings = {
 
 export type MonetizationAccountOverride = {
   iosPaywallEnabled: boolean | null
+  webPaywallEnabled: boolean | null
   entitlementEnforcementEnabled: boolean | null
 }
 
 export type EffectiveMonetizationFlags = {
   iosPaywallEnabled: boolean
+  webPaywallEnabled: boolean
   entitlementEnforcementEnabled: boolean
 }
 
 export const MONETIZATION_FLAGS_FAIL_CLOSED: EffectiveMonetizationFlags = {
   iosPaywallEnabled: false,
+  webPaywallEnabled: false,
   entitlementEnforcementEnabled: false,
 }
 
@@ -53,6 +57,8 @@ export function resolveEffectiveMonetizationFlags(
   return {
     iosPaywallEnabled:
       accountOverride?.iosPaywallEnabled ?? globalSettings.iosPaywallEnabled,
+    webPaywallEnabled:
+      accountOverride?.webPaywallEnabled ?? globalSettings.webPaywallEnabled,
     entitlementEnforcementEnabled:
       accountOverride?.entitlementEnforcementEnabled ??
       globalSettings.entitlementEnforcementEnabled,

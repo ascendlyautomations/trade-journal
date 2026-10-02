@@ -47,6 +47,14 @@ struct SettingsAccountView: View {
                 }
             }
 
+            if let exportError = viewModel.exportErrorMessage {
+                Section {
+                    SettingsInlineError(message: exportError) {
+                        viewModel.clearExportError()
+                    }
+                }
+            }
+
             Section {
                 SettingsInfoRow(title: "Email", value: viewModel.email ?? "—")
                 SettingsInfoRow(title: "Username", value: viewModel.username.map { "@\($0)" } ?? "—")
@@ -70,6 +78,29 @@ struct SettingsAccountView: View {
                     SettingsNavigationRow(title: "Password & Security", systemImage: "lock.shield")
                 }
                 .buttonStyle(.plain)
+            }
+
+            Section {
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    viewModel.downloadAccountData()
+                } label: {
+                    SettingsNavigationRow(
+                        title: "Download Account Data",
+                        systemImage: "square.and.arrow.down",
+                        showsChevron: false
+                    )
+                    .overlay(alignment: .trailing) {
+                        if viewModel.isExportingAccountData {
+                            ProgressView()
+                                .accessibilityIdentifier("settings.account.downloading")
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isDeletingAccount || viewModel.isExportingAccountData || viewModel.exportShareItem != nil)
+                .accessibilityLabel("Download Account Data")
+                .accessibilityIdentifier("settings.account.downloadData")
             }
 
             Section {
@@ -119,6 +150,20 @@ struct SettingsAccountView: View {
             }
         }
         .onAppear { viewModel.loadIfNeeded() }
+        .sheet(
+            isPresented: Binding(
+                get: { viewModel.exportShareItem != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.clearExportShare()
+                    }
+                }
+            )
+        ) {
+            if let url = viewModel.exportShareItem?.url {
+                AccountDataShareSheet(items: [url])
+            }
+        }
         .confirmationDialog(
             "Log out of TradeTraxs?",
             isPresented: Binding(
@@ -267,6 +312,16 @@ private struct AppleSubscriptionDeletionWarningSheet: View {
         }
         .accessibilityIdentifier("settings.account.deleteApple.warning")
     }
+}
+
+private struct AccountDataShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 private struct AccountDeletionSuccessView: View {

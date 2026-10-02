@@ -71,7 +71,8 @@ export async function insertCopyTradedTrades({
   | { ok: true; trades: Record<string, unknown>[] }
   | { ok: false; message: string }
 > {
-  if (accounts.length === 0) {
+  const journalable = accounts.filter((account) => account.is_active !== false)
+  if (journalable.length === 0) {
     return { ok: false, message: "Copy trading group has no linked accounts." }
   }
 
@@ -81,7 +82,7 @@ export async function insertCopyTradedTrades({
     .eq("id", userId)
     .maybeSingle()
 
-  for (const account of accounts) {
+  for (const account of journalable) {
     const entryGate = await assertAccountAllowsNewTrades(
       client,
       userId,
@@ -125,7 +126,7 @@ export async function insertCopyTradedTrades({
       ? String(sourceAccountId).trim()
       : null
 
-  const rows = accounts.map((account) => {
+  const rows = journalable.map((account) => {
     const snapshot = accountToTradeSnapshot(account)
     return {
       ...tradeTemplate,

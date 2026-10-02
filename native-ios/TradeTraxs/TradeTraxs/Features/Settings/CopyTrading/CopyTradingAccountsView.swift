@@ -24,6 +24,7 @@ struct CopyTradingAccountsView: View {
 
     var body: some View {
         @Bindable var viewModel = viewModel
+        let billing = SessionBillingEntitlementStore.shared.status
         List {
             if let error = viewModel.errorMessage {
                 Section {
@@ -85,6 +86,11 @@ struct CopyTradingAccountsView: View {
         .listSectionSpacing(ExperienceSpacing.xxs)
         .contentMargins(.top, ExperienceSpacing.xxs, for: .scrollContent)
         .experienceNavigationTitle("Copy Trading Accounts")
+        .proUpgradeSheet()
+        .task {
+            let isPro = billing?.hasTraxProAccess == true
+            _ = ProUpgradeCoordinator.shared.presentIfNeeded(isPro: isPro, feature: .copyTrading)
+        }
         .overlay {
             if viewModel.isLoading {
                 ProgressView()

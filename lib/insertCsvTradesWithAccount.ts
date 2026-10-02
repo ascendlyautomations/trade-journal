@@ -52,11 +52,9 @@ export async function insertCsvTradesWithAccount(
       error: {
         message: entryGate.message,
         code:
-          entryGate.code === "selection_required"
-            ? "ACCOUNT_SLOT_SELECTION_REQUIRED"
-            : entryGate.code === "read_only"
-              ? "ACCOUNT_READ_ONLY"
-              : "ACCOUNT_MISSING",
+          entryGate.code === "ownership"
+            ? "ACCOUNT_OWNERSHIP_MISMATCH"
+            : "ACCOUNT_MISSING",
       },
     }
   }

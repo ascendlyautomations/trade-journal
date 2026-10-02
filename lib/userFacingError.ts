@@ -4,6 +4,7 @@ import {
   FREE_PLAN_DAILY_TRADE_LIMIT_MESSAGE,
 } from "./freePlanDailyLimits.ts"
 import { FREE_PLAN_DAILY_DM_LIMIT_MESSAGE } from "./freePlanMessagingLimits.ts"
+import { parseProLimitPayload } from "./proGateReason.ts"
 
 /**
  * Central registry: map internal error codes → polished user-facing copy.
@@ -18,10 +19,12 @@ export const USER_FACING_ERROR_MESSAGES = {
   FREE_PLAN_REELS_LIMIT: FREE_PLAN_DAILY_CLIP_LIMIT_MESSAGE,
   FREE_PLAN_ACCOUNT_LIMIT:
     "Free plan allows up to 3 active accounts. Upgrade to Pro for unlimited accounts.",
+  /** @deprecated Legacy slot-selection era — not current product behavior. */
   ACCOUNT_READ_ONLY:
-    "This account is read-only on the Free plan. Choose it as one of your 3 active accounts or upgrade to Pro to add trades.",
+    "This trading account can't accept new trades right now.",
+  /** @deprecated Legacy slot-selection era — not current product behavior. */
   ACCOUNT_SLOT_SELECTION_REQUIRED:
-    "Choose up to 3 accounts to keep active for new trades. Your other accounts stay available in read-only mode.",
+    "Choose up to 3 accounts to keep active for new trades.",
   ACCOUNT_OWNERSHIP_MISMATCH: "That trading account does not belong to you.",
   RATE_LIMIT_EXCEEDED:
     "You're doing that too often. Please wait a moment and try again.",
@@ -443,6 +446,9 @@ export function toUserFacingErrorMessage(
   error: unknown,
   fallback: string = UNKNOWN_ERROR_MESSAGE
 ): string {
+  const proLimit = parseProLimitPayload(error)
+  if (proLimit) return proLimit.message
+
   if (error instanceof TypeError) {
     const network = lookupMappedMessage(error.message)
     if (network) return network

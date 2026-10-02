@@ -78,8 +78,12 @@ nonisolated enum BrokerSyncFailureResolution: Equatable, Sendable {
     /// Maps sync resolution to broker import failure UI actions (import sheet + settings retry/reconnect).
     static func importFailureAction(
         for resolution: BrokerSyncFailureResolution,
-        response: TradovateAccountSyncResponse
+        response: TradovateAccountSyncResponse,
+        provider: BrokerIntegrationProvider
     ) -> BrokerImportFailureKind {
+        if provider == .tradovate {
+            return tradovateLinkedImportFailureAction(for: resolution, response: response)
+        }
         switch resolution {
         case .success:
             return .dismiss
@@ -90,6 +94,26 @@ nonisolated enum BrokerSyncFailureResolution: Equatable, Sendable {
         case .importFailed, .noAvailableTradeHistory:
             return .dismiss
         }
+    }
+
+    /// Existing linked Tradovate mapping — any import failure offers reconnect (never Retry-only).
+    static func tradovateLinkedImportFailureAction(
+        for resolution: BrokerSyncFailureResolution,
+        response: TradovateAccountSyncResponse
+    ) -> BrokerImportFailureKind {
+        switch resolution {
+        case .success:
+            return .dismiss
+        case .noAvailableTradeHistory:
+            return .dismiss
+        case .reconnectRequired, .retryable, .importFailed:
+            return .reconnect
+        }
+    }
+
+    /// Transport / decode failures during an import for an existing linked Tradovate account.
+    static func tradovateLinkedImportTransportFailureAction() -> BrokerImportFailureKind {
+        .reconnect
     }
 }
 

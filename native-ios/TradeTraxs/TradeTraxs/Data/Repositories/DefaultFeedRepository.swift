@@ -588,13 +588,15 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             return []
         }
 
-        // Same select as web `ACTIVE_STORIES_SELECT`. No `expires_at` / `media_url` columns.
+        // Same select as web `ACTIVE_STORIES_SELECT`. Expired rows stay out even before cleanup.
+        let cutoff = ISO8601.string(from: Date().addingTimeInterval(-ActiveStorySemantics.window))
         let rows: [Row] = try await supabase.database.select(
             Row.self,
             from: "stories",
             query: [
                 SupabaseQuery.select("id,user_id,image_url,created_at"),
                 SupabaseQuery.isIn("user_id", candidateIDs),
+                URLQueryItem(name: "created_at", value: "gt.\(cutoff)"),
                 URLQueryItem(name: "order", value: "created_at.desc"),
             ]
         )
@@ -651,12 +653,14 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             var created_at: String?
         }
 
+        let cutoff = ISO8601.string(from: Date().addingTimeInterval(-ActiveStorySemantics.window))
         let rows: [Row] = try await supabase.database.select(
             Row.self,
             from: "stories",
             query: [
                 SupabaseQuery.select("id,user_id,image_url,created_at"),
                 SupabaseQuery.eq("id", id.rawValue),
+                URLQueryItem(name: "created_at", value: "gt.\(cutoff)"),
                 URLQueryItem(name: "limit", value: "1"),
             ]
         )
@@ -679,9 +683,22 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
     }
 
     func createStory(userID: ProfileID, imageURL: String) async throws -> Story {
-        struct Body: Encodable {
+        try await createStory(userID: userID, imageURL: imageURL, textOverlays: [])
+    }
+
+    func createStory(
+        userID: ProfileID,
+        imageURL: String,
+        textOverlays: [StoryTextOverlayRecord]
+    ) async throws -> Story {
+        struct PlainBody: Encodable {
             var user_id: String
             var image_url: String
+        }
+        struct OverlayBody: Encodable {
+            var user_id: String
+            var image_url: String
+            var text_overlays: [StoryTextOverlayRecord]
         }
         struct Row: Codable {
             var id: String?
@@ -695,11 +712,27 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             throw AppError.unknown(message: "Missing story image")
         }
 
-        let row: Row = try await supabase.database.insert(
-            Body(user_id: userID.rawValue, image_url: trimmedURL),
-            into: "stories",
-            returning: Row.self
-        )
+        let overlays = textOverlays.filter {
+            !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        let row: Row
+        if overlays.isEmpty {
+            row = try await supabase.database.insert(
+                PlainBody(user_id: userID.rawValue, image_url: trimmedURL),
+                into: "stories",
+                returning: Row.self
+            )
+        } else {
+            row = try await supabase.database.insert(
+                OverlayBody(
+                    user_id: userID.rawValue,
+                    image_url: trimmedURL,
+                    text_overlays: overlays
+                ),
+                into: "stories",
+                returning: Row.self
+            )
+        }
 
         guard let id = row.id?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty,
               let author = row.user_id?.trimmingCharacters(in: .whitespacesAndNewlines), !author.isEmpty,
@@ -723,6 +756,23 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         )
     }
 
+    func storyTextOverlays(id: StoryID) async throws -> [StoryTextOverlayRecord] {
+        struct Row: Codable {
+            var text_overlays: [StoryTextOverlayRecord]?
+        }
+
+        let rows: [Row] = try await supabase.database.select(
+            Row.self,
+            from: "stories",
+            query: [
+                SupabaseQuery.select("text_overlays"),
+                SupabaseQuery.eq("id", id.rawValue),
+                URLQueryItem(name: "limit", value: "1"),
+            ]
+        )
+        return rows.first?.text_overlays ?? []
+    }
+
     private static func storyMediaKind(forPublicURL url: String) -> MediaKind {
         let path = url.lowercased()
         for ext in [".mp4", ".mov", ".m4v", ".webm"] where path.hasSuffix(ext) {
@@ -741,10 +791,48 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             from: "stories",
             query: [SupabaseQuery.eq("id", id.rawValue)]
         )
+        let storyOwned = (media ?? []).filter { url in
+            OwnedMediaStorageCleanup.location(fromPublicURL: url)?.bucket == StorageBucket.stories.rawValue
+        }
+        var removable: [String?] = []
+        for url in storyOwned {
+            guard let url, !(await storyMediaURLIsShared(url)) else { continue }
+            removable.append(url)
+        }
         await OwnedMediaStorageCleanup.removePublicObjects(
-            urls: media ?? [],
+            urls: removable,
             storage: supabase.storage
         )
+    }
+
+    /// True when another story, post, clip, or trade still points at this URL.
+    /// A failed lookup is treated as shared so cleanup cannot delete someone else's media.
+    private func storyMediaURLIsShared(_ url: String) async -> Bool {
+        if await mediaURLExists(in: "stories", column: "image_url", url: url) { return true }
+        if await mediaURLExists(in: "profile_posts", column: "image_url", url: url) { return true }
+        if await mediaURLExists(in: "posts", column: "image_url", url: url) { return true }
+        if await mediaURLExists(in: "reels", column: "video_url", url: url) { return true }
+        if await mediaURLExists(in: "reels", column: "thumbnail_url", url: url) { return true }
+        if await mediaURLExists(in: "trades", column: "image_url", url: url) { return true }
+        return false
+    }
+
+    private func mediaURLExists(in table: String, column: String, url: String) async -> Bool {
+        struct Row: Decodable, Sendable { var id: String? }
+        do {
+            let rows: [Row] = try await supabase.database.select(
+                Row.self,
+                from: table,
+                query: [
+                    SupabaseQuery.select("id"),
+                    SupabaseQuery.eq(column, url),
+                    URLQueryItem(name: "limit", value: "1"),
+                ]
+            )
+            return !rows.isEmpty
+        } catch {
+            return true
+        }
     }
 
     func reel(id: ReelID) async throws -> ReelLoadResult {

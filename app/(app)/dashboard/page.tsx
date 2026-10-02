@@ -53,6 +53,7 @@ import {
 import { supabase } from "../../../lib/supabaseClient"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 import { isProActive } from "../../../lib/subscription"
+import { useProGate } from "@/lib/useProGate"
 import { CREATOR_ACCESS_SUCCESS_MESSAGE } from "@/lib/creatorAccess"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { excludeBacktestTrades } from "@/lib/tradeModeFilters"
@@ -156,6 +157,8 @@ export default function Dashboard() {
   const { accounts: accountRows, loading: accountsLoading } =
     useCachedAccounts(user?.id)
   const isPro = isProActive(profile)
+  const { shouldGateFeature, presentFeature } = useProGate(profile)
+  const proFeatureUnlocked = isPro || !shouldGateFeature(true)
   const [deferredSectionsReady, setDeferredSectionsReady] = useState(false)
   const [accountFilter, setAccountFilter] = useState("all")
   const [copyGroupsRequested, setCopyGroupsRequested] = useState(false)
@@ -163,16 +166,16 @@ export default function Dashboard() {
     setCopyGroupsRequested(true)
   }, [])
   useEffect(() => {
-    if (!isPro) return
+    if (!proFeatureUnlocked) return
     const prefs = loadDashboardGearPrefs()
     if (isCopyGroupFilterValue(prefs?.accountFilter)) {
       setCopyGroupsRequested(true)
     }
-  }, [isPro])
+  }, [proFeatureUnlocked])
   // Copy Trading loads on demand — saved copy-group filter or account/filter UI open.
   const { copyGroups } = useCopyTradingGroups(
     user?.id,
-    isPro &&
+    proFeatureUnlocked &&
       (copyGroupsRequested || isCopyGroupFilterValue(accountFilter))
   )
   const [accountTypeFilter, setAccountTypeFilter] = useState("all")
@@ -200,9 +203,6 @@ export default function Dashboard() {
     quickTradeOpen: showQuickTrade,
     openQuickTrade,
     closeQuickTrade,
-    upgradeOpen: showProUpgradeModal,
-    openUpgrade: openExportUpgradeModal,
-    closeUpgrade,
     importOpen: showImportModal,
     openImport,
     closeImport,
@@ -874,7 +874,7 @@ export default function Dashboard() {
   )
 
   const timeframeLabel = syncTimeframeDisplayLabel(timeFilter, selectedDate)
-  const dashboardUserIsPro = isProActive(profile)
+  const dashboardUserIsPro = proFeatureUnlocked
 
   const desktopTerminal = (
     <DashboardDesktopTerminal
@@ -954,10 +954,7 @@ export default function Dashboard() {
                   requestDemoSignup("upload")
                   return
                 }
-                if (!isPro) {
-                  openExportUpgradeModal()
-                  return
-                }
+                if (presentFeature("performance_exports")) return
                 openPerformanceShare()
               }}
               onOpenQuickInput={() => {
@@ -1269,8 +1266,6 @@ export default function Dashboard() {
         profile={profile}
         customRangeStart={customRangeStart}
         customRangeEnd={customRangeEnd}
-        upgradeOpen={showProUpgradeModal}
-        onCloseUpgrade={closeUpgrade}
         quickTradeOpen={showQuickTrade}
         userId={user?.id ?? null}
         onCloseQuickTrade={closeQuickTrade}

@@ -150,11 +150,28 @@ final class SettingsSubscriptionViewModel {
     }
 
     var subscribeButtonTitle: String {
-        guard let product = selectedProduct else { return "Subscribe" }
-        if product.hasEligibleIntroductoryOffer {
-            return "Start TraxPro"
+        upgradePrimaryButtonTitle
+    }
+
+    var upgradeHeroTitle: String {
+        if selectedProduct?.hasEligibleIntroductoryOffer == true {
+            return "Try TradeTraxs Pro Free for 14 Days"
         }
-        return "Subscribe to TraxPro"
+        return "TradeTraxs Pro"
+    }
+
+    var upgradePrimaryButtonTitle: String {
+        guard let product = selectedProduct else { return "Upgrade to Pro" }
+        if product.hasEligibleIntroductoryOffer {
+            return "Start 14-Day Free Trial"
+        }
+        return "Upgrade to Pro"
+    }
+
+    var upgradePostTrialFootnote: String? {
+        guard let product = selectedProduct, product.hasEligibleIntroductoryOffer else { return nil }
+        let interval = product.subscriptionPeriodLabel.lowercased()
+        return "Then \(product.displayPrice)/\(interval). Cancel anytime."
     }
 
     var isPrimaryActionDisabled: Bool {
@@ -224,6 +241,7 @@ final class SettingsSubscriptionViewModel {
             if status?.hasTraxProAccess == true {
                 actionMessage = "TraxPro is now active on your account."
                 errorMessage = nil
+                ProUpgradeCoordinator.shared.completePurchaseIfPro(active: true)
             } else {
                 errorMessage = "Purchase received. TraxPro will unlock once verification completes."
             }
@@ -255,6 +273,7 @@ final class SettingsSubscriptionViewModel {
             await reconcileEntitlements()
             if status?.hasTraxProAccess == true {
                 actionMessage = "TraxPro access restored."
+                ProUpgradeCoordinator.shared.completePurchaseIfPro(active: true)
             } else if restored {
                 actionMessage = "Purchase found. TraxPro will unlock once verification completes."
             } else {

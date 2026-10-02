@@ -307,7 +307,13 @@ struct SettingsSubscriptionView: View {
                 .accessibilityIdentifier("settings.subscription.subscribe")
             }
         } header: {
-            sectionHeading("Choose Your Plan")
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                sectionHeading("Choose Your Plan")
+                if viewModel.showsFreePlanDetails {
+                    Text(viewModel.upgradeHeroTitle)
+                        .experienceStyle(.subheadline, color: colors.secondaryText)
+                }
+            }
         } footer: {
             if case .loaded = viewModel.productsState {
                 Text(SubscriptionPresentationPolicy.autoRenewDisclosure(selectedProduct: viewModel.selectedProduct))

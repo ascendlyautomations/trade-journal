@@ -800,6 +800,7 @@ final class GlobalUploadCoordinator {
                         uploadService: services.uploadService,
                         objectStorage: services.objectStorage,
                         predeterminedStoragePath: spec.storagePath,
+                        textOverlays: spec.textOverlays,
                         onProgress: { [weak self] progress in
                             Task { @MainActor in
                                 self?.updateJob(jobID) { job in
@@ -913,7 +914,11 @@ final class GlobalUploadCoordinator {
         }
 
         do {
-            let created = try await services.feed.createStory(userID: spec.authorID, imageURL: publicURL)
+            let created = try await services.feed.createStory(
+                userID: spec.authorID,
+                imageURL: publicURL,
+                textOverlays: spec.textOverlays
+            )
             var saved = retryStory[jobID]?.2 ?? StoryUploadCheckpoint()
             saved.savedStoryID = created.id
             saved.insertConfirmedAbsent = false
@@ -1893,11 +1898,37 @@ final class GlobalUploadCoordinator {
 
     private func failJob(jobID: String, error: Error, runGeneration: UInt64) async {
         guard jobRunIsLive(jobID: jobID, generation: runGeneration, stage: "failJob") else { return }
-        let message = ProfileSectionSupport.message(for: error)
+        if ProLimitPresentation.presentUpgradeIfProGate(error) {
+            await abandonJobForProGate(jobID: jobID, runGeneration: runGeneration)
+            return
+        }
+        let message = ProLimitPresentation.userMessageUnlessProLimit(error)
+        let display = message.isEmpty
+            ? ProfileSectionSupport.message(for: error)
+            : message
         updateJob(jobID) { job in
             job.phase = .failed
-            job.errorMessage = message
+            job.errorMessage = display.isEmpty ? nil : display
         }
+    }
+
+    /// Pro limits are not upload/network failures — drop the job quietly and keep retry payload for the user.
+    private func abandonJobForProGate(jobID: String, runGeneration: UInt64) async {
+        guard jobRunIsLive(jobID: jobID, generation: runGeneration, stage: "abandonProGate") else { return }
+        GlobalUploadJobDiagnostics.log(
+            id: jobID,
+            kind: jobs.first(where: { $0.id == jobID })?.kind ?? .trade,
+            event: .removed,
+            taskCancelled: false,
+            generation: runGeneration,
+            removalReason: "proGate"
+        )
+        scheduledRemovalTasks[jobID]?.cancel()
+        scheduledRemovalTasks.removeValue(forKey: jobID)
+        tasks.removeValue(forKey: jobID)
+        activeTaskGenerations.removeValue(forKey: jobID)
+        jobs.removeAll { $0.id == jobID }
+        jobRunGeneration.removeValue(forKey: jobID)
     }
 
     private func invalidateJobRun(jobID: String) {

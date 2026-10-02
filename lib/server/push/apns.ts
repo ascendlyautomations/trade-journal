@@ -2,37 +2,13 @@ import crypto from "crypto"
 import http2 from "http2"
 import { NATIVE_IOS_APP_ID } from "@/lib/nativeIosIdentity"
 import { redactDeviceToken } from "@/lib/server/push/deviceTokenRedaction"
+import {
+  buildApnsAlertPayloadBody,
+  type ApnsAlertPayload,
+} from "@/lib/server/push/apnsPayloadBody"
 
-export type ApnsAlertPayload = {
-  title: string
-  body: string
-  href: string
-  /**
-   * Omit to leave the icon badge unchanged. `0` clears it — do not use that
-   * for announcements that are not an unread-count update.
-   */
-  badge?: number
-  notificationType: string
-  /** iOS notification category for long-press actions. */
-  category?: string
-  conversationId?: string
-  roomId?: string
-  roomSlug?: string
-  followRequestId?: string
-  joinRequestId?: string
-  /** Actor profile UUID — native follow / social deep links resolve by id. */
-  senderId?: string
-  /**
-   * APNs thread-id — groups related alerts in Notification Center.
-   * For DMs this is stable per conversation (`dm:{conversationId}`).
-   */
-  threadId?: string
-  /**
-   * APNs collapse-id — replaces a prior undelivered/delivered alert with the
-   * same id so rapid messages in one conversation become one evolving banner.
-   */
-  collapseId?: string
-}
+export type { ApnsAlertPayload }
+export { buildApnsAlertPayloadBody }
 
 /** Keep alerts eligible for offline delivery (~24h). `0` means expire immediately. */
 const APNS_EXPIRATION_TTL_SECONDS = 24 * 60 * 60
@@ -173,34 +149,7 @@ export async function sendApnsAlert(
     ? "https://api.push.apple.com"
     : "https://api.sandbox.push.apple.com"
 
-  // Custom keys outside `aps` are consumed by the native Swift push parser
-  // (tap routing via `href` / `type` and notification actions).
-  const body = JSON.stringify({
-    aps: {
-      alert: {
-        title: payload.title,
-        body: payload.body,
-      },
-      ...(typeof payload.badge === "number"
-        ? { badge: Math.max(0, Math.floor(payload.badge)) }
-        : {}),
-      sound: "default",
-      ...(payload.category ? { category: payload.category } : {}),
-      ...(payload.threadId ? { "thread-id": payload.threadId } : {}),
-    },
-    href: payload.href,
-    type: payload.notificationType,
-    ...(payload.conversationId
-      ? { conversationId: payload.conversationId }
-      : {}),
-    ...(payload.roomId ? { roomId: payload.roomId } : {}),
-    ...(payload.roomSlug ? { roomSlug: payload.roomSlug } : {}),
-    ...(payload.followRequestId
-      ? { followRequestId: payload.followRequestId }
-      : {}),
-    ...(payload.joinRequestId ? { joinRequestId: payload.joinRequestId } : {}),
-    ...(payload.senderId ? { senderId: payload.senderId } : {}),
-  })
+  const body = buildApnsAlertPayloadBody(payload)
 
   const jwt = createApnsJwt(config)
 

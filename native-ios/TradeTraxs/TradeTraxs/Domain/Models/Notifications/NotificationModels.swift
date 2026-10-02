@@ -56,7 +56,22 @@ nonisolated enum ActivityNotificationKind: String, Hashable, Codable, Sendable {
         case "tradingReport": return .tradingReport
         case "affiliate": return .affiliateReferral
         case "achievement": return .system
+        case "announcement", "announcements", "product_update", "maintenance", "platform_update",
+             "daily_check_in", "trade_import_reminder":
+            return .system
         default: return .system
+        }
+    }
+
+    /// TradeTraxs-sourced Activity (not another user's profile) — show app logo in the avatar slot.
+    var usesTradeTraxsBrandAvatar: Bool {
+        switch self {
+        case .tradingReport, .affiliateReferral, .affiliateCommissionEarned, .system:
+            return true
+        case .like, .comment, .follow, .followRequest, .followRequestAccepted,
+             .roomJoin, .tradeRoomJoinRequest, .tradeRoomJoinAccepted, .tradeRoomJoinDeclined,
+             .roomMention, .message:
+            return false
         }
     }
 }
@@ -94,6 +109,10 @@ nonisolated struct ActivityNotification: Hashable, Codable, Sendable, Identifiab
     var isMention: Bool
     var createdAt: Date
     var isRead: Bool
+
+    var usesTradeTraxsBrandAvatar: Bool {
+        kind.usesTradeTraxsBrandAvatar
+    }
 }
 
 /// Pending private-profile follow request (from `follow_requests`, not notification rows).

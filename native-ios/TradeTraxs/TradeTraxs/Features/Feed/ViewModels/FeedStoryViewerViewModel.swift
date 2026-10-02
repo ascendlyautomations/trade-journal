@@ -8,7 +8,6 @@ final class FeedStoryViewerViewModel {
     enum Phase: Equatable {
         case loading
         case loaded
-        case unavailable
         case failed(String)
     }
 
@@ -22,12 +21,13 @@ final class FeedStoryViewerViewModel {
     private(set) var slideIndex = 0
     private(set) var isSendingReply = false
     private(set) var replyErrorMessage: String?
+    private(set) var videoTextOverlays: [StoryTextOverlayRecord] = []
+    private(set) var videoPixelSize: CGSize = .zero
 
     let storyID: StoryID
     let playback: StoryPlaybackController
 
-    private var authorOrder: [ProfileID] = []
-    private var storiesByAuthor: [ProfileID: [Story]] = [:]
+    private var sequence = StoryViewerContinuation()
     private var viewerID: ProfileID?
 
     private let feed: any FeedRepository
@@ -58,6 +58,9 @@ final class FeedStoryViewerViewModel {
         self.playback.onAdvance = { [weak self] in
             self?.advanceFromPlayback()
         }
+        self.playback.onVideoPixelSize = { [weak self] size in
+            self?.videoPixelSize = size
+        }
     }
 
     func tearDown() {
@@ -74,18 +77,81 @@ final class FeedStoryViewerViewModel {
     }
 
     var currentSlides: [Story] {
-        guard authorIndex >= 0, authorIndex < authorOrder.count else { return [] }
-        return storiesByAuthor[authorOrder[authorIndex]] ?? []
+        sequence.slides(at: authorIndex)
     }
 
     func loadIfNeeded() async {
         viewerID = await session.currentUserID.map { ProfileID($0.rawValue) }
         await bootstrapCatalogIfNeeded()
-        guard resolveInitialPosition() else {
-            phase = .unavailable
+        guard let position = sequence.position(of: storyID) else {
+            dismissViewer()
             return
         }
+        authorIndex = position.authorIndex
+        slideIndex = 0
         await applyCurrentSlide()
+    }
+
+    /// Same-device deletes, another device, and refreshes all enter here.
+    /// A missing slide moves to the next story, the next author, or closes the viewer.
+    func absorbRemovedStory(_ storyID: StoryID) async {
+        guard sequence.position(of: storyID) != nil else { return }
+        let destination = sequence.remove(
+            storyIDs: [storyID],
+            viewingAuthorIndex: authorIndex,
+            viewingSlideIndex: slideIndex
+        )
+        cache.removeStory(id: storyID)
+        FeedStoriesCatalogStore.shared.removeStory(id: storyID)
+        await apply(destination)
+    }
+
+    func absorbLatestContentMutation() {
+        guard case .storyDeleted(let storyID) = ContentMutationStore.shared.latest else { return }
+        Task { await absorbRemovedStory(storyID) }
+    }
+
+    /// Drops slides whose 24-hour window has ended while the viewer is open.
+    func absorbExpiredStories(now: Date = Date()) async {
+        let visibleID = story?.id
+        let destination = sequence.dropInactive(
+            viewingAuthorIndex: authorIndex,
+            viewingSlideIndex: slideIndex,
+            now: now
+        )
+        if case .showing(let nextAuthor, let nextSlide) = destination,
+           nextAuthor == authorIndex,
+           nextSlide == slideIndex,
+           sequence.slides(at: nextAuthor).indices.contains(nextSlide),
+           sequence.slides(at: nextAuthor)[nextSlide].id == visibleID
+        {
+            return
+        }
+        await apply(destination)
+    }
+
+    /// Confirms the visible story still exists. A network failure leaves the current slide up.
+    func revalidateVisibleStory() async {
+        await absorbExpiredStories()
+        guard phase == .loaded, let current = story, let viewerID else { return }
+        guard !FeedSupport.isLocalDevelopmentProfile(viewerID) else { return }
+        do {
+            let fresh = try await feed.story(id: current.id)
+            if fresh == nil {
+                await absorbRemovedStory(current.id)
+            }
+        } catch {
+            return
+        }
+    }
+
+    /// While the viewer is open, expire slides on time and notice deletes from another device.
+    func watchStoryLifecycle() async {
+        while !Task.isCancelled {
+            await revalidateVisibleStory()
+            let delay = secondsUntilSoonestExpiry()
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+        }
     }
 
     func setReplyComposerActive(_ active: Bool) {
@@ -127,7 +193,7 @@ final class FeedStoryViewerViewModel {
     func goNextAuthor() {
         guard phase == .loaded else { return }
         ExperienceHaptics.play(.selection)
-        guard authorIndex < authorOrder.count - 1 else {
+        guard authorIndex < sequence.authorOrder.count - 1 else {
             dismissViewer()
             return
         }
@@ -173,29 +239,16 @@ final class FeedStoryViewerViewModel {
             {
                 try await feed.deleteStory(id: currentStory.id)
             }
+            let destination = sequence.remove(
+                storyIDs: [currentStory.id],
+                viewingAuthorIndex: authorIndex,
+                viewingSlideIndex: slideIndex
+            )
             cache.removeStory(id: currentStory.id)
-            ContentMutationStore.shared.noteStoryDeleted(currentStory.id)
             FeedStoriesCatalogStore.shared.removeStory(id: currentStory.id)
-            removeCurrentSlideFromCatalog(storyID: currentStory.id)
+            ContentMutationStore.shared.noteStoryDeleted(currentStory.id)
             ExperienceHaptics.play(.success)
-
-            if authorOrder.isEmpty {
-                dismissViewer()
-                return true
-            }
-            clampIndices()
-            if currentSlides.isEmpty {
-                if authorIndex > 0 {
-                    authorIndex -= 1
-                    slideIndex = max(0, (storiesByAuthor[authorOrder[authorIndex]] ?? []).count - 1)
-                } else {
-                    dismissViewer()
-                    return true
-                }
-            } else if slideIndex >= currentSlides.count {
-                slideIndex = max(0, currentSlides.count - 1)
-            }
-            await applyCurrentSlide()
+            await apply(destination)
             return true
         } catch {
             deleteErrorMessage = ProfileSectionSupport.message(for: error)
@@ -299,7 +352,7 @@ final class FeedStoryViewerViewModel {
             Task { await applyCurrentSlide() }
             return
         }
-        if authorIndex < authorOrder.count - 1 {
+        if authorIndex < sequence.authorOrder.count - 1 {
             authorIndex += 1
             slideIndex = 0
             Task { await applyCurrentSlide() }
@@ -317,7 +370,7 @@ final class FeedStoryViewerViewModel {
         }
         if authorIndex > 0 {
             authorIndex -= 1
-            let previousSlides = storiesByAuthor[authorOrder[authorIndex]] ?? []
+            let previousSlides = sequence.slides(at: authorIndex)
             slideIndex = max(0, previousSlides.count - 1)
             Task { await applyCurrentSlide() }
             return
@@ -335,7 +388,7 @@ final class FeedStoryViewerViewModel {
         }
 
         guard let viewerID else {
-            phase = .unavailable
+            dismissViewer()
             return
         }
 
@@ -360,44 +413,43 @@ final class FeedStoryViewerViewModel {
                 FeedStoriesCatalogStore.shared.replace(catalog: [cached], viewerID: viewerID)
                 applyCatalog([cached], viewerID: viewerID)
             } else {
-                phase = .unavailable
+                dismissViewer()
             }
         }
     }
 
     private func applyCatalog(_ catalog: [Story], viewerID: ProfileID) {
         self.viewerID = viewerID
-        storiesByAuthor = ActiveStorySemantics.groupByAuthor(catalog)
-        authorOrder = ActiveStorySemantics.authorOrder(from: catalog, viewerID: viewerID)
-            .filter { !(storiesByAuthor[$0] ?? []).isEmpty }
+        sequence.install(catalog: catalog, viewerID: viewerID)
     }
 
-    private func resolveInitialPosition() -> Bool {
-        guard !authorOrder.isEmpty else { return false }
-
-        for (authorIdx, authorID) in authorOrder.enumerated() {
-            guard let slides = storiesByAuthor[authorID] else { continue }
-            if slides.contains(where: { $0.id == storyID }) {
-                authorIndex = authorIdx
-                slideIndex = 0
-                return true
-            }
+    private func apply(_ destination: StoryViewerContinuation.Destination) async {
+        switch destination {
+        case .dismiss:
+            dismissViewer()
+        case .showing(let nextAuthor, let nextSlide):
+            authorIndex = nextAuthor
+            slideIndex = nextSlide
+            await applyCurrentSlide()
         }
-
-        authorIndex = 0
-        slideIndex = 0
-        return true
     }
 
     private func applyCurrentSlide() async {
         let slides = currentSlides
-        guard !slides.isEmpty, slideIndex < slides.count else {
-            phase = .unavailable
+        guard slides.indices.contains(slideIndex) else {
+            dismissViewer()
             return
         }
 
         let current = slides[slideIndex]
+        guard ActiveStorySemantics.isActive(createdAt: current.createdAt) else {
+            await absorbExpiredStories()
+            return
+        }
+
         story = current
+        videoTextOverlays = []
+        videoPixelSize = .zero
         author = cache.profile(id: current.authorProfileID)
             ?? FollowListFixtures.profile(id: current.authorProfileID)
         if let author {
@@ -411,27 +463,40 @@ final class FeedStoryViewerViewModel {
         }
         phase = .loaded
         playback.bind(story: current)
+        if StoryPlaybackController.isVideoStory(current) {
+            let storyID = current.id
+            let authorID = current.authorProfileID
+            Task { await loadVideoTextOverlays(for: storyID, authorID: authorID) }
+        }
     }
 
-    private func removeCurrentSlideFromCatalog(storyID: StoryID) {
-        for authorID in storiesByAuthor.keys {
-            storiesByAuthor[authorID]?.removeAll { $0.id == storyID }
-            if storiesByAuthor[authorID]?.isEmpty == true {
-                storiesByAuthor[authorID] = nil
+    private func loadVideoTextOverlays(for storyID: StoryID, authorID: ProfileID) async {
+        guard !storyID.rawValue.hasPrefix("dev-"),
+              !FeedSupport.isLocalDevelopmentProfile(authorID)
+        else { return }
+        do {
+            let overlays = try await feed.storyTextOverlays(id: storyID)
+            guard self.story?.id == storyID else { return }
+            videoTextOverlays = overlays
+        } catch {
+            guard self.story?.id == storyID else { return }
+            videoTextOverlays = []
+        }
+    }
+
+    private func secondsUntilSoonestExpiry(now: Date = Date()) -> TimeInterval {
+        var soonest = ActiveStorySemantics.window
+        for slides in sequence.slidesByAuthor.values {
+            for story in slides {
+                let remaining = story.createdAt.addingTimeInterval(ActiveStorySemantics.window)
+                    .timeIntervalSince(now)
+                if remaining < soonest {
+                    soonest = remaining
+                }
             }
         }
-        authorOrder.removeAll { storiesByAuthor[$0]?.isEmpty != false }
-    }
-
-    private func clampIndices() {
-        if authorOrder.isEmpty {
-            authorIndex = 0
-            slideIndex = 0
-            return
-        }
-        authorIndex = min(max(authorIndex, 0), authorOrder.count - 1)
-        let slides = currentSlides
-        slideIndex = min(max(slideIndex, 0), max(slides.count - 1, 0))
+        if soonest < 0.5 { return 0.5 }
+        return min(soonest, 20)
     }
 
     private func patchInbox(with message: Message, conversation: Conversation, viewerID: ProfileID) {

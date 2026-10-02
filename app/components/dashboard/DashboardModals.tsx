@@ -4,9 +4,6 @@ import dynamic from "next/dynamic"
 import type { ComponentProps } from "react"
 import type { DashboardTradeRow } from "./dashboardTypes"
 
-const ProUpgradeModal = dynamic(() => import("../ProUpgradeModal"), {
-  ssr: false,
-})
 const PerformanceShareModal = dynamic(
   () => import("../PerformanceShareModal"),
   { ssr: false }
@@ -34,8 +31,6 @@ type DashboardModalsProps = {
   profile: ComponentProps<typeof PerformanceShareModal>["profile"]
   customRangeStart: string
   customRangeEnd: string
-  upgradeOpen: boolean
-  onCloseUpgrade: () => void
   quickTradeOpen: boolean
   userId: string | null
   onCloseQuickTrade: () => void
@@ -56,8 +51,6 @@ export default function DashboardModals({
   profile,
   customRangeStart,
   customRangeEnd,
-  upgradeOpen,
-  onCloseUpgrade,
   quickTradeOpen,
   userId,
   onCloseQuickTrade,
@@ -84,10 +77,6 @@ export default function DashboardModals({
           initialCustomRangeStart={customRangeStart}
           initialCustomRangeEnd={customRangeEnd}
         />
-      ) : null}
-
-      {upgradeOpen ? (
-        <ProUpgradeModal open onClose={onCloseUpgrade} variant="custom" />
       ) : null}
 
       {quickTradeOpen ? (

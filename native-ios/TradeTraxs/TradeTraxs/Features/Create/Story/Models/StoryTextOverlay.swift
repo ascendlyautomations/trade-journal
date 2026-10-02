@@ -141,3 +141,61 @@ struct StoryCanvasState: Equatable {
         selectedTextID = nil
     }
 }
+
+extension StoryTextOverlayRecord {
+    init(_ overlay: StoryTextOverlay) {
+        self.init(
+            id: overlay.id,
+            text: overlay.text,
+            x: Double(overlay.normalizedCenter.x),
+            y: Double(overlay.normalizedCenter.y),
+            scale: Double(overlay.scale),
+            rotation: Double(overlay.rotationRadians),
+            red: overlay.textFill.red,
+            green: overlay.textFill.green,
+            blue: overlay.textFill.blue,
+            alpha: overlay.textFill.alpha,
+            alignment: Self.wireAlignment(overlay.alignment),
+            background: overlay.showsBackground
+        )
+    }
+
+    func storyTextOverlay() -> StoryTextOverlay {
+        StoryTextOverlay(
+            id: id,
+            text: text,
+            normalizedCenter: CGPoint(x: x, y: y),
+            scale: CGFloat(scale),
+            rotationRadians: CGFloat(rotation),
+            textFill: StoryTextFill(red: red, green: green, blue: blue, alpha: alpha),
+            alignment: Self.textAlignment(alignment),
+            showsBackground: background
+        )
+    }
+
+    func positionedForPlayback(videoPixelSize: CGSize, viewerSize: CGSize) -> StoryTextOverlay {
+        var overlay = storyTextOverlay()
+        overlay.normalizedCenter = StoryTextOverlayPlacement.viewerNormalizedCenter(
+            composerNormalized: overlay.normalizedCenter,
+            videoPixelSize: videoPixelSize,
+            viewerSize: viewerSize
+        )
+        return overlay
+    }
+
+    private static func wireAlignment(_ alignment: TextAlignment) -> String {
+        switch alignment {
+        case .leading: return "leading"
+        case .trailing: return "trailing"
+        default: return "center"
+        }
+    }
+
+    private static func textAlignment(_ alignment: String) -> TextAlignment {
+        switch alignment {
+        case "leading": return .leading
+        case "trailing": return .trailing
+        default: return .center
+        }
+    }
+}

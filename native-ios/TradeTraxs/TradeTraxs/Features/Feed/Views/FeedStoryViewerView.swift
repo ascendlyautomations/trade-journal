@@ -44,13 +44,9 @@ struct FeedStoryViewerView: View {
             case .loading:
                 ProgressView()
                     .tint(.white)
-            case .unavailable, .failed:
-                ExperienceEmptyState(
-                    icon: .photo,
-                    title: "Story unavailable",
-                    message: "This story has expired or was deleted."
-                )
-                .foregroundStyle(.white)
+            case .failed:
+                ProgressView()
+                    .tint(.white)
             case .loaded:
                 if let story = viewModel.story {
                     storyContent(story)
@@ -109,8 +105,19 @@ struct FeedStoryViewerView: View {
                 )
             }
         }
-        .task { await viewModel.loadIfNeeded() }
+        .task {
+            await viewModel.loadIfNeeded()
+            await viewModel.watchStoryLifecycle()
+        }
         .onDisappear { viewModel.tearDown() }
+        .onChange(of: ContentMutationStore.shared.revision) { _, _ in
+            viewModel.absorbLatestContentMutation()
+        }
+        .onChange(of: viewModel.phase) { _, phase in
+            if case .failed = phase {
+                closeViewer()
+            }
+        }
         .onChange(of: isReplyFocused) { _, focused in
             viewModel.setReplyComposerActive(focused)
         }
@@ -118,6 +125,7 @@ struct FeedStoryViewerView: View {
             switch phase {
             case .active:
                 viewModel.setBackgroundPaused(false)
+                Task { await viewModel.revalidateVisibleStory() }
             case .background, .inactive:
                 viewModel.setBackgroundPaused(true)
             @unknown default:
@@ -167,10 +175,19 @@ struct FeedStoryViewerView: View {
                 viewModel.setHoldPaused(holding)
             }
 
+            if viewModel.isVideoStory, !viewModel.videoTextOverlays.isEmpty {
+                StoryVideoTextPlaybackOverlay(
+                    overlays: viewModel.videoTextOverlays,
+                    videoPixelSize: viewModel.videoPixelSize
+                )
+                .allowsHitTesting(false)
+                .accessibilityIdentifier("storyViewer.textOverlays")
+            }
+
             storyTapNavigationOverlay
 
             VStack(spacing: 0) {
-                storyInfoOverlay(for: story)
+                storyTopChrome(for: story)
                 Spacer(minLength: 0)
                 if viewModel.showReplyComposer {
                     StoryReplyInputView(
@@ -190,17 +207,8 @@ struct FeedStoryViewerView: View {
                     )
                 }
             }
+            .safeAreaPadding(.top, StoryViewerChromeMetrics.topBreathingRoom)
             .safeAreaPadding(.bottom)
-
-            VStack {
-                HStack {
-                    Spacer(minLength: 0)
-                    storyOverflowMenu
-                }
-                .padding(.horizontal, ExperienceSpacing.md)
-                Spacer(minLength: 0)
-            }
-            .safeAreaPadding(.top, ExperienceSpacing.xxs)
         }
         .simultaneousGesture(storyHorizontalDragGesture)
     }
@@ -252,27 +260,45 @@ struct FeedStoryViewerView: View {
         .allowsHitTesting(!isReplyFocused)
     }
 
-    private func storyInfoOverlay(for story: Story) -> some View {
+    private func storyTopChrome(for story: Story) -> some View {
+        let slides = viewModel.currentSlides
         let profile = viewModel.author
-        return HStack(spacing: ExperienceSpacing.sm) {
-            if let profile {
-                FollowListAvatarView(profile: profile, imagePipeline: imagePipeline, size: 32)
-            } else {
-                ExperienceAvatar(initials: "?", size: 32)
+
+        return VStack(alignment: .leading, spacing: StoryViewerChromeMetrics.sectionSpacing) {
+            if slides.count > 1 {
+                StorySlideProgressStrip(
+                    slideCount: slides.count,
+                    activeIndex: min(max(viewModel.slideIndex, 0), slides.count - 1)
+                )
             }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(profile?.displayName ?? "Trader")
-                    .experienceStyle(.headline, color: .white)
-                    .lineLimit(1)
-                Text(MessagesInboxSupport.relativeTimestamp(story.createdAt))
-                    .experienceStyle(.caption, color: .white.opacity(0.7))
+
+            HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+                HStack(spacing: ExperienceSpacing.sm) {
+                    if let profile {
+                        FollowListAvatarView(profile: profile, imagePipeline: imagePipeline, size: 32)
+                    } else {
+                        ExperienceAvatar(initials: "?", size: 32)
+                    }
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(profile?.displayName ?? "Trader")
+                            .experienceStyle(.headline, color: .white)
+                            .lineLimit(1)
+                        Text(MessagesInboxSupport.relativeTimestamp(story.createdAt))
+                            .experienceStyle(.caption, color: .white.opacity(0.7))
+                            .lineLimit(1)
+                    }
+                }
+                .allowsHitTesting(false)
+                .accessibilityElement(children: .combine)
+
+                Spacer(minLength: ExperienceSpacing.sm)
+                    .allowsHitTesting(false)
+
+                storyOverflowMenu
             }
-            Spacer(minLength: ExperienceAccessibility.minTouchTarget)
         }
-        .padding(.horizontal, ExperienceSpacing.md)
-        .padding(.top, ExperienceSpacing.xs)
+        .padding(.horizontal, StoryViewerChromeMetrics.horizontalInset)
         .padding(.bottom, ExperienceSpacing.sm)
-        .allowsHitTesting(false)
-        .accessibilityElement(children: .combine)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

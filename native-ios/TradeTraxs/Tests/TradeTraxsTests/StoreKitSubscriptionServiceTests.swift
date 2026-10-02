@@ -7,6 +7,19 @@ final class StoreKitSubscriptionServiceTests: XCTestCase {
         super.tearDown()
     }
 
+    func testSyncRequestSendsSignedTransactionAndTransactionId() throws {
+        let request = AppleSubscriptionSyncRequest(
+            transactionId: "2000000123456789",
+            signedTransactionInfo: "header.payload.signature"
+        )
+        let data = try JSONEncoder().encode(request)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: String])
+        XCTAssertEqual(object["transactionId"], "2000000123456789")
+        XCTAssertEqual(object["signedTransactionInfo"], "header.payload.signature")
+        XCTAssertNil(object["productId"])
+        XCTAssertNil(object["isPro"])
+    }
+
     func testIosPaidSubscriptionsDisabledSkipsOfferCodePresentation() async {
         IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = false
         let service = StoreKitSubscriptionService(syncClient: RecordingAppleSyncClient())
@@ -19,8 +32,9 @@ final class StoreKitSubscriptionServiceTests: XCTestCase {
 }
 
 private struct RecordingAppleSyncClient: AppleSubscriptionSyncClienting {
-    func sync(transactionID: String) async throws -> AppleSubscriptionSyncResponse {
+    func sync(transactionID: String, signedTransactionInfo: String) async throws -> AppleSubscriptionSyncResponse {
         _ = transactionID
+        _ = signedTransactionInfo
         return AppleSubscriptionSyncResponse(
             traxProActive: false,
             source: nil,

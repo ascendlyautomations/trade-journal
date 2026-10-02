@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 /// Full-screen Instagram-style story editor — crop/zoom image + text overlays.
@@ -7,7 +8,8 @@ struct StoryEditorView: View {
 
     private let isPosting: Bool
     private let onCancel: () -> Void
-    private let onPostStory: (UIImage) -> Void
+    private let onPostStory: ((UIImage) -> Void)?
+    private let onPostVideo: (([StoryTextOverlay]) -> Void)?
 
     @State private var imageDragStart: CGSize = .zero
     @State private var imagePinchStart: CGFloat?
@@ -28,6 +30,20 @@ struct StoryEditorView: View {
         self.isPosting = isPosting
         self.onCancel = onCancel
         self.onPostStory = onPostStory
+        self.onPostVideo = nil
+    }
+
+    init(
+        videoURL: URL,
+        isPosting: Bool = false,
+        onCancel: @escaping () -> Void,
+        onPostVideo: @escaping ([StoryTextOverlay]) -> Void
+    ) {
+        _viewModel = State(initialValue: StoryEditorViewModel(videoURL: videoURL))
+        self.isPosting = isPosting
+        self.onCancel = onCancel
+        self.onPostStory = nil
+        self.onPostVideo = onPostVideo
     }
 
     var body: some View {
@@ -108,8 +124,12 @@ struct StoryEditorView: View {
             isLoading: isPosting,
             accessibilityIdentifier: "storyEditor.postStory"
         ) {
+            if let onPostVideo {
+                onPostVideo(viewModel.publishableTextOverlays)
+                return
+            }
             guard let rendered = viewModel.renderFinalImage() else { return }
-            onPostStory(rendered)
+            onPostStory?(rendered)
         }
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.bottom, ExperienceSpacing.md)
@@ -202,20 +222,27 @@ struct StoryEditorView: View {
 
     @ViewBuilder
     private func imageLayer(canvasSize: CGSize) -> some View {
-        let rect = StoryImageLayout.drawRect(
-            imageSize: viewModel.sourceImage.size,
-            canvasSize: canvasSize,
-            scale: viewModel.canvas.imageScale,
-            offset: viewModel.canvas.imageOffset
-        )
+        if let sourceImage = viewModel.sourceImage {
+            let rect = StoryImageLayout.drawRect(
+                imageSize: sourceImage.size,
+                canvasSize: canvasSize,
+                scale: viewModel.canvas.imageScale,
+                offset: viewModel.canvas.imageOffset
+            )
 
-        Image(uiImage: viewModel.sourceImage)
-            .resizable()
-            .frame(width: rect.width, height: rect.height)
-            .position(x: rect.midX, y: rect.midY)
-            .gesture(imageDragGesture(canvasSize: canvasSize))
-            .simultaneousGesture(imagePinchGesture(canvasSize: canvasSize))
-            .allowsHitTesting(viewModel.canvas.selectedTextID == nil && !viewModel.isEditingText)
+            Image(uiImage: sourceImage)
+                .resizable()
+                .frame(width: rect.width, height: rect.height)
+                .position(x: rect.midX, y: rect.midY)
+                .gesture(imageDragGesture(canvasSize: canvasSize))
+                .simultaneousGesture(imagePinchGesture(canvasSize: canvasSize))
+                .allowsHitTesting(viewModel.canvas.selectedTextID == nil && !viewModel.isEditingText)
+        } else if let videoURL = viewModel.videoURL {
+            StoryEditorLoopingVideo(url: videoURL)
+                .frame(width: canvasSize.width, height: canvasSize.height)
+                .clipped()
+                .allowsHitTesting(false)
+        }
     }
 
     private func imageDragGesture(canvasSize: CGSize) -> some Gesture {
@@ -397,7 +424,7 @@ enum StoryTextDragDeleteMetrics {
     }
 }
 
-private struct StoryTextOverlayView: View {
+struct StoryTextOverlayView: View {
     let overlay: StoryTextOverlay
     let canvasSize: CGSize
     let isSelected: Bool
@@ -570,5 +597,48 @@ private struct StoryTextOverlayView: View {
             .onEnded { _ in
                 rotationStart = nil
             }
+    }
+}
+
+/// Aspect-fills the story canvas and keeps the clip looping under the text editor.
+private struct StoryEditorLoopingVideo: UIViewRepresentable {
+    let url: URL
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(url: url)
+    }
+
+    func makeUIView(context: Context) -> FeedPlayerLayerView {
+        let view = FeedPlayerLayerView()
+        view.playerLayer.videoGravity = .resizeAspectFill
+        view.backgroundColor = .black
+        view.playerLayer.player = context.coordinator.player
+        context.coordinator.player.play()
+        return view
+    }
+
+    func updateUIView(_ uiView: FeedPlayerLayerView, context: Context) {
+        uiView.playerLayer.videoGravity = .resizeAspectFill
+        uiView.playerLayer.player = context.coordinator.player
+        if context.coordinator.player.rate == 0 {
+            context.coordinator.player.play()
+        }
+    }
+
+    static func dismantleUIView(_ uiView: FeedPlayerLayerView, coordinator: Coordinator) {
+        coordinator.player.pause()
+        uiView.playerLayer.player = nil
+    }
+
+    final class Coordinator {
+        let player: AVQueuePlayer
+        private let looper: AVPlayerLooper
+
+        init(url: URL) {
+            let item = AVPlayerItem(url: url)
+            let queue = AVQueuePlayer()
+            player = queue
+            looper = AVPlayerLooper(player: queue, templateItem: item)
+        }
     }
 }

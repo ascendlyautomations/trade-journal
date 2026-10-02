@@ -32,11 +32,27 @@ final class BrokerSyncFailureResolutionTests: XCTestCase {
             "Reconnect Tradovate"
         )
         XCTAssertEqual(
-            BrokerSyncFailureResolution.importFailureAction(for: .reconnectRequired, response: response),
+            BrokerSyncFailureResolution.importFailureAction(
+                for: .reconnectRequired,
+                response: response,
+                provider: .tradovate
+            ),
             .reconnect
         )
         XCTAssertEqual(
-            BrokerSyncFailureResolution.importFailureAction(for: .retryable, response: response),
+            BrokerSyncFailureResolution.importFailureAction(
+                for: .retryable,
+                response: response,
+                provider: .tradovate
+            ),
+            .reconnect
+        )
+        XCTAssertEqual(
+            BrokerSyncFailureResolution.importFailureAction(
+                for: .retryable,
+                response: response,
+                provider: .rithmic
+            ),
             .retry
         )
     }
@@ -114,8 +130,20 @@ final class BrokerSyncFailureResolutionTests: XCTestCase {
         let response = try decoder.decode(TradovateAccountSyncResponse.self, from: json)
         XCTAssertEqual(BrokerSyncFailureResolution.from(response), .retryable)
         XCTAssertEqual(
-            BrokerSyncFailureResolution.importFailureAction(for: .retryable, response: response),
+            BrokerSyncFailureResolution.importFailureAction(
+                for: .retryable,
+                response: response,
+                provider: .rithmic
+            ),
             .syncInProgress
+        )
+        XCTAssertEqual(
+            BrokerSyncFailureResolution.importFailureAction(
+                for: .retryable,
+                response: response,
+                provider: .tradovate
+            ),
+            .reconnect
         )
     }
 
@@ -143,7 +171,11 @@ final class BrokerSyncFailureResolutionTests: XCTestCase {
         let response = try decoder.decode(TradovateAccountSyncResponse.self, from: json)
         XCTAssertEqual(BrokerSyncFailureResolution.from(response), .reconnectRequired)
         XCTAssertEqual(
-            BrokerSyncFailureResolution.importFailureAction(for: .reconnectRequired, response: response),
+            BrokerSyncFailureResolution.importFailureAction(
+                for: .reconnectRequired,
+                response: response,
+                provider: .tradovate
+            ),
             .reconnect
         )
     }
@@ -192,8 +224,55 @@ final class BrokerSyncFailureResolutionTests: XCTestCase {
         let response = try decoder.decode(TradovateAccountSyncResponse.self, from: json)
         XCTAssertEqual(BrokerSyncFailureResolution.from(response), .retryable)
         XCTAssertEqual(
-            BrokerSyncFailureResolution.importFailureAction(for: .retryable, response: response),
+            BrokerSyncFailureResolution.importFailureAction(
+                for: .retryable,
+                response: response,
+                provider: .rithmic
+            ),
             .retry
+        )
+        XCTAssertEqual(
+            BrokerSyncFailureResolution.importFailureAction(
+                for: .retryable,
+                response: response,
+                provider: .tradovate
+            ),
+            .reconnect
+        )
+    }
+
+    func testTradovateGenericImportFailureOffersReconnect() throws {
+        let json = """
+        {
+          "ok": false,
+          "connectionId": "c1",
+          "mappingId": "m1",
+          "code": "BROKER_SYNC_FAILED",
+          "summary": {
+            "ok": false,
+            "status": "error",
+            "tradesCreated": 0,
+            "tradesUpdated": 0,
+            "newTradeIds": [],
+            "updatedTradeIds": [],
+            "errorCode": "sync_failed"
+          },
+          "accounts": []
+        }
+        """.data(using: .utf8)!
+        let response = try decoder.decode(TradovateAccountSyncResponse.self, from: json)
+        XCTAssertEqual(BrokerSyncFailureResolution.from(response), .importFailed)
+        XCTAssertEqual(
+            BrokerSyncFailureResolution.importFailureAction(
+                for: .importFailed,
+                response: response,
+                provider: .tradovate
+            ),
+            .reconnect
+        )
+        XCTAssertEqual(
+            BrokerSyncFailureResolution.tradovateLinkedImportTransportFailureAction(),
+            .reconnect
         )
     }
 

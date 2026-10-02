@@ -13,6 +13,7 @@ import {
 
 type SettingsRow = {
   ios_paywall_enabled: boolean
+  web_paywall_enabled: boolean
   entitlement_enforcement_enabled: boolean
   launch_access_mode: string
   launch_access_cutoff_at: string | null
@@ -20,6 +21,7 @@ type SettingsRow = {
 
 type OverrideRow = {
   ios_paywall_enabled: boolean | null
+  web_paywall_enabled: boolean | null
   entitlement_enforcement_enabled: boolean | null
 }
 
@@ -27,6 +29,7 @@ function mapSettings(row: SettingsRow | null): MonetizationGlobalSettings | null
   if (!row) return null
   return {
     iosPaywallEnabled: row.ios_paywall_enabled === true,
+    webPaywallEnabled: row.web_paywall_enabled === true,
     entitlementEnforcementEnabled: row.entitlement_enforcement_enabled === true,
     launchAccessMode: parseLaunchAccessMode(row.launch_access_mode),
     launchAccessCutoffAt: row.launch_access_cutoff_at,
@@ -44,7 +47,7 @@ export async function loadMonetizationGlobalSettings(
   const { data, error } = await client
     .from("app_monetization_settings")
     .select(
-      "ios_paywall_enabled,entitlement_enforcement_enabled,launch_access_mode,launch_access_cutoff_at"
+      "ios_paywall_enabled,web_paywall_enabled,entitlement_enforcement_enabled,launch_access_mode,launch_access_cutoff_at"
     )
     .eq("id", 1)
     .maybeSingle<SettingsRow>()
@@ -59,13 +62,14 @@ export async function loadMonetizationAccountOverride(
 ): Promise<MonetizationAccountOverride | null> {
   const { data, error } = await databaseClient(supabase)
     .from("app_monetization_account_overrides")
-    .select("ios_paywall_enabled,entitlement_enforcement_enabled")
+    .select("ios_paywall_enabled,web_paywall_enabled,entitlement_enforcement_enabled")
     .eq("user_id", userId)
     .maybeSingle<OverrideRow>()
 
   if (error || !data) return null
   return {
     iosPaywallEnabled: data.ios_paywall_enabled,
+    webPaywallEnabled: data.web_paywall_enabled,
     entitlementEnforcementEnabled: data.entitlement_enforcement_enabled,
   }
 }

@@ -8,6 +8,7 @@ import {
 import { parseBrokerLinkCreateAccountPayload } from "@/lib/integrations/brokerLinkCreateAccountPayload"
 import { insertTradingAccount } from "@/lib/tradingAccounts"
 import type { TradingAccountPropFirmRules } from "@/lib/tradingAccounts"
+import { proLimitResponseFromError } from "@/lib/server/proLimitFromError"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -144,6 +145,8 @@ export async function POST(req: Request, context: RouteContext) {
     })
 
     if (createError || !account) {
+      const proLimit = proLimitResponseFromError(createError, 403)
+      if (proLimit) return proLimit
       return Response.json(
         { error: createError?.message ?? "Could not create trading account." },
         { status: 400 }

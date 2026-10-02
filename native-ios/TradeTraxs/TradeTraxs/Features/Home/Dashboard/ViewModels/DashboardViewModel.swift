@@ -340,7 +340,10 @@ final class DashboardViewModel {
 
     var equityHeroChartPoints: [ProfileStatisticsMetrics.EquityPoint] {
         guard equityChartAccountFilter == accountFilter else { return [] }
-        if usesDashboardAnalyticsV3, !selectedChartOverlayLoaded {
+        if let points = resolvedEquityHeroChartPoints(), !points.isEmpty {
+            return points
+        }
+        if isEquityChartOverlayLoading {
             return []
         }
         let chartSummary = equityChartSummary ?? summary
@@ -349,6 +352,21 @@ final class DashboardViewModel {
             chartSummary.equityData,
             propStartingBalance: equityHeroAccountStartingBalance
         )
+    }
+
+    /// True while the V3 chart overlay for the current account scope is still resolving.
+    var isEquityChartOverlayLoading: Bool {
+        guard usesDashboardAnalyticsV3, analyticsV3Bootstrap != nil else { return false }
+        if selectedChartOverlayLoaded { return false }
+        switch selectedAccountChartsAvailability {
+        case .loading:
+            return true
+        case .notRequested, .failed:
+            return accountChartHydrateTask != nil || aggregateChartHydrateTask != nil
+                || needsEquityChartOverlayFetch(ignoreSettlement: true)
+        case .loaded:
+            return !selectedChartOverlayLoaded
+        }
     }
 
     private func manualPayoutEntries(for accountID: TradingAccountID) -> [AccountPayoutEntry] {
@@ -693,12 +711,22 @@ final class DashboardViewModel {
     func setAccountFilter(_ filter: DashboardAccountFilter) {
         guard accountFilter != filter else { return }
         ExperienceHaptics.play(.selection)
+        accountChartHydrateTask?.cancel()
+        accountChartHydrateTask = nil
+        aggregateChartHydrateTask?.cancel()
+        aggregateChartHydrateTask = nil
+        accountChartSelectionToken = DashboardAnalyticsAccountChartsCoordinator.bumpSelection()
+        aggregateChartSelectionToken = DashboardAnalyticsAggregateChartsCoordinator.bumpSelection()
         resetChartOverlayFetchSettlement()
         lastAccountScopedSummary = nil
         lastAccountScopedFilter = nil
         accountFilter = filter
-        equityChartSummary = nil
-        equityChartAccountFilter = nil
+        if hasCachedChartOverlayReadyForCurrentSelection() {
+            // Recompute will refresh equity from the per-account cache — avoid a false empty chart.
+        } else {
+            equityChartSummary = nil
+            equityChartAccountFilter = nil
+        }
         if case .account(let id) = filter,
            payoutCyclesByAccount[id] == nil,
            let profileID,
@@ -714,6 +742,7 @@ final class DashboardViewModel {
             }
         }
         recompute()
+        ensureEquityChartOverlayIfNeeded()
         if usesDashboardAnalyticsV3, usesDashboardAnalyticsGRDB, analyticsV3Bootstrap != nil {
             DashboardAnalyticsGRDBProbe.logNetworkAvoided(reason: "account_metrics_local")
         }
@@ -1638,7 +1667,8 @@ final class DashboardViewModel {
     private func needsEquityChartOverlayFetch(ignoreSettlement: Bool = false) -> Bool {
         guard usesDashboardAnalyticsV3, analyticsV3Bootstrap != nil else { return false }
         if !ignoreSettlement,
-           chartOverlayFetchSettledSelectionKey == currentChartOverlaySelectionKey()
+           chartOverlayFetchSettledSelectionKey == currentChartOverlaySelectionKey(),
+           selectedAccountChartsAvailability != .failed
         {
             return false
         }
@@ -1714,48 +1744,18 @@ final class DashboardViewModel {
     }
 
     private func scheduleAccountChartHydration() {
-        if let accountChartHydrateTask, !accountChartHydrateTask.isCancelled {
-            return
-        }
-        if case .account(let id) = accountFilter,
-           case .loading = DashboardAnalyticsAccountChartsStore.shared.availability(
-            accountID: id,
-            revision: analyticsV3Revision
-           )
-        {
-            return
-        }
-        if case .account(let id) = accountFilter,
-           DashboardAnalyticsAccountChartsStore.shared.availability(
-            accountID: id,
-            revision: analyticsV3Revision
-           ) == .loading
-        {
-            DashboardAnalyticsAccountChartsStore.shared.markNotRequested(
-                accountID: id,
-                revision: analyticsV3Revision
-            )
-        }
-        accountChartSelectionToken = DashboardAnalyticsAccountChartsCoordinator.bumpSelection()
-        let token = accountChartSelectionToken
+        guard case .account = accountFilter else { return }
         accountChartHydrateTask?.cancel()
+        let token = accountChartSelectionToken
         accountChartHydrateTask = Task(priority: .userInitiated) { [weak self] in
             await self?.hydrateAccountChartsIfNeeded(selectionToken: token)
         }
     }
 
     private func scheduleAggregateChartHydration() {
-        if let aggregateChartHydrateTask, !aggregateChartHydrateTask.isCancelled {
-            return
-        }
-        if accountFilter == .all,
-           case .loading = DashboardAnalyticsAggregateChartsStore.shared.availability(revision: analyticsV3Revision)
-        {
-            return
-        }
-        aggregateChartSelectionToken = DashboardAnalyticsAggregateChartsCoordinator.bumpSelection()
-        let token = aggregateChartSelectionToken
+        guard accountFilter == .all else { return }
         aggregateChartHydrateTask?.cancel()
+        let token = aggregateChartSelectionToken
         aggregateChartHydrateTask = Task(priority: .userInitiated) { [weak self] in
             await self?.hydrateAggregateChartsIfNeeded(selectionToken: token)
         }
@@ -1787,10 +1787,7 @@ final class DashboardViewModel {
             if selectionToken == accountChartSelectionToken,
                case .account(let current) = accountFilter,
                current == id,
-               DashboardAnalyticsAccountChartsStore.shared.availability(
-                accountID: id,
-                revision: analyticsV3Revision
-               ) != .loading
+               shouldMarkChartOverlayFetchSettled(forAccountID: id)
             {
                 markChartOverlayFetchSettledForCurrentSelection()
             }
@@ -1841,7 +1838,7 @@ final class DashboardViewModel {
         defer {
             if selectionToken == aggregateChartSelectionToken,
                accountFilter == .all,
-               DashboardAnalyticsAggregateChartsStore.shared.availability(revision: analyticsV3Revision) != .loading
+               shouldMarkChartOverlayFetchSettled(forAccountID: nil)
             {
                 markChartOverlayFetchSettledForCurrentSelection()
             }
@@ -2285,6 +2282,57 @@ final class DashboardViewModel {
             dateRange = resolved
         }
         effectiveEquityChartRange = dateRange
+    }
+
+    private func hasCachedChartOverlayReadyForCurrentSelection() -> Bool {
+        guard usesDashboardAnalyticsV3 else { return false }
+        guard let overlay = rawChartOverlayForFilter(),
+              DashboardAnalyticsChartsSupport.chartsReadyForPresentation(overlay)
+        else { return false }
+        return true
+    }
+
+    private func resolvedEquityHeroChartPoints() -> [ProfileStatisticsMetrics.EquityPoint]? {
+        guard equityChartAccountFilter == accountFilter else { return nil }
+        if let chartSummary = equityChartSummary {
+            let points = DashboardEquityHeroPresentation.chartPoints(
+                chartSummary.equityData,
+                propStartingBalance: equityHeroAccountStartingBalance
+            )
+            if !points.isEmpty { return points }
+        }
+        if usesDashboardAnalyticsV3,
+           let bootstrap = analyticsV3Bootstrap,
+           let overlay = rawChartOverlayForFilter(),
+           DashboardAnalyticsChartsSupport.chartsReadyForPresentation(overlay),
+           let bundle = DashboardAnalyticsMapper.bundle(
+               in: bootstrap,
+               accountFilter: accountFilter,
+               dateRange: effectiveEquityChartRange,
+               accountCharts: overlay
+           )
+        {
+            let chartSummary = DashboardAnalyticsMapper.summary(from: bundle, payoutTotal: payoutTotal)
+            let points = DashboardEquityHeroPresentation.chartPoints(
+                chartSummary.equityData,
+                propStartingBalance: equityHeroAccountStartingBalance
+            )
+            if !points.isEmpty { return points }
+        }
+        return nil
+    }
+
+    private func shouldMarkChartOverlayFetchSettled(forAccountID accountID: TradingAccountID?) -> Bool {
+        guard selectedChartOverlayLoaded else { return false }
+        if let accountID {
+            guard case .account(let current) = accountFilter, current == accountID else { return false }
+            return DashboardAnalyticsAccountChartsStore.shared.availability(
+                accountID: accountID,
+                revision: analyticsV3Revision
+            ) == .loaded
+        }
+        guard accountFilter == .all else { return false }
+        return DashboardAnalyticsAggregateChartsStore.shared.availability(revision: analyticsV3Revision) == .loaded
     }
 
     private func refreshEquityChartPresentation(bootstrap: AnalyticsDashboardBootstrapV3? = nil) {

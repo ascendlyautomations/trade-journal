@@ -1,5 +1,6 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { deleteUnsharedStoryStorage } from "@/lib/storyMediaCleanup"
 import {
   getDemoFollowingIds,
   getDemoStoriesForUserIds,
@@ -130,6 +131,10 @@ export function removeStoryFromStoriesByUser(
   return next
 }
 
+export function activeStoryCreatedAfterISO(nowMs = Date.now()): string {
+  return new Date(nowMs - STORY_WINDOW_MS).toISOString()
+}
+
 export async function deleteStoryById(
   client: SupabaseClient,
   storyId: string
@@ -143,8 +148,25 @@ export async function deleteStoryById(
     return { error: null }
   }
 
+  const { data: existing, error: readError } = await client
+    .from("stories")
+    .select("image_url")
+    .eq("id", trimmed)
+    .maybeSingle()
+  if (readError) return { error: readError }
+
   const { error } = await client.from("stories").delete().eq("id", trimmed)
-  return { error }
+  if (error) return { error }
+
+  const imageURL = (existing as { image_url?: string | null } | null)?.image_url
+  if (imageURL) {
+    try {
+      await deleteUnsharedStoryStorage(client, [imageURL])
+    } catch (storageError) {
+      console.warn("[deleteStoryById] storage cleanup:", storageError)
+    }
+  }
+  return { error: null }
 }
 
 export async function fetchActiveStoriesForUserIds(
@@ -169,6 +191,7 @@ export async function fetchActiveStoriesForUserIds(
     .from("stories")
     .select(ACTIVE_STORIES_SELECT)
     .in("user_id", ids)
+    .gt("created_at", activeStoryCreatedAfterISO())
     .order("created_at", { ascending: false })
 
   if (error) {

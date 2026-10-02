@@ -51,17 +51,21 @@ enum PushNotificationPresentationPolicy {
 
     static func foregroundOptions(
         for destination: NotificationDestination,
-        bannersEnabled: Bool
+        bannersEnabled: Bool,
+        apnsSound: UNNotificationSound?
     ) -> UNNotificationPresentationOptions {
         var options: UNNotificationPresentationOptions = [.list]
         guard bannersEnabled else { return options }
 
+        let playSound = apnsSound != nil
+
         switch priority(for: destination) {
         case .high:
             options.insert(.banner)
-            options.insert(.sound)
+            if playSound { options.insert(.sound) }
         case .normal:
             options.insert(.banner)
+            if playSound { options.insert(.sound) }
         case .silent:
             break
         }

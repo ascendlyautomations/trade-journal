@@ -107,6 +107,87 @@ final class ConversationMessageMergeTests: XCTestCase {
         XCTAssertEqual(reconciled.map(\.id.rawValue), ["old", "kept"])
     }
 
+    func testSharedTradeShareReplacesOptimisticTempRow() {
+        let tradeID = TradeID("trade-42")
+        let temp = Message(
+            id: MessageID("temp-share"),
+            conversationID: conversation,
+            senderProfileID: viewer,
+            kind: .tradeShare,
+            body: nil,
+            attachments: [
+                MessageAttachment(
+                    id: tradeID.rawValue,
+                    media: MediaReference(id: tradeID.rawValue, kind: .file, altText: "Shared trade"),
+                    tradeID: tradeID
+                ),
+            ],
+            replyToMessageID: nil,
+            createdAt: Date(timeIntervalSince1970: 1_000),
+            isReadByViewer: true,
+            sharedContent: .trade(tradeID)
+        )
+        let server = Message(
+            id: MessageID("server-trade"),
+            conversationID: conversation,
+            senderProfileID: viewer,
+            kind: .tradeShare,
+            body: nil,
+            attachments: temp.attachments,
+            replyToMessageID: nil,
+            createdAt: Date(timeIntervalSince1970: 1_002),
+            isReadByViewer: true,
+            sharedContent: .trade(tradeID)
+        )
+
+        let merged = ConversationMessageMerge.mergeMessages(
+            existing: [temp],
+            incoming: [server],
+            viewerID: viewer
+        )
+
+        XCTAssertEqual(merged.count, 1)
+        XCTAssertEqual(merged[0].id.rawValue, "server-trade")
+    }
+
+    func testSharedPostReplacesOptimisticTempRow() {
+        let postID = PostID("post-9")
+        let reference = SharedContentReference.feedPost(postID)
+        let temp = Message(
+            id: MessageID("temp-post"),
+            conversationID: conversation,
+            senderProfileID: viewer,
+            kind: reference.messageKind,
+            body: nil,
+            attachments: [],
+            replyToMessageID: nil,
+            createdAt: Date(timeIntervalSince1970: 2_000),
+            isReadByViewer: true,
+            sharedContent: reference
+        )
+        let server = Message(
+            id: MessageID("server-post"),
+            conversationID: conversation,
+            senderProfileID: viewer,
+            kind: reference.messageKind,
+            body: nil,
+            attachments: [],
+            replyToMessageID: nil,
+            createdAt: Date(timeIntervalSince1970: 2_001),
+            isReadByViewer: true,
+            sharedContent: reference
+        )
+
+        let merged = ConversationMessageMerge.mergeMessages(
+            existing: [temp],
+            incoming: [server],
+            viewerID: viewer
+        )
+
+        XCTAssertEqual(merged.count, 1)
+        XCTAssertEqual(merged[0].id.rawValue, "server-post")
+    }
+
     func testPreservesAttachmentsWhenIncomingIsThin() {
         let rich = Message(
             id: MessageID("m1"),

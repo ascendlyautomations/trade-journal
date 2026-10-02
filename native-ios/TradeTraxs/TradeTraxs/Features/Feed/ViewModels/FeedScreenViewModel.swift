@@ -84,7 +84,9 @@ final class FeedScreenViewModel {
 
     var phase: FeedState.Phase { state.phase }
     var entries: [FeedTimelineEntry] { state.entries }
-    var stories: [Story] { state.stories }
+    var stories: [Story] {
+        ActiveStorySemantics.filterActive(state.stories)
+    }
     var isRefreshing: Bool { state.isRefreshing }
     var isLoadingMore: Bool { state.isLoadingMore }
     var viewerID: ProfileID? { state.viewerID }
@@ -443,6 +445,7 @@ final class FeedScreenViewModel {
     }
 
     func openStory(_ story: Story) {
+        guard ActiveStorySemantics.isActive(createdAt: story.createdAt) else { return }
         ExperienceHaptics.play(.selection)
         detailCache.seed(story)
         if let author = detailCache.profile(id: story.authorProfileID)

@@ -916,8 +916,9 @@ private struct LoginShellBrokerIntegrationRepository: BrokerIntegrationRepositor
 }
 
 private struct LoginShellAppleSubscriptionSyncClient: AppleSubscriptionSyncClienting {
-    func sync(transactionID: String) async throws -> AppleSubscriptionSyncResponse {
+    func sync(transactionID: String, signedTransactionInfo: String) async throws -> AppleSubscriptionSyncResponse {
         _ = transactionID
+        _ = signedTransactionInfo
         return AppleSubscriptionSyncResponse(
             traxProActive: false,
             source: nil,

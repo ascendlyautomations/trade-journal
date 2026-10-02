@@ -22,6 +22,7 @@ final class CreateStoryViewModel {
     /// Original picked image — preserved separately from the rendered upload.
     private(set) var sourceImage: UIImage?
     private(set) var localVideoFileURL: URL?
+    private var pendingVideoTextOverlays: [StoryTextOverlayRecord] = []
     private(set) var contentType = "image/jpeg"
     private(set) var originalFileName = "story.jpg"
 
@@ -168,7 +169,16 @@ final class CreateStoryViewModel {
         imagePreview = nil
         imageData = nil
         localVideoFileURL = nil
+        pendingVideoTextOverlays = []
         formError = nil
+    }
+
+    func postVideoStory(textOverlays: [StoryTextOverlay]) {
+        guard canChangeMedia, !isPostingStory else { return }
+        isPostingStory = true
+        defer { isPostingStory = false }
+        pendingVideoTextOverlays = textOverlays.map(StoryTextOverlayRecord.init)
+        publish()
     }
 
     func reportPickerError(_ message: String) {
@@ -190,7 +200,8 @@ final class CreateStoryViewModel {
                     imageData: nil,
                     localVideoFileURL: localVideoFileURL,
                     contentType: contentType,
-                    originalFileName: originalFileName
+                    originalFileName: originalFileName,
+                    textOverlays: pendingVideoTextOverlays
                 ),
                 services: uploadServices,
                 onSuccess: onPublished

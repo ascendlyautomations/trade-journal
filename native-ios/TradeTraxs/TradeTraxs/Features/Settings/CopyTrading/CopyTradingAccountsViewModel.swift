@@ -49,7 +49,7 @@ final class CopyTradingAccountsViewModel {
 
     var selectableAccounts: [TradingAccount] {
         accounts
-            .filter { $0.isActive && $0.canAddTrades }
+            .filter(\.isActive)
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 

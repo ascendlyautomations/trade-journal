@@ -52,6 +52,7 @@ export type SaveManualTradeResult =
         | "account_limit"
         | "account_read_only"
         | "account_slot_selection"
+        | "account_ownership"
         | "upload"
         | "save"
         | "post"
@@ -170,12 +171,7 @@ export async function saveManualTrade(
   if (!entryGate.ok) {
     return {
       ok: false,
-      code:
-        entryGate.code === "selection_required"
-          ? "account_slot_selection"
-          : entryGate.code === "read_only"
-            ? "account_read_only"
-            : "save",
+      code: entryGate.code === "ownership" ? "account_ownership" : "save",
       message: entryGate.message,
     }
   }

@@ -431,9 +431,6 @@ final class ManageAccountsViewModel {
         if let status = account.customPublicStatus?.trimmingCharacters(in: .whitespacesAndNewlines), !status.isEmpty {
             parts.append(status)
         }
-        if !account.canAddTrades {
-            parts.append("Read Only")
-        }
         if !account.isActive {
             parts.append("Inactive")
         }
@@ -486,6 +483,9 @@ final class ManageAccountsViewModel {
             try await work()
             return true
         } catch {
+            if ProLimitPresentation.presentUpgradeIfProLimit(error) {
+                return false
+            }
             if let app = error as? AppError, case .unknown(let message) = app {
                 formError = message
             } else {

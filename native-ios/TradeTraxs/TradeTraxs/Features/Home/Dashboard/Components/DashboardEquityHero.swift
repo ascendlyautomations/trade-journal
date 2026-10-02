@@ -11,6 +11,7 @@ struct DashboardEquityHero: View {
     var title: String = "Equity"
     var displayEquity: Decimal
     var chartPoints: [ProfileStatisticsMetrics.EquityPoint]
+    var isChartLoading: Bool = false
     var withdrawalSummary: AccountTrackedBalanceSupport.WithdrawalSummary?
     var onWithdrawalSummaryTap: (() -> Void)?
 
@@ -24,6 +25,7 @@ struct DashboardEquityHero: View {
         title: String = "Equity",
         displayEquity: Decimal? = nil,
         chartPoints: [ProfileStatisticsMetrics.EquityPoint]? = nil,
+        isChartLoading: Bool = false,
         withdrawalSummary: AccountTrackedBalanceSupport.WithdrawalSummary? = nil,
         onWithdrawalSummaryTap: (() -> Void)? = nil
     ) {
@@ -32,6 +34,7 @@ struct DashboardEquityHero: View {
         self.title = title
         self.displayEquity = displayEquity ?? summary.currentEquity
         self.chartPoints = chartPoints ?? summary.equityData
+        self.isChartLoading = isChartLoading
         self.withdrawalSummary = withdrawalSummary
         self.onWithdrawalSummaryTap = onWithdrawalSummaryTap
     }
@@ -70,7 +73,7 @@ struct DashboardEquityHero: View {
     /// A curve needs two trades in the resolved dashboard dataset. Fewer than that
     /// stays a short message instead of reserving the chart frame.
     private var showsCompactEquityEmpty: Bool {
-        summary.tradeCount < 2
+        !isChartLoading && summary.tradeCount < 2
     }
 
     @ViewBuilder
@@ -87,6 +90,11 @@ struct DashboardEquityHero: View {
             .padding(.vertical, ExperienceSpacing.sm)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("No equity data. Chart will show with 2 trades")
+        } else if isChartLoading && chartPoints.count < 2 {
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .frame(height: 280)
+                .accessibilityLabel("Loading equity chart")
         } else {
             ProfileEquityCurveView(points: chartPoints)
                 .frame(height: 280)

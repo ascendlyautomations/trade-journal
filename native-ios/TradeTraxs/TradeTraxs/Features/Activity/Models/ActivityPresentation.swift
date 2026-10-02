@@ -24,7 +24,7 @@ struct ActivityRowModel: Identifiable, Hashable {
     var secondaryText: String?
     var relativeTimestamp: String
     var isUnread: Bool
-    var showsSystemIcon: Bool
+    var usesTradeTraxsBrandAvatar: Bool
     /// All Activity rows represented by this card (like/comment groups).
     var groupedNotificationIDs: [NotificationID]
 
@@ -83,9 +83,7 @@ enum ActivityPresentation {
                 isUnread: item.notificationIDs.contains { id in
                     notifications.first(where: { $0.id == id })?.isRead == false
                 },
-                showsSystemIcon: notification.kind == .tradingReport
-                    || notification.kind == .affiliateReferral
-                    || notification.kind == .affiliateCommissionEarned,
+                usesTradeTraxsBrandAvatar: notification.usesTradeTraxsBrandAvatar,
                 groupedNotificationIDs: item.notificationIDs
             )
 

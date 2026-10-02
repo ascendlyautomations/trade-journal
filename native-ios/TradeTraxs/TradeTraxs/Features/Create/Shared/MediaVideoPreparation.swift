@@ -9,6 +9,8 @@ enum MediaVideoPreparation {
         var maxDurationSeconds: Int
         var maxFinalUploadBytes: Int
         var maxSourceFileBytes: Int
+        /// When false, byte ceilings are ignored. Duration and playability still apply.
+        var enforcesUploadByteLimits: Bool
         var durationLimitMessage: String
         var sourceTooLargeMessage: String
         var compressionFailedMessage: String
@@ -18,20 +20,23 @@ enum MediaVideoPreparation {
             maxDurationSeconds: 90,
             maxFinalUploadBytes: 100 * 1024 * 1024,
             maxSourceFileBytes: 500 * 1024 * 1024,
+            enforcesUploadByteLimits: true,
             durationLimitMessage: "Clips must be 90 seconds (1 minute 30 seconds) or less.",
             sourceTooLargeMessage: "This video is too large to process on device. Try a shorter clip.",
             compressionFailedMessage: "Couldn't prepare this video. Try another clip or record again.",
             preparedTooLargeMessage: "Prepared video is still too large. Try a shorter clip."
         )
 
+        /// Stories are eligible by duration. Compression still runs; size is not a rejection rule.
         nonisolated static let story = Limits(
             maxDurationSeconds: StoryMediaDuration.maxVideoDurationSeconds,
-            maxFinalUploadBytes: 15 * 1024 * 1024,
-            maxSourceFileBytes: 120 * 1024 * 1024,
+            maxFinalUploadBytes: .max,
+            maxSourceFileBytes: .max,
+            enforcesUploadByteLimits: false,
             durationLimitMessage: StoryMediaDuration.durationExceededMessage,
-            sourceTooLargeMessage: "This video is too large to process for a story.",
+            sourceTooLargeMessage: "Couldn't prepare this video for your story. Try another clip.",
             compressionFailedMessage: "Couldn't prepare this video for your story. Try another clip.",
-            preparedTooLargeMessage: "Video must be 15 MB or smaller."
+            preparedTooLargeMessage: StoryMediaDuration.durationExceededMessage
         )
     }
 
@@ -78,7 +83,7 @@ enum MediaVideoPreparation {
         guard size > 0 else {
             throw AppError.unknown(message: "Could not read this video file.")
         }
-        guard size <= limits.maxSourceFileBytes else {
+        if limits.enforcesUploadByteLimits, size > limits.maxSourceFileBytes {
             throw AppError.unknown(message: limits.sourceTooLargeMessage)
         }
     }
@@ -328,7 +333,7 @@ enum MediaVideoPreparation {
             return nil
         }
 
-        guard outputProfile.fileBytes <= limits.maxFinalUploadBytes else {
+        if limits.enforcesUploadByteLimits, outputProfile.fileBytes > limits.maxFinalUploadBytes {
             VideoPrepareDiagnostics.logOptimizationFallback(reason: "compressedExceedsUploadLimit")
             return nil
         }
@@ -371,7 +376,7 @@ enum MediaVideoPreparation {
         guard isPlayableSourceProfile(sourceProfile, limits: limits) else {
             throw AppError.unknown(message: limits.compressionFailedMessage)
         }
-        guard sourceProfile.fileBytes <= limits.maxFinalUploadBytes else {
+        if limits.enforcesUploadByteLimits, sourceProfile.fileBytes > limits.maxFinalUploadBytes {
             throw AppError.unknown(message: limits.preparedTooLargeMessage)
         }
 
@@ -402,7 +407,7 @@ enum MediaVideoPreparation {
                 asset: AVURLAsset(url: remuxed),
                 fileURL: remuxed
             )
-            guard remuxProfile.fileBytes <= limits.maxFinalUploadBytes else {
+            if limits.enforcesUploadByteLimits, remuxProfile.fileBytes > limits.maxFinalUploadBytes {
                 try? FileManager.default.removeItem(at: remuxed)
                 throw AppError.unknown(message: limits.preparedTooLargeMessage)
             }

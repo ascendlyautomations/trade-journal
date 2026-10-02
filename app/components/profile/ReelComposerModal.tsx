@@ -14,6 +14,8 @@ import {
   validateReelVideoFile,
 } from "@/lib/reelVideo"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
+import { useUserProfile } from "@/lib/UserProfileProvider"
+import { useProGate } from "@/lib/useProGate"
 
 type ReelComposerModalProps = {
   open: boolean
@@ -33,6 +35,8 @@ export default function ReelComposerModal({
   editReel = null,
   onSaved,
 }: ReelComposerModalProps) {
+  const { profile } = useUserProfile()
+  const { fromError } = useProGate(profile)
   const isEditMode = editReel != null
   const isTradeReplayEdit = isEditMode && isTradeAttachedReel(editReel)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -118,6 +122,7 @@ export default function ReelComposerModal({
           })
 
           if ("error" in result) {
+            fromError({ message: result.error })
             throw new Error(result.error)
           }
 

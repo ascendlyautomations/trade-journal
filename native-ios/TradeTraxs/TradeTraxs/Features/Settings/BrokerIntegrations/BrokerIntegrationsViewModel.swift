@@ -222,12 +222,14 @@ final class BrokerIntegrationsViewModel {
         if !isValid(importRetryPrompt) {
             importRetryPrompt = nil
         }
-        if let prompt = importReconnectPrompt,
-           let connection = (tradovateConnections + rithmicConnections).first(where: { $0.id == prompt.connectionId }),
-           connection.connected,
-           connection.status == .connected
-        {
-            importReconnectPrompt = nil
+        if let retry = importRetryPrompt, retry.provider == .tradovate, isValid(retry) {
+            importReconnectPrompt = ImportReconnectPrompt(
+                provider: retry.provider,
+                connectionId: retry.connectionId,
+                mappingId: retry.mappingId,
+                tradovateSyncMode: retry.tradovateSyncMode
+            )
+            importRetryPrompt = nil
         }
     }
 
@@ -647,11 +649,11 @@ final class BrokerIntegrationsViewModel {
                 )
             }
         } catch {
-            importReconnectPrompt = nil
-            importRetryPrompt = ImportReconnectPrompt(
+            assignImportFailurePromptsAfterTransportError(
                 provider: provider,
                 connectionId: connectionId,
-                mappingId: mappingId
+                mappingId: mappingId,
+                tradovateSyncMode: .preview
             )
             presentMessage(BrokerSyncPresentation.temporaryFailureMessage(), error: true)
         }
@@ -686,11 +688,11 @@ final class BrokerIntegrationsViewModel {
                 mappingId: pending.mappingId
             )
         } catch {
-            importReconnectPrompt = nil
-            importRetryPrompt = ImportReconnectPrompt(
+            assignImportFailurePromptsAfterTransportError(
                 provider: .tradovate,
                 connectionId: pending.connectionId,
-                mappingId: pending.mappingId
+                mappingId: pending.mappingId,
+                tradovateSyncMode: .import
             )
             presentMessage(BrokerSyncPresentation.temporaryFailureMessage(), error: true)
         }
@@ -766,11 +768,12 @@ final class BrokerIntegrationsViewModel {
         case .oauthFailed(let message):
             presentMessage(message ?? "Tradovate connection failed.", error: true)
         case .syncUnavailable:
-            importReconnectPrompt = nil
-            importRetryPrompt = ImportReconnectPrompt(
+            importRetryPrompt = nil
+            importReconnectPrompt = ImportReconnectPrompt(
                 provider: .tradovate,
                 connectionId: connectionId,
-                mappingId: mappingId
+                mappingId: mappingId,
+                tradovateSyncMode: syncMode
             )
             presentMessage(BrokerSyncPresentation.temporaryFailureMessage(), error: true)
         case .syncCompleted(let response):
@@ -886,31 +889,92 @@ final class BrokerIntegrationsViewModel {
         )
         switch resolution {
         case .reconnectRequired:
-            importRetryPrompt = nil
-            importReconnectPrompt = ImportReconnectPrompt(
+            assignImportReconnectPrompt(
                 provider: provider,
                 connectionId: connectionId,
                 mappingId: mappingId,
-                usesImportPasswordReauth: response.summary.errorCode == "rithmic_password_required",
+                response: response,
                 tradovateSyncMode: tradovateSyncMode
             )
             presentMessage(message, error: true)
         case .retryable:
-            importReconnectPrompt = nil
-            importRetryPrompt = ImportReconnectPrompt(
-                provider: provider,
-                connectionId: connectionId,
-                mappingId: mappingId
-            )
+            if provider == .tradovate {
+                assignImportReconnectPrompt(
+                    provider: provider,
+                    connectionId: connectionId,
+                    mappingId: mappingId,
+                    response: response,
+                    tradovateSyncMode: tradovateSyncMode
+                )
+            } else {
+                importReconnectPrompt = nil
+                importRetryPrompt = ImportReconnectPrompt(
+                    provider: provider,
+                    connectionId: connectionId,
+                    mappingId: mappingId
+                )
+            }
             presentMessage(message, error: true)
         case .noAvailableTradeHistory:
             importReconnectPrompt = nil
             importRetryPrompt = nil
             showsTradovateNoTradeHistorySheet = true
         case .success, .importFailed:
-            importReconnectPrompt = nil
+            if provider == .tradovate {
+                assignImportReconnectPrompt(
+                    provider: provider,
+                    connectionId: connectionId,
+                    mappingId: mappingId,
+                    response: response,
+                    tradovateSyncMode: tradovateSyncMode
+                )
+                presentMessage(message, error: true)
+            } else {
+                importReconnectPrompt = nil
+                importRetryPrompt = nil
+                presentMessage(message, error: true)
+            }
+        }
+    }
+
+    private func assignImportReconnectPrompt(
+        provider: BrokerIntegrationProvider,
+        connectionId: String,
+        mappingId: String,
+        response: TradovateAccountSyncResponse,
+        tradovateSyncMode: TradovateSyncRequestMode
+    ) {
+        importRetryPrompt = nil
+        importReconnectPrompt = ImportReconnectPrompt(
+            provider: provider,
+            connectionId: connectionId,
+            mappingId: mappingId,
+            usesImportPasswordReauth: response.summary.errorCode == "rithmic_password_required",
+            tradovateSyncMode: tradovateSyncMode
+        )
+    }
+
+    private func assignImportFailurePromptsAfterTransportError(
+        provider: BrokerIntegrationProvider,
+        connectionId: String,
+        mappingId: String,
+        tradovateSyncMode: TradovateSyncRequestMode
+    ) {
+        if provider == .tradovate {
             importRetryPrompt = nil
-            presentMessage(message, error: true)
+            importReconnectPrompt = ImportReconnectPrompt(
+                provider: provider,
+                connectionId: connectionId,
+                mappingId: mappingId,
+                tradovateSyncMode: tradovateSyncMode
+            )
+        } else {
+            importReconnectPrompt = nil
+            importRetryPrompt = ImportReconnectPrompt(
+                provider: provider,
+                connectionId: connectionId,
+                mappingId: mappingId
+            )
         }
     }
 
@@ -936,6 +1000,17 @@ final class BrokerIntegrationsViewModel {
         {
             return prompt
         }
+        if provider == .tradovate,
+           let retry = importRetryPrompt,
+           retry.mappingId == account.id
+        {
+            return ImportReconnectPrompt(
+                provider: retry.provider,
+                connectionId: retry.connectionId,
+                mappingId: retry.mappingId,
+                tradovateSyncMode: retry.tradovateSyncMode
+            )
+        }
         guard BrokerImportActionAvailability.prefersReconnectAction(
             connection: connection,
             account: account,
@@ -958,6 +1033,16 @@ final class BrokerIntegrationsViewModel {
         connection: TradovateConnectionSummary,
         account: BrokerIntegrationAccount
     ) -> String {
+        if connection.provider == .tradovate,
+           BrokerImportActionAvailability.showsRetryImportLabel(connection: connection, account: account)
+            || resolvedImportReconnectPrompt(
+                provider: .tradovate,
+                connection: connection,
+                account: account
+            ) != nil
+        {
+            return BrokerSyncPresentation.reconnectPrimaryActionTitle(provider: .tradovate)
+        }
         if BrokerImportActionAvailability.showsRetryImportLabel(connection: connection, account: account) {
             return "Retry Import"
         }

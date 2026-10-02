@@ -43,6 +43,13 @@ nonisolated protocol FeedRepository: Sendable {
     /// Resolves a single active story when the viewer is allowed to see it (RLS + 24h window).
     func story(id: StoryID) async throws -> Story?
     func createStory(userID: ProfileID, imageURL: String) async throws -> Story
+    /// Video stories persist text beside the media. Empty overlays use the image-only insert.
+    func createStory(
+        userID: ProfileID,
+        imageURL: String,
+        textOverlays: [StoryTextOverlayRecord]
+    ) async throws -> Story
+    func storyTextOverlays(id: StoryID) async throws -> [StoryTextOverlayRecord]
     /// Deletes a story the viewer owns.
     func deleteStory(id: StoryID) async throws
     func reel(id: ReelID) async throws -> ReelLoadResult
@@ -75,6 +82,18 @@ extension FeedRepository {
 
     func story(id: StoryID) async throws -> Story? {
         nil
+    }
+
+    func createStory(
+        userID: ProfileID,
+        imageURL: String,
+        textOverlays: [StoryTextOverlayRecord]
+    ) async throws -> Story {
+        try await createStory(userID: userID, imageURL: imageURL)
+    }
+
+    func storyTextOverlays(id: StoryID) async throws -> [StoryTextOverlayRecord] {
+        []
     }
 
     func deleteStory(id: StoryID) async throws {

@@ -13,4 +13,6 @@ nonisolated enum FreeTierPolicy {
     static let dailyReelLimit = 3
     static let dailyDirectMessageLimit = 25
     static let maxTradeEntryAccounts = 3
+    /// Free-plan CSV cooldown — keep in sync with ``lib/csvImportGate.ts`` `FREE_PLAN_CSV_IMPORT_COOLDOWN_DAYS`.
+    static let csvImportCooldownDays = 3
 }

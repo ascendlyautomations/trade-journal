@@ -6,7 +6,8 @@ import UIKit
 @Observable
 @MainActor
 final class StoryEditorViewModel {
-    let sourceImage: UIImage
+    let sourceImage: UIImage?
+    let videoURL: URL?
     private(set) var canvas = StoryCanvasState()
     private(set) var canvasSize: CGSize = .zero
     private(set) var isEditingText = false
@@ -17,6 +18,18 @@ final class StoryEditorViewModel {
 
     init(sourceImage: UIImage) {
         self.sourceImage = sourceImage
+        self.videoURL = nil
+    }
+
+    init(videoURL: URL) {
+        self.sourceImage = nil
+        self.videoURL = videoURL
+    }
+
+    var publishableTextOverlays: [StoryTextOverlay] {
+        canvas.textOverlays.filter {
+            !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
     }
 
     var selectedOverlay: StoryTextOverlay? {
@@ -128,7 +141,8 @@ final class StoryEditorViewModel {
     }
 
     func renderFinalImage() -> UIImage? {
-        StoryImageRenderer.render(
+        guard let sourceImage else { return nil }
+        return StoryImageRenderer.render(
             sourceImage: sourceImage,
             canvas: canvas,
             canvasSize: canvasSize

@@ -193,7 +193,7 @@ final class ManageAccountsExperienceTests: XCTestCase {
         XCTAssertEqual(prop.winning_day_threshold, 100)
     }
 
-    func testSubtitleSurfacesReadOnlyAndInactive() {
+    func testSubtitleSurfacesInactiveWithoutReadOnly() {
         let viewModel = ManageAccountsViewModel(
             trades: ManageAccountsStubTradeRepository(),
             session: ManageAccountsStubSession(userID: SettingsFixtures.viewerID.rawValue),
@@ -203,7 +203,7 @@ final class ManageAccountsExperienceTests: XCTestCase {
         account.canAddTrades = false
         account.isActive = false
         let subtitle = viewModel.subtitle(for: account)
-        XCTAssertTrue(subtitle.contains("Read Only"))
+        XCTAssertFalse(subtitle.contains("Read Only"))
         XCTAssertTrue(subtitle.contains("Inactive"))
     }
 

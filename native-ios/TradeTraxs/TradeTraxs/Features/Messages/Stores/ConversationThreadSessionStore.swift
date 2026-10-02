@@ -71,9 +71,10 @@ final class ConversationThreadSessionStore {
         guard !incoming.isEmpty else { return }
         let key = Self.cacheKey(viewerID: viewerID, conversationID: conversationID)
         if var snapshot = snapshots[key] {
-            let merged = ConversationMessageMerge.reconcileServerFirstPage(
+            let merged = ConversationMessageMerge.mergeMessages(
                 existing: snapshot.messages,
-                incoming: incoming
+                incoming: incoming,
+                viewerID: viewerID
             )
             snapshot.messages = Self.newestPage(from: merged, limit: Self.messageLimit)
             if Self.openThreadNeedsFullBootstrap(messageCount: snapshot.messages.count) {

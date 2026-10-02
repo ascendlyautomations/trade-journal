@@ -1,20 +1,25 @@
+"use client"
+
 import Link from "next/link"
 import { buttonVariants, Card, cn } from "@/app/components/ui"
 import { TRADETRAXS_PRO_PLAN } from "@/lib/tradeTraxsPlans"
+import type { ProFeatureKind } from "@/lib/proGateReason"
 
 type LockedFeatureProps = {
   title?: string
   description?: string
+  feature?: ProFeatureKind
   /** When false, hides the secondary “Back to Dashboard” link (e.g. inside a modal). */
   showBackLink?: boolean
   className?: string
-  /** Compact teaser — opens parent upgrade modal instead of inline upgrade UI. */
+  /** Compact teaser — opens shared upgrade flow via parent callback. */
   onUpgradeClick?: () => void
 }
 
 export default function LockedFeature({
   title,
   description,
+  feature = "generic",
   showBackLink = true,
   className = "",
   onUpgradeClick,
@@ -34,7 +39,9 @@ export default function LockedFeature({
             {title}
           </p>
         ) : null}
-        <p className="text-sm font-medium text-white">🔒 Pro feature</p>
+        <p className="text-sm font-medium text-white">
+          Upgrade to {TRADETRAXS_PRO_PLAN.name}
+        </p>
         <p className="mt-1 text-xs text-emerald-300">Tap to unlock</p>
       </button>
     )
@@ -63,7 +70,8 @@ export default function LockedFeature({
       </p>
       <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
         <Link
-          href="/pricing"
+          href="/settings?upgrade=1"
+          data-pro-feature={feature}
           className={buttonVariants({ variant: "primary", size: "md" })}
         >
           Upgrade to {TRADETRAXS_PRO_PLAN.name}

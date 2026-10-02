@@ -27,6 +27,14 @@ nonisolated protocol SupabaseDatabaseExecuting: Sendable {
         returning type: T.Type
     ) async throws -> T
 
+    /// PostgREST bulk insert — JSON array response (`Accept: application/json`).
+    func insertReturningMany<Body: Encodable, T: Decodable>(
+        _ body: Body,
+        into table: String,
+        query: [URLQueryItem],
+        returning type: T.Type
+    ) async throws -> [T]
+
     /// PostgREST insert with `return=minimal` — required for conversation shell before participants exist (RLS).
     func insert<Body: Encodable>(_ body: Body, into table: String) async throws
 
@@ -196,6 +204,28 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
             }
             return first
         }
+    }
+
+    func insertReturningMany<Body: Encodable, T: Decodable>(
+        _ body: Body,
+        into table: String,
+        query: [URLQueryItem],
+        returning type: T.Type
+    ) async throws -> [T] {
+        DatabaseRequestDebugLog.write(operation: "INSERT", target: table, reason: "insert-returning-many")
+        let data = try transport.encodeJSON(body)
+        let response = try await transport.send(
+            host: .supabase,
+            path: "/rest/v1/\(table)",
+            method: .post,
+            queryItems: query,
+            headers: [
+                "Prefer": "return=representation",
+                "Accept": "application/json",
+            ],
+            body: data
+        )
+        return try transport.decoder.decode([T].self, from: response)
     }
 
     func insert<Body: Encodable>(_ body: Body, into table: String) async throws {
@@ -382,6 +412,16 @@ nonisolated struct UnconfiguredSupabaseDatabaseClient: SupabaseDatabaseExecuting
         query: [URLQueryItem],
         returning type: T.Type
     ) async throws -> T {
+        _ = (body, table, query, type)
+        throw AppError.authentication(.notConfigured)
+    }
+
+    func insertReturningMany<Body: Encodable, T: Decodable>(
+        _ body: Body,
+        into table: String,
+        query: [URLQueryItem],
+        returning type: T.Type
+    ) async throws -> [T] {
         _ = (body, table, query, type)
         throw AppError.authentication(.notConfigured)
     }

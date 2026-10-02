@@ -37,7 +37,7 @@ export type TradingAccountListItem = {
   mode: string | null
   category: string | null
   is_active: boolean
-  /** Free-plan trade-entry slot; false = historical read-only. */
+  /** Free-plan account-creation quota flag. Not trade-entry authorization. */
   can_add_trades: boolean
   note: string
   rules: TradingAccountPropFirmRules | null

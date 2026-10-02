@@ -17,6 +17,7 @@ export async function GET(req: Request) {
 
   return Response.json({
     iosPaywallEnabled: snapshot.flags.iosPaywallEnabled,
+    webPaywallEnabled: snapshot.flags.webPaywallEnabled,
     entitlementEnforcementEnabled: snapshot.flags.entitlementEnforcementEnabled,
     settingsPresent: snapshot.settingsPresent,
     globalIosPaywallEnabled: snapshot.globalIosPaywallEnabled,

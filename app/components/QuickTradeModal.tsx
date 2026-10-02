@@ -52,6 +52,7 @@ import {
   filterAccountsForTradeEntry,
 } from "@/lib/freePlanAccountSlots"
 import { supabaseMutationFeedback } from "@/lib/supabaseMutationFeedback"
+import { useProGate } from "@/lib/useProGate"
 import { upsertAccountInCache } from "@/lib/appDataCache"
 import { parseOptionalRr } from "@/lib/tradeRr"
 import {
@@ -200,6 +201,12 @@ export default function QuickTradeModal({
   initialCsvPatch = null,
 }: QuickTradeModalProps) {
   const { profile: contextProfile } = useUserProfile()
+  const { fromError, presentLimit } = useProGate(contextProfile)
+
+  function showMutationLimitOrError(error: unknown, title: string) {
+    if (fromError(error)) return
+    showPopup(supabaseMutationFeedback(error, title))
+  }
   const csvFileInputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const uploadingRef = useRef(false)
@@ -312,6 +319,7 @@ export default function QuickTradeModal({
         mode: acc.mode ?? "live",
         category: acc.category ?? null,
         can_add_trades: acc.can_add_trades !== false,
+        show_in_account_dropdowns: acc.show_in_account_dropdowns !== false,
       }))
 
       setAccounts(rows)
@@ -491,6 +499,19 @@ export default function QuickTradeModal({
     () => copyGroups.find((group) => group.id === selectedCopyGroupId) ?? null,
     [copyGroups, selectedCopyGroupId]
   )
+
+  const dropdownAccounts = useMemo(() => {
+    const visible = accounts.filter(
+      (account) => account.show_in_account_dropdowns !== false
+    )
+    if (
+      selectedAccount &&
+      !visible.some((account) => String(account.id) === String(selectedAccount.id))
+    ) {
+      return [...visible, selectedAccount]
+    }
+    return visible
+  }, [accounts, selectedAccount])
 
   const copyGroupListAccounts = useMemo(
     (): TradingAccountListItem[] =>
@@ -716,9 +737,7 @@ export default function QuickTradeModal({
 
       if (insertErr) {
         console.error(insertErr)
-        showPopup(
-          supabaseMutationFeedback(insertErr, "Save Failed")
-        )
+        showMutationLimitOrError(insertErr, "Save Failed")
         return
       }
 
@@ -933,7 +952,9 @@ export default function QuickTradeModal({
 
           if (!result.ok) {
             if (result.code === "account_limit") {
-              showPopup(feedbackPresets.accountLimit())
+              if (!presentLimit("account_count")) {
+                showPopup(feedbackPresets.accountLimit())
+              }
               throw new Error("Account limit reached.")
             }
             if (result.code === "account_locked") {
@@ -942,11 +963,11 @@ export default function QuickTradeModal({
             }
             const failureTitle =
               result.code === "post" ? "Post Failed" : "Save Failed"
-            showPopup(
-              result.error != null
-                ? supabaseMutationFeedback(result.error, failureTitle)
-                : persistentError(failureTitle, result.message)
-            )
+            if (result.error != null) {
+              showMutationLimitOrError(result.error, failureTitle)
+            } else {
+              showPopup(persistentError(failureTitle, result.message))
+            }
             throw new Error(result.message)
           }
 
@@ -1095,7 +1116,7 @@ export default function QuickTradeModal({
               <TradeAccountPicker
                 className="mt-2"
                 triggerId="quick-trade-account-trigger"
-                accounts={accounts}
+                accounts={dropdownAccounts}
                 isPro={isPro}
                 copyGroups={copyGroups}
                 selectedAccount={selectedAccount}

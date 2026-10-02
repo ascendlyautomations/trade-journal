@@ -45,5 +45,6 @@ final class DomainLayerTests: XCTestCase {
     func testFreeTierPolicyCaps() {
         XCTAssertEqual(FreeTierPolicy.dailyTradeLimit, 3)
         XCTAssertEqual(FreeTierPolicy.maxTradeEntryAccounts, 3)
+        XCTAssertEqual(FreeTierPolicy.csvImportCooldownDays, 3)
     }
 }

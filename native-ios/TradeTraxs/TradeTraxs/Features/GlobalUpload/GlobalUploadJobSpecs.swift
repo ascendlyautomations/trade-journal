@@ -109,6 +109,8 @@ struct StoryUploadSpec: Sendable {
     var originalFileName: String?
     /// Deterministic object key — filled by ``GlobalUploadCoordinator`` at enqueue.
     var storagePath: String = ""
+    /// Video story text. Photo stories leave this empty because text is burned into the image.
+    var textOverlays: [StoryTextOverlayRecord] = []
 }
 
 struct StoryUploadCheckpoint: Sendable, Equatable {

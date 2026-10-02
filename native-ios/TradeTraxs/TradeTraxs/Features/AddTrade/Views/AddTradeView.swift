@@ -155,6 +155,8 @@ struct AddTradeView: View {
             NavigationStack {
                 ReelPickerView(
                     reels: viewModel.unattachedReels,
+                    imagePipeline: viewModel.clipLinkImagePipeline,
+                    objectStorage: viewModel.clipLinkObjectStorage,
                     isLoading: viewModel.isLoadingReels,
                     onSelect: { reel in
                         viewModel.selectLinkedReel(reel)
@@ -775,20 +777,12 @@ struct AddTradeView: View {
                 .accessibilityIdentifier("addTrade.reelDraft")
             } else if let reel = viewModel.linkedReel {
                 HStack(spacing: ExperienceSpacing.sm) {
-                    Image(systemName: "play.rectangle.fill")
-                        .foregroundStyle(colors.accent)
-                        .frame(width: 36, height: 48)
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(reel.caption ?? "Existing clip")
-                            .experienceStyle(.body, color: colors.primaryText)
-                            .lineLimit(2)
-                        if let seconds = reel.durationSeconds {
-                            Text(MediaVideoPreparation.formatDuration(seconds))
-                                .experienceStyle(.caption, color: colors.secondaryText)
-                        }
-                    }
-                    Spacer()
+                    TradeClipLinkRowView(
+                        reel: reel,
+                        imagePipeline: viewModel.clipLinkImagePipeline,
+                        objectStorage: viewModel.clipLinkObjectStorage,
+                        presentation: .linkedSelection
+                    )
                     Button {
                         viewModel.clearClip()
                     } label: {
@@ -887,7 +881,7 @@ struct AddTradeView: View {
             .accessibilityIdentifier("addTrade.account")
         } else {
             Picker("Account", selection: Binding(
-                get: { viewModel.selectedAccountID?.rawValue ?? "" },
+                get: { viewModel.accountPickerSelectionTag },
                 set: { newValue in
                     if newValue.isEmpty {
                         viewModel.clearAccountSelection()

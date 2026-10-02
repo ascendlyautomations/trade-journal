@@ -205,6 +205,7 @@ final class ProfileHeaderViewModel {
     }
 
     func openViewerStory(_ story: Story) {
+        guard ActiveStorySemantics.isActive(createdAt: story.createdAt) else { return }
         ExperienceHaptics.play(.selection)
         detailCache.seed(story)
         if let profile = store.profile {

@@ -30,6 +30,8 @@ import {
   type TradingAccountListItem,
 } from "@/lib/tradingAccounts"
 import { countTradeEntryEnabledAccounts } from "@/lib/freePlanAccountSlots"
+import { useUserProfile } from "@/lib/useUserProfile"
+import { useProGate } from "@/lib/useProGate"
 
 const ACCOUNTS_PAGE_SIZE = 5
 
@@ -60,6 +62,8 @@ export default function TradingAccountsSettingsSection({
   isPro,
 }: Props) {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
+  const { profile } = useUserProfile()
+  const { presentLimit, fromError, enforceFreeLimits } = useProGate(profile)
   const [accounts, setAccounts] = useState<TradingAccountListItem[]>([])
   const [loading, setLoading] = useState(Boolean(userId))
   const [togglingId, setTogglingId] = useState<string | null>(null)
@@ -74,9 +78,10 @@ export default function TradingAccountsSettingsSection({
     useState<TradingAccountListItem | null>(null)
   const [savingNoteId, setSavingNoteId] = useState<string | null>(null)
 
-  const canCreateMore = isPro
-    ? true
-    : countTradeEntryEnabledAccounts(accounts) < FREE_PLAN_ACCOUNT_LIMIT
+  const canCreateMore =
+    isPro ||
+    !enforceFreeLimits ||
+    countTradeEntryEnabledAccounts(accounts) < FREE_PLAN_ACCOUNT_LIMIT
 
   const editFormValues = useMemo(
     () =>
@@ -203,7 +208,9 @@ export default function TradingAccountsSettingsSection({
     const gate = await assertCanCreateTradingAccount(supabase, userId, profile)
     if (!gate.ok) {
       setCreating(false)
-      showPopup(feedbackPresets.accountLimit())
+      if (!presentLimit("account_count")) {
+        showPopup(feedbackPresets.accountLimit())
+      }
       return
     }
 
@@ -216,6 +223,7 @@ export default function TradingAccountsSettingsSection({
 
     if (error) {
       console.error(error)
+      if (fromError(error)) return
       showPopup({
         type: "error",
         message:

@@ -37,7 +37,7 @@ describe("csvImportGate", () => {
     assert.equal(status.allowed, true)
   })
 
-  it("blocks free users within the 7-day cooldown", () => {
+  it("blocks free users within the 3-day cooldown", () => {
     const status = evaluateCsvImportGate({
       is_pro: false,
       last_csv_import_at: new Date().toISOString(),
@@ -58,8 +58,9 @@ describe("csvImportGate", () => {
   })
 
   it("includes days remaining in the limit message", () => {
-    const message = csvImportLimitMessage(3)
-    assert.match(message, /3 days/)
+    const message = csvImportLimitMessage(2)
+    assert.match(message, /every 3 days/)
+    assert.match(message, /2 days/)
     assert.match(message, /Upgrade to Pro/)
   })
 })

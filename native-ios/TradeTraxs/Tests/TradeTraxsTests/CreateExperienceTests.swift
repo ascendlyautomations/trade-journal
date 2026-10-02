@@ -159,6 +159,7 @@ final class CreateExperienceTests: XCTestCase {
         viewModel.clearLinkedTrade()
         XCTAssertEqual(viewModel.captionText, "Caught this breakout perfectly today")
         viewModel.captionText = "Standalone note"
+        markFixtureVideoPrepared(viewModel)
         viewModel.publish()
         await waitFor { dismissed }
         await waitFor { ContentMutationStore.shared.revision >= 1 }
@@ -199,7 +200,9 @@ final class CreateExperienceTests: XCTestCase {
         viewModel.loadIfNeeded()
         await waitFor { viewModel.phase == .ready }
         viewModel.applyScreenshotFixture(filled: true)
+        markFixtureVideoPrepared(viewModel)
         viewModel.publish()
+        await waitFor { GlobalUploadCoordinator.shared.jobs.count == 1 }
         let jobsAfterFirst = GlobalUploadCoordinator.shared.jobs.count
         viewModel.publish()
         XCTAssertEqual(GlobalUploadCoordinator.shared.jobs.count, jobsAfterFirst)
@@ -225,6 +228,7 @@ final class CreateExperienceTests: XCTestCase {
         await waitFor { viewModel.phase == .ready }
         var draft = CreateReelFixtures.screenshotDraft(linkedTrade: trade)
         draft.linkedTradeID = trade.id
+        draft.videoAssetState = .preparedDelivery
         viewModel.draft = draft
         viewModel.publish()
         await waitFor { dismissed }
@@ -243,6 +247,15 @@ final class CreateExperienceTests: XCTestCase {
         XCTAssertEqual(MediaVideoPreparation.maxFinalUploadBytes, 100 * 1024 * 1024)
         XCTAssertEqual(MediaVideoPreparation.maxSourceFileBytes, 500 * 1024 * 1024)
         XCTAssertEqual(MediaVideoPreparation.maxCaptionLength, 2200)
+    }
+
+    /// Screenshot fixtures are a tiny stand-in file, not a Photos import.
+    /// Publish now treats unfinished imports as background preparation. Marking the
+    /// fixture prepared matches a clip that already finished delivery prep.
+    private func markFixtureVideoPrepared(_ viewModel: CreateReelViewModel) {
+        guard var draft = viewModel.draft else { return }
+        draft.videoAssetState = .preparedDelivery
+        viewModel.draft = draft
     }
 
     private func waitFor(timeout: TimeInterval = 2, _ condition: @escaping () -> Bool) async {

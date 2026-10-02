@@ -2380,6 +2380,14 @@ final class ConversationViewModel {
         )
     }
 
+    private func rollbackOptimisticSend(tempID: MessageID) {
+        messages = messages.filter { $0.id != tempID }
+        sendStates.removeValue(forKey: tempID)
+        OptimisticOutboundImageStore.shared.remove(messageID: tempID)
+        uploadedOutboundImageURLs.removeValue(forKey: tempID)
+        syncThreadSessionCache(context: "proGateRollback")
+    }
+
     private func completeOptimisticSend(
         tempID: MessageID,
         body: String,
@@ -2448,8 +2456,12 @@ final class ConversationViewModel {
                 error=\(String(describing: error), privacy: .public)
                 """
             )
-            sendStates[tempID] = .failed
-            ExperienceHaptics.play(.error)
+            if ProLimitPresentation.presentUpgradeIfProGate(error) {
+                rollbackOptimisticSend(tempID: tempID)
+            } else {
+                sendStates[tempID] = .failed
+                ExperienceHaptics.play(.error)
+            }
         }
     }
 

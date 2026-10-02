@@ -1,6 +1,8 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import {
   assertAppleTransactionNotBoundToOtherUser,
+  buildAppleSyncRequestDiagnostics,
+  isStoreKitTestingEnvironmentClaim,
   upsertVerifiedAppleSubscription,
   verifyAppleSignedTransactionInfo,
   verifyAppleTransactionId,
@@ -35,6 +37,10 @@ export async function POST(req: Request) {
 
   const signedTransactionInfo = body.signedTransactionInfo?.trim()
   const transactionId = body.transactionId?.trim()
+  const diagnostics = buildAppleSyncRequestDiagnostics({
+    signedTransactionInfo,
+    transactionId,
+  })
 
   if (!signedTransactionInfo && !transactionId) {
     return Response.json(
@@ -43,11 +49,55 @@ export async function POST(req: Request) {
     )
   }
 
-  const verified = signedTransactionInfo
+  let verified = signedTransactionInfo
     ? await verifyAppleSignedTransactionInfo(signedTransactionInfo)
-    : await verifyAppleTransactionId(transactionId!)
-  if (!verified.ok) {
-    return Response.json({ error: verified.reason }, { status: 400 })
+    : null
+  const deviceVerificationFailed =
+    verified != null &&
+    !verified.ok &&
+    verified.reason === "Transaction verification failed"
+  const storeKitTestingTransaction =
+    diagnostics.appearsStoreKitTestingClaim ||
+    isStoreKitTestingEnvironmentClaim(diagnostics.claimedEnvironment)
+
+  let transactionIdFallbackAttempted = false
+  if (
+    (!verified || deviceVerificationFailed) &&
+    transactionId &&
+    !storeKitTestingTransaction
+  ) {
+    transactionIdFallbackAttempted = true
+    verified = await verifyAppleTransactionId(transactionId)
+  }
+
+  if (!verified || !verified.ok) {
+    const reason = verified?.reason ?? "Transaction verification failed"
+    const clientCode =
+      verified && !verified.ok && "clientCode" in verified
+        ? verified.clientCode
+        : "VERIFICATION_FAILED"
+
+    console.error("[api/apple/subscription/sync] rejected", {
+      stage: "sync",
+      reason,
+      clientCode,
+      userId: user.id,
+      ...diagnostics,
+      transactionIdFallbackAttempted,
+      storeKitTestingTransaction,
+      jwsVerificationUsed: Boolean(signedTransactionInfo),
+      verifierPath: transactionIdFallbackAttempted
+        ? "AppStoreServerAPI_getTransactionInfo"
+        : "SignedDataVerifier",
+    })
+
+    return Response.json(
+      {
+        error: reason,
+        code: clientCode,
+      },
+      { status: 400 }
+    )
   }
 
   const ownership = await assertAppleTransactionNotBoundToOtherUser(

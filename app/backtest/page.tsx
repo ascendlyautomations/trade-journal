@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase"
 import { deleteUserTrade } from "@/lib/deleteTrade"
 import { isProActive } from "@/lib/subscription"
 import LockedFeature from "../components/LockedFeature"
+import { useProGate } from "@/lib/useProGate"
 import TradesPageTradeCard from "../components/TradesPageTradeCard"
 import Calendar from "@/components/Calendar"
 import { formatPnlCurrency } from "@/lib/formatMoney"
@@ -46,6 +47,8 @@ type BacktestTrade = Record<string, unknown> & {
 export default function BacktestPage() {
   const router = useRouter()
   const { user, profile: contextProfile } = useUserProfile()
+  const { shouldGateFeature, presentFeature, isPro: gateIsPro } =
+    useProGate(contextProfile)
   const [trades, setTrades] = useState<BacktestTrade[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedStrategy, setSelectedStrategy] = useState("all")
@@ -78,7 +81,10 @@ export default function BacktestPage() {
       return
     }
 
-    if (contextProfile && isProActive(contextProfile)) {
+    if (
+      contextProfile &&
+      (isProActive(contextProfile) || !shouldGateFeature(true))
+    ) {
       setShareProfile(
         contextProfile.referral_code != null
           ? { referral_code: contextProfile.referral_code }
@@ -90,7 +96,9 @@ export default function BacktestPage() {
         .select("is_pro, subscription_status, referral_code")
         .eq("id", user.id)
         .maybeSingle()
-      if (!isProActive(profileRow)) {
+      const locked =
+        !isProActive(profileRow) && shouldGateFeature(true)
+      if (locked) {
         setProLocked(true)
         setLoading(false)
         return
@@ -194,7 +202,12 @@ export default function BacktestPage() {
       <>
         <div className="tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
           <div className="mx-auto max-w-7xl px-6 pb-6 pt-6 xl:max-w-[1560px]">
-            <LockedFeature title="Backtest Lab" className="mx-auto max-w-lg" />
+            <LockedFeature
+              title="Backtest Lab"
+              feature="backtest_lab"
+              className="mx-auto max-w-lg"
+              onUpgradeClick={() => presentFeature("backtest_lab")}
+            />
           </div>
         </div>
       </>

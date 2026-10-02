@@ -430,18 +430,13 @@ final class SharedContentShareViewModel {
             sharedContent: nil
         )
 
-        if ConversationThreadSupport.isLocalDevelopment(viewerID)
+        let skipNetwork = ConversationThreadSupport.isLocalDevelopment(viewerID)
             || ConversationThreadSupport.isLocalConversation(conversation.id)
-        {
-            deliverOutbound(message: optimistic, conversation: conversation, viewerID: viewerID)
-            return true
-        }
-
-        deliverOutbound(message: optimistic, conversation: conversation, viewerID: viewerID)
-        return await persistOutboundSharedMessage(
-            optimistic: optimistic,
+        return await sendDMMessage(
+            optimistic,
             conversation: conversation,
-            viewerID: viewerID
+            viewerID: viewerID,
+            skipNetwork: skipNetwork
         )
     }
 
@@ -454,55 +449,46 @@ final class SharedContentShareViewModel {
             viewerID: viewerID
         )
 
-        if ConversationThreadSupport.isLocalDevelopment(viewerID)
+        let skipNetwork = ConversationThreadSupport.isLocalDevelopment(viewerID)
             || ConversationThreadSupport.isLocalConversation(conversation.id)
-        {
-            deliverOutbound(message: optimistic, conversation: conversation, viewerID: viewerID)
-            return true
-        }
-
-        deliverOutbound(message: optimistic, conversation: conversation, viewerID: viewerID)
-        return await persistOutboundSharedMessage(
-            optimistic: optimistic,
+        return await sendDMMessage(
+            optimistic,
             conversation: conversation,
-            viewerID: viewerID
+            viewerID: viewerID,
+            skipNetwork: skipNetwork
         )
     }
 
-    /// Inserts on the server and reconciles the optimistic row — UI already updated via ``deliverOutbound``.
-    private func persistOutboundSharedMessage(
-        optimistic: Message,
+    private func sendDMMessage(
+        _ message: Message,
         conversation: Conversation,
-        viewerID: ProfileID
+        viewerID: ProfileID,
+        skipNetwork: Bool
     ) async -> Bool {
-        do {
-            let saved = try await messagesRepo.send(optimistic)
-            reconcileOutbound(
-                optimistic: optimistic,
-                saved: saved,
-                conversation: conversation,
-                viewerID: viewerID
-            )
+        let context = dmSendContext(conversation: conversation, viewerID: viewerID)
+        switch await ConversationOutboundMessageDelivery.send(
+            message: message,
+            context: context,
+            skipNetwork: skipNetwork
+        ) {
+        case .success:
             return true
-        } catch {
+        case .failure(let error):
             sendErrorMessage = ProfileSectionSupport.message(for: error)
             return false
         }
     }
 
-    private func reconcileOutbound(
-        optimistic: Message,
-        saved: Message,
+    private func dmSendContext(
         conversation: Conversation,
         viewerID: ProfileID
-    ) {
-        patchInbox(with: saved, conversation: conversation, viewerID: viewerID)
-        SharedContentOutboundDelivery.post(
-            SharedContentOutboundDelivery.Payload(
-                destination: .dm(conversation.id),
-                message: saved,
-                hydrationSnapshot: nil
-            )
+    ) -> ConversationOutboundMessageDelivery.SendContext {
+        ConversationOutboundMessageDelivery.SendContext(
+            conversation: conversation,
+            viewerID: viewerID,
+            messagesRepo: messagesRepo,
+            inboxStore: inboxStore,
+            detailCache: detailCache
         )
     }
 
@@ -686,58 +672,6 @@ final class SharedContentShareViewModel {
         )
     }
 
-    // MARK: - Outbound delivery
-
-    private func deliverOutbound(
-        message: Message,
-        conversation: Conversation,
-        viewerID: ProfileID
-    ) {
-        if let reference = message.sharedContent {
-            SharedContentShareSeeder.seed(
-                reference: reference,
-                detailCache: detailCache,
-                feedSessionStore: FeedSessionStore.shared,
-                viewerID: viewerID
-            )
-        }
-        patchInbox(with: message, conversation: conversation, viewerID: viewerID)
-        let hydrationSnapshot = SharedContentHydrator.shareOutboundSnapshot(
-            message: message,
-            detailCache: detailCache,
-            feedSessionStore: FeedSessionStore.shared,
-            viewerID: viewerID,
-            surface: .dm
-        )
-        SharedContentOutboundDelivery.post(
-            SharedContentOutboundDelivery.Payload(
-                destination: .dm(conversation.id),
-                message: message,
-                hydrationSnapshot: hydrationSnapshot
-            )
-        )
-    }
-
-    private func patchInbox(with message: Message, conversation: Conversation, viewerID: ProfileID) {
-        let isOpen = inboxStore.activeConversationID == message.conversationID
-        inboxStore.patchFromMessage(
-            message,
-            viewerID: viewerID,
-            conversationOpen: isOpen,
-            policy: .confirmedOutgoing,
-            fallbackConversation: conversation,
-            source: "sharedContentSend"
-        )
-        let patchedConversation =
-            inboxStore.conversations.first(where: { $0.id == message.conversationID })
-            ?? conversation
-        ConversationThreadSessionStore.shared.patchMessages(
-            viewerID: viewerID,
-            conversationID: message.conversationID,
-            incoming: [message],
-            conversation: patchedConversation
-        )
-    }
 }
 
 extension SharedContentShareViewModel.RecipientScope: Identifiable {

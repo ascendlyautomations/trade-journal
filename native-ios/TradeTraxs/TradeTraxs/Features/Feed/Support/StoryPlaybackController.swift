@@ -16,6 +16,7 @@ final class StoryPlaybackController {
     private(set) var player: AVPlayer?
 
     var onAdvance: (() -> Void)?
+    var onVideoPixelSize: ((CGSize) -> Void)?
 
     private let storage: any ObjectStorageProviding
 
@@ -165,6 +166,10 @@ final class StoryPlaybackController {
         Task {
             await waitForPlayableItem(item)
             guard generation == self.generation, storyID == self.activeStoryID else { return }
+            let size = item.presentationSize
+            if size.width > 1, size.height > 1 {
+                onVideoPixelSize?(size)
+            }
             let seconds = item.duration.seconds
             if !seconds.isFinite || seconds <= 0 {
                 scheduleVideoFallback(generation: generation, duration: Self.videoFallbackDuration)

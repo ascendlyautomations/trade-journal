@@ -48,13 +48,8 @@ struct ActivityRowView: View {
 
     @ViewBuilder
     private var avatar: some View {
-        if row.showsSystemIcon {
-            ZStack {
-                Circle()
-                    .fill(colors.secondaryBackground)
-                ExperienceIcon(icon: .activity, size: .md, color: colors.secondaryText)
-            }
-            .frame(width: 40, height: 40)
+        if row.usesTradeTraxsBrandAvatar {
+            ActivityTradeTraxsBrandAvatarView(size: 40)
         } else if let profile = row.actor, let imagePipeline {
             Group {
                 if let onSelectActor {

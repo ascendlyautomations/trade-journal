@@ -1,4 +1,3 @@
-import AVKit
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -110,7 +109,9 @@ struct CreateStoryView: View {
     }
 
     private var showsEditor: Bool {
-        viewModel.sourceImage != nil && viewModel.imageData == nil && viewModel.phase != .publishing
+        viewModel.imageData == nil
+            && viewModel.phase != .publishing
+            && (viewModel.sourceImage != nil || viewModel.localVideoFileURL != nil)
     }
 
     @ViewBuilder
@@ -127,8 +128,18 @@ struct CreateStoryView: View {
                     viewModel.postRenderedStory(rendered)
                 }
             )
-        } else if viewModel.localVideoFileURL != nil && viewModel.imagePreview == nil && viewModel.phase != .publishing {
-            videoReadyContent
+        } else if showsEditor, let videoURL = viewModel.localVideoFileURL {
+            StoryEditorView(
+                videoURL: videoURL,
+                isPosting: viewModel.isPostingStory,
+                onCancel: {
+                    viewModel.clearImage()
+                    mediaItem = nil
+                },
+                onPostVideo: { overlays in
+                    viewModel.postVideoStory(textOverlays: overlays)
+                }
+            )
         } else if viewModel.imagePreview == nil && viewModel.phase != .publishing {
             emptyComposer
         } else {
@@ -197,34 +208,6 @@ struct CreateStoryView: View {
         .onAppear {
             autoPresentMediaPickerIfNeeded()
         }
-    }
-
-    private var videoReadyContent: some View {
-        VStack(spacing: ExperienceSpacing.md) {
-            if let url = viewModel.localVideoFileURL {
-                VideoPlayer(player: AVPlayer(url: url))
-                    .aspectRatio(StoryCanvasState.canvasAspectRatio, contentMode: .fit)
-                    .frame(maxWidth: 280)
-                    .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous))
-                    .accessibilityIdentifier("createStory.videoPreview")
-            }
-
-            Button("Choose Different Media") {
-                viewModel.clearImage()
-                mediaItem = nil
-                showsMediaPicker = true
-            }
-            .font(ExperienceTypography.subheadline.weight(.semibold))
-            .foregroundStyle(colors.accent)
-
-            if let formError = viewModel.formError {
-                Text(formError)
-                    .experienceStyle(.footnote, color: colors.loss)
-                    .accessibilityIdentifier("createStory.formError")
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.top, ExperienceSpacing.lg)
     }
 
     private var publishingContent: some View {

@@ -240,7 +240,11 @@ final class CreatePostViewModel {
                 )
             }
             phase = .ready
-            formError = PostPublishProbe.userFacingMessage(for: failedStage, error: error)
+            if ProLimitPresentation.presentUpgradeIfProLimit(error) {
+                formError = nil
+            } else {
+                formError = PostPublishProbe.userFacingMessage(for: failedStage, error: error)
+            }
         }
         publishTask = nil
     }

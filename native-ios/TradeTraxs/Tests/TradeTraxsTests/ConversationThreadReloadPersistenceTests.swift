@@ -153,6 +153,59 @@ final class ConversationThreadReloadPersistenceTests: XCTestCase {
         XCTAssertEqual(reopened?.contentGeneration, 2)
     }
 
+    func testPatchMessagesCollapsesOptimisticSharedContentSend() {
+        let key = ConversationThreadSessionStore.cacheKey(viewerID: viewer, conversationID: conversationID)
+        let convo = makeConversation()
+        let tradeID = TradeID("trade-share-1")
+        let temp = Message(
+            id: MessageID("temp-share"),
+            conversationID: conversationID,
+            senderProfileID: viewer,
+            kind: .tradeShare,
+            body: nil,
+            attachments: [
+                MessageAttachment(
+                    id: tradeID.rawValue,
+                    media: MediaReference(id: tradeID.rawValue, kind: .file, altText: "Shared trade"),
+                    tradeID: tradeID
+                ),
+            ],
+            replyToMessageID: nil,
+            createdAt: Date(timeIntervalSince1970: 500),
+            isReadByViewer: true,
+            sharedContent: .trade(tradeID)
+        )
+        let server = Message(
+            id: MessageID("server-share"),
+            conversationID: conversationID,
+            senderProfileID: viewer,
+            kind: .tradeShare,
+            body: nil,
+            attachments: temp.attachments,
+            replyToMessageID: nil,
+            createdAt: Date(timeIntervalSince1970: 501),
+            isReadByViewer: true,
+            sharedContent: .trade(tradeID)
+        )
+
+        ConversationThreadSessionStore.shared.patchMessages(
+            viewerID: viewer,
+            conversationID: conversationID,
+            incoming: [temp],
+            conversation: convo
+        )
+        ConversationThreadSessionStore.shared.patchMessages(
+            viewerID: viewer,
+            conversationID: conversationID,
+            incoming: [server],
+            conversation: convo
+        )
+
+        let restored = ConversationThreadSessionStore.shared.restore(key: key)
+        XCTAssertEqual(restored?.messages.count, 1)
+        XCTAssertEqual(restored?.messages.first?.id.rawValue, "server-share")
+    }
+
     func testSyncOpenThreadStatePreservesPaginatedHistoryAfterBatchDelete() {
         let key = ConversationThreadSessionStore.cacheKey(viewerID: viewer, conversationID: conversationID)
         let convo = makeConversation()

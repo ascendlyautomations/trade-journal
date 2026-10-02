@@ -2,7 +2,6 @@ import Foundation
 
 /// Upload + insert path matching web `lib/publishStory.ts`.
 enum StoryPublishPipeline {
-    private static let maxStoryVideoBytes = 15 * 1024 * 1024
     static func publish(
         imageData: Data,
         contentType: String,
@@ -68,6 +67,7 @@ enum StoryPublishPipeline {
         uploadService: any UploadService,
         objectStorage: any ObjectStorageProviding,
         predeterminedStoragePath: String? = nil,
+        textOverlays: [StoryTextOverlayRecord] = [],
         onProgress: ((Double) -> Void)? = nil,
         onPrepared: ((_ publicURL: String, _ storagePath: String) -> Void)? = nil
     ) async throws -> Story {
@@ -86,9 +86,10 @@ enum StoryPublishPipeline {
             }
         }
 
-        guard prepared.byteCount > 0, prepared.byteCount <= maxStoryVideoBytes else {
-            throw AppError.unknown(message: "Video must be 15 MB or smaller.")
+        guard prepared.byteCount > 0 else {
+            throw AppError.unknown(message: "Couldn't read this video.")
         }
+        _ = try await StoryMediaDuration.validatedDurationSeconds(at: prepared.fileURL)
 
         let storagePath: String
         if let predetermined = predeterminedStoragePath, !predetermined.isEmpty {
@@ -118,7 +119,8 @@ enum StoryPublishPipeline {
         onPrepared?(publicURL, uploaded.id)
         let story = try await feed.createStory(
             userID: authorID,
-            imageURL: publicURL
+            imageURL: publicURL,
+            textOverlays: textOverlays
         )
         onProgress?(1)
         return story

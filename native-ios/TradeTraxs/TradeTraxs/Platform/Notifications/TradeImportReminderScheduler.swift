@@ -61,6 +61,7 @@ enum TradeImportReminderScheduler {
             let content = UNMutableNotificationContent()
             content.title = notificationTitle
             content.body = notificationBody
+            content.sound = .default
             content.userInfo = ["type": notificationType]
 
             let components = WeekdayEasternReminderSupport.dateComponents(

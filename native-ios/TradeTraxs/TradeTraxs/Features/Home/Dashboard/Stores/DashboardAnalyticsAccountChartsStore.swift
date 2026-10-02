@@ -42,6 +42,13 @@ final class DashboardAnalyticsAccountChartsStore {
     ) {
         guard claimOwner(viewerID) else { return }
         let key = Key(accountID: normalized(accountID), revision: revision)
+        if let existing = chartsByKey[key],
+           DashboardAnalyticsChartsSupport.hasEquityPoints(existing),
+           !DashboardAnalyticsChartsSupport.hasEquityPoints(presets)
+        {
+            availabilityByKey[key] = .loaded
+            return
+        }
         chartsByKey[key] = presets
         availabilityByKey[key] = .loaded
     }

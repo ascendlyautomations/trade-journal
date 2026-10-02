@@ -870,6 +870,9 @@ final class CreateReelViewModel {
     }
 
     private static func userMessage(for error: Error) -> String {
+        if ProLimitPresentation.presentUpgradeIfProLimit(error) {
+            return ""
+        }
         if let failure = error as? VideoPreparationFailure {
             switch failure {
             case .compressionFailed, .outputValidationFailed:

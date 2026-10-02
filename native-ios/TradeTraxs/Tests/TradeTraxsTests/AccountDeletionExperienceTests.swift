@@ -152,6 +152,52 @@ final class AccountDeletionExperienceTests: XCTestCase {
         XCTAssertTrue(context.auth.manager.state.isAuthenticated)
     }
 
+    func testDownloadAccountDataSharesServerCSV() async throws {
+        let csv = Data("id,user_id\ntrade-1,user-1\n".utf8)
+        let context = await makeContext(billing: freeBillingStatus())
+        context.account.exportResult = .success(csv)
+        let viewModel = context.viewModel
+
+        viewModel.downloadAccountData()
+        await waitFor { viewModel.exportShareItem != nil && !viewModel.isExportingAccountData }
+
+        let url = try XCTUnwrap(viewModel.exportShareItem?.url)
+        XCTAssertEqual(url.lastPathComponent, AccountDataExport.filename)
+        let written = try Data(contentsOf: url)
+        XCTAssertEqual(written, csv)
+        XCTAssertEqual(context.account.exportCallCount, 1)
+        XCTAssertEqual(context.account.deleteCallCount, 0)
+        XCTAssertNil(viewModel.exportErrorMessage)
+        XCTAssertFalse(viewModel.showsDeleteAccountExplainer)
+        XCTAssertFalse(viewModel.isExportingAccountData)
+    }
+
+    func testDownloadAccountDataFailureDoesNotOpenShareSheet() async {
+        let context = await makeContext(billing: freeBillingStatus())
+        context.account.exportResult = .failure(AccountDataExportError.failed)
+        let viewModel = context.viewModel
+
+        viewModel.downloadAccountData()
+        await waitFor { viewModel.exportErrorMessage != nil }
+
+        XCTAssertEqual(viewModel.exportErrorMessage, "Failed to export data.")
+        XCTAssertNil(viewModel.exportShareItem)
+        XCTAssertEqual(context.account.deleteCallCount, 0)
+        XCTAssertNil(viewModel.deleteErrorMessage)
+    }
+
+    func testDownloadAccountDataUnauthorizedMessage() async {
+        let context = await makeContext(billing: freeBillingStatus())
+        context.account.exportResult = .failure(AccountDataExportError.notAuthenticated)
+        let viewModel = context.viewModel
+
+        viewModel.downloadAccountData()
+        await waitFor { viewModel.exportErrorMessage != nil }
+
+        XCTAssertEqual(viewModel.exportErrorMessage, "Your session expired. Sign in again and retry.")
+        XCTAssertNil(viewModel.exportShareItem)
+    }
+
     func testConfirmDeleteAccountSurfacesUnauthorized() async {
         let account = AccountDeletionSpyRepository(error: .notAuthenticated)
         let context = await makeContext(billing: freeBillingStatus(), account: account)
@@ -248,6 +294,14 @@ private final class AccountDeletionSpyRepository: AccountRepository, @unchecked 
     func deleteAuthenticatedAccount() async throws {
         deleteCallCount += 1
         if let error { throw error }
+    }
+
+    var exportResult: Result<Data, Error> = .success(Data())
+    private(set) var exportCallCount = 0
+
+    func exportAuthenticatedAccountData() async throws -> Data {
+        exportCallCount += 1
+        return try exportResult.get()
     }
 }
 

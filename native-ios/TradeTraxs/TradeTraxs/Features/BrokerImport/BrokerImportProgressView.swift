@@ -151,10 +151,12 @@ struct BrokerImportProgressView: View {
         message: String,
         action: BrokerImportFlowModel.BrokerImportFailureAction
     ) -> some View {
+        let resolved = resolvedFailureAction(action)
+        let provider = model.activeImportProvider ?? .tradovate
         let title: String
         let primaryTitle: String
         let showsClose: Bool
-        switch action {
+        switch resolved {
         case .retry:
             title = "Couldn't import trades"
             primaryTitle = "Retry"
@@ -164,10 +166,8 @@ struct BrokerImportProgressView: View {
             primaryTitle = "Retry"
             showsClose = true
         case .reconnect:
-            title = "Connection expired"
-            primaryTitle = BrokerSyncPresentation.reconnectPrimaryActionTitle(
-                provider: model.activeImportProvider ?? .tradovate
-            )
+            title = provider == .tradovate ? "Couldn't import trades" : "Connection expired"
+            primaryTitle = BrokerSyncPresentation.reconnectPrimaryActionTitle(provider: provider)
             showsClose = true
         case .dismiss:
             title = "Couldn't import trades"
@@ -180,7 +180,7 @@ struct BrokerImportProgressView: View {
             message: message,
             primaryTitle: primaryTitle,
             primaryAction: {
-                switch action {
+                switch resolved {
                 case .retry, .syncInProgress:
                     model.retryImport()
                 case .reconnect:
@@ -193,6 +193,19 @@ struct BrokerImportProgressView: View {
             secondaryTitle: showsClose ? "Close" : nil,
             secondaryAction: showsClose ? { model.close(reset: true); onClose() } : nil
         )
+    }
+
+    /// Linked Tradovate imports always recover via reconnect OAuth — never a bare Retry.
+    private func resolvedFailureAction(
+        _ action: BrokerImportFlowModel.BrokerImportFailureAction
+    ) -> BrokerImportFlowModel.BrokerImportFailureAction {
+        guard model.activeImportProvider == .tradovate else { return action }
+        switch action {
+        case .retry, .syncInProgress, .reconnect:
+            return .reconnect
+        case .dismiss:
+            return .dismiss
+        }
     }
 
     private func outcomeScaffold(

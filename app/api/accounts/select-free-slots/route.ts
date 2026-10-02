@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server"
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
-import { FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
-import { isProActive } from "@/lib/subscription"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
+import { proLimitResponseFromError } from "@/lib/server/proLimitFromError"
 
 export const runtime = "nodejs"
 
 /**
- * Free-plan downgrade: keep 0–3 accounts entry-enabled; rest read-only.
- * Body: { accountIds: string[] } — length 0..3, owned by the caller.
+ * Compatibility endpoint. Previously marked unselected accounts read-only.
+ * It now confirms ownership of any ids in the body and enables trade entry
+ * on every account the caller owns. Creating accounts is still capped separately.
  */
 export async function POST(req: Request) {
   try {
@@ -29,34 +29,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
     }
 
-    if (accountIds.length > FREE_PLAN_ACCOUNT_LIMIT) {
-      return NextResponse.json(
-        {
-          error: `Select at most ${FREE_PLAN_ACCOUNT_LIMIT} accounts.`,
-        },
-        { status: 400 }
-      )
-    }
-
     if (new Set(accountIds).size !== accountIds.length) {
       return NextResponse.json(
         { error: "Selected accounts must be distinct." },
         { status: 400 }
       )
-    }
-
-    const { data: profile } = await supabaseServiceRole
-      .from("profiles")
-      .select("is_pro, subscription_status, trial_end")
-      .eq("id", user.id)
-      .maybeSingle()
-
-    if (isProActive(profile)) {
-      await supabaseServiceRole
-        .from("accounts")
-        .update({ can_add_trades: true })
-        .eq("user_id", user.id)
-      return NextResponse.json({ ok: true, pro: true })
     }
 
     if (accountIds.length > 0) {
@@ -82,30 +59,16 @@ export async function POST(req: Request) {
       }
     }
 
-    const { error: disableErr } = await supabaseServiceRole
+    const { error: enableErr } = await supabaseServiceRole
       .from("accounts")
-      .update({ can_add_trades: false })
+      .update({ can_add_trades: true })
       .eq("user_id", user.id)
 
-    if (disableErr) {
-      console.error("[select-free-slots] disable", disableErr)
+    if (enableErr) {
+      console.error("[select-free-slots] enable", enableErr)
+      const proLimit = proLimitResponseFromError(enableErr, 403)
+      if (proLimit) return proLimit
       return NextResponse.json({ error: "Could not update accounts." }, { status: 500 })
-    }
-
-    if (accountIds.length > 0) {
-      const { error: enableErr } = await supabaseServiceRole
-        .from("accounts")
-        .update({ can_add_trades: true })
-        .eq("user_id", user.id)
-        .in("id", accountIds)
-
-      if (enableErr) {
-        console.error("[select-free-slots] enable", enableErr)
-        return NextResponse.json(
-          { error: "Could not update accounts." },
-          { status: 500 }
-        )
-      }
     }
 
     return NextResponse.json({ ok: true })

@@ -52,6 +52,7 @@ export type TradeAccountOption = {
   profit_target?: number | string | null
   winning_days?: number | string | null
   winning_day_threshold?: number | string | null
+  show_in_account_dropdowns?: boolean | null
 }
 
 type FilterOption = {

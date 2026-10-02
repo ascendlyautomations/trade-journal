@@ -50,6 +50,7 @@ import {
 } from "@/app/components/dashboard/dashboardInsightStyles"
 import { propFirmModeAccountIdFromQuery } from "@/lib/dashboardPropFirmContext"
 import { isProActive } from "@/lib/subscription"
+import { useProGate } from "@/lib/useProGate"
 import { formatPnlCurrency } from "@/lib/formatMoney"
 import {
   MANAGE_ACCOUNTS_VALUE,
@@ -380,6 +381,8 @@ export default function PropFirmPage() {
   const searchParams = useSearchParams()
   const accountFromUrl = searchParams.get("account")
   const { user, profile } = useUserProfile()
+  const { shouldGateFeature, presentFeature } = useProGate(profile)
+  const canUsePropFirm = isProActive(profile) || !shouldGateFeature(true)
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [planChecked, setPlanChecked] = useState(false)
   const [hasProAccess, setHasProAccess] = useState(false)
@@ -574,7 +577,7 @@ export default function PropFirmPage() {
 
   useEffect(() => {
     if (profile) {
-      setHasProAccess(isProActive(profile))
+      setHasProAccess(canUsePropFirm)
       setPlanChecked(true)
       return
     }
@@ -591,11 +594,13 @@ export default function PropFirmPage() {
         .select("is_pro, subscription_status")
         .eq("id", user!.id)
         .maybeSingle()
-      setHasProAccess(isProActive(profileRow))
+      setHasProAccess(
+        isProActive(profileRow) || !shouldGateFeature(true)
+      )
       setPlanChecked(true)
     }
     void checkPlan()
-  }, [profile, user?.id])
+  }, [profile, user?.id, canUsePropFirm, shouldGateFeature])
 
   const loadAccounts = useCallback(async () => {
     if (propFirmV2Active) {
@@ -1180,7 +1185,12 @@ export default function PropFirmPage() {
   if (!hasProAccess) {
     return (
       <PropfirmPageShell>
-        <LockedFeature title="Prop Firm Mode" className="mx-auto max-w-lg" />
+        <LockedFeature
+          title="Prop Firm Mode"
+          feature="prop_firm"
+          className="mx-auto max-w-lg"
+          onUpgradeClick={() => presentFeature("prop_firm")}
+        />
       </PropfirmPageShell>
     )
   }

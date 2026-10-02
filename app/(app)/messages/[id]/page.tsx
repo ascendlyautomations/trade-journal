@@ -31,7 +31,8 @@ import { validateImageUpload } from "@/lib/uploadValidation"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { LOADING_COPY } from "@/lib/loadingCopy"
 import { logSupabaseError } from "@/lib/logSupabaseError"
-import { dmSendFeedback } from "@/lib/dmSendFeedback"
+import { dmSendFeedback, isDmProLimitError } from "@/lib/dmSendFeedback"
+import { useProGate } from "@/lib/useProGate"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import ImageCropModal from "@/app/components/ImageCropModal"
 import { useImageCropUpload } from "@/lib/useImageCropUpload"
@@ -1021,7 +1022,17 @@ function buildTypingIndicatorText(
 export default function DMPage() {
   const messagePageSize = 50
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
-  const { user: profileUser } = useUserProfile()
+  const { user: profileUser, profile: dmGateProfile } = useUserProfile()
+  const { fromError, presentLimit } = useProGate(dmGateProfile)
+
+  function showDmSendFailure(error: unknown) {
+    if (isDmProLimitError(error)) {
+      if (presentLimit("daily_direct_messages")) return
+    } else if (fromError(error)) {
+      return
+    }
+    showPopup(dmSendFeedback(error))
+  }
   const nativeIos = useIsNativeIos()
   const params = useParams()
   const router = useRouter()
@@ -2818,7 +2829,7 @@ export default function DMPage() {
         if (!isRetry) {
           setInput((cur) => (cur.trim() ? cur : prevInput))
         }
-        showPopup(dmSendFeedback(sendErr))
+        showDmSendFailure(sendErr)
         return
       }
 
@@ -2957,7 +2968,7 @@ export default function DMPage() {
           markOptimisticMessageFailed(prev, tempId)
         )
         setReplyTarget(prevReply)
-        showPopup(dmSendFeedback(sendErr))
+        showDmSendFailure(sendErr)
         return
       }
 

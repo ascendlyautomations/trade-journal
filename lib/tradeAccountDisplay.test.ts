@@ -101,7 +101,7 @@ describe("buildAccountFilterOptionsFromRows", () => {
     assert.equal(options[1].label, "Archived 50k • Live")
   })
 
-  it("marks read-only accounts in historical filter labels", () => {
+  it("does not badge historical can_add_trades false in filter labels", () => {
     const options = buildAccountFilterOptionsFromRows([
       {
         id: "a1",
@@ -112,8 +112,8 @@ describe("buildAccountFilterOptionsFromRows", () => {
         can_add_trades: false,
       },
     ])
-    assert.equal(options[0].label, "Legacy 50k • Live (Read Only)")
-    assert.equal(options[0].readOnly, true)
+    assert.equal(options[0].label, "Legacy 50k • Live")
+    assert.equal(options[0].readOnly, false)
   })
 
   it("includes account number before mode in label when present", () => {

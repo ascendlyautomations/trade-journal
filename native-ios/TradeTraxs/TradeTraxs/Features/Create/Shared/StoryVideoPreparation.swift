@@ -1,6 +1,6 @@
 import Foundation
 
-/// Story video delivery prep — same encoder as reels with story duration/size limits.
+/// Story video delivery prep — same encoder as reels, limited by story duration.
 enum StoryVideoPreparation {
     static func prepareForUpload(
         from sourceURL: URL,

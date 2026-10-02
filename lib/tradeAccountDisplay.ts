@@ -218,8 +218,8 @@ export function formatTradingAccountSelectorLabel(
 
 /**
  * Build account selector options from `accounts` rows for historical filters.
- * Includes read-only (can_add_trades = false) accounts with a badge flag.
  * Soft-hidden (`is_active === false`) rows remain available for history.
+ * `can_add_trades` does not change the label.
  */
 export function buildAccountFilterOptionsFromRows(
   accountRows: readonly AccountRowForDisplay[],
@@ -246,18 +246,15 @@ export function buildAccountFilterOptionsFromRows(
       { includeAccountNumber }
     )
 
-    const readOnly = row.can_add_trades === false
     const baseLabel = `${parts.name}${parts.suffix}`.replace(/\s+/g, " ").trim()
 
     accountMap.set(value, {
       value,
-      label: readOnly ? `${baseLabel} (Read Only)` : baseLabel,
+      label: baseLabel,
       labelName: parts.name,
-      labelSuffix: readOnly
-        ? `${parts.suffix} • Read Only`
-        : parts.suffix,
+      labelSuffix: parts.suffix,
       accountType: row.mode ?? null,
-      readOnly,
+      readOnly: false,
     })
   }
 

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react"
 import ProGate from "@/app/components/ProGate"
+import { useUserProfile } from "@/lib/useUserProfile"
+import { useProGate } from "@/lib/useProGate"
 import CopyTradingGroupEditorModal from "@/app/components/CopyTradingGroupEditorModal"
 import { ConfirmModal, FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import EmptyState from "@/app/components/ui/EmptyState"
@@ -43,9 +45,14 @@ function mapCachedAccounts(userId: string): TradingAccountListItem[] {
 
 export default function CopyTradingGroupsSection({
   userId,
-  isPro,
+  isPro: isProProp,
   variant = "settings",
 }: CopyTradingGroupsSectionProps) {
+  const { profile } = useUserProfile()
+  const { isPro: isProFromGate, shouldGateFeature, presentFeature } =
+    useProGate(profile)
+  const isPro = isProProp || isProFromGate
+  const copyTradingEnabled = isPro || !shouldGateFeature(true)
   const [groups, setGroups] = useState<CopyTradingGroup[]>([])
   const [accounts, setAccounts] = useState<TradingAccountListItem[]>([])
   const [loading, setLoading] = useState(Boolean(userId))
@@ -79,7 +86,7 @@ export default function CopyTradingGroupsSection({
         accountRows.map((row) => mapTradingAccountRow(row as Record<string, unknown>))
       )
 
-      if (!isPro) {
+      if (!copyTradingEnabled) {
         setGroups([])
         setLoading(false)
         return
@@ -101,7 +108,7 @@ export default function CopyTradingGroupsSection({
     } finally {
       setLoading(false)
     }
-  }, [userId, isPro])
+  }, [userId, copyTradingEnabled])
 
   useEffect(() => {
     if (!userId) {
@@ -195,7 +202,7 @@ export default function CopyTradingGroupsSection({
             </h3>
             <p className="mt-1 max-w-2xl text-sm text-gray-400">{description}</p>
           </div>
-          {isPro ? (
+          {copyTradingEnabled ? (
             <button
               type="button"
               onClick={openCreate}
@@ -206,9 +213,11 @@ export default function CopyTradingGroupsSection({
           ) : null}
         </div>
 
-        {!isPro ? (
+        {!copyTradingEnabled ? (
           <div className="mt-4">
-            <ProGate isPro={false}>{null}</ProGate>
+            <ProGate isPro={false} feature="copy_trading">
+              {null}
+            </ProGate>
           </div>
         ) : loading ? (
           <p className="mt-4 text-sm text-gray-400">{LOADING_COPY.copyTradingGroups}</p>

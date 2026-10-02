@@ -459,6 +459,19 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         guard let userID = await session.currentUserID else {
             throw AppError.domain(.permission(.notAuthenticated))
         }
+        let profileID = ProfileID(userID.rawValue)
+        let ownerAccounts = try await accounts(for: profileID)
+        let ownerByID = Dictionary(uniqueKeysWithValues: ownerAccounts.map { ($0.id.rawValue, $0) })
+        let orderedAccounts: [TradingAccount] = plan.accounts.compactMap { ownerByID[$0.accountID.rawValue] }
+        guard orderedAccounts.count == plan.accounts.count else {
+            throw AppError.unknown(message: "Copy trading group has no linked accounts.")
+        }
+        if let message = await MainActor.run(body: {
+            TradeEntryEntitlementGate.validateAccountsForNewTrades(orderedAccounts, profileID: profileID)
+        }) {
+            throw AppError.domain(.tradeValidation(.message(message)))
+        }
+
         let pnl = draft.realizedPnL?.amount ?? 0
         let stamps = CopyTradingTradeFanout.rows(
             groupID: plan.groupID,
@@ -466,8 +479,8 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             pnl: pnl
         )
         let accountsByID = Dictionary(uniqueKeysWithValues: plan.accounts.map { ($0.accountID.rawValue, $0) })
-        var saved: [Trade] = []
-        saved.reserveCapacity(stamps.count)
+        var bodies: [TradeDTO.InsertBody] = []
+        bodies.reserveCapacity(stamps.count)
         for stamp in stamps {
             guard let account = accountsByID[stamp.accountID] else { continue }
             var memberDraft = draft
@@ -486,13 +499,25 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             body.source_account_id = stamp.sourceAccountID
             body.copied_account_ids = stamp.copiedAccountIDs
             body.copy_trading_group_id = stamp.groupID
-            let tradeID = try await ImageCropWireInsert.insertTradeRow(supabase: supabase, body: body)
+            bodies.append(body)
+        }
+        guard !bodies.isEmpty else {
+            throw AppError.unknown(message: "Copy trading group has no linked accounts.")
+        }
+
+        let tradeIDs = try await ImageCropWireInsert.insertTradeRows(supabase: supabase, bodies: bodies)
+        var saved: [Trade] = []
+        saved.reserveCapacity(tradeIDs.count)
+        for (index, tradeID) in tradeIDs.enumerated() {
             let trade = try await savedOwnerTrade(id: tradeID)
+            var memberDraft = draft
+            memberDraft.copyTradingPlan = nil
+            memberDraft.mode = .copyTraded
+            if index < stamps.count, let account = accountsByID[stamps[index].accountID] {
+                memberDraft.accountID = account.accountID
+            }
             try await insertPublicPostIfNeeded(draft: memberDraft, trade: trade, userID: userID)
             saved.append(trade)
-        }
-        if saved.isEmpty {
-            throw AppError.unknown(message: "Copy trading group has no linked accounts.")
         }
         return saved
     }

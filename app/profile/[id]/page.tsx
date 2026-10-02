@@ -182,6 +182,8 @@ import {
 } from "@/lib/profileSessionCache"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import { useProGate } from "@/lib/useProGate"
+import { mutationProGateFeedback } from "@/lib/mutationProGateFeedback"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 import {
   PUBLIC_TRADE_SELECT,
@@ -369,6 +371,7 @@ function ProfilePageContent() {
   const [followingCount, setFollowingCount] = useState(0)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const { profile: viewerContextProfile, user: viewerUser } = useUserProfile()
+  const { fromError } = useProGate(viewerContextProfile)
   const viewerShareProfile =
     viewerContextProfile?.referral_code != null
       ? { referral_code: viewerContextProfile.referral_code }
@@ -2343,7 +2346,12 @@ function ProfilePageContent() {
             .single()
 
           if (error) {
-            showPopup(supabaseMutationFeedback(error, "Post Failed"))
+            const feedback = mutationProGateFeedback(
+              fromError,
+              error,
+              "Post Failed"
+            )
+            if (feedback) showPopup(feedback)
             throw new Error(handleSupabaseError(error))
           }
           if (!createdPost) {

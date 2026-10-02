@@ -175,10 +175,20 @@ nonisolated enum ImageCropWireInsert {
         supabase: SupabaseInfrastructure,
         body: TradeDTO.InsertBody
     ) async throws -> String {
+        try await insertTradeRows(supabase: supabase, bodies: [body]).first
+            ?? { throw AppError.unknown(message: "Insert returned empty representation") }()
+    }
+
+    /// One PostgREST request — all rows succeed or none are inserted.
+    static func insertTradeRows(
+        supabase: SupabaseInfrastructure,
+        bodies: [TradeDTO.InsertBody]
+    ) async throws -> [String] {
+        guard !bodies.isEmpty else { return [] }
         do {
-            return try await insertTradeID(supabase: supabase, body: body)
+            return try await insertTradeIDs(supabase: supabase, bodies: bodies)
         } catch {
-            guard body.image_crop != nil,
+            guard bodies.contains(where: { $0.image_crop != nil }),
                   ContentImagePresentationCodec.isMissingImageCropColumnError(error)
             else {
                 PostPublishProbe.logFailed(stage: .databaseInsert, error: error)
@@ -187,25 +197,40 @@ nonisolated enum ImageCropWireInsert {
             PostPublishProbe.logNote(
                 "trades.image_crop column missing — retrying without image_crop. \(migrationHint)"
             )
-            var fallback = body
-            fallback.image_crop = nil
-            return try await insertTradeID(supabase: supabase, body: fallback)
+            let fallback = bodies.map { body -> TradeDTO.InsertBody in
+                var copy = body
+                copy.image_crop = nil
+                return copy
+            }
+            return try await insertTradeIDs(supabase: supabase, bodies: fallback)
         }
     }
 
-    private static func insertTradeID(
+    private static func insertTradeIDs(
         supabase: SupabaseInfrastructure,
-        body: TradeDTO.InsertBody
-    ) async throws -> String {
+        bodies: [TradeDTO.InsertBody]
+    ) async throws -> [String] {
         struct IDRow: Decodable { var id: String }
         PostPublishProbe.logDatabaseInsertStarted(table: "trades", payloadKeys: ["trades"])
-        let row: IDRow = try await supabase.database.insert(
-            body,
-            into: "trades",
-            query: [URLQueryItem(name: "select", value: "id")],
-            returning: IDRow.self
-        )
+        let query = [URLQueryItem(name: "select", value: "id")]
+        let rows: [IDRow]
+        if bodies.count == 1, let body = bodies.first {
+            let row: IDRow = try await supabase.database.insert(
+                body,
+                into: "trades",
+                query: query,
+                returning: IDRow.self
+            )
+            rows = [row]
+        } else {
+            rows = try await supabase.database.insertReturningMany(
+                bodies,
+                into: "trades",
+                query: query,
+                returning: IDRow.self
+            )
+        }
         PostPublishProbe.logDatabaseInsertSucceeded(table: "trades")
-        return row.id
+        return rows.map(\.id)
     }
 }

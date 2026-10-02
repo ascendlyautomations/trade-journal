@@ -8,6 +8,7 @@ import { createPortal } from "react-dom"
 import { useSearchParams } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { isProActive } from "../../lib/subscription"
+import { useProGate } from "@/lib/useProGate"
 import { formatEST } from "@/lib/formatEST"
 import { formatRR } from "@/lib/formatDisplay"
 import {
@@ -502,6 +503,8 @@ export default function AnalystPage() {
 
 function AnalystPageContent() {
   const { user, profile, loading: profileLoading } = useUserProfile()
+  const { shouldGateFeature, presentFeature } = useProGate(profile)
+  const canUseAnalyst = isProActive(profile) || !shouldGateFeature(true)
   const { trades, loading: tradesLoading } = useCachedTrades(user?.id, {
     fullHistory: true,
   })
@@ -555,7 +558,7 @@ function AnalystPageContent() {
 
   const selectTradeForReview = useCallback(
     (trade: any) => {
-      if (!isProActive(profile)) return
+      if (!canUseAnalyst) return
 
       setSelectedTrade(trade)
       setInput("")
@@ -599,7 +602,7 @@ function AnalystPageContent() {
   }, [pageReady, trades, searchParams, selectedTrade?.id, selectTradeForReview])
 
   async function runTradeAnalysis() {
-    if (!selectedTrade || !isProActive(profile)) return
+    if (!selectedTrade || !canUseAnalyst) return
     if (selectedTrade.ai_feedback) return
     if (analysisRunningRef.current || analysisInProgress || loading) return
     if (isDemoModeActive()) {
@@ -673,7 +676,10 @@ function AnalystPageContent() {
 
   async function sendMessage() {
     if (!input.trim() || !selectedTrade) return
-    if (!isProActive(profile)) return
+    if (shouldGateFeature(true) && !isProActive(profile)) {
+      presentFeature("ai_analyst")
+      return
+    }
     if (isDemoModeActive()) {
       requestDemoSignup("ai")
       return
@@ -734,7 +740,7 @@ function AnalystPageContent() {
     setLoading(false)
   }
 
-  const pro = isProActive(profile)
+  const pro = canUseAnalyst
 
   const panelProps = {
     selectedTrade,
@@ -770,7 +776,11 @@ function AnalystPageContent() {
             <SkeletonAnalystPanel count={4} />
           ) : !pro ? (
             <div className="mx-auto w-full max-w-lg">
-              <LockedFeature title="AI Analyst" />
+              <LockedFeature
+                title="AI Analyst"
+                feature="ai_analyst"
+                onUpgradeClick={() => presentFeature("ai_analyst")}
+              />
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">

@@ -53,6 +53,7 @@ import {
   markProfileCsvImportUsed,
 } from "@/lib/csvImportGate"
 import { isProActive } from "@/lib/subscription"
+import { useProGate } from "@/lib/useProGate"
 
 export type CsvImportPanelProps = {
   /** Smaller preview + less chrome (e.g. onboarding modal) */
@@ -95,6 +96,7 @@ export default function CsvImportPanel({
 }: CsvImportPanelProps) {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const { user, profile } = useUserProfile()
+  const { presentLimit, fromError } = useProGate(profile)
   const { runUpload } = useUploadProgress()
   const [parsed, setParsed] = useState<CsvRow[]>([])
   const [loading, setLoading] = useState(false)
@@ -137,6 +139,12 @@ export default function CsvImportPanel({
   }, [user?.id])
 
   function showCsvSubscriptionLimit(daysUntilNextImport?: number) {
+    if (
+      presentLimit("csv_import_cooldown") ||
+      fromError({ message: "FREE_PLAN_CSV_COOLDOWN" })
+    ) {
+      return
+    }
     showPopup(
       feedbackPresets.csvSubscriptionLimit(
         daysUntilNextImport ?? csvDaysUntilNextImport ?? undefined
@@ -499,7 +507,9 @@ export default function CsvImportPanel({
 
           if (error) {
             console.error("INSERT ERROR:", error)
-            showPopup(supabaseMutationFeedback(error, "Import Failed"))
+            if (!fromError(error)) {
+              showPopup(supabaseMutationFeedback(error, "Import Failed"))
+            }
             throw new Error(handleSupabaseError(error))
           }
 

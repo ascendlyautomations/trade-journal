@@ -230,6 +230,14 @@ final class PushNotificationExperienceTests: XCTestCase {
             rawUserInfo: ["type": "like"]
         )
         XCTAssertEqual(PushNotificationPresentationPolicy.priority(for: like), .silent)
+        let likeOptions = PushNotificationPresentationPolicy.foregroundOptions(
+            for: like,
+            bannersEnabled: true,
+            apnsSound: .default
+        )
+        XCTAssertFalse(likeOptions.contains(.sound))
+        XCTAssertFalse(likeOptions.contains(.banner))
+
         let mention = NotificationDestination(
             category: .roomMention,
             threadID: "m1",
@@ -243,6 +251,36 @@ final class PushNotificationExperienceTests: XCTestCase {
             rawUserInfo: ["type": "room_mention"]
         )
         XCTAssertEqual(PushNotificationPresentationPolicy.priority(for: mention), .high)
+        let mentionOptions = PushNotificationPresentationPolicy.foregroundOptions(
+            for: mention,
+            bannersEnabled: true,
+            apnsSound: .default
+        )
+        XCTAssertTrue(mentionOptions.contains(.sound))
+        XCTAssertTrue(mentionOptions.contains(.banner))
+    }
+
+    func testForegroundPolicyNormalPriorityPlaysSoundWhenApnsIncludesSound() {
+        let follow = NotificationDestination(
+            category: .activity,
+            threadID: nil,
+            tradeID: nil,
+            postID: nil,
+            reelID: nil,
+            profileID: ProfileID("actor-1"),
+            conversationID: nil,
+            roomID: nil,
+            reportID: nil,
+            rawUserInfo: ["type": "follow"]
+        )
+        XCTAssertEqual(PushNotificationPresentationPolicy.priority(for: follow), .normal)
+        let options = PushNotificationPresentationPolicy.foregroundOptions(
+            for: follow,
+            bannersEnabled: true,
+            apnsSound: .default
+        )
+        XCTAssertTrue(options.contains(.banner))
+        XCTAssertTrue(options.contains(.sound))
     }
 
     // MARK: - Helpers

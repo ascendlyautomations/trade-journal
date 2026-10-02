@@ -162,6 +162,11 @@ nonisolated enum TradingAccountDisplay {
         )
     }
 
+    /// Picker row. `canAddTrades` does not change the label.
+    static func ownerPickerLine(for account: TradingAccount) -> String {
+        ownerDropdownLine(for: account)
+    }
+
     static func ownerDropdownLine(
         name: String?,
         mode: TradingAccountMode,

@@ -13,6 +13,7 @@ import {
 } from "@/app/components/feed/feedPostHelpers"
 import {
   ACTIVE_STORIES_SELECT,
+  activeStoryCreatedAfterISO,
   filterActiveStories,
   type ActiveStoryRow,
 } from "@/lib/activeStories"
@@ -337,6 +338,7 @@ export class FeedRestBootstrapRepository implements FeedBootstrapProviding {
         .from("stories")
         .select(ACTIVE_STORIES_SELECT)
         .in("user_id", storyUserIds)
+        .gt("created_at", activeStoryCreatedAfterISO())
         .order("created_at", { ascending: false })
       const active = filterActiveStories((storyRows ?? []) as ActiveStoryRow[])
       stories = active.map((s) => ({

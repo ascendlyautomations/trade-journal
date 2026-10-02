@@ -14,8 +14,8 @@ import {
   FREE_PLAN_ACCOUNT_LIMIT,
 } from "@/lib/tradingAccounts"
 import {
-  ACCOUNT_READ_ONLY_BADGE,
   countTradeEntryEnabledAccounts,
+  filterAccountsForDropdown,
   filterAccountsForTradeEntry,
 } from "@/lib/freePlanAccountSlots"
 import {
@@ -35,6 +35,7 @@ import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { assertRequiredAccountValue } from "@/lib/createAccountForm"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { supabaseMutationFeedback } from "@/lib/supabaseMutationFeedback"
+import { useProGate } from "@/lib/useProGate"
 import { getSessionFromDate } from "@/lib/getSession"
 import {
   buildDateTime,
@@ -208,6 +209,13 @@ export default function InputTradeForm({
   const { isNativeIos } = usePlatformPresentation()
   const { user, profile: contextProfile } = useUserProfile()
   const userId = user?.id ?? null
+  const { fromError, presentLimit, enforceFreeLimits } =
+    useProGate(contextProfile)
+
+  function showMutationLimitOrError(error: unknown, title: string) {
+    if (fromError(error)) return
+    showPopup(supabaseMutationFeedback(error, title))
+  }
   const isEditMode = Boolean(existingTrade?.id)
   const showAsModal = isEditMode && Boolean(onClose)
 
@@ -431,6 +439,7 @@ export default function InputTradeForm({
         category: acc.category,
         is_active: acc.is_active !== false,
         can_add_trades: acc.can_add_trades !== false,
+        show_in_account_dropdowns: acc.show_in_account_dropdowns !== false,
         note: acc.note ?? "",
       }))
       setAccounts(formatted)
@@ -477,9 +486,7 @@ export default function InputTradeForm({
 
     if (error) {
       console.error(error)
-      showPopup(
-        supabaseMutationFeedback(error, "Save Failed")
-      )
+      showMutationLimitOrError(error, "Save Failed")
       return false
     }
     return true
@@ -554,7 +561,7 @@ export default function InputTradeForm({
   ])
 
   const pickerAccounts = useMemo(() => {
-    const list = [...activeAccounts]
+    const list = [...filterAccountsForDropdown(activeAccounts)]
     if (!selectedAccount?.id) return list
     const selectedId = String(selectedAccount.id)
     if (list.some((a) => String(a.id) === selectedId)) return list
@@ -1358,9 +1365,7 @@ export default function InputTradeForm({
 
       if (error) {
         console.error("UPDATE ERROR:", error)
-        showPopup(
-        supabaseMutationFeedback(error, "Save Failed")
-      )
+        showMutationLimitOrError(error, "Save Failed")
         throw new Error(handleSupabaseError(error))
       }
 
@@ -1384,9 +1389,7 @@ export default function InputTradeForm({
         )
         if (postErr) {
           console.error("posts upsert:", postErr)
-          showPopup(
-            supabaseMutationFeedback(postErr, "Post Failed")
-          )
+          showMutationLimitOrError(postErr, "Post Failed")
           throw new Error(handleSupabaseError(postErr))
         }
       } else {
@@ -1515,9 +1518,7 @@ export default function InputTradeForm({
 
     if (error) {
       console.error("Trade insert error:", error)
-      showPopup(
-        supabaseMutationFeedback(error, "Save Failed")
-      )
+      showMutationLimitOrError(error, "Save Failed")
       throw new Error(handleSupabaseError(error))
     }
 
@@ -1547,9 +1548,7 @@ export default function InputTradeForm({
       ])
       if (postError) {
         console.error("Post insert error:", postError)
-        showPopup(
-          supabaseMutationFeedback(postError, "Post Failed")
-        )
+        showMutationLimitOrError(postError, "Post Failed")
         throw new Error(handleSupabaseError(postError))
       }
 
@@ -1702,7 +1701,11 @@ export default function InputTradeForm({
   function handleUploadCsvGuardClick() {
     if (!onUploadCsvClick) return
     if (csvImportBlocked) {
-      showPopup(feedbackPresets.csvSubscriptionLimit(csvDaysUntilNextImport ?? undefined))
+      if (!presentLimit("csv_import_cooldown")) {
+        showPopup(
+          feedbackPresets.csvSubscriptionLimit(csvDaysUntilNextImport ?? undefined)
+        )
+      }
       return
     }
     // Mobile Safari requires file input activation in the same user gesture — no await before click().
@@ -1739,9 +1742,14 @@ export default function InputTradeForm({
       if (!csvGate.ok) {
         setCsvImportBlocked(true)
         setCsvDaysUntilNextImport(csvGate.daysUntilNextImport)
-        showPopup(
-          feedbackPresets.csvSubscriptionLimit(csvGate.daysUntilNextImport)
-        )
+        if (
+          enforceFreeLimits &&
+          !presentLimit("csv_import_cooldown")
+        ) {
+          showPopup(
+            feedbackPresets.csvSubscriptionLimit(csvGate.daysUntilNextImport)
+          )
+        }
         return
       }
 
@@ -1760,7 +1768,9 @@ export default function InputTradeForm({
 
       if (error) {
         console.error(error)
-        showPopup(feedbackPresets.importFailed(handleSupabaseError(error)))
+        if (!fromError(error)) {
+          showPopup(feedbackPresets.importFailed(handleSupabaseError(error)))
+        }
         return
       }
 
@@ -1782,7 +1792,7 @@ export default function InputTradeForm({
       invalidateTradesCache(userId)
     } catch (err) {
       console.error(err)
-      showPopup(supabaseMutationFeedback(err, "Import Failed"))
+      showMutationLimitOrError(err, "Import Failed")
     } finally {
       csvImportingRef.current = false
       setCsvImporting(false)
@@ -1802,9 +1812,7 @@ export default function InputTradeForm({
 
     if (error) {
       console.error(error)
-      showPopup(
-        supabaseMutationFeedback(error, "Save Failed")
-      )
+      showMutationLimitOrError(error, "Save Failed")
       setTogglingAccountId(null)
       return
     }
@@ -1876,9 +1884,7 @@ export default function InputTradeForm({
 
     if (error) {
       console.error(error)
-      showPopup(
-        supabaseMutationFeedback(error, "Save Failed")
-      )
+      showMutationLimitOrError(error, "Save Failed")
       return
     }
 
@@ -2944,8 +2950,7 @@ export default function InputTradeForm({
           <p className="text-sm font-medium text-white">Accounts</p>
           <p className="text-xs text-gray-400">
             Inactive accounts stay linked to trades but are hidden from the
-            account picker. Read-only accounts keep full history and cannot
-            receive new trades on Free.
+            account picker.
           </p>
           {accounts.length === 0 ? (
             <p className="text-sm text-gray-400">No accounts yet.</p>
@@ -2971,11 +2976,6 @@ export default function InputTradeForm({
                         <span className="mt-0.5 block truncate text-xs text-gray-400">
                           · ID: {accountIdLabel}
                         </span>
-                        {account.can_add_trades === false ? (
-                          <span className="mt-1 inline-flex rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-200">
-                            {ACCOUNT_READ_ONLY_BADGE}
-                          </span>
-                        ) : null}
                         {account.note?.trim() ? (
                           <p className="mt-1 truncate text-xs text-gray-400">
                             {account.note.trim()}

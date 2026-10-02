@@ -1,6 +1,7 @@
 import Foundation
 
-/// Calls the existing BFF `POST /api/delete-account` pipeline (same as web Settings).
+/// Calls the existing BFF account routes used by web Settings:
+/// `POST /api/delete-account` and `GET /api/export-data`.
 nonisolated struct DefaultAccountRepository: AccountRepository {
     private let supabase: SupabaseInfrastructure
 
@@ -58,6 +59,28 @@ nonisolated struct DefaultAccountRepository: AccountRepository {
             AccountDeletionDebugLog.failed(reason: resolved)
 #endif
             throw AccountDeletionError.serverMessage(resolved)
+        }
+    }
+
+    func exportAuthenticatedAccountData() async throws -> Data {
+        guard let transport = supabase.transport else {
+            throw AppError.unknown(message: "Network transport unavailable")
+        }
+
+        let response = try await transport.send(
+            host: .bff,
+            path: "/api/export-data",
+            method: .get,
+            requiresAuthentication: true
+        )
+
+        switch response.statusCode {
+        case 200 ... 299:
+            return response.data
+        case 401:
+            throw AccountDataExportError.notAuthenticated
+        default:
+            throw AccountDataExportError.failed
         }
     }
 }

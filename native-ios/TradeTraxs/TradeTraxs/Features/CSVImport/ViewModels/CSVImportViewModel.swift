@@ -258,7 +258,11 @@ final class CSVImportViewModel {
                 #if DEBUG
                 print("[CSV_IMPORT] failed stage=persistence error=\(UserFacingError.message(for: error))")
                 #endif
-                phase = .failed(UserFacingError.message(for: error))
+                if ProLimitPresentation.presentUpgradeIfProGate(error) {
+                    phase = .chooseFile
+                } else {
+                    phase = .failed(UserFacingError.message(for: error))
+                }
             }
             isImporting = false
         }

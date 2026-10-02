@@ -258,6 +258,7 @@ struct DashboardHomeView: View {
                             title: viewModel.equityHeroTitle,
                             displayEquity: viewModel.equityHeroDisplayValue,
                             chartPoints: viewModel.equityHeroChartPoints,
+                            isChartLoading: viewModel.isEquityChartOverlayLoading,
                             withdrawalSummary: accountValueWithdrawalSummary,
                             onWithdrawalSummaryTap: viewModel.openWithdrawalsHistory
                         )

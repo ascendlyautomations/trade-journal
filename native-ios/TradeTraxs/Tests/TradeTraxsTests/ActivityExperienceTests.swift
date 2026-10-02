@@ -35,6 +35,26 @@ final class ActivityExperienceTests: XCTestCase {
         XCTAssertEqual(ActivityNotificationKind.parse("followRequest"), .followRequest)
         XCTAssertEqual(ActivityNotificationKind.parse("room_mention"), .roomMention)
         XCTAssertEqual(ActivityNotificationKind.parse("trading_report"), .tradingReport)
+        XCTAssertEqual(ActivityNotificationKind.parse("announcement"), .system)
+        XCTAssertEqual(ActivityNotificationKind.parse("product_update"), .system)
+    }
+
+    func testTradeTraxsBrandAvatarPolicy() {
+        XCTAssertTrue(ActivityNotificationKind.tradingReport.usesTradeTraxsBrandAvatar)
+        XCTAssertTrue(ActivityNotificationKind.system.usesTradeTraxsBrandAvatar)
+        XCTAssertTrue(ActivityNotificationKind.affiliateReferral.usesTradeTraxsBrandAvatar)
+        XCTAssertFalse(ActivityNotificationKind.like.usesTradeTraxsBrandAvatar)
+        XCTAssertFalse(ActivityNotificationKind.comment.usesTradeTraxsBrandAvatar)
+        XCTAssertFalse(ActivityNotificationKind.follow.usesTradeTraxsBrandAvatar)
+    }
+
+    func testMonthlyTradingReportActivityRowUsesTradeTraxsBrandAvatar() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let report = ActivityFixtures.notifications(now: now).first { $0.kind == .tradingReport }
+        XCTAssertNotNil(report)
+        let sections = ActivityPresentation.sections(from: [report!], actors: [:], now: now)
+        let row = sections.flatMap(\.rows).first
+        XCTAssertEqual(row?.usesTradeTraxsBrandAvatar, true)
     }
 
     func testDisplayFormattingForCoreTypes() {

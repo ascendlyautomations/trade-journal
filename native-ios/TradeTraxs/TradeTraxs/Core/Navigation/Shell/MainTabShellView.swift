@@ -44,6 +44,7 @@ struct MainTabShellView: View {
             }
         }
         .globalUploadQueueSheet(coordinator: globalUploadCoordinator)
+        .proUpgradeSheet()
         .sheet(isPresented: Binding(
             get: { postTradeReflectionGate.pendingTrade != nil },
             set: { isPresented in

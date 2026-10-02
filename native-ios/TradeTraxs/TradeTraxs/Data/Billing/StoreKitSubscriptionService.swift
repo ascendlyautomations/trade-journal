@@ -40,6 +40,7 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
     private let syncClient: any AppleSubscriptionSyncClienting
     private var updatesTask: Task<Void, Never>?
     private var listenerStarted = false
+    private var inFlightSync: [String: Task<Void, Error>] = [:]
 
     init(syncClient: any AppleSubscriptionSyncClienting) {
         self.syncClient = syncClient
@@ -53,9 +54,9 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
         guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else { return }
         guard !listenerStarted else { return }
         listenerStarted = true
-        updatesTask = Task { [syncClient] in
+        updatesTask = Task {
             for await update in Transaction.updates {
-                await self.handle(update, syncClient: syncClient)
+                await self.handle(update)
             }
         }
     }
@@ -108,7 +109,10 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
                 switch verification {
                 case .verified(let transaction):
                     do {
-                        try await syncVerifiedTransaction(transaction)
+                        try await syncVerifiedTransaction(
+                            transaction,
+                            signedTransactionInfo: verification.jwsRepresentation
+                        )
                         await transaction.finish()
                         return .success
                     } catch {
@@ -138,7 +142,10 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
         var syncedAny = false
         for await entitlement in Transaction.currentEntitlements {
             let transaction = try Self.checkVerified(entitlement)
-            try await syncVerifiedTransaction(transaction)
+            try await syncVerifiedTransaction(
+                transaction,
+                signedTransactionInfo: entitlement.jwsRepresentation
+            )
             syncedAny = true
         }
         return syncedAny
@@ -157,7 +164,10 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
         var syncedAny = false
         for await entitlement in Transaction.currentEntitlements {
             let transaction = try Self.checkVerified(entitlement)
-            try await syncVerifiedTransaction(transaction)
+            try await syncVerifiedTransaction(
+                transaction,
+                signedTransactionInfo: entitlement.jwsRepresentation
+            )
             syncedAny = true
         }
         if !syncedAny {
@@ -165,22 +175,48 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
         }
     }
 
-    private func syncVerifiedTransaction(_ transaction: Transaction) async throws {
+    private func syncVerifiedTransaction(
+        _ transaction: Transaction,
+        signedTransactionInfo: String
+    ) async throws {
         let transactionID = String(transaction.id)
         guard !transactionID.isEmpty else {
             throw AppError.unknown(message: "Missing transaction id")
         }
-        _ = try await syncClient.sync(transactionID: transactionID)
+        let signedTransaction = signedTransactionInfo.trimmingCharacters(in: .whitespacesAndNewlines)
+        logStoreKitSyncAttempt(
+            transactionID: transactionID,
+            productID: transaction.productID,
+            environment: transaction.environment,
+            signedJWSBytes: signedTransaction.utf8.count
+        )
+        if let blockMessage = Self.serverSyncBlockMessage(for: transaction.environment) {
+            throw AppError.unknown(message: blockMessage)
+        }
+        if let existing = inFlightSync[transactionID] {
+            try await existing.value
+            return
+        }
+        let syncClient = self.syncClient
+        let task = Task {
+            _ = try await syncClient.sync(
+                transactionID: transactionID,
+                signedTransactionInfo: signedTransaction
+            )
+        }
+        inFlightSync[transactionID] = task
+        defer { inFlightSync[transactionID] = nil }
+        try await task.value
     }
 
     /// Offer-code redemptions and purchases both arrive on ``Transaction.updates``; sync then finish only after server verification.
-    private func handle(
-        _ update: VerificationResult<Transaction>,
-        syncClient: any AppleSubscriptionSyncClienting
-    ) async {
+    private func handle(_ update: VerificationResult<Transaction>) async {
         do {
             let transaction = try Self.checkVerified(update)
-            _ = try await syncClient.sync(transactionID: String(transaction.id))
+            try await syncVerifiedTransaction(
+                transaction,
+                signedTransactionInfo: update.jwsRepresentation
+            )
             await transaction.finish()
         } catch {
             AppLog.application.error(
@@ -271,6 +307,36 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
             return period.value == 1 ? "Yearly" : "\(period.value) years"
         @unknown default:
             return "Subscription"
+        }
+    }
+
+    private func logStoreKitSyncAttempt(
+        transactionID: String,
+        productID: String,
+        environment: AppStore.Environment,
+        signedJWSBytes: Int
+    ) {
+        AppLog.application.info(
+            """
+            StoreKit server sync attempt \
+            id=\(transactionID, privacy: .public) \
+            product=\(productID, privacy: .public) \
+            environment=\(String(describing: environment), privacy: .public) \
+            signedJWSBytes=\(signedJWSBytes, privacy: .public)
+            """
+        )
+    }
+
+    /// Xcode StoreKit Configuration purchases are not Apple-signed for production verification.
+    nonisolated private static func serverSyncBlockMessage(for environment: AppStore.Environment) -> String? {
+        switch environment {
+        case .xcode:
+            return """
+            This purchase came from Xcode StoreKit Testing, which cannot unlock TraxPro on the server. \
+            Remove the StoreKit Configuration from your Run scheme (or disable StoreKit Testing) and purchase with a Sandbox Apple ID on device, or use TestFlight.
+            """
+        default:
+            return nil
         }
     }
 

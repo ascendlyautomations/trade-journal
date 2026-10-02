@@ -31,7 +31,7 @@ import {
   resolveCopyGroupAccountIdsForFilter,
 } from "@/lib/tradeAccountSelection"
 import { tradeAnalysisHref } from "@/lib/tradeAnalysisNavigation"
-import ProUpgradeModal from "../../components/ProUpgradeModal"
+import { useProGate } from "@/lib/useProGate"
 import PlatformTradesHeader from "@/app/components/platform/PlatformTradesHeader"
 import BrokerEnrichmentInboxBanner from "@/app/components/BrokerEnrichmentInboxBanner"
 import {
@@ -70,6 +70,9 @@ export default function TradesPage() {
     (accountsLoading && accountRows.length === 0 && !accountsHasCachedData)
 
   const isPro = isProActive(gateProfile)
+  const { shouldGateFeature, presentFeature, isPro: gateIsPro } =
+    useProGate(gateProfile)
+  const proFeatureUnlocked = gateIsPro || !shouldGateFeature(true)
 
   const [resultFilter, setResultFilter] = useState<"all" | "wins" | "losses">("all")
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
@@ -80,7 +83,7 @@ export default function TradesPage() {
   }, [])
   const { copyGroups } = useCopyTradingGroups(
     user?.id,
-    isPro &&
+    proFeatureUnlocked &&
       (copyGroupsRequested || isCopyGroupFilterValue(accountFilter))
   )
   const [accountTypeFilter, setAccountTypeFilter] = useState("all")
@@ -93,7 +96,6 @@ export default function TradesPage() {
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
   const [showQuickTrade, setShowQuickTrade] = useState(false)
-  const [showExportUpgradeModal, setShowExportUpgradeModal] = useState(false)
   const [sendTradeId, setSendTradeId] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(10)
   const [sortBy, setSortBy] = useState<TradesSortKey>("newest")
@@ -231,12 +233,9 @@ export default function TradesPage() {
       requestDemoSignup("upload")
       return
     }
-    if (!isProActive(gateProfile)) {
-      setShowExportUpgradeModal(true)
-      return
-    }
+    if (presentFeature("performance_exports")) return
     setShowPerformanceShare(true)
-  }, [gateProfile])
+  }, [presentFeature])
 
   const handleToggleAdvanced = useCallback(() => {
     setShowAdvanced((prev) => !prev)
@@ -517,11 +516,6 @@ export default function TradesPage() {
       />
 
       <ConfirmModal {...confirmModalProps} />
-      <ProUpgradeModal
-        open={showExportUpgradeModal}
-        onClose={() => setShowExportUpgradeModal(false)}
-        variant="custom"
-      />
       <QuickTradeModal
         open={showQuickTrade}
         userId={user?.id ?? null}

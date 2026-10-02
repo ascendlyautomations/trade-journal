@@ -3,6 +3,11 @@ import Observation
 import StoreKit
 import UIKit
 
+struct AccountDataExportShareItem: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
 @Observable
 @MainActor
 final class SettingsAccountViewModel {
@@ -20,8 +25,11 @@ final class SettingsAccountViewModel {
     private(set) var billingStatus: BillingStatus?
     private(set) var isLoading = false
     private(set) var isDeletingAccount = false
+    private(set) var isExportingAccountData = false
     private(set) var errorMessage: String?
     private(set) var deleteErrorMessage: String?
+    private(set) var exportErrorMessage: String?
+    var exportShareItem: AccountDataExportShareItem?
     private(set) var passwordResetMessage: String?
     var confirmsLogout = false
     var showsDeleteAccountExplainer = false
@@ -216,6 +224,43 @@ final class SettingsAccountViewModel {
 
     func clearDeleteError() {
         deleteErrorMessage = nil
+    }
+
+    func clearExportError() {
+        exportErrorMessage = nil
+    }
+
+    func downloadAccountData() {
+        guard !isExportingAccountData, !isDeletingAccount else { return }
+        exportErrorMessage = nil
+        isExportingAccountData = true
+        Task {
+            defer { isExportingAccountData = false }
+            do {
+                let csv = try await account.exportAuthenticatedAccountData()
+                exportShareItem = AccountDataExportShareItem(url: try Self.writeAccountDataExport(csv))
+                ExperienceHaptics.play(.success)
+            } catch AccountDataExportError.notAuthenticated {
+                exportErrorMessage = "Your session expired. Sign in again and retry."
+                ExperienceHaptics.play(.error)
+            } catch {
+                exportErrorMessage = "Failed to export data."
+                ExperienceHaptics.play(.error)
+            }
+        }
+    }
+
+    func clearExportShare() {
+        exportShareItem = nil
+    }
+
+    private static func writeAccountDataExport(_ csv: Data) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AccountDataExport", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fileURL = directory.appendingPathComponent(AccountDataExport.filename)
+        try csv.write(to: fileURL, options: .atomic)
+        return fileURL
     }
 
     func confirmDeleteAccount() {

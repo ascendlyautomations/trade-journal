@@ -276,7 +276,8 @@ extension PushNotificationCenter: UNUserNotificationCenterDelegate {
             let destination = PushNotificationPayloadParser.parse(userInfo: userInfoBox.userInfo)
             let options = PushNotificationPresentationPolicy.foregroundOptions(
                 for: destination,
-                bannersEnabled: foregroundBannersEnabled
+                bannersEnabled: foregroundBannersEnabled,
+                apnsSound: notification.request.content.sound
             )
             completionHandler(options)
         }

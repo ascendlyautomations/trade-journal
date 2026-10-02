@@ -133,7 +133,7 @@ export type UserProfileSlice = {
   has_email_password: boolean | null
 }
 
-function pickUserProfileFields(row: unknown): UserProfileSlice | null {
+export function pickUserProfileFields(row: unknown): UserProfileSlice | null {
   if (!row || typeof row !== "object") return null
   const o = row as Record<string, unknown>
   const id = o.id

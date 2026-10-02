@@ -246,6 +246,7 @@ final class FeedExperienceTests: XCTestCase {
 
     func testStoryViewerOwnerDetection() async throws {
         let cache = DetailPresentationCache()
+        FeedStoriesCatalogStore.shared.invalidate()
         let stories = FeedFixtures.stories(viewerID: FeedFixtures.viewerID)
         cache.seed(stories: stories)
 
@@ -643,6 +644,144 @@ final class FeedExperienceTests: XCTestCase {
             navigationCoordinator: NavigationCoordinator(store: NavigationStore())
         )
         XCTAssertTrue(type(of: screen) == FeedScreenViewModel.self)
+    }
+
+    func testDeleteOnlyStoryDismissesViewer() async {
+        let me = ProfileID("dev.story-owner")
+        let only = storySlide(id: "only", author: me, age: -60)
+        var dismissed = false
+        let viewer = seededViewer(stories: [only], open: only.id, viewer: me) {
+            dismissed = true
+        }
+        await viewer.loadIfNeeded()
+        XCTAssertEqual(viewer.phase, .loaded)
+        let deleted = await viewer.deleteStory()
+        XCTAssertTrue(deleted)
+        XCTAssertTrue(dismissed)
+    }
+
+    func testDeleteFirstOfMultipleStoriesShowsNext() async {
+        let me = ProfileID("dev.story-owner")
+        let first = storySlide(id: "first", author: me, age: -180)
+        let second = storySlide(id: "second", author: me, age: -60)
+        var dismissed = false
+        let viewer = seededViewer(stories: [first, second], open: first.id, viewer: me) {
+            dismissed = true
+        }
+        await viewer.loadIfNeeded()
+        XCTAssertEqual(viewer.story?.id, first.id)
+        let deleted = await viewer.deleteStory()
+        XCTAssertTrue(deleted)
+        XCTAssertFalse(dismissed)
+        XCTAssertEqual(viewer.phase, .loaded)
+        XCTAssertEqual(viewer.story?.id, second.id)
+    }
+
+    func testDeleteLastStoryForAuthorAdvancesToNextAuthor() async {
+        let me = ProfileID("dev.story-owner")
+        let other = ProfileID("dev.story-next")
+        let mine = storySlide(id: "mine", author: me, age: -60)
+        let theirs = storySlide(id: "theirs", author: other, age: -120)
+        var dismissed = false
+        let viewer = seededViewer(stories: [mine, theirs], open: mine.id, viewer: me) {
+            dismissed = true
+        }
+        await viewer.loadIfNeeded()
+        let deleted = await viewer.deleteStory()
+        XCTAssertTrue(deleted)
+        XCTAssertFalse(dismissed)
+        XCTAssertEqual(viewer.story?.id, theirs.id)
+    }
+
+    func testDeleteFromAnotherDeviceDismissesWhenNothingFollows() async {
+        let me = ProfileID("user.real-story")
+        let only = storySlide(id: "remote", author: me, age: -60)
+        var dismissed = false
+        let viewer = seededViewer(stories: [only], open: only.id, viewer: me) {
+            dismissed = true
+        }
+        await viewer.loadIfNeeded()
+        XCTAssertEqual(viewer.phase, .loaded)
+        await viewer.revalidateVisibleStory()
+        XCTAssertTrue(dismissed)
+    }
+
+    func testStoryExpirationWhileViewingDismissesOrAdvances() async {
+        let me = ProfileID("dev.story-owner")
+        let other = ProfileID("dev.story-next")
+        let mine = storySlide(id: "aging", author: me, age: -60)
+        let theirs = storySlide(id: "still", author: other, age: -30)
+        var dismissed = false
+        let viewer = seededViewer(stories: [mine, theirs], open: mine.id, viewer: me) {
+            dismissed = true
+        }
+        await viewer.loadIfNeeded()
+        let expiry = mine.createdAt.addingTimeInterval(ActiveStorySemantics.window)
+        await viewer.absorbExpiredStories(now: expiry)
+        XCTAssertFalse(dismissed)
+        XCTAssertEqual(viewer.story?.id, theirs.id)
+
+        await viewer.absorbExpiredStories(now: theirs.createdAt.addingTimeInterval(ActiveStorySemantics.window))
+        XCTAssertTrue(dismissed)
+    }
+
+    func testExpiredStoryCannotBeReopened() async {
+        let me = ProfileID("dev.story-owner")
+        let expired = storySlide(id: "old", author: me, age: -(25 * 60 * 60))
+        var dismissed = false
+        let viewer = seededViewer(stories: [expired], open: expired.id, viewer: me) {
+            dismissed = true
+        }
+        await viewer.loadIfNeeded()
+        XCTAssertTrue(dismissed)
+        XCTAssertNotEqual(viewer.phase, .loaded)
+    }
+
+    func testContentMutationRemovesStoryAndAdvances() async {
+        let me = ProfileID("dev.story-owner")
+        let first = storySlide(id: "keep-watch", author: me, age: -180)
+        let second = storySlide(id: "after", author: me, age: -60)
+        var dismissed = false
+        let viewer = seededViewer(stories: [first, second], open: first.id, viewer: me) {
+            dismissed = true
+        }
+        await viewer.loadIfNeeded()
+        ContentMutationStore.shared.noteStoryDeleted(first.id)
+        await viewer.absorbRemovedStory(first.id)
+        XCTAssertFalse(dismissed)
+        XCTAssertEqual(viewer.story?.id, second.id)
+    }
+
+    private func storySlide(id: String, author: ProfileID, age: TimeInterval) -> Story {
+        let created = Date().addingTimeInterval(age)
+        return Story(
+            id: StoryID(id),
+            authorProfileID: author,
+            media: MediaReference(id: "media-\(id)", kind: .image, altText: nil),
+            expiresAt: created.addingTimeInterval(ActiveStorySemantics.window),
+            createdAt: created,
+            viewerHasSeen: false
+        )
+    }
+
+    private func seededViewer(
+        stories: [Story],
+        open storyID: StoryID,
+        viewer: ProfileID,
+        onDismiss: @escaping () -> Void
+    ) -> FeedStoryViewerViewModel {
+        FeedStoriesCatalogStore.shared.invalidate()
+        ContentMutationStore.shared.invalidate()
+        FeedStoriesCatalogStore.shared.replace(catalog: stories, viewerID: viewer, isFullCatalog: true)
+        return FeedStoryViewerViewModel(
+            storyID: storyID,
+            feed: FeedStubFeedRepository(),
+            messages: FeedStubMessageRepository(),
+            session: FeedStubSession(userID: viewer.rawValue),
+            cache: DetailPresentationCache(),
+            objectStorage: FeedStubObjectStorage(),
+            onDismiss: onDismiss
+        )
     }
 
     private func waitFor(

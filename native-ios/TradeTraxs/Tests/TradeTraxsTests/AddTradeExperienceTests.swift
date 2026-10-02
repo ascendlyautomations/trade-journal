@@ -7,6 +7,7 @@ final class AddTradeExperienceTests: XCTestCase {
         GlobalUploadCoordinator.shared.resetForTesting()
         TradeJournalMutationStore.shared.invalidate()
         ContentMutationStore.shared.invalidate()
+        AddTradeViewModel.resetSessionDefaultsForTesting()
         super.tearDown()
     }
 
@@ -104,7 +105,99 @@ final class AddTradeExperienceTests: XCTestCase {
         XCTAssertEqual(TradeJournalMutationStore.shared.revision, 1)
     }
 
-    func testReadOnlyAccountCannotBeSelected() async throws {
+    func testHistoricalCanAddTradesFalseAccountCanBeSelected() async throws {
+        let cache = DetailPresentationCache()
+        var dismissed = false
+        let viewModel = AddTradeViewModel(
+            trades: AddTradeStubRepository(),
+            feed: AddTradeStubFeedRepository(),
+            session: AddTradeStubSession(userID: AddTradeFixtures.viewerID.rawValue),
+            detailCache: cache,
+            uploadService: AddTradeStubUpload(),
+            objectStorage: AddTradeStubStorage(),
+            onDismiss: { dismissed = true }
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .ready }
+        let historical = try XCTUnwrap(
+            viewModel.accountsForPicker.first(where: { !$0.canAddTrades })
+        )
+        viewModel.selectAccount(historical.id)
+        XCTAssertEqual(viewModel.selectedAccountID, historical.id)
+        XCTAssertEqual(viewModel.accountPickerSelectionTag, historical.id.rawValue)
+        XCTAssertNil(viewModel.fieldErrors[.account])
+        XCTAssertTrue(viewModel.eligibleAccounts.contains(where: { $0.id == historical.id }))
+
+        viewModel.symbolText = "ES"
+        viewModel.pnlText = "10"
+        viewModel.contractsText = "1"
+        viewModel.save()
+        await waitFor { dismissed }
+        XCTAssertNil(viewModel.fieldErrors[.account])
+        XCTAssertTrue(dismissed)
+    }
+
+    func testRememberedReadOnlyAccountStaysSelectedWhenVisibleInPicker() async throws {
+        let cache = DetailPresentationCache()
+        let readOnly = AddTradeFixtures.accounts().first(where: { !$0.canAddTrades })!
+        AddTradeViewModel.rememberLastAccountID(readOnly.id)
+
+        let viewModel = AddTradeViewModel(
+            trades: AddTradeStubRepository(),
+            feed: AddTradeStubFeedRepository(),
+            session: AddTradeStubSession(userID: AddTradeFixtures.viewerID.rawValue),
+            detailCache: cache,
+            uploadService: AddTradeStubUpload(),
+            objectStorage: AddTradeStubStorage(),
+            onDismiss: {}
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .ready }
+        XCTAssertEqual(viewModel.selectedAccountID, readOnly.id)
+        XCTAssertEqual(viewModel.accountPickerSelectionTag, readOnly.id.rawValue)
+        XCTAssertTrue(viewModel.accountsForPicker.contains(where: { $0.id == readOnly.id }))
+        XCTAssertNil(viewModel.fieldErrors[.account])
+    }
+
+    func testAccountPickerVisibilityFollowsShowInAccountDropdownsNotCanAddTrades() async {
+        let owner = ProfileID("user.addtrade.visibility")
+        let accounts = AddTradeExperienceTests.visibilityMatrixAccounts(owner: owner)
+        let cache = DetailPresentationCache()
+        cache.seed(accounts: accounts, for: owner)
+
+        let viewModel = AddTradeViewModel(
+            trades: AddTradeVisibilityStubRepository(accounts: accounts),
+            feed: AddTradeStubFeedRepository(),
+            session: AddTradeStubSession(userID: owner.rawValue),
+            detailCache: cache,
+            uploadService: AddTradeStubUpload(),
+            objectStorage: AddTradeStubStorage(),
+            onDismiss: {}
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .ready }
+
+        let pickerIDs = Set(viewModel.accountsForPicker.map(\.id))
+        XCTAssertTrue(pickerIDs.contains(TradingAccountID("acct-writable-on")))
+        XCTAssertTrue(pickerIDs.contains(TradingAccountID("acct-readonly-on")))
+        XCTAssertFalse(pickerIDs.contains(TradingAccountID("acct-writable-off")))
+        XCTAssertFalse(pickerIDs.contains(TradingAccountID("acct-readonly-off")))
+        XCTAssertTrue(pickerIDs.contains(TradingAccountID("acct-broker-on")))
+        XCTAssertTrue(pickerIDs.contains(TradingAccountID("acct-funded-on")))
+        XCTAssertTrue(pickerIDs.contains(TradingAccountID("acct-eval-on")))
+
+        XCTAssertTrue(viewModel.eligibleAccounts.contains(where: { $0.id.rawValue == "acct-writable-on" }))
+        XCTAssertTrue(viewModel.eligibleAccounts.contains(where: { $0.id.rawValue == "acct-readonly-on" }))
+        XCTAssertTrue(viewModel.eligibleAccounts.contains(where: { $0.id.rawValue == "acct-writable-off" }))
+        XCTAssertFalse(pickerIDs.contains(TradingAccountID("acct-writable-off")))
+        viewModel.selectAccount(TradingAccountID("acct-readonly-on"))
+        XCTAssertNil(viewModel.fieldErrors[.account])
+        XCTAssertFalse(
+            viewModel.accountsForPicker.contains { $0.name.localizedCaseInsensitiveContains("Read Only") }
+        )
+    }
+
+    func testAccountPickerTagMatchesVisibleRows() async {
         let cache = DetailPresentationCache()
         let viewModel = AddTradeViewModel(
             trades: AddTradeStubRepository(),
@@ -117,10 +210,9 @@ final class AddTradeExperienceTests: XCTestCase {
         )
         viewModel.loadIfNeeded()
         await waitFor { viewModel.phase == .ready }
-        let readOnly = try XCTUnwrap(viewModel.ineligibleAccounts.first)
-        viewModel.selectAccount(readOnly.id)
-        XCTAssertNotEqual(viewModel.selectedAccountID, readOnly.id)
-        XCTAssertNotNil(viewModel.formError)
+        let tag = viewModel.accountPickerSelectionTag
+        XCTAssertFalse(tag.isEmpty)
+        XCTAssertTrue(viewModel.accountsForPicker.contains(where: { $0.id.rawValue == tag }))
     }
 
     func testExitBeforeEntryFailsValidation() async {
@@ -166,6 +258,7 @@ final class AddTradeExperienceTests: XCTestCase {
         await waitFor { viewModel.phase == .ready }
         viewModel.symbolText = "NQ"
         viewModel.pnlText = "50"
+        viewModel.contractsText = "1"
         viewModel.save()
         viewModel.save()
         await waitFor { dismissCount == 1 }
@@ -191,6 +284,7 @@ final class AddTradeExperienceTests: XCTestCase {
         await waitFor { viewModel.phase == .ready }
         viewModel.symbolText = "CL"
         viewModel.pnlText = "-20"
+        viewModel.contractsText = "1"
         viewModel.notesText = "Keep me"
         viewModel.save()
         await waitFor { dismissed }
@@ -355,6 +449,7 @@ final class AddTradeExperienceTests: XCTestCase {
         await waitFor { viewModel.phase == .ready }
         viewModel.symbolText = "MNQ"
         viewModel.pnlText = "100"
+        viewModel.contractsText = "1"
         viewModel.applyClipDraftFixture()
         viewModel.save()
         await waitFor { dismissed }
@@ -628,6 +723,75 @@ private struct AddTradeStubStorage: ObjectStorageProviding {
     func publicURL(bucket: String, path: String) -> URL? {
         URL(string: "https://example.com/\(path)")
     }
+}
+
+extension AddTradeExperienceTests {
+    static func visibilityMatrixAccounts(owner: ProfileID) -> [TradingAccount] {
+        func account(
+            id: String,
+            name: String,
+            canAddTrades: Bool,
+            showInAccountDropdowns: Bool,
+            mode: TradingAccountMode = .live,
+            category: TradingAccountCategory = .personal
+        ) -> TradingAccount {
+            TradingAccount(
+                id: TradingAccountID(id),
+                ownerProfileID: owner,
+                name: name,
+                category: category,
+                mode: mode,
+                size: Money(amount: 50_000),
+                isActive: true,
+                canAddTrades: canAddTrades,
+                showInAccountDropdowns: showInAccountDropdowns,
+                accountNumber: "100"
+            )
+        }
+
+        return [
+            account(id: "acct-writable-on", name: "Writable ON", canAddTrades: true, showInAccountDropdowns: true),
+            account(id: "acct-readonly-on", name: "Readonly ON", canAddTrades: false, showInAccountDropdowns: true),
+            account(id: "acct-writable-off", name: "Writable OFF", canAddTrades: true, showInAccountDropdowns: false),
+            account(id: "acct-readonly-off", name: "Readonly OFF", canAddTrades: false, showInAccountDropdowns: false),
+            account(id: "acct-broker-on", name: "Broker ON", canAddTrades: true, showInAccountDropdowns: true),
+            account(
+                id: "acct-funded-on",
+                name: "Funded ON",
+                canAddTrades: true,
+                showInAccountDropdowns: true,
+                mode: .live,
+                category: .propFirm
+            ),
+            account(
+                id: "acct-eval-on",
+                name: "Eval ON",
+                canAddTrades: false,
+                showInAccountDropdowns: true,
+                mode: .evaluation,
+                category: .propFirm
+            ),
+        ]
+    }
+}
+
+private struct AddTradeVisibilityStubRepository: TradeRepository {
+    let accounts: [TradingAccount]
+
+    func trade(id: TradeID) async throws -> Trade { throw AppError.unknown(message: "stub") }
+    func trades(ownedBy: ProfileID, accountID: TradingAccountID?, page: PageRequest, publicOnly: Bool) async throws -> CursorPage<Trade> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+    func trades(ownedBy: ProfileID, accountID: TradingAccountID?, entryFrom: Date, entryTo: Date, limit: Int) async throws -> [Trade] { [] }
+    func save(_ draft: TradeDraft) async throws -> Trade { try await AddTradeStubRepository().save(draft) }
+    func update(_ trade: Trade) async throws -> Trade { trade }
+    func delete(id: TradeID) async throws {}
+    func images(for tradeID: TradeID) async throws -> [TradeImage] { [] }
+    func notes(for tradeID: TradeID) async throws -> [TradeNote] { [] }
+    func statistics(for profileID: ProfileID, interval: DateIntervalValue) async throws -> TradeStatistics {
+        TradeStatistics(tradeCount: 0, winCount: 0, lossCount: 0, totalPnL: Money(amount: 0), averagePnL: Money(amount: 0), averageRiskReward: nil, winRate: 0)
+    }
+    func accounts(for profileID: ProfileID) async throws -> [TradingAccount] { accounts }
 }
 
 private struct AddTradeStubRepository: TradeRepository {

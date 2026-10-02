@@ -1,7 +1,10 @@
 import {
+  APIException,
   AppStoreServerAPIClient,
   Environment,
   SignedDataVerifier,
+  VerificationException,
+  VerificationStatus,
   type JWSTransactionDecodedPayload,
   type JWSRenewalInfoDecodedPayload,
   type ResponseBodyV2DecodedPayload,
@@ -114,7 +117,234 @@ function mapEnvironment(
   return environment === Environment.SANDBOX ? "Sandbox" : "Production"
 }
 
-function createVerifier(environment: Environment): SignedDataVerifier | null {
+export type UnverifiedAppleTransactionClaims = {
+  environment?: string
+  productId?: string
+  bundleId?: string
+  transactionId?: string
+}
+
+export const STOREKIT_TESTING_NOT_VERIFIABLE_REASON =
+  "StoreKit Testing transactions cannot be verified by the server"
+
+export function isStoreKitTestingEnvironmentClaim(
+  environment: string | undefined
+): boolean {
+  return (
+    environment === Environment.XCODE ||
+    environment === Environment.LOCAL_TESTING
+  )
+}
+
+/** Safe request metadata for `/api/apple/subscription/sync` logs — never includes full JWS. */
+export type AppleSyncRequestDiagnostics = {
+  hasSignedTransactionInfo: boolean
+  signedTransactionInfoLength: number
+  hasTransactionId: boolean
+  claimedEnvironment?: string
+  claimedProductId?: string
+  claimedBundleId?: string
+  claimedTransactionId?: string
+  configuredBundleId?: string
+  bundleIdMatchesConfig: boolean | null
+  certificateStage: string
+  x5cCount?: number
+  appearsStoreKitTestingClaim: boolean
+  credentialsConfigured: boolean
+}
+
+export function buildAppleSyncRequestDiagnostics(input: {
+  signedTransactionInfo?: string | null
+  transactionId?: string | null
+}): AppleSyncRequestDiagnostics {
+  const signed = input.signedTransactionInfo?.trim() ?? ""
+  const claims = signed ? readUnverifiedAppleTransactionClaims(signed) : null
+  const certificate = signed
+    ? readJWSCertificateStage(signed)
+    : { certificateStage: "missing_jws" as const }
+  const configuredBundleId = process.env.APPLE_BUNDLE_ID?.trim()
+  const claimedBundleId = claims?.bundleId
+  const bundleIdMatchesConfig =
+    claimedBundleId && configuredBundleId
+      ? claimedBundleId === configuredBundleId
+      : null
+
+  return {
+    hasSignedTransactionInfo: signed.length > 0,
+    signedTransactionInfoLength: signed.length,
+    hasTransactionId: Boolean(input.transactionId?.trim()),
+    claimedEnvironment: claims?.environment,
+    claimedProductId: claims?.productId,
+    claimedBundleId,
+    claimedTransactionId: claims?.transactionId,
+    configuredBundleId,
+    bundleIdMatchesConfig,
+    certificateStage: certificate.certificateStage,
+    x5cCount: certificate.x5cCount,
+    appearsStoreKitTestingClaim: isStoreKitTestingEnvironmentClaim(
+      claims?.environment
+    ),
+    credentialsConfigured: appleCredentialsConfigured(),
+  }
+}
+
+/**
+ * Reads the unsigned JWT payload so verification can target Sandbox vs Production.
+ * These claims are never used to grant access.
+ */
+export function readUnverifiedAppleTransactionClaims(
+  jws: string
+): UnverifiedAppleTransactionClaims | null {
+  const payload = jws.split(".")[1]
+  if (!payload) return null
+  try {
+    const decoded = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf8")
+    ) as Record<string, unknown>
+    if (!decoded || typeof decoded !== "object") return null
+    return {
+      environment:
+        typeof decoded.environment === "string" ? decoded.environment : undefined,
+      productId:
+        typeof decoded.productId === "string" ? decoded.productId : undefined,
+      bundleId:
+        typeof decoded.bundleId === "string" ? decoded.bundleId : undefined,
+      transactionId:
+        typeof decoded.transactionId === "string"
+          ? decoded.transactionId
+          : undefined,
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Apple-signed environments only. Xcode and LocalTesting are not verifier targets. */
+export function appleVerificationEnvironments(
+  claimedEnvironment: string | undefined
+): Environment[] {
+  if (claimedEnvironment === Environment.SANDBOX) {
+    return [Environment.SANDBOX, Environment.PRODUCTION]
+  }
+  if (claimedEnvironment === Environment.PRODUCTION) {
+    return [Environment.PRODUCTION, Environment.SANDBOX]
+  }
+  return [Environment.PRODUCTION, Environment.SANDBOX]
+}
+
+/**
+ * Chain and signature failures are retried once without OCSP.
+ * Environment and bundle mismatches are definitive for that verifier.
+ */
+export function shouldRetryAppleVerificationWithoutOnlineChecks(
+  status: VerificationStatus
+): boolean {
+  return (
+    status !== VerificationStatus.INVALID_ENVIRONMENT &&
+    status !== VerificationStatus.INVALID_APP_IDENTIFIER
+  )
+}
+
+type AppleVerificationLog = {
+  stage: string
+  appleEnvironment?: string
+  productId?: string
+  bundleId?: string
+  configuredBundleId?: string
+  transactionId?: string
+  verificationStatus?: string
+  apiStatusCode?: number
+  apiErrorCode?: number | null
+  certificateStage?: string
+  x5cCount?: number
+  onlineChecks?: boolean
+  cause?: string
+  transactionIdFallbackAttempted?: boolean
+  verifierUsed?: "SignedDataVerifier" | "AppStoreServerAPI"
+}
+
+function logAppleVerification(details: AppleVerificationLog) {
+  console.error("[apple-subscription-verify]", details)
+}
+
+function sanitizeDiagnostic(value: string | null | undefined): string | undefined {
+  if (!value) return undefined
+  if (
+    value.includes("BEGIN ") ||
+    value.includes("eyJ") ||
+    value.length > 160
+  ) {
+    return "omitted"
+  }
+  return value
+}
+
+function verificationFailureDetails(error: unknown): Pick<
+  AppleVerificationLog,
+  "verificationStatus" | "apiStatusCode" | "apiErrorCode" | "cause"
+> {
+  if (error instanceof VerificationException) {
+    const cause = error.cause instanceof Error ? error.cause.message : undefined
+    return {
+      verificationStatus: VerificationStatus[error.status] ?? String(error.status),
+      cause: sanitizeDiagnostic(cause),
+    }
+  }
+  if (error instanceof APIException) {
+    return {
+      apiStatusCode: error.httpStatusCode,
+      apiErrorCode: error.apiError == null ? null : Number(error.apiError),
+      cause: sanitizeDiagnostic(error.errorMessage),
+    }
+  }
+  if (error instanceof Error) {
+    return { cause: sanitizeDiagnostic(`${error.name}`) }
+  }
+  return { cause: "unknown_error" }
+}
+
+function readJWSCertificateStage(jws: string): {
+  x5cCount?: number
+  certificateStage: string
+} {
+  const headerPart = jws.split(".")[0]
+  if (!headerPart) return { certificateStage: "missing_header" }
+  try {
+    const header = JSON.parse(
+      Buffer.from(headerPart, "base64url").toString("utf8")
+    ) as { x5c?: unknown }
+    const x5cCount = Array.isArray(header.x5c) ? header.x5c.length : 0
+    return {
+      x5cCount,
+      certificateStage: x5cCount === 3 ? "x5c_chain_present" : "x5c_chain_length",
+    }
+  } catch {
+    return { certificateStage: "header_decode_failed" }
+  }
+}
+
+function verifierUnavailableReason(environment: Environment): string | null {
+  if (!process.env.APPLE_BUNDLE_ID?.trim() || !appleCredentialsConfigured()) {
+    return "credentials_or_bundle_missing"
+  }
+  if (environment === Environment.PRODUCTION) {
+    const appAppleId = Number(process.env.APPLE_APP_APPLE_ID?.trim())
+    if (!Number.isFinite(appAppleId)) return "production_app_apple_id_missing"
+  }
+  try {
+    if (loadAppleRootCertificates().length === 0) {
+      return "apple_root_certificates_missing"
+    }
+  } catch {
+    return "apple_root_certificates_invalid"
+  }
+  return null
+}
+
+function createVerifier(
+  environment: Environment,
+  enableOnlineChecks: boolean
+): SignedDataVerifier | null {
   const bundleId = process.env.APPLE_BUNDLE_ID?.trim()
   const appAppleIdRaw = process.env.APPLE_APP_APPLE_ID?.trim()
   const appAppleId = appAppleIdRaw ? Number(appAppleIdRaw) : undefined
@@ -135,10 +365,10 @@ function createVerifier(environment: Environment): SignedDataVerifier | null {
   try {
     return new SignedDataVerifier(
       rootCerts,
-      true,
+      enableOnlineChecks,
       environment,
       bundleId,
-      appAppleId
+      environment === Environment.PRODUCTION ? appAppleId : undefined
     )
   } catch {
     return null
@@ -218,78 +448,278 @@ export async function verifyAppleTransactionId(
   }
 
   if (!appleCredentialsConfigured()) {
+    logAppleVerification({
+      stage: "credentials",
+      transactionId: id,
+      cause: "apple_app_store_credentials_or_bundle_missing",
+    })
     return { ok: false, reason: "Apple verification is not configured" }
   }
 
+  let sawSignedTransaction = false
   for (const environment of [Environment.PRODUCTION, Environment.SANDBOX]) {
     const client = createAppStoreServerClient(environment)
-    if (!client) continue
+    if (!client) {
+      logAppleVerification({
+        stage: "app_store_server_api",
+        appleEnvironment: environment,
+        transactionId: id,
+        cause: "api_client_unavailable",
+      })
+      continue
+    }
 
     try {
       const response = await client.getTransactionInfo(id)
       const signed = response.signedTransactionInfo?.trim()
-      if (!signed) continue
-      const verified = await verifyAppleSignedTransactionInfo(signed)
+      if (!signed) {
+        logAppleVerification({
+          stage: "app_store_server_api",
+          appleEnvironment: environment,
+          transactionId: id,
+          cause: "missing_signed_transaction_info",
+        })
+        continue
+      }
+      sawSignedTransaction = true
+      const verified = await verifyAppleSignedTransactionInfo(signed, environment)
       if (verified.ok) return verified
-    } catch {
-      // Try the other environment.
+      logAppleVerification({
+        stage: "transaction_id_fallback_jws_rejected",
+        appleEnvironment: environment,
+        transactionId: id,
+        transactionIdFallbackAttempted: true,
+        verifierUsed: "AppStoreServerAPI",
+        cause: verified.ok ? undefined : verified.reason,
+      })
+    } catch (error) {
+      logAppleVerification({
+        stage: "app_store_server_api",
+        appleEnvironment: environment,
+        transactionId: id,
+        ...verificationFailureDetails(error),
+      })
     }
+  }
+
+  if (!sawSignedTransaction) {
+    logAppleVerification({
+      stage: "app_store_server_api",
+      transactionId: id,
+      cause: "transaction_not_returned_for_production_or_sandbox",
+    })
   }
 
   return { ok: false, reason: "Transaction verification failed" }
 }
 
-export async function verifyAppleSignedTransactionInfo(
-  signedTransactionInfo: string,
-  preferredEnvironment?: Environment
+async function verifyDecodedAppleTransaction(
+  jws: string,
+  environment: Environment,
+  enableOnlineChecks: boolean
 ): Promise<
   | { ok: true; transaction: VerifiedAppleTransaction }
   | { ok: false; reason: string }
+  | { ok: false; retryWithoutOnlineChecks: true }
 > {
+  const unavailable = verifierUnavailableReason(environment)
+  const verifier = unavailable ? null : createVerifier(environment, enableOnlineChecks)
+  const claims = readUnverifiedAppleTransactionClaims(jws)
+  const certificate = readJWSCertificateStage(jws)
+  if (!verifier) {
+    logAppleVerification({
+      stage: "verifier_unavailable",
+      appleEnvironment: environment,
+      productId: claims?.productId,
+      bundleId: claims?.bundleId,
+      configuredBundleId: process.env.APPLE_BUNDLE_ID?.trim(),
+      transactionId: claims?.transactionId,
+      certificateStage: certificate.certificateStage,
+      x5cCount: certificate.x5cCount,
+      onlineChecks: enableOnlineChecks,
+      cause: unavailable ?? "signed_data_verifier_init_failed",
+    })
+    return { ok: false, reason: "Transaction verification failed" }
+  }
+
+  try {
+    const decoded = await verifier.verifyAndDecodeTransaction(jws)
+    const productId = String(decoded.productId ?? "")
+    if (!isKnownTraxProAppleProductId(productId)) {
+      logAppleVerification({
+        stage: "product_id",
+        appleEnvironment: mapEnvironment(environment),
+        productId,
+        bundleId: decoded.bundleId,
+        configuredBundleId: process.env.APPLE_BUNDLE_ID?.trim(),
+        transactionId: decoded.transactionId,
+        onlineChecks: enableOnlineChecks,
+      })
+      return { ok: false, reason: "Unknown TraxPro product" }
+    }
+
+    const transaction = mapDecodedTransaction(decoded, mapEnvironment(environment))
+    if (!transaction.originalTransactionId || !transaction.transactionId) {
+      logAppleVerification({
+        stage: "transaction_identifiers",
+        appleEnvironment: transaction.environment,
+        productId: transaction.productId,
+        bundleId: decoded.bundleId,
+        transactionId: transaction.transactionId || undefined,
+        onlineChecks: enableOnlineChecks,
+      })
+      return { ok: false, reason: "Invalid transaction identifiers" }
+    }
+
+    return { ok: true, transaction }
+  } catch (error) {
+    const failure = verificationFailureDetails(error)
+    logAppleVerification({
+      stage: "jws_verification",
+      appleEnvironment: environment,
+      productId: claims?.productId,
+      bundleId: claims?.bundleId,
+      configuredBundleId: process.env.APPLE_BUNDLE_ID?.trim(),
+      transactionId: claims?.transactionId,
+      certificateStage: certificate.certificateStage,
+      x5cCount: certificate.x5cCount,
+      onlineChecks: enableOnlineChecks,
+      ...failure,
+    })
+    if (
+      enableOnlineChecks &&
+      error instanceof VerificationException &&
+      shouldRetryAppleVerificationWithoutOnlineChecks(error.status)
+    ) {
+      return { ok: false, retryWithoutOnlineChecks: true }
+    }
+    return { ok: false, reason: "Transaction verification failed" }
+  }
+}
+
+export type AppleSignedTransactionVerifyResult =
+  | { ok: true; transaction: VerifiedAppleTransaction }
+  | {
+      ok: false
+      reason: string
+      clientCode?:
+        | "STOREKIT_TESTING_NOT_VERIFIABLE"
+        | "APPLE_BUNDLE_MISMATCH"
+        | "APPLE_NOT_CONFIGURED"
+        | "UNKNOWN_PRODUCT"
+        | "VERIFICATION_FAILED"
+    }
+
+export async function verifyAppleSignedTransactionInfo(
+  signedTransactionInfo: string,
+  preferredEnvironment?: Environment
+): Promise<AppleSignedTransactionVerifyResult> {
   const jws = signedTransactionInfo?.trim()
   if (!jws) {
-    return { ok: false, reason: "Missing signed transaction" }
+    return { ok: false, reason: "Missing signed transaction", clientCode: "VERIFICATION_FAILED" }
   }
 
   if (!appleCredentialsConfigured()) {
-    return { ok: false, reason: "Apple verification is not configured" }
-  }
-
-  const attempts: Environment[] = preferredEnvironment
-    ? [
-        preferredEnvironment,
-        preferredEnvironment === Environment.PRODUCTION
-          ? Environment.SANDBOX
-          : Environment.PRODUCTION,
-      ]
-    : [Environment.PRODUCTION, Environment.SANDBOX]
-
-  for (const environment of attempts) {
-    const verifier = createVerifier(environment)
-    if (!verifier) continue
-
-    try {
-      const decoded = await verifier.verifyAndDecodeTransaction(jws)
-      const productId = String(decoded.productId ?? "")
-      if (!isKnownTraxProAppleProductId(productId)) {
-        return { ok: false, reason: "Unknown TraxPro product" }
-      }
-
-      const transaction = mapDecodedTransaction(
-        decoded,
-        mapEnvironment(environment)
-      )
-      if (!transaction.originalTransactionId || !transaction.transactionId) {
-        return { ok: false, reason: "Invalid transaction identifiers" }
-      }
-
-      return { ok: true, transaction }
-    } catch {
-      // Try the other environment.
+    logAppleVerification({
+      stage: "credentials",
+      cause: "apple_app_store_credentials_or_bundle_missing",
+      ...readJWSCertificateStage(jws),
+    })
+    return {
+      ok: false,
+      reason: "Apple verification is not configured",
+      clientCode: "APPLE_NOT_CONFIGURED",
     }
   }
 
-  return { ok: false, reason: "Transaction verification failed" }
+  const claims = readUnverifiedAppleTransactionClaims(jws)
+  const configuredBundleId = process.env.APPLE_BUNDLE_ID?.trim()
+  if (
+    claims?.bundleId &&
+    configuredBundleId &&
+    claims.bundleId !== configuredBundleId
+  ) {
+    logAppleVerification({
+      stage: "bundle_mismatch",
+      appleEnvironment: claims.environment,
+      productId: claims.productId,
+      bundleId: claims.bundleId,
+      configuredBundleId,
+      transactionId: claims.transactionId,
+      ...readJWSCertificateStage(jws),
+      cause: "jws_bundle_id_does_not_match_server_config",
+    })
+    return {
+      ok: false,
+      reason: "Transaction bundle ID does not match server configuration",
+      clientCode: "APPLE_BUNDLE_MISMATCH",
+    }
+  }
+
+  if (isStoreKitTestingEnvironmentClaim(claims?.environment)) {
+    logAppleVerification({
+      stage: "environment",
+      appleEnvironment: claims?.environment,
+      productId: claims?.productId,
+      bundleId: claims?.bundleId,
+      configuredBundleId,
+      transactionId: claims?.transactionId,
+      ...readJWSCertificateStage(jws),
+      cause: "storekit_testing_transaction_is_not_apple_signed",
+    })
+    return {
+      ok: false,
+      reason: STOREKIT_TESTING_NOT_VERIFIABLE_REASON,
+      clientCode: "STOREKIT_TESTING_NOT_VERIFIABLE",
+    }
+  }
+
+  const attempts = preferredEnvironment
+    ? appleVerificationEnvironments(preferredEnvironment)
+    : appleVerificationEnvironments(claims?.environment)
+
+  for (const environment of attempts) {
+    const online = await verifyDecodedAppleTransaction(jws, environment, true)
+    if (online.ok) return online
+    if ("reason" in online && online.reason !== "Transaction verification failed") {
+      return {
+        ok: false,
+        reason: online.reason,
+        clientCode: mapVerifyFailureClientCode(online.reason),
+      }
+    }
+    if ("retryWithoutOnlineChecks" in online) {
+      const offline = await verifyDecodedAppleTransaction(jws, environment, false)
+      if (offline.ok) return offline
+      if ("reason" in offline && offline.reason !== "Transaction verification failed") {
+        return {
+          ok: false,
+          reason: offline.reason,
+          clientCode: mapVerifyFailureClientCode(offline.reason),
+        }
+      }
+    }
+  }
+
+  return {
+    ok: false,
+    reason: "Transaction verification failed",
+    clientCode: "VERIFICATION_FAILED",
+  }
+}
+
+function mapVerifyFailureClientCode(
+  reason: string
+): NonNullable<Extract<AppleSignedTransactionVerifyResult, { ok: false }>["clientCode"]> {
+  if (reason === "Unknown TraxPro product") return "UNKNOWN_PRODUCT"
+  if (reason === "Apple verification is not configured") return "APPLE_NOT_CONFIGURED"
+  if (reason === STOREKIT_TESTING_NOT_VERIFIABLE_REASON) {
+    return "STOREKIT_TESTING_NOT_VERIFIABLE"
+  }
+  if (reason === "Transaction bundle ID does not match server configuration") {
+    return "APPLE_BUNDLE_MISMATCH"
+  }
+  return "VERIFICATION_FAILED"
 }
 
 export async function verifyAppleSignedRenewalInfo(
@@ -318,7 +748,7 @@ export async function verifyAppleSignedRenewalInfo(
     : [Environment.PRODUCTION, Environment.SANDBOX]
 
   for (const environment of attempts) {
-    const verifier = createVerifier(environment)
+    const verifier = createVerifier(environment, true)
     if (!verifier) continue
 
     try {
@@ -352,7 +782,7 @@ export async function verifyAppleSignedNotification(
   }
 
   for (const environment of [Environment.PRODUCTION, Environment.SANDBOX]) {
-    const verifier = createVerifier(environment)
+    const verifier = createVerifier(environment, true)
     if (!verifier) continue
 
     try {

@@ -123,9 +123,11 @@ struct ActivityHomeView: View {
                             row: row,
                             imagePipeline: imagePipeline,
                             onSelect: { viewModel.open(row) },
-                            onSelectActor: row.notification.actorProfileID.map { id in
-                                { viewModel.openActor(id) }
-                            }
+                            onSelectActor: row.usesTradeTraxsBrandAvatar
+                                ? nil
+                                : row.notification.actorProfileID.map { id in
+                                    { viewModel.openActor(id) }
+                                }
                         )
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(colors.backgroundPrimary)
@@ -166,7 +168,9 @@ struct ActivityHomeView: View {
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
-                            if let actorID = row.notification.actorProfileID {
+                            if !row.usesTradeTraxsBrandAvatar,
+                               let actorID = row.notification.actorProfileID
+                            {
                                 Button {
                                     viewModel.openActor(actorID)
                                 } label: {

@@ -97,6 +97,8 @@ final class AddTradeViewModel {
     private let objectStorage: any ObjectStorageProviding
     private let uploadServices: GlobalUploadServices
     private let imagePipeline: (any ImagePipeline)?
+    var clipLinkImagePipeline: (any ImagePipeline)? { imagePipeline }
+    var clipLinkObjectStorage: any ObjectStorageProviding { objectStorage }
     private let copyTradingGroups: (any CopyTradingGroupRepository)?
     private let onDismiss: () -> Void
 
@@ -203,28 +205,42 @@ final class AddTradeViewModel {
     }
 
     var selectedAccount: TradingAccount? {
-        accounts.first(where: { $0.id == selectedAccountID })
+        ownerAccountSource().first(where: { $0.id == selectedAccountID })
     }
 
+    /// Accounts that may receive new trades: owned and active. Dropdown visibility is separate.
     var eligibleAccounts: [TradingAccount] {
-        TradingAccountDropdownFilter.selectableForNewTrades(accounts)
+        ownerAccountSource().filter(\.isActive)
     }
 
     var ineligibleAccounts: [TradingAccount] {
-        accounts.filter { $0.isActive && (!$0.canAddTrades || !$0.showInAccountDropdowns) }
+        ownerAccountSource().filter { !$0.isActive }
     }
 
-    /// Picker list — edit mode keeps the original account even when read-only.
+    /// Picker list — active accounts toggled ON in Settings (`show_in_account_dropdowns`).
     var accountsForPicker: [TradingAccount] {
-        var list = eligibleAccounts
-        if let selected = selectedAccount,
-           !list.contains(where: { $0.id == selected.id })
-        {
-            list.insert(selected, at: 0)
-        }
-        let resolved = OwnerAccountDropdownSupport.resolvedAccounts(profileID: viewerID, fallback: accounts)
-        let byID = Dictionary(uniqueKeysWithValues: resolved.map { ($0.id, $0) })
-        return list.map { byID[$0.id] ?? $0 }
+        let preserveID = isEditing ? editingOriginalAccountID : selectedAccountID
+        return TradingAccountDropdownFilter.visibleForManualTradePicker(
+            from: ownerAccountSource(),
+            preservingSelection: preserveID
+        )
+    }
+
+    private func ownerAccountSource() -> [TradingAccount] {
+        let resolved = OwnerAccountDropdownSupport.resolvedAccounts(
+            profileID: viewerID,
+            fallback: accounts,
+            detailCache: detailCache
+        )
+        return resolved.isEmpty ? accounts : resolved
+    }
+
+
+    /// SwiftUI `Picker` tag — must match a row in ``accountsForPicker`` (avoids stale selection warnings).
+    var accountPickerSelectionTag: String {
+        let visible = Set(accountsForPicker.map(\.id.rawValue))
+        guard let raw = selectedAccountID?.rawValue, visible.contains(raw) else { return "" }
+        return raw
     }
 
     private(set) var instrumentCatalogRevision = 0
@@ -367,16 +383,15 @@ final class AddTradeViewModel {
     }
 
     func selectAccount(_ id: TradingAccountID) {
-        guard let account = accounts.first(where: { $0.id == id }) else { return }
+        guard ownerAccountSource().contains(where: { $0.id == id }) else { return }
+        guard accountsForPicker.contains(where: { $0.id == id }) else { return }
         let keepOriginal = isEditing && id == editingOriginalAccountID
-        guard account.canAddTrades || keepOriginal else {
-            fieldErrors[.account] = "This account is read-only and cannot accept new trades."
-            return
-        }
         ExperienceHaptics.play(.selection)
         selectedAccountID = id
-        Self.lastAccountID = id
-        fieldErrors[.account] = nil
+        if keepOriginal || viewerID != nil {
+            Self.lastAccountID = id
+            fieldErrors[.account] = nil
+        }
     }
 
     func clearAccountSelection() {
@@ -393,17 +408,39 @@ final class AddTradeViewModel {
         return copyGroups.first(where: { $0.id == selectedCopyGroupID })
     }
 
+    /// Copy-group membership in sort order — not filtered by `can_add_trades` or dropdown visibility.
+    func resolvedCopyGroupAccounts(_ group: CopyTradingGroup) -> [TradingAccount] {
+        let source = ownerAccountSource()
+        let byID = Dictionary(uniqueKeysWithValues: source.map { ($0.id.rawValue, $0) })
+        return group.accountIDs.compactMap { byID[$0] }.filter(\.isActive)
+    }
+
     func resolvedCopyAccounts(_ group: CopyTradingGroup) -> [TradingAccount] {
-        let byID = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id.rawValue, $0) })
-        return group.accountIDs.compactMap { byID[$0] }
+        resolvedCopyGroupAccounts(group)
     }
 
     func selectCopyGroup(_ groupID: String?) {
+        if let groupID, !groupID.isEmpty {
+            if ProAccessGate.presentFeatureIfNeeded(.copyTrading, profileID: viewerID) {
+                selectedCopyGroupID = nil
+                return
+            }
+        }
         selectedCopyGroupID = groupID
         fieldErrors[.account] = nil
-        guard let group = selectedCopyGroup, let first = resolvedCopyAccounts(group).first else { return }
+        guard let group = selectedCopyGroup else { return }
+        let members = resolvedCopyGroupAccounts(group)
+        guard let first = members.first else { return }
         selectedAccountID = first.id
-        Self.lastAccountID = first.id
+        if let viewerID,
+           TradeEntryEntitlementGate.accountAllowsNewTrade(
+               first,
+               viewerTier: TradeEntryEntitlementGate.viewerTier(profileID: viewerID)
+           )
+        {
+            Self.lastAccountID = first.id
+        }
+        syncAccountFieldErrorForCopyGroup(members)
     }
 
     func loadCopyTradingGroupsIfNeeded() async {
@@ -576,15 +613,102 @@ final class AddTradeViewModel {
     var hasNoTradingAccounts: Bool { accounts.isEmpty }
 
     private func applyAccountSelectionAfterReload(preferredID: TradingAccountID?) {
-        if let preferredID,
-           eligibleAccounts.contains(where: { $0.id == preferredID })
-        {
-            selectAccount(preferredID)
+        reconcileAccountSelection(preferredID: preferredID)
+    }
+
+    /// Create mode: keep a visible picker selection. Edit mode preserves the trade's account.
+    private func reconcileAccountSelection(preferredID: TradingAccountID? = nil) {
+        if isEditing {
+            if selectedAccountID == nil, let original = editingOriginalAccountID {
+                selectedAccountID = original
+            }
+            syncAccountFieldErrorForCurrentSelection()
             return
         }
-        if selectedAccountID == nil, let first = eligibleAccounts.first {
-            selectAccount(first.id)
+
+        if let group = selectedCopyGroup {
+            let members = resolvedCopyGroupAccounts(group)
+            if members.isEmpty {
+                selectedCopyGroupID = nil
+            } else if let first = members.first {
+                selectedAccountID = first.id
+                if let viewerID,
+                   TradeEntryEntitlementGate.accountAllowsNewTrade(
+                       first,
+                       viewerTier: TradeEntryEntitlementGate.viewerTier(profileID: viewerID)
+                   )
+                {
+                    Self.lastAccountID = first.id
+                }
+                syncAccountFieldErrorForCopyGroup(members)
+                return
+            }
         }
+
+        let pickerRows = accountsForPicker
+        func isVisibleInPicker(_ id: TradingAccountID) -> Bool {
+            pickerRows.contains(where: { $0.id == id })
+        }
+
+        if let preferredID, isVisibleInPicker(preferredID) {
+            selectedAccountID = preferredID
+            syncAccountFieldErrorForCurrentSelection()
+            Self.lastAccountID = preferredID
+            return
+        }
+
+        if let current = selectedAccountID, isVisibleInPicker(current) {
+            syncAccountFieldErrorForCurrentSelection()
+            return
+        }
+
+        if let last = Self.lastAccountID, isVisibleInPicker(last) {
+            selectedAccountID = last
+            syncAccountFieldErrorForCurrentSelection()
+            Self.lastAccountID = last
+            return
+        }
+
+        if let firstVisible = pickerRows.first {
+            selectedAccountID = firstVisible.id
+            Self.lastAccountID = firstVisible.id
+            fieldErrors[.account] = nil
+        } else {
+            clearAccountSelection()
+        }
+    }
+
+    private func syncAccountFieldErrorForCurrentSelection() {
+        if let group = selectedCopyGroup {
+            syncAccountFieldErrorForCopyGroup(resolvedCopyGroupAccounts(group))
+            return
+        }
+        guard selectedAccount != nil, viewerID != nil else {
+            fieldErrors[.account] = nil
+            return
+        }
+        fieldErrors[.account] = nil
+    }
+
+    private func syncAccountFieldErrorForCopyGroup(_ members: [TradingAccount]) {
+        guard let viewerID else {
+            fieldErrors[.account] = nil
+            return
+        }
+        if let message = TradeEntryEntitlementGate.validateAccountsForNewTrades(members, profileID: viewerID) {
+            fieldErrors[.account] = message
+        } else {
+            fieldErrors[.account] = nil
+        }
+    }
+
+    private func validateCopyGroupBeforeSave(_ group: CopyTradingGroup) -> String? {
+        let members = resolvedCopyGroupAccounts(group)
+        guard members.count >= CopyTradingGroupRules.minimumAccounts else {
+            return "This copy trading group has no linked accounts."
+        }
+        guard let viewerID else { return "Sign in to add trades." }
+        return TradeEntryEntitlementGate.validateAccountsForNewTrades(members, profileID: viewerID)
     }
 
     #if DEBUG
@@ -607,6 +731,12 @@ final class AddTradeViewModel {
     static func rememberLastAccountID(_ id: TradingAccountID) {
         lastAccountID = id
     }
+
+    #if DEBUG
+    static func resetSessionDefaultsForTesting() {
+        lastAccountID = nil
+    }
+    #endif
 
     static func devFixtureTrade(from draft: TradeDraft, owner: ProfileID) -> Trade {
         fixtureTrade(from: draft, owner: owner)
@@ -635,6 +765,7 @@ final class AddTradeViewModel {
             accounts = AddTradeFixtures.accounts(owner: viewerID)
             detailCache.seed(accounts: accounts, for: viewerID)
             guard await hydrateEditTradeIfNeeded() else { return }
+            reconcileAccountSelection()
             phase = .ready
             #if DEBUG
             AddTradeLoadProbe.noteRequest("fixtures")
@@ -653,21 +784,29 @@ final class AddTradeViewModel {
            !cached.isEmpty
         {
             accounts = cached
+            let sessionKind = SessionAccountsStore.shared.snapshotKind(for: viewerID)
+            let needsFullOwnerSnapshot = sessionKind == .dashboard
+            let needsRefresh = needsFullOwnerSnapshot
+                || (sessionKind == .rest && !SessionAccountsStore.shared.isFresh(for: viewerID))
+            if needsRefresh {
+                await refreshAccountsFromNetwork(
+                    viewerID: viewerID,
+                    forceNetwork: needsFullOwnerSnapshot
+                )
+            }
             guard await hydrateEditTradeIfNeeded() else { return }
+            reconcileAccountSelection()
             phase = .ready
             #if DEBUG
-            AddTradeLoadProbe.noteRequest("accountsCache", blocking: false)
+            AddTradeLoadProbe.noteRequest(needsRefresh ? "accountsCache+rest" : "accountsCache", blocking: needsRefresh)
             lastProbe = AddTradeLoadProbe.usableForm(loaded: ["accountsCache"])
             #endif
-            // Background revalidate only when session cache is stale/missing.
-            if !SessionAccountsStore.shared.isFresh(for: viewerID) {
-                Task { await refreshAccountsFromNetwork(viewerID: viewerID, forceNetwork: true) }
-            }
             return
         }
 
         await refreshAccountsFromNetwork(viewerID: viewerID, forceNetwork: false)
         guard await hydrateEditTradeIfNeeded() else { return }
+        reconcileAccountSelection()
         #if DEBUG
         lastProbe = AddTradeLoadProbe.usableForm(loaded: ["accounts"])
         #endif
@@ -686,11 +825,13 @@ final class AddTradeViewModel {
                 requiresFullOwnerSnapshot: true
             )
             accounts = loaded
+            reconcileAccountSelection()
             phase = .ready
         } catch {
             if accounts.isEmpty {
                 phase = .failed("Couldn't load trading accounts.")
             } else {
+                reconcileAccountSelection()
                 phase = .ready
             }
         }
@@ -838,7 +979,13 @@ final class AddTradeViewModel {
         }
         let accountForSave: TradingAccount?
         if let group = selectedCopyGroup {
-            accountForSave = resolvedCopyAccounts(group).first
+            if let block = validateCopyGroupBeforeSave(group) {
+                fieldErrors[.account] = block
+                phase = .ready
+                saveTask = nil
+                return
+            }
+            accountForSave = resolvedCopyGroupAccounts(group).first
         } else {
             accountForSave = selectedAccount
         }
@@ -850,14 +997,6 @@ final class AddTradeViewModel {
             saveTask = nil
             return
         }
-        let journalingCopyGroup = selectedCopyGroup != nil
-        let keepOriginalAccount = isEditing && account.id == editingOriginalAccountID
-        guard journalingCopyGroup || account.canAddTrades || keepOriginalAccount else {
-            fieldErrors[.account] = "Choose Account."
-            phase = .ready
-            saveTask = nil
-            return
-        }
         guard let viewerID else {
             formError = isEditing ? "Sign in to edit trades." : "Sign in to add trades."
             phase = .ready
@@ -865,6 +1004,14 @@ final class AddTradeViewModel {
             return
         }
         guard let spec = makeTradeSaveUploadSpec(viewerID: viewerID, account: account) else {
+            phase = .ready
+            saveTask = nil
+            return
+        }
+
+        if spec.draft.copyTradingPlan != nil,
+           ProAccessGate.presentFeatureIfNeeded(.copyTrading, profileID: viewerID)
+        {
             phase = .ready
             saveTask = nil
             return
@@ -1142,14 +1289,13 @@ final class AddTradeViewModel {
         if ticker.isEmpty {
             errors[.symbol] = "Symbol is required"
         }
-        let keepOriginalAccount = isEditing && selectedAccountID == editingOriginalAccountID
-        if selectedCopyGroup != nil {
-            if resolvedCopyAccounts(selectedCopyGroup!).isEmpty {
-                errors[.account] = "This copy trading group has no linked accounts."
+        if let group = selectedCopyGroup {
+            if let block = validateCopyGroupBeforeSave(group) {
+                errors[.account] = block
+            } else if resolvedCopyGroupAccounts(group).first(where: { $0.id == selectedAccountID }) == nil {
+                errors[.account] = "Choose Account."
             }
-        } else if selectedAccountID == nil
-            || (selectedAccount?.canAddTrades != true && !keepOriginalAccount)
-        {
+        } else if selectedAccountID == nil {
             errors[.account] = "Choose Account."
         }
         if Self.parseDecimal(contractsText, style: .tradeQuantity) == nil {
@@ -1352,13 +1498,16 @@ final class AddTradeViewModel {
     }
 
     private static func userMessage(for error: Error) -> String {
+        if ProLimitPresentation.presentUpgradeIfProLimit(error) {
+            return ""
+        }
         if let domain = error as? DomainError {
             switch domain {
             case .tradeValidation(let v):
                 switch v {
                 case .missingSymbol: return "Symbol is required."
                 case .accountRequired: return "Choose a trading account."
-                case .accountReadOnly: return "This account is read-only."
+                case .accountReadOnly: return "Choose a different trading account."
                 case .exitBeforeEntry: return "Exit time must be after entry."
                 case .invalidQuantity: return "Invalid contracts."
                 case .invalidPrice: return "Invalid price."

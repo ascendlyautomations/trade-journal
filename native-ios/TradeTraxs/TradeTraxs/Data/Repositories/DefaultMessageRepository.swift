@@ -1022,7 +1022,8 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             ],
             replyToMessageID: message.replyToMessageID,
             createdAt: ISO8601.date(from: inserted.created_at) ?? message.createdAt,
-            isReadByViewer: true
+            isReadByViewer: true,
+            sharedContent: .trade(tradeID)
         )
     }
 

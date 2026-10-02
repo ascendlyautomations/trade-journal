@@ -180,6 +180,7 @@ struct ProfileView: View {
             if contentStore.isOwner {
                 viewerStoryStore.reconcileExpired()
             }
+            contentStore.reconcileExpiredStories()
         }
         .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
             guard contentStore.isOwner else { return }

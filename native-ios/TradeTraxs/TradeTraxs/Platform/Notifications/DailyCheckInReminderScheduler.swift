@@ -40,6 +40,7 @@ enum DailyCheckInReminderScheduler {
             let content = UNMutableNotificationContent()
             content.title = notificationTitle
             content.body = notificationBody
+            content.sound = .default
             content.userInfo = ["type": "daily_check_in"]
 
             let components = WeekdayEasternReminderSupport.dateComponents(
