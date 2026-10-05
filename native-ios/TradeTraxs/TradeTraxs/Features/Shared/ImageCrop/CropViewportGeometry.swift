@@ -46,10 +46,14 @@ struct CropViewportGeometry: Equatable {
     /// Source-pixel rect visible through the viewport before edge clamping.
     var sourceRectBeforeClamp: CGRect {
         let scale = effectiveScale
-        guard scale > 0,
-              viewportSize.width > 0,
-              viewportSize.height > 0
+        guard scale.isFinite, scale > 0,
+              viewportSize.width.isFinite, viewportSize.height.isFinite,
+              viewportSize.width > 0, viewportSize.height > 0,
+              layout.origin.x.isFinite, layout.origin.y.isFinite
         else {
+            guard sourcePixelSize.width.isFinite, sourcePixelSize.height.isFinite,
+                  sourcePixelSize.width > 0, sourcePixelSize.height > 0
+            else { return .zero }
             return CGRect(origin: .zero, size: sourcePixelSize)
         }
         return CGRect(

@@ -275,6 +275,89 @@ final class NavigationStackBehaviorTests: XCTestCase {
         XCTAssertTrue(store.paths.profile.isEmpty)
     }
 
+    func testLoggedOutPushStaysOffTheShell() {
+        let store = NavigationStore()
+        store.sessionPhase = .unauthenticated
+        let coordinator = NavigationCoordinator(store: store)
+        coordinator.pushHome(.calendar)
+        XCTAssertTrue(store.paths.home.isEmpty)
+        XCTAssertNotNil(store.pendingAfterAuth)
+    }
+
+    func testDemoModeCanPushTheAuthenticatedShell() throws {
+        let launch = AppLaunchController.shared
+        let wasDemo = launch.isDemoExperienceActive
+        if !wasDemo {
+            launch.enterBundledDemoExplore()
+        }
+        guard launch.isDemoExperienceActive else {
+            throw XCTSkip("Demo entry requires an unauthenticated launch controller")
+        }
+        defer {
+            if !wasDemo {
+                launch.exitDemoExplore()
+            }
+        }
+
+        let store = NavigationStore()
+        store.sessionPhase = .unauthenticated
+        let coordinator = NavigationCoordinator(store: store)
+        coordinator.markExploreExperience()
+        coordinator.pushHome(.calendar)
+        coordinator.pushHome(.trades)
+        coordinator.pushHome(.activity)
+        coordinator.pushHome(.payouts)
+        coordinator.pushFeed(.explore)
+        coordinator.pushMessages(.thread(ConversationID("demo.thread")))
+        coordinator.pushProfileSettingsHome(source: "demo-test")
+
+        XCTAssertEqual(store.sessionPhase, .unauthenticated)
+        XCTAssertEqual(store.paths.home, [.calendar, .trades, .activity, .payouts])
+        XCTAssertEqual(store.paths.feed, [.explore])
+        XCTAssertEqual(store.paths.messages, [.thread(ConversationID("demo.thread"))])
+        XCTAssertEqual(store.paths.profile, [.settings(.home)])
+        XCTAssertNil(store.pendingAfterAuth)
+    }
+
+    func testProfileWithdrawalsOpensDetailOnTheSameStack() {
+        let store = NavigationStore()
+        store.sessionPhase = .authenticated
+        let router = StackNavigation.profile(store: store)
+        router.pushSettings(.payouts)
+        WithdrawalDetailSelection.stage("ledger:entry-1")
+        router.pushSettings(.withdrawalDetail)
+
+        XCTAssertEqual(
+            store.paths.profile,
+            [.settings(.payouts), .settings(.withdrawalDetail)]
+        )
+        XCTAssertEqual(WithdrawalDetailSelection.historyItemID, "ledger:entry-1")
+        XCTAssertFalse(SettingsHomeModel.sections.flatMap(\.items).map(\.route).contains(.withdrawalDetail))
+    }
+
+    func testManualLedgerRowsStayEditableAndPropCyclesStayViewOnly() {
+        let manual = PayoutHistoryItem(
+            id: "ledger:entry-1",
+            amount: 250,
+            date: .now,
+            accountID: TradingAccountID("account-1"),
+            ledgerEntryID: AccountPayoutEntryID("entry-1"),
+            source: .liveLedger,
+            note: nil
+        )
+        let cycle = PayoutHistoryItem(
+            id: "cycle:cycle-1",
+            amount: 250,
+            date: .now,
+            accountID: TradingAccountID("account-1"),
+            ledgerEntryID: nil,
+            source: .fundedCycle,
+            note: nil
+        )
+        XCTAssertTrue(manual.isEditable)
+        XCTAssertFalse(cycle.isEditable)
+    }
+
     // MARK: - Helpers
 
     private func coordinatorPushMessagesSettings(store: NavigationStore) {

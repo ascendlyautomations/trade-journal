@@ -135,7 +135,10 @@ enum SharedContentNavigation {
         switch reference {
         case .feedPost(let postID):
             if let post = cache.post(id: postID), let tradeID = post.linkedTradeID {
-                coordinator.pushSocialTrade(tradeID, cache: cache)
+                let preview =
+                    cache.presentationSeed(id: tradeID)?.previewTrade
+                    ?? cache.previewTrade(id: tradeID)
+                coordinator.pushSocialTrade(tradeID, cache: cache, preview: preview)
             } else {
                 coordinator.pushPostDetail(postID)
             }
@@ -146,7 +149,10 @@ enum SharedContentNavigation {
         case .reel(let reelID):
             coordinator.pushReelDetail(reelID)
         case .trade(let tradeID):
-            coordinator.pushSocialTrade(tradeID, cache: cache)
+            let preview =
+                cache.presentationSeed(id: tradeID)?.previewTrade
+                ?? cache.previewTrade(id: tradeID)
+            coordinator.pushSocialTrade(tradeID, cache: cache, preview: preview)
         }
     }
 }

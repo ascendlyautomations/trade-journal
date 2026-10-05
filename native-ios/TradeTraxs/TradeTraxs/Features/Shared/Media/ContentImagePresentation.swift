@@ -391,8 +391,12 @@ extension ContentImagePresentation {
     ) -> ImageCropMath.DrawRect? {
         guard presentation.requiresFramedViewport,
               let crop = presentation.resolvedCrop(imagePixelSize: imagePixelSize),
-              containerSize.width > 0,
-              containerSize.height > 0
+              imagePixelSize.width.isFinite, imagePixelSize.height.isFinite,
+              imagePixelSize.width > 0, imagePixelSize.height > 0,
+              containerSize.width.isFinite, containerSize.height.isFinite,
+              containerSize.width > 0, containerSize.height > 0,
+              crop.x.isFinite, crop.y.isFinite, crop.width.isFinite, crop.height.isFinite,
+              crop.width > 0, crop.height > 0
         else { return nil }
 
         let w = imagePixelSize.width
@@ -401,6 +405,7 @@ extension ContentImagePresentation {
         let py = crop.y * h
         let pw = max(crop.width * w, 1)
         let ph = max(crop.height * h, 1)
+        guard pw.isFinite, ph.isFinite, pw > 0, ph > 0 else { return nil }
 
         let fw = containerSize.width
         let fh = containerSize.height
@@ -409,6 +414,9 @@ extension ContentImagePresentation {
         let displayH = h * scale
         let x = -px * scale
         let y = -py * scale
+        guard scale.isFinite, displayW.isFinite, displayH.isFinite, x.isFinite, y.isFinite else {
+            return nil
+        }
 
         return ImageCropMath.DrawRect(x: x, y: y, width: displayW, height: displayH)
     }

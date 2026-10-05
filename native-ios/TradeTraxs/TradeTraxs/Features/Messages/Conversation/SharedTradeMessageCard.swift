@@ -4,6 +4,7 @@ import SwiftUI
 struct SharedTradeMessageCard: View {
     let trade: Trade?
     let tradeID: TradeID
+    var messageID: MessageID? = nil
     let imagePipeline: any ImagePipeline
     var isOutgoing: Bool
     var includesBackground: Bool = true
@@ -54,6 +55,17 @@ struct SharedTradeMessageCard: View {
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint("Opens trade detail")
         .accessibilityIdentifier("conversation.bubble.trade")
+        .onAppear {
+            #if DEBUG
+            if let messageID {
+                SharedContentTrace.cardRender(
+                    messageID: messageID,
+                    tradeID: tradeID,
+                    tradeLoaded: trade != nil
+                )
+            }
+            #endif
+        }
     }
 
     private var secondaryTextColor: Color {

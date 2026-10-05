@@ -100,6 +100,7 @@ final class AddTradeViewModel {
     var clipLinkImagePipeline: (any ImagePipeline)? { imagePipeline }
     var clipLinkObjectStorage: any ObjectStorageProviding { objectStorage }
     private let copyTradingGroups: (any CopyTradingGroupRepository)?
+    private let contentDrafts: (any ContentDraftRepository)?
     private let onDismiss: () -> Void
 
     private var viewerID: ProfileID?
@@ -115,6 +116,11 @@ final class AddTradeViewModel {
     private static var lastAccountID: TradingAccountID?
     private(set) var copyGroups: [CopyTradingGroup] = []
     var selectedCopyGroupID: String?
+    private(set) var isSavingDraft = false
+    private var activeDraftID: UUID?
+    private var retainedDraftImagePath: String?
+    private var didClearDraftImage = false
+    private var didRestoreDraftMedia = false
 
     #if DEBUG
     private(set) var lastProbe: AddTradeLoadProbe.Snapshot?
@@ -131,6 +137,8 @@ final class AddTradeViewModel {
         uploadServices: GlobalUploadServices,
         imagePipeline: (any ImagePipeline)? = nil,
         copyTradingGroups: (any CopyTradingGroupRepository)? = nil,
+        contentDrafts: (any ContentDraftRepository)? = nil,
+        restoredDraft: ContentDraft? = nil,
         mode: Mode = .create,
         onDismiss: @escaping () -> Void
     ) {
@@ -144,8 +152,12 @@ final class AddTradeViewModel {
         self.uploadServices = uploadServices
         self.imagePipeline = imagePipeline
         self.copyTradingGroups = copyTradingGroups
+        self.contentDrafts = contentDrafts
         self.mode = mode
         self.onDismiss = onDismiss
+        if let restoredDraft, restoredDraft.type == .trade, !isEditing {
+            applyTradeDraft(restoredDraft)
+        }
     }
 
     /// Tests and legacy call sites — constructs the default detail repository boundary.
@@ -522,6 +534,7 @@ final class AddTradeViewModel {
     func clearScreenshot() {
         screenshotData = nil
         screenshotPreview = nil
+        didClearDraftImage = true
         if existingImageURL != nil {
             removeExistingScreenshot = true
         }
@@ -766,6 +779,7 @@ final class AddTradeViewModel {
             detailCache.seed(accounts: accounts, for: viewerID)
             guard await hydrateEditTradeIfNeeded() else { return }
             reconcileAccountSelection()
+            await restorePendingDraftMediaIfNeeded()
             phase = .ready
             #if DEBUG
             AddTradeLoadProbe.noteRequest("fixtures")
@@ -796,6 +810,7 @@ final class AddTradeViewModel {
             }
             guard await hydrateEditTradeIfNeeded() else { return }
             reconcileAccountSelection()
+            await restorePendingDraftMediaIfNeeded()
             phase = .ready
             #if DEBUG
             AddTradeLoadProbe.noteRequest(needsRefresh ? "accountsCache+rest" : "accountsCache", blocking: needsRefresh)
@@ -826,12 +841,14 @@ final class AddTradeViewModel {
             )
             accounts = loaded
             reconcileAccountSelection()
+            await restorePendingDraftMediaIfNeeded()
             phase = .ready
         } catch {
             if accounts.isEmpty {
                 phase = .failed("Couldn't load trading accounts.")
             } else {
                 reconcileAccountSelection()
+                await restorePendingDraftMediaIfNeeded()
                 phase = .ready
             }
         }
@@ -1043,6 +1060,13 @@ final class AddTradeViewModel {
             services: uploadServices,
             checkpoint: checkpoint
         )
+        if let activeDraftID, let contentDrafts {
+            ContentDraftPublicationCleanup.shared.track(
+                jobID: jobID,
+                draftID: activeDraftID,
+                repository: contentDrafts
+            )
+        }
 
         tradeAwaitingClip = nil
         reelDraft = nil
@@ -1495,6 +1519,167 @@ final class AddTradeViewModel {
         }
         trade.updatedAt = .now
         return trade
+    }
+
+    var showsSaveDraft: Bool {
+        !isEditing && contentDrafts != nil && ExploreModeSupport.canWriteContent
+    }
+
+    var canSaveDraft: Bool {
+        guard showsSaveDraft, !isSavingDraft, phase != .saving else { return false }
+        let hasRetainedImage = retainedDraftImagePath != nil && !didClearDraftImage
+        return screenshotData != nil || hasRetainedImage || !makeTradeDraftState(imagePath: nil).isMeaningfullyEmpty
+    }
+
+    func saveDraft() {
+        guard canSaveDraft, let contentDrafts, !isSavingDraft else {
+            if showsSaveDraft, !isSavingDraft, phase != .saving {
+                formError = "Nothing to save yet."
+            }
+            return
+        }
+        isSavingDraft = true
+        formError = nil
+        let draftID = activeDraftID ?? UUID()
+        let imageData = screenshotData
+        let previousPath = retainedDraftImagePath
+        let clearedImage = didClearDraftImage
+        let state = makeTradeDraftState(imagePath: nil)
+        Task {
+            do {
+                var payloadState = state
+                if let imageData {
+                    payloadState.imageStoragePath = try await contentDrafts.uploadDraftImage(
+                        draftID: draftID,
+                        data: imageData
+                    )
+                    if let previousPath, previousPath != payloadState.imageStoragePath {
+                        await contentDrafts.deleteDraftMedia(paths: [previousPath])
+                    }
+                } else if clearedImage {
+                    if let previousPath {
+                        await contentDrafts.deleteDraftMedia(paths: [previousPath])
+                    }
+                    payloadState.imageStoragePath = nil
+                } else {
+                    payloadState.imageStoragePath = previousPath
+                }
+                var payload = ContentDraftPayload()
+                payload.trade = payloadState
+                guard !payload.isMeaningfullyEmpty else {
+                    isSavingDraft = false
+                    formError = "Nothing to save yet."
+                    return
+                }
+                let userID = await session.currentUserID ?? UserID("")
+                let saved = try await contentDrafts.saveDraft(
+                    ContentDraft(
+                        id: draftID,
+                        userID: userID,
+                        type: .trade,
+                        payload: payload,
+                        createdAt: Date(),
+                        updatedAt: Date()
+                    )
+                )
+                activeDraftID = saved.id
+                isSavingDraft = false
+                SaveSuccessConfirmationCenter.shared.present("Draft saved")
+                onDismiss()
+            } catch {
+                isSavingDraft = false
+                formError = UserFacingError.message(for: error)
+            }
+        }
+    }
+
+    private func applyTradeDraft(_ draft: ContentDraft) {
+        guard let state = draft.payload.trade else { return }
+        activeDraftID = draft.id
+        retainedDraftImagePath = state.imageStoragePath
+        if let accountID = state.accountID, !accountID.isEmpty {
+            selectedAccountID = TradingAccountID(accountID)
+        }
+        selectedCopyGroupID = state.copyGroupID
+        symbolText = state.symbol
+        side = TradeSide(rawValue: state.side) ?? .long
+        entryPriceText = state.entryPrice
+        exitPriceText = state.exitPrice
+        contractsText = state.contracts
+        pnlText = state.pnl
+        pointsText = state.points
+        rrText = state.rr
+        if let entryAt = state.entryAt.flatMap(ContentDraftDateCodec.date(from:)) {
+            self.entryAt = entryAt
+        }
+        if let exitAt = state.exitAt.flatMap(ContentDraftDateCodec.date(from:)) {
+            self.exitAt = exitAt
+        }
+        includeExitTime = state.includeExitTime
+        strategyText = state.strategy
+        notesText = state.notes
+        timeframeSelection = state.timeframe
+        customTimeframeText = state.customTimeframe
+        newsEvent = state.newsEvent
+        confidenceLevel = state.confidence
+        emotionSelection = state.emotion
+        followedPlan = state.followedPlan
+        marketConditionSelection = state.marketCondition
+        psychologyNotesText = state.psychologyNotes
+        screenshotDisplayMode = TradeScreenshotDisplayMode(rawValue: state.screenshotDisplayMode) ?? .fit
+        publicCaptionText = state.publicCaption
+        shareToProfile = state.shareToProfile
+    }
+
+    private func makeTradeDraftState(imagePath: String?) -> TradeComposerDraftState {
+        var state = TradeComposerDraftState()
+        state.accountID = selectedAccountID?.rawValue
+        state.copyGroupID = selectedCopyGroupID
+        state.symbol = symbolText
+        state.side = side.rawValue
+        state.entryPrice = entryPriceText
+        state.exitPrice = exitPriceText
+        state.contracts = contractsText
+        state.pnl = pnlText
+        state.points = pointsText
+        state.rr = rrText
+        state.entryAt = ContentDraftDateCodec.string(from: entryAt)
+        state.exitAt = includeExitTime ? ContentDraftDateCodec.string(from: exitAt) : nil
+        state.includeExitTime = includeExitTime
+        state.strategy = strategyText
+        state.notes = notesText
+        state.timeframe = timeframeSelection
+        state.customTimeframe = customTimeframeText
+        state.newsEvent = newsEvent
+        state.confidence = confidenceLevel
+        state.emotion = emotionSelection
+        state.followedPlan = followedPlan
+        state.marketCondition = marketConditionSelection
+        state.psychologyNotes = psychologyNotesText
+        state.screenshotDisplayMode = screenshotDisplayMode.rawValue
+        state.publicCaption = publicCaptionText
+        state.shareToProfile = shareToProfile
+        state.imageStoragePath = imagePath
+        return state
+    }
+
+    private func restorePendingDraftMediaIfNeeded() async {
+        guard !didRestoreDraftMedia else { return }
+        didRestoreDraftMedia = true
+        guard let path = retainedDraftImagePath else { return }
+        do {
+            let data = try await ContentDraftMediaDownload.imageData(
+                path: path,
+                session: session,
+                objectStorage: objectStorage
+            )
+            guard let image = UIImage(data: data) else { return }
+            let displayMode = screenshotDisplayMode
+            setScreenshot(image)
+            screenshotDisplayMode = displayMode
+        } catch {
+            formError = "Couldn't restore the draft screenshot."
+        }
     }
 
     private static func userMessage(for error: Error) -> String {

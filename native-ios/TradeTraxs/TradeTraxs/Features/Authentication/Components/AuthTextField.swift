@@ -108,6 +108,12 @@ struct AuthTextField: View {
             guard old.isEmpty, !new.isEmpty, let loginField else { return }
             LoginFocusProbe.firstCharacterChanged(field: loginField.probeName)
         }
+        .experienceTextInputProbe(
+            screen: "auth",
+            field: loginField?.probeName ?? title,
+            text: text,
+            isFocused: isFieldFocused
+        )
     }
 
     private var isFieldFocused: Bool {

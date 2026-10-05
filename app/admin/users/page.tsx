@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { getCurrentAdminCheckResult } from "@/lib/adminUsers"
-import { banUser, unbanUser } from "@/lib/adminModeration"
+import { banUser, setUserHiddenFromCommunity, unbanUser } from "@/lib/adminModeration"
 import {
   type AdminUserActivityCounts,
   type AdminUserListRow,
@@ -237,6 +237,7 @@ export default function AdminUsersPage() {
           banned_reason: null,
           banned_at: null,
           is_beta_tester: false,
+          is_hidden_from_community: false,
           full_count: 0,
         }
     )
@@ -447,6 +448,23 @@ export default function AdminUsersPage() {
       return
     }
     setSelected({ ...selected, is_banned: true, banned_reason: banReason.trim(), banned_at: new Date().toISOString() })
+    await loadDirectory()
+  }
+
+  async function handleCommunityVisibility(hidden: boolean) {
+    if (!selected || !adminUserId) return
+    setModerationBusy(true)
+    const { error } = await setUserHiddenFromCommunity(supabase, {
+      adminUserId,
+      targetUserId: selected.id,
+      hidden,
+    })
+    setModerationBusy(false)
+    if (error) {
+      alert(toUserFacingErrorMessage(error))
+      return
+    }
+    setSelected({ ...selected, is_hidden_from_community: hidden })
     await loadDirectory()
   }
 
@@ -668,6 +686,7 @@ export default function AdminUsersPage() {
                     <th className="px-3 py-2">Pro</th>
                     <th className="px-3 py-2">Private</th>
                     <th className="px-3 py-2">Banned</th>
+                    <th className="px-3 py-2">Community</th>
                     <th className="px-3 py-2">Beta</th>
                     <th className="px-3 py-2">Referral</th>
                   </tr>
@@ -675,7 +694,7 @@ export default function AdminUsersPage() {
                 <tbody className="divide-y divide-white/5">
                   {!listLoading && rows.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-3 py-6 text-center text-gray-400">
+                      <td colSpan={10} className="px-3 py-6 text-center text-gray-400">
                         No users match these filters.
                       </td>
                     </tr>
@@ -728,6 +747,13 @@ export default function AdminUsersPage() {
                         <td className="px-3 py-2">{pro ? <span className="text-emerald-400">Yes</span> : <span className="text-gray-400">No</span>}</td>
                         <td className="px-3 py-2">{row.is_private ? "Yes" : "No"}</td>
                         <td className="px-3 py-2">{row.is_banned ? <span className="text-red-300">Yes</span> : "No"}</td>
+                        <td className="px-3 py-2">
+                          {row.is_hidden_from_community ? (
+                            <span className="text-amber-300">Hidden</span>
+                          ) : (
+                            <span className="text-gray-400">Visible</span>
+                          )}
+                        </td>
                         <td className="px-3 py-2">
                           {row.is_beta_tester ? (
                             <span className="text-amber-400">Yes</span>
@@ -864,6 +890,36 @@ export default function AdminUsersPage() {
                     {countsLoading ? "…" : counts?.supportTickets ?? "—"}
                   </p>
                 </div>
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-lg border border-white/10 bg-black/30 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-200">Hide User From Community</h3>
+                  <p className="mt-1 text-xs text-gray-400">
+                    Hidden users can use TradeTraxs normally but are not discoverable or visible to other users.
+                  </p>
+                  <p className="mt-2 text-xs font-medium text-gray-200">
+                    {selected.is_hidden_from_community ? "Status: Hidden" : "Status: Visible"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={selected.is_hidden_from_community}
+                  disabled={moderationBusy || deleteView}
+                  onClick={() => void handleCommunityVisibility(!selected.is_hidden_from_community)}
+                  className={`relative h-6 w-11 shrink-0 rounded-full transition ${
+                    selected.is_hidden_from_community ? "bg-amber-500" : "bg-white/20"
+                  } disabled:opacity-50`}
+                >
+                  <span
+                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${
+                      selected.is_hidden_from_community ? "left-5" : "left-0.5"
+                    }`}
+                  />
+                </button>
               </div>
             </div>
 

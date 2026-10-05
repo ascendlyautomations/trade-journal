@@ -14,6 +14,7 @@ import {
 } from "@/lib/achievementPostEngagement"
 import { FEED_REELS_SELECT } from "@/lib/reelEngagement"
 import { fetchReelsByTradeIds } from "@/lib/reels"
+import { hydrateCopyTradeFeedPosts } from "./feedCopyTradeHydration"
 import {
   FEED_POSTS_SELECT,
   type FeedContentFilter,
@@ -193,6 +194,8 @@ export async function fetchTradeFeedBatch(
   ) {
     items = await hydrateTradeFeedItemsWithReels(supabase, options.userId, items)
   }
+
+  items = await hydrateCopyTradeFeedPosts(supabase, items)
 
   return { items }
 }

@@ -7,6 +7,9 @@ nonisolated enum AuthenticationEvent: Sendable, Equatable {
     case signInStarted(AuthenticationProviderKind)
     case signInSucceeded(userID: UserID, provider: AuthenticationProviderKind)
     case signInFailed(AuthenticationError)
+    case signUpStarted(AuthenticationProviderKind)
+    case signUpSucceeded(userID: UserID, provider: AuthenticationProviderKind)
+    case signUpFailed(AuthenticationError)
     case tokenRefreshStarted
     case tokenRefreshSucceeded
     case tokenRefreshFailed

@@ -68,6 +68,8 @@ nonisolated enum StorageBucket: String, Sendable {
     case profilePosts = "profile_posts"
     /// DM / Trade Room voice messages (AAC m4a).
     case messageAudio = "message-audio"
+    /// Private composer attachments. Never a public content bucket.
+    case draftMedia = "draft-media"
 }
 
 nonisolated struct SupabaseObjectStorageProvider: ObjectStorageProviding {

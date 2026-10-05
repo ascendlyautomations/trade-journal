@@ -27,6 +27,8 @@ struct CreateStoryView: View {
                 uploadService: data.uploadService,
                 objectStorage: data.objectStorage,
                 uploadServices: data.globalUploadServices(),
+                contentDrafts: data.contentDraftRepository(),
+                restoredDraft: ContentDraftLaunchStore.shared.consume(expecting: .story),
                 onPublished: onPublished,
                 onDismiss: onDismiss
             )
@@ -60,6 +62,16 @@ struct CreateStoryView: View {
                     Button("Cancel") { requestDismiss() }
                         .font(.body.weight(.regular))
                         .disabled(viewModel.phase == .publishing)
+                }
+                if viewModel.showsSaveDraft {
+                    ToolbarItem(placement: .primaryAction) {
+                        SaveDraftToolbarButton(
+                            isSaving: viewModel.isSavingDraft,
+                            isEnabled: viewModel.canSaveDraft
+                        ) {
+                            viewModel.saveDraft()
+                        }
+                    }
                 }
             }
         }
@@ -120,6 +132,9 @@ struct CreateStoryView: View {
             StoryEditorView(
                 sourceImage: source,
                 isPosting: viewModel.isPostingStory,
+                restoredCanvas: viewModel.restoredCanvas,
+                isSavingDraft: viewModel.isSavingDraft,
+                onSaveDraft: viewModel.showsSaveDraft ? { viewModel.saveDraft(canvas: $0) } : nil,
                 onCancel: {
                     viewModel.clearImage()
                     mediaItem = nil
@@ -132,6 +147,9 @@ struct CreateStoryView: View {
             StoryEditorView(
                 videoURL: videoURL,
                 isPosting: viewModel.isPostingStory,
+                restoredCanvas: viewModel.restoredCanvas,
+                isSavingDraft: viewModel.isSavingDraft,
+                onSaveDraft: viewModel.showsSaveDraft ? { viewModel.saveDraft(canvas: $0) } : nil,
                 onCancel: {
                     viewModel.clearImage()
                     mediaItem = nil

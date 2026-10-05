@@ -271,6 +271,7 @@ enum ProLimitPresentation {
     static func presentUpgradeIfProGate(_ error: Error) -> Bool {
         guard let reason = ProGateReasonParser.reason(from: error) else { return false }
         guard ProMonetizationPolicy.canPresentProPaywall(
+            demoModeActive: ExploreModeSupport.isActive,
             enforcement: IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled,
             paywallEnabled: IosSubscriptionReleaseConfiguration.iosPaywallEnabled
         ) else { return false }

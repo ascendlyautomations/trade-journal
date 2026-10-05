@@ -18,9 +18,39 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
     }
 
     func trade(id: TradeID) async throws -> Trade {
+        #if DEBUG
+        let ownerStarted = CFAbsoluteTimeGetCurrent()
+        await MainActor.run {
+            SharedTradeOpenDiagnostics.repositoryFetchStarted(tradeID: id, step: "rpc_v1_trade_owner_read")
+        }
+        #endif
         if let ownerDto = try await fetchOwnerTradeDTO(id: id.rawValue) {
+            #if DEBUG
+            let elapsedMs = Int((CFAbsoluteTimeGetCurrent() - ownerStarted) * 1000)
+            await MainActor.run {
+                SharedTradeOpenDiagnostics.repositoryFetchFinished(
+                    tradeID: id,
+                    step: "rpc_v1_trade_owner_read",
+                    outcome: "hit",
+                    elapsedMs: elapsedMs
+                )
+            }
+            #endif
             return try TradeMapper.mapToDomain(ownerDto)
         }
+        #if DEBUG
+        let ownerElapsedMs = Int((CFAbsoluteTimeGetCurrent() - ownerStarted) * 1000)
+        await MainActor.run {
+            SharedTradeOpenDiagnostics.repositoryFetchFinished(
+                tradeID: id,
+                step: "rpc_v1_trade_owner_read",
+                outcome: "miss",
+                elapsedMs: ownerElapsedMs
+            )
+            SharedTradeOpenDiagnostics.repositoryFetchStarted(tradeID: id, step: "trades_public_read")
+        }
+        let publicStarted = CFAbsoluteTimeGetCurrent()
+        #endif
         let dto: TradeDTO.Trade = try await supabase.database.selectOne(
             TradeDTO.Trade.self,
             from: TradeDTO.tradesPublicReadTable,
@@ -29,6 +59,17 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
                 SupabaseQuery.eq("id", id.rawValue),
             ]
         )
+        #if DEBUG
+        let publicElapsedMs = Int((CFAbsoluteTimeGetCurrent() - publicStarted) * 1000)
+        await MainActor.run {
+            SharedTradeOpenDiagnostics.repositoryFetchFinished(
+                tradeID: id,
+                step: "trades_public_read",
+                outcome: "success",
+                elapsedMs: publicElapsedMs
+            )
+        }
+        #endif
         return try TradeMapper.mapToDomain(dto)
     }
 
@@ -516,8 +557,10 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             if index < stamps.count, let account = accountsByID[stamps[index].accountID] {
                 memberDraft.accountID = account.accountID
             }
-            try await insertPublicPostIfNeeded(draft: memberDraft, trade: trade, userID: userID)
             saved.append(trade)
+        }
+        if draft.visibility == .public, let sourceTrade = saved.first {
+            try await insertPublicPostIfNeeded(draft: draft, trade: sourceTrade, userID: userID)
         }
         return saved
     }
@@ -897,6 +940,10 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         return try TradingAccountMapper.mapToDomain(row)
     }
 
+    /// Columns the owner can read back. Limits `return=representation` to this list.
+    private static let payoutEntryOwnerSelect =
+        "id,account_id,user_id,amount,payout_date,note,image_url,created_at,updated_at"
+
     func payoutEntries(for accountIDs: [TradingAccountID]) async throws -> [AccountPayoutEntry] {
         let unique = Array(Set(accountIDs.map(\.rawValue))).filter { !$0.isEmpty }
         guard !unique.isEmpty else { return [] }
@@ -904,7 +951,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             TradeDTO.AccountPayoutEntryRow.self,
             from: "account_payout_entries",
             query: [
-                SupabaseQuery.select("id,account_id,user_id,amount,payout_date,note,image_url,created_at,updated_at"),
+                SupabaseQuery.select(Self.payoutEntryOwnerSelect),
                 SupabaseQuery.isIn("account_id", unique),
                 URLQueryItem(name: "order", value: "payout_date.desc,id.desc"),
             ]
@@ -939,7 +986,10 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         let row: TradeDTO.AccountPayoutEntryRow = try await supabase.database.update(
             body,
             table: "account_payout_entries",
-            query: [SupabaseQuery.eq("id", id.rawValue)],
+            query: [
+                SupabaseQuery.select(Self.payoutEntryOwnerSelect),
+                SupabaseQuery.eq("id", id.rawValue),
+            ],
             returning: TradeDTO.AccountPayoutEntryRow.self
         )
         return try AccountPayoutEntryMapper.mapToDomain(row)

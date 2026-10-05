@@ -181,13 +181,24 @@ enum ActivityNotificationRouting {
         _ notification: ActivityNotification,
         host: ActivityNavigationHost,
         coordinator: NavigationCoordinator,
+        detailCache: DetailPresentationCache? = nil,
         router: any NotificationRouting = NotificationRouter()
     ) {
         switch host {
         case .home:
-            openOnHomeStack(notification, coordinator: coordinator, router: router)
+            openOnHomeStack(
+                notification,
+                coordinator: coordinator,
+                detailCache: detailCache,
+                router: router
+            )
         case .profile:
-            openOnProfileStack(notification, coordinator: coordinator, router: router)
+            openOnProfileStack(
+                notification,
+                coordinator: coordinator,
+                detailCache: detailCache,
+                router: router
+            )
         }
     }
 
@@ -195,6 +206,7 @@ enum ActivityNotificationRouting {
     private static func openOnHomeStack(
         _ notification: ActivityNotification,
         coordinator: NavigationCoordinator,
+        detailCache: DetailPresentationCache?,
         router: any NotificationRouting
     ) {
         switch notification.kind {
@@ -226,7 +238,10 @@ enum ActivityNotificationRouting {
             } else if let postID = notification.postID ?? notification.profilePostID {
                 coordinator.pushHome(.post(postID))
             } else if let tradeID = notification.tradeID {
-                coordinator.pushHome(.socialTrade(tradeID))
+                #if DEBUG
+                SharedTradeOpenDiagnostics.tapped(tradeID: tradeID)
+                #endif
+                coordinator.pushSocialTrade(tradeID, cache: detailCache)
             } else if let profileID = notification.actorProfileID {
                 coordinator.pushHome(.otherProfile(profileID))
             } else {
@@ -261,6 +276,7 @@ enum ActivityNotificationRouting {
     private static func openOnProfileStack(
         _ notification: ActivityNotification,
         coordinator: NavigationCoordinator,
+        detailCache: DetailPresentationCache?,
         router: any NotificationRouting
     ) {
         switch notification.kind {
@@ -292,7 +308,10 @@ enum ActivityNotificationRouting {
             } else if let postID = notification.postID ?? notification.profilePostID {
                 coordinator.pushProfile(.post(postID))
             } else if let tradeID = notification.tradeID {
-                coordinator.pushProfile(.trade(tradeID))
+                #if DEBUG
+                SharedTradeOpenDiagnostics.tapped(tradeID: tradeID)
+                #endif
+                coordinator.pushSocialTrade(tradeID, cache: detailCache)
             } else if let profileID = notification.actorProfileID {
                 coordinator.pushProfile(.otherProfile(profileID))
             } else {

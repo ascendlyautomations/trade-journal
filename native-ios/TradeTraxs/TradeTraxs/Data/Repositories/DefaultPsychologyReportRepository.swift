@@ -50,10 +50,26 @@ actor DefaultPsychologyReportRepository: PsychologyReportRepository {
 
     private func loadInputs(forceNetwork: Bool) async throws -> ([Trade], [TraderDailyCheckIn], String) {
         let userID = await session.currentUserID
-        let profileID = ProfileID(userID?.rawValue ?? "dev.reports")
+        let demoActive = await AppLaunchController.shared.isDemoExperienceActive
+        guard case .viewer(let profileID) = SessionViewerIdentity.resolve(
+            userID: userID,
+            demoExperienceActive: demoActive
+        ) else {
+            throw AppError.unknown(message: SessionViewerIdentity.sessionUnavailableMessage)
+        }
+        let latestUserID = await session.currentUserID
+        guard SessionViewerIdentity.shouldCommit(
+            resolved: profileID,
+            userID: latestUserID,
+            demoExperienceActive: await AppLaunchController.shared.isDemoExperienceActive
+        ) else {
+            throw AppError.unknown(message: SessionViewerIdentity.sessionUnavailableMessage)
+        }
 
         let loaded: [Trade]
-        if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+        if profileID == DemoExperienceSupport.profileID {
+            loaded = DemoCanonicalDataset.trades()
+        } else if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
             loaded = ProfileTradeFixtures.samples(owner: profileID)
         } else {
             loaded = try await SessionOwnerTradesStore.shared.trades(
@@ -68,7 +84,9 @@ actor DefaultPsychologyReportRepository: PsychologyReportRepository {
         let startKey = CheckInHistoryAggregator.startDateKey()
         let endKey = TraderPsychologyAnalyticsFoundation.todayCheckInDateKey()
         let checkIns: [TraderDailyCheckIn]
-        if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+        if profileID == DemoExperienceSupport.profileID {
+            checkIns = DemoCanonicalDataset.checkIns()
+        } else if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
             checkIns = []
         } else {
             checkIns = try await dailyCheckIns.checkIns(

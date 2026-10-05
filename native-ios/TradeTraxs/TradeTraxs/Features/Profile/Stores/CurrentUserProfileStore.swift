@@ -216,6 +216,13 @@ final class CurrentUserProfileStore {
         detailCache?.seed(stats: stats)
     }
 
+    /// Journal mutation reconciliation — Trades / Win % / Profit Factor (canonical overview metrics).
+    func applyOwnerJournalHeaderMetrics(_ incoming: ProfileStats) {
+        guard profile?.id == incoming.profileID else { return }
+        stats = incoming
+        detailCache?.seed(stats: incoming)
+    }
+
     private func profileStoreSeed(profile: Profile, stats: ProfileStats?) {
         self.profile = profile
         if let stats {
@@ -233,6 +240,18 @@ final class CurrentUserProfileStore {
         phase = profile == nil ? .loading : phase
         errorMessage = nil
         defer { loadTask = nil }
+
+        if let userID = await session.currentUserID {
+            let localID = ProfileID(userID.rawValue)
+            if DemoExperienceSupport.usesLocalBundledData(localID) {
+                let loaded = (try? await profiles.profile(id: localID)) ?? DemoCanonicalDataset.profile()
+                let stats = localID == DemoExperienceSupport.profileID
+                    ? DemoCanonicalDataset.profileStats()
+                    : nil
+                profileStoreSeed(profile: loaded, stats: stats)
+                return
+            }
+        }
 
         await SessionNetworkGate.shared.awaitReady()
 

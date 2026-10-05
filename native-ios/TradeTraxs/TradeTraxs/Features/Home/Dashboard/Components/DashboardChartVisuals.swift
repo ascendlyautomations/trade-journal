@@ -144,6 +144,7 @@ struct DashboardSessionBarsView: View {
             )
         } else {
             let maxAbs = max(rows.map { abs($0.netPnL) }.max() ?? 0, 1)
+            ProposedWidthClamp {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                 ForEach(rows) { row in
                     Button {
@@ -190,6 +191,7 @@ struct DashboardSessionBarsView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("\(row.label), \(signedMoney(row.netPnL)), \(row.tradeCount) trades.")
                 }
+            }
             }
         }
     }
@@ -239,55 +241,69 @@ struct DashboardWeekdayHeatmapView: View {
                 message: "Complete a few more trades to unlock your weekday heatmap."
             )
         } else {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            if bestLabel != nil || worstLabel != nil {
-                HStack(spacing: ExperienceSpacing.md) {
-                    if let best = bestLabel, let p = points.first(where: { $0.label == best }) {
-                        Text("Best \(best) · \(moneyLabel(p.value))")
-                            .experienceStyle(.caption2, color: colors.profit)
-                    }
-                    if let worst = worstLabel, let p = points.first(where: { $0.label == worst }) {
-                        Text("Worst \(worst) · \(moneyLabel(p.value))")
-                            .experienceStyle(.caption2, color: colors.loss)
-                    }
-                }
-            }
-            HStack(spacing: ExperienceSpacing.xs) {
-                ForEach(points) { point in
-                    Button {
-                        onSelect?(point.label)
-                    } label: {
-                        VStack(spacing: 6) {
-                            RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-                                .fill(cellColor(point.value))
-                                .overlay {
-                                    if point.label == bestLabel || point.label == worstLabel {
-                                        RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-                                            .stroke(colors.primaryText.opacity(0.45), lineWidth: 1)
-                                    }
-                                }
-                                .frame(height: 44)
-                                .overlay {
-                                    if abs(point.value) < 0.01 {
-                                        Text("·")
-                                            .experienceStyle(.caption2, color: colors.tertiaryText)
-                                    } else {
-                                        Text(point.value >= 0 ? "+" : "−")
-                                            .font(.system(.caption2, design: .rounded).weight(.bold))
-                                            .foregroundStyle(colors.primaryText.opacity(0.85))
-                                    }
-                                }
-                            Text(point.label)
-                                .experienceStyle(.caption2, color: colors.tertiaryText)
+            ProposedWidthClamp {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                    if bestLabel != nil || worstLabel != nil {
+                        HStack(spacing: ExperienceSpacing.md) {
+                            bestWorstLabels
                         }
-                        .frame(maxWidth: .infinity)
-                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("\(point.label), \(moneyLabel(point.value)). Double tap to view trades.")
+                    HStack(spacing: ExperienceSpacing.xs) {
+                        ForEach(points) { point in
+                            Button {
+                                onSelect?(point.label)
+                            } label: {
+                                VStack(spacing: 6) {
+                                    RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                                        .fill(cellColor(point.value))
+                                        .overlay {
+                                            if point.label == bestLabel || point.label == worstLabel {
+                                                RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                                                    .stroke(colors.primaryText.opacity(0.45), lineWidth: 1)
+                                            }
+                                        }
+                                        .frame(height: 44)
+                                        .overlay {
+                                            if abs(point.value) < 0.01 {
+                                                Text("·")
+                                                    .experienceStyle(.caption2, color: colors.tertiaryText)
+                                            } else {
+                                                Text(point.value >= 0 ? "+" : "−")
+                                                    .font(.system(.caption2, design: .rounded).weight(.bold))
+                                                    .foregroundStyle(colors.primaryText.opacity(0.85))
+                                            }
+                                        }
+                                    Text(point.label)
+                                        .experienceStyle(.caption2, color: colors.tertiaryText)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.7)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .frame(maxWidth: .infinity)
+                            .accessibilityLabel("\(point.label), \(moneyLabel(point.value)). Double tap to view trades.")
+                        }
+                    }
                 }
             }
-            }
+        }
+    }
+
+    @ViewBuilder
+    private var bestWorstLabels: some View {
+        if let best = bestLabel, let p = points.first(where: { $0.label == best }) {
+            Text("Best \(best) · \(moneyLabel(p.value))")
+                .experienceStyle(.caption2, color: colors.profit)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        if let worst = worstLabel, let p = points.first(where: { $0.label == worst }) {
+            Text("Worst \(worst) · \(moneyLabel(p.value))")
+                .experienceStyle(.caption2, color: colors.loss)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
     }
 
@@ -341,6 +357,7 @@ struct DashboardHourTimelineView: View {
     }
 
     var body: some View {
+        ProposedWidthClamp {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             headerSummary
             if bestHourLabel != nil || worstHourLabel != nil {
@@ -374,6 +391,7 @@ struct DashboardHourTimelineView: View {
             .padding(.top, ExperienceSpacing.xs)
 
             axisLabels
+        }
         }
     }
 
@@ -627,6 +645,7 @@ struct DashboardHoldHistogramView: View {
                 message: "Your hold time distribution will appear after more completed trades."
             )
         } else {
+            ProposedWidthClamp {
             VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
                 Chart(buckets) { bucket in
                     BarMark(
@@ -718,6 +737,7 @@ struct DashboardHoldHistogramView: View {
                     }
                     .padding(.top, ExperienceSpacing.xs)
                 }
+            }
             }
         }
     }

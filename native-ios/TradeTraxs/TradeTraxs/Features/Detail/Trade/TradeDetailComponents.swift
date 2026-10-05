@@ -64,6 +64,81 @@ struct TradeDetailCompactHeader: View {
     }
 }
 
+// MARK: - Social (public) header
+
+struct SocialTradeDetailHeader: View {
+    let trade: Trade
+    var accountLine: String?
+
+    @Environment(\.themeColors) private var colors
+    @Environment(\.experienceTheme) private var theme
+
+    private var pnlAmount: Double {
+        NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                    Text(TradeDisplay.tickerText(trade.symbol))
+                        .font(.system(.title3, design: .default).weight(.bold))
+                        .foregroundStyle(colors.primaryText)
+                        .lineLimit(1)
+
+                    Text(TradeDisplay.sideTitle(trade.side).uppercased())
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .foregroundStyle(trade.side == .long ? colors.profit : colors.loss)
+                }
+
+                Spacer(minLength: ExperienceSpacing.xs)
+
+                VStack(alignment: .trailing, spacing: ExperienceSpacing.xxs) {
+                    Text(TradeDisplay.pnlText(trade.realizedPnL))
+                        .font(.system(.title3, design: .rounded).weight(.bold).monospacedDigit())
+                        .foregroundStyle(theme.metricColor(for: pnlAmount))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+
+                    if let rr = TradeDisplay.compactRRText(trade.riskReward) {
+                        Text(rr)
+                            .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
+                            .foregroundStyle(colors.secondaryText)
+                    }
+                }
+            }
+
+            Text(TradeDisplay.socialSharedExecutionTimeRangeText(for: trade))
+                .font(.system(.subheadline, design: .rounded).weight(.medium).monospacedDigit())
+                .foregroundStyle(colors.primaryText)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+
+            Text(TradeDisplay.socialSharedTradeDateText(for: trade))
+                .experienceStyle(.caption, color: colors.secondaryText)
+
+            if let accountLine, !accountLine.isEmpty {
+                Text(accountLine)
+                    .experienceStyle(.caption2, color: colors.tertiaryText)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+struct SocialTradePublicMetricsSection: View {
+    let trade: Trade
+
+    var body: some View {
+        TradeDetailGroupedSurface {
+            TradeExecutionMetricsTwoRowGrid(trade: trade)
+        }
+        .accessibilityIdentifier("detail.trade.socialMetrics")
+    }
+}
+
 // MARK: - Grouped surfaces
 
 struct TradeDetailGroupedSurface<Content: View>: View {

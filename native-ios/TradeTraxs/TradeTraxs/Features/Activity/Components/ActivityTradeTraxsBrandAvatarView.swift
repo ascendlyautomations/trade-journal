@@ -7,6 +7,8 @@ struct ActivityTradeTraxsBrandAvatarView: View {
     @Environment(\.themeColors) private var colors
 
     private static let logoAssetName = "AppLogo"
+    /// In-circle fill for `AppLogo` before the circular clip (~10% zoom-out step from 1.10).
+    private static let logoFillScale: CGFloat = 1.0
 
     var body: some View {
         ZStack {
@@ -16,7 +18,7 @@ struct ActivityTradeTraxsBrandAvatarView: View {
                 .resizable()
                 .interpolation(.high)
                 .scaledToFill()
-                .padding(size * 0.06)
+                .scaleEffect(Self.logoFillScale)
         }
         .frame(width: size, height: size)
         .clipShape(Circle())

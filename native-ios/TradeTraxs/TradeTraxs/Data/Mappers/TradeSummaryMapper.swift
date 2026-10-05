@@ -36,6 +36,8 @@ nonisolated enum TradeSummaryMapper {
             quantity: flexDecimal(wire.contracts) ?? 0,
             entryAt: entryAt,
             exitAt: ISO8601.date(from: wire.exit_time),
+            entryPrice: flexDecimal(wire.entry_price),
+            exitPrice: flexDecimal(wire.exit_price),
             createdAt: createdAt,
             visibility: visibility,
             publicCaption: wire.public_description,
@@ -67,6 +69,8 @@ nonisolated enum TradeSummaryMapper {
             quantity: detail.quantity,
             entryAt: detail.entryAt,
             exitAt: detail.exitAt,
+            entryPrice: detail.entryPrice,
+            exitPrice: detail.exitPrice,
             createdAt: detail.createdAt,
             visibility: detail.visibility,
             publicCaption: detail.publicCaption,
@@ -103,6 +107,8 @@ nonisolated enum TradeSummaryMapper {
             contracts: wire.contracts,
             entry_time: wire.entry_time,
             exit_time: wire.exit_time,
+            entry_price: wire.entry_price,
+            exit_price: wire.exit_price,
             created_at: wire.created_at,
             is_public: wire.is_public,
             public_description: wire.public_description,
@@ -116,10 +122,21 @@ nonisolated enum TradeSummaryMapper {
             duration_seconds: wire.duration_seconds,
             duration_text: wire.duration_text
         )
-        let summary = try map(from: coreWire)
+        var summary = try map(from: coreWire)
         let accountID = wire.account_id.flatMap { raw -> TradingAccountID? in
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? nil : TradingAccountID(trimmed)
+        }
+        if let linkage = wire.account_mode?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !linkage.isEmpty,
+           let parsed = TradingAccountMode.parseWireValue(linkage)
+        {
+            summary.accountMode = parsed
+        } else if let resolved = CopyTradePresentation.resolvedPublicAccountMode(
+            summary: summary,
+            linkageAccountMode: wire.account_mode
+        ) {
+            summary.accountMode = resolved
         }
         return TradeOwnerJournalSummary(
             summary: summary,
@@ -128,7 +145,44 @@ nonisolated enum TradeSummaryMapper {
             strategy: trimmedOptional(wire.strategy),
             entryPrice: flexDecimal(wire.entry_price),
             exitPrice: flexDecimal(wire.exit_price),
-            sessionLabel: trimmedOptional(wire.session)
+            sessionLabel: trimmedOptional(wire.session),
+            copyTrade: mapCopyTradeJournalMetadata(from: wire)
+        )
+    }
+
+    static func mapCopyTradeJournalMetadata(
+        from wire: TradeOwnerJournalSummaryWireV1
+    ) -> CopyTradeJournalMetadata? {
+        guard CopyTradePresentation.isCopyTraded(
+            tradeMode: TradeMapper.mapExecutionMode(
+                tradeMode: wire.trade_mode,
+                mode: wire.mode,
+                accountType: wire.account_type
+            )
+        ) else { return nil }
+
+        let sourceRaw = wire.source_account_id?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let source = sourceRaw.flatMap { $0.isEmpty ? nil : TradingAccountID($0) }
+        let copied = (wire.copied_account_ids ?? [])
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .map { TradingAccountID($0) }
+        let groupRaw = wire.copy_trading_group_id?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let group = groupRaw.flatMap { $0.isEmpty ? nil : $0 }
+        let participatingModes = CopyTradePresentation.parseParticipatingAccountModes(
+            (wire.participating_account_modes ?? []).compactMap { row -> (String, String?)? in
+                guard let raw = row.account_id else { return nil }
+                return (raw, row.account_mode)
+            }
+        )
+        if source == nil, copied.isEmpty, group == nil, participatingModes.isEmpty { return nil }
+        return CopyTradeJournalMetadata(
+            sourceAccountID: source,
+            copiedAccountIDs: copied,
+            copyTradingGroupID: group,
+            participatingAccountModesByID: participatingModes
         )
     }
 
@@ -152,7 +206,8 @@ nonisolated enum TradeSummaryMapper {
             strategy: trade.strategy,
             entryPrice: trade.entryPrice,
             exitPrice: trade.exitPrice,
-            sessionLabel: trade.sessionLabel
+            sessionLabel: trade.sessionLabel,
+            copyTrade: trade.copyTrade
         )
     }
 
@@ -172,6 +227,8 @@ nonisolated enum TradeSummaryMapper {
             quantity: trade.quantity,
             entryAt: trade.entryAt,
             exitAt: trade.exitAt,
+            entryPrice: trade.entryPrice,
+            exitPrice: trade.exitPrice,
             createdAt: trade.createdAt,
             visibility: trade.visibility,
             publicCaption: trade.publicCaption,
@@ -194,6 +251,7 @@ nonisolated enum TradeSummaryMapper {
         trade.entryPrice = item.entryPrice
         trade.exitPrice = item.exitPrice
         trade.sessionLabel = item.sessionLabel
+        trade.copyTrade = item.copyTrade
         return trade
     }
 
@@ -206,8 +264,8 @@ nonisolated enum TradeSummaryMapper {
             side: summary.side,
             mode: summary.mode,
             quantity: summary.quantity,
-            entryPrice: nil,
-            exitPrice: nil,
+            entryPrice: summary.entryPrice,
+            exitPrice: summary.exitPrice,
             entryAt: summary.entryAt,
             exitAt: summary.exitAt,
             realizedPnL: summary.realizedPnL,

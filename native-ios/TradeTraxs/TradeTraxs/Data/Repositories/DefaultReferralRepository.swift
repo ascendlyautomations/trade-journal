@@ -32,11 +32,10 @@ nonisolated struct DefaultReferralRepository: ReferralRepository {
 
     func apply(code: String, invitee: ProfileID) async throws -> Referral {
         struct Body: Encodable { var referred_by: String }
-        _ = try await supabase.database.update(
+        try await supabase.database.update(
             Body(referred_by: code.uppercased()),
             table: "profiles",
-            query: [SupabaseQuery.eq("id", invitee.rawValue)],
-            returning: ProfileDTO.Profile.self
+            query: [SupabaseQuery.eq("id", invitee.rawValue)]
         )
         return Referral(
             id: ReferralID("\(invitee.rawValue)-\(code)"),

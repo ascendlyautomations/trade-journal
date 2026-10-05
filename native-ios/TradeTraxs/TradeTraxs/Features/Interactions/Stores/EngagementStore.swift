@@ -50,6 +50,10 @@ final class EngagementStore {
     }
 
     func toggleLike(on target: InteractionTarget) async {
+        if ExploreModeSupport.isActive {
+            DemoModeAuthGatePresenter.shared.requireAuthentication()
+            return
+        }
         guard !inFlightLikes.contains(target) else { return }
         inFlightLikes.insert(target)
         defer { inFlightLikes.remove(target) }

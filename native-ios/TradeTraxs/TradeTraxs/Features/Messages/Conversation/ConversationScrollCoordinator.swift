@@ -145,6 +145,8 @@ final class ConversationScrollCoordinator {
         case .userNearBottom(let isNearBottom):
             guard !pendingInitialScroll else { return }
             if isNearBottom {
+                // Same bottom-pinned state must not invalidate the thread again this frame.
+                guard mode != .bottomPinned || showsNewMessagesIndicator else { return }
                 mode = .bottomPinned
                 showsNewMessagesIndicator = false
             } else if mode == .bottomPinned {

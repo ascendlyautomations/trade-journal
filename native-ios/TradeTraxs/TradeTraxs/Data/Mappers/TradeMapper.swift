@@ -101,8 +101,45 @@ nonisolated enum TradeMapper: DTOMapper {
                 mode: dto.mode
             ),
             publicAccountBadge: publicBadge,
+            copyTrade: mapCopyTradeJournalMetadata(dto, executionMode: mode),
             createdAt: createdAt,
             updatedAt: createdAt
+        )
+    }
+
+    static func mapCopyTradeJournalMetadata(
+        _ dto: DTO,
+        executionMode: TradeMode
+    ) -> CopyTradeJournalMetadata? {
+        guard executionMode == .copyTraded else { return nil }
+        let sourceRaw = dto.source_account_id?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let source = sourceRaw.flatMap { $0.isEmpty ? nil : TradingAccountID($0) }
+        let copied = (dto.copied_account_ids ?? [])
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .map { TradingAccountID($0) }
+        let groupID = dto.copy_trading_group_id?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedGroup = groupID.flatMap { $0.isEmpty ? nil : $0 }
+        let participatingModes = participatingAccountModesByID(from: dto)
+        if source == nil, copied.isEmpty, trimmedGroup == nil, participatingModes.isEmpty { return nil }
+        return CopyTradeJournalMetadata(
+            sourceAccountID: source,
+            copiedAccountIDs: copied,
+            copyTradingGroupID: trimmedGroup,
+            participatingAccountModesByID: participatingModes
+        )
+    }
+
+    static func participatingAccountModesByID(
+        from dto: DTO
+    ) -> [TradingAccountID: TradingAccountMode] {
+        CopyTradePresentation.parseParticipatingAccountModes(
+            (dto.participating_account_modes ?? []).compactMap { row -> (String, String?)? in
+                guard let raw = row.account_id else { return nil }
+                return (raw, row.account_mode)
+            }
         )
     }
 

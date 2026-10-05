@@ -93,7 +93,9 @@ enum SharedContentHydrationProbe {
         }
 
         private func log(_ message: String) {
-            AppLog.general.debug("[SharedContent] \(message, privacy: .public)")
+            let line = "[SharedContent] \(message)"
+            print(line)
+            AppLog.general.info("\(line, privacy: .public)")
         }
     }
 }

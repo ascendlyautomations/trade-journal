@@ -48,6 +48,8 @@ struct ProfileTradeCard: View {
     var onReport: (() -> Void)? = nil
     var profilePin: ProfilePinCallbacks? = nil
     var isProfilePinned: Bool = false
+    /// Grouped copy-action mode line from Profile display grouping — not recomputed from ``TradeSummary/accountMode``.
+    var copyTradeModeSummaryLine: String? = nil
 
     init(
         summary: TradeSummary,
@@ -62,7 +64,8 @@ struct ProfileTradeCard: View {
         isDeleteInProgress: Bool = false,
         onReport: (() -> Void)? = nil,
         profilePin: ProfilePinCallbacks? = nil,
-        isProfilePinned: Bool = false
+        isProfilePinned: Bool = false,
+        copyTradeModeSummaryLine: String? = nil
     ) {
         self.summary = summary
         self.imagePipeline = imagePipeline
@@ -77,6 +80,7 @@ struct ProfileTradeCard: View {
         self.onReport = onReport
         self.profilePin = profilePin
         self.isProfilePinned = isProfilePinned
+        self.copyTradeModeSummaryLine = copyTradeModeSummaryLine
     }
 
     @Environment(\.themeColors) private var colors
@@ -213,8 +217,22 @@ struct ProfileTradeCard: View {
         .accessibilityIdentifier("profile.trades.card.\(summary.id.rawValue)")
     }
 
+    private var profileCopyTradeModeLine: String? {
+        ProfileCopyTradeModeSummaryText.renderedText(
+            groupedLine: copyTradeModeSummaryLine,
+            summaryLine: summary.copyTradePublicModeSummary
+        )
+    }
+
     private var tradeSummaryColumn: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            if summary.mode == .copyTraded {
+                Text("Copy Traded")
+                    .experienceStyle(.caption, color: colors.primaryText)
+                    .fontWeight(.semibold)
+                    .accessibilityIdentifier("profile.trade.copyTradedTitle")
+            }
+
             ProfileTradeHeadlineRow(
                 ticker: summary.symbol.ticker,
                 realizedPnL: summary.realizedPnL,
@@ -228,8 +246,25 @@ struct ProfileTradeCard: View {
                 visibilityIcon
             }
 
-            PublicTradeMetaChipRow(summary: summary, showsSession: false, layout: .wrap)
-                .accessibilityIdentifier("profile.trade.badges")
+            if summary.mode == .copyTraded {
+                Text(
+                    "\(TradeDisplay.sideTitle(summary.side)) • \(TradeDisplay.dateText(summary.entryAt))"
+                )
+                .experienceStyle(.caption, color: colors.secondaryText)
+                .lineLimit(2)
+                .accessibilityIdentifier("profile.trade.copySideTiming")
+
+                ProfileCopyTradeModeSummaryText(
+                    summary: summary,
+                    groupedModeSummaryLine: copyTradeModeSummaryLine
+                )
+            }
+
+            TradeExecutionMetricsTwoRowGrid(
+                summary: summary,
+                priceDisplay: .profileCardRounded
+            )
+            .accessibilityIdentifier("profile.trade.executionMetrics")
         }
     }
 
@@ -259,6 +294,46 @@ struct ProfileTradeCard: View {
         let side = TradeDisplay.sideTitle(summary.side)
         let pin = isPinnedToProfile ? "Pinned to profile, " : ""
         return "\(pin)\(pnl), \(summary.symbol.ticker), \(side)"
+    }
+}
+
+/// Profile copy card — render grouped ``copyTradePublicModeSummary`` only (never ``accountMode``).
+private struct ProfileCopyTradeModeSummaryText: View {
+    let summary: TradeSummary
+    let groupedModeSummaryLine: String?
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        let copySummary = summary.copyTradePublicModeSummary
+        let rendered = Self.renderedText(
+            groupedLine: groupedModeSummaryLine,
+            summaryLine: copySummary
+        )
+        #if DEBUG
+        let _ = ProfileCopySummaryDiagnostics.logCopyTradeCardRender(
+            tradeID: summary.id.rawValue,
+            isCopyTraded: summary.mode == .copyTraded,
+            accountMode: summary.accountMode,
+            copySummary: copySummary,
+            renderedText: rendered
+        )
+        #endif
+        if let rendered {
+            Text(rendered)
+                .experienceStyle(.caption, color: colors.secondaryText)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("profile.trade.copyModeSummary")
+        }
+    }
+
+    static func renderedText(groupedLine: String?, summaryLine: String?) -> String? {
+        let candidate = groupedLine ?? summaryLine
+        guard let trimmed = candidate?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty
+        else { return nil }
+        return trimmed
     }
 }
 

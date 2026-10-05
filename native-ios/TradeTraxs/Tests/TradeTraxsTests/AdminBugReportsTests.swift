@@ -205,6 +205,7 @@ private struct MockAdminUsersForBugReports: AdminUsersRepository {
 
     func banUser(targetUserID: ProfileID, adminUserID: ProfileID, reason: String) async throws {}
     func unbanUser(targetUserID: ProfileID, adminUserID: ProfileID) async throws {}
+    func setHiddenFromCommunity(targetUserID: ProfileID, adminUserID: ProfileID, hidden: Bool) async throws {}
     func fetchDeletionPreview(targetUserID: ProfileID) async throws -> AdminUserDeletionPreview {
         throw AppError.authentication(.sessionMissing)
     }

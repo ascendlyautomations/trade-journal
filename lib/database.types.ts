@@ -3147,6 +3147,7 @@ export type Database = {
           id: string
           is_banned: boolean
           is_beta_tester: boolean
+          is_hidden_from_community: boolean
           is_private: boolean | null
           is_pro: boolean | null
           last_csv_import_at: string | null
@@ -3210,6 +3211,7 @@ export type Database = {
           id: string
           is_banned?: boolean
           is_beta_tester?: boolean
+          is_hidden_from_community?: boolean
           is_private?: boolean | null
           is_pro?: boolean | null
           last_csv_import_at?: string | null
@@ -3273,6 +3275,7 @@ export type Database = {
           id?: string
           is_banned?: boolean
           is_beta_tester?: boolean
+          is_hidden_from_community?: boolean
           is_private?: boolean | null
           is_pro?: boolean | null
           last_csv_import_at?: string | null
@@ -5517,6 +5520,7 @@ export type Database = {
           id: string
           is_banned: boolean
           is_beta_tester: boolean
+          is_hidden_from_community: boolean
           is_private: boolean
           is_pro: boolean
           name: string

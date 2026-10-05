@@ -200,7 +200,7 @@ nonisolated struct DemoExploreRoomsRepository: RoomRepository, @unchecked Sendab
         if DemoExploreTradeRoom.isLocalRoom(roomID) {
             return try local()
         }
-        return try await remote()
+        throw AppError.domain(.notFound(entity: "room", id: roomID.rawValue))
     }
 
     func room(id: RoomID) async throws -> TradeRoom {
@@ -208,11 +208,13 @@ nonisolated struct DemoExploreRoomsRepository: RoomRepository, @unchecked Sendab
     }
 
     func rooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom> {
-        try await guest.rooms(for: profileID, page: page)
+        _ = (profileID, page)
+        return CursorPage(items: [DemoExploreTradeRoom.room()], nextCursor: nil)
     }
 
     func memberRooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom> {
-        try await guest.memberRooms(for: profileID, page: page)
+        _ = (profileID, page)
+        return CursorPage(items: [DemoExploreTradeRoom.room()], nextCursor: nil)
     }
 
     func activeMemberCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int] {
@@ -501,13 +503,13 @@ nonisolated struct DemoExploreMessageRepository: MessageRepository, @unchecked S
     }
 
     func conversations(page: PageRequest) async throws -> ConversationListResult {
-        let items = DemoExploreInboxFixtures.conversations(viewerID: viewerID)
-        let profiles = DemoExploreInboxFixtures.profiles(for: items, viewerID: viewerID)
+        let items = DemoGraph.conversations(viewerID: viewerID)
+        let profiles = items.flatMap(\.participantProfileIDs).compactMap(DemoGraph.profile(id:))
         return ConversationListResult(items: items, nextCursor: nil, embeddedProfiles: profiles)
     }
 
     func conversation(id: ConversationID) async throws -> Conversation {
-        let items = DemoExploreInboxFixtures.conversations(viewerID: viewerID)
+        let items = DemoGraph.conversations(viewerID: viewerID)
         guard let match = items.first(where: { $0.id == id }) else {
             throw AppError.domain(.notFound(entity: "conversation", id: id.rawValue))
         }
@@ -515,13 +517,8 @@ nonisolated struct DemoExploreMessageRepository: MessageRepository, @unchecked S
     }
 
     func messages(in conversationID: ConversationID, page: PageRequest) async throws -> CursorPage<Message> {
-        let conversation = try await conversation(id: conversationID)
-        let peer = MessagesInboxSupport.peerID(in: conversation, viewerID: viewerID) ?? viewerID
-        let items = DemoExploreInboxFixtures.messages(
-            conversationID: conversationID,
-            viewerID: viewerID,
-            peerID: peer
-        )
+        _ = try await conversation(id: conversationID)
+        let items = DemoGraph.messages(conversationID: conversationID, viewerID: viewerID)
         return CursorPage(items: items, nextCursor: nil)
     }
 

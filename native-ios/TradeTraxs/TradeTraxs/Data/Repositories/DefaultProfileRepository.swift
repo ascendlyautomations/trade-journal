@@ -296,11 +296,10 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         #endif
 
         do {
-            _ = try await supabase.database.update(
+            try await supabase.database.update(
                 body,
                 table: "profiles",
-                query: [SupabaseQuery.eq("id", update.profileID.rawValue)],
-                returning: ProfileDTO.Profile.self
+                query: [SupabaseQuery.eq("id", update.profileID.rawValue)]
             )
         } catch {
             #if DEBUG
@@ -363,7 +362,10 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         let dto: ProfileDTO.Profile = try await supabase.database.update(
             body,
             table: "profiles",
-            query: [SupabaseQuery.eq("id", profile.id.rawValue)],
+            query: [
+                SupabaseQuery.select(Self.publicProfileSelect),
+                SupabaseQuery.eq("id", profile.id.rawValue),
+            ],
             returning: ProfileDTO.Profile.self
         )
         let updated = try ProfileMapper.mapToDomain(dto)
@@ -395,10 +397,17 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         let dto: ProfileDTO.DmPrivacyRow = try await supabase.database.update(
             body,
             table: "profiles",
-            query: [SupabaseQuery.eq("id", userID.rawValue)],
+            query: [
+                SupabaseQuery.select("dm_privacy"),
+                SupabaseQuery.eq("id", userID.rawValue),
+            ],
             returning: ProfileDTO.DmPrivacyRow.self
         )
         return DmPrivacy.parse(dto.dm_privacy)
+    }
+
+    func invalidateCachedStats(for profileID: ProfileID) {
+        cache.memory.remove(forKey: "profile-stats:\(profileID.rawValue)")
     }
 
     func stats(for profileID: ProfileID) async throws -> ProfileStats {
@@ -825,6 +834,7 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             let dto: ProfileDTO.Profile = try await supabase.database.insert(
                 body,
                 into: "profiles",
+                query: [SupabaseQuery.select(Self.publicProfileSelect)],
                 returning: ProfileDTO.Profile.self
             )
             let profile = try ProfileMapper.mapToDomain(dto)

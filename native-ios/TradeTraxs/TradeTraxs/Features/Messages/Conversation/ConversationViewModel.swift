@@ -438,6 +438,7 @@ final class ConversationViewModel {
     }
 
     func sendText() async {
+        guard !rejectGuestMutationIfNeeded() else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isSending else { return }
         draft = ""
@@ -445,6 +446,7 @@ final class ConversationViewModel {
     }
 
     func sendImage(_ image: UIImage) async {
+        guard !rejectGuestMutationIfNeeded() else { return }
         guard !isMessagingBlocked else { return }
         guard let data = MediaImagePreparation.chatJPEGData(from: image) else { return }
         await send(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), imageURL: nil, localImageData: data)
@@ -452,8 +454,9 @@ final class ConversationViewModel {
     }
 
     func sendVoice(localFileURL: URL, duration: TimeInterval) async {
-        guard !isSending else { return }
         defer { try? FileManager.default.removeItem(at: localFileURL) }
+        guard !rejectGuestMutationIfNeeded() else { return }
+        guard !isSending else { return }
         guard let data = try? Data(contentsOf: localFileURL) else { return }
         await sendVoice(data: data, duration: duration)
     }
@@ -488,6 +491,7 @@ final class ConversationViewModel {
     }
 
     func sendTrade(_ trade: Trade) async {
+        guard !rejectGuestMutationIfNeeded() else { return }
         guard viewerID != nil, !isSending else { return }
         let summary =
             tradePickerSummaries.first(where: { $0.id == trade.id })
@@ -496,9 +500,11 @@ final class ConversationViewModel {
     }
 
     func sendTradeSummary(_ summary: TradeSummary) async {
+        guard !rejectGuestMutationIfNeeded() else { return }
         guard let viewerID, !isSending else { return }
         showsTradePicker = false
         sharedTrades[summary.id] = TradeSummaryMapper.previewTrade(from: summary)
+        detailCache.seedPresentationSeed(summary)
         isSending = true
         defer { isSending = false }
 
@@ -1044,14 +1050,19 @@ final class ConversationViewModel {
         // Web optimistic clear on open — badge drops before history finishes loading.
         inboxStore.markRead(conversationID: conversationID)
         inboxStore.setActiveConversation(conversationID)
-        startRealtime()
 
         let current = await session.currentUserID
         let viewer = current.map { ProfileID($0.rawValue) }
         viewerID = viewer
+        let demoInbox = viewer.map(DemoExperienceSupport.usesExploreDemoInbox) == true
+        if !demoInbox {
+            startRealtime()
+        }
 
         do {
-            if let viewer,
+            if demoInbox {
+                try await loadFromRepository()
+            } else if let viewer,
                ConversationThreadSupport.isLocalDevelopment(viewer)
                 || ConversationThreadSupport.isLocalConversation(conversationID)
             {
@@ -1109,6 +1120,7 @@ final class ConversationViewModel {
         didMarkReadThisOpen = true
 
         guard let viewerID,
+              !DemoExperienceSupport.usesExploreDemoInbox(viewerID),
               !ConversationThreadSupport.isLocalDevelopment(viewerID),
               !ConversationThreadSupport.isLocalConversation(conversationID)
         else { return }
@@ -2304,7 +2316,14 @@ final class ConversationViewModel {
         }
     }
 
+    private func rejectGuestMutationIfNeeded() -> Bool {
+        guard ExploreModeSupport.isActive else { return false }
+        DemoModeAuthGatePresenter.shared.requireAuthentication()
+        return true
+    }
+
     private func send(body: String, imageURL: String?, localImageData: Data?) async {
+        guard !rejectGuestMutationIfNeeded() else { return }
         guard let viewerID, !isMessagingBlocked else { return }
         let blocksComposer = localImageData == nil
         if blocksComposer {

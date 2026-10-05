@@ -1,6 +1,7 @@
 "use client"
 
 import "./tradesNativeTheme.css"
+import { groupTradesForTradesPageDisplay } from "@/lib/copyTradePresentation"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { excludeBacktestTrades } from "@/lib/tradeModeFilters"
 import { averageRrFromTrades } from "@/lib/tradeRr"
@@ -363,16 +364,25 @@ export default function TradesPage() {
     [visibleTrades, visibleCount]
   )
 
+  const displayedTradeItems = useMemo(
+    () => groupTradesForTradesPageDisplay(displayedTrades),
+    [displayedTrades]
+  )
+
   const reelFetchTradeIds = useMemo(
     () =>
       [
         ...new Set(
-          displayedTrades
-            .map((trade) => String(trade.id))
+          displayedTradeItems
+            .map((item) =>
+              item.kind === "copyGroup"
+                ? String(item.representative.id ?? "")
+                : String(item.trade.id ?? "")
+            )
             .filter((id) => id.trim() !== "")
         ),
       ],
-    [displayedTrades]
+    [displayedTradeItems]
   )
 
   useEffect(() => {
@@ -476,7 +486,7 @@ export default function TradesPage() {
             onTogglePublicOnly={handleTogglePublicOnly}
             onOpenPerformanceShare={handleOpenPerformanceShare}
             tradeStats={tradeStats}
-            displayedTrades={displayedTrades}
+            displayedTradeItems={displayedTradeItems}
             visibleTradesLength={visibleTrades.length}
             hasAnyTrades={trades.length > 0}
             visibleCount={visibleCount}

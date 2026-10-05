@@ -411,11 +411,20 @@ final class FollowListViewModel {
         if viewerID == nil {
             viewerID = listOwnerID
         }
-        switch kind {
-        case .followers:
-            items = FollowListFixtures.followers(owner: listOwnerID)
-        case .following:
-            items = FollowListFixtures.following(owner: listOwnerID)
+        if listOwnerID == DemoExperienceSupport.profileID {
+            switch kind {
+            case .followers:
+                items = DemoGraph.followers()
+            case .following:
+                items = DemoGraph.following()
+            }
+        } else {
+            switch kind {
+            case .followers:
+                items = FollowListFixtures.followers(owner: listOwnerID)
+            case .following:
+                items = FollowListFixtures.following(owner: listOwnerID)
+            }
         }
         seedListCache(items)
         let followingIDs = Set(FollowListFixtures.following(owner: listOwnerID).map(\.id))

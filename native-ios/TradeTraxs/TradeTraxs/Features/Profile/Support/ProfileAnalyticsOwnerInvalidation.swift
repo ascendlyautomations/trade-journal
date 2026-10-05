@@ -13,36 +13,36 @@ nonisolated enum ProfileAnalyticsOwnerInvalidation {
     }
 
     static func submitTradeMutation(old: Trade?, new: Trade?) {
-        guard affectsPublicProfileAnalytics(old: old, new: new) else { return }
+        guard affectsOwnerJournalHeaderMetrics(old: old, new: new) else { return }
         let owner = new?.ownerProfileID ?? old?.ownerProfileID
         guard let owner else { return }
         invalidateOwnerSnapshot(viewerID: owner)
     }
 
-    static func affectsPublicProfileAnalytics(old: Trade?, new: Trade?) -> Bool {
-        func isPublic(_ trade: Trade) -> Bool {
-            trade.visibility == .public
-        }
+    /// Owner header + analytics — any journal change that can alter Trades / Win % / Profit Factor.
+    static func affectsOwnerJournalHeaderMetrics(old: Trade?, new: Trade?) -> Bool {
         switch (old, new) {
-        case (nil, let created?):
-            return isPublic(created)
-        case (let deleted?, nil):
-            return isPublic(deleted)
+        case (nil, _?):
+            return true
+        case (_?, nil):
+            return true
         case (let before?, let after?):
-            if isPublic(before) || isPublic(after) {
-                if before.visibility != after.visibility { return true }
-                if isPublic(after) {
-                    return before.realizedPnL?.amount != after.realizedPnL?.amount
-                        || before.entryAt != after.entryAt
-                        || before.exitAt != after.exitAt
-                        || before.accountID != after.accountID
-                        || before.accountMode != after.accountMode
-                        || before.mode != after.mode
-                }
-            }
+            if before.visibility != after.visibility { return true }
+            if before.realizedPnL?.amount != after.realizedPnL?.amount { return true }
+            if before.riskReward != after.riskReward { return true }
+            if before.mode != after.mode { return true }
+            if before.accountMode != after.accountMode { return true }
+            if before.accountID != after.accountID { return true }
+            if before.entryAt != after.entryAt { return true }
+            if before.exitAt != after.exitAt { return true }
             return false
         default:
             return false
         }
+    }
+
+    /// Legacy name — tests and GRDB shadow paths.
+    static func affectsPublicProfileAnalytics(old: Trade?, new: Trade?) -> Bool {
+        affectsOwnerJournalHeaderMetrics(old: old, new: new)
     }
 }

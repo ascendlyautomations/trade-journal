@@ -192,6 +192,12 @@ struct DailyCheckInView: View {
                 .padding(ExperienceSpacing.sm)
                 .background(colors.fillSecondary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
                 .accessibilityIdentifier("dailyCheckIn.notes")
+                .experienceTextInputProbe(
+                    screen: "dailyCheckIn",
+                    field: "dailyCheckIn.notes",
+                    text: viewModel.draft.notes,
+                    isFocused: false
+                )
         }
         .padding(ExperienceSpacing.md)
         .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous))

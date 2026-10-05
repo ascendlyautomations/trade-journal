@@ -15,6 +15,16 @@ final class StatsContainerViewModel {
         }
     }
 
+    var selectedTimeframe: ProfileStatisticsMetrics.Timeframe = .allTime {
+        didSet {
+            guard oldValue != selectedTimeframe else { return }
+            if !selectedTimeframe.isAllTime {
+                scheduleTradeInputsLoadIfNeeded()
+            }
+            recompute()
+        }
+    }
+
     private let profileID: ProfileID
     private let trades: any TradeRepository
     private let rpc: (any RPCClient)?
@@ -26,6 +36,8 @@ final class StatsContainerViewModel {
     private var modeResults: [ProfileStatisticsMetrics.Mode: ProfileStatisticsMetrics.Result] = [:]
     /// Legacy fallback only when statistics RPC is unavailable.
     private var tradeInputs: [ProfileStatisticsMetrics.TradeInput] = []
+    private var hasLoadedTradeInputs = false
+    private var tradeInputsTask: Task<Void, Never>?
     private var accountModes: [TradingAccountID: TradingAccountMode] = [:]
     private var analyticsTask: Task<Void, Never>?
     private var hasLoadedAnalytics = false
@@ -140,6 +152,10 @@ final class StatsContainerViewModel {
         if isScreenOwned {
             hasLoadedAnalytics = false
             modeResults = [:]
+            tradeInputs = []
+            hasLoadedTradeInputs = false
+            tradeInputsTask?.cancel()
+            tradeInputsTask = nil
             didScheduleLockedProfileShadow = false
             analyticsTask?.cancel()
             analyticsTask = nil
@@ -155,6 +171,10 @@ final class StatsContainerViewModel {
         isRefreshing = true
         hasLoadedAnalytics = false
         modeResults = [:]
+        tradeInputs = []
+        hasLoadedTradeInputs = false
+        tradeInputsTask?.cancel()
+        tradeInputsTask = nil
         didScheduleLockedProfileShadow = false
         Task {
             await ProfileAnalyticsV2ShadowSession.shared.clearShadowKeys(
@@ -169,6 +189,12 @@ final class StatsContainerViewModel {
         guard selectedMode != mode else { return }
         ExperienceHaptics.play(.selection)
         selectedMode = mode
+    }
+
+    func setTimeframe(_ timeframe: ProfileStatisticsMetrics.Timeframe) {
+        guard selectedTimeframe != timeframe else { return }
+        ExperienceHaptics.play(.selection)
+        selectedTimeframe = timeframe
     }
 
     func loadMoreIfNeeded() async {
@@ -242,6 +268,7 @@ final class StatsContainerViewModel {
                 analyticsFetchedAt = Date()
                 initialLoadFailureGrace.cancel()
                 recompute()
+                prefetchTradeInputsIfNeeded()
                 scheduleProfileAnalyticsV2Shadow(v1ModeResults: applied.modeResults)
 #if DEBUG
                 ProfileStatsTrace.finalState(subject: profileID.rawValue, state: "loaded-v1")
@@ -275,6 +302,7 @@ final class StatsContainerViewModel {
                 accountModes: accountModes
             )
             hasLoadedAnalytics = true
+            hasLoadedTradeInputs = true
             analyticsFetchedAt = Date()
             initialLoadFailureGrace.cancel()
             recompute()
@@ -327,6 +355,7 @@ final class StatsContainerViewModel {
         }
         modeResults = cached.modeResults
         recompute()
+        prefetchTradeInputsIfNeeded()
 #if DEBUG
         let tradeCount = cached.modeResults[.all]?.filteredTradeCount ?? 0
         ProfileStatsTrace.cacheHit(subject: profileID.rawValue, tradeCount: tradeCount)
@@ -376,6 +405,7 @@ final class StatsContainerViewModel {
                 analyticsFetchedAt = Date()
                 initialLoadFailureGrace.cancel()
                 recompute()
+                prefetchTradeInputsIfNeeded()
 #if DEBUG
                 ProfileStatsTrace.applyAccepted(
                     subject: profileID.rawValue,
@@ -450,27 +480,79 @@ final class StatsContainerViewModel {
     }
 
     private func applyFixtures() {
-        let samples = ProfileTradeFixtures.samples(owner: profileID)
-            .filter { $0.visibility == .public }
-        accountModes = ProfileTradeFixtures.accountModes()
+        let samples: [Trade]
+        if profileID == DemoExperienceSupport.profileID {
+            samples = DemoCanonicalDataset.trades().filter { $0.visibility == .public }
+            accountModes = DemoCanonicalDataset.accountModes()
+        } else {
+            samples = ProfileTradeFixtures.samples(owner: profileID)
+                .filter { $0.visibility == .public }
+            accountModes = ProfileTradeFixtures.accountModes()
+        }
         tradeInputs = samples.map {
             ProfileStatisticsMetrics.tradeInput(from: $0, accountModes: accountModes)
         }
+        hasLoadedTradeInputs = true
         modeResults = [:]
         recompute()
     }
 
+    private func prefetchTradeInputsIfNeeded() {
+        scheduleTradeInputsLoadIfNeeded()
+    }
+
+    private func scheduleTradeInputsLoadIfNeeded() {
+        guard canViewContent else { return }
+        guard !hasLoadedTradeInputs else { return }
+        guard tradeInputsTask == nil else { return }
+        tradeInputsTask = Task { [weak self] in
+            guard let self else { return }
+            defer { tradeInputsTask = nil }
+            do {
+                let inputs = try await ProfileStatisticsTradeLoader.loadPublicTradeInputs(
+                    profileID: profileID,
+                    trades: trades,
+                    rpc: rpc,
+                    accountModes: accountModes
+                )
+                guard !Task.isCancelled else { return }
+                tradeInputs = inputs
+                hasLoadedTradeInputs = true
+                recompute()
+            } catch {
+                guard !Task.isCancelled else { return }
+            }
+        }
+    }
+
     private func recompute() {
-        if let server = modeResults[selectedMode] {
+        if selectedTimeframe.isAllTime, let server = modeResults[selectedMode] {
+            metrics = server
+        } else if hasLoadedTradeInputs {
+            metrics = ProfileStatisticsMetrics.compute(
+                from: tradeInputs,
+                selectedMode: selectedMode,
+                selectedTimeframe: selectedTimeframe
+            )
+        } else if selectedTimeframe.isAllTime, let server = modeResults[selectedMode] {
             metrics = server
         } else {
             metrics = ProfileStatisticsMetrics.compute(
-                from: tradeInputs,
-                selectedMode: selectedMode
+                from: [],
+                selectedMode: selectedMode,
+                selectedTimeframe: selectedTimeframe
             )
+            scheduleTradeInputsLoadIfNeeded()
         }
 
         let allCount: Int = {
+            if hasLoadedTradeInputs {
+                return ProfileStatisticsMetrics.compute(
+                    from: tradeInputs,
+                    selectedMode: .all,
+                    selectedTimeframe: .allTime
+                ).filteredTradeCount
+            }
             if let all = modeResults[.all] { return all.filteredTradeCount }
             return ProfileStatisticsMetrics.compute(from: tradeInputs, selectedMode: .all).filteredTradeCount
         }()

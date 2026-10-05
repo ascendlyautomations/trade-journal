@@ -308,6 +308,19 @@ final class PropFirmExperienceTests: XCTestCase {
         XCTAssertNotNil(account.propFirmRules?.maxDrawdown)
     }
 
+    func testNilProductionViewerDoesNotLoadPropFirmFixtures() async {
+        let viewModel = PropFirmDetailViewModel(
+            accountID: TradingAccountID("prop-1"),
+            trades: PropFirmStubTradeRepository(),
+            session: PropFirmStubSession(userID: nil),
+            detailCache: DetailPresentationCache()
+        )
+        await viewModel.loadIfNeeded()
+        XCTAssertNil(viewModel.snapshot)
+        XCTAssertEqual(viewModel.errorMessage, SessionViewerIdentity.sessionUnavailableMessage)
+        XCTAssertFalse(viewModel.isLoading)
+    }
+
     private func date(_ iso: String) -> Date {
         ISO8601DateFormatter().date(from: iso) ?? Date()
     }

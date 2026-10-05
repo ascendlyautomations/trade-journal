@@ -44,10 +44,17 @@ nonisolated struct DefaultTradeDetailRepository: TradeDetailRepository {
         #endif
 
         if !policy.forceNetwork, let cached = await store.cachedDetail(tradeID: tradeID, viewerKey: viewerKey) {
-            await MainActor.run {
-                detailCache?.seedAuthoritativeDetail(cached, authority: .authoritativeNetwork)
+            let merged = await MainActor.run {
+                detailCache?.seedAuthoritativeDetail(cached, authority: .authoritativeNetwork) ?? cached
             }
-            return cached
+            await store.store(
+                merged,
+                tradeID: tradeID,
+                viewerKey: viewerKey,
+                authority: .authoritativeNetwork,
+                payloadBytes: await store.lastPayloadBytes(tradeID: tradeID, viewerKey: viewerKey)
+            )
+            return merged
         }
 
         if policy.forceNetwork {
@@ -72,24 +79,31 @@ nonisolated struct DefaultTradeDetailRepository: TradeDetailRepository {
             throw error
         }
 
-        await MainActor.run {
-            detailCache?.seedAuthoritativeDetail(detail, authority: .authoritativeNetwork)
+        let merged = await MainActor.run {
+            detailCache?.seedAuthoritativeDetail(detail, authority: .authoritativeNetwork) ?? detail
         }
-        return detail
+        await store.store(
+            merged,
+            tradeID: tradeID,
+            viewerKey: viewerKey,
+            authority: .authoritativeNetwork,
+            payloadBytes: await store.lastPayloadBytes(tradeID: tradeID, viewerKey: viewerKey)
+        )
+        return merged
     }
 
     func replaceCachedDetail(_ detail: TradeDetail, authority: TradeDetailAuthority) async {
         let viewerKey = await TradeDetailSessionStore.viewerKey(from: session)
+        let merged = await MainActor.run {
+            detailCache?.seedAuthoritativeDetail(detail, authority: authority) ?? detail
+        }
         await store.store(
-            detail,
-            tradeID: detail.id,
+            merged,
+            tradeID: merged.id,
             viewerKey: viewerKey,
             authority: authority,
             payloadBytes: nil
         )
-        await MainActor.run {
-            detailCache?.seedAuthoritativeDetail(detail, authority: authority)
-        }
     }
 
     func evict(tradeID: TradeID) async {

@@ -33,6 +33,7 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
             var data: SignUpMetadata?
         }
         guard transport.isConfigured else { throw AuthenticationError.notConfigured }
+        SignupFailureDiagnostics.reset()
         let normalizedName = ProfileDisplayNamePolicy.normalized(fullName)
         do {
             let response = try await transport.send(
@@ -54,10 +55,12 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
                 provider: .email
             )
         } catch let error as AppError {
+            SignupFailureDiagnostics.record(error)
             throw mapSignupRequestError(error)
         } catch let error as AuthenticationError {
             throw error
         } catch {
+            SignupFailureDiagnostics.record(.transport(.unknown(message: "local")))
             throw AuthenticationError.unknown(error.localizedDescription)
         }
     }
@@ -289,13 +292,15 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
     ) -> AuthenticationError {
         if case .transport(let network) = error {
             switch network {
-            case .connectivity, .timeout:
-                return .unknown("Network connection failed. Check your connection and try again.")
+            case .connectivity:
+                return .unknown(SignInFormErrorPresentation.Reason.networkUnavailable)
+            case .timeout:
+                return .unknown(SignInFormErrorPresentation.Reason.timedOut)
             case .cancelled:
                 return .cancelled
             case .server(let code, let message):
                 if (500...599).contains(code) {
-                    return .unknown("serverUnavailable")
+                    return .unknown(SignInFormErrorPresentation.Reason.serverUnavailable)
                 }
                 return mapProviderServerFailure(
                     statusCode: code,
@@ -307,7 +312,9 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
                     return .invalidCredentials
                 }
                 return .providerTokenInvalid(provider)
-            case .forbidden, .rateLimited, .decoding, .validation, .unknown:
+            case .validation(_, let message):
+                return mapProviderValidationFailure(message: message, provider: provider)
+            case .forbidden, .rateLimited, .decoding, .unknown:
                 break
             }
         }
@@ -340,6 +347,29 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
         return mapTokenRequestError(error, provider: .email)
     }
 
+    private func mapProviderValidationFailure(
+        message: String,
+        provider: AuthenticationProviderKind
+    ) -> AuthenticationError {
+        let body = message.lowercased()
+        if provider == .email {
+            if GoTrueAuthErrorParsing.isEmailAlreadyRegisteredMessage(body) {
+                return .emailAlreadyRegistered
+            }
+            if GoTrueAuthErrorParsing.isInvalidLoginCredentialsMessage(body) {
+                return .invalidCredentials
+            }
+            return .unknown(SignInFormErrorPresentation.Reason.serverUnavailable)
+        }
+        if body.contains("provider") && (body.contains("not enabled") || body.contains("disabled")) {
+            return .providerMisconfigured(provider)
+        }
+        if GoTrueAuthErrorParsing.isInvalidLoginCredentialsMessage(body) {
+            return .providerTokenInvalid(provider)
+        }
+        return .unknown(SignInFormErrorPresentation.Reason.serverUnavailable)
+    }
+
     private func mapProviderServerFailure(
         statusCode: Int,
         message: String?,
@@ -350,8 +380,11 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
             if GoTrueAuthErrorParsing.isEmailAlreadyRegisteredMessage(body) {
                 return .emailAlreadyRegistered
             }
-            if statusCode == 400 || statusCode == 401 {
+            if GoTrueAuthErrorParsing.isInvalidLoginCredentialsMessage(body) {
                 return .invalidCredentials
+            }
+            if statusCode == 400 || statusCode == 401 {
+                return .unknown(SignInFormErrorPresentation.Reason.serverUnavailable)
             }
         } else {
             if body.contains("provider") && (body.contains("not enabled") || body.contains("disabled")) {
@@ -362,9 +395,14 @@ nonisolated struct SupabaseAuthenticationBackend: AuthenticationBackend {
             }
         }
         if statusCode == 400 || statusCode == 401 {
-            return provider == .email ? .invalidCredentials : .providerTokenInvalid(provider)
+            if provider == .email {
+                return GoTrueAuthErrorParsing.isInvalidLoginCredentialsMessage(body)
+                    ? .invalidCredentials
+                    : .unknown(SignInFormErrorPresentation.Reason.serverUnavailable)
+            }
+            return .providerTokenInvalid(provider)
         }
-        return .unknown(message ?? "Authentication failed.")
+        return .unknown(SignInFormErrorPresentation.Reason.serverUnavailable)
     }
 
     private func mapPasswordUpdateError(_ error: AppError) -> AuthenticationError {
@@ -495,6 +533,32 @@ private nonisolated enum GoTrueAuthErrorParsing {
         }
     }
 
+    static func isInvalidLoginCredentialsMessage(_ loweredBody: String) -> Bool {
+        guard !loweredBody.isEmpty else { return false }
+        if loweredBody.contains("invalid login credentials") { return true }
+        if loweredBody.contains("invalid login") { return true }
+        if loweredBody.contains("invalid_grant") { return true }
+        if loweredBody.contains("invalid email or password") { return true }
+        if loweredBody.contains("wrong email or password") { return true }
+        if let parsed = parseJSON(loweredBody) {
+            let code = parsed.error_code?.lowercased() ?? ""
+            if code == "invalid_credentials" || code == "invalid_grant" { return true }
+            let errorToken = parsed.error?.lowercased() ?? ""
+            if errorToken == "invalid_grant" { return true }
+            let combined = [parsed.msg, parsed.message, parsed.error_description]
+                .compactMap { $0?.lowercased() }
+                .joined(separator: " ")
+            if combined.contains("invalid login credentials")
+                || combined.contains("invalid login")
+                || combined.contains("invalid_grant")
+                || combined.contains("invalid email or password")
+            {
+                return true
+            }
+        }
+        return false
+    }
+
     static func isEmailAlreadyRegisteredMessage(_ loweredBody: String) -> Bool {
         guard !loweredBody.isEmpty else { return false }
         if loweredBody.contains("user_already_exists") { return true }
@@ -519,6 +583,7 @@ private nonisolated enum GoTrueAuthErrorParsing {
     private struct GoTrueErrorWire: Decodable {
         var error: String?
         var error_code: String?
+        var error_description: String?
         var msg: String?
         var message: String?
     }

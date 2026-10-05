@@ -8,11 +8,14 @@ nonisolated enum ProfileTabBootstrapV2Applier {
         detailCache: DetailPresentationCache?
     ) -> ProfileTabBootstrapApplier.Applied {
         var summaries: [TradeSummary] = []
+        var journalItems: [TradeOwnerJournalSummary] = []
         var skipped = 0
         for row in bootstrap.data.items {
             do {
                 try row.validateSchema()
-                summaries.append(try TradeSummaryMapper.map(from: row))
+                let journal = try TradeSummaryMapper.mapOwnerJournal(from: row)
+                journalItems.append(journal)
+                summaries.append(journal.summary)
             } catch {
                 skipped += 1
                 TradeMappingTelemetry.recordSkippedTrade()
@@ -31,6 +34,7 @@ nonisolated enum ProfileTabBootstrapV2Applier {
 
         return ProfileTabBootstrapApplier.Applied(
             tradeSummaries: summaries,
+            profileTradeJournalItems: journalItems,
             reelLinkedTrades: nil,
             nextCursor: bootstrap.data.next_cursor,
             tradeEngagement: bootstrap.data.engagement,

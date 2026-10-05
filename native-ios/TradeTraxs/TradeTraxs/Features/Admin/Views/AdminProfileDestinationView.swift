@@ -79,6 +79,20 @@ enum AdminProfileDestinationView {
             )
         case .updates:
             AdminPlatformUpdatesView(data: data)
+        case .demoMode:
+            DemoModeAdminView(data: data, navigationCoordinator: navigationCoordinator)
+        case .demoBrowse(let kind):
+            DemoAdminBrowserView(data: data, navigationCoordinator: navigationCoordinator, kind: kind)
+        case .demoEdit(let entity, let recordID, let isNew):
+            DemoAdminEditorView(
+                data: data,
+                navigationCoordinator: navigationCoordinator,
+                entity: entity,
+                recordID: recordID,
+                isNew: isNew
+            )
+        case .demoHistory:
+            DemoAdminHistoryView(data: data)
         }
     }
 }

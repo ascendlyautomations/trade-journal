@@ -15,6 +15,8 @@ nonisolated protocol ProfileRepository: Sendable {
     func ownerProfileForSettings(id: ProfileID) async throws -> Profile
     func updateProfileSettings(_ update: ProfileSettingsUpdate) async throws -> Profile
     func stats(for profileID: ProfileID) async throws -> ProfileStats
+    /// Drop in-memory REST stats so the next fetch reflects journal mutations.
+    func invalidateCachedStats(for profileID: ProfileID)
     /// Web Profile wall — `profile_posts` (not feed `posts`).
     func wallPosts(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Post>
     /// Single wall post for detail destinations (`profile_posts`).
@@ -39,7 +41,7 @@ nonisolated protocol ProfileRepository: Sendable {
     func updateDmPrivacy(_ privacy: DmPrivacy) async throws -> DmPrivacy
 }
 
-extension ProfileRepository {
+nonisolated extension ProfileRepository {
     func ownerDmPrivacy() async throws -> DmPrivacy {
         throw AppError.notImplemented(feature: "ownerDmPrivacy")
     }
@@ -49,7 +51,9 @@ extension ProfileRepository {
     }
 }
 
-extension ProfileRepository {
+nonisolated extension ProfileRepository {
+    func invalidateCachedStats(for profileID: ProfileID) {}
+
     func createWallPost(authorID: ProfileID, content: String, imageURL: String?) async throws -> Post {
         try await createWallPost(
             authorID: authorID,

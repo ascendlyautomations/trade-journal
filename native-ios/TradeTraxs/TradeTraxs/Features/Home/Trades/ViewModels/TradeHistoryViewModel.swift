@@ -77,6 +77,11 @@ final class TradeHistoryViewModel {
         TradeHistorySummary.from(summaries: items)
     }
 
+    /// Presentation-only grouping — one card per copy action.
+    var displayItems: [TradeHistoryDisplayItem] {
+        CopyTradeJournalGrouping.group(items, accounts: accounts)
+    }
+
     private var usesJournalSummaryV2: Bool {
         BackendV2FeatureFlags.isEnabled(.tradeJournalSummaryV2)
             && BackendV2FeatureFlags.isEnabled(.tradesList)
@@ -95,7 +100,7 @@ final class TradeHistoryViewModel {
     }
 
     var resultCountLabel: String {
-        let count = summary.tradeCount
+        let count = displayItems.count
         return count == 1 ? "1 trade" : "\(count) trades"
     }
 
@@ -368,6 +373,7 @@ final class TradeHistoryViewModel {
     }
 
     func openTrade(_ item: TradeOwnerJournalSummary) {
+        FirstTradeDetailCoachmarkStore.shared.completeIfOpeningTrade(item.id)
         ExperienceHaptics.play(.selection)
         detailCache.seedPresentationSeed(TradeSummaryMapper.presentationSeed(from: item))
         if let accountID = item.accountID, let name = accountNames[accountID] {
@@ -547,7 +553,17 @@ final class TradeHistoryViewModel {
         }
 
         let userID = await session.currentUserID
-        let profileID = ProfileID(userID?.rawValue ?? "dev.screenshot")
+        let demoActive = AppLaunchController.shared.isDemoExperienceActive
+        guard case .viewer(let profileID) = SessionViewerIdentity.resolve(
+            userID: userID,
+            demoExperienceActive: demoActive
+        ) else {
+            if !hasLoaded {
+                phase = .failed(SessionViewerIdentity.sessionUnavailableMessage)
+            }
+            return
+        }
+        guard generation == loadGeneration else { return }
         self.profileID = profileID
 
         // Session store survives ViewModel recreation on push/pop (profile-scoped key).
@@ -662,6 +678,30 @@ final class TradeHistoryViewModel {
             phase = .loading
         } else if reason == "refresh" {
             isRefreshing = true
+        }
+
+        if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+            let latestUserID = await session.currentUserID
+            guard generation == loadGeneration else { return }
+            guard SessionViewerIdentity.shouldCommit(
+                resolved: profileID,
+                userID: latestUserID,
+                demoExperienceActive: AppLaunchController.shared.isDemoExperienceActive
+            ) else {
+                if let latestUserID, ProfileID(latestUserID.rawValue) != profileID {
+                    await performLoad(reason: reason, preserveScroll: preserveScroll, generation: generation)
+                } else if !hasLoaded {
+                    phase = .failed(SessionViewerIdentity.sessionUnavailableMessage)
+                }
+                return
+            }
+            applyFixtures(profileID: profileID)
+            hasLoaded = true
+            lastQueryKey = queryKey
+            phase = .loaded
+            paginationErrorMessage = nil
+            isRefreshing = false
+            return
         }
 
         do {
@@ -873,8 +913,14 @@ final class TradeHistoryViewModel {
     }
 
     private func applyFixtures(profileID: ProfileID) {
-        let all = ProfileTradeFixtures.samples(owner: profileID)
-        accounts = PropFirmFixtures.accounts(owner: profileID)
+        let all: [Trade]
+        if profileID == DemoExperienceSupport.profileID {
+            all = DemoCanonicalDataset.trades()
+            accounts = DemoCanonicalDataset.accounts()
+        } else {
+            all = ProfileTradeFixtures.samples(owner: profileID)
+            accounts = PropFirmFixtures.accounts(owner: profileID)
+        }
         accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
         detailCache.seed(accounts: accounts, for: profileID)
         let query = currentQuery

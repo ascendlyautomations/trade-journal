@@ -140,6 +140,40 @@ struct NetworkConcurrencyCoordinatorTests {
         await coordinator.markAuthenticatedSessionActive(authGeneration: 12)
     }
 
+    @Test("An older session end cannot cancel the generation that replaced it")
+    func staleSessionEndDoesNotBlockCurrentGeneration() async throws {
+        let coordinator = NetworkConcurrencyCoordinator.shared
+        await coordinator.markAuthenticatedSessionActive(authGeneration: 50)
+        _ = await coordinator.resetForAuthenticatedSessionEnd(authGeneration: 49)
+
+        let value = try await coordinator.runWithSlot(
+            priority: .visible,
+            path: "/rest/v1/rpc/rpc_v1_feed_bootstrap",
+            host: "test",
+            method: .post
+        ) {
+            "current"
+        }
+        #expect(value == "current")
+
+        _ = await coordinator.resetForAuthenticatedSessionEnd(authGeneration: 51)
+        var rejected = false
+        do {
+            _ = try await coordinator.runWithSlot(
+                priority: .visible,
+                path: "/rest/v1/rpc/rpc_v1_messaging_bootstrap",
+                host: "test",
+                method: .post
+            ) {
+                "ended"
+            }
+        } catch {
+            rejected = true
+        }
+        #expect(rejected)
+        await coordinator.markAuthenticatedSessionActive(authGeneration: 52)
+    }
+
     private func fillBackgroundSlots(
         coordinator: NetworkConcurrencyCoordinator,
         count: Int

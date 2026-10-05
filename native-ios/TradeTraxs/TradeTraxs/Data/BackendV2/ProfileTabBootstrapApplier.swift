@@ -3,6 +3,8 @@ import Foundation
 nonisolated enum ProfileTabBootstrapApplier {
     struct Applied: Sendable {
         var tradeSummaries: [TradeSummary]?
+        /// Profile Trades tab rows with copy linkage for presentation grouping.
+        var profileTradeJournalItems: [TradeOwnerJournalSummary]?
         /// Reels tab joined trade rows — not Profile tab summaries.
         var reelLinkedTrades: [Trade]?
         var posts: [Post]?
@@ -34,9 +36,11 @@ nonisolated enum ProfileTabBootstrapApplier {
                 return emptyApplied(tab: tab, bootstrap: bootstrap)
             }
             var summaries: [TradeSummary] = []
+            var journalItems: [TradeOwnerJournalSummary] = []
             for row in wires {
                 let dto = row.asTradeDTO(ownerID: ownerID.rawValue)
                 if let trade = try? TradeMapper.mapToDomain(dto) {
+                    journalItems.append(TradeSummaryMapper.ownerJournal(fromListTrade: trade))
                     summaries.append(TradeSummaryMapper.summary(fromPartialListTrade: trade))
                 }
             }
@@ -71,6 +75,7 @@ nonisolated enum ProfileTabBootstrapApplier {
             #endif
             return Applied(
                 tradeSummaries: summaries,
+                profileTradeJournalItems: journalItems,
                 reelLinkedTrades: nil,
                 nextCursor: bootstrap.data.next_cursor,
                 tradeEngagement: bootstrap.data.engagement,

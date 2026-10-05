@@ -121,7 +121,7 @@ enum FeedBootstrapApplier {
         return item
     }
 
-    static func feedItemKind(_ raw: String) -> FeedItemKind {
+    nonisolated static func feedItemKind(_ raw: String) -> FeedItemKind {
         switch raw {
         case "profile_post": return .post
         case "achievement_post": return .achievement

@@ -103,6 +103,7 @@ final class ActivityHomeViewModel {
             row.notification,
             host: navigationHost,
             coordinator: navigationCoordinator,
+            detailCache: detailCache,
             router: router
         )
     }

@@ -1878,6 +1878,7 @@ final class GlobalUploadCoordinator {
             job.showsSuccessFlash = true
             job.title = kind.defaultTitle
         }
+        await ContentDraftPublicationCleanup.shared.noteJobCompleted(jobID)
         GlobalUploadJobDiagnostics.log(
             id: jobID,
             kind: kind,
@@ -2037,7 +2038,13 @@ final class GlobalUploadCoordinator {
     ) {
         switch mode {
         case .create:
+            let owner = trade.ownerProfileID
+            let priorCount = FirstTradeDetailCoachmarkEligibility.priorPersistedTradeCount(for: owner)
             TradeJournalMutationStore.shared.noteCreated(trade)
+            FirstTradeDetailCoachmarkStore.shared.stageAfterManualCreate(
+                trade: trade,
+                priorPersistedTradeCount: priorCount
+            )
         case .edit:
             TradeJournalMutationStore.shared.noteUpdated(trade, previous: previous)
         }

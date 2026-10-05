@@ -7,6 +7,9 @@ nonisolated struct LiveAnalyticsReconciliationExecutor: AnalyticsReconciliationE
         generation: UInt64
     ) async throws -> AnalyticsDashboardReconcileResult {
         _ = hintRevision
+        if DemoExperienceSupport.usesLocalBundledData(viewerID) {
+            return AnalyticsDashboardReconcileResult(serverRevision: hintRevision ?? 0, elapsedMs: 0)
+        }
         guard let rpc = AnalyticsReconciliationRuntime.rpc else {
             throw AnalyticsReconciliationExecutorError.missingRuntime("rpc")
         }
@@ -50,6 +53,13 @@ nonisolated struct LiveAnalyticsReconciliationExecutor: AnalyticsReconciliationE
         intent: AnalyticsCalendarRangeIntent,
         generation: UInt64
     ) async throws -> AnalyticsCalendarReconcileResult {
+        if DemoExperienceSupport.usesLocalBundledData(intent.viewerID) {
+            return AnalyticsCalendarReconcileResult(
+                serverRevision: intent.targetRevision ?? 0,
+                rowsWritten: 0,
+                elapsedMs: 0
+            )
+        }
         guard let rpc = AnalyticsReconciliationRuntime.rpc else {
             throw AnalyticsReconciliationExecutorError.missingRuntime("rpc")
         }

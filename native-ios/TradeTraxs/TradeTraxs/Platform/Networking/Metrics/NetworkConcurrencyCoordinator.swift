@@ -37,7 +37,11 @@ actor NetworkConcurrencyCoordinator {
     private init() {}
 
     /// Hard session boundary — resume every waiter and reject new authenticated acquires until login succeeds.
+    /// A reset for an older generation cannot cancel the session that replaced it.
     func resetForAuthenticatedSessionEnd(authGeneration: UInt64) -> (waitersReleased: Int, inFlightCleared: Int) {
+        guard authGeneration >= sessionEndGeneration else {
+            return (0, 0)
+        }
         authenticatedSessionNetworkingBlocked = true
         sessionEndGeneration = authGeneration
         let waitersReleased = backgroundWaiters.count

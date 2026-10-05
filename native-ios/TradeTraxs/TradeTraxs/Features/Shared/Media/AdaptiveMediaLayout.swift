@@ -57,7 +57,7 @@ nonisolated enum FeedMediaLayout {
         imageAspect: CGFloat,
         presentation: ContentImagePresentation
     ) -> FrameMetrics {
-        guard containerWidth > 0 else {
+        guard containerWidth.isFinite, containerWidth > 0 else {
             return FrameMetrics(
                 containerWidth: 0,
                 containerHeight: minHeight,
@@ -105,11 +105,19 @@ nonisolated enum FeedMediaLayout {
         imagePixelSize: CGSize,
         aspectOption: ImageCropAspectOption
     ) -> CGSize {
-        guard containerWidth > 0 else { return .zero }
-        let imageAspect = max(imagePixelSize.width / max(imagePixelSize.height, 1), 0.01)
+        guard containerWidth.isFinite, containerWidth > 0 else { return .zero }
+        let imageWidth = imagePixelSize.width.isFinite ? imagePixelSize.width : 0
+        let imageHeight = imagePixelSize.height.isFinite ? max(imagePixelSize.height, 1) : 1
+        let imageAspect = max(imageWidth / max(imageHeight, 1), 0.01)
         let aspect = presentationAspect(imageAspect: imageAspect, aspectOption: aspectOption)
-        let height = max(containerWidth / aspect, minHeight)
-        return CGSize(width: containerWidth, height: height)
+        guard aspect.isFinite, aspect > 0 else {
+            return CGSize(width: containerWidth, height: minHeight)
+        }
+        let height = containerWidth / aspect
+        guard height.isFinite else {
+            return CGSize(width: containerWidth, height: minHeight)
+        }
+        return CGSize(width: containerWidth, height: max(height, minHeight))
     }
 }
 
@@ -200,7 +208,7 @@ struct AdaptiveInlineMediaContainer<Content: View>: View {
         .frame(maxWidth: .infinity)
         .fixedSize(horizontal: false, vertical: true)
         .onGeometryChange(for: CGFloat.self, of: \.size.width) { width in
-            guard width > 0, abs(width - containerWidth) > 0.5 else { return }
+            guard width.isFinite, width > 0, abs(width - containerWidth) > 0.5 else { return }
             containerWidth = width
         }
     }

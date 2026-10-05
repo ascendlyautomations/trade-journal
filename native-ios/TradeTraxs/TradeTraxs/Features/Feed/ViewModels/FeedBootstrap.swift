@@ -37,6 +37,24 @@ enum FeedBootstrap: ScreenBootstrap {
     static func loadInitial(_ context: Context) async throws -> PageResult {
         let viewer = await context.session.currentUserID.map { ProfileID($0.rawValue) }
 
+        if let viewer, viewer == DemoExperienceSupport.profileID {
+            DemoGraph.seedFeedCache(context.detailCache, viewerID: viewer)
+            if context.scope == .following {
+                FeedStoriesCatalogStore.shared.replace(
+                    catalog: DemoGraph.stories(viewerID: viewer),
+                    viewerID: viewer,
+                    isFullCatalog: true
+                )
+            }
+            return PageResult(
+                viewerID: viewer,
+                entries: DemoGraph.feedEntries(viewerID: viewer),
+                stories: context.scope == .following ? DemoGraph.stories(viewerID: viewer) : [],
+                nextCursor: nil,
+                usedDevelopmentFixtures: true
+            )
+        }
+
         if let viewer,
            DemoExperienceSupport.usesLocalBundledSocialData(viewer)
         {

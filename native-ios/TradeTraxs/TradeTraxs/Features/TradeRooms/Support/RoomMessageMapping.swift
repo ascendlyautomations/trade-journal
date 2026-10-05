@@ -47,13 +47,21 @@ nonisolated enum RoomMessageMapping {
         if let reference = SharedContentRoomMessageSupport.decode(from: body),
            SharedContentRoomMessageSupport.isStructuredShare(type: roomMessage.shareType, content: body)
         {
+            let attachments: [MessageAttachment]
+            if case .trade(let tradeID) = reference {
+                attachments = SharedContentMessageSupport.tradeShareAttachments(for: tradeID)
+            } else if let tradeID = roomMessage.attachedTradeID {
+                attachments = SharedContentMessageSupport.tradeShareAttachments(for: tradeID)
+            } else {
+                attachments = []
+            }
             return Message(
                 id: MessageID(roomMessage.id.rawValue),
                 conversationID: conversationID,
                 senderProfileID: roomMessage.senderProfileID,
                 kind: reference.messageKind,
                 body: nil,
-                attachments: [],
+                attachments: attachments,
                 replyToMessageID: roomMessage.parentMessageID.map { MessageID($0.rawValue) },
                 createdAt: roomMessage.createdAt,
                 isReadByViewer: true,

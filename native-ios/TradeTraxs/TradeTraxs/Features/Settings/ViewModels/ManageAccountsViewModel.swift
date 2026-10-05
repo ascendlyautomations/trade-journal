@@ -372,12 +372,41 @@ final class ManageAccountsViewModel {
         draft: AccountPayoutEntryDraft,
         image: PayoutEntryImageWrite = .unchanged
     ) async -> Bool {
-        await mutate {
+        PayoutEditDiagnostics.saveStarted(
+            entryID: entryID.rawValue,
+            accountID: accountID.rawValue,
+            image: PayoutEditDiagnostics.imageWriteName(image)
+        )
+        guard !isSaving else { return false }
+        formError = nil
+        isSaving = true
+        defer { isSaving = false }
+        do {
             guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
             let updated = try await trades.updatePayoutEntry(id: entryID, draft: draft, image: image)
             WithdrawalsHistoryStore.shared.replaceLedgerEntry(updated, profileID: viewerID)
             AccountMutationStore.shared.notePayoutRecorded(accountID: accountID)
             ExperienceHaptics.play(.success)
+            PayoutEditDiagnostics.saveCompleted(
+                entryID: entryID.rawValue,
+                accountID: accountID.rawValue
+            )
+            return true
+        } catch {
+            PayoutEditDiagnostics.saveFailed(
+                entryID: entryID.rawValue,
+                accountID: accountID.rawValue,
+                error: error
+            )
+            if ProLimitPresentation.presentUpgradeIfProLimit(error) {
+                return false
+            }
+            if let app = error as? AppError, case .unknown(let message) = app {
+                formError = message
+            } else {
+                formError = UserFacingError.message(for: error)
+            }
+            return false
         }
     }
 

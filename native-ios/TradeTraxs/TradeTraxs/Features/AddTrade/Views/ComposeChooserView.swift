@@ -9,8 +9,11 @@ struct ComposeChooserView: View {
     let onCreateStory: () -> Void
     let onRecordWithdrawal: () -> Void
     let onClose: () -> Void
+    var draftsRepository: (any ContentDraftRepository)? = nil
+    var onOpenDraft: (ContentDraft) -> Void = { _ in }
 
     @Environment(\.themeColors) private var colors
+    @State private var showsDrafts = false
 
     var body: some View {
         List {
@@ -90,10 +93,26 @@ struct ComposeChooserView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Close", action: onClose)
             }
+            if showsDraftsAction {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Drafts") { showsDrafts = true }
+                        .font(.subheadline.weight(.regular))
+                        .accessibilityIdentifier("compose.drafts")
+                }
+            }
+        }
+        .navigationDestination(isPresented: $showsDrafts) {
+            if let draftsRepository {
+                ContentDraftsListView(repository: draftsRepository, onOpen: onOpenDraft)
+            }
         }
         .toolbarBackground(colors.groupedBackground, for: .navigationBar)
         .toolbarBackgroundVisibility(.visible, for: .navigationBar)
         .accessibilityIdentifier("compose.chooser")
+    }
+
+    private var showsDraftsAction: Bool {
+        draftsRepository != nil && ExploreModeSupport.canWriteContent
     }
 
     private var composeRowInsets: EdgeInsets {

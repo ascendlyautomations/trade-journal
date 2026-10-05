@@ -1,3 +1,4 @@
+import SwiftUI
 import UIKit
 import XCTest
 @testable import TradeTraxs
@@ -374,6 +375,131 @@ final class ProfileOnboardingTests: XCTestCase {
         } else {
             XCTFail("Expected gate complete after continue without photo")
         }
+    }
+
+    @MainActor
+    func testCreateAccountNamePrefillsOnboardingNameField() {
+        OAuthProfileOnboardingNameStore.resetAll()
+        defer { OAuthProfileOnboardingNameStore.resetAll() }
+
+        let profileID = ProfileID(UUID().uuidString)
+        let userID = UserID(profileID.rawValue)
+        OAuthProfileOnboardingNameStore.stageManualSignup(fullName: "Nick Rivard", for: userID)
+        let snapshot = ProfileOnboardingSnapshot(
+            profileID: profileID,
+            displayName: "New User",
+            onboardingCompleted: false
+        )
+        let viewModel = onboardingViewModel(snapshot: snapshot)
+        XCTAssertEqual(viewModel.displayName, "Nick Rivard")
+
+        let rendered = renderedOnboardingText(viewModel)
+        XCTAssertTrue(
+            rendered.contains("Nick Rivard"),
+            "Onboarding Name field did not show the Create Account name. Rendered: \(rendered)"
+        )
+    }
+
+    @MainActor
+    func testPersistedProfileNamePrefillsOnboardingAndIsNotReplaced() {
+        OAuthProfileOnboardingNameStore.resetAll()
+        defer { OAuthProfileOnboardingNameStore.resetAll() }
+
+        let profileID = ProfileID(UUID().uuidString)
+        OAuthProfileOnboardingNameStore.stageManualSignup(
+            fullName: "Someone Else",
+            for: UserID(profileID.rawValue)
+        )
+        let snapshot = ProfileOnboardingSnapshot(
+            profileID: profileID,
+            displayName: "Nick Rivard",
+            onboardingCompleted: false
+        )
+        let viewModel = onboardingViewModel(snapshot: snapshot)
+        XCTAssertEqual(viewModel.displayName, "Nick Rivard")
+
+        viewModel.displayName = "Edited Name"
+        viewModel.applySignupNamePrefillIfBlank()
+        XCTAssertEqual(viewModel.displayName, "Edited Name")
+    }
+
+    @MainActor
+    func testBlankOnboardingNameFillsFromSignupNameBeforeAppear() {
+        OAuthProfileOnboardingNameStore.resetAll()
+        defer { OAuthProfileOnboardingNameStore.resetAll() }
+
+        let profileID = ProfileID(UUID().uuidString)
+        let snapshot = ProfileOnboardingSnapshot(
+            profileID: profileID,
+            onboardingCompleted: false
+        )
+        let viewModel = onboardingViewModel(snapshot: snapshot)
+        XCTAssertEqual(viewModel.displayName, "")
+
+        OAuthProfileOnboardingNameStore.stageManualSignup(
+            fullName: "Nick Rivard",
+            for: UserID(profileID.rawValue)
+        )
+        viewModel.applySignupNamePrefillIfBlank()
+        XCTAssertEqual(viewModel.displayName, "Nick Rivard")
+    }
+
+    @MainActor
+    private func onboardingViewModel(snapshot: ProfileOnboardingSnapshot) -> ProfileOnboardingViewModel {
+        let repo = RecordingOnboardingProfileRepository()
+        repo.storedSnapshot = snapshot
+        let session = FixedSessionProvider(userID: UserID(snapshot.profileID.rawValue))
+        let gate = ProfileOnboardingGateStore(
+            profiles: repo,
+            session: session,
+            rpc: nil,
+            detailCache: nil,
+            realtimeHub: nil,
+            profileStore: CurrentUserProfileStore(
+                profiles: repo,
+                session: session,
+                imagePipeline: PlaceholderImagePipeline()
+            )
+        )
+        return makeOnboardingViewModel(snapshot: snapshot, profiles: repo, gateStore: gate)
+    }
+
+    @MainActor
+    private func renderedOnboardingText(_ viewModel: ProfileOnboardingViewModel) -> String {
+        let size = CGSize(width: 390, height: 844)
+        let root = ProfileOnboardingView(
+            viewModel: viewModel,
+            imagePipeline: PlaceholderImagePipeline(),
+            onSignOut: {}
+        )
+        .frame(width: size.width, height: size.height)
+        let host = UIHostingController(rootView: root)
+        let window = UIWindow(frame: CGRect(origin: .zero, size: size))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        let texts = Self.collectedControlText(in: host.view)
+        window.isHidden = true
+        return texts.joined(separator: "\n")
+    }
+
+    private static func collectedControlText(in view: UIView) -> [String] {
+        var texts: [String] = []
+        if let field = view as? UITextField, let text = field.text, !text.isEmpty {
+            texts.append(text)
+        }
+        if let label = view as? UILabel, let text = label.text, !text.isEmpty {
+            texts.append(text)
+        }
+        if let value = view.accessibilityValue, !value.isEmpty {
+            texts.append(value)
+        }
+        for child in view.subviews {
+            texts.append(contentsOf: collectedControlText(in: child))
+        }
+        return texts
     }
 }
 

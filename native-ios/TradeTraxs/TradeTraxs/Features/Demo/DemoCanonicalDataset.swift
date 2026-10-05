@@ -12,10 +12,24 @@ nonisolated enum DemoCanonicalDataset {
         "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1200&q=80"
 
     static func profile(now: Date = Date()) -> Profile {
-        DemoExploreIdentity.profile(now: now)
+        if let snapshot = DemoSnapshotStore.shared.current {
+            return snapshot.viewer
+        }
+        return DemoExploreIdentity.profile(now: now)
     }
 
     static func accounts(owner: ProfileID = profileID) -> [TradingAccount] {
+        if let snapshot = DemoSnapshotStore.shared.current {
+            return snapshot.accounts.map { account in
+                var copy = account
+                copy.ownerProfileID = owner
+                return copy
+            }
+        }
+        return bundledAccounts(owner: owner)
+    }
+
+    private static func bundledAccounts(owner: ProfileID) -> [TradingAccount] {
         [
             TradingAccount(
                 id: evaluationAccountID,
@@ -68,7 +82,10 @@ nonisolated enum DemoCanonicalDataset {
     }
 
     static func accountModes() -> [TradingAccountID: TradingAccountMode] {
-        [
+        if let snapshot = DemoSnapshotStore.shared.current {
+            return Dictionary(snapshot.accounts.map { ($0.id, $0.mode) }, uniquingKeysWith: { _, latest in latest })
+        }
+        return [
             evaluationAccountID: .evaluation,
             fundedAccountID: .funded,
             liveAccountID: .live,
@@ -76,6 +93,13 @@ nonisolated enum DemoCanonicalDataset {
     }
 
     static func trades(now: Date = Date()) -> [Trade] {
+        if let snapshot = DemoSnapshotStore.shared.current {
+            return snapshot.trades.sorted { $0.entryAt > $1.entryAt }
+        }
+        return bundledTrades(now: now)
+    }
+
+    private static func bundledTrades(now: Date) -> [Trade] {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TradingCalendarDay.timeZone
 
@@ -98,9 +122,10 @@ nonisolated enum DemoCanonicalDataset {
             guard let day = calendar.date(byAdding: .day, value: dayOffset, to: now) else { continue }
             let tradesThisDay = dayOffset % 9 == 0 ? 2 : 1
             for index in 0..<tradesThisDay {
-                let symbol = symbols[(abs(dayOffset) + index) % symbols.count]
-                let side = sides[(abs(dayOffset) + index) % sides.count]
-                let account = accounts[(abs(dayOffset) + index) % accounts.count]
+                let sequence = result.count
+                let symbol = symbols[(sequence + index) % symbols.count]
+                let side = sides[(sequence + index) % sides.count]
+                let account = accounts[sequence % accounts.count]
                 let hour = 9 + (index * 2) + (abs(dayOffset) % 4)
                 var comps = calendar.dateComponents([.year, .month, .day], from: day)
                 comps.hour = min(hour, 15)
@@ -163,15 +188,15 @@ nonisolated enum DemoCanonicalDataset {
     }
 
     static func achievements(owner: ProfileID = profileID) -> [Achievement] {
-        ProfileAchievementFixtures.samples(owner: owner)
+        DemoGraph.achievements(owner: owner)
     }
 
     static func posts(owner: ProfileID = profileID) -> [Post] {
-        ProfilePostFixtures.samples(owner: owner)
+        DemoGraph.posts(owner: owner)
     }
 
     static func clips(owner: ProfileID = profileID) -> [Reel] {
-        ProfileClipFixtures.samples(owner: owner)
+        DemoGraph.clips(owner: owner)
     }
 
     static func profileStats(from trades: [Trade] = trades()) -> ProfileStats {
@@ -206,7 +231,44 @@ nonisolated enum DemoCanonicalDataset {
         )
     }
 
+    /// Check-ins aligned to the same trade dates as ``trades()``.
+    static func checkIns(now: Date = Date()) -> [TraderDailyCheckIn] {
+        if let snapshot = DemoSnapshotStore.shared.current {
+            return snapshot.checkIns.sorted { $0.checkInDate > $1.checkInDate }
+        }
+        let grouped = Dictionary(grouping: bundledTrades(now: now)) {
+            TraderPsychologyAnalyticsFoundation.tradeDateKey(for: $0)
+        }
+        return grouped.map { date, dayTrades in
+            let pnl = dayTrades.reduce(Decimal(0)) { partial, trade in
+                partial + (trade.realizedPnL?.amount ?? 0)
+            }
+            let goodDay = pnl > 0
+            let anchor = dayTrades[0].entryAt
+            return TraderDailyCheckIn(
+                id: TraderDailyCheckInID("demo.checkin.\(date)"),
+                ownerProfileID: profileID,
+                checkInDate: date,
+                sleepHours: goodDay ? Decimal(string: "7.5") : Decimal(string: "5.5"),
+                sleepQuality: goodDay ? 4 : 2,
+                morningRating: goodDay ? 4 : 2,
+                stressLevel: goodDay ? 2 : 4,
+                energyLevel: goodDay ? 4 : 2,
+                focusLevel: goodDay ? 5 : 2,
+                notes: goodDay
+                    ? "Slept through the night and stuck to the plan."
+                    : "Short sleep. Noted the impulse to size up after the first loss.",
+                createdAt: anchor,
+                updatedAt: anchor
+            )
+        }
+        .sorted { $0.checkInDate > $1.checkInDate }
+    }
+
     static func payoutEntries(for accountID: TradingAccountID) -> [AccountPayoutEntry] {
+        if let snapshot = DemoSnapshotStore.shared.current {
+            return snapshot.payouts.filter { $0.accountID == accountID }
+        }
         guard accountID == fundedAccountID else { return [] }
         let now = Date()
         return [
@@ -237,6 +299,6 @@ extension DemoCanonicalDataset {
         cache.seed(accounts: accounts(), for: viewer)
         cache.seed(trades: trades())
         cache.seed(achievements: achievements())
-        FeedFixtures.seedDetailCache(cache, viewerID: viewer)
+        DemoGraph.seedFeedCache(cache, viewerID: viewer)
     }
 }

@@ -595,11 +595,7 @@ final class DataEnvironment {
             DemoCanonicalDataset.seedDetailCache(detailCache)
         }
 
-        let tradesRepository: any TradeRepository = GuestPublicTradeAccessRepository(
-            supabase: supabase,
-            cache: cache,
-            session: session
-        )
+        let tradesRepository: any TradeRepository = DemoTradeRepository()
         let tradeDetailRepository: any TradeDetailRepository = DefaultTradeDetailRepository(
             trades: tradesRepository,
             session: session,
@@ -608,22 +604,15 @@ final class DataEnvironment {
         let profiles: any ProfileRepository = DemoProfileRepository()
         let achievements: any AchievementRepository = DemoAchievementRepository()
         let interactions: any InteractionRepository = DemoInteractionRepository()
-        let feedRepository: any FeedRepository = GuestPublicFeedRepository(
-            supabase: supabase,
-            cache: cache,
-            session: session
-        )
-        let exploreRepository: any ExploreRepository = GuestPublicExploreRepository(supabase: supabase)
+        let feedRepository: any FeedRepository = DemoFeedRepository()
+        let exploreRepository: any ExploreRepository = DemoExploreRepository()
         let roomsRepository: any RoomRepository = DemoExploreRoomsRepository(supabase: supabase, cache: cache)
         let messagesRepository: any MessageRepository = DemoExploreMessageRepository()
-        let guestBillingClient = LoginShellAppleSubscriptionSyncClient()
-        let storeKitSubscriptions: any StoreKitSubscriptionServicing = StoreKitSubscriptionService(
-            syncClient: guestBillingClient
-        )
+        let storeKitSubscriptions: any StoreKitSubscriptionServicing = DemoStoreKitSubscriptionService()
 
         let psychologyReports: any PsychologyReportRepository = DefaultPsychologyReportRepository(
             trades: DemoTradeRepository(),
-            dailyCheckIns: DefaultTraderDailyCheckInRepository(supabase: supabase, cache: cache),
+            dailyCheckIns: DemoCheckInRepository(),
             session: session,
             detailCache: detailCache
         )
@@ -658,46 +647,30 @@ final class DataEnvironment {
             feed: feedRepository,
             messages: messagesRepository,
             rooms: roomsRepository,
-            notifications: DefaultNotificationRepository(
-                supabase: supabase,
-                cache: cache,
-                session: session
-            ),
-            followRequests: DefaultFollowRequestRepository(supabase: supabase, session: session),
-            calendar: DefaultCalendarRepository(supabase: supabase, cache: cache),
+            notifications: DemoNotificationRepository(),
+            followRequests: DemoFollowRequestRepository(),
+            calendar: DemoCalendarRepository(),
             leaderboard: DefaultLeaderboardRepository(),
             explore: exploreRepository,
-            search: DefaultSearchRepository(supabase: supabase, cache: cache),
-            billing: DefaultBillingRepository(
-                supabase: supabase,
-                cache: cache,
-                storeKitSync: storeKitSubscriptions,
-                entitlementClient: guestBillingClient
-            ),
+            search: DemoSearchRepository(),
+            billing: DemoBillingRepository(),
             storeKitSubscriptions: storeKitSubscriptions,
-            account: DefaultAccountRepository(supabase: supabase),
-            analytics: DefaultAnalyticsRepository(supabase: supabase),
+            account: DemoAccountRepository(),
+            analytics: DemoAnalyticsRepository(),
             achievements: achievements,
-            referrals: DefaultReferralRepository(supabase: supabase, cache: cache),
-            notificationPreferences: DefaultNotificationPreferencesRepository(
-                supabase: supabase,
-                cache: cache
-            ),
+            referrals: DemoReferralRepository(),
+            notificationPreferences: DemoNotificationPreferencesRepository(),
             authentication: DefaultAuthenticationRepository(manager: authenticationManager),
-            home: DefaultHomeRepository(supabase: supabase, cache: cache, session: session),
+            home: DemoHomeRepository(),
             interactions: interactions,
             engagementStore: makeEngagementStore(interactions: interactions, session: session),
-            ai: DefaultAIRepository(supabase: supabase, session: session),
+            ai: DemoAIRepository(),
             tradingReports: tradingReports,
             psychologyReports: psychologyReports,
-            dailyCheckIns: DefaultTraderDailyCheckInRepository(supabase: supabase, cache: cache),
+            dailyCheckIns: DemoCheckInRepository(),
             contentReports: LoginShellContentReportRepository(),
-            userSubmissions: DefaultUserSubmissionRepository(
-                supabase: supabase,
-                session: session,
-                profiles: profiles
-            ),
-            vault: DefaultVaultRepository(supabase: supabase, session: session),
+            userSubmissions: DemoUserSubmissionRepository(),
+            vault: DemoVaultRepository(),
             vaultStore: VaultStore(repository: DemoVaultRepository()),
             brokerIntegrations: LoginShellBrokerIntegrationRepository(),
             adminUsers: LoginShellAdminUsersRepository(),
@@ -855,6 +828,11 @@ private struct LoginShellAdminUsersRepository: AdminUsersRepository {
         throw unavailable()
     }
 
+    func setHiddenFromCommunity(targetUserID: ProfileID, adminUserID: ProfileID, hidden: Bool) async throws {
+        _ = (targetUserID, adminUserID, hidden)
+        throw unavailable()
+    }
+
     func fetchDeletionPreview(targetUserID: ProfileID) async throws -> AdminUserDeletionPreview {
         _ = targetUserID
         throw unavailable()
@@ -913,6 +891,119 @@ private struct LoginShellBrokerIntegrationRepository: BrokerIntegrationRepositor
         password: String?
     ) async throws -> TradovateAccountSyncResponse { throw unavailable() }
     func disconnectRithmic(connectionId: String) async throws { throw unavailable() }
+}
+
+private struct DemoAnalyticsRepository: AnalyticsRepository {
+    func track(event: String, properties: [String: String]) async {
+        _ = (event, properties)
+    }
+}
+
+private struct DemoAccountRepository: AccountRepository {
+    func deleteAuthenticatedAccount() async throws { throw DemoAuthRequired.error }
+    func exportAuthenticatedAccountData() async throws -> Data { throw DemoAuthRequired.error }
+}
+
+private struct DemoCalendarRepository: CalendarRepository {
+    func events(for profileID: ProfileID, interval: DateIntervalValue) async throws -> [CalendarEvent] {
+        _ = (profileID, interval)
+        return []
+    }
+
+    func event(id: CalendarEventID) async throws -> CalendarEvent {
+        throw AppError.domain(.notFound(entity: "calendarEvent", id: id.rawValue))
+    }
+
+    func upsert(_ event: CalendarEvent) async throws -> CalendarEvent { throw DemoAuthRequired.error }
+    func delete(id: CalendarEventID) async throws { throw DemoAuthRequired.error }
+}
+
+private struct DemoSearchRepository: SearchRepository {
+    func search(
+        query: String,
+        kinds: Set<SearchResultKind>,
+        page: PageRequest,
+        excludingProfileID: ProfileID?
+    ) async throws -> CursorPage<SearchResult> {
+        _ = (query, kinds, page, excludingProfileID)
+        return CursorPage(items: [], nextCursor: nil)
+    }
+}
+
+private struct DemoNotificationPreferencesRepository: NotificationPreferencesRepository {
+    func preferences(for userID: ProfileID) async throws -> NotificationPreferences {
+        SettingsFixtures.preferences(userID: userID)
+    }
+
+    func update(
+        _ patch: [NotificationPreferenceKey: Bool],
+        for userID: ProfileID
+    ) async throws -> NotificationPreferences {
+        _ = patch
+        throw DemoAuthRequired.error
+    }
+}
+
+private struct DemoCheckInRepository: TraderDailyCheckInRepository {
+    func checkIn(for profileID: ProfileID, date: String) async throws -> TraderDailyCheckIn? {
+        guard profileID == DemoExperienceSupport.profileID else { return nil }
+        return DemoCanonicalDataset.checkIns().first { $0.checkInDate == date }
+    }
+
+    func checkIns(
+        for profileID: ProfileID,
+        from startDate: String,
+        to endDate: String
+    ) async throws -> [TraderDailyCheckIn] {
+        guard profileID == DemoExperienceSupport.profileID else { return [] }
+        return DemoCanonicalDataset.checkIns().filter {
+            $0.checkInDate >= startDate && $0.checkInDate <= endDate
+        }
+    }
+
+    func upsert(
+        _ draft: TraderDailyCheckInDraft,
+        for profileID: ProfileID
+    ) async throws -> TraderDailyCheckIn {
+        _ = (draft, profileID)
+        throw DemoAuthRequired.error
+    }
+}
+
+private struct DemoFollowRequestRepository: FollowRequestRepository {
+    func pendingRequests() async throws -> [FollowRequest] { [] }
+    func approve(id: FollowRequestID) async throws { throw DemoAuthRequired.error }
+    func decline(id: FollowRequestID) async throws { throw DemoAuthRequired.error }
+}
+
+private struct DemoNotificationRepository: NotificationRepository {
+    func notifications(page: PageRequest) async throws -> CursorPage<ActivityNotification> {
+        _ = page
+        return CursorPage(items: DemoGraph.notifications(), nextCursor: nil)
+    }
+
+    func notification(id: NotificationID) async throws -> ActivityNotification? {
+        DemoGraph.notifications().first { $0.id == id }
+    }
+
+    func unreadCount() async throws -> Int {
+        DemoGraph.notifications().filter { !$0.isRead }.count
+    }
+
+    func markRead(id: NotificationID) async throws { _ = id }
+    func markRead(ids: [NotificationID]) async throws -> Int { ids.count }
+    func markMessageNotificationsRead() async throws -> Int { 0 }
+    func markRoomNotificationsRead(roomID: RoomID, slug: String?) async throws -> Int {
+        _ = (roomID, slug)
+        return 0
+    }
+
+    func markAllRead() async throws {}
+    func delete(id: NotificationID) async throws { throw DemoAuthRequired.error }
+    func delete(ids: [NotificationID]) async throws -> Int { throw DemoAuthRequired.error }
+    func profiles(ids: [ProfileID]) async throws -> [Profile] {
+        ids.compactMap(DemoGraph.profile(id:))
+    }
 }
 
 private struct LoginShellAppleSubscriptionSyncClient: AppleSubscriptionSyncClienting {

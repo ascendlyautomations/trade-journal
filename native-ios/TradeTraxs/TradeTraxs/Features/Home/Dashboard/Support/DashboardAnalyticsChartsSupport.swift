@@ -18,9 +18,16 @@ nonisolated enum DashboardAnalyticsChartsSupport {
         distributions.symbols != nil && distributions.streaks != nil
     }
 
-    /// Lazy chart overlay is usable for expanded Dashboard visuals (equity + post-expansion distributions).
+    /// A fetched overlay is ready once it can be shown.
+    /// Fewer than two equity points is a resolved empty curve, not an unfinished request.
+    /// A drawable curve still has to include the distribution expansion keys.
     static func chartsReadyForPresentation(_ presets: [String: AnalyticsDashboardChartsPresetV1]) -> Bool {
-        hasEquityPoints(presets) && hasVisualExpansionContract(presets)
+        guard !presets.isEmpty else { return false }
+        let longestSeries = presets.values.map(\.equity.points.count).max() ?? 0
+        if longestSeries < DashboardEquityChartRangeResolver.minimumTradeCountForEquityCurve {
+            return true
+        }
+        return hasVisualExpansionContract(presets)
     }
 
     static func samplePreset(

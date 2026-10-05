@@ -30,6 +30,11 @@ nonisolated final class SessionManager: @unchecked Sendable {
         lock.lock(); current = session; lock.unlock()
     }
 
+    /// Guest Explore token. Memory only, so a killed app cannot restore it as a normal login.
+    func installEphemeral(_ session: AuthenticationSession) {
+        lock.lock(); current = session; lock.unlock()
+    }
+
     func updateTokens(accessToken: String, refreshToken: String?, expiresAt: Date?) throws {
         lock.lock()
         guard var session = current else {

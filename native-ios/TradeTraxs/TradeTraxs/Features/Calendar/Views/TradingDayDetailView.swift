@@ -226,7 +226,16 @@ final class CalendarDayDetailLoader {
         isLoading = true
         defer { isLoading = false }
         let userID = await session.currentUserID
-        let profileID = ProfileID(userID?.rawValue ?? "dev.screenshot")
+        let demoActive = AppLaunchController.shared.isDemoExperienceActive
+        guard case .viewer(let profileID) = SessionViewerIdentity.resolve(
+            userID: userID,
+            demoExperienceActive: demoActive
+        ) else {
+            if summary == nil {
+                errorMessage = SessionViewerIdentity.sessionUnavailableMessage
+            }
+            return
+        }
 
         if let loaded = SessionAccountsStore.shared.cached(for: profileID)
             ?? detailCache.accounts(for: profileID)
@@ -235,7 +244,22 @@ final class CalendarDayDetailLoader {
         }
 
         if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
-            let all = CalendarFixtures.trades(owner: profileID)
+            let latestUserID = await session.currentUserID
+            guard SessionViewerIdentity.shouldCommit(
+                resolved: profileID,
+                userID: latestUserID,
+                demoExperienceActive: AppLaunchController.shared.isDemoExperienceActive
+            ) else {
+                if let latestUserID, ProfileID(latestUserID.rawValue) != profileID {
+                    await refresh()
+                } else if summary == nil {
+                    errorMessage = SessionViewerIdentity.sessionUnavailableMessage
+                }
+                return
+            }
+            let all = profileID == DemoExperienceSupport.profileID
+                ? DemoCanonicalDataset.trades()
+                : CalendarFixtures.trades(owner: profileID)
             apply(all, source: "fixtures")
             return
         }

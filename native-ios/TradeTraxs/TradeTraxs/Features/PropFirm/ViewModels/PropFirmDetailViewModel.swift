@@ -42,7 +42,17 @@ final class PropFirmDetailViewModel {
         isLoading = snapshot == nil
         errorMessage = nil
         let userID = await session.currentUserID
-        let profileID = ProfileID(userID?.rawValue ?? "dev.screenshot")
+        let demoActive = AppLaunchController.shared.isDemoExperienceActive
+        guard case .viewer(let profileID) = SessionViewerIdentity.resolve(
+            userID: userID,
+            demoExperienceActive: demoActive
+        ) else {
+            if snapshot == nil {
+                errorMessage = SessionViewerIdentity.sessionUnavailableMessage
+            }
+            isLoading = false
+            return
+        }
 
         do {
             if let rpc, !ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
@@ -72,6 +82,20 @@ final class PropFirmDetailViewModel {
 
             let accounts: [TradingAccount]
             if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+                let latestUserID = await session.currentUserID
+                guard SessionViewerIdentity.shouldCommit(
+                    resolved: profileID,
+                    userID: latestUserID,
+                    demoExperienceActive: AppLaunchController.shared.isDemoExperienceActive
+                ) else {
+                    if let latestUserID, ProfileID(latestUserID.rawValue) != profileID {
+                        await refresh()
+                    } else if snapshot == nil {
+                        errorMessage = SessionViewerIdentity.sessionUnavailableMessage
+                    }
+                    isLoading = false
+                    return
+                }
                 accounts = PropFirmFixtures.accounts(owner: profileID)
                 SessionAccountsStore.shared.seed(accounts, for: profileID, detailCache: detailCache)
             } else {

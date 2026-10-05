@@ -26,6 +26,10 @@ final class StoryEditorViewModel {
         self.videoURL = videoURL
     }
 
+    func applyRestoredCanvas(_ state: StoryCanvasState) {
+        canvas = state
+    }
+
     var publishableTextOverlays: [StoryTextOverlay] {
         canvas.textOverlays.filter {
             !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

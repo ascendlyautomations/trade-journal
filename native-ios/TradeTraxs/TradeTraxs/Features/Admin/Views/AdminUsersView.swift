@@ -110,6 +110,15 @@ private struct AdminUserRow: View {
                     Text(displayHandle)
                         .experienceStyle(.body, color: colors.primaryText)
                         .lineLimit(1)
+                    if summary.isHiddenFromCommunity {
+                        Text("Hidden")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(colors.warning)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(colors.warning.opacity(0.15))
+                            .clipShape(Capsule())
+                    }
                     if summary.isBanned {
                         Text("Banned")
                             .font(.caption2.weight(.semibold))

@@ -153,6 +153,16 @@ final class ExploreViewModel {
         let forceFixtures = false
         #endif
 
+        if viewerID == DemoExperienceSupport.profileID {
+            let lowered = query.lowercased()
+            let exclude = viewerID ?? DemoExperienceSupport.profileID
+            searchPeople = DemoGraph.traders(excluding: exclude).filter {
+                $0.profile.displayName.lowercased().contains(lowered)
+                    || $0.profile.username.lowercased().contains(lowered)
+            }
+            searchRooms = []
+            return
+        }
         if forceFixtures || (viewerID.map(isLocalDevelopment) ?? false) {
             let lowered = query.lowercased()
             let exclude = viewerID ?? ExploreFixtures.viewerID
@@ -331,6 +341,34 @@ final class ExploreViewModel {
 
         if let raw = await session.currentUserID?.rawValue {
             viewerID = ProfileID(raw)
+        }
+
+        if let viewerID, viewerID == DemoExperienceSupport.profileID {
+            let traders = DemoGraph.traders(excluding: viewerID)
+            let rooms = [
+                ExploreRoomSuggestion(
+                    id: DemoExploreTradeRoom.roomID,
+                    name: DemoExploreTradeRoom.room().name,
+                    slug: DemoExploreTradeRoom.room().slug,
+                    description: DemoExploreTradeRoom.room().description,
+                    memberCount: DemoExploreTradeRoom.room().memberCount,
+                    ownerProfileID: DemoExploreTradeRoom.hostProfileID,
+                    roomKind: .community,
+                    isJoined: true,
+                    isMember: true
+                )
+            ]
+            DemoGraph.seedFeedCache(detailCache, viewerID: viewerID)
+            store.applyBootstrap(
+                traders: traders,
+                rooms: rooms,
+                suggestedRooms: rooms,
+                following: Set(DemoGraph.following().map(\.id)),
+                tradersNextCursor: nil
+            )
+            phase = .loaded
+            bootstrapTask = nil
+            return
         }
 
         if let viewerID, isLocalDevelopment(viewerID) {

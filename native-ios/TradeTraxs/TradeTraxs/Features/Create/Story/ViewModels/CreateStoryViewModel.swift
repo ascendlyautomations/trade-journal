@@ -35,6 +35,7 @@ final class CreateStoryViewModel {
     private let uploadService: any UploadService
     private let objectStorage: any ObjectStorageProviding
     private let uploadServices: GlobalUploadServices
+    private let contentDrafts: (any ContentDraftRepository)?
     private let onPublished: (Story) -> Void
     private let onDismiss: () -> Void
 
@@ -42,6 +43,13 @@ final class CreateStoryViewModel {
     private var publishTask: Task<Void, Never>?
     private var hasPrepared = false
     private(set) var isPostingStory = false
+    private(set) var isSavingDraft = false
+    private(set) var restoredCanvas: StoryCanvasState?
+    private var activeDraftID: UUID?
+    private var pendingStoryDraft: StoryComposerDraftState?
+    private var retainedImagePath: String?
+    private var retainedVideoPath: String?
+    private var didClearDraftMedia = false
 
     init(
         feed: any FeedRepository,
@@ -51,6 +59,8 @@ final class CreateStoryViewModel {
         uploadService: any UploadService,
         objectStorage: any ObjectStorageProviding,
         uploadServices: GlobalUploadServices,
+        contentDrafts: (any ContentDraftRepository)? = nil,
+        restoredDraft: ContentDraft? = nil,
         onPublished: @escaping (Story) -> Void,
         onDismiss: @escaping () -> Void
     ) {
@@ -61,8 +71,12 @@ final class CreateStoryViewModel {
         self.uploadService = uploadService
         self.objectStorage = objectStorage
         self.uploadServices = uploadServices
+        self.contentDrafts = contentDrafts
         self.onPublished = onPublished
         self.onDismiss = onDismiss
+        if let restoredDraft, restoredDraft.type == .story {
+            applyStoryDraft(restoredDraft)
+        }
     }
 
     var hasUnsavedChanges: Bool {
@@ -94,6 +108,7 @@ final class CreateStoryViewModel {
         formError = nil
         localVideoFileURL = nil
         sourceImage = image
+        restoredCanvas = nil
         imagePreview = nil
         imageData = nil
         originalFileName = fileName.hasSuffix(".jpg") || fileName.hasSuffix(".jpeg")
@@ -117,6 +132,7 @@ final class CreateStoryViewModel {
             return
         }
         sourceImage = nil
+        restoredCanvas = nil
         imagePreview = nil
         imageData = nil
         localVideoFileURL = fileURL
@@ -169,8 +185,106 @@ final class CreateStoryViewModel {
         imagePreview = nil
         imageData = nil
         localVideoFileURL = nil
+        restoredCanvas = nil
         pendingVideoTextOverlays = []
+        didClearDraftMedia = true
         formError = nil
+    }
+
+    var showsSaveDraft: Bool {
+        contentDrafts != nil && ExploreModeSupport.canWriteContent
+    }
+
+    var canSaveDraft: Bool {
+        guard showsSaveDraft, !isSavingDraft, phase != .publishing else { return false }
+        if sourceImage != nil || localVideoFileURL != nil || imageData != nil { return true }
+        if !didClearDraftMedia, retainedImagePath != nil || retainedVideoPath != nil { return true }
+        return restoredCanvas?.textOverlays.contains {
+            !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        } ?? false
+    }
+
+    func saveDraft(canvas: StoryCanvasState? = nil) {
+        guard showsSaveDraft, !isSavingDraft, let contentDrafts else { return }
+        let canvas = canvas ?? restoredCanvas ?? StoryCanvasState()
+        let hasText = canvas.textOverlays.contains {
+            !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        let hasMedia = sourceImage != nil
+            || localVideoFileURL != nil
+            || (!didClearDraftMedia && (retainedImagePath != nil || retainedVideoPath != nil))
+        guard hasText || hasMedia else {
+            formError = "Nothing to save yet."
+            return
+        }
+        isSavingDraft = true
+        formError = nil
+        let draftID = activeDraftID ?? UUID()
+        let image = sourceImage
+        let videoURL = localVideoFileURL
+        let videoType = contentType
+        let fileName = originalFileName
+        let previousImage = retainedImagePath
+        let previousVideo = retainedVideoPath
+        let cleared = didClearDraftMedia
+        Task {
+            do {
+                var state = StoryComposerDraftState()
+                state.fileName = fileName
+                state.imageScale = Double(canvas.imageScale)
+                state.imageOffsetWidth = Double(canvas.imageOffset.width)
+                state.imageOffsetHeight = Double(canvas.imageOffset.height)
+                state.textOverlays = canvas.textOverlays.map(StoryTextOverlayRecord.init)
+                if let image, let jpeg = MediaImagePreparation.storyJPEGData(from: image) {
+                    state.mediaKind = "image"
+                    state.contentType = "image/jpeg"
+                    state.imageStoragePath = try await contentDrafts.uploadDraftImage(draftID: draftID, data: jpeg)
+                    state.videoStoragePath = nil
+                    await contentDrafts.deleteDraftMedia(paths: [previousImage, previousVideo].compactMap { $0 }.filter { $0 != state.imageStoragePath })
+                } else if let videoURL {
+                    state.mediaKind = "video"
+                    state.contentType = videoType.isEmpty ? "video/mp4" : videoType
+                    state.videoStoragePath = try await contentDrafts.uploadDraftVideo(
+                        draftID: draftID,
+                        fileURL: videoURL,
+                        contentType: state.contentType
+                    )
+                    state.imageStoragePath = nil
+                    await contentDrafts.deleteDraftMedia(paths: [previousImage, previousVideo].compactMap { $0 }.filter { $0 != state.videoStoragePath })
+                } else if cleared {
+                    await contentDrafts.deleteDraftMedia(paths: [previousImage, previousVideo].compactMap { $0 })
+                } else {
+                    state.imageStoragePath = previousImage
+                    state.videoStoragePath = previousVideo
+                    state.mediaKind = previousVideo != nil ? "video" : "image"
+                    state.contentType = videoType
+                }
+                var payload = ContentDraftPayload()
+                payload.story = state
+                guard !payload.isMeaningfullyEmpty else {
+                    isSavingDraft = false
+                    formError = "Nothing to save yet."
+                    return
+                }
+                let saved = try await contentDrafts.saveDraft(
+                    ContentDraft(
+                        id: draftID,
+                        userID: await session.currentUserID ?? UserID(""),
+                        type: .story,
+                        payload: payload,
+                        createdAt: Date(),
+                        updatedAt: Date()
+                    )
+                )
+                activeDraftID = saved.id
+                isSavingDraft = false
+                SaveSuccessConfirmationCenter.shared.present("Draft saved")
+                onDismiss()
+            } catch {
+                isSavingDraft = false
+                formError = UserFacingError.message(for: error)
+            }
+        }
     }
 
     func postVideoStory(textOverlays: [StoryTextOverlay]) {
@@ -206,6 +320,7 @@ final class CreateStoryViewModel {
                 services: uploadServices,
                 onSuccess: onPublished
             )
+            noteDraftPublished(jobID: jobID)
             clearImage()
             phase = .ready
             onDismiss()
@@ -242,6 +357,7 @@ final class CreateStoryViewModel {
             services: uploadServices,
             onSuccess: onPublished
         )
+        noteDraftPublished(jobID: jobID)
         clearImage()
         phase = .ready
         onDismiss()
@@ -278,6 +394,70 @@ final class CreateStoryViewModel {
             detailCache.seed(loaded)
         }
 
+        await restorePendingStoryDraftIfNeeded()
         phase = .ready
+    }
+
+    private func noteDraftPublished(jobID: String) {
+        guard let activeDraftID, let contentDrafts else { return }
+        ContentDraftPublicationCleanup.shared.track(
+            jobID: jobID,
+            draftID: activeDraftID,
+            repository: contentDrafts
+        )
+    }
+
+    private func applyStoryDraft(_ draft: ContentDraft) {
+        guard let state = draft.payload.story else { return }
+        activeDraftID = draft.id
+        pendingStoryDraft = state
+        retainedImagePath = state.imageStoragePath
+        retainedVideoPath = state.videoStoragePath
+        contentType = state.contentType
+        originalFileName = state.fileName
+    }
+
+    private func restorePendingStoryDraftIfNeeded() async {
+        guard let state = pendingStoryDraft else { return }
+        pendingStoryDraft = nil
+        do {
+            if let path = state.videoStoragePath {
+                let data = try await ContentDraftMediaDownload.imageData(
+                    path: path,
+                    session: session,
+                    objectStorage: objectStorage
+                )
+                let ext = state.contentType == "video/quicktime" ? "mov" : "mp4"
+                let url = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("\(draftMediaToken()).\(ext)")
+                try data.write(to: url, options: .atomic)
+                localVideoFileURL = url
+                contentType = state.contentType
+                originalFileName = state.fileName
+            } else if let path = state.imageStoragePath {
+                let data = try await ContentDraftMediaDownload.imageData(
+                    path: path,
+                    session: session,
+                    objectStorage: objectStorage
+                )
+                guard let image = UIImage(data: data) else { return }
+                sourceImage = image
+                contentType = "image/jpeg"
+                originalFileName = state.fileName
+            }
+            restoredCanvas = StoryCanvasState(
+                imageScale: CGFloat(state.imageScale),
+                imageOffset: CGSize(width: state.imageOffsetWidth, height: state.imageOffsetHeight),
+                textOverlays: state.textOverlays.map { $0.storyTextOverlay() },
+                selectedTextID: nil
+            )
+            didClearDraftMedia = false
+        } catch {
+            formError = "Couldn't restore the draft story."
+        }
+    }
+
+    private func draftMediaToken() -> String {
+        activeDraftID?.uuidString ?? UUID().uuidString
     }
 }

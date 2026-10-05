@@ -245,4 +245,58 @@ final class ImageCropMathTests: XCTestCase {
         XCTAssertEqual(exported.origin.y, max(0, inverse.origin.y), accuracy: 0.5)
         XCTAssertEqual(exported.midY, geometry.previewSourceCenter, accuracy: 1)
     }
+
+    func testInfiniteImageSizeDoesNotProduceNaNPreviewFrame() {
+        let geometry = CropViewportGeometry(
+            sourcePixelSize: CGSize(width: CGFloat.infinity, height: CGFloat.infinity),
+            viewportSize: CGSize(width: 300, height: 375),
+            userScale: 1,
+            translation: .zero
+        )
+        let frame = geometry.previewImageFrame
+        XCTAssertTrue(frame.origin.x.isFinite)
+        XCTAssertTrue(frame.origin.y.isFinite)
+        XCTAssertTrue(frame.width.isFinite)
+        XCTAssertTrue(frame.height.isFinite)
+        XCTAssertEqual(frame, CGRect.zero)
+    }
+
+    func testNaNPanDoesNotProduceNaNPreviewFrame() {
+        let geometry = CropViewportGeometry(
+            sourcePixelSize: CGSize(width: 1200, height: 1600),
+            viewportSize: CGSize(width: 300, height: 375),
+            userScale: 1,
+            translation: CGSize(width: CGFloat.nan, height: 12)
+        )
+        let frame = geometry.previewImageFrame
+        XCTAssertTrue(frame.origin.x.isFinite)
+        XCTAssertTrue(frame.origin.y.isFinite)
+        XCTAssertTrue(frame.width.isFinite && frame.width > 0)
+        XCTAssertTrue(frame.height.isFinite && frame.height > 0)
+    }
+
+    func testInfiniteContainerWidthDoesNotProduceInfiniteEditorViewport() {
+        let size = FeedMediaLayout.editorViewportSize(
+            containerWidth: CGFloat.infinity,
+            imagePixelSize: CGSize(width: 1200, height: 1600),
+            aspectOption: .square
+        )
+        XCTAssertTrue(size.width.isFinite)
+        XCTAssertTrue(size.height.isFinite)
+        XCTAssertEqual(size, CGSize.zero)
+    }
+
+    func testNonFinitePinchKeepsFiniteTransform() {
+        let transform = ImageCropViewportMath.zoomAroundAnchor(
+            anchor: CGPoint(x: CGFloat.nan, y: 40),
+            imagePixelSize: CGSize(width: 1200, height: 1600),
+            viewportSize: CGSize(width: 300, height: 375),
+            startUserScale: 1.4,
+            startTranslation: CGSize(width: 8, height: -6),
+            magnification: CGFloat.nan
+        )
+        XCTAssertTrue(transform.zoom.isFinite)
+        XCTAssertTrue(transform.offset.width.isFinite)
+        XCTAssertTrue(transform.offset.height.isFinite)
+    }
 }

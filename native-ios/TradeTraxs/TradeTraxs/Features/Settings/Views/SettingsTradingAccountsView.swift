@@ -59,7 +59,7 @@ struct SettingsTradingAccountsView: View {
                 }
             }
 
-            if let data {
+            if let data, !AppLaunchController.shared.isDemoExperienceActive {
                 Section {
                     NavigationLink {
                         BrokerIntegrationsView(data: data, navigationCoordinator: navigationCoordinator)
@@ -139,6 +139,7 @@ struct SettingsTradingAccountsView: View {
                                 isOn: Binding(
                                     get: { viewModel.showInAccountDropdowns(for: account.id) },
                                     set: { show in
+                                        guard !AppLaunchController.shared.isDemoExperienceActive else { return }
                                         Task {
                                             await viewModel.setShowInAccountDropdowns(
                                                 id: account.id,
@@ -155,6 +156,7 @@ struct SettingsTradingAccountsView: View {
                             )
 
                             Button {
+                                guard !AppLaunchController.shared.isDemoExperienceActive else { return }
                                 editorPresentation = .edit(account)
                             } label: {
                                 HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
@@ -181,6 +183,9 @@ struct SettingsTradingAccountsView: View {
                         }
                         .accessibilityIdentifier("settings.account.\(account.id.rawValue)")
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            if AppLaunchController.shared.isDemoExperienceActive {
+                                EmptyView()
+                            } else {
                             Button {
                                 ExperienceHaptics.play(.selection)
                                 Task {
@@ -190,8 +195,10 @@ struct SettingsTradingAccountsView: View {
                                 Text(account.isActive ? "Deactivate" : "Activate")
                             }
                             .tint(account.isActive ? colors.secondaryText : colors.accent)
+                            }
                         }
                         .contextMenu {
+                            if !AppLaunchController.shared.isDemoExperienceActive {
                             Button {
                                 editorPresentation = .edit(account)
                             } label: {
@@ -207,6 +214,7 @@ struct SettingsTradingAccountsView: View {
                                     account.isActive ? "Deactivate" : "Activate",
                                     systemImage: account.isActive ? "pause.circle" : "checkmark.circle"
                                 )
+                            }
                             }
                         }
                     }
@@ -224,13 +232,15 @@ struct SettingsTradingAccountsView: View {
         .background(colors.groupedBackground.ignoresSafeArea())
         .experienceNavigationTitle("Manage Accounts")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    editorPresentation = .create
-                } label: {
-                    Label("Add", systemImage: "plus")
+            if !AppLaunchController.shared.isDemoExperienceActive {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        editorPresentation = .create
+                    } label: {
+                        Label("Add", systemImage: "plus")
+                    }
+                    .accessibilityIdentifier("manageAccounts.add")
                 }
-                .accessibilityIdentifier("manageAccounts.add")
             }
         }
         .overlay {

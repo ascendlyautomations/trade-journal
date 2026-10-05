@@ -1,7 +1,7 @@
 import Foundation
 
 /// Profile Trades outcome filter — matches web `ProfileTradesTab` semantics.
-enum ProfileTradesFilter: String, CaseIterable, Identifiable, Sendable {
+nonisolated enum ProfileTradesFilter: String, CaseIterable, Identifiable, Sendable {
     case all
     case wins
     case losses
@@ -33,7 +33,7 @@ enum ProfileTradesFilter: String, CaseIterable, Identifiable, Sendable {
 }
 
 /// Profile Trades sort — matches web `TradesSortKey` labels/order.
-enum ProfileTradesSort: String, CaseIterable, Identifiable, Sendable {
+nonisolated enum ProfileTradesSort: String, CaseIterable, Identifiable, Sendable {
     case newest
     case oldest
     case highestProfit
@@ -93,5 +93,11 @@ enum ProfileTradesSort: String, CaseIterable, Identifiable, Sendable {
         case let (l?, r?):
             return ascending ? l < r : l > r
         }
+    }
+
+    func sortedJournal(_ items: [TradeOwnerJournalSummary]) -> [TradeOwnerJournalSummary] {
+        let sortedSummaries = sorted(items.map(\.summary))
+        let byID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        return sortedSummaries.compactMap { byID[$0.id] }
     }
 }

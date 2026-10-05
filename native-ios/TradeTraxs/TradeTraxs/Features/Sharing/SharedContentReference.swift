@@ -219,6 +219,57 @@ nonisolated enum SharedContentMessageSupport {
         }
     }
 
+    /// Trade IDs a shared message row depends on for card rendering (attachment, structured share, linked feed post).
+    static func referencedTradeIDs(
+        for message: Message,
+        sharedPosts: [PostID: Post] = [:]
+    ) -> [TradeID] {
+        var ids: [TradeID] = []
+        if let attachmentID = message.attachments.first?.tradeID {
+            ids.append(attachmentID)
+        }
+        if case .trade(let tradeID) = message.sharedContent {
+            ids.append(tradeID)
+        }
+        if let reference = message.sharedContent {
+            switch reference {
+            case .feedPost(let postID):
+                if let tradeID = sharedPosts[postID]?.linkedTradeID {
+                    ids.append(tradeID)
+                }
+            case .reel:
+                break
+            default:
+                break
+            }
+        }
+        if message.kind == .feedPostShare,
+           let postID = message.sharedContent.flatMap({ ref -> PostID? in
+               if case .feedPost(let id) = ref { return id }
+               return nil
+           }),
+           let tradeID = sharedPosts[postID]?.linkedTradeID
+        {
+            ids.append(tradeID)
+        }
+        var seen = Set<String>()
+        return ids.filter { seen.insert($0.rawValue).inserted }
+    }
+
+    static func primaryTradeID(for message: Message, sharedPosts: [PostID: Post] = [:]) -> TradeID? {
+        referencedTradeIDs(for: message, sharedPosts: sharedPosts).first
+    }
+
+    static func tradeShareAttachments(for tradeID: TradeID) -> [MessageAttachment] {
+        [
+            MessageAttachment(
+                id: tradeID.rawValue,
+                media: MediaReference(id: tradeID.rawValue, kind: .file, altText: "Shared trade"),
+                tradeID: tradeID
+            ),
+        ]
+    }
+
     /// Optional sender note attached to a structured share — not structured JSON / placeholders.
     static func userWrittenMessage(for message: Message) -> String? {
         guard isInternallySharedContent(message) else { return nil }

@@ -341,6 +341,10 @@ final class ActivityInboxStore {
         rpc: (any RPCClient)? = nil,
         feedPresentation: Bool = false
     ) async {
+        if await seedBundledActivityIfNeeded(session: session, detailCache: detailCache) {
+            return
+        }
+
         await bootstrapUnreadIfNeeded(
             notifications: notifications,
             session: session,
@@ -498,6 +502,32 @@ final class ActivityInboxStore {
         )
     }
 
+    /// Local demo / `dev.*` viewers render bundled activity and never open notification RPCs.
+    private func seedBundledActivityIfNeeded(
+        session: any SessionProviding,
+        detailCache: DetailPresentationCache?
+    ) async -> Bool {
+        guard let userID = await session.currentUserID?.rawValue else { return false }
+        let viewer = ProfileID(userID)
+        guard DemoExperienceSupport.usesLocalBundledData(viewer) else { return false }
+        if startedForUserID == userID, hasLoaded {
+            return true
+        }
+        if viewer == DemoExperienceSupport.profileID {
+            DemoGraph.seedActivity(self, cache: detailCache)
+            startedForUserID = userID
+            persistedViewerID = viewer
+            return true
+        }
+        ActivityFixtures.seedStore(self)
+        for profile in ActivityFixtures.profiles() {
+            detailCache?.seed(profile)
+        }
+        startedForUserID = userID
+        persistedViewerID = viewer
+        return true
+    }
+
     func bootstrapUnreadIfNeeded(
         notifications: any NotificationRepository,
         session: any SessionProviding,
@@ -505,6 +535,9 @@ final class ActivityInboxStore {
         detailCache: DetailPresentationCache? = nil,
         rpc: (any RPCClient)? = nil
     ) async {
+        if await seedBundledActivityIfNeeded(session: session, detailCache: detailCache) {
+            return
+        }
         if DemoExperienceSupport.skipsAuthenticatedViewerServices { return }
         guard let userID = await session.currentUserID?.rawValue else { return }
         if startedForUserID == userID, hasBootstrappedUnread {

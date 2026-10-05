@@ -12,6 +12,7 @@ final class ProUpgradeCoordinator {
 
     func present(reason: ProGateReason, retry: (() -> Void)? = nil) {
         guard ProMonetizationPolicy.canPresentProPaywall(
+            demoModeActive: ExploreModeSupport.isActive,
             enforcement: IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled,
             paywallEnabled: IosSubscriptionReleaseConfiguration.iosPaywallEnabled
         ) else { return }
@@ -21,6 +22,7 @@ final class ProUpgradeCoordinator {
     }
 
     func presentIfNeeded(isPro: Bool, feature: ProFeatureKind) -> Bool {
+        if ExploreModeSupport.isActive { return false }
         guard ProMonetizationPolicy.shouldGateProFeature(
             isPro: isPro,
             enforcement: IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled

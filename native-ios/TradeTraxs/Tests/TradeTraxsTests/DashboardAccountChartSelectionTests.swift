@@ -1,6 +1,16 @@
 import XCTest
 @testable import TradeTraxs
 
+private struct EquityCurveExplodingRPC: RPCClient {
+    func call(functionName: String, parameters: [String: String]) async throws -> Data {
+        throw AppError.unknown(message: "equity overlay should already be resolved")
+    }
+
+    func call(functionName: String, jsonBody: Data) async throws -> Data {
+        throw AppError.unknown(message: "equity overlay should already be resolved")
+    }
+}
+
 @MainActor
 final class DashboardAccountChartSelectionTests: XCTestCase {
     private let accountA = TradingAccountID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
@@ -45,6 +55,55 @@ final class DashboardAccountChartSelectionTests: XCTestCase {
             revision: revision
         )
         XCTAssertTrue(DashboardAnalyticsChartsSupport.hasEquityPoints(cached ?? [:]))
+    }
+
+    func testResolvedEmptyEquityChartsAreReady() {
+        let empty = chartsWithEquity(pointCount: 0)
+        let oneTrade = chartsWithEquity(pointCount: 1)
+        XCTAssertTrue(DashboardAnalyticsChartsSupport.chartsReadyForPresentation(empty))
+        XCTAssertTrue(DashboardAnalyticsChartsSupport.chartsReadyForPresentation(oneTrade))
+        XCTAssertFalse(DashboardAnalyticsChartsSupport.chartsReadyForPresentation([:]))
+
+        DashboardAnalyticsAccountChartsStore.shared.markLoaded(
+            accountID: accountB,
+            revision: revision,
+            presets: empty
+        )
+        XCTAssertEqual(
+            DashboardAnalyticsAccountChartsStore.shared.availability(accountID: accountB, revision: revision),
+            .loaded
+        )
+    }
+
+    func testAccountSwitchResolvedEmptyDoesNotStayLoading() async {
+        DashboardAnalyticsAccountChartsStore.shared.markLoading(accountID: accountA, revision: revision)
+        let empty = chartsWithEquity(pointCount: 0)
+        DashboardAnalyticsAccountChartsStore.shared.markLoaded(
+            accountID: accountB,
+            revision: revision,
+            presets: empty
+        )
+        DashboardAnalyticsAccountChartsStore.shared.markLoaded(
+            accountID: accountA,
+            revision: revision,
+            presets: empty
+        )
+
+        let store = DashboardAnalyticsAccountChartsStore.shared
+        XCTAssertEqual(store.availability(accountID: accountB, revision: revision), .loaded)
+        XCTAssertTrue(DashboardAnalyticsChartsSupport.chartsReadyForPresentation(store.charts(accountID: accountB, revision: revision) ?? [:]))
+        XCTAssertNotEqual(store.availability(accountID: accountB, revision: revision), .loading)
+
+        let token = DashboardAnalyticsAccountChartsCoordinator.bumpSelection()
+        let applied = await DashboardAnalyticsAccountChartsCoordinator.loadIfNeeded(
+            selectedAccountID: accountB,
+            selectionToken: token,
+            revision: revision,
+            viewerID: ProfileID("equity-viewer"),
+            rpc: EquityCurveExplodingRPC()
+        )
+        XCTAssertTrue(applied)
+        XCTAssertEqual(store.availability(accountID: accountB, revision: revision), .loaded)
     }
 
     func testPerAccountCacheKeysDoNotCollide() {

@@ -94,6 +94,7 @@ final class ProfileScreenViewModel {
     func onAppear(currentUserProfile: CurrentUserProfileStore) {
         seedOwnerCacheIfNeeded(from: currentUserProfile)
         FollowMutationCoordinator.shared.registerActiveProfile(screen: self)
+        ProfileOwnerHeaderStatsCoordinator.shared.registerActiveProfile(screen: self)
         SocialRealtimeRepairSurfaces.shared.profileViewModel = self
         SocialRealtimeRepairSurfaces.shared.bumpProfileRepairGeneration()
         if case .currentUser = target {
@@ -112,6 +113,19 @@ final class ProfileScreenViewModel {
     func onDisappearProfileEntityRealtime() {}
 
     private func bindProfileEntityRealtime() {}
+
+    /// Owner journal header metrics — keep shell + ``ProfileContentStore`` aligned with detail cache.
+    func applyExternalOwnerHeaderStats(_ stats: ProfileStats) {
+        guard state.isOwner, state.profileID == stats.profileID else { return }
+        var next = state
+        next.stats = stats
+        applyLocalState(
+            next,
+            skipPostsBootstrap: true,
+            skipClipsBootstrap: true,
+            skipTradesBootstrap: true
+        )
+    }
 
     /// FollowMutationCoordinator — keep ProfileState aligned with shared caches.
     func applyExternalFollowState(isFollowing: Bool, stats: ProfileStats?) {
@@ -297,7 +311,15 @@ final class ProfileScreenViewModel {
         switch item.contentType {
         case .trade:
             if let id = item.tradeID {
-                navigationCoordinator.pushSocialTrade(id)
+                if let summary = data.detailCache.tradeSummary(id: id) {
+                    data.detailCache.seedPresentationSeed(summary)
+                } else if let preview = data.detailCache.previewTrade(id: id) {
+                    data.detailCache.ensurePresentationSeed(forPreview: preview)
+                }
+                #if DEBUG
+                SharedTradeOpenDiagnostics.tapped(tradeID: id)
+                #endif
+                navigationCoordinator.pushSocialTrade(id, cache: data.detailCache)
             }
         case .profilePost:
             if let id = item.postID {

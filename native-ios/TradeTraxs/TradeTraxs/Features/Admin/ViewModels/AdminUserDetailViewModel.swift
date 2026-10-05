@@ -99,6 +99,28 @@ final class AdminUserDetailViewModel {
         }
     }
 
+    func setHiddenFromCommunity(_ hidden: Bool) async -> Bool {
+        guard let adminID = await viewerID else {
+            moderationMessage = "Session expired."
+            return false
+        }
+        moderationBusy = true
+        moderationMessage = nil
+        defer { moderationBusy = false }
+        do {
+            try await repository.setHiddenFromCommunity(
+                targetUserID: user.id,
+                adminUserID: adminID,
+                hidden: hidden
+            )
+            user.isHiddenFromCommunity = hidden
+            return true
+        } catch {
+            moderationMessage = error.localizedDescription
+            return false
+        }
+    }
+
     func unban() async -> Bool {
         guard let adminID = await viewerID else {
             moderationMessage = "Session expired."

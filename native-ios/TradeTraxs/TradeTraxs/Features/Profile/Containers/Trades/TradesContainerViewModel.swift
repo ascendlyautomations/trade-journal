@@ -5,7 +5,14 @@ import Observation
 @MainActor
 final class TradesContainerViewModel {
     private(set) var state: ProfileSectionLoadState = .idle
-    private(set) var items: [TradeSummary] = []
+    private(set) var journalItems: [TradeOwnerJournalSummary] = []
+    /// Grouped Profile Trades cards — rebuilt with ``updateStateForVisibleItems()`` (includes copy mode summary).
+    private(set) var renderedTradeSummaries: [TradeSummary] = []
+
+    /// Flat public trade rows backing the section (includes copy siblings before display grouping).
+    var items: [TradeSummary] {
+        journalItems.map(\.summary)
+    }
     private(set) var nextCursor: String?
     private(set) var accountNames: [TradingAccountID: String] = [:]
     private(set) var accountNumbers: [TradingAccountID: String] = [:]
@@ -40,9 +47,28 @@ final class TradesContainerViewModel {
     private var canViewContent = true
     private var isScreenOwned = false
     private var awaitingScreenBootstrap = false
+    private var hasAuthoritativeV2Journal = false
+    private(set) var isHydratingAuthoritativeJournal = false
     private let initialLoadFailureGrace = ProfileSectionFailureGrace()
 
     var hasAuthoritativePayload: Bool { hasLoaded }
+
+    #if DEBUG
+    /// Tests — loaded list with a stale pagination footer and an explicit cursor.
+    func testing_setLoadedPagination(nextCursor: String?, paginationError: String?) {
+        hasLoaded = true
+        self.nextCursor = nextCursor
+        paginationErrorMessage = paginationError
+    }
+
+    /// Tests — simulate successful `rpc_v1_profile_tab_trades_v2` hydration.
+    func installAuthoritativeV2JournalForTests(_ rows: [TradeOwnerJournalSummary]) {
+        hasAuthoritativeV2Journal = true
+        journalItems = rows
+        hasLoaded = true
+        updateStateForVisibleItems()
+    }
+    #endif
 
     struct SharePayload: Identifiable, Equatable {
         let id = UUID()
@@ -79,8 +105,7 @@ final class TradesContainerViewModel {
     }
 
     var visibleItems: [TradeSummary] {
-        let filtered = items.filter { filter.matches($0) }
-        return sort.sorted(filtered)
+        renderedTradeSummaries
     }
 
     var showsOwnerActions: Bool { isOwner }
@@ -108,7 +133,7 @@ final class TradesContainerViewModel {
 
     /// Shown when trades exist but the active filter/sort yields no rows — keeps filters visible (Stats parity).
     var filterEmptyMessage: String? {
-        guard hasLoaded, !items.isEmpty, visibleItems.isEmpty else { return nil }
+        guard hasLoaded, !journalItems.isEmpty, visibleItems.isEmpty else { return nil }
         return emptyMessage
     }
 
@@ -120,7 +145,7 @@ final class TradesContainerViewModel {
         if snapshot.isContentLocked {
             canViewContent = false
             hasLoaded = true
-            items = []
+            journalItems = []
             state = .empty
             return
         }
@@ -130,7 +155,7 @@ final class TradesContainerViewModel {
             snapshot: snapshot,
             didLoadSection: snapshot.didLoadTrades,
             sectionItemsEmpty: snapshot.trades.isEmpty,
-            localItemsEmpty: items.isEmpty
+            localItemsEmpty: journalItems.isEmpty
         )
         guard snapshot.didLoadTrades || !snapshot.trades.isEmpty else {
             if hasLoaded {
@@ -140,8 +165,8 @@ final class TradesContainerViewModel {
             let plan = ProfileSectionInitialLoad.planWhenBootstrapOmitsSectionPayload(
                 snapshot: snapshot,
                 hasLoaded: hasLoaded,
-                itemsEmpty: items.isEmpty,
-                itemCount: items.count,
+                itemsEmpty: journalItems.isEmpty,
+                itemCount: journalItems.count,
                 currentState: state,
                 awaitingScreenBootstrap: awaitingScreenBootstrap
             )
@@ -156,27 +181,49 @@ final class TradesContainerViewModel {
         awaitingScreenBootstrap = false
         initialLoadFailureGrace.cancel()
 
+        if hasAuthoritativeV2Journal {
+            mergeBootstrapMetadata(from: snapshot)
+            seedCachesFromItems()
+            updateStateForVisibleItems()
+            prefetchEngagement(for: visibleItems.map(\.id))
+            hydrateAuthoritativeJournalIfNeeded()
+            return
+        }
+
         if hasLoaded {
+            if isHydratingAuthoritativeJournal, !hasAuthoritativeV2Journal {
+                mergeBootstrapMetadata(from: snapshot)
+                seedCachesFromItems()
+                updateStateForVisibleItems()
+                prefetchEngagement(for: visibleItems.map(\.id))
+                return
+            }
             if snapshot.trades.isEmpty {
                 if snapshot.didLoadTrades {
-                    items = []
+                    journalItems = []
                     seedCachesFromItems()
                     updateStateForVisibleItems()
                     prefetchEngagement(for: [])
                 }
                 return
             }
-            items = ProfileSectionSupport.reconcileLoadedSnapshot(
+            journalItems = reconcileJournal(
                 snapshot: snapshot.trades,
-                loaded: items
+                loaded: journalItems
             )
+            #if DEBUG
+            ProfileTradesHydrationDiagnostics.logHydration(
+                source: .bootstrap,
+                count: snapshot.trades.count,
+                journalCount: journalItems.count
+            )
+            #endif
             nextCursor = snapshot.tradesNextCursor ?? nextCursor
-            if !snapshot.accountNames.isEmpty { accountNames = snapshot.accountNames }
-            if !snapshot.accountModes.isEmpty { accountModes = snapshot.accountModes }
-            if !snapshot.accountSizes.isEmpty { accountSizes = snapshot.accountSizes }
+            mergeBootstrapMetadata(from: snapshot)
             seedCachesFromItems()
             updateStateForVisibleItems()
             prefetchEngagement(for: visibleItems.map(\.id))
+            hydrateAuthoritativeJournalIfNeeded()
             return
         }
 
@@ -186,31 +233,72 @@ final class TradesContainerViewModel {
             hasLoaded: hasLoaded,
             didLoadAuthoritative: snapshot.didLoadTrades
         )
-        items = reconciled.items
+        journalItems = reconcileJournal(snapshot: reconciled.items, loaded: journalItems)
+        #if DEBUG
+        ProfileTradesHydrationDiagnostics.logHydration(
+            source: .bootstrap,
+            count: reconciled.items.count,
+            journalCount: journalItems.count
+        )
+        #endif
         hasLoaded = reconciled.hasLoaded
         nextCursor = snapshot.tradesNextCursor
-        accountNames = snapshot.accountNames
+        mergeBootstrapMetadata(from: snapshot)
         accountNumbers = [:]
-        accountModes = snapshot.accountModes
-        accountSizes = snapshot.accountSizes
         seedCachesFromItems()
         paginationErrorMessage = nil
         updateStateForVisibleItems()
         prefetchEngagement(for: visibleItems.map(\.id))
+        hydrateAuthoritativeJournalIfNeeded()
+    }
+
+    /// Profile → Trades tab — ensure V2 journal hydration even after bootstrap `didLoadTrades`.
+    func hydrateAuthoritativeJournalIfNeeded() {
+        let decision = Self.v2HydrationDecision(profileID: profileID, rpc: rpc, hasV2Journal: hasAuthoritativeV2Journal)
+        #if DEBUG
+        ProfileTradesHydrationDiagnostics.logV2Request(
+            requested: decision.shouldFetch,
+            reason: decision.reason
+        )
+        #endif
+        guard decision.shouldFetch else { return }
+        if loadTask != nil { return }
+        syncGeneration &+= 1
+        let generation = syncGeneration
+        isHydratingAuthoritativeJournal = true
+        loadTask = Task { await performLoad(reset: true, generation: generation) }
+    }
+
+    private func mergeBootstrapMetadata(from snapshot: ProfileState) {
+        if !snapshot.accountNames.isEmpty { accountNames = snapshot.accountNames }
+        if !snapshot.accountModes.isEmpty {
+            accountModes = CopyTradePresentation.mergedAccountModes(
+                journalItems: journalItems,
+                accountModesByID: snapshot.accountModes
+            )
+        }
+        if !snapshot.accountSizes.isEmpty { accountSizes = snapshot.accountSizes }
     }
 
     /// Owner journal create/update — upsert immediately; optional page-1 reload uses generation guards.
     func noteJournalMutationSucceeded(_ trade: Trade, preservingExisting existingItems: [TradeSummary] = []) {
         guard trade.ownerProfileID == profileID else { return }
         guard trade.visibility == .public else {
-            items.removeAll { $0.id == trade.id }
+            journalItems.removeAll { $0.id == trade.id }
             detailCache.removeTrade(id: trade.id)
             updateStateForVisibleItems()
             return
         }
-        let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
-        let baseline = items.isEmpty ? existingItems : items
-        items = OwnerProfileOptimisticStore.upserting(summary, into: baseline)
+        let journal = TradeSummaryMapper.ownerJournal(fromListTrade: trade)
+        var next = journalItems.isEmpty
+            ? ProfileTradesJournalMapping.journalItems(from: existingItems)
+            : journalItems
+        if let index = next.firstIndex(where: { $0.id == journal.id }) {
+            next[index] = journal
+        } else {
+            next.insert(journal, at: 0)
+        }
+        journalItems = next
         hasLoaded = true
         detailCache.seedPresentationSeed(TradeSummaryMapper.presentationSeed(fromListTrade: trade))
         updateStateForVisibleItems()
@@ -218,6 +306,10 @@ final class TradesContainerViewModel {
     }
 
     func loadIfNeeded() {
+        if !hasAuthoritativeV2Journal {
+            hydrateAuthoritativeJournalIfNeeded()
+            if loadTask != nil { return }
+        }
         guard !hasLoaded, loadTask == nil else { return }
         guard canViewContent else {
             hasLoaded = true
@@ -225,7 +317,7 @@ final class TradesContainerViewModel {
             return
         }
         if awaitingScreenBootstrap {
-            if items.isEmpty {
+            if journalItems.isEmpty {
                 state = .loading
             }
             return
@@ -250,6 +342,7 @@ final class TradesContainerViewModel {
         guard sort != value else { return }
         ExperienceHaptics.play(.selection)
         sort = value
+        updateStateForVisibleItems()
     }
 
     func loadMoreIfNeeded(currentTradeID: TradeID?) async {
@@ -260,6 +353,9 @@ final class TradesContainerViewModel {
             return
         }
         guard nextCursor != nil else {
+            // End of the list is not a failed page. Drop any error left by an
+            // earlier request so the footer cannot keep offering a retry.
+            paginationErrorMessage = nil
             #if DEBUG
             ProfileTradesPaginationDiagnostics.skipped(reason: "noMore")
             #endif
@@ -271,7 +367,7 @@ final class TradesContainerViewModel {
             #endif
             return
         }
-        guard let currentTradeID, items.last?.id == currentTradeID else { return }
+        guard let currentTradeID, visibleItems.last?.id == currentTradeID else { return }
 
         let cursor = nextCursor
         let generation = paginationGeneration
@@ -291,13 +387,17 @@ final class TradesContainerViewModel {
 
     func retryLoadMore() {
         paginationErrorMessage = nil
-        guard let lastID = items.last?.id else { return }
+        guard let lastID = visibleItems.last?.id else { return }
         Task { await loadMoreIfNeeded(currentTradeID: lastID) }
     }
 
     func openTrade(_ summary: TradeSummary) {
         detailCache.seedPresentationSeed(DetailPresentationSeed(summary: summary))
-        navigationCoordinator.pushSocialTrade(summary.id, cache: detailCache)
+        let preview = TradeSummaryMapper.previewTrade(from: summary)
+        #if DEBUG
+        SharedTradeOpenDiagnostics.tapped(tradeID: summary.id)
+        #endif
+        navigationCoordinator.pushSocialTrade(summary.id, cache: detailCache, preview: preview)
     }
 
     func addTrade() {
@@ -368,27 +468,27 @@ final class TradesContainerViewModel {
     func handleJournalMutation() {
         switch TradeJournalMutationStore.shared.latest {
         case .created(let trade) where trade.visibility == .public && trade.ownerProfileID == profileID:
-            let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
-            items.removeAll { $0.id == summary.id }
-            items.insert(summary, at: 0)
+            let journal = TradeSummaryMapper.ownerJournal(fromListTrade: trade)
+            journalItems.removeAll { $0.id == journal.id }
+            journalItems.insert(journal, at: 0)
             detailCache.seedPresentationSeed(TradeSummaryMapper.presentationSeed(fromListTrade: trade))
             updateStateForVisibleItems()
         case .updated(let trade) where trade.ownerProfileID == profileID:
-            let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
+            let journal = TradeSummaryMapper.ownerJournal(fromListTrade: trade)
             if trade.visibility == .public {
-                if let index = items.firstIndex(where: { $0.id == summary.id }) {
-                    items[index] = summary
+                if let index = journalItems.firstIndex(where: { $0.id == journal.id }) {
+                    journalItems[index] = journal
                 } else {
-                    items.insert(summary, at: 0)
+                    journalItems.insert(journal, at: 0)
                 }
                 detailCache.seedPresentationSeed(TradeSummaryMapper.presentationSeed(fromListTrade: trade))
             } else {
-                items.removeAll { $0.id == summary.id }
-                detailCache.removeTrade(id: summary.id)
+                journalItems.removeAll { $0.id == journal.id }
+                detailCache.removeTrade(id: journal.id)
             }
             updateStateForVisibleItems()
         case .deleted(let id, let owner) where owner == profileID:
-            items.removeAll { $0.id == id }
+            journalItems.removeAll { $0.id == id }
             detailCache.removeTrade(id: id)
             updateStateForVisibleItems()
         case .bulkImport:
@@ -431,7 +531,7 @@ final class TradesContainerViewModel {
         }
 
         do {
-            let pageItems: [TradeSummary]
+            let pageJournal: [TradeOwnerJournalSummary]
             let newCursor: String?
             if BackendV2FeatureFlags.isEnabled(.profile), let rpc {
                 let applied = try await ProfileTabBootstrapLoader.load(
@@ -441,7 +541,7 @@ final class TradesContainerViewModel {
                     detailCache: detailCache,
                     cursor: cursor
                 )
-                pageItems = applied.tradeSummaries ?? []
+                pageJournal = Self.journalItems(from: applied)
                 newCursor = applied.nextCursor
                 seedTradeEngagement(applied.tradeEngagement)
             } else {
@@ -451,7 +551,7 @@ final class TradesContainerViewModel {
                     page: PageRequest(cursor: cursor, limit: 30),
                     publicOnly: true
                 )
-                pageItems = page.items.map(TradeSummaryMapper.summary(fromPartialListTrade:))
+                pageJournal = page.items.map { TradeSummaryMapper.ownerJournal(fromListTrade: $0) }
                 newCursor = page.nextCursor
             }
 
@@ -464,18 +564,18 @@ final class TradesContainerViewModel {
 
             #if DEBUG
             ProfileTradesPaginationDiagnostics.response(
-                count: pageItems.count,
+                count: pageJournal.count,
                 hasMore: newCursor != nil
             )
             #endif
 
-            let beforeCount = items.count
-            if pageItems.isEmpty {
+            let beforeCount = journalItems.count
+            if pageJournal.isEmpty {
                 nextCursor = nil
             } else {
-                appendUnique(pageItems)
+                appendUniqueJournal(pageJournal)
                 nextCursor = newCursor
-                if items.count == beforeCount {
+                if journalItems.count == beforeCount {
                     nextCursor = nil
                 }
             }
@@ -485,7 +585,7 @@ final class TradesContainerViewModel {
 
             #if DEBUG
             ProfileTradesPaginationDiagnostics.completed(
-                appended: items.count - beforeCount,
+                appended: journalItems.count - beforeCount,
                 hasMore: nextCursor != nil
             )
             #endif
@@ -523,13 +623,28 @@ final class TradesContainerViewModel {
                 return
             }
             hasLoaded = true
-            items = ProfileTradeFixtures.samples(owner: profileID).map(
-                TradeSummaryMapper.summary(fromPartialListTrade:)
-            )
-            accountNames = ProfileTradeFixtures.accountNames()
+            if profileID == DemoExperienceSupport.profileID {
+                journalItems = DemoCanonicalDataset.trades().map {
+                    TradeSummaryMapper.ownerJournal(fromListTrade: $0)
+                }
+                accountNames = Dictionary(
+                    uniqueKeysWithValues: DemoCanonicalDataset.accounts().map { ($0.id, $0.name) }
+                )
+                accountModes = DemoCanonicalDataset.accountModes()
+                accountSizes = Dictionary(
+                    uniqueKeysWithValues: DemoCanonicalDataset.accounts().compactMap { account in
+                        account.size.map { (account.id, $0.amount) }
+                    }
+                )
+            } else {
+                journalItems = ProfileTradeFixtures.samples(owner: profileID).map {
+                    TradeSummaryMapper.ownerJournal(fromListTrade: $0)
+                }
+                accountNames = ProfileTradeFixtures.accountNames()
+                accountModes = ProfileTradeFixtures.accountModes()
+                accountSizes = ProfileTradeFixtures.accountSizes()
+            }
             accountNumbers = [:]
-            accountModes = ProfileTradeFixtures.accountModes()
-            accountSizes = ProfileTradeFixtures.accountSizes()
             seedCachesFromItems()
             nextCursor = nil
             updateStateForVisibleItems()
@@ -538,14 +653,24 @@ final class TradesContainerViewModel {
             return
         }
 
-        if reset, items.isEmpty {
+        if reset, journalItems.isEmpty {
             state = .loading
         }
         initialLoadFailureGrace.cancel()
 
+        #if DEBUG
+        ProfileTradesHydrationDiagnostics.logPerformLoadStart(
+            reset: reset,
+            journalCount: journalItems.count
+        )
+        #endif
+
+        var usedV2Journal = false
+        var pageJournalCount = 0
         do {
-            let pageItems: [TradeSummary]
+            let pageJournal: [TradeOwnerJournalSummary]
             let newCursor: String?
+            let hydrationSource: ProfileTradesHydrationDiagnostics.Source
             if BackendV2FeatureFlags.isEnabled(.profile), let rpc {
                 let applied = try await ProfileTabBootstrapLoader.load(
                     tab: .trades,
@@ -554,12 +679,20 @@ final class TradesContainerViewModel {
                     detailCache: detailCache,
                     cursor: nil
                 )
-                pageItems = applied.tradeSummaries ?? []
+                pageJournal = Self.journalItems(from: applied)
                 newCursor = applied.nextCursor
                 if let names = applied.accountNames { accountNames = names }
-                if let modes = applied.accountModes { accountModes = modes }
+                if let modes = applied.accountModes {
+                    accountModes = CopyTradePresentation.mergedAccountModes(
+                        journalItems: pageJournal,
+                        accountModesByID: modes
+                    )
+                }
                 if let sizes = applied.accountSizes { accountSizes = sizes }
                 seedTradeEngagement(applied.tradeEngagement)
+                usedV2Journal = Self.appliedUsesAuthoritativeV2Journal(applied)
+                hydrationSource = usedV2Journal ? .v2 : .v1
+                pageJournalCount = pageJournal.count
             } else {
                 let page = try await trades.trades(
                     ownedBy: profileID,
@@ -567,25 +700,54 @@ final class TradesContainerViewModel {
                     page: PageRequest(limit: 30),
                     publicOnly: true
                 )
-                pageItems = page.items.map(TradeSummaryMapper.summary(fromPartialListTrade:))
+                pageJournal = page.items.map { TradeSummaryMapper.ownerJournal(fromListTrade: $0) }
                 newCursor = page.nextCursor
+                usedV2Journal = false
+                hydrationSource = .repository
+                pageJournalCount = pageJournal.count
             }
 
             guard generation == syncGeneration, !Task.isCancelled else {
+                #if DEBUG
+                ProfileTradesHydrationDiagnostics.logPerformLoadFinished(
+                    usedV2: usedV2Journal,
+                    pageCount: pageJournalCount,
+                    journalCount: journalItems.count,
+                    error: "cancelledOrStaleGeneration"
+                )
+                #endif
                 loadTask = nil
+                isHydratingAuthoritativeJournal = false
                 return
             }
 
-            let preserveIDs = ownerPublicTradePreserveIDs()
-            if reset, !items.isEmpty {
-                items = ProfilePersistentReconcile.reconcileTradeSummaries(
-                    existing: items,
-                    incoming: pageItems,
-                    preserveIDs: preserveIDs
-                ).items
+            if usedV2Journal {
+                hasAuthoritativeV2Journal = true
+                applyAuthoritativeJournalPage(pageJournal, reset: reset)
             } else {
-                items = pageItems
+                let preserveIDs = ownerPublicTradePreserveIDs()
+                let pageSummaries = pageJournal.map(\.summary)
+                if reset, !journalItems.isEmpty {
+                    let reconciled = ProfilePersistentReconcile.reconcileTradeSummaries(
+                        existing: items,
+                        incoming: pageSummaries,
+                        preserveIDs: preserveIDs
+                    ).items
+                    var next = reconcileJournal(snapshot: reconciled, loaded: journalItems)
+                    let pageByID = Dictionary(uniqueKeysWithValues: pageJournal.map { ($0.id, $0) })
+                    next = next.map { pageByID[$0.id] ?? $0 }
+                    journalItems = next
+                } else {
+                    journalItems = pageJournal
+                }
             }
+            #if DEBUG
+            ProfileTradesHydrationDiagnostics.logHydration(
+                source: hydrationSource,
+                count: pageJournal.count,
+                journalCount: journalItems.count
+            )
+            #endif
             nextCursor = newCursor
             seedCachesFromItems()
             hasLoaded = true
@@ -596,13 +758,30 @@ final class TradesContainerViewModel {
             if isOwner {
                 OwnerProfileOptimisticStore.shared.syncOwnerTradesState(items)
             }
+            #if DEBUG
+            ProfileTradesHydrationDiagnostics.logPerformLoadFinished(
+                usedV2: usedV2Journal,
+                pageCount: pageJournalCount,
+                journalCount: journalItems.count,
+                error: nil
+            )
+            #endif
         } catch {
+            #if DEBUG
+            ProfileTradesHydrationDiagnostics.logPerformLoadFinished(
+                usedV2: false,
+                pageCount: pageJournalCount,
+                journalCount: journalItems.count,
+                error: String(describing: error)
+            )
+            #endif
             guard !Task.isCancelled else { return }
             guard generation == syncGeneration else {
                 loadTask = nil
+                isHydratingAuthoritativeJournal = false
                 return
             }
-            if items.isEmpty {
+            if journalItems.isEmpty {
                 if awaitingScreenBootstrap {
                     state = .loading
                 } else {
@@ -611,18 +790,21 @@ final class TradesContainerViewModel {
                     initialLoadFailureGrace.scheduleIfNeeded(message: message) { [weak self] in
                         guard let self else { return false }
                         return !hasLoaded
-                            && items.isEmpty
+                            && journalItems.isEmpty
                             && syncGeneration == failedGeneration
                             && !awaitingScreenBootstrap
                     } present: { [weak self] message in
                         self?.state = .failed(message: message)
                     }
                 }
-            } else {
+            } else if nextCursor != nil {
                 paginationErrorMessage = ProfileSectionSupport.message(for: error)
+            } else {
+                paginationErrorMessage = nil
             }
         }
         loadTask = nil
+        isHydratingAuthoritativeJournal = false
     }
 
     private func seedCachesFromItems() {
@@ -673,29 +855,114 @@ final class TradesContainerViewModel {
         }
     }
 
-    private func appendUnique(_ pageItems: [TradeSummary]) {
-        let existing = Set(items.map(\.id))
+    private func appendUniqueJournal(_ pageItems: [TradeOwnerJournalSummary]) {
+        let existing = Set(journalItems.map(\.id))
         let fresh = pageItems.filter { !existing.contains($0.id) }
-        items.append(contentsOf: fresh)
+        journalItems.append(contentsOf: fresh)
         if !fresh.isEmpty {
             detailCache.seed(publicTradeSummaries: items, for: profileID)
         }
     }
 
+    private func reconcileJournal(
+        snapshot: [TradeSummary],
+        loaded: [TradeOwnerJournalSummary]
+    ) -> [TradeOwnerJournalSummary] {
+        guard !loaded.isEmpty else {
+            return ProfileTradesJournalMapping.journalItems(from: snapshot)
+        }
+        let reconciled = ProfileSectionSupport.reconcileLoadedSnapshot(
+            snapshot: snapshot,
+            loaded: loaded.map(\.summary)
+        )
+        return ProfileTradesJournalMapping.replaceSummaries(
+            reconciled,
+            in: loaded,
+            preserveRicherExisting: hasAuthoritativeV2Journal
+        )
+    }
+
+    private func applyAuthoritativeJournalPage(
+        _ pageJournal: [TradeOwnerJournalSummary],
+        reset: Bool
+    ) {
+        guard !pageJournal.isEmpty else { return }
+        if reset || journalItems.isEmpty {
+            journalItems = pageJournal
+            return
+        }
+        let pageByID = Dictionary(uniqueKeysWithValues: pageJournal.map { ($0.id, $0) })
+        journalItems = journalItems.map { pageByID[$0.id] ?? $0 }
+        let known = Set(journalItems.map(\.id))
+        journalItems.append(contentsOf: pageJournal.filter { !known.contains($0.id) })
+    }
+
+    private struct V2HydrationDecision {
+        var shouldFetch: Bool
+        var reason: String
+    }
+
+    private static func v2HydrationDecision(
+        profileID: ProfileID,
+        rpc: (any RPCClient)?,
+        hasV2Journal: Bool
+    ) -> V2HydrationDecision {
+        if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+            return V2HydrationDecision(shouldFetch: false, reason: "localDevelopmentProfile")
+        }
+        if hasV2Journal {
+            return V2HydrationDecision(shouldFetch: false, reason: "alreadyHydratedV2")
+        }
+        guard BackendV2FeatureFlags.isEnabled(.profile) else {
+            return V2HydrationDecision(shouldFetch: false, reason: "profileFlagOff")
+        }
+        guard BackendV2FeatureFlags.isEnabled(.profileTradesSummaryV2) else {
+            return V2HydrationDecision(shouldFetch: false, reason: "profileTradesSummaryV2Off")
+        }
+        guard rpc != nil else {
+            return V2HydrationDecision(shouldFetch: false, reason: "rpcUnavailable")
+        }
+        return V2HydrationDecision(shouldFetch: true, reason: "needsAuthoritativeV2Journal")
+    }
+
+    private static func appliedUsesAuthoritativeV2Journal(
+        _ applied: ProfileTabBootstrapApplier.Applied
+    ) -> Bool {
+        guard BackendV2FeatureFlags.isEnabled(.profileTradesSummaryV2) else { return false }
+        guard let journal = applied.profileTradeJournalItems, !journal.isEmpty else { return false }
+        return journal.contains { $0.accountID != nil || $0.copyTrade != nil }
+    }
+
+    private static func journalItems(from applied: ProfileTabBootstrapApplier.Applied) -> [TradeOwnerJournalSummary] {
+        if let journal = applied.profileTradeJournalItems, !journal.isEmpty {
+            return journal
+        }
+        return ProfileTradesJournalMapping.journalItems(from: applied.tradeSummaries ?? [])
+    }
+
     private func updateStateForVisibleItems() {
+        renderedTradeSummaries = ProfileTradesDisplayGrouping.visibleSummaries(
+            journalItems: journalItems,
+            filter: filter,
+            sort: sort,
+            accountModesByID: accountModes,
+            deferCopyModeSummaryUntilAuthoritativeJournal:
+                isHydratingAuthoritativeJournal && !hasAuthoritativeV2Journal
+        )
         if !hasLoaded {
             state = .loading
             return
         }
-        if items.isEmpty {
+        if journalItems.isEmpty {
+            renderedTradeSummaries = []
             state = .empty
             return
         }
-        if visibleItems.isEmpty {
+        if renderedTradeSummaries.isEmpty {
             state = .loaded(itemCount: 0)
             return
         }
-        state = .loaded(itemCount: visibleItems.count)
+        state = .loaded(itemCount: renderedTradeSummaries.count)
     }
 
     private static let loadMoreFailureMessage = "Please try again."
@@ -759,6 +1026,31 @@ nonisolated enum TradeDisplay {
             ?? "$\(value)"
     }
 
+    /// Collapsed Profile card — nearest whole dollar, display only (`$29,406` from `29405.50`).
+    static func profileCardExecutionPriceText(_ value: Decimal?) -> String {
+        guard let value else { return "—" }
+        var input = value
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &input, 0, .plain)
+        return NumberDisplay.currency(
+            rounded,
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        )
+    }
+
+    static func executionPriceText(
+        _ value: Decimal?,
+        display: TradeExecutionMetricsPriceDisplay
+    ) -> String {
+        switch display {
+        case .fullPrecision:
+            return priceText(value)
+        case .profileCardRounded:
+            return profileCardExecutionPriceText(value)
+        }
+    }
+
     static func rrText(_ value: Decimal?) -> String {
         guard let value else { return "—" }
         return "RR \(NumberDisplay.decimal(value, minimumFractionDigits: 1, maximumFractionDigits: 1))"
@@ -807,8 +1099,9 @@ nonisolated enum TradeDisplay {
     }
 
     static func durationText(entryAt: Date, exitAt: Date?) -> String? {
-        guard let exitAt, exitAt >= entryAt else { return nil }
+        guard let exitAt, exitAt > entryAt else { return nil }
         let seconds = Int(exitAt.timeIntervalSince(entryAt).rounded(.down))
+        guard seconds > 0 else { return nil }
         let allowSubMinute = TradeHoldDuration.timestampsSupportSecondPrecision(
             entryAt: entryAt,
             exitAt: exitAt
@@ -834,8 +1127,9 @@ nonisolated enum TradeDisplay {
     }
 
     static func cardDurationText(entryAt: Date, exitAt: Date?) -> String? {
-        guard let exitAt, exitAt >= entryAt else { return nil }
+        guard let exitAt, exitAt > entryAt else { return nil }
         let seconds = Int(exitAt.timeIntervalSince(entryAt).rounded(.down))
+        guard seconds > 0 else { return nil }
         let allowSubMinute = TradeHoldDuration.timestampsSupportSecondPrecision(
             entryAt: entryAt,
             exitAt: exitAt
@@ -858,6 +1152,23 @@ nonisolated enum TradeDisplay {
 
     static func holdDuration(for item: TradeOwnerJournalSummary) -> String? {
         holdDuration(for: TradeSummaryMapper.listMatchTrade(from: item))
+    }
+
+    /// Personal Trades list — prefer entry→exit duration (full components) over stored abbreviations.
+    static func journalCardDuration(for item: TradeOwnerJournalSummary) -> String? {
+        let trade = TradeSummaryMapper.listMatchTrade(from: item)
+        if let fromTimes = durationText(entryAt: trade.entryAt, exitAt: trade.exitAt) {
+            return fromTimes
+        }
+        if let seconds = trade.durationSeconds, seconds >= 0 {
+            return durationTextFromSeconds(seconds, allowSubMinuteSeconds: true)
+        }
+        if let text = trade.durationText?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty
+        {
+            return text
+        }
+        return nil
     }
 
     private static func durationTextFromSeconds(
@@ -908,12 +1219,41 @@ nonisolated enum TradeDisplay {
 
     /// Entry/exit time in quick stats — time-only when paired timestamps share a day.
     static func entryExecutionTimeText(for trade: Trade) -> String {
-        executionTimestampText(trade.entryAt, compareTo: trade.exitAt)
+        entryExecutionTimeText(entryAt: trade.entryAt, exitAt: trade.exitAt)
     }
 
     static func exitExecutionTimeText(for trade: Trade) -> String {
-        guard let exitAt = trade.exitAt else { return "—" }
-        return executionTimestampText(exitAt, compareTo: trade.entryAt)
+        exitExecutionTimeText(entryAt: trade.entryAt, exitAt: trade.exitAt)
+    }
+
+    static func entryExecutionTimeText(for summary: TradeSummary) -> String {
+        entryExecutionTimeText(entryAt: summary.entryAt, exitAt: summary.exitAt)
+    }
+
+    static func exitExecutionTimeText(for summary: TradeSummary) -> String {
+        exitExecutionTimeText(entryAt: summary.entryAt, exitAt: summary.exitAt)
+    }
+
+    static func entryExecutionTimeText(entryAt: Date, exitAt: Date?) -> String {
+        executionTimestampText(entryAt, compareTo: exitAt)
+    }
+
+    static func exitExecutionTimeText(entryAt: Date, exitAt: Date?) -> String {
+        guard let exitAt else { return "—" }
+        return executionTimestampText(exitAt, compareTo: entryAt)
+    }
+
+    /// Shared social trade detail — entry/exit clock times on one line.
+    static func socialSharedExecutionTimeRangeText(for trade: Trade) -> String {
+        let entry = executionTimeOnlyFormatter.string(from: trade.entryAt)
+        guard let exitAt = trade.exitAt else { return entry }
+        let exit = executionTimeOnlyFormatter.string(from: exitAt)
+        return "\(entry) – \(exit)"
+    }
+
+    /// Shared social trade detail — calendar day for the execution (entry day).
+    static func socialSharedTradeDateText(for trade: Trade) -> String {
+        dateText(trade.entryAt)
     }
 
     private static let executionTimeOnlyFormatter: DateFormatter = {

@@ -15,6 +15,7 @@ import FeedPostHeader from "./FeedPostHeader"
 import FeedPostScreenshot from "./FeedPostScreenshot"
 import { postAttachedReel } from "./feedPostHelpers"
 import type { ReelRow } from "@/lib/reels"
+import { isCopyTradedMode } from "@/lib/tradeMode"
 
 export type FeedLikeMeta = { count: number; liked: boolean }
 
@@ -90,6 +91,12 @@ function FeedPostCard({
   const publicDesc = useMemo(() => postPublicDescription(post), [post])
   const pnl = useMemo(() => Number(post.pnl), [post.pnl])
   const pnlPositive = !Number.isNaN(pnl) && pnl >= 0
+  const isCopyTrade = isCopyTradedMode(tradeRow)
+  const copyTradeModeSummary =
+    typeof post.copy_trade_mode_summary === "string"
+      ? post.copy_trade_mode_summary
+      : null
+
   const tradeDisplay = useMemo(() => {
     const accountTypeRaw = normalizeFeedAccountType(
       tradeRow?.account_type ?? tradeRow?.mode
@@ -99,10 +106,10 @@ function FeedPostCard({
     return {
       tickerLabel: tradeRow?.ticker != null ? String(tradeRow.ticker) : "—",
       dirLabel: tradeRow?.direction != null ? String(tradeRow.direction) : "—",
-      accountTypeNorm: accountTypeLabel,
+      accountTypeNorm: isCopyTrade ? "" : accountTypeLabel,
       accountTypeStyles: accountTypeRaw ? getModeStyles(accountTypeRaw) : "",
     }
-  }, [tradeRow])
+  }, [tradeRow, isCopyTrade])
   return (
     <article
       role={preview ? "article" : "button"}
@@ -119,8 +126,12 @@ function FeedPostCard({
         userId={post.user_id}
         avatarUrl={avatarUrl}
         username={profileUsername}
-        metaLabel="Trade"
-        metaLabelClassName="font-medium text-amber-400/90"
+        metaLabel={isCopyTrade ? "Copy Traded" : "Trade"}
+        metaLabelClassName={
+          isCopyTrade
+            ? "font-medium text-violet-300/90"
+            : "font-medium text-amber-400/90"
+        }
         postedAt={post.created_at}
         preview={preview}
       />
@@ -154,6 +165,7 @@ function FeedPostCard({
         dirLabel={tradeDisplay.dirLabel}
         accountTypeNorm={tradeDisplay.accountTypeNorm}
         accountTypeStyles={tradeDisplay.accountTypeStyles}
+        copyTradeModeSummary={copyTradeModeSummary}
         rr={post.rr}
         publicDesc={publicDesc}
         timingTrade={tradeRow}

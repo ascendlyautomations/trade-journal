@@ -1,0 +1,1 @@
+-- Recorded remote no-op. The community visibility rules are in the following migration.

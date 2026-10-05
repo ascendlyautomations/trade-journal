@@ -85,6 +85,7 @@ nonisolated final class InMemoryAuthenticationBackend: AuthenticationBackend, @u
     var refreshDelayNanoseconds: UInt64 = 0
     var signOutDelayNanoseconds: UInt64 = 0
     var refreshError: AuthenticationError?
+    var signInError: AuthenticationError?
 
     private let refreshCount = Mutex(0)
 
@@ -93,6 +94,7 @@ nonisolated final class InMemoryAuthenticationBackend: AuthenticationBackend, @u
     }
 
     func signIn(email: String, password: String) async throws -> AuthenticationSession {
+        if let signInError { throw signInError }
         guard !email.isEmpty, !password.isEmpty else { throw AuthenticationError.invalidCredentials }
         return makeSession(email: email, provider: .email)
     }

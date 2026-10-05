@@ -145,7 +145,9 @@ final class MessagesHomeViewModel {
     func bootstrapIfNeeded() async {
         await domain.bootstrapHomeIfNeeded(forceNetwork: false)
         syncFromDomain()
-        await domain.retainRealtime()
+        if !DemoExperienceSupport.skipsAuthenticatedViewerServices {
+            await domain.retainRealtime()
+        }
     }
 
     func releaseRealtime() {

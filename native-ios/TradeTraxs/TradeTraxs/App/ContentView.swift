@@ -17,6 +17,7 @@ struct ContentView: View {
             currentUserProfile: appEnvironment.currentUserProfile,
             appBootstrapState: appEnvironment.appBootstrapState,
             profileOnboardingGate: appEnvironment.profileOnboardingGate,
+            postSignupTransition: appEnvironment.authentication.coordinator.postSignupTransition,
             contentReportPresenter: appEnvironment.contentReportPresenter,
             thirdPartyAIConsentPresenter: appEnvironment.thirdPartyAIConsentPresenter,
             allowsDevelopmentBypass: appEnvironment.authentication.configuration.allowsDevelopmentSessionBypass
@@ -35,6 +36,7 @@ struct ContentView: View {
         currentUserProfile: environment.currentUserProfile,
         appBootstrapState: environment.appBootstrapState,
         profileOnboardingGate: environment.profileOnboardingGate,
+        postSignupTransition: environment.authentication.coordinator.postSignupTransition,
         contentReportPresenter: environment.contentReportPresenter,
         thirdPartyAIConsentPresenter: environment.thirdPartyAIConsentPresenter,
         allowsDevelopmentBypass: environment.authentication.configuration.allowsDevelopmentSessionBypass

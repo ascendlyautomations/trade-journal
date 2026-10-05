@@ -1,5 +1,11 @@
 import Foundation
 
+/// Public copy-trade aggregate — safe account id + mode only.
+nonisolated struct TradeParticipatingAccountModeWireV1: Codable, Sendable, Equatable {
+    var account_id: String?
+    var account_mode: String?
+}
+
 /// Phase 8B — canonical TradeSummary wire (`summary_schema = trade_summary_v1`).
 nonisolated struct TradeSummaryWireV1: Codable, Sendable, Equatable {
     static let schema = "trade_summary_v1"
@@ -15,6 +21,8 @@ nonisolated struct TradeSummaryWireV1: Codable, Sendable, Equatable {
     var contracts: PostgresFlexibleDouble?
     var entry_time: String?
     var exit_time: String?
+    var entry_price: PostgresFlexibleDouble?
+    var exit_price: PostgresFlexibleDouble?
     var created_at: String
     var is_public: PostgresFlexibleBool?
     var public_description: String?
@@ -51,6 +59,8 @@ nonisolated struct TradeOwnerJournalSummaryWireV1: Codable, Sendable, Equatable 
     var contracts: PostgresFlexibleDouble?
     var entry_time: String?
     var exit_time: String?
+    var entry_price: PostgresFlexibleDouble?
+    var exit_price: PostgresFlexibleDouble?
     var created_at: String
     var is_public: PostgresFlexibleBool?
     var public_description: String?
@@ -66,9 +76,13 @@ nonisolated struct TradeOwnerJournalSummaryWireV1: Codable, Sendable, Equatable 
     var account_id: String?
     var account_name: String?
     var strategy: String?
-    var entry_price: PostgresFlexibleDouble?
-    var exit_price: PostgresFlexibleDouble?
     var session: String?
+    var source_account_id: String?
+    var copied_account_ids: [String]?
+    var copy_trading_group_id: String?
+    /// Profile copy linkage — `accounts.mode` for this row's participating account.
+    var account_mode: String?
+    var participating_account_modes: [TradeParticipatingAccountModeWireV1]?
 
     func validateSchema() throws {
         guard summary_schema == TradeSummaryWireV1.schema else {
@@ -128,7 +142,8 @@ nonisolated struct ProfileTabBootstrapV2: Codable, Sendable, Equatable {
 
     nonisolated struct DataPayload: Codable, Sendable, Equatable {
         var tab: String
-        var items: [TradeSummaryWireV1]
+        /// `trade_summary_v1` plus optional profile copy-linkage keys.
+        var items: [TradeOwnerJournalSummaryWireV1]
         var engagement: [String: ProfileBootstrapV1.TradeEngagementWire]?
         var next_cursor: String?
     }

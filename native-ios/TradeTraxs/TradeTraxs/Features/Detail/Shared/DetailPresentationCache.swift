@@ -11,6 +11,8 @@ final class DetailPresentationCache {
     private var trades: [TradeID: Trade] = [:]
     private var tradeAuthority: [TradeID: TradeDetailAuthority] = [:]
     private var presentationSeeds: [TradeID: DetailPresentationSeed] = [:]
+    /// Profile/feed copy-trade line preserved across authoritative detail hydration.
+    private var copyTradePublicModeSummaries: [TradeID: String] = [:]
     private var posts: [PostID: Post] = [:]
     private var reels: [ReelID: Reel] = [:]
     private var reelIDByLinkedTradeID: [TradeID: ReelID] = [:]
@@ -118,13 +120,66 @@ final class DetailPresentationCache {
         presentationSeeds[seed.summary.id] = seed
         trades[seed.summary.id] = seed.previewTrade
         tradeAuthority[seed.summary.id] = .listSeed
+        if let line = Self.trimmedCopyTradePublicModeSummary(seed.summary.copyTradePublicModeSummary) {
+            copyTradePublicModeSummaries[seed.summary.id] = line
+        }
+    }
+
+    /// Before pushing social detail — copy a DM/room card preview into presentation seeds when missing.
+    func ensurePresentationSeed(forPreview trade: Trade) {
+        guard authoritativeDetail(id: trade.id) == nil else { return }
+        guard presentationSeed(id: trade.id) == nil else { return }
+        seedListPreview(trade)
     }
 
     /// Complete detail from network or successful mutation — safe for edit/detail completeness.
-    func seedAuthoritativeDetail(_ detail: TradeDetail, authority: TradeDetailAuthority) {
-        trades[detail.id] = detail
-        tradeAuthority[detail.id] = authority
-        presentationSeeds[detail.id] = nil
+    @discardableResult
+    func seedAuthoritativeDetail(_ detail: TradeDetail, authority: TradeDetailAuthority) -> TradeDetail {
+        let presentationTrade = presentationSeeds[detail.id]?.previewTrade
+        let listSeedTrade: Trade? = {
+            guard tradeAuthority[detail.id] == .listSeed, let trade = trades[detail.id] else { return nil }
+            return trade
+        }()
+        let mergedDetail: TradeDetail
+        if let prior = presentationTrade ?? listSeedTrade {
+            mergedDetail = SocialEntityPresentationMerge.trade(replace: prior, with: detail)
+        } else {
+            mergedDetail = detail
+        }
+
+        if copyTradePublicModeSummaries[mergedDetail.id] == nil {
+            copyTradePublicModeSummaries[mergedDetail.id] = copyTradePublicModeSummary(for: mergedDetail.id)
+        }
+        trades[mergedDetail.id] = mergedDetail
+        tradeAuthority[mergedDetail.id] = authority
+        presentationSeeds[mergedDetail.id] = nil
+        if let recomputed = copyTradePublicModeSummary(for: mergedDetail.id) {
+            copyTradePublicModeSummaries[mergedDetail.id] = recomputed
+        }
+        return mergedDetail
+    }
+
+    /// Canonical public copy-trade line — matches Profile card / feed (`CopyTradePresentation`).
+    func copyTradePublicModeSummary(for id: TradeID) -> String? {
+        if let line = Self.trimmedCopyTradePublicModeSummary(
+            presentationSeeds[id]?.summary.copyTradePublicModeSummary
+        ) {
+            return line
+        }
+        if let line = copyTradePublicModeSummaries[id] {
+            return line
+        }
+        if let line = Self.trimmedCopyTradePublicModeSummary(tradeSummary(id: id)?.copyTradePublicModeSummary) {
+            return line
+        }
+        guard let trade = trades[id], trade.mode == .copyTraded else { return nil }
+        let journal = TradeSummaryMapper.ownerJournal(fromListTrade: trade)
+        return CopyTradePresentation.publicAcrossAccountsSummary(for: [journal])
+    }
+
+    private static func trimmedCopyTradePublicModeSummary(_ raw: String?) -> String? {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     func presentationSeed(id: TradeID) -> DetailPresentationSeed? {
@@ -526,6 +581,7 @@ final class DetailPresentationCache {
         trades[id] = nil
         tradeAuthority[id] = nil
         presentationSeeds[id] = nil
+        copyTradePublicModeSummaries[id] = nil
         for key in publicTradesByProfile.keys {
             publicTradesByProfile[key]?.removeAll { $0.id == id }
         }
@@ -569,6 +625,7 @@ final class DetailPresentationCache {
         trades = [:]
         tradeAuthority = [:]
         presentationSeeds = [:]
+        copyTradePublicModeSummaries = [:]
         posts = [:]
         reels = [:]
         reelIDByLinkedTradeID = [:]
@@ -592,5 +649,19 @@ final class DetailPresentationCache {
         viewerFollowRequestByProfile = [:]
         feedEngagementTargetByTradeID = [:]
         feedEngagementTargetByAchievementID = [:]
+    }
+}
+
+/// Tap-time trade preview staged before navigation — consumed synchronously in ``TradeDetailViewModel`` init.
+@MainActor
+enum SocialTradeOpenHandoff {
+    private static var previews: [String: Trade] = [:]
+
+    static func stage(_ trade: Trade, for tradeID: TradeID) {
+        previews[tradeID.rawValue] = trade
+    }
+
+    static func consume(for tradeID: TradeID) -> Trade? {
+        previews.removeValue(forKey: tradeID.rawValue)
     }
 }

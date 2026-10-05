@@ -191,6 +191,7 @@ nonisolated struct Trade: Hashable, Codable, Sendable, Identifiable {
     var accountMode: TradingAccountMode? = nil
     /// Compact public account badge (Eval / Funded / Live / …) from denormalized trade mode fields.
     var publicAccountBadge: String? = nil
+    var copyTrade: CopyTradeJournalMetadata? = nil
     var createdAt: Date
     var updatedAt: Date
 }

@@ -254,7 +254,9 @@ final class ClipsContainerViewModel {
             }
             let serverMerged = OwnerProfileOptimisticStore.merging(
                 overlay: overlay,
-                into: ProfileClipFixtures.samples(owner: profileOwnerID)
+                into: profileOwnerID == DemoExperienceSupport.profileID
+                    ? DemoGraph.clips(owner: profileOwnerID)
+                    : ProfileClipFixtures.samples(owner: profileOwnerID)
             )
             items = OwnerProfileOptimisticStore.merging(overlay: serverMerged, into: items)
             detailCache.seed(reels: items)

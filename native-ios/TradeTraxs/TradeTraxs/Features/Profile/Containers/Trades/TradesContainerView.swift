@@ -30,6 +30,9 @@ struct TradesContainerView: View {
         ) {
             tradesContent
         }
+        .onAppear {
+            viewModel.hydrateAuthoritativeJournalIfNeeded()
+        }
         .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
             viewModel.handleJournalMutation()
         }
@@ -111,8 +114,10 @@ struct TradesContainerView: View {
                             isDeleteInProgress: viewModel.isDeletingTrade(summary.id),
                             onReport: reportAction(for: summary),
                             profilePin: profilePin,
-                            isProfilePinned: isProfilePinned(summary)
+                            isProfilePinned: isProfilePinned(summary),
+                            copyTradeModeSummaryLine: summary.copyTradePublicModeSummary
                         )
+                        .id("\(summary.id.rawValue)-\(summary.copyTradePublicModeSummary ?? "")")
                         .transition(
                             reduceMotion
                                 ? .opacity

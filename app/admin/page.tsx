@@ -214,6 +214,12 @@ export default function AdminPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <AdminModuleCard
+              href="/admin/demo"
+              title="Demo Mode"
+              description="Edit the draft Demo dataset, then publish a version the iOS app can load."
+              variant="emerald"
+            />
+            <AdminModuleCard
               href="/admin/updates"
               title="Updates"
               description="What's New entries and optional broadcast push to all iOS users."

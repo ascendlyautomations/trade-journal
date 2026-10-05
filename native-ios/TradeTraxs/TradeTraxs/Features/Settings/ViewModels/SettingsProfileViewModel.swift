@@ -101,6 +101,10 @@ final class SettingsProfileViewModel {
 
     func save() {
         guard let profile, !isSaving else { return }
+        if AppLaunchController.shared.isDemoExperienceActive {
+            errorMessage = "Profile changes need a TradeTraxs account."
+            return
+        }
         errorMessage = nil
         usernameError = nil
 
@@ -175,6 +179,10 @@ final class SettingsProfileViewModel {
 
     func setPrivate(_ value: Bool) {
         draftIsPrivate = value
+        if AppLaunchController.shared.isDemoExperienceActive {
+            errorMessage = "Privacy changes need a TradeTraxs account."
+            return
+        }
         guard var current = profile, current.isPrivate != value else { return }
         let previous = current.isPrivate
         current.isPrivate = value
@@ -194,6 +202,10 @@ final class SettingsProfileViewModel {
 
     func setTraderType(_ type: TraderType) {
         guard draftTraderType != type else { return }
+        if AppLaunchController.shared.isDemoExperienceActive {
+            errorMessage = "Profile changes need a TradeTraxs account."
+            return
+        }
         draftTraderType = type
         guard var current = profile else { return }
         let previous = current.traderType

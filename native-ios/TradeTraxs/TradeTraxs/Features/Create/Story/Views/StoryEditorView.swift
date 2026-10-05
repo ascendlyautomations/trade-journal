@@ -7,6 +7,8 @@ struct StoryEditorView: View {
     @FocusState private var textFieldFocused: Bool
 
     private let isPosting: Bool
+    private let isSavingDraft: Bool
+    private let onSaveDraft: ((StoryCanvasState) -> Void)?
     private let onCancel: () -> Void
     private let onPostStory: ((UIImage) -> Void)?
     private let onPostVideo: (([StoryTextOverlay]) -> Void)?
@@ -23,11 +25,20 @@ struct StoryEditorView: View {
     init(
         sourceImage: UIImage,
         isPosting: Bool = false,
+        restoredCanvas: StoryCanvasState? = nil,
+        isSavingDraft: Bool = false,
+        onSaveDraft: ((StoryCanvasState) -> Void)? = nil,
         onCancel: @escaping () -> Void,
         onPostStory: @escaping (UIImage) -> Void
     ) {
-        _viewModel = State(initialValue: StoryEditorViewModel(sourceImage: sourceImage))
+        let editor = StoryEditorViewModel(sourceImage: sourceImage)
+        if let restoredCanvas {
+            editor.applyRestoredCanvas(restoredCanvas)
+        }
+        _viewModel = State(initialValue: editor)
         self.isPosting = isPosting
+        self.isSavingDraft = isSavingDraft
+        self.onSaveDraft = onSaveDraft
         self.onCancel = onCancel
         self.onPostStory = onPostStory
         self.onPostVideo = nil
@@ -36,11 +47,20 @@ struct StoryEditorView: View {
     init(
         videoURL: URL,
         isPosting: Bool = false,
+        restoredCanvas: StoryCanvasState? = nil,
+        isSavingDraft: Bool = false,
+        onSaveDraft: ((StoryCanvasState) -> Void)? = nil,
         onCancel: @escaping () -> Void,
         onPostVideo: @escaping ([StoryTextOverlay]) -> Void
     ) {
-        _viewModel = State(initialValue: StoryEditorViewModel(videoURL: videoURL))
+        let editor = StoryEditorViewModel(videoURL: videoURL)
+        if let restoredCanvas {
+            editor.applyRestoredCanvas(restoredCanvas)
+        }
+        _viewModel = State(initialValue: editor)
         self.isPosting = isPosting
+        self.isSavingDraft = isSavingDraft
+        self.onSaveDraft = onSaveDraft
         self.onCancel = onCancel
         self.onPostStory = nil
         self.onPostVideo = onPostVideo
@@ -79,6 +99,24 @@ struct StoryEditorView: View {
                 .accessibilityIdentifier("storyEditor.cancel")
 
             Spacer()
+
+            if onSaveDraft != nil {
+                Button {
+                    onSaveDraft?(viewModel.canvas)
+                } label: {
+                    if isSavingDraft {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Text("Save Draft")
+                            .font(.subheadline.weight(.regular))
+                    }
+                }
+                .font(.subheadline.weight(.regular))
+                .foregroundStyle(colors.primaryText)
+                .disabled(isSavingDraft || isPosting)
+                .accessibilityIdentifier("composer.saveDraft")
+            }
 
             Button {
                 viewModel.beginAddingText()

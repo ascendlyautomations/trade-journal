@@ -70,6 +70,7 @@ struct SettingsAccountView: View {
                 Text("Your sign-in email and public username.")
             }
 
+            if !AppLaunchController.shared.isDemoExperienceActive {
             Section("Security") {
                 Button {
                     ExperienceHaptics.play(.selection)
@@ -137,6 +138,7 @@ struct SettingsAccountView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(viewModel.isDeletingAccount)
+            }
             }
         }
         .experienceInsetGroupedListStyle(pageBackground: true)

@@ -111,6 +111,21 @@ nonisolated struct DefaultAdminUsersRepository: AdminUsersRepository {
         )
     }
 
+    func setHiddenFromCommunity(targetUserID: ProfileID, adminUserID: ProfileID, hidden: Bool) async throws {
+        let patch = ProfileCommunityVisibilityPatch(is_hidden_from_community: hidden)
+        try await supabase.database.update(
+            patch,
+            table: "profiles",
+            query: [URLQueryItem(name: "id", value: "eq.\(targetUserID.rawValue)")]
+        )
+        try await insertAudit(
+            adminUserID: adminUserID,
+            targetUserID: targetUserID,
+            action: hidden ? "hide_user_from_community" : "unhide_user_from_community",
+            details: ["is_hidden_from_community": hidden ? "true" : "false"]
+        )
+    }
+
     func fetchDeletionPreview(targetUserID: ProfileID) async throws -> AdminUserDeletionPreview {
         let response = try await transport.send(
             host: .bff,
@@ -242,6 +257,10 @@ nonisolated struct DefaultAdminUsersRepository: AdminUsersRepository {
 
 // MARK: - Encodable payloads
 
+private nonisolated struct ProfileCommunityVisibilityPatch: Encodable, Sendable {
+    var is_hidden_from_community: Bool
+}
+
 private nonisolated struct ProfileBanPatch: Encodable, Sendable {
     var is_banned: Bool
     var banned_reason: String?
@@ -330,7 +349,8 @@ private nonisolated extension AdminUserSummary {
             isBanned: json["is_banned"] as? Bool ?? false,
             bannedReason: json["banned_reason"] as? String,
             bannedAt: (json["banned_at"] as? String).flatMap { AdminISO8601.date(from: $0) },
-            isBetaTester: json["is_beta_tester"] as? Bool ?? false
+            isBetaTester: json["is_beta_tester"] as? Bool ?? false,
+            isHiddenFromCommunity: json["is_hidden_from_community"] as? Bool ?? false
         )
     }
 }

@@ -310,6 +310,43 @@ final class TradeRoomsExperienceTests: XCTestCase {
         XCTAssertEqual(viewModel.messages.count, generalCount)
     }
 
+    func testBootstrapStructuredTradeShareMapsAttachmentTradeID() {
+        let json = """
+        {"share_type":"trade","trade_id":"trade-bootstrap-1"}
+        """
+        var dto = RoomDTO.Message()
+        dto.id = "msg-1"
+        dto.room_id = TradeRoomsFixtures.deskRoomID.rawValue
+        dto.sender_id = TradeRoomsFixtures.viewerID.rawValue
+        dto.type = "trade"
+        dto.body = json
+        dto.content = json
+        dto.section_id = "dev-room-desk-trades"
+        dto.created_at = "2026-01-01T00:00:00Z"
+        let roomMessage = RoomMessageDTOMapper.mapMessage(dto)
+        XCTAssertEqual(roomMessage?.attachedTradeID, TradeID("trade-bootstrap-1"))
+        let display = roomMessage.map(RoomMessageMapping.displayMessage(from:))
+        XCTAssertEqual(display?.kind, .tradeShare)
+        XCTAssertEqual(display?.attachments.first?.tradeID, TradeID("trade-bootstrap-1"))
+    }
+
+    func testReferencedTradeIDsIncludesStructuredShareWithoutAttachment() {
+        let message = Message(
+            id: MessageID("m1"),
+            conversationID: ConversationID("c1"),
+            senderProfileID: ProfileID("u1"),
+            kind: .tradeShare,
+            body: nil,
+            attachments: [],
+            replyToMessageID: nil,
+            createdAt: .now,
+            isReadByViewer: true,
+            sharedContent: .trade(TradeID("trade-structured"))
+        )
+        let ids = SharedContentMessageSupport.referencedTradeIDs(for: message)
+        XCTAssertEqual(ids, [TradeID("trade-structured")])
+    }
+
     func testRoomMessageMappingPreservesTradeShare() {
         let channelID = RoomChannelID("dev-room-desk-trades")
         let roomMessage = RoomMessage(

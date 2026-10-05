@@ -16,6 +16,16 @@ nonisolated struct ImageCropViewportLayout: Equatable {
     let origin: CGPoint
 
     var totalScale: CGFloat { baseFillScale * userScale }
+
+    /// Finite stand-in when the bitmap or viewport cannot be drawn.
+    static let empty = ImageCropViewportLayout(
+        baseFillScale: 1,
+        userScale: 1,
+        translation: .zero,
+        displayWidth: 0,
+        displayHeight: 0,
+        origin: .zero
+    )
 }
 
 /// Authoritative aspect-fill crop math — preview and export both use this.
@@ -24,8 +34,8 @@ nonisolated enum ImageCropViewportMath {
     static let maxUserScale: CGFloat = ImageCropMath.maxZoom
 
     static func baseFillScale(imagePixelSize: CGSize, viewportSize: CGSize) -> CGFloat {
-        guard imagePixelSize.width > 0, imagePixelSize.height > 0,
-              viewportSize.width > 0, viewportSize.height > 0
+        guard finitePositive(imagePixelSize.width), finitePositive(imagePixelSize.height),
+              finitePositive(viewportSize.width), finitePositive(viewportSize.height)
         else { return 1 }
         return max(
             viewportSize.width / imagePixelSize.width,
@@ -40,8 +50,18 @@ nonisolated enum ImageCropViewportMath {
         translation: CGSize,
         maxUserScale: CGFloat = maxUserScale
     ) -> ImageCropViewportLayout {
+        // Infinity passes `> 0`, then `viewport / infinity` is 0 and `infinity * 0` is NaN.
+        guard finitePositive(imagePixelSize.width), finitePositive(imagePixelSize.height),
+              viewportSize.width.isFinite, viewportSize.height.isFinite
+        else { return .empty }
+
+        let safeUserScale = userScale.isFinite ? userScale : minUserScale
+        let safeTranslation = CGSize(
+            width: translation.width.isFinite ? translation.width : 0,
+            height: translation.height.isFinite ? translation.height : 0
+        )
         let base = baseFillScale(imagePixelSize: imagePixelSize, viewportSize: viewportSize)
-        let clampedUser = min(max(userScale, minUserScale), maxUserScale)
+        let clampedUser = min(max(safeUserScale, minUserScale), maxUserScale)
         let total = base * clampedUser
         let displayWidth = imagePixelSize.width * total
         let displayHeight = imagePixelSize.height * total
@@ -51,7 +71,7 @@ nonisolated enum ImageCropViewportMath {
             viewportSize: viewportSize,
             displayWidth: displayWidth,
             displayHeight: displayHeight,
-            translation: translation
+            translation: safeTranslation
         )
 
         let centeredX = (viewportSize.width - displayWidth) / 2
@@ -60,6 +80,10 @@ nonisolated enum ImageCropViewportMath {
             width: clampedOrigin.x - centeredX,
             height: clampedOrigin.y - centeredY
         )
+        guard displayWidth.isFinite, displayHeight.isFinite,
+              clampedOrigin.x.isFinite, clampedOrigin.y.isFinite,
+              clampedTranslation.width.isFinite, clampedTranslation.height.isFinite
+        else { return .empty }
 
         return ImageCropViewportLayout(
             baseFillScale: base,
@@ -106,8 +130,11 @@ nonisolated enum ImageCropViewportMath {
             maxUserScale: maxUserScale
         )
 
-        guard startLayout.displayWidth > 0, startLayout.displayHeight > 0 else {
-            return ImageCropTransform(zoom: startUserScale, offset: startTranslation)
+        guard magnification.isFinite,
+              anchor.x.isFinite, anchor.y.isFinite,
+              startLayout.displayWidth > 0, startLayout.displayHeight > 0
+        else {
+            return ImageCropTransform(zoom: startLayout.userScale, offset: startLayout.translation)
         }
 
         let imageFractionX = (anchor.x - startLayout.origin.x) / startLayout.displayWidth
@@ -151,10 +178,18 @@ nonisolated enum ImageCropViewportMath {
         let vh = viewportSize.height
         let scale = layout.totalScale
 
-        guard scale > 0, layout.displayWidth > 0, layout.displayHeight > 0,
-              iw > 0, ih > 0, vw > 0, vh > 0
+        guard scale.isFinite, scale > 0,
+              layout.displayWidth.isFinite, layout.displayHeight.isFinite,
+              layout.displayWidth > 0, layout.displayHeight > 0,
+              finitePositive(iw), finitePositive(ih),
+              finitePositive(vw), finitePositive(vh)
         else {
-            return CGRect(x: 0, y: 0, width: max(iw, 1), height: max(ih, 1))
+            return CGRect(
+                x: 0,
+                y: 0,
+                width: finitePositive(iw) ? iw : 1,
+                height: finitePositive(ih) ? ih : 1
+            )
         }
 
         let unclamped = CGRect(
@@ -219,7 +254,12 @@ nonisolated enum ImageCropViewportMath {
             originY = (vh - displayHeight) / 2
         }
 
+        guard originX.isFinite, originY.isFinite else { return .zero }
         return CGPoint(x: originX, y: originY)
+    }
+
+    private static func finitePositive(_ value: CGFloat) -> Bool {
+        value.isFinite && value > 0
     }
 }
 
@@ -247,7 +287,9 @@ nonisolated enum ImageCropMath {
         frameWidth: CGFloat,
         frameHeight: CGFloat
     ) -> CGFloat {
-        guard imageWidth > 0, imageHeight > 0 else { return 1 }
+        guard imageWidth.isFinite, imageHeight.isFinite, imageWidth > 0, imageHeight > 0,
+              frameWidth.isFinite, frameHeight.isFinite, frameWidth > 0, frameHeight > 0
+        else { return 1 }
         return min(frameWidth / imageWidth, frameHeight / imageHeight)
     }
 

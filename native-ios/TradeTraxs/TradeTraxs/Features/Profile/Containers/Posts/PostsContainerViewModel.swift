@@ -234,7 +234,9 @@ final class PostsContainerViewModel {
             }
             let serverMerged = OwnerProfileOptimisticStore.merging(
                 overlay: overlay,
-                into: ProfilePostFixtures.samples(owner: profileOwnerID)
+                into: profileOwnerID == DemoExperienceSupport.profileID
+                    ? DemoGraph.posts(owner: profileOwnerID)
+                    : ProfilePostFixtures.samples(owner: profileOwnerID)
             )
             items = OwnerProfileOptimisticStore.merging(overlay: serverMerged, into: items)
             detailCache.seed(posts: items)

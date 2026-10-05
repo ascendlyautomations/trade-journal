@@ -7,14 +7,18 @@ enum ExploreModeSupport {
         AppLaunchController.shared.isDemoExperienceActive
     }
 
-    /// Personal journal tabs use bundled demo data; community uses guest public repositories.
-    static var usesLiveCommunityFeed: Bool { isActive }
+    /// Demo Feed uses bundled fixtures for Global and Following. Guest RPC scope lock stays off.
+    static var usesLiveCommunityFeed: Bool { false }
 
     /// Cache key identity for guest Feed — not a Supabase user id.
     static let guestFeedViewerID = ProfileID("explore.guest.feed")
 
-    /// Skip authenticated viewer services (blocks, messaging bootstrap, follow sync, Realtime).
-    static var skipsAuthenticatedViewerServices: Bool { isActive }
+    /// Bundled Explore has no session, so it skips viewer services.
+    /// A guest-issued session keeps those services so Feed, Messages, and Rooms
+    /// load for the real showcase account.
+    static var skipsAuthenticatedViewerServices: Bool {
+        isActive && DemoExperienceSupport.skipsAuthenticatedViewerServices
+    }
 
     static var canWriteContent: Bool { !isActive }
     static var canInteractSocially: Bool { !isActive }

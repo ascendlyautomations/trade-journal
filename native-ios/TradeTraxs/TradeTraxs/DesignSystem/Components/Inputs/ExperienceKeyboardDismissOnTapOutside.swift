@@ -28,29 +28,61 @@ struct ExperienceKeyboardDismissOnTapOutsideInstaller: UIViewRepresentable {
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         private weak var installedHost: UIView?
         private var tapRecognizer: UITapGestureRecognizer?
+        private var ownsRecognizer = false
 
         func installIfNeeded(from anchor: UIView) {
             guard let host = anchor.nearestViewControllerHostView else { return }
-            if installedHost === host, tapRecognizer != nil { return }
+            if installedHost === host,
+               let tapRecognizer,
+               host.gestureRecognizers?.contains(tapRecognizer) == true {
+                return
+            }
             uninstall(from: anchor)
 
-            let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
+            if let existing = host.gestureRecognizers?.first(where: {
+                $0.name == ExperienceKeyboardDismissTapName.recognizer
+            }) as? UITapGestureRecognizer {
+                tapRecognizer = existing
+                installedHost = host
+                ownsRecognizer = false
+                return
+            }
+
+            let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
             tap.name = ExperienceKeyboardDismissTapName.recognizer
             tap.cancelsTouchesInView = false
+            tap.delaysTouchesBegan = false
+            tap.delaysTouchesEnded = false
             tap.delegate = self
             host.addGestureRecognizer(tap)
             tapRecognizer = tap
             installedHost = host
+            ownsRecognizer = true
         }
 
         func uninstall(from anchor: UIView) {
-            guard let host = installedHost, let tapRecognizer else { return }
-            host.removeGestureRecognizer(tapRecognizer)
-            self.tapRecognizer = nil
+            if ownsRecognizer, let host = installedHost, let tapRecognizer {
+                host.removeGestureRecognizer(tapRecognizer)
+            }
+            tapRecognizer = nil
             installedHost = nil
+            ownsRecognizer = false
         }
 
-        @objc private func handleTap() {
+        @objc private func handleTap(_ recognizer: UITapGestureRecognizer) {
+            let hit = recognizer.view?.hitTest(recognizer.location(in: recognizer.view), with: nil)
+            if TextInputFocusGuard.touchIsInsideEditableView(hit) {
+                TextInputResponsivenessProbe.tap(
+                    screen: "keyboardDismiss",
+                    field: TextInputFocusGuard.fieldIdentifier(for: hit)
+                )
+                return
+            }
+            TextInputResponsivenessProbe.focusChanged(
+                screen: "keyboardDismiss",
+                field: "outsideTap",
+                focused: false
+            )
             ExperienceKeyboard.dismiss()
         }
 
@@ -62,18 +94,14 @@ struct ExperienceKeyboardDismissOnTapOutsideInstaller: UIViewRepresentable {
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-            !Self.touchIsInsideEditableView(touch.view)
-        }
-
-        private static func touchIsInsideEditableView(_ view: UIView?) -> Bool {
-            var current = view
-            while let candidate = current {
-                if candidate is UITextField || candidate is UITextView {
-                    return true
-                }
-                current = candidate.superview
+            if TextInputFocusGuard.touchIsInsideEditableView(touch.view) {
+                TextInputResponsivenessProbe.tap(
+                    screen: "keyboardDismiss",
+                    field: TextInputFocusGuard.fieldIdentifier(for: touch.view)
+                )
+                return false
             }
-            return false
+            return true
         }
     }
 }

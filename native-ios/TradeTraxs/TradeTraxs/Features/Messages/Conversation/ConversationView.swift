@@ -315,8 +315,6 @@ struct ConversationView: View {
                                 viewerProfileID: viewModel.viewerID,
                                 sharedTrade: viewModel.sharedTrade(for: bubble.message),
                                 sharedPost: viewModel.sharedPost(for: bubble.message),
-                                sharedPostAuthor: viewModel.sharedPost(for: bubble.message)
-                                    .map { viewModel.authorProfile(for: $0.authorProfileID) } ?? nil,
                                 sharedReel: viewModel.sharedReel(for: bubble.message),
                                 sharedReelAuthor: viewModel.sharedReel(for: bubble.message)
                                     .map { viewModel.authorProfile(for: $0.authorProfileID) } ?? nil,
@@ -337,7 +335,17 @@ struct ConversationView: View {
                                     Task { await viewModel.deleteMessage(bubble) }
                                 },
                                 onSharedTradeTap: { tradeID in
-                                    navigationCoordinator?.pushSocialTrade(tradeID, cache: detailCache)
+                                    #if DEBUG
+                                    SharedTradeOpenDiagnostics.tapped(tradeID: tradeID)
+                                    #endif
+                                    let preview =
+                                        viewModel.sharedTrade(for: bubble.message)
+                                        ?? viewModel.sharedTrades[tradeID]
+                                    navigationCoordinator?.pushSocialTrade(
+                                        tradeID,
+                                        cache: detailCache,
+                                        preview: preview
+                                    )
                                 },
                                 onSharedContentTap: { reference in
                                     SharedContentNavigation.open(
@@ -428,24 +436,26 @@ struct ConversationView: View {
                 }
             }
             .simultaneousGesture(initialScrollReleaseGesture)
-            .onScrollGeometryChange(for: ScrollLayoutSample.self) { geometry in
-                let distanceFromBottom = geometry.contentSize.height
-                    - geometry.contentOffset.y
-                    - geometry.containerSize.height
-                return ScrollLayoutSample(
+            .onScrollGeometryChange(for: ConversationThreadScrollSupport.ScrollGeometrySignal.self) { geometry in
+                ConversationThreadScrollSupport.ScrollGeometrySignal(
                     contentHeight: geometry.contentSize.height,
                     contentOffsetY: geometry.contentOffset.y,
-                    containerHeight: geometry.containerSize.height,
-                    isNearBottom: distanceFromBottom <= ConversationThreadScrollSupport.bottomProximityThreshold
+                    containerHeight: geometry.containerSize.height
                 )
-            } action: { _, sample in
-                lastScrollSample = sample
-                handleInitialScrollGeometry(sample, proxy: proxy)
-                guard viewModel.isInitialScrollConfirmed else { return }
-                viewModel.scrollCoordinator.reportNearBottom(
-                    sample.isNearBottom,
-                    conversationID: viewModel.conversationID
-                )
+            } action: { previous, signal in
+                let sample = signal.sample
+                if viewModel.isInitialScrollPinningBottom {
+                    if lastScrollSample.map({ ConversationThreadScrollSupport.geometrySignalsMatch($0, sample) }) != true {
+                        lastScrollSample = sample
+                    }
+                    handleInitialScrollGeometry(sample, proxy: proxy)
+                } else if viewModel.isInitialScrollConfirmed,
+                          previous.sample.isNearBottom != sample.isNearBottom {
+                    viewModel.scrollCoordinator.reportNearBottom(
+                        sample.isNearBottom,
+                        conversationID: viewModel.conversationID
+                    )
+                }
             }
             .onChange(of: viewModel.scrollCoordinator.scrollCommandGeneration) { _, _ in
                 applyCoordinatorScrollCommand(proxy: proxy)
@@ -667,7 +677,9 @@ struct ConversationView: View {
 
     private func handleInitialScrollGeometry(_ sample: ScrollLayoutSample, proxy: ScrollViewProxy) {
         let contentSizeDelta = sample.contentHeight - lastScrollContentHeight
-        lastScrollContentHeight = sample.contentHeight
+        if abs(contentSizeDelta) >= 1 {
+            lastScrollContentHeight = sample.contentHeight
+        }
 
         switch viewModel.initialScrollPhase {
         case .pending:

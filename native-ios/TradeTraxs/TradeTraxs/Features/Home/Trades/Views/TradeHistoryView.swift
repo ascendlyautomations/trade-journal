@@ -142,16 +142,27 @@ struct TradeHistoryView: View {
             TradeHistoryShareSheet(items: [payload.text])
         }
         .accessibilityIdentifier("trades.home")
+        .firstTradeDetailCoachmarkHost()
     }
 
     private var listContent: some View {
+        ScrollViewReader { scrollProxy in
+            listBody
+                .onChange(of: FirstTradeDetailCoachmarkStore.shared.pendingTradeID) { _, pendingID in
+                    guard let pendingID else { return }
+                    scrollProxy.scrollTo(pendingID, anchor: .center)
+                }
+        }
+    }
+
+    private var listBody: some View {
         List {
             Section {
                 TradeHistoryFilterBar(viewModel: viewModel)
                     .listRowInsets(EdgeInsets(
                         top: ExperienceSpacing.sm,
                         leading: ExperienceSpacing.md,
-                        bottom: ExperienceSpacing.xs,
+                        bottom: ExperienceSpacing.xxs,
                         trailing: ExperienceSpacing.md
                     ))
                     .listRowBackground(Color.clear)
@@ -162,39 +173,33 @@ struct TradeHistoryView: View {
                         .listRowInsets(EdgeInsets(
                             top: 0,
                             leading: ExperienceSpacing.md,
-                            bottom: ExperienceSpacing.xs,
+                            bottom: ExperienceSpacing.xxs,
                             trailing: ExperienceSpacing.md
                         ))
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                 }
 
-                if !viewModel.items.isEmpty {
-                    summaryRow
-                        .listRowInsets(EdgeInsets(
-                            top: ExperienceSpacing.xs,
-                            leading: ExperienceSpacing.md,
-                            bottom: ExperienceSpacing.sm,
-                            trailing: ExperienceSpacing.md
-                        ))
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
+                if !viewModel.displayItems.isEmpty {
+                    listCaptionRow
                 }
-            }
 
-            Section {
-                ForEach(viewModel.items) { item in
+                ForEach(viewModel.displayItems) { displayItem in
+                    let item = displayItem.representative
                     TradeJournalCard(
                         item: item,
                         accountName: viewModel.displayAccountTitle(for: item.accountID),
+                        copyParticipatingAccountLines: displayItem.copyParticipatingAccountLines,
                         imagePipeline: imagePipeline,
                         onOpen: { viewModel.openTrade(item) },
                         onShare: { viewModel.shareTrade(item) },
                         onEdit: { viewModel.editTrade(item) },
                         onDelete: { viewModel.requestDelete(item) }
                     )
+                    .id(item.id)
+                    .firstTradeDetailCoachmarkAnchor(for: item.id)
                     .listRowInsets(EdgeInsets(
-                        top: ExperienceSpacing.xs,
+                        top: ExperienceSpacing.xxs,
                         leading: ExperienceSpacing.md,
                         bottom: ExperienceSpacing.xs,
                         trailing: ExperienceSpacing.md
@@ -276,11 +281,27 @@ struct TradeHistoryView: View {
         .accessibilityIdentifier("trades.activeFilters")
     }
 
-    private var summaryRow: some View {
-        Text(viewModel.resultCountLabel)
-            .experienceStyle(.footnote, color: colors.secondaryText)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityIdentifier("trades.summary")
+    private var listCaptionRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
+            Text(viewModel.resultCountLabel)
+                .experienceStyle(.footnote, color: colors.secondaryText)
+            Text("•")
+                .experienceStyle(.footnote, color: colors.tertiaryText)
+            Text("Click on a trade to see more information")
+                .experienceStyle(.caption, color: colors.tertiaryText)
+        }
+        .lineLimit(1)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .listRowInsets(EdgeInsets(
+            top: 0,
+            leading: ExperienceSpacing.md,
+            bottom: ExperienceSpacing.xxs,
+            trailing: ExperienceSpacing.md
+        ))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("trades.listCaption")
     }
 }
 

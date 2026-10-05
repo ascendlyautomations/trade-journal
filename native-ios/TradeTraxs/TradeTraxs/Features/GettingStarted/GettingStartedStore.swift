@@ -154,6 +154,12 @@ final class GettingStartedStore {
             isRefreshing = !signalsReady
         }
 
+        if DemoExperienceSupport.usesLocalBundledData(profileID) {
+            signalsReady = true
+            isRefreshing = false
+            return
+        }
+
         do {
             await SessionNetworkGate.shared.awaitReady()
             let loaded = try await GettingStartedLoader.load(viewerID: profileID, rpc: rpc)

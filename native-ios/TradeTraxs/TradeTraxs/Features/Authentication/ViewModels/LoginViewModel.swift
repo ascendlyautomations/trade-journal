@@ -19,6 +19,8 @@ final class LoginViewModel {
     /// True from Apple/Google interaction start through token exchange (covers system UI latency).
     private(set) var isOAuthInteractionInFlight: Bool = false
     var errorMessage: String?
+    /// Survives the Create Account → Sign In handoff. Credential edits must not clear it.
+    var duplicateEmailNotice: String?
     var informationalMessage: String?
     var pendingConfirmationEmail: String?
     var isResendingConfirmation = false
@@ -51,13 +53,27 @@ final class LoginViewModel {
 
     var showsDevelopmentContinue: Bool { allowsDevelopmentBypass }
 
+    static let duplicateEmailSignInMessage =
+        "That email is already in use. Sign in to the existing account below, or tap Create Account to use a different email."
+
     func toggleMode() {
         ExperienceHaptics.play(.selection)
         mode = mode == .signIn ? .signUp : .signIn
         errorMessage = nil
+        duplicateEmailNotice = nil
         informationalMessage = nil
         pendingConfirmationEmail = nil
         confirmationResentMessage = nil
+    }
+
+    func noteCredentialsEdited() {
+        errorMessage = nil
+    }
+
+    /// Password edits clear ordinary form errors. The duplicate-email notice is separate and stays.
+    func notePasswordEdited() {
+        guard errorMessage != Self.duplicateEmailSignInMessage else { return }
+        errorMessage = nil
     }
 
     func submit() async {
@@ -98,7 +114,11 @@ final class LoginViewModel {
 
     /// Apple / Google — same pipeline regardless of email Sign In vs Create Account mode.
     func signInWithApple(credential: AppleIDCredentialPayload) async {
-        guard !isSubmitting else { return }
+        if isSubmitting {
+            endOAuthProviderInteraction()
+            errorMessage = "Sign-in is already in progress. Please wait a moment."
+            return
+        }
         await runSignIn(label: "login.tap.apple") { [self] in
             try await authenticationCoordinator.signInWithApple(credential: credential)
         }
@@ -153,6 +173,8 @@ final class LoginViewModel {
             AuthFlowTracer.trace(label, phase: .authenticating)
             do {
                 try await operation()
+                errorMessage = nil
+                duplicateEmailNotice = nil
                 ExperienceHaptics.play(.success)
             } catch is CancellationError {
                 isSubmitting = false
@@ -225,18 +247,28 @@ final class LoginViewModel {
                 return
             }
             if case .emailAlreadyRegistered = auth {
-                errorMessage = "An account with this email already exists. Sign in with your password."
-                mode = .signIn
+                if mode == .signUp {
+                    mode = .signIn
+                    password = ""
+                    isSubmitting = false
+                    errorMessage = nil
+                    duplicateEmailNotice = Self.duplicateEmailSignInMessage
+                    return
+                }
+                errorMessage = nil
+                duplicateEmailNotice = Self.duplicateEmailSignInMessage
                 return
             }
-            errorMessage = UserFacingError.map(auth).message
+            let message = SignInFormErrorPresentation.inlineMessage(for: auth)
+            errorMessage = message.isEmpty ? nil : message
             return
         }
         if let app = error as? AppError {
-            errorMessage = UserFacingError.map(app).message
+            let message = SignInFormErrorPresentation.inlineMessage(for: app)
+            errorMessage = message.isEmpty ? nil : message
             return
         }
-        let appError = AppError.unknown(message: error.localizedDescription)
-        errorMessage = UserFacingError.map(appError).message
+        let message = SignInFormErrorPresentation.inlineMessage(for: error)
+        errorMessage = message.isEmpty ? nil : message
     }
 }

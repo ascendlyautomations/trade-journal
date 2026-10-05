@@ -14,7 +14,8 @@ enum FeedRpcProjectionSeeder {
     @MainActor
     static func seed(
         bootstrap: FeedBootstrapV1,
-        detailCache: DetailPresentationCache
+        detailCache: DetailPresentationCache,
+        copyTradePlan: CopyTradeFeedDedupe.Plan? = nil
     ) -> SeedResult {
         var result = SeedResult()
 
@@ -33,7 +34,7 @@ enum FeedRpcProjectionSeeder {
             let kind = FeedBootstrapApplier.feedItemKind(row.kind)
             switch kind {
             case .trade:
-                if seedTrade(row, detailCache: detailCache) {
+                if seedTrade(row, detailCache: detailCache, copyTradePlan: copyTradePlan) {
                     result.trades += 1
                 } else {
                     result.skipped += 1
@@ -70,12 +71,27 @@ enum FeedRpcProjectionSeeder {
 
     // MARK: - Trade
 
-    private static func seedTrade(_ row: FeedItemV1, detailCache: DetailPresentationCache) -> Bool {
+    private static func seedTrade(
+        _ row: FeedItemV1,
+        detailCache: DetailPresentationCache,
+        copyTradePlan: CopyTradeFeedDedupe.Plan?
+    ) -> Bool {
+        if let copyTradePlan, !copyTradePlan.visiblePostIDs.contains(row.id) {
+            return false
+        }
+
         guard let tradeID = string(row.payload, keys: ["trade_id"]),
               !tradeID.isEmpty
         else { return false }
 
-        guard let summary = TradeSummaryFeedMapper.mapTradeRow(row) else { return false }
+        guard var summary = TradeSummaryFeedMapper.mapTradeRow(row) else { return false }
+        if let copyTradePlan {
+            summary = CopyTradeFeedDedupe.applyPresentation(
+                to: summary,
+                plan: copyTradePlan,
+                postID: row.id
+            )
+        }
         detailCache.seedPresentationSeed(DetailPresentationSeed(summary: summary))
         seedAttachedReel(from: row.payload, tradeID: summary.id, authorID: row.author_id, detailCache: detailCache)
         #if DEBUG

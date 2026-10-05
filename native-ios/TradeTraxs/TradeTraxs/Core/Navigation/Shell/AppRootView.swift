@@ -10,6 +10,7 @@ struct AppRootView: View {
     @Bindable var currentUserProfile: CurrentUserProfileStore
     @Bindable var appBootstrapState: AppBootstrapState
     @Bindable var profileOnboardingGate: ProfileOnboardingGateStore
+    @Bindable var postSignupTransition: PostSignupTransitionStore
     @Bindable var contentReportPresenter: ContentReportPresenter
     @Bindable var thirdPartyAIConsentPresenter: ThirdPartyAIConsentPresenter
     let allowsDevelopmentBypass: Bool
@@ -162,6 +163,14 @@ struct AppRootView: View {
         .onChange(of: navigation.store.selectedTab) { _, _ in
             OwnerAccountFilterDropdownController.shared.dismiss()
         }
+        .onChange(of: profileOnboardingGate.phase) { _, phase in
+            syncPostSignupTransition(with: phase)
+        }
+        .onChange(of: postSignupTransition.phase) { _, _ in
+            postSignupTransition.releaseCoverIfAuthenticatedDestinationReady(
+                gatePhase: profileOnboardingGate.phase
+            )
+        }
         .environment(themeManager)
     }
 
@@ -169,6 +178,8 @@ struct AppRootView: View {
     private var authRootContent: some View {
         if launchController.isDemoExperienceActive {
             demoExperienceShell
+        } else if shouldHoldCreatingAccount {
+            postSignupBootstrapRoot
         } else if shouldPresentSignInRoot {
             signInRoot
         } else {
@@ -212,15 +223,74 @@ struct AppRootView: View {
         }
     }
 
-    /// Sign-in root takes precedence over session-validation recovery once auth is definitively cleared.
+    /// Creating Account covers the root only while signup bootstrap has not reached onboarding or the shell.
+    private var shouldHoldCreatingAccount: Bool {
+        guard postSignupTransition.isObscuringAuthRoot else { return false }
+        return !profileOnboardingGate.phase.presentsAuthenticatedDestination
+    }
+
+    /// One login form for signed-out, in-flight, and failed auth. Splitting those states
+    /// rebuilt LoginView and dropped the duplicate-email notice.
     private var shouldPresentSignInRoot: Bool {
         switch authenticationManager.state {
-        case .unauthenticated, .failure:
+        case .unauthenticated, .authenticating, .failure:
             return true
         case .sessionValidationFailed(_, let error):
             return error.isTerminalRefreshFailure
         default:
             return false
+        }
+    }
+
+    private var postSignupBootstrapRoot: some View {
+        Group {
+            switch postSignupTransition.phase {
+            case .inactive:
+                EmptyView()
+            case .creatingAccount:
+                CreatingAccountView()
+            case .bootstrapFailed(let message):
+                CreatingAccountView(
+                    failureMessage: message,
+                    isRetrying: profileOnboardingGate.phase == .resolving,
+                    onRetry: retryPostSignupBootstrap
+                )
+            }
+        }
+        .task(id: postSignupTransition.bootstrapAttemptID) {
+            guard authenticationManager.state.isSessionReady else { return }
+            profileOnboardingGate.resolveIfNeeded(
+                forceNetwork: postSignupTransition.bootstrapAttemptID > 0
+            )
+        }
+        .onChange(of: authenticationManager.state) { _, newState in
+            guard postSignupTransition.isObscuringAuthRoot else { return }
+            if newState.isSessionReady, navigation.store.sessionPhase != .authenticated {
+                authenticationCoordinator.syncNavigation(with: newState)
+            }
+        }
+    }
+
+    private func retryPostSignupBootstrap() {
+        postSignupTransition.retryBootstrap()
+        profileOnboardingGate.resolveIfNeeded(forceNetwork: true)
+    }
+
+    private func syncPostSignupTransition(with gatePhase: ProfileOnboardingGateStore.Phase) {
+        guard postSignupTransition.isObscuringAuthRoot else { return }
+        switch gatePhase {
+        case .idle, .resolving:
+            break
+        case .required, .brokerOnboarding, .complete:
+            postSignupTransition.finishBootstrapTransition()
+        case .failed(let message):
+            postSignupTransition.failBootstrap(
+                message: message.isEmpty
+                    ? PostSignupTransitionStore.defaultBootstrapFailureMessage
+                    : message
+            )
+        case .connectivityBlocked(let message):
+            postSignupTransition.failBootstrap(message: message)
         }
     }
 
@@ -311,6 +381,7 @@ struct AppRootView: View {
         )
         .ownerAccountFilterDropdownOverlay()
         .demoExperienceShellChrome()
+        .id(launchController.demoSnapshotRevision)
     }
 
     private var mainAuthenticatedShell: some View {
@@ -476,6 +547,22 @@ struct AppRootView: View {
                         onClose: {
                             ExperienceHaptics.play(.selection)
                             navigation.coordinator.dismissSheet()
+                        },
+                        draftsRepository: appEnvironment.data.contentDraftRepository(),
+                        onOpenDraft: { draft in
+                            ExperienceHaptics.play(.selection)
+                            ContentDraftLaunchStore.shared.stage(draft)
+                            navigation.coordinator.dismissSheet()
+                            switch draft.type {
+                            case .trade:
+                                navigation.coordinator.openCompose(.trade)
+                            case .post:
+                                navigation.coordinator.openCompose(.post)
+                            case .achievement:
+                                navigation.coordinator.openCompose(.achievement)
+                            case .story:
+                                navigation.coordinator.openCompose(.story)
+                            }
                         }
                     )
                 case .dailyCheckIn:

@@ -62,6 +62,7 @@ final class NavigationCoordinator {
     }
 
     /// Explore Mode main tabs — remains ``SessionPhase/unauthenticated`` (no authenticated services).
+    /// Stack pushes still run while ``AppLaunchController/isDemoExperienceActive`` is true.
     func markExploreExperience() {
         dismissPresentation()
         store.sessionPhase = .unauthenticated
@@ -198,7 +199,7 @@ final class NavigationCoordinator {
 
     func pushHome(_ route: HomeRoute) {
         ensureAuthenticatedOrStash(.home(route))
-        guard store.sessionPhase == .authenticated else { return }
+        guard allowsContentNavigation else { return }
         let pathBefore = store.paths.home.count
         store.paths.home.append(route)
         logNavigationEvent(
@@ -214,7 +215,7 @@ final class NavigationCoordinator {
 
     func pushFeed(_ route: FeedRoute) {
         ensureAuthenticatedOrStash(.feed(route))
-        guard store.sessionPhase == .authenticated else { return }
+        guard allowsContentNavigation else { return }
         if case .room(let roomID) = route {
             InboxMarkReadCoordinator.shared.prepareOpenRoom(roomID)
         }
@@ -233,7 +234,7 @@ final class NavigationCoordinator {
 
     func pushMessages(_ route: MessagesRoute) {
         ensureAuthenticatedOrStash(.messages(route))
-        guard store.sessionPhase == .authenticated else { return }
+        guard allowsContentNavigation else { return }
         switch route {
         case .thread(let conversationID):
 #if DEBUG
@@ -260,7 +261,7 @@ final class NavigationCoordinator {
 
     func pushProfile(_ route: ProfileRoute) {
         ensureAuthenticatedOrStash(.profile(route))
-        guard store.sessionPhase == .authenticated else { return }
+        guard allowsContentNavigation else { return }
         if case .room(let roomID) = route {
             InboxMarkReadCoordinator.shared.prepareOpenRoom(roomID)
         }
@@ -295,7 +296,7 @@ final class NavigationCoordinator {
     /// Open Settings home from Profile — idempotent; avoids duplicate `settings(.home)` frames.
     func pushProfileSettingsHome(source: String) {
         ensureAuthenticatedOrStash(.profile(.settings(.home)))
-        guard store.sessionPhase == .authenticated else { return }
+        guard allowsContentNavigation else { return }
 
         let home = ProfileRoute.settings(.home)
         let before = store.paths.profile
@@ -346,9 +347,13 @@ final class NavigationCoordinator {
         pushSocialTrade(tradeID, cache: cache)
     }
 
-    func pushSocialTrade(_ tradeID: TradeID, cache: DetailPresentationCache? = nil) {
+    func pushSocialTrade(
+        _ tradeID: TradeID,
+        cache: DetailPresentationCache? = nil,
+        preview: Trade? = nil
+    ) {
         ExperienceHaptics.play(.selection)
-        _ = cache
+        prepareSocialTradeOpen(tradeID: tradeID, cache: cache, preview: preview)
         switch store.selectedTab {
         case .home:
             pushHome(.socialTrade(tradeID))
@@ -514,9 +519,14 @@ final class NavigationCoordinator {
         }
     }
 
-    func pushSharedTrade(_ tradeID: TradeID, host: TradeRoomNavigationHost, cache: DetailPresentationCache? = nil) {
+    func pushSharedTrade(
+        _ tradeID: TradeID,
+        host: TradeRoomNavigationHost,
+        cache: DetailPresentationCache? = nil,
+        preview: Trade? = nil
+    ) {
         ExperienceHaptics.play(.selection)
-        _ = cache
+        prepareSocialTradeOpen(tradeID: tradeID, cache: cache, preview: preview)
         switch host {
         case .home:
             pushHome(.socialTrade(tradeID))
@@ -533,6 +543,11 @@ final class NavigationCoordinator {
         switch reference {
         case .feedPost(let postID):
             if let post = cache.post(id: postID), let tradeID = post.linkedTradeID {
+                prepareSocialTradeOpen(
+                    tradeID: tradeID,
+                    cache: cache,
+                    preview: socialTradePreview(from: cache, tradeID: tradeID)
+                )
                 pushMessages(.sharedTrade(tradeID))
             } else {
                 pushMessages(.sharedPost(postID))
@@ -544,6 +559,11 @@ final class NavigationCoordinator {
         case .reel(let reelID):
             pushMessages(.sharedReel(reelID))
         case .trade(let tradeID):
+            prepareSocialTradeOpen(
+                tradeID: tradeID,
+                cache: cache,
+                preview: socialTradePreview(from: cache, tradeID: tradeID)
+            )
             pushMessages(.sharedTrade(tradeID))
         }
     }
@@ -552,6 +572,11 @@ final class NavigationCoordinator {
         switch reference {
         case .feedPost(let postID):
             if let post = cache.post(id: postID), let tradeID = post.linkedTradeID {
+                prepareSocialTradeOpen(
+                    tradeID: tradeID,
+                    cache: cache,
+                    preview: socialTradePreview(from: cache, tradeID: tradeID)
+                )
                 pushFeed(.trade(tradeID))
             } else {
                 pushFeed(.post(postID))
@@ -563,6 +588,11 @@ final class NavigationCoordinator {
         case .reel(let reelID):
             pushFeed(.reel(reelID))
         case .trade(let tradeID):
+            prepareSocialTradeOpen(
+                tradeID: tradeID,
+                cache: cache,
+                preview: socialTradePreview(from: cache, tradeID: tradeID)
+            )
             pushFeed(.trade(tradeID))
         }
     }
@@ -571,6 +601,11 @@ final class NavigationCoordinator {
         switch reference {
         case .feedPost(let postID):
             if let post = cache.post(id: postID), let tradeID = post.linkedTradeID {
+                prepareSocialTradeOpen(
+                    tradeID: tradeID,
+                    cache: cache,
+                    preview: socialTradePreview(from: cache, tradeID: tradeID)
+                )
                 pushProfile(.trade(tradeID))
             } else {
                 pushProfile(.post(postID))
@@ -582,6 +617,11 @@ final class NavigationCoordinator {
         case .reel(let reelID):
             pushProfile(.reel(reelID))
         case .trade(let tradeID):
+            prepareSocialTradeOpen(
+                tradeID: tradeID,
+                cache: cache,
+                preview: socialTradePreview(from: cache, tradeID: tradeID)
+            )
             pushProfile(.trade(tradeID))
         }
     }
@@ -590,6 +630,11 @@ final class NavigationCoordinator {
         switch reference {
         case .feedPost(let postID):
             if let post = cache.post(id: postID), let tradeID = post.linkedTradeID {
+                prepareSocialTradeOpen(
+                    tradeID: tradeID,
+                    cache: cache,
+                    preview: socialTradePreview(from: cache, tradeID: tradeID)
+                )
                 pushHome(.socialTrade(tradeID))
             } else {
                 pushHome(.post(postID))
@@ -601,8 +646,17 @@ final class NavigationCoordinator {
         case .reel(let reelID):
             pushHome(.reel(reelID))
         case .trade(let tradeID):
+            prepareSocialTradeOpen(
+                tradeID: tradeID,
+                cache: cache,
+                preview: socialTradePreview(from: cache, tradeID: tradeID)
+            )
             pushHome(.socialTrade(tradeID))
         }
+    }
+
+    private func socialTradePreview(from cache: DetailPresentationCache, tradeID: TradeID) -> Trade? {
+        cache.presentationSeed(id: tradeID)?.previewTrade ?? cache.previewTrade(id: tradeID)
     }
 
     func pop() {
@@ -623,6 +677,11 @@ final class NavigationCoordinator {
 
     /// Owner deleted a journal trade — always land on Home → Trades (not the prior screen).
     func completeTradeDeletionNavigation() {
+        presentOwnerTradesJournalRoot(source: "completeTradeDeletionNavigation")
+    }
+
+    /// Home tab → Trades journal list (used after first-trade coachmark and trade deletion).
+    func presentOwnerTradesJournalRoot(source: String) {
         dismissPresentation()
         let pathBefore = store.paths.home.count
         if store.selectedTab != .home {
@@ -633,7 +692,7 @@ final class NavigationCoordinator {
         store.paths.home = [.trades]
         logNavigationEvent(
             action: "replace",
-            source: "completeTradeDeletionNavigation",
+            source: source,
             destination: "trades",
             tab: .home,
             pathBefore: pathBefore,
@@ -701,7 +760,7 @@ final class NavigationCoordinator {
     /// Cold deep link / external settings URL — intentional Profile tab + constructed stack.
     private func openSettingsDeepLink(_ routes: [SettingsRoute]) {
         ensureAuthenticatedOrStash(.settingsStack(routes))
-        guard store.sessionPhase == .authenticated else { return }
+        guard allowsContentNavigation else { return }
         selectTab(.profile)
         store.paths.profile.removeAll()
         for route in routes {
@@ -710,8 +769,13 @@ final class NavigationCoordinator {
         emit(.pushed(tab: .profile, description: "settingsDeepLink:\(routes.map(\.rawValue).joined(separator: "/"))"))
     }
 
+    /// Authenticated shells and Demo Mode may push. Logged-out visitors stash the destination for after sign-in.
+    private var allowsContentNavigation: Bool {
+        store.sessionPhase == .authenticated || AppLaunchController.shared.isDemoExperienceActive
+    }
+
     private func ensureAuthenticatedOrStash(_ destination: AppDestination) {
-        guard store.sessionPhase != .authenticated else { return }
+        guard !allowsContentNavigation else { return }
         stashForAuthentication(destination)
     }
 
@@ -723,6 +787,34 @@ final class NavigationCoordinator {
         case .profile: return store.paths.profile.count
         case .create: return 0
         }
+    }
+
+    private func prepareSocialTradeOpen(
+        tradeID: TradeID,
+        cache: DetailPresentationCache?,
+        preview: Trade?
+    ) {
+        let resolvedPreview =
+            preview
+            ?? cache?.presentationSeed(id: tradeID)?.previewTrade
+            ?? cache?.previewTrade(id: tradeID)
+        if let resolvedPreview {
+            SocialTradeOpenHandoff.stage(resolvedPreview, for: tradeID)
+            cache?.ensurePresentationSeed(forPreview: resolvedPreview)
+        }
+        let seedAvailable = cache.map {
+            $0.authoritativeDetail(id: tradeID) != nil
+                || $0.presentationSeed(id: tradeID) != nil
+                || $0.previewTrade(id: tradeID) != nil
+        } ?? false
+        #if DEBUG
+        SharedTradeOpenDiagnostics.destinationCreated(
+            tradeID: tradeID,
+            seedAvailable: seedAvailable,
+            handoffStaged: resolvedPreview != nil,
+            cacheInstance: cache.map { ObjectIdentifier($0) }
+        )
+        #endif
     }
 
 #if DEBUG

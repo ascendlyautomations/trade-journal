@@ -342,6 +342,20 @@ final class MessagingDomain {
             applyTerminalFailure("Messaging domain is not configured.", generation: generation)
             return
         }
+        if let session, let userID = await session.currentUserID {
+            let viewer = ProfileID(userID.rawValue)
+            if DemoExperienceSupport.usesExploreDemoInbox(viewer) {
+                do {
+                    let result = try await MessagingBootstrap.loadHome(context)
+                    guard generation == loadGeneration else { return }
+                    apply(result)
+                    markLoaded(generation: generation)
+                } catch {
+                    applyTerminalFailure(MessagesInboxSupport.message(for: error), generation: generation)
+                }
+                return
+            }
+        }
         var hydratedFromDisk = false
         if let session, let userID = await session.currentUserID, !forceNetwork, !inboxStore.hasLoaded {
             let viewer = ProfileID(userID.rawValue)

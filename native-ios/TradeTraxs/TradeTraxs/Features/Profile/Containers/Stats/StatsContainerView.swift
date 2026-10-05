@@ -50,6 +50,10 @@ struct StatsContainerView: View {
             ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
             value: viewModel.selectedMode
         )
+        .animation(
+            ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
+            value: viewModel.selectedTimeframe
+        )
     }
 
     // MARK: - Dashboard sections
@@ -148,20 +152,56 @@ struct StatsContainerView: View {
     }
 
     private var modeFilter: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: ExperienceSpacing.xs) {
-                ForEach(ProfileStatisticsMetrics.Mode.profileFilterCases) { mode in
-                    ExperienceChip(
-                        title: mode.title,
-                        isSelected: viewModel.selectedMode == mode
-                    ) {
-                        viewModel.setMode(mode)
+        HStack(spacing: ExperienceSpacing.sm) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: ExperienceSpacing.xs) {
+                    ForEach(ProfileStatisticsMetrics.Mode.profileFilterCases) { mode in
+                        ExperienceChip(
+                            title: mode.title,
+                            isSelected: viewModel.selectedMode == mode
+                        ) {
+                            viewModel.setMode(mode)
+                        }
+                        .accessibilityIdentifier("profile.stats.mode.\(mode.rawValue)")
                     }
-                    .accessibilityIdentifier("profile.stats.mode.\(mode.rawValue)")
                 }
             }
+            .accessibilityLabel("Account mode filter")
+
+            Menu {
+                ForEach(ProfileStatisticsMetrics.Timeframe.allCases) { timeframe in
+                    Button {
+                        viewModel.setTimeframe(timeframe)
+                    } label: {
+                        if viewModel.selectedTimeframe == timeframe {
+                            Label(timeframe.menuTitle, systemImage: "checkmark")
+                        } else {
+                            Text(timeframe.menuTitle)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: ExperienceSpacing.xxs) {
+                    Text(viewModel.selectedTimeframe.menuTitle)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .font(ExperienceTypography.footnote)
+                .foregroundStyle(colors.primaryText)
+                .padding(.horizontal, ExperienceSpacing.sm)
+                .frame(minHeight: ExperienceAccessibility.minTouchTarget)
+                .background(colors.fillSecondary)
+                .clipShape(Capsule())
+            }
+            .accessibilityLabel("Timeframe")
+            .accessibilityValue(viewModel.selectedTimeframe.menuTitle)
+            .accessibilityIdentifier("profile.stats.timeframe")
+            .layoutPriority(1)
         }
-        .accessibilityLabel("Account mode filter")
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("profile.stats.filters")
     }
 
     private func equityBlock(_ metrics: ProfileStatisticsMetrics.Result) -> some View {
@@ -178,9 +218,7 @@ struct StatsContainerView: View {
                 }
             }
 
-            ProfileEquityCurveView(points: metrics.equityData)
-                .frame(height: 180)
-                .accessibilityLabel("Equity curve")
+            equityCurveBody(metrics)
         }
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.vertical, ExperienceSpacing.sm)
@@ -190,6 +228,31 @@ struct StatsContainerView: View {
             in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
         )
         .accessibilityIdentifier("profile.stats.equity")
+    }
+
+    @ViewBuilder
+    private func equityCurveBody(_ metrics: ProfileStatisticsMetrics.Result) -> some View {
+        let tradeCount = metrics.filteredTradeCount
+        if tradeCount >= DashboardEquityChartRangeResolver.minimumTradeCountForEquityCurve {
+            ProfileEquityCurveView(points: metrics.equityData)
+                .frame(height: 180)
+                .accessibilityLabel("Equity curve")
+                .accessibilityIdentifier("profile.stats.equity.chart")
+        } else if tradeCount == 1 {
+            Text(ProfileStatsEquityCurvePresentation.singleTradeDetail)
+                .experienceStyle(.caption2, color: colors.secondaryText)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .frame(height: 180)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("profile.stats.equity.singleTradeNote")
+                .accessibilityLabel(ProfileStatsEquityCurvePresentation.singleTradeAccessibilityLabel)
+        } else {
+            ProfileEquityCurveView(points: metrics.equityData)
+                .frame(height: 180)
+                .accessibilityLabel("Equity curve")
+                .accessibilityIdentifier("profile.stats.equity.empty")
+        }
     }
 
     private func profitFactorColor(_ value: Decimal?) -> Color {

@@ -99,16 +99,38 @@ final class AchievementDetailViewModel {
         }
 
         if achievementID.rawValue.hasPrefix("dev-") {
-            let owner = ProfileID(
-                await session.currentUserID?.rawValue ?? "dev.screenshot"
-            )
-            if let fixture = ProfileAchievementFixtures.samples(owner: owner)
-                .first(where: { $0.id == achievementID })
-            {
-                cache.seed(fixture)
-                achievement = fixture
-                phase = .loaded
-                await loadAuthor(for: fixture.ownerProfileID)
+            let userID = await session.currentUserID
+            let demoActive = AppLaunchController.shared.isDemoExperienceActive
+            if case .viewer(let owner) = SessionViewerIdentity.resolve(
+                userID: userID,
+                demoExperienceActive: demoActive
+            ), ProfileSectionSupport.isLocalDevelopmentProfile(owner) {
+                let latestUserID = await session.currentUserID
+                guard SessionViewerIdentity.shouldCommit(
+                    resolved: owner,
+                    userID: latestUserID,
+                    demoExperienceActive: AppLaunchController.shared.isDemoExperienceActive
+                ) else {
+                    if let latestUserID, ProfileID(latestUserID.rawValue) != owner {
+                        await performLoad(forceNetwork: forceNetwork)
+                    } else {
+                        phase = .failed(SessionViewerIdentity.sessionUnavailableMessage)
+                    }
+                    loadTask = nil
+                    return
+                }
+                if let fixture = ProfileAchievementFixtures.samples(owner: owner)
+                    .first(where: { $0.id == achievementID })
+                {
+                    cache.seed(fixture)
+                    achievement = fixture
+                    phase = .loaded
+                    await loadAuthor(for: fixture.ownerProfileID)
+                    loadTask = nil
+                    return
+                }
+            } else {
+                phase = .failed(SessionViewerIdentity.sessionUnavailableMessage)
                 loadTask = nil
                 return
             }

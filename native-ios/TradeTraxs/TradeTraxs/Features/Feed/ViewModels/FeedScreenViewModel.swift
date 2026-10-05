@@ -412,7 +412,12 @@ final class FeedScreenViewModel {
                 detailCache.seedFeedEngagementTarget(.feedPost(postID), forTrade: summary.id)
             }
             #if DEBUG
+            SharedTradeOpenDiagnostics.tapped(tradeID: summary.id)
             TradeSummaryFeedTelemetry.recordDetailBoundary(action: "open", tradeID: summary.id.rawValue)
+            SharedTradeOpenDiagnostics.destinationCreated(
+                tradeID: summary.id,
+                seedAvailable: true
+            )
             #endif
             navigationCoordinator.pushFeed(.trade(summary.id))
         case .post(_, let post):
@@ -828,6 +833,10 @@ final class FeedScreenViewModel {
     /// First-page network delta after Realtime reconnect — no pagination reset.
     private func performReconnectHeadReconcile(generation: UInt64) async {
         guard BackendV2FeatureFlags.isEnabled(.feed), let rpc else { return }
+        if let sessionUserID = await session.currentUserID,
+           DemoExperienceSupport.usesLocalBundledSocialData(ProfileID(sessionUserID.rawValue)) {
+            return
+        }
         reconcileSharedFeedScopeWithState()
         let guestPublicFeed = ExploreModeSupport.skipsAuthenticatedViewerServices
         let resolvedScope = state.scope
@@ -951,6 +960,14 @@ final class FeedScreenViewModel {
         #endif
 
         let guestPublicFeed = ExploreModeSupport.skipsAuthenticatedViewerServices
+        let localBundledSocial: Bool
+        if let sessionUserID = await session.currentUserID {
+            localBundledSocial = DemoExperienceSupport.usesLocalBundledSocialData(
+                ProfileID(sessionUserID.rawValue)
+            )
+        } else {
+            localBundledSocial = false
+        }
         let blockPeerSync: Task<Void, Never>?
         if resetting {
             if guestPublicFeed {
@@ -973,7 +990,7 @@ final class FeedScreenViewModel {
             blockPeerSync = nil
         }
 
-        if BackendV2FeatureFlags.isEnabled(.feed), let rpc {
+        if !localBundledSocial, BackendV2FeatureFlags.isEnabled(.feed), let rpc {
             let sessionUserID = await session.currentUserID
             if guestPublicFeed || sessionUserID != nil {
                 let viewerID: ProfileID
@@ -1214,9 +1231,12 @@ final class FeedScreenViewModel {
                     }
                 }
             } else {
-                let existing = Set(state.entries.map(\.id))
-                let appended = filteredEntries.filter { !existing.contains($0.id) }
-                assignFeedEntries(FeedSupport.sortDescending(state.entries + appended))
+                assignFeedEntries(
+                    CopyTradeFeedDedupe.mergeTimeline(
+                        existing: state.entries,
+                        incoming: filteredEntries
+                    )
+                )
             }
             state.nextCursor = page.nextCursor
             state.hasMore = page.nextCursor != nil

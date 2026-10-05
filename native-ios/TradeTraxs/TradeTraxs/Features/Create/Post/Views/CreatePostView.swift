@@ -27,6 +27,8 @@ struct CreatePostView: View {
                 uploadService: data.uploadService,
                 objectStorage: data.objectStorage,
                 uploadServices: data.globalUploadServices(),
+                contentDrafts: data.contentDraftRepository(),
+                restoredDraft: ContentDraftLaunchStore.shared.consume(expecting: .post),
                 onDismiss: onDismiss
             )
         )
@@ -59,6 +61,16 @@ struct CreatePostView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { requestDismiss() }
                     .font(.body.weight(.regular))
+            }
+            if viewModel.showsSaveDraft {
+                ToolbarItem(placement: .primaryAction) {
+                    SaveDraftToolbarButton(
+                        isSaving: viewModel.isSavingDraft,
+                        isEnabled: viewModel.canSaveDraft
+                    ) {
+                        viewModel.saveDraft()
+                    }
+                }
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -146,26 +158,36 @@ struct CreatePostView: View {
                     if viewModel.bodyText.isEmpty {
                         Text("What's on your mind?")
                             .experienceStyle(.body, color: colors.tertiaryText)
-                            .padding(.top, 8)
-                            .padding(.leading, 5)
                             .allowsHitTesting(false)
                     }
 
-                    TextEditor(text: $viewModel.bodyText)
+                    TextField("", text: $viewModel.bodyText, axis: .vertical)
                         .id("createPostCaption")
                         .focused($isComposerFocused)
                         .font(ExperienceTypography.body)
                         .foregroundStyle(colors.primaryText)
-                        .frame(minHeight: composerTextMinHeight, alignment: .top)
-                        .scrollContentBackground(.hidden)
-                        .scrollDisabled(true)
-                        .background(Color.clear)
+                        .textFieldStyle(.plain)
+                        .lineLimit(1...Self.postBodyMaxVisibleLines)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityLabel("Post text")
                         .accessibilityIdentifier("createPost.body")
+                        .experienceTextInputProbe(
+                            screen: "createPost",
+                            field: "createPost.body",
+                            text: viewModel.bodyText,
+                            isFocused: isComposerFocused
+                        )
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
+
+    /// Matches prior TextEditor max height (~280pt) — field grows vertically, then scrolls inside.
+    private static let postBodyMaxVisibleLines = 14
 
     @ViewBuilder
     private var composerAvatar: some View {
@@ -252,15 +274,6 @@ struct CreatePostView: View {
     private var composerUsername: String {
         viewModel.viewerProfile?.username
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    }
-
-    private var composerTextMinHeight: CGFloat {
-        let text = viewModel.bodyText
-        if text.isEmpty { return 28 }
-        let newlineCount = max(1, text.components(separatedBy: .newlines).count)
-        let wrappedLines = max(1, Int(ceil(Double(text.count) / 36.0)))
-        let lineCount = max(newlineCount, wrappedLines)
-        return min(max(28, CGFloat(lineCount) * 22 + 8), 280)
     }
 
     private func requestDismiss() {

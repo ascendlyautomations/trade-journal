@@ -13,6 +13,7 @@ struct TradeEntryHubView: View {
     let initialTab: Tab
     let onDismiss: () -> Void
 
+    @State private var restoredTradeDraft: ContentDraft?
     @State private var tab: Tab
     @State private var csvImportViewModel: CSVImportViewModel
     @Environment(\.themeColors) private var colors
@@ -25,6 +26,7 @@ struct TradeEntryHubView: View {
         self.data = data
         self.initialTab = initialTab
         self.onDismiss = onDismiss
+        _restoredTradeDraft = State(initialValue: ContentDraftLaunchStore.shared.consume(expecting: .trade))
         _tab = State(initialValue: initialTab)
         _csvImportViewModel = State(
             initialValue: CSVImportViewModel(
@@ -50,6 +52,7 @@ struct TradeEntryHubView: View {
                         data: data,
                         mode: .create,
                         embeddedInTradeEntryHub: true,
+                        restoredDraft: restoredTradeDraft,
                         onDismiss: onDismiss
                     )
                     .accessibilityIdentifier("tradeEntry.manual")

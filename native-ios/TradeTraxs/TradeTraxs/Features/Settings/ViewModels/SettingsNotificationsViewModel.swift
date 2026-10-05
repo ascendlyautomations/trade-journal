@@ -128,6 +128,9 @@ final class SettingsNotificationsViewModel {
         current.set(key, enabled: enabled)
         preferences = current
         ExperienceHaptics.play(.selection)
+        if AppLaunchController.shared.isDemoExperienceActive {
+            return
+        }
 
         guard !inflightKeys.contains(key) else { return }
         inflightKeys.insert(key)

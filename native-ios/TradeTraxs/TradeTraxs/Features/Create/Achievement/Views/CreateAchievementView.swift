@@ -32,7 +32,10 @@ struct CreateAchievementView: View {
                 trades: data.trades,
                 session: data.session,
                 uploadServices: data.globalUploadServices(),
+                objectStorage: data.objectStorage,
+                contentDrafts: data.contentDraftRepository(),
                 prefill: prefill,
+                restoredDraft: ContentDraftLaunchStore.shared.consume(expecting: .achievement),
                 onDismiss: onDismiss
             )
         )
@@ -70,6 +73,16 @@ struct CreateAchievementView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 ExperienceArrowBackButton(action: requestDismiss)
+            }
+            if viewModel.showsSaveDraft {
+                ToolbarItem(placement: .primaryAction) {
+                    SaveDraftToolbarButton(
+                        isSaving: viewModel.isSavingDraft,
+                        isEnabled: viewModel.canSaveDraft
+                    ) {
+                        viewModel.saveDraft()
+                    }
+                }
             }
         }
         .confirmationDialog(

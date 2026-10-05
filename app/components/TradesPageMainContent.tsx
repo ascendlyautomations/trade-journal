@@ -7,6 +7,7 @@ import Button from "./ui/Button"
 import TradeFilterBar from "./TradeFilterBar"
 import PerformanceShareButton from "./PerformanceShareButton"
 import TradesPageTradeCard from "./TradesPageTradeCard"
+import type { TradesPageListItem } from "@/lib/copyTradePresentation"
 import {
   SkeletonStatsCard,
   SkeletonTradesPageTradeCard,
@@ -48,7 +49,7 @@ type TradesPageMainContentProps = {
   onTogglePublicOnly: () => void
   onOpenPerformanceShare: () => void
   tradeStats: TradeStats
-  displayedTrades: any[]
+  displayedTradeItems: TradesPageListItem[]
   visibleTradesLength: number
   hasAnyTrades: boolean
   visibleCount: number
@@ -105,7 +106,7 @@ function TradesPageMainContent({
   onTogglePublicOnly,
   onOpenPerformanceShare,
   tradeStats,
-  displayedTrades,
+  displayedTradeItems,
   visibleTradesLength,
   hasAnyTrades,
   visibleCount,
@@ -350,28 +351,38 @@ function TradesPageMainContent({
                 />
               </div>
             ) : (
-              displayedTrades.map((trade) => (
-                <TradesPageTradeCard
-                  key={trade.id}
-                  trade={trade}
-                  showAdvanced={showAdvanced}
-                  accountRow={accountById[String(trade.account_id ?? "")]}
-                  accounts={Object.values(accountById)}
-                  shareProfile={gateProfile}
-                  attachedReel={tradeReelsByTradeId[String(trade.id)] ?? null}
-                  onOpenReplay={
-                    onOpenTradeReplay
-                      ? () => onOpenTradeReplay(trade)
-                      : undefined
-                  }
-                  onEdit={onEditTrade}
-                  onDelete={onDeleteTrade}
-                  onSendClick={onSendTrade}
-                  onAnalyze={onAnalyzeTrade}
-                  onImageClick={onImageClick}
-                  suppressScreenshot={editingTradeId === String(trade.id)}
-                />
-              ))
+              displayedTradeItems.map((item) => {
+                const trade =
+                  item.kind === "copyGroup" ? item.representative : item.trade
+                const tradeId = String(trade.id ?? "")
+                return (
+                  <TradesPageTradeCard
+                    key={
+                      item.kind === "copyGroup" ? item.batchKey : tradeId
+                    }
+                    trade={trade}
+                    copyGroupMembers={
+                      item.kind === "copyGroup" ? item.members : undefined
+                    }
+                    showAdvanced={showAdvanced}
+                    accountRow={accountById[String(trade.account_id ?? "")]}
+                    accounts={Object.values(accountById)}
+                    shareProfile={gateProfile}
+                    attachedReel={tradeReelsByTradeId[tradeId] ?? null}
+                    onOpenReplay={
+                      onOpenTradeReplay
+                        ? () => onOpenTradeReplay(trade)
+                        : undefined
+                    }
+                    onEdit={onEditTrade}
+                    onDelete={onDeleteTrade}
+                    onSendClick={onSendTrade}
+                    onAnalyze={onAnalyzeTrade}
+                    onImageClick={onImageClick}
+                    suppressScreenshot={editingTradeId === tradeId}
+                  />
+                )
+              })
             )}
           </div>
 

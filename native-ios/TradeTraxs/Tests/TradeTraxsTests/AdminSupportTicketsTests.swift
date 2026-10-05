@@ -146,6 +146,10 @@ private struct MockAdminUsersForSupportTickets: AdminUsersRepository {
         _ = (targetUserID, adminUserID)
     }
 
+    func setHiddenFromCommunity(targetUserID: ProfileID, adminUserID: ProfileID, hidden: Bool) async throws {
+        _ = (targetUserID, adminUserID, hidden)
+    }
+
     func fetchDeletionPreview(targetUserID: ProfileID) async throws -> AdminUserDeletionPreview {
         _ = targetUserID
         throw AppError.authentication(.sessionMissing)

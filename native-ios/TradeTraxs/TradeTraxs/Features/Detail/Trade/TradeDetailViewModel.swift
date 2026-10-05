@@ -95,6 +95,57 @@ final class TradeDetailViewModel {
         self.navigationCoordinator = navigationCoordinator
         self.rpc = rpc
         self.experience = experience
+        applyInitialCacheSeed()
+    }
+
+    private func applyInitialCacheSeed() {
+        let cacheOID = ObjectIdentifier(cache)
+        if let handoff = SocialTradeOpenHandoff.consume(for: tradeID) {
+            cache.ensurePresentationSeed(forPreview: handoff)
+            applySeed(handoff)
+            #if DEBUG
+            SharedTradeOpenDiagnostics.initialRender(
+                tradeID: tradeID,
+                state: "handoff",
+                cacheInstance: cacheOID,
+                tradeNonNil: trade != nil
+            )
+            #endif
+            return
+        }
+        if let authoritative = cache.authoritativeDetail(id: tradeID) {
+            applySeed(authoritative)
+            phase = .loaded
+            #if DEBUG
+            SharedTradeOpenDiagnostics.initialRender(
+                tradeID: tradeID,
+                state: "authoritative",
+                cacheInstance: cacheOID,
+                tradeNonNil: trade != nil
+            )
+            #endif
+            return
+        }
+        if let shell = presentationShellTrade() {
+            applySeed(shell)
+            #if DEBUG
+            SharedTradeOpenDiagnostics.initialRender(
+                tradeID: tradeID,
+                state: "presentationSeed",
+                cacheInstance: cacheOID,
+                tradeNonNil: trade != nil
+            )
+            #endif
+            return
+        }
+        #if DEBUG
+        SharedTradeOpenDiagnostics.initialRender(
+            tradeID: tradeID,
+            state: "empty",
+            cacheInstance: cacheOID,
+            tradeNonNil: false
+        )
+        #endif
     }
 
     var mediaReference: MediaReference? {
@@ -105,9 +156,12 @@ final class TradeDetailViewModel {
     var authorUsername: String { DetailAuthorPresentation.username(for: author) }
     var authorInitials: String { DetailAuthorPresentation.initials(for: author) }
 
-    /// Header identity — journal+owner: `Name • Number`; all public/social paths: sanitized name only.
+    /// Header identity — journal+owner: `Name • Number`; public copy action: `Copy Traded`.
     var accountIdentityLine: String? {
-        TradeDisplay.accountIdentityLine(
+        if trade?.mode == .copyTraded, accountDisplayAudience == .public {
+            return "Copy Traded"
+        }
+        return TradeDisplay.accountIdentityLine(
             name: accountName,
             size: accountSize,
             mode: accountMode,
@@ -115,6 +169,11 @@ final class TradeDetailViewModel {
             audience: accountDisplayAudience,
             category: nil
         )
+    }
+
+    /// Grouped copy-action mode line under side/timing on social detail.
+    var socialCopyTradeModeSummary: String? {
+        cache.copyTradePublicModeSummary(for: tradeID)
     }
 
     /// Owner journal summary line — account name + compact mode.
@@ -229,15 +288,19 @@ final class TradeDetailViewModel {
     // MARK: - Private
 
     private func performLoad(forceNetwork: Bool = false) async {
+        defer { loadTask = nil }
+        let hydrationStarted = CFAbsoluteTimeGetCurrent()
         if !forceNetwork, let authoritative = cache.authoritativeDetail(id: tradeID) {
             applySeed(authoritative)
             phase = .loaded
+            #if DEBUG
+            SharedTradeOpenDiagnostics.statePublished(tradeID: tradeID)
+            #endif
             await loadSupplementaries(for: authoritative)
-            loadTask = nil
             return
         }
 
-        if trade == nil, let shell = cache.presentationSeed(id: tradeID)?.previewTrade {
+        if trade == nil, let shell = presentationShellTrade() {
             applySeed(shell)
         }
 
@@ -245,22 +308,74 @@ final class TradeDetailViewModel {
             phase = .loading
         }
 
+        #if DEBUG
+        let source = trade == nil ? "TradeDetailRepository.load" : "TradeDetailRepository.load(background)"
+        SharedTradeOpenDiagnostics.hydrationStarted(tradeID: tradeID, source: source)
+        #endif
+
         do {
             let loaded = try await tradeDetailRepository.load(
                 tradeID: tradeID,
                 policy: TradeDetailLoadPolicy(forceNetwork: forceNetwork)
             )
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                #if DEBUG
+                SharedTradeOpenDiagnostics.hydrationCancelled(tradeID: tradeID, reason: "taskCancelled")
+                #endif
+                scheduleHydrationRecoveryAfterCancellation()
+                return
+            }
+            #if DEBUG
+            let elapsedMs = Int((CFAbsoluteTimeGetCurrent() - hydrationStarted) * 1000)
+            SharedTradeOpenDiagnostics.hydrationResponse(
+                tradeID: tradeID,
+                status: "success",
+                elapsedMs: elapsedMs
+            )
+            SharedTradeOpenDiagnostics.hydrationDecoded(tradeID: tradeID)
+            #endif
             applySeed(loaded)
             phase = .loaded
+            #if DEBUG
+            SharedTradeOpenDiagnostics.statePublished(tradeID: tradeID)
+            #endif
             await loadSupplementaries(for: loaded)
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                #if DEBUG
+                SharedTradeOpenDiagnostics.hydrationCancelled(tradeID: tradeID, reason: "taskCancelled")
+                #endif
+                scheduleHydrationRecoveryAfterCancellation()
+                return
+            }
+            #if DEBUG
+            let elapsedMs = Int((CFAbsoluteTimeGetCurrent() - hydrationStarted) * 1000)
+            SharedTradeOpenDiagnostics.hydrationResponse(
+                tradeID: tradeID,
+                status: "failure",
+                elapsedMs: elapsedMs
+            )
+            SharedTradeOpenDiagnostics.hydrationFailed(
+                tradeID: tradeID,
+                error: ProfileSectionSupport.message(for: error)
+            )
+            #endif
             if trade == nil {
                 phase = .failed(ProfileSectionSupport.message(for: error))
             }
         }
-        loadTask = nil
+    }
+
+    private func presentationShellTrade() -> Trade? {
+        cache.presentationSeed(id: tradeID)?.previewTrade ?? cache.previewTrade(id: tradeID)
+    }
+
+    private func scheduleHydrationRecoveryAfterCancellation() {
+        guard trade == nil else { return }
+        Task { @MainActor in
+            guard trade == nil, loadTask == nil else { return }
+            loadIfNeeded()
+        }
     }
 
     private func applySeed(_ seed: Trade) {
@@ -317,6 +432,10 @@ final class TradeDetailViewModel {
     private func loadSupplementaries(for trade: Trade) async {
         let userID = await session.currentUserID
         isOwner = userID?.rawValue == trade.ownerProfileID.rawValue
+
+        if author == nil, let cachedAuthor = cache.profile(id: trade.ownerProfileID) {
+            author = cachedAuthor
+        }
 
         if ProfileSectionSupport.isLocalDevelopmentProfile(trade.ownerProfileID) {
             if let accountID = trade.accountID {
@@ -392,7 +511,13 @@ final class TradeDetailViewModel {
         if !fetchedNotes.isEmpty {
             notes = fetchedNotes
         }
-        author = cache.profile(id: trade.ownerProfileID) ?? fetchedAuthor
+        if let cachedAuthor = cache.profile(id: trade.ownerProfileID) {
+            author = fetchedAuthor.map {
+                SocialEntityPresentationMerge.profile(replace: cachedAuthor, with: $0)
+            } ?? cachedAuthor
+        } else {
+            author = fetchedAuthor ?? author
+        }
         await loadAuthorAvatar()
         await resolveAccountMetadata(for: trade)
         await loadOwnerAnalytics(for: trade)

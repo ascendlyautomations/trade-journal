@@ -53,6 +53,7 @@ final class TradeJournalMutationStore {
             scope: AnalyticsLocalMutationScopeBuilder.create(trade: trade)
         )
         ProfileAnalyticsOwnerInvalidation.submitTradeMutation(old: nil, new: trade)
+        ProfileOwnerHeaderStatsCoordinator.shared.reconcile(ownerID: trade.ownerProfileID)
         GettingStartedRefreshCenter.noteTradePersisted(trade)
     }
 
@@ -68,6 +69,9 @@ final class TradeJournalMutationStore {
         }
         AnalyticsLocalMutationRouter.submit(kind: .update, scope: scope)
         ProfileAnalyticsOwnerInvalidation.submitTradeMutation(old: previous, new: trade)
+        if ProfileAnalyticsOwnerInvalidation.affectsOwnerJournalHeaderMetrics(old: previous, new: trade) {
+            ProfileOwnerHeaderStatsCoordinator.shared.reconcile(ownerID: trade.ownerProfileID)
+        }
         GettingStartedRefreshCenter.noteTradeVisibilityUpdated(trade, previous: previous)
     }
 
@@ -108,7 +112,10 @@ final class TradeJournalMutationStore {
                 scope: AnalyticsLocalMutationScopeBuilder.delete(old: previous)
             )
             ProfileAnalyticsOwnerInvalidation.submitTradeMutation(old: previous, new: nil)
+        } else {
+            ProfileAnalyticsOwnerInvalidation.invalidateOwnerSnapshot(viewerID: owner)
         }
+        ProfileOwnerHeaderStatsCoordinator.shared.reconcile(ownerID: owner)
     }
 
     /// CSV / bulk import — bounded invalidation; authoritative reload via mounted observers.

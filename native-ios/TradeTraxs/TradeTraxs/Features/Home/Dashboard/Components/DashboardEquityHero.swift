@@ -1,5 +1,26 @@
 import SwiftUI
 
+enum DashboardEquityCurvePresentation: Equatable {
+    case loading
+    case compactEmpty
+    case chart
+
+    static let emptyTitle = "No equity data"
+    static let emptyDetail = "Equity curve displays after 2 trades."
+    static let emptyAccessibilityLabel = "No equity data. Equity curve displays after 2 trades."
+
+    /// Loading only while the request is unresolved. A resolved series under two trades collapses.
+    static func resolve(tradeCount: Int, isChartLoading: Bool, chartPointCount: Int) -> DashboardEquityCurvePresentation {
+        if !isChartLoading && tradeCount < DashboardEquityChartRangeResolver.minimumTradeCountForEquityCurve {
+            return .compactEmpty
+        }
+        if isChartLoading && chartPointCount < DashboardEquityChartRangeResolver.minimumTradeCountForEquityCurve {
+            return .loading
+        }
+        return .chart
+    }
+}
+
 /// Stocks-style equity centerpiece — period performance first, curve second.
 ///
 /// For one selected account, title/value/curve use tracked account value
@@ -70,40 +91,47 @@ struct DashboardEquityHero: View {
         .accessibilityIdentifier("dashboard.equity")
     }
 
-    /// A curve needs two trades in the resolved dashboard dataset. Fewer than that
-    /// stays a short message instead of reserving the chart frame.
-    private var showsCompactEquityEmpty: Bool {
-        !isChartLoading && summary.tradeCount < 2
+    private var curvePresentation: DashboardEquityCurvePresentation {
+        DashboardEquityCurvePresentation.resolve(
+            tradeCount: summary.tradeCount,
+            isChartLoading: isChartLoading,
+            chartPointCount: chartPoints.count
+        )
     }
 
     @ViewBuilder
     private var equityCurve: some View {
-        if showsCompactEquityEmpty {
+        switch curvePresentation {
+        case .compactEmpty:
             VStack(spacing: ExperienceSpacing.xxs) {
-                Text("No equity data")
+                Text(DashboardEquityCurvePresentation.emptyTitle)
                     .experienceStyle(.footnote, color: colors.primaryText)
-                Text("Chart will show with 2 trades")
+                Text(DashboardEquityCurvePresentation.emptyDetail)
                     .experienceStyle(.caption2, color: colors.secondaryText)
             }
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity)
             .padding(.vertical, ExperienceSpacing.sm)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("No equity data. Chart will show with 2 trades")
-        } else if isChartLoading && chartPoints.count < 2 {
+            .accessibilityIdentifier("dashboard.equity.empty")
+            .accessibilityLabel(DashboardEquityCurvePresentation.emptyAccessibilityLabel)
+        case .loading:
             ProgressView()
                 .frame(maxWidth: .infinity)
                 .frame(height: 280)
+                .accessibilityIdentifier("dashboard.equity.loading")
                 .accessibilityLabel("Loading equity chart")
-        } else {
+        case .chart:
             ProfileEquityCurveView(points: chartPoints)
                 .frame(height: 280)
+                .accessibilityIdentifier("dashboard.equity.chart")
                 .accessibilityLabel(title == "Account Value" ? "Account value curve" : "Equity curve")
                 .accessibilityHint("Drag to inspect date and \(title.lowercased())")
         }
     }
 
     private var header: some View {
+        ProposedWidthClamp {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xs) {
                 Text(title)
@@ -148,6 +176,7 @@ struct DashboardEquityHero: View {
                         .accessibilityLabel("Period change \(percent)")
                 }
             }
+        }
         }
     }
 

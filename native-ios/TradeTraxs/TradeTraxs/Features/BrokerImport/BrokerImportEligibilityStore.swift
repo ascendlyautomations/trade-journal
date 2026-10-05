@@ -141,6 +141,9 @@ final class BrokerImportEligibilityStore {
             throw NetworkError.unauthorized
         }
         let generation = loadGeneration
+        if DemoExperienceSupport.usesLocalBundledData(ProfileID(userID)) {
+            throw CancellationError()
+        }
         await SessionNetworkGate.shared.awaitReady()
         let response = try await broker.importEligibility()
         let stillSignedIn = await session?.currentUserID?.rawValue == userID

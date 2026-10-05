@@ -33,7 +33,10 @@ nonisolated enum TradeHoldDuration {
             return seconds > 0 ? "\(minutes)m \(seconds)s" : "\(minutes)m"
         }
 
-        return minutes > 0 ? "\(hours)h \(minutes)m" : "\(hours)h"
+        var parts = ["\(hours)h"]
+        if minutes > 0 { parts.append("\(minutes)m") }
+        if seconds > 0 { parts.append("\(seconds)s") }
+        return parts.joined(separator: " ")
     }
 
     /// True when entry/exit carry clock time beyond date-only midnight placeholders.

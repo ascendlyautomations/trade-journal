@@ -35,6 +35,7 @@ final class CalendarViewModel {
     /// Session cache: calendar year → trades across all month fetch windows.
     private var yearTradeCache: [Int: [Trade]] = [:]
     private var loadTask: Task<Void, Never>?
+    private var viewerLoadGeneration: UInt64 = 0
     private var hasLoadedAccounts = false
     /// Calendar V2 — full-granularity month payloads (account buckets); filter client-side.
     var analyticsV2Memory: [String: AnalyticsDailyRangeBootstrapV1] = [:]
@@ -427,13 +428,40 @@ final class CalendarViewModel {
     }
 
     private func performLoad(forceNetwork: Bool) async {
+        viewerLoadGeneration &+= 1
+        let generation = viewerLoadGeneration
         let userID = await session.currentUserID
-        let profileID = ProfileID(userID?.rawValue ?? "dev.screenshot")
+        let demoActive = AppLaunchController.shared.isDemoExperienceActive
+        guard case .viewer(let profileID) = SessionViewerIdentity.resolve(
+            userID: userID,
+            demoExperienceActive: demoActive
+        ) else {
+            if month == nil {
+                phase = .failed(SessionViewerIdentity.sessionUnavailableMessage)
+            }
+            return
+        }
+        guard generation == viewerLoadGeneration else { return }
         self.profileID = profileID
 
         if month == nil { phase = .loading }
 
         if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+            let latestUserID = await session.currentUserID
+            guard generation == viewerLoadGeneration else { return }
+            guard SessionViewerIdentity.shouldCommit(
+                resolved: profileID,
+                userID: latestUserID,
+                demoExperienceActive: AppLaunchController.shared.isDemoExperienceActive
+            ) else {
+                if let latestUserID, ProfileID(latestUserID.rawValue) != profileID {
+                    await performLoad(forceNetwork: forceNetwork)
+                } else if month == nil {
+                    phase = .failed(SessionViewerIdentity.sessionUnavailableMessage)
+                }
+                return
+            }
+            guard generation == viewerLoadGeneration else { return }
             applyFixtures(profileID: profileID)
             phase = .loaded
             await startRealtime(profileID: profileID)
@@ -660,8 +688,14 @@ final class CalendarViewModel {
     }
 
     private func applyFixtures(profileID: ProfileID) {
-        let samples = CalendarFixtures.trades(owner: profileID)
-        accounts = CalendarFixtures.accounts(owner: profileID)
+        let samples: [Trade]
+        if profileID == DemoExperienceSupport.profileID {
+            samples = DemoCanonicalDataset.trades()
+            accounts = DemoCanonicalDataset.accounts()
+        } else {
+            samples = CalendarFixtures.trades(owner: profileID)
+            accounts = CalendarFixtures.accounts(owner: profileID)
+        }
         accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
         detailCache.seed(accounts: accounts, for: profileID)
         detailCache.seed(trades: samples)

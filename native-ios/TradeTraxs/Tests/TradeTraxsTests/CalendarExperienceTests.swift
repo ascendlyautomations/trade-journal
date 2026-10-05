@@ -205,6 +205,42 @@ final class CalendarExperienceTests: XCTestCase {
         XCTAssertLessThan(after, before)
     }
 
+    func testNilProductionViewerDoesNotLoadScreenshotFixtures() async {
+        let viewModel = CalendarViewModel(
+            trades: CalendarStubTradeRepository(),
+            session: CalendarStubSession(userID: nil),
+            detailCache: DetailPresentationCache(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+        viewModel.loadIfNeeded()
+        await waitFor {
+            if case .failed = viewModel.phase { return true }
+            return false
+        }
+        XCTAssertEqual(viewModel.phase, .failed(SessionViewerIdentity.sessionUnavailableMessage))
+        XCTAssertNil(viewModel.month)
+    }
+
+    func testStaleScreenshotIdentityDoesNotPaintCalendarFixtures() async {
+        let realID = "11111111-1111-4111-8111-111111111111"
+        let repository = RecordingCalendarTradeRepository()
+        let viewModel = CalendarViewModel(
+            trades: repository,
+            session: CalendarIdentityFlipSession(first: "dev.screenshot", then: realID),
+            detailCache: DetailPresentationCache(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+        CalendarMonthSessionStore.shared.invalidate()
+        viewModel.loadIfNeeded()
+        await waitFor {
+            viewModel.phase == .loaded
+                || viewModel.phase == .failed(SessionViewerIdentity.sessionUnavailableMessage)
+        }
+        XCTAssertFalse(repository.owners.contains("dev.screenshot"))
+        XCTAssertFalse(repository.owners.contains(where: { $0 != realID && !$0.isEmpty }))
+        XCTAssertNotEqual(viewModel.month?.monthSummary.tradeCount, 11)
+    }
+
     func testRealtimeUpsertAndDeleteUpdateDaySummary() async {
         let store = NavigationStore()
         store.sessionPhase = .authenticated
@@ -282,6 +318,62 @@ final class CalendarExperienceTests: XCTestCase {
 }
 
 // MARK: - Stubs
+
+private final class CalendarIdentityFlipSession: SessionProviding, @unchecked Sendable {
+    private let lock = NSLock()
+    private var upcoming: [String?]
+    private var current: String?
+
+    init(first: String?, then: String?) {
+        upcoming = [first, then]
+        current = first
+    }
+
+    var currentUserID: UserID? {
+        get async {
+            lock.lock()
+            let value = upcoming.isEmpty ? current : upcoming.removeFirst()
+            current = value
+            lock.unlock()
+            guard let value else { return nil }
+            return UserID(value)
+        }
+    }
+
+    var accessToken: String? { get async { nil } }
+}
+
+private final class RecordingCalendarTradeRepository: TradeRepository, @unchecked Sendable {
+    var owners: [String] = []
+
+    func trade(id: TradeID) async throws -> Trade {
+        throw AppError.unknown(message: "unused")
+    }
+
+    func trades(
+        ownedBy profileID: ProfileID,
+        accountID: TradingAccountID?,
+        page: PageRequest,
+        publicOnly: Bool
+    ) async throws -> CursorPage<Trade> {
+        owners.append(profileID.rawValue)
+        return CursorPage(items: [], nextCursor: nil)
+    }
+
+    func save(_ draft: TradeDraft) async throws -> Trade { throw AppError.unknown(message: "unused") }
+    func update(_ trade: Trade) async throws -> Trade { trade }
+    func delete(id: TradeID) async throws {}
+    func images(for tradeID: TradeID) async throws -> [TradeImage] { [] }
+    func notes(for tradeID: TradeID) async throws -> [TradeNote] { [] }
+    func statistics(for profileID: ProfileID, interval: DateIntervalValue) async throws -> TradeStatistics {
+        TradeStatistics(
+            tradeCount: 0, winCount: 0, lossCount: 0,
+            totalPnL: Money(amount: 0), averagePnL: Money(amount: 0),
+            averageRiskReward: nil, winRate: 0
+        )
+    }
+    func accounts(for profileID: ProfileID) async throws -> [TradingAccount] { [] }
+}
 
 private struct CalendarStubSession: SessionProviding {
     let userID: String?

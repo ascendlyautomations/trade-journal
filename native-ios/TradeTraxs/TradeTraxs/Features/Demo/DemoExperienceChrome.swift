@@ -10,17 +10,31 @@ struct DemoExperienceLeaveButton: View {
             launchController.exitDemoExplore()
         } label: {
             Text("Leave Demo")
-                .font(ExperienceTypography.caption.weight(.semibold))
+                .font(ExperienceTypography.footnote.weight(.semibold))
                 .foregroundStyle(colors.accent)
-                .padding(.horizontal, ExperienceSpacing.sm)
-                .padding(.vertical, ExperienceSpacing.xxs)
-                .background(colors.fillSecondary.opacity(0.85), in: Capsule())
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.vertical, ExperienceSpacing.xs)
+                .background(colors.surfacePrimary, in: Capsule())
+                .overlay {
+                    Capsule()
+                        .strokeBorder(colors.border.opacity(0.8), lineWidth: ExperienceBorder.hairline)
+                }
         }
         .buttonStyle(.plain)
         .experienceTouchTarget()
         .accessibilityLabel("Leave Demo")
         .accessibilityHint("Returns to sign in")
         .accessibilityIdentifier("demo.leave")
+    }
+}
+
+/// Centers the existing Leave Demo control just above the tab bar.
+struct DemoExperienceLeaveButtonPlacement: View {
+    var body: some View {
+        DemoExperienceLeaveButton()
+            .padding(.top, ExperienceSpacing.xxs)
+            .padding(.bottom, ExperienceSpacing.sm)
+            .frame(maxWidth: .infinity)
     }
 }
 

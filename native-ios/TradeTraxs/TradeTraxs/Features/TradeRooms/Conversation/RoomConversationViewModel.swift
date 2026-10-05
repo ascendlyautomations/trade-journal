@@ -641,6 +641,7 @@ final class RoomConversationViewModel {
         guard let viewerID, !isSending, canPostInSelectedChannel, let channelID = selectedChannelID else { return }
         showsTradePicker = false
         sharedTrades[summary.id] = TradeSummaryMapper.previewTrade(from: summary)
+        detailCache.seedPresentationSeed(summary)
         isSending = true
         defer { isSending = false }
 
@@ -1249,6 +1250,7 @@ final class RoomConversationViewModel {
             apply(cache: cache)
             notifyScrollContentApplied(isBootstrap: true)
             await hydrateSenders(for: cache.messages)
+            hydrateSharedContent(from: cache.messages)
         }
         applyPendingDeepLinkFocusHighlight()
         phase = .loaded
@@ -1357,16 +1359,18 @@ final class RoomConversationViewModel {
             channelMetadataCached = true
             selectedChannelID = applied.selectedChannelID
             applyPendingDeepLinkFocusSelectingChannel()
-            let cache = ChannelThreadCache(
+            let incoming = ChannelThreadCache(
                 messages: applied.channelCache.messages,
                 nextOlderCursor: applied.channelCache.nextOlderCursor,
                 hasMoreOlder: applied.channelCache.hasMoreOlder,
                 scrollAnchorMessageID: applied.channelCache.scrollAnchorMessageID,
                 isLoaded: applied.channelCache.isLoaded
             )
-            channelCaches[applied.selectedChannelID] = cache
-            apply(cache: cache)
-            notifyScrollContentApplied(isBootstrap: true)
+            #if DEBUG
+            RoomTimelineTrace.log(stage: "bootstrapMapped", messages: incoming.messages, extra: "guestBootstrap")
+            #endif
+            let cache = reconcileChannelThreadCache(channelID: applied.selectedChannelID, incoming: incoming)
+            installChannelCache(cache, for: applied.selectedChannelID, isBootstrap: true)
             await hydrateSenders(for: cache.messages)
             hydrateSharedContent(from: cache.messages)
             applyPendingDeepLinkFocusHighlight()
@@ -1406,17 +1410,19 @@ final class RoomConversationViewModel {
             channelMetadataCached = true
             selectedChannelID = applied.selectedChannelID
             applyPendingDeepLinkFocusSelectingChannel()
-            let cache = ChannelThreadCache(
+            let incoming = ChannelThreadCache(
                 messages: applied.channelCache.messages,
                 nextOlderCursor: applied.channelCache.nextOlderCursor,
                 hasMoreOlder: applied.channelCache.hasMoreOlder,
                 scrollAnchorMessageID: applied.channelCache.scrollAnchorMessageID,
                 isLoaded: applied.channelCache.isLoaded
             )
-            channelCaches[applied.selectedChannelID] = cache
+            #if DEBUG
+            RoomTimelineTrace.log(stage: "bootstrapMapped", messages: incoming.messages, extra: "memberBootstrap")
+            #endif
+            let cache = reconcileChannelThreadCache(channelID: applied.selectedChannelID, incoming: incoming)
             if canViewMessages {
-                apply(cache: cache)
-                notifyScrollContentApplied(isBootstrap: true)
+                installChannelCache(cache, for: applied.selectedChannelID, isBootstrap: true)
                 await hydrateSenders(for: cache.messages)
                 hydrateSharedContent(from: cache.messages)
                 applyPendingDeepLinkFocusHighlight()
@@ -1424,6 +1430,7 @@ final class RoomConversationViewModel {
                     patchInboxPreview(with: last)
                 }
             } else {
+                channelCaches[applied.selectedChannelID] = cache
                 replaceMessages([])
                 hasMoreOlder = false
                 if membership == nil, applied.room.joinPolicy == .approval {
@@ -1616,15 +1623,22 @@ final class RoomConversationViewModel {
             page: PageRequest(limit: 50)
         )
         let mapped = page.items.map(RoomMessageMapping.displayMessage)
-        let sorted = ConversationMessageMerge.mergeMessages(
-            existing: [],
-            incoming: mapped,
-            viewerID: viewerID
+        let existing = channelCaches[channelID]?.messages ?? []
+        let sorted = ConversationMessageMerge.reconcileServerFirstPage(
+            existing: existing,
+            incoming: mapped
         )
+        #if DEBUG
+        RoomTimelineTrace.log(
+            stage: "timelineReconciled",
+            messages: sorted,
+            extra: "fetchChannel existingCount=\(existing.count) incomingCount=\(mapped.count)"
+        )
+        #endif
         let cache = ChannelThreadCache(
             messages: sorted,
-            nextOlderCursor: page.nextCursor,
-            hasMoreOlder: page.nextCursor != nil,
+            nextOlderCursor: page.nextCursor ?? channelCaches[channelID]?.nextOlderCursor,
+            hasMoreOlder: page.nextCursor != nil || (channelCaches[channelID]?.hasMoreOlder ?? false),
             scrollAnchorMessageID: sorted.last?.id,
             isLoaded: true
         )
@@ -1690,8 +1704,12 @@ final class RoomConversationViewModel {
         }
         channelCaches = restoredCaches
         if let selectedChannelID, let cache = channelCaches[selectedChannelID] {
+            #if DEBUG
+            RoomTimelineTrace.log(stage: "diskLoaded", messages: cache.messages)
+            #endif
             apply(cache: cache)
             notifyScrollContentApplied(isBootstrap: false)
+            hydrateSharedContent(from: cache.messages)
         }
     }
 
@@ -1801,6 +1819,16 @@ final class RoomConversationViewModel {
 
     private func hydrateSharedContent(from messages: [Message]) {
         guard !messages.isEmpty else { return }
+        #if DEBUG
+        let tradeReferenceCount = messages.reduce(into: 0) { count, message in
+            count += SharedContentMessageSupport.referencedTradeIDs(for: message, sharedPosts: sharedPosts).count
+        }
+        RoomTimelineTrace.logHydration(
+            stage: "sharedContentHydrationStarted",
+            timelineCount: self.messages.count,
+            tradeReferenceCount: tradeReferenceCount
+        )
+        #endif
         primeSharedContentFromCaches(messages: messages)
         enqueueSharedContentNetworkHydration(messages: messages)
     }
@@ -1848,6 +1876,9 @@ final class RoomConversationViewModel {
 
     private func performSharedContentNetworkHydration(from messages: [Message]) async {
         guard !messages.isEmpty else { return }
+        #if DEBUG
+        let timelineCountBefore = self.messages.count
+        #endif
         richContentHydrationCount += 1
         defer { richContentHydrationCount -= 1 }
         let probe = SharedContentHydrationProbe.Session(surface: .tradeRoom)
@@ -1864,12 +1895,58 @@ final class RoomConversationViewModel {
             context: context,
             probe: probe
         )
-        sharedTrades = hydrated.sharedTrades
-        sharedPosts = hydrated.sharedPosts
-        sharedReels = hydrated.sharedReels
-        sharedAchievements = hydrated.sharedAchievements
-        unavailableSharedContentKeys = hydrated.unavailableSharedContentKeys
+        for (id, trade) in hydrated.sharedTrades { sharedTrades[id] = trade }
+        for (id, post) in hydrated.sharedPosts { sharedPosts[id] = post }
+        for (id, reel) in hydrated.sharedReels { sharedReels[id] = reel }
+        for (id, achievement) in hydrated.sharedAchievements { sharedAchievements[id] = achievement }
+        unavailableSharedContentKeys.formUnion(hydrated.unavailableSharedContentKeys)
         persistSharedContentNetworkResults(hydrated, messages: messages, context: context)
+        #if DEBUG
+        RoomTimelineTrace.logHydration(
+            stage: "sharedContentHydrationCompleted",
+            timelineCount: self.messages.count,
+            tradeReferenceCount: 0,
+            extra: "timelineCountBefore=\(timelineCountBefore) timelineCountAfter=\(self.messages.count)"
+        )
+        assert(self.messages.count == timelineCountBefore, "SharedContent hydration must not mutate the message timeline")
+        #endif
+    }
+
+    private func reconcileChannelThreadCache(
+        channelID: RoomChannelID,
+        incoming: ChannelThreadCache
+    ) -> ChannelThreadCache {
+        let existing = channelCaches[channelID]
+        let reconciled = ConversationMessageMerge.reconcileServerFirstPage(
+            existing: existing?.messages ?? [],
+            incoming: incoming.messages,
+            dropOmittedInWindow: false
+        )
+        #if DEBUG
+        RoomTimelineTrace.log(
+            stage: "timelineReconciled",
+            messages: reconciled,
+            extra: "channel=\(channelID.rawValue) existingCount=\(existing?.messages.count ?? 0) incomingCount=\(incoming.messages.count)"
+        )
+        #endif
+        return ChannelThreadCache(
+            messages: reconciled,
+            nextOlderCursor: incoming.nextOlderCursor ?? existing?.nextOlderCursor,
+            hasMoreOlder: incoming.hasMoreOlder || (existing?.hasMoreOlder ?? false),
+            scrollAnchorMessageID: reconciled.last?.id,
+            isLoaded: incoming.isLoaded || (existing?.isLoaded ?? false)
+        )
+    }
+
+    private func installChannelCache(
+        _ cache: ChannelThreadCache,
+        for channelID: RoomChannelID,
+        isBootstrap: Bool
+    ) {
+        channelCaches[channelID] = cache
+        guard selectedChannelID == channelID else { return }
+        apply(cache: cache)
+        notifyScrollContentApplied(isBootstrap: isBootstrap)
     }
 
     private func persistSharedContentNetworkResults(

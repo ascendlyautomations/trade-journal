@@ -42,7 +42,6 @@ struct SharedContentUnavailableCard: View {
 
 struct SharedPostMessageCard: View {
     let post: Post?
-    let author: Profile?
     let imagePipeline: any ImagePipeline
     var isOutgoing: Bool
     var includesBackground: Bool = true
@@ -67,24 +66,6 @@ struct SharedPostMessageCard: View {
                     .frame(height: 160)
                     .clipped()
                     .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
-                }
-
-                if let author {
-                    HStack(spacing: ExperienceSpacing.xs) {
-                        ExperienceAvatar(
-                            initials: ProfileDisplay.initials(
-                                displayName: author.displayName,
-                                username: author.username
-                            ),
-                            size: 24
-                        )
-                        Text(author.displayName)
-                            .experienceStyle(.caption, color: secondaryTextColor)
-                            .lineLimit(1)
-                        if author.isCreator {
-                            TradeTraxsVerifiedBadge(size: .inline)
-                        }
-                    }
                 }
 
                 let caption = post.body.trimmingCharacters(in: .whitespacesAndNewlines)

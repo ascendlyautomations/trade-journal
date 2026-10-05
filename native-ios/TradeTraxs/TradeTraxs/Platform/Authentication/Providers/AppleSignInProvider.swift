@@ -32,7 +32,7 @@ nonisolated struct AppleSignInProvider: OAuthProviding {
         AppLog.authentication.debug(
             "[AppleAuth] credential.received identityToken.present=\(!credential.idToken.isEmpty, privacy: .public) nonce.present=\(credential.nonce != nil, privacy: .public) backend.type=\(String(describing: type(of: backend)), privacy: .public)"
         )
-        AppLog.authentication.debug("[AppleAuth] idTokenExchange.started provider=apple")
+        AppLog.authentication.debug("[AppleAuth] supabaseSignInStarted")
 #endif
         let session: AuthenticationSession
         do {

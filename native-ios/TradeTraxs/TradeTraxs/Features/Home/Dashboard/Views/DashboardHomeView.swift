@@ -481,7 +481,7 @@ struct DashboardHomeView: View {
             gettingStartedStore.loadIfNeeded()
             dailyCheckInStore.loadIfNeeded()
             brokerImportEligibilityStore.loadIfNeeded()
-            if let data, !DemoExperienceSupport.skipsAuthenticatedViewerServices {
+            if let data {
                 activityStore.ensureUnreadBootstrap(
                     notifications: data.notifications,
                     session: data.session,

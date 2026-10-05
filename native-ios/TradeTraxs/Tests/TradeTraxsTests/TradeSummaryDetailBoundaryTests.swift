@@ -6,9 +6,9 @@ final class TradeSummaryDetailBoundaryTests: XCTestCase {
     func testTradeSummaryWireDecode() throws {
         let json = BackendV2ContractFixtures.profileTabTradesV2
         let bootstrap: ProfileTabBootstrapV2 = try JSONDecoder().decode(ProfileTabBootstrapV2.self, from: Data(json.utf8))
-        let summary = try TradeSummaryMapper.map(from: bootstrap.data.items[0])
-        XCTAssertEqual(summary.id.rawValue, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
-        XCTAssertEqual(summary.notePreview, "Held through the open drive.")
+        let journal = try TradeSummaryMapper.mapOwnerJournal(from: bootstrap.data.items[0])
+        XCTAssertEqual(journal.summary.id.rawValue, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        XCTAssertEqual(journal.summary.notePreview, "Held through the open drive.")
     }
 
     func testDetailMapsToSummaryButSummaryCannotBeDetail() {
@@ -16,6 +16,8 @@ final class TradeSummaryDetailBoundaryTests: XCTestCase {
         let summary = TradeSummaryMapper.summary(from: detail)
         XCTAssertEqual(summary.id, detail.id)
         let preview = TradeSummaryMapper.previewTrade(from: summary)
+        XCTAssertEqual(preview.entryPrice, detail.entryPrice)
+        XCTAssertEqual(preview.exitPrice, detail.exitPrice)
         XCTAssertNil(preview.psychologyNotes)
         XCTAssertNil(preview.importSource)
         XCTAssertFalse(TradeDetailCompleteness.isAuthoritative(.listSeed))
@@ -28,6 +30,56 @@ final class TradeSummaryDetailBoundaryTests: XCTestCase {
         cache.seed(trade)
         XCTAssertNil(cache.authoritativeDetail(id: trade.id))
         XCTAssertNotNil(cache.presentationSeed(id: trade.id))
+    }
+
+    func testEnsurePresentationSeedFromDMCardPreview() {
+        let cache = DetailPresentationCache()
+        let trade = fullDetailFixture()
+        cache.ensurePresentationSeed(forPreview: trade)
+        XCTAssertNotNil(cache.presentationSeed(id: trade.id))
+        XCTAssertEqual(cache.presentationSeed(id: trade.id)?.summary.symbol.ticker, trade.symbol.ticker)
+    }
+
+    func testSocialTradeOpenHandoffAppliesBeforeCacheLookup() {
+        let environment = CompositionRoot.bootstrapAppEnvironment()
+        let cache = environment.data.detailCache
+        let trade = fullDetailFixture()
+        SocialTradeOpenHandoff.stage(trade, for: trade.id)
+        let viewModel = TradeDetailViewModel(
+            tradeID: trade.id,
+            trades: environment.data.trades,
+            profiles: environment.data.profiles,
+            session: environment.data.session,
+            imagePipeline: environment.data.imagePipeline,
+            cache: cache,
+            navigationCoordinator: environment.navigation.coordinator,
+            rpc: environment.data.rpc,
+            experience: .social
+        )
+        XCTAssertNotNil(viewModel.trade)
+        XCTAssertEqual(viewModel.trade?.symbol.ticker, trade.symbol.ticker)
+        XCTAssertNil(SocialTradeOpenHandoff.consume(for: trade.id))
+    }
+
+    func testTradeDetailViewModelAppliesPresentationSeedSynchronously() {
+        let environment = CompositionRoot.bootstrapAppEnvironment()
+        let cache = environment.data.detailCache
+        let trade = fullDetailFixture()
+        cache.seedListPreview(trade)
+        let viewModel = TradeDetailViewModel(
+            tradeID: trade.id,
+            trades: environment.data.trades,
+            profiles: environment.data.profiles,
+            session: environment.data.session,
+            imagePipeline: environment.data.imagePipeline,
+            cache: cache,
+            navigationCoordinator: environment.navigation.coordinator,
+            rpc: environment.data.rpc,
+            experience: .social
+        )
+        XCTAssertNotNil(viewModel.trade)
+        XCTAssertEqual(viewModel.trade?.symbol.ticker, trade.symbol.ticker)
+        XCTAssertEqual(viewModel.trade?.entryPrice, trade.entryPrice)
     }
 
     func testOwnerJournalSelectIncludesDetailFields() {

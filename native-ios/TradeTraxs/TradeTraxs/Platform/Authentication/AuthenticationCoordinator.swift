@@ -8,10 +8,20 @@ import OSLog
 ///
 /// Also owns **session-scoped cache invalidation** so Features never reset stores
 /// on logout / account switch.
+enum PostSignInFlow: Sendable {
+    case returningUser
+    case newAccountRegistration
+}
+
 @MainActor
 final class AuthenticationCoordinator {
     private let authenticationManager: AuthenticationManager
     private let navigation: NavigationEnvironment
+
+    let postSignupTransition = PostSignupTransitionStore()
+
+    /// Bound by ``CompositionRoot`` when profile onboarding gate is available.
+    weak var profileOnboardingGate: ProfileOnboardingGateStore?
 
     /// Bound by ``CompositionRoot`` after session stores exist (MainActor).
     var invalidateSessionCaches: (@MainActor () -> Void)?
@@ -108,7 +118,7 @@ final class AuthenticationCoordinator {
         password: String,
         smartSignUpIfNewEmail: Bool = false
     ) async throws {
-        try await performSignIn(operation: {
+        try await performSignIn(flow: .returningUser, operation: {
             try await self.authenticationManager.signIn(
                 email: email,
                 password: password,
@@ -121,7 +131,7 @@ final class AuthenticationCoordinator {
         let hint = ProfileDisplayNamePolicy.normalized(fullName).map {
             OAuthFirstLoginHint(fullName: $0, email: nil)
         }
-        try await performSignIn(operation: {
+        try await performSignIn(flow: .newAccountRegistration, lifecycle: .signUp, operation: {
             try await self.authenticationManager.signUp(
                 email: email,
                 password: password,
@@ -131,26 +141,30 @@ final class AuthenticationCoordinator {
     }
 
     func signInWithApple() async throws {
-        try await performSignIn(operation: {
+        try await performSignIn(flow: .returningUser, operation: {
             try await self.authenticationManager.signInWithApple()
         })
     }
 
     func signInWithApple(credential: AppleIDCredentialPayload) async throws {
-        try await performSignIn(operation: {
-            try await self.authenticationManager.signInWithApple(credential: credential)
-        })
+        let likelyNewAccount = credential.fullName != nil || credential.email != nil
+        try await performSignIn(
+            flow: likelyNewAccount ? .newAccountRegistration : .returningUser,
+            operation: {
+                try await self.authenticationManager.signInWithApple(credential: credential)
+            }
+        )
     }
 
     func signInWithGoogle() async throws {
-        try await performSignIn(operation: {
+        try await performSignIn(flow: .returningUser, operation: {
             try await self.authenticationManager.signInWithGoogle()
         })
     }
 
     /// Infrastructure Continue — uses development session when allowed (Debug).
     func continueAsDevelopmentSessionIfAllowed() async throws {
-        try await performSignIn(operation: {
+        try await performSignIn(flow: .returningUser, operation: {
             try await self.authenticationManager.issueDevelopmentSession()
         })
     }
@@ -236,6 +250,7 @@ final class AuthenticationCoordinator {
 #endif
 
         invalidateCachesForSessionChange()
+        postSignupTransition.reset()
 #if DEBUG
         LogoutTrace.localSessionCleared(elapsedMs: LogoutTrace.elapsedSinceTapMs())
 #endif
@@ -281,6 +296,10 @@ final class AuthenticationCoordinator {
     /// Primary sign-in provider for the active session (used by account deletion copy).
     var currentSignInProvider: AuthenticationProviderKind? {
         authenticationManager.state.session?.provider
+    }
+
+    var hasReadySession: Bool {
+        authenticationManager.state.isSessionReady
     }
 
     func recoverSessionAfterUnauthorized() async -> NetworkUnauthorizedRecovery.Outcome {
@@ -346,6 +365,24 @@ final class AuthenticationCoordinator {
             break
 
         case .unauthenticated, .failure, .authenticating:
+            if postSignupTransition.isObscuringAuthRoot,
+               authenticationManager.state.isSessionReady
+            {
+                if navigation.store.sessionPhase != .authenticated {
+                    let deferred = navigation.consumeDeferredAuthenticatedSnapshot()
+                    navigation.coordinator.markAuthenticated(applyingDeferred: deferred)
+                }
+                Task { await bindAuthenticatedUser() }
+                return
+            }
+            if authenticationManager.state.isSessionReady {
+                if navigation.store.sessionPhase != .authenticated {
+                    let deferred = navigation.consumeDeferredAuthenticatedSnapshot()
+                    navigation.coordinator.markAuthenticated(applyingDeferred: deferred)
+                }
+                Task { await bindAuthenticatedUser() }
+                return
+            }
             if navigation.store.sessionPhase != .unauthenticated {
                 navigation.coordinator.markUnauthenticated()
             }
@@ -364,14 +401,24 @@ final class AuthenticationCoordinator {
         }
     }
 
-    private func performSignIn(operation: () async throws -> Void) async throws {
+    private enum AuthAttemptLifecycle: String {
+        case signIn
+        case signUp
+    }
+
+    private func performSignIn(
+        flow: PostSignInFlow,
+        lifecycle: AuthAttemptLifecycle = .signIn,
+        operation: () async throws -> Void
+    ) async throws {
         await AppLaunchController.shared.ensureFullBootstrapComplete()
         signInGeneration &+= 1
         restoreGeneration &+= 1
         let generation = signInGeneration
         let correlation = AuthFlowTracer.beginCorrelation()
+        let attempt = lifecycle.rawValue
         AuthFlowTracer.trace(
-            "auth.signIn.started",
+            "auth.\(attempt).started",
             phase: .authenticating,
             correlation: correlation,
             generation: generation
@@ -381,7 +428,7 @@ final class AuthenticationCoordinator {
             try await operation()
             guard !Task.isCancelled else {
                 AuthFlowTracer.trace(
-                    "auth.signIn.cancelled",
+                    "auth.\(attempt).cancelled",
                     phase: .unauthenticated,
                     correlation: correlation,
                     generation: generation
@@ -391,7 +438,7 @@ final class AuthenticationCoordinator {
             }
             guard generation == signInGeneration else {
                 AuthFlowTracer.trace(
-                    "auth.signIn.stale",
+                    "auth.\(attempt).stale",
                     phase: authenticationManager.state.authFlowPhase,
                     correlation: correlation,
                     generation: generation
@@ -401,21 +448,23 @@ final class AuthenticationCoordinator {
                     navigation.coordinator.markAuthenticated(
                         applyingDeferred: navigation.consumeDeferredAuthenticatedSnapshot()
                     )
+                    return
                 }
-                return
+                throw AuthenticationError.unknown(SignInFormErrorPresentation.Reason.sessionNotReady)
             }
             guard authenticationManager.state.isSessionReady else {
                 AuthFlowTracer.trace(
-                    "auth.signIn.failed",
+                    signupFailureEvent("auth.\(attempt).failed"),
                     phase: .unauthenticated,
                     correlation: correlation,
                     generation: generation
                 )
-                return
+                syncNavigation(with: authenticationManager.state)
+                throw AuthenticationError.unknown(SignInFormErrorPresentation.Reason.sessionNotReady)
             }
 
             AuthFlowTracer.trace(
-                "auth.signIn.completed",
+                "auth.\(attempt).completed",
                 phase: .authenticated,
                 correlation: correlation,
                 generation: generation
@@ -426,10 +475,19 @@ final class AuthenticationCoordinator {
                 correlation: correlation,
                 generation: generation
             )
+            if flow == .newAccountRegistration {
+                postSignupTransition.beginCreatingAccount()
+                if let gatePhase = profileOnboardingGate?.phase {
+                    postSignupTransition.releaseCoverIfAuthenticatedDestinationReady(gatePhase: gatePhase)
+                }
+            }
             await bindAuthenticatedUser()
             navigation.coordinator.markAuthenticated(
                 applyingDeferred: navigation.consumeDeferredAuthenticatedSnapshot()
             )
+            if flow == .newAccountRegistration {
+                profileOnboardingGate?.resolveIfNeeded()
+            }
             AuthFlowTracer.trace(
                 "root.authenticated",
                 phase: .authenticated,
@@ -438,7 +496,7 @@ final class AuthenticationCoordinator {
             )
         } catch is CancellationError {
             AuthFlowTracer.trace(
-                "auth.signIn.cancelled",
+                "auth.\(attempt).cancelled",
                 phase: .unauthenticated,
                 correlation: correlation,
                 generation: generation
@@ -447,13 +505,19 @@ final class AuthenticationCoordinator {
             throw CancellationError()
         } catch {
             AuthFlowTracer.trace(
-                "auth.signIn.failed",
+                signupFailureEvent("auth.\(attempt).failed"),
                 phase: .unauthenticated,
                 correlation: correlation,
                 generation: generation
             )
             throw error
         }
+    }
+
+    private func signupFailureEvent(_ event: String) -> String {
+        guard event.hasPrefix("auth.signUp.") else { return event }
+        guard let detail = SignupFailureDiagnostics.consumeLogReason() else { return event }
+        return "\(event) \(detail)"
     }
 
     private func syncNavigationIfAuthenticatedAfterCancellation() {

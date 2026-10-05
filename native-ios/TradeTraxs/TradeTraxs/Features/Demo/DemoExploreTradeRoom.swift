@@ -8,6 +8,13 @@ nonisolated enum DemoExploreTradeRoom {
     static func isLocalRoom(_ id: RoomID) -> Bool { id == roomID }
 
     static func room(now: Date = Date()) -> TradeRoom {
+        if let snapshot = DemoSnapshotStore.shared.current {
+            return snapshot.room
+        }
+        return bundledRoom(now: now)
+    }
+
+    private static func bundledRoom(now: Date = Date()) -> TradeRoom {
         TradeRoom(
             id: roomID,
             ownerProfileID: hostProfileID,
@@ -34,6 +41,13 @@ nonisolated enum DemoExploreTradeRoom {
     }
 
     static func channels(roomID: RoomID = roomID) -> [RoomChannel] {
+        if let snapshot = DemoSnapshotStore.shared.current {
+            return snapshot.channels.filter { $0.roomID == roomID }
+        }
+        return bundledChannels(roomID: roomID)
+    }
+
+    private static func bundledChannels(roomID: RoomID) -> [RoomChannel] {
         [
             RoomChannel(
                 id: RoomChannelID("\(roomID.rawValue)-general"),
@@ -60,6 +74,13 @@ nonisolated enum DemoExploreTradeRoom {
     }
 
     static func hostProfile() -> Profile {
+        if let snapshot = DemoSnapshotStore.shared.current {
+            return snapshot.host
+        }
+        return bundledHostProfile()
+    }
+
+    private static func bundledHostProfile() -> Profile {
         Profile(
             id: hostProfileID,
             userID: UserID(hostProfileID.rawValue),
@@ -78,13 +99,12 @@ nonisolated enum DemoExploreTradeRoom {
     }
 
     static func memberProfiles(viewerID: ProfileID) -> [Profile] {
+        if let snapshot = DemoSnapshotStore.shared.current {
+            _ = viewerID
+            return [snapshot.host, snapshot.viewer] + snapshot.peers
+        }
         var profiles = [hostProfile(), DemoExploreIdentity.profile()]
-        if let ada = FollowListFixtures.profile(id: ProfileID("dev.follower.ada")) {
-            profiles.append(ada)
-        }
-        if let ict = FollowListFixtures.profile(id: ProfileID("dev.following.ict")) {
-            profiles.append(ict)
-        }
+        profiles.append(contentsOf: DemoGraph.profiles())
         _ = viewerID
         return profiles
     }
@@ -95,12 +115,21 @@ nonisolated enum DemoExploreTradeRoom {
         channelID: RoomChannelID? = nil,
         now: Date = Date()
     ) -> [RoomMessage] {
-        let channels = channels(roomID: roomID)
+        if let snapshot = DemoSnapshotStore.shared.current {
+            let stored = snapshot.roomMessages.filter { $0.roomID == roomID }
+            guard let channelID else { return stored }
+            let channel = channels(roomID: roomID).first { $0.id == channelID }
+            if channel?.isGeneral == true {
+                return stored.filter { $0.channelID == channelID || $0.channelID == nil }
+            }
+            return stored.filter { $0.channelID == channelID }
+        }
+        let channels = bundledChannels(roomID: roomID)
         let general = channels.first { $0.isGeneral }?.id
         let setups = channels.first { $0.name == "setups" }?.id
         let recap = channels.first { $0.name == "recap" }?.id
-        let ada = ProfileID("dev.follower.ada")
-        let sampleTradeID = DemoCanonicalDataset.trades().first?.id
+        let ada = DemoGraph.sarahID
+        let sampleTradeID = DemoGraph.featuredTrade().id
 
         let all: [RoomMessage] = [
             RoomMessage(
@@ -195,7 +224,18 @@ nonisolated enum DemoExploreTradeRoom {
     }
 
     static func members(viewerID: ProfileID) -> [RoomMemberItem] {
-        let room = room()
+        if let snapshot = DemoSnapshotStore.shared.current {
+            return snapshot.memberships.compactMap { membership in
+                guard let profile = profileForMembership(membership.profileID, viewerID: viewerID) else { return nil }
+                return RoomMemberItem(
+                    profile: profile,
+                    role: membership.role,
+                    joinedAt: membership.joinedAt,
+                    isOnline: membership.role != .member || membership.profileID != viewerID
+                )
+            }
+        }
+        let room = bundledRoom()
         let host = hostProfile()
         var items: [RoomMemberItem] = [
             RoomMemberItem(
@@ -226,5 +266,60 @@ nonisolated enum DemoExploreTradeRoom {
             )
         }
         return items
+    }
+
+    private static func profileForMembership(_ id: ProfileID, viewerID: ProfileID) -> Profile? {
+        if id == DemoExperienceSupport.profileID || id == viewerID {
+            return DemoCanonicalDataset.profile()
+        }
+        if id == hostProfileID {
+            return hostProfile()
+        }
+        return DemoGraph.profile(id: id)
+    }
+
+    static func discoverySuggestion(joined: Bool) -> ExploreRoomSuggestion {
+        let sample = room()
+        return ExploreRoomSuggestion(
+            id: sample.id,
+            name: sample.name,
+            slug: sample.slug,
+            description: sample.description,
+            memberCount: sample.memberCount,
+            ownerProfileID: sample.ownerProfileID,
+            roomKind: sample.roomKind,
+            discoveryTags: sample.discoveryTags,
+            isJoined: joined,
+            isOwner: false,
+            isMember: joined
+        )
+    }
+
+    static func homeBootstrap(
+        viewerID: ProfileID,
+        scope: TradeRoomDiscoveryScope
+    ) -> TradeRoomsHomeBootstrap {
+        let sample = room()
+        let yours = ExploreRoomSuggestion(
+            id: sample.id,
+            name: sample.name,
+            slug: sample.slug,
+            description: sample.description,
+            memberCount: sample.memberCount,
+            ownerProfileID: sample.ownerProfileID,
+            roomKind: sample.roomKind,
+            discoveryTags: sample.discoveryTags,
+            isJoined: true,
+            isOwner: false,
+            isMember: true,
+            joinPolicy: sample.joinPolicy
+        )
+        return TradeRoomsHomeBootstrap(
+            viewerID: viewerID,
+            scope: scope,
+            yourRooms: [yours],
+            suggested: [],
+            popular: []
+        )
     }
 }

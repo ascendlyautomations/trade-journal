@@ -127,6 +127,12 @@ struct AddTradePsychologySheet: View {
                 .frame(minHeight: 96, alignment: .top)
                 .scrollContentBackground(.hidden)
                 .background(Color.clear)
+                .experienceTextInputProbe(
+                    screen: "addTradePsychology",
+                    field: "addTrade.psychology.notes",
+                    text: viewModel.psychologyNotesText,
+                    isFocused: false
+                )
                 .accessibilityIdentifier("addTrade.psychology.notes")
         }
     }

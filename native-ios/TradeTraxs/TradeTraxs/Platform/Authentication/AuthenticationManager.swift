@@ -148,6 +148,13 @@ final class AuthenticationManager {
 
     /// Async follow-up after cold launch — refresh only when required.
     func restoreSession() async {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-uitesting-reset-auth") {
+            state = .unauthenticated
+            await SessionNetworkGate.shared.markUnauthenticated()
+            return
+        }
+        #endif
         if restoreInFlight {
             await waitForRestoreCompletion()
             return
@@ -223,6 +230,12 @@ final class AuthenticationManager {
         isRetryingValidation = true
         state = .refreshing(session)
         await restoreSession()
+    }
+
+    /// Guest Explore has no refresh token. Cancel any leftover GoTrue refresh timer
+    /// so expiry is handled by a new guest-session issuance.
+    func suppressGoTrueRefreshForGuestSession() {
+        refreshCoordinator.cancel()
     }
 
     /// Invoked when an authenticated API returns 401 — refresh once, then terminal logout if needed.
@@ -355,7 +368,7 @@ final class AuthenticationManager {
         password: String,
         firstLoginHint: OAuthFirstLoginHint? = nil
     ) async throws {
-        try await authenticate(provider: .email) {
+        try await authenticate(provider: .email, lifecycle: .signUp) {
             AuthCompletion(
                 session: try await emailProvider.signUp(
                     email: email,
@@ -457,6 +470,9 @@ final class AuthenticationManager {
         let authGeneration = AuthLifecycleGeneration.bump()
         refreshCoordinator.cancel()
         await AuthRefreshSingleFlight.shared.cancelAll()
+        await MainActor.run {
+            AppLaunchController.shared.relinquishGuestSessionForAuthenticatedSignIn()
+        }
         try sessionManager.install(session)
         await NetworkConcurrencyCoordinator.shared.markAuthenticatedSessionActive(
             authGeneration: authGeneration
@@ -478,6 +494,16 @@ final class AuthenticationManager {
 
     func logout() async {
         guard !logoutInFlight else { return }
+        if await MainActor.run(body: { AppLaunchController.shared.guestSessionIsInstalled }) {
+            AuthLifecycleTrace.log(
+                operation: "logout.skipped",
+                authGeneration: AuthLifecycleGeneration.current(),
+                phase: "guest",
+                decision: "allowed",
+                reason: "guestSessionActive"
+            )
+            return
+        }
         logoutInFlight = true
         defer { logoutInFlight = false }
 
@@ -496,6 +522,19 @@ final class AuthenticationManager {
         await AuthRefreshSingleFlight.shared.bumpSessionGeneration()
         await AuthRefreshSingleFlight.shared.cancelAll()
         await SessionNetworkGate.shared.markUnauthenticated()
+        if await MainActor.run(body: { AppLaunchController.shared.guestSessionIsInstalled }) {
+            await NetworkConcurrencyCoordinator.shared.markAuthenticatedSessionActive(
+                authGeneration: AuthLifecycleGeneration.current()
+            )
+            AuthLifecycleTrace.log(
+                operation: "logout.skipped",
+                authGeneration: AuthLifecycleGeneration.current(),
+                phase: "guest",
+                decision: "allowed",
+                reason: "guestSessionInstalledDuringLogout"
+            )
+            return
+        }
         let networkReset = await NetworkConcurrencyCoordinator.shared.resetForAuthenticatedSessionEnd(
             authGeneration: authGeneration
         )
@@ -564,30 +603,63 @@ final class AuthenticationManager {
         }
     }
 
+    private enum AuthLifecycleKind: String {
+        case signIn
+        case signUp
+
+        func started(_ provider: AuthenticationProviderKind) -> AuthenticationEvent {
+            switch self {
+            case .signIn: return .signInStarted(provider)
+            case .signUp: return .signUpStarted(provider)
+            }
+        }
+
+        func succeeded(userID: UserID, provider: AuthenticationProviderKind) -> AuthenticationEvent {
+            switch self {
+            case .signIn: return .signInSucceeded(userID: userID, provider: provider)
+            case .signUp: return .signUpSucceeded(userID: userID, provider: provider)
+            }
+        }
+
+        func failed(_ error: AuthenticationError) -> AuthenticationEvent {
+            switch self {
+            case .signIn: return .signInFailed(error)
+            case .signUp: return .signUpFailed(error)
+            }
+        }
+    }
+
     private func authenticate(
         provider: AuthenticationProviderKind,
+        lifecycle: AuthLifecycleKind = .signIn,
         operation: () async throws -> AuthCompletion
     ) async throws {
+        restorationGeneration &+= 1
+        refreshCoordinator.cancel()
+        await AuthRefreshSingleFlight.shared.cancelAll()
         state = .authenticating(provider)
-        emit(.signInStarted(provider))
+        emit(lifecycle.started(provider))
         AuthLifecycleTrace.log(
-            operation: "signIn.started",
+            operation: "\(lifecycle.rawValue).started",
             authGeneration: AuthLifecycleGeneration.current(),
             sessionGeneration: restorationGeneration,
             phase: "authenticating(\(provider.rawValue))",
             decision: "allowed",
             reason: "userInitiated"
         )
-        defer {
-            if case .authenticating = state {
-                state = .unauthenticated
-            }
+#if DEBUG
+        if provider == .apple {
+            AppLog.authentication.debug(
+                "[AppleAuth] authorizationStarted sessionGeneration=\(self.restorationGeneration, privacy: .public)"
+            )
         }
+#endif
         do {
             let completion = try await operation()
             try await complete(
                 session: completion.session,
-                firstLoginHint: completion.firstLoginHint
+                firstLoginHint: completion.firstLoginHint,
+                lifecycle: lifecycle
             )
             if provider == .apple, let code = completion.appleAuthorizationCode {
                 let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -599,7 +671,7 @@ final class AuthenticationManager {
             if case .authenticating = state {
                 state = .unauthenticated
             }
-            emit(.signInFailed(.cancelled))
+            emit(lifecycle.failed(.cancelled))
             throw CancellationError()
         } catch let error as AuthenticationError {
             if case .emailConfirmationRequired = error {
@@ -609,36 +681,49 @@ final class AuthenticationManager {
 #if DEBUG
             if provider == .apple {
                 AppLog.authentication.debug(
-                    "[AppleAuth] authenticate.failed errorType=AuthenticationError error=\(String(describing: error), privacy: .public)"
+                    "[AppleAuth] failed stage=authenticate errorType=AuthenticationError error=\(String(describing: error), privacy: .public)"
                 )
             }
 #endif
-            state = .failure(error)
-            emit(.signInFailed(error))
+            if case .authenticating = state {
+                state = .failure(error)
+            }
+            emit(lifecycle.failed(error))
             throw error
         } catch {
             let mapped = AuthenticationError.unknown(error.localizedDescription)
-            state = .failure(mapped)
-            emit(.signInFailed(mapped))
+            if case .authenticating = state {
+                state = .failure(mapped)
+            }
+            emit(lifecycle.failed(mapped))
             AuthLifecycleTrace.log(
-                operation: "signIn.failed",
+                operation: "\(lifecycle.rawValue).failed",
                 authGeneration: AuthLifecycleGeneration.current(),
                 sessionGeneration: restorationGeneration,
                 phase: "failure",
                 decision: "cancelled",
                 reason: String(describing: mapped)
             )
+#if DEBUG
+            if provider == .apple {
+                AppLog.authentication.debug(
+                    "[AppleAuth] failed stage=authenticate errorType=\(String(describing: type(of: error)), privacy: .public) error=\(String(describing: mapped), privacy: .public)"
+                )
+            }
+#endif
             throw mapped
         }
     }
 
     private func complete(
         session: AuthenticationSession,
-        firstLoginHint: OAuthFirstLoginHint?
+        firstLoginHint: OAuthFirstLoginHint?,
+        lifecycle: AuthLifecycleKind = .signIn
     ) async throws {
-        restorationGeneration &+= 1
         let authGeneration = AuthLifecycleGeneration.bump()
-        await AuthRefreshSingleFlight.shared.cancelAll()
+        await MainActor.run {
+            AppLaunchController.shared.relinquishGuestSessionForAuthenticatedSignIn()
+        }
         try sessionManager.install(session)
         await NetworkConcurrencyCoordinator.shared.markAuthenticatedSessionActive(
             authGeneration: authGeneration
@@ -651,38 +736,92 @@ final class AuthenticationManager {
             decision: "allowed",
             reason: "supabaseSessionPersisted"
         )
-        let mergedHint = OAuthFirstLoginHint.merged(explicit: firstLoginHint, session: session)
-        if let sessionBootstrap {
-            try await sessionBootstrap.finalize(
-                session: session,
-                firstLoginHint: mergedHint?.hasContent == true ? mergedHint : nil
+#if DEBUG
+        if session.provider == .apple {
+            let suffix = String(session.userID.rawValue.suffix(6))
+            AppLog.authentication.debug(
+                "[AppleAuth] supabaseSignInSucceeded user=…\(suffix, privacy: .public)"
             )
         }
-        await MainActor.run {
-            OAuthProfileOnboardingNameStore.bindEmailPendingToUserIfNeeded(
-                email: session.email,
-                userID: session.userID
-            )
-            if let manual = ProfileDisplayNamePolicy.normalized(firstLoginHint?.fullName),
-               session.provider == .email
-            {
-                OAuthProfileOnboardingNameStore.stageManualSignup(fullName: manual, for: session.userID)
-            } else if let manual = ProfileDisplayNamePolicy.normalized(firstLoginHint?.fullName) {
-                OAuthProfileOnboardingNameStore.stageProvider(fullName: manual, for: session.userID)
-            } else if let mergedName = ProfileDisplayNamePolicy.normalized(mergedHint?.fullName) {
-                if session.provider == .email {
-                    OAuthProfileOnboardingNameStore.stageManualSignup(fullName: mergedName, for: session.userID)
-                } else {
-                    OAuthProfileOnboardingNameStore.stageProvider(fullName: mergedName, for: session.userID)
-                }
-            }
-        }
+#endif
         await SessionNetworkGate.shared.markReady()
+        let mergedHint = OAuthFirstLoginHint.merged(explicit: firstLoginHint, session: session)
+        stageOnboardingDisplayName(session: session, explicit: firstLoginHint, merged: mergedHint)
         applyAuthenticated(
             session,
-            event: .signInSucceeded(userID: session.userID, provider: session.provider)
+            event: lifecycle.succeeded(userID: session.userID, provider: session.provider)
         )
+        if lifecycle == .signUp {
+            AuthLifecycleTrace.log(
+                operation: "signUp.completed",
+                authGeneration: authGeneration,
+                sessionGeneration: restorationGeneration,
+                phase: "authenticated",
+                decision: "allowed",
+                reason: "supabaseSessionPersisted"
+            )
+        }
+#if DEBUG
+        if session.provider == .apple {
+            AppLog.authentication.debug("[AppleAuth] sessionApplied")
+        }
+#endif
         refreshCoordinator.schedule(for: session)
+
+#if DEBUG
+        if session.provider == .apple {
+            AppLog.authentication.debug("[AppleAuth] bootstrapStarted")
+        }
+#endif
+        if let sessionBootstrap {
+            do {
+                try await sessionBootstrap.finalize(
+                    session: session,
+                    firstLoginHint: mergedHint?.hasContent == true ? mergedHint : nil
+                )
+#if DEBUG
+                if session.provider == .apple {
+                    AppLog.authentication.debug("[AppleAuth] bootstrapSucceeded")
+                }
+#endif
+            } catch {
+                AppLog.authentication.error(
+                    "Post-auth profile bootstrap failed — session remains authenticated: \(String(describing: error), privacy: .public)"
+                )
+#if DEBUG
+                if session.provider == .apple {
+                    AppLog.authentication.debug(
+                        "[AppleAuth] failed stage=bootstrap error=\(String(describing: error), privacy: .public)"
+                    )
+                }
+#endif
+            }
+        }
+    }
+
+    /// Available before the authenticated shell can open onboarding.
+    private func stageOnboardingDisplayName(
+        session: AuthenticationSession,
+        explicit: OAuthFirstLoginHint?,
+        merged: OAuthFirstLoginHint?
+    ) {
+        OAuthProfileOnboardingNameStore.bindEmailPendingToUserIfNeeded(
+            email: session.email,
+            userID: session.userID
+        )
+        if let manual = ProfileDisplayNamePolicy.normalized(explicit?.fullName),
+           session.provider == .email
+        {
+            OAuthProfileOnboardingNameStore.stageManualSignup(fullName: manual, for: session.userID)
+        } else if let manual = ProfileDisplayNamePolicy.normalized(explicit?.fullName) {
+            OAuthProfileOnboardingNameStore.stageProvider(fullName: manual, for: session.userID)
+        } else if let mergedName = ProfileDisplayNamePolicy.normalized(merged?.fullName) {
+            if session.provider == .email {
+                OAuthProfileOnboardingNameStore.stageManualSignup(fullName: mergedName, for: session.userID)
+            } else {
+                OAuthProfileOnboardingNameStore.stageProvider(fullName: mergedName, for: session.userID)
+            }
+        }
     }
 
     private func applyAuthenticated(_ session: AuthenticationSession, event: AuthenticationEvent) {

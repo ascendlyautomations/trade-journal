@@ -56,3 +56,26 @@ export async function unbanUser(supabase: SupabaseClient, input: { adminUserId: 
 
   return { error: auditError }
 }
+
+export async function setUserHiddenFromCommunity(
+  supabase: SupabaseClient,
+  input: { adminUserId: string; targetUserId: string; hidden: boolean }
+) {
+  const { error: updateError } = await supabase
+    .from("profiles")
+    .update({ is_hidden_from_community: input.hidden })
+    .eq("id", input.targetUserId)
+
+  if (updateError) return { error: updateError }
+
+  const { error: auditError } = await logAdminAction(supabase, {
+    adminUserId: input.adminUserId,
+    targetUserId: input.targetUserId,
+    action: input.hidden ? "hide_user_from_community" : "unhide_user_from_community",
+    targetType: "user",
+    targetId: input.targetUserId,
+    details: { is_hidden_from_community: input.hidden },
+  })
+
+  return { error: auditError }
+}

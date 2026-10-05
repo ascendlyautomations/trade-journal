@@ -25,7 +25,8 @@ private struct ExperienceFormFocusSyncOptionalModifier<F: Hashable>: ViewModifie
             .onReceive(NotificationCenter.default.publisher(for: .experienceKeyboardWillDismiss)) { _ in
                 focus = nil
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { notification in
+                guard TextInputFocusGuard.shouldReleaseBoundFocus(onKeyboardWillHide: notification) else { return }
                 focus = nil
             }
     }
@@ -39,7 +40,8 @@ private struct ExperienceFormFocusSyncBoolModifier: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: .experienceKeyboardWillDismiss)) { _ in
                 isFocused = false
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { notification in
+                guard TextInputFocusGuard.shouldReleaseBoundFocus(onKeyboardWillHide: notification) else { return }
                 isFocused = false
             }
     }

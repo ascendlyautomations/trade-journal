@@ -117,6 +117,12 @@ struct CreateComposerMultilineField: View {
                 .applyOptionalAccessibilityLabel(accessibilityLabel)
         }
         .experienceFormFocusSync($isFocused)
+        .experienceTextInputProbe(
+            screen: "createComposer",
+            field: accessibilityIdentifier ?? "multiline",
+            text: text,
+            isFocused: isFocused
+        )
     }
 }
 

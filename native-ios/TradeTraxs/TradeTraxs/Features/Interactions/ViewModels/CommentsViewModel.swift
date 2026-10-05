@@ -165,8 +165,14 @@ final class CommentsViewModel {
         isPosting = true
         defer { isPosting = false }
 
-        let userID = await session.currentUserID.map { ProfileID($0.rawValue) }
-            ?? ProfileID("dev.local")
+        let sessionUserID = await session.currentUserID
+        guard case .viewer(let userID) = SessionViewerIdentity.resolve(
+            userID: sessionUserID,
+            demoExperienceActive: AppLaunchController.shared.isDemoExperienceActive
+        ) else {
+            errorMessage = SessionViewerIdentity.sessionUnavailableMessage
+            return
+        }
         let cachedViewer = detailCache?.profile(id: userID)
         let optimisticID = CommentID("local-\(UUID().uuidString)")
         let optimistic = InteractionComment(

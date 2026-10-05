@@ -1,4 +1,9 @@
+import {
+  tradeMatchesParticipatingAccountFilter,
+  type CopyTradeWireRow,
+} from "./copyTradePresentation.ts"
 import { formatPublicAccountTypeLabel } from "./publicAccountPrivacy.ts"
+import { isCopyTradedMode } from "./tradeMode.ts"
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -272,6 +277,13 @@ export function tradeMatchesAccountFilter(
   if (options?.copyGroupAccountIds && options.copyGroupAccountIds.length > 0) {
     const tradeAccountId = String(trade.account_id ?? "").trim()
     return options.copyGroupAccountIds.includes(tradeAccountId)
+  }
+
+  if (isCopyTradedMode(trade as CopyTradeWireRow)) {
+    return tradeMatchesParticipatingAccountFilter(
+      trade as CopyTradeWireRow,
+      accountFilter
+    )
   }
 
   return buildTradeAccountFilterKey(trade, accountRow) === accountFilter

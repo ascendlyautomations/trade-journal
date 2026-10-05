@@ -86,6 +86,17 @@ final class ProfileOnboardingViewModel {
         usernameError = nil
     }
 
+    /// Fills a blank Name field from the saved profile, then the Create Account name. Edits stay.
+    func applySignupNamePrefillIfBlank() {
+        guard ProfileDisplayNamePolicy.normalized(displayName) == nil else { return }
+        let prefilled = ProfileOnboardingNamePrefill.editableName(
+            snapshot: snapshot,
+            userID: UserID(snapshot.profileID.rawValue)
+        )
+        guard !prefilled.isEmpty else { return }
+        displayName = prefilled
+    }
+
     func setAvatarImage(_ image: UIImage?) {
         avatarUploadError = nil
         guard let image else {

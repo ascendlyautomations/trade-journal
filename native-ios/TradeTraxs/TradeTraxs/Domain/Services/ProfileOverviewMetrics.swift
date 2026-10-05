@@ -34,6 +34,24 @@ nonisolated enum ProfileOverviewMetrics {
         }
     }
 
+    /// Public journal rows — same universe as web `fetchSummaryTrades` / REST profile stats.
+    static func tradeInputs(fromPublicJournal trades: [Trade]) -> [TradeInput] {
+        trades
+            .filter { $0.visibility == .public }
+            .map { trade in
+                TradeInput(
+                    pnl: trade.realizedPnL?.amount,
+                    rr: trade.riskReward,
+                    mode: trade.mode.rawValue,
+                    accountType: trade.accountMode?.rawValue
+                )
+            }
+    }
+
+    static func overview(fromPublicJournal trades: [Trade]) -> Result {
+        compute(from: tradeInputs(fromPublicJournal: trades))
+    }
+
     static func compute(from publicTrades: [TradeInput]) -> Result {
         let trades = excludingBacktest(publicTrades)
         let total = trades.count

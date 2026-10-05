@@ -8,6 +8,7 @@ struct PayoutsScreenView: View {
     @State private var isRevalidatingCycles = false
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.stackNavigation) private var stackNavigation
 
     private let data: DataEnvironment?
     private let navigationCoordinator: NavigationCoordinator?
@@ -188,22 +189,29 @@ struct PayoutsScreenView: View {
         .padding(.vertical, ExperienceSpacing.xxs)
         .background(colors.backgroundPrimary)
 
-        if let data, let navigationCoordinator {
-            // Destination link stays on the current stack. Settings hosts this screen
-            // on SettingsRoute, which does not register HomeRoute destinations, so a
-            // HomeRoute value link never opened the detail.
-            NavigationLink {
-                WithdrawalDetailView(
-                    historyItemID: item.id,
-                    data: data,
-                    navigationCoordinator: navigationCoordinator
-                )
+        if data != nil, navigationCoordinator != nil {
+            Button {
+                openHistoryItem(item)
             } label: {
                 row
             }
             .buttonStyle(.plain)
         } else {
             row
+        }
+    }
+
+    private func openHistoryItem(_ item: PayoutHistoryItem) {
+        WithdrawalDetailSelection.stage(item.id)
+        PayoutEditDiagnostics.open(
+            historyItemID: item.id,
+            editable: item.isEditable,
+            surface: "list"
+        )
+        if let stackNavigation {
+            stackNavigation.pushSettings(.withdrawalDetail)
+        } else {
+            navigationCoordinator?.pushHome(.withdrawalDetail(item.id))
         }
     }
 

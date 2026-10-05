@@ -22,27 +22,21 @@ struct MainTabShellView: View {
         // `tabBarMinimizeBehavior` is iOS 26+; on iOS 18 the tab bar never minimizes.
         Group {
             if #available(iOS 26.0, *) {
-                tabView.tabBarMinimizeBehavior(.never)
+                if showsDemoExperienceChrome {
+                    tabView
+                        .tabBarMinimizeBehavior(.never)
+                        .tabViewBottomAccessory {
+                            DemoExperienceLeaveButtonPlacement()
+                        }
+                } else {
+                    tabView.tabBarMinimizeBehavior(.never)
+                }
             } else {
                 tabView
             }
         }
         .tabViewStyle(.tabBarOnly)
         .experienceAppChrome(usesFeedOpaqueChrome: store.selectedTab == .feed)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if showsDemoExperienceChrome {
-                HStack(spacing: 0) {
-                    Spacer()
-                        .frame(width: ExperienceSpacing.huge + ExperienceSpacing.sm)
-                        .allowsHitTesting(false)
-                    DemoExperienceLeaveButton()
-                    Spacer(minLength: 0)
-                        .allowsHitTesting(false)
-                }
-                .padding(.horizontal, ExperienceSpacing.md)
-                .padding(.top, ExperienceSpacing.xxs)
-            }
-        }
         .globalUploadQueueSheet(coordinator: globalUploadCoordinator)
         .proUpgradeSheet()
         .sheet(isPresented: Binding(
@@ -98,9 +92,19 @@ struct MainTabShellView: View {
         }
         .onAppear {
             syncFeedScopedBarChrome(isFeedTab: store.selectedTab == .feed)
+            FirstTradeDetailCoachmarkStore.shared.configure(
+                viewerID: currentUserProfile.profile?.id,
+                navigationCoordinator: coordinator
+            )
             guard let profileID = currentUserProfile.profile?.id else { return }
             viewerStoryStore.reconcileFromFeedCache(viewerID: profileID)
             viewerStoryStore.reconcileExpired()
+        }
+        .onChange(of: currentUserProfile.profile?.id) { _, profileID in
+            FirstTradeDetailCoachmarkStore.shared.configure(
+                viewerID: profileID,
+                navigationCoordinator: coordinator
+            )
         }
 #if DEBUG
         .overlay(alignment: .topLeading) {
@@ -1022,5 +1026,23 @@ private extension View {
     /// Banner sits below the navigation bar; page content shifts down via layout (not overlay).
     func mainTabGlobalUploadNavigationChrome() -> some View {
         globalUploadNavigationInset(coordinator: GlobalUploadCoordinator.shared)
+            .modifier(LegacyDemoLeaveButtonInsetModifier())
+    }
+}
+
+/// iOS 18 has no tab-bar accessory. iOS 26 uses ``tabViewBottomAccessory`` on the shell.
+private struct LegacyDemoLeaveButtonInsetModifier: ViewModifier {
+    @Bindable private var launchController = AppLaunchController.shared
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+        } else if launchController.isDemoExperienceActive {
+            content.safeAreaInset(edge: .bottom, spacing: ExperienceSpacing.xs) {
+                DemoExperienceLeaveButtonPlacement()
+            }
+        } else {
+            content
+        }
     }
 }

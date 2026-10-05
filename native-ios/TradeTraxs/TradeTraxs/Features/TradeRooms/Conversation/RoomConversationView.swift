@@ -364,8 +364,6 @@ struct RoomConversationView: View {
                                 imagePipeline: imagePipeline,
                                 sharedTrade: viewModel.sharedTrade(for: bubble.message),
                                 sharedPost: viewModel.sharedPost(for: bubble.message),
-                                sharedPostAuthor: viewModel.sharedPost(for: bubble.message)
-                                    .map { viewModel.authorProfile(for: $0.authorProfileID) } ?? nil,
                                 sharedReel: viewModel.sharedReel(for: bubble.message),
                                 sharedReelAuthor: viewModel.sharedReel(for: bubble.message)
                                     .map { viewModel.authorProfile(for: $0.authorProfileID) } ?? nil,
@@ -388,10 +386,17 @@ struct RoomConversationView: View {
                                 },
                                 onSharedTradeTap: { tradeID in
                                     guard let navigationCoordinator, let data else { return }
+                                    #if DEBUG
+                                    SharedTradeOpenDiagnostics.tapped(tradeID: tradeID)
+                                    #endif
+                                    let preview =
+                                        viewModel.sharedTrade(for: bubble.message)
+                                        ?? viewModel.sharedTrades[tradeID]
                                     navigationCoordinator.pushSharedTrade(
                                         tradeID,
                                         host: navigationHost,
-                                        cache: data.detailCache
+                                        cache: data.detailCache,
+                                        preview: preview
                                     )
                                 },
                                 onSharedContentTap: { reference in
@@ -495,24 +500,26 @@ struct RoomConversationView: View {
                 }
             }
             .simultaneousGesture(initialScrollReleaseGesture)
-            .onScrollGeometryChange(for: ConversationThreadScrollSupport.LayoutSample.self) { geometry in
-                let distanceFromBottom = geometry.contentSize.height
-                    - geometry.contentOffset.y
-                    - geometry.containerSize.height
-                return ConversationThreadScrollSupport.LayoutSample(
+            .onScrollGeometryChange(for: ConversationThreadScrollSupport.ScrollGeometrySignal.self) { geometry in
+                ConversationThreadScrollSupport.ScrollGeometrySignal(
                     contentHeight: geometry.contentSize.height,
                     contentOffsetY: geometry.contentOffset.y,
-                    containerHeight: geometry.containerSize.height,
-                    isNearBottom: distanceFromBottom <= ConversationThreadScrollSupport.bottomProximityThreshold
+                    containerHeight: geometry.containerSize.height
                 )
-            } action: { _, sample in
-                lastScrollSample = sample
-                handleInitialScrollGeometry(sample, proxy: proxy)
-                guard viewModel.isInitialScrollConfirmed else { return }
-                viewModel.scrollCoordinator.reportNearBottom(
-                    sample.isNearBottom,
-                    conversationID: viewModel.scrollScopeConversationID
-                )
+            } action: { previous, signal in
+                let sample = signal.sample
+                if viewModel.isInitialScrollPinningBottom {
+                    if lastScrollSample.map({ ConversationThreadScrollSupport.geometrySignalsMatch($0, sample) }) != true {
+                        lastScrollSample = sample
+                    }
+                    handleInitialScrollGeometry(sample, proxy: proxy)
+                } else if viewModel.isInitialScrollConfirmed,
+                          previous.sample.isNearBottom != sample.isNearBottom {
+                    viewModel.scrollCoordinator.reportNearBottom(
+                        sample.isNearBottom,
+                        conversationID: viewModel.scrollScopeConversationID
+                    )
+                }
             }
             .onChange(of: viewModel.scrollCoordinator.scrollCommandGeneration) { _, _ in
                 applyCoordinatorScrollCommand(proxy: proxy)
@@ -647,7 +654,9 @@ struct RoomConversationView: View {
         proxy: ScrollViewProxy
     ) {
         let contentSizeDelta = sample.contentHeight - lastScrollContentHeight
-        lastScrollContentHeight = sample.contentHeight
+        if abs(contentSizeDelta) >= 1 {
+            lastScrollContentHeight = sample.contentHeight
+        }
 
         switch viewModel.initialScrollPhase {
         case .pending:

@@ -33,9 +33,19 @@ nonisolated enum ConversationMessageMerge {
 
     /// Server first-page refresh — upsert incoming rows and drop in-window rows the server omitted
     /// (soft-deleted / filtered). Older paginated rows below the window are preserved.
-    static func reconcileServerFirstPage(existing: [Message], incoming: [Message]) -> [Message] {
+    ///
+    /// When ``dropOmittedInWindow`` is false, disk/cache rows are never dropped because incoming
+    /// omitted them (e.g. room bootstrap merged onto a fuller disk snapshot).
+    static func reconcileServerFirstPage(
+        existing: [Message],
+        incoming: [Message],
+        dropOmittedInWindow: Bool = true
+    ) -> [Message] {
         guard !incoming.isEmpty else {
             return sortByCreatedAt(uniqueByID(existing))
+        }
+        if !dropOmittedInWindow {
+            return mergeMessageLists(existing: existing, incoming: incoming)
         }
         let incomingIDs = Set(incoming.map(\.id))
         let windowStart = incoming.map(\.createdAt).min()!

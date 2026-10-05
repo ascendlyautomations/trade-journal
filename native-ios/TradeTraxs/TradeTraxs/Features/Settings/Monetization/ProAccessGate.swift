@@ -5,6 +5,7 @@ import Foundation
 enum ProAccessGate {
     static func shouldPresentPaywall(profileID: ProfileID?) -> Bool {
         guard ProMonetizationPolicy.canPresentProPaywall(
+            demoModeActive: ExploreModeSupport.isActive,
             enforcement: IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled,
             paywallEnabled: IosSubscriptionReleaseConfiguration.iosPaywallEnabled
         ) else { return false }

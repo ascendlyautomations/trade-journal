@@ -247,8 +247,29 @@ enum SharedContentHydrator {
         let pendingTradeIDs = missingTradeIDs(
             from: messages,
             sharedTrades: sharedTrades,
-            sharedPosts: sharedPosts
+            sharedPosts: sharedPosts,
+            unavailableSharedContentKeys: unavailableSharedContentKeys
         )
+        #if DEBUG
+        SharedContentTrace.hydrateTradeBatch(tradeIDs: pendingTradeIDs)
+        for message in messages where SharedContentMessageSupport.isInternallySharedContent(message) {
+            let referenced = SharedContentMessageSupport.referencedTradeIDs(
+                for: message,
+                sharedPosts: sharedPosts
+            )
+            let included = referenced.contains { pendingTradeIDs.contains($0) }
+            let dropReason: String? = referenced.isEmpty
+                ? "noTradeIDExtracted"
+                : (included ? nil : "alreadyHydratedOrUnavailable")
+            SharedContentTrace.messageEncountered(
+                message: message,
+                sharedPosts: sharedPosts,
+                sharedTrades: sharedTrades,
+                includedInTradeBatch: included,
+                dropReason: dropReason
+            )
+        }
+        #endif
 
         probe.logHydrateBatch(
             trades: pendingTradeIDs.count,
@@ -335,7 +356,8 @@ enum SharedContentHydrator {
             ids: missingTradeIDs(
                 from: messages,
                 sharedTrades: sharedTrades,
-                sharedPosts: sharedPosts
+                sharedPosts: sharedPosts,
+                unavailableSharedContentKeys: unavailableSharedContentKeys
             ),
             sharedTrades: &sharedTrades,
             unavailableSharedContentKeys: &unavailableSharedContentKeys,
@@ -396,29 +418,20 @@ enum SharedContentHydrator {
     private static func missingTradeIDs(
         from messages: [Message],
         sharedTrades: [TradeID: Trade],
-        sharedPosts: [PostID: Post]
+        sharedPosts: [PostID: Post],
+        unavailableSharedContentKeys: Set<String>
     ) -> [TradeID] {
         Array(
             Set(
-                messages.compactMap { message -> TradeID? in
-                    if let id = message.attachments.first?.tradeID, sharedTrades[id] == nil {
-                        return id
-                    }
-                    if case .trade(let id) = message.sharedContent, sharedTrades[id] == nil {
-                        return id
-                    }
-                    if let post = message.sharedContent.flatMap({ ref -> PostID? in
-                        switch ref {
-                        case .feedPost(let id): return id
-                        default: return nil
-                        }
-                    }), let cached = sharedPosts[post], let tradeID = cached.linkedTradeID, sharedTrades[tradeID] == nil {
-                        return tradeID
-                    }
-                    return nil
+                messages.flatMap { message in
+                    SharedContentMessageSupport.referencedTradeIDs(for: message, sharedPosts: sharedPosts)
                 }
             )
         )
+        .filter { tradeID in
+            sharedTrades[tradeID] == nil
+                && !unavailableSharedContentKeys.contains(SharedContentReference.trade(tradeID).stableKey)
+        }
     }
 
     private static func hasRenderableContent(
@@ -659,18 +672,18 @@ enum SharedContentHydrator {
         viewerID: ProfileID?
     ) {
         for message in messages {
-            guard let tradeID = message.attachments.first?.tradeID, sharedTrades[tradeID] == nil else {
-                continue
-            }
-            if let trade = detailCache.trade(id: tradeID) {
-                sharedTrades[tradeID] = trade
-                continue
-            }
-            if let viewerID,
-               let summary = feedSessionStore.lookupTradeSummary(id: tradeID, viewerID: viewerID)
-            {
-                detailCache.seedPresentationSeed(DetailPresentationSeed(summary: summary))
-                sharedTrades[tradeID] = TradeSummaryMapper.previewTrade(from: summary)
+            for tradeID in SharedContentMessageSupport.referencedTradeIDs(for: message) {
+                guard sharedTrades[tradeID] == nil else { continue }
+                if let trade = detailCache.trade(id: tradeID) {
+                    sharedTrades[tradeID] = trade
+                    continue
+                }
+                if let viewerID,
+                   let summary = feedSessionStore.lookupTradeSummary(id: tradeID, viewerID: viewerID)
+                {
+                    detailCache.seedPresentationSeed(DetailPresentationSeed(summary: summary))
+                    sharedTrades[tradeID] = TradeSummaryMapper.previewTrade(from: summary)
+                }
             }
         }
     }
@@ -862,7 +875,19 @@ enum SharedContentHydrator {
         probe: SharedContentHydrationProbe.Session
     ) async {
         let missing = ids.filter { sharedTrades[$0] == nil }
-        guard !missing.isEmpty, let tradesRepo = context.tradesRepo else { return }
+        guard !missing.isEmpty else { return }
+        guard let tradesRepo = context.tradesRepo else {
+            #if DEBUG
+            probe.logResolution(
+                type: "trade",
+                contentID: missing.map(\.rawValue).joined(separator: ","),
+                source: "network",
+                result: "failed",
+                reason: "missingTradesRepository"
+            )
+            #endif
+            return
+        }
         let started = CFAbsoluteTimeGetCurrent()
         probe.logMetadataRequestStarted(type: "trade", count: missing.count)
         let fetched = (try? await SessionTradeEntityStore.shared.trades(

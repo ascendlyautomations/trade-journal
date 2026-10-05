@@ -234,6 +234,7 @@ enum CompositionRoot {
                 routerFacade: NotificationRouterFacade(router: NotificationRouter())
             )
         }
+        authentication.coordinator.profileOnboardingGate = profileOnboardingGate
         logLaunchSummary(
             configuration: configuration,
             themeManager: themeManager,
@@ -502,6 +503,11 @@ enum CompositionRoot {
             detailCache: data.detailCache,
             currentUserProfile: currentUserProfile
         )
+        ProfileOwnerHeaderStatsCoordinator.shared.configure(
+            detailCache: data.detailCache,
+            currentUserProfile: currentUserProfile,
+            profiles: data.profiles
+        )
         ViewerSyncStateRuntime.configure(rpc: data.rpc, profiles: data.profiles)
         AnalyticsReconciliationRuntime.configure(rpc: data.rpc, detailCache: data.detailCache)
         Task { await AnalyticsReconciliationCoordinator.shared.installProductionExecutor() }
@@ -522,6 +528,7 @@ enum CompositionRoot {
             await pushNotifications.unregisterForAccountDeletion()
             await data.realtimeHub.stop()
         }
+        authentication.coordinator.profileOnboardingGate = profileOnboardingGate
         authentication.coordinator.invalidateSessionCaches = {
             SessionScopedCaches.invalidate(
                 currentUserProfile: currentUserProfile,
@@ -529,12 +536,19 @@ enum CompositionRoot {
             )
             appBootstrapState.reset()
             profileOnboardingGate.reset()
+            authentication.coordinator.postSignupTransition.reset()
             ContextualTourCoordinator.shared.resetForSessionBoundary()
+            FirstTradeDetailCoachmarkStore.shared.resetForSessionBoundary()
         }
         Task {
             await NetworkUnauthorizedRecovery.shared.configure { @Sendable in
                 await Task { @MainActor in
-                    await authentication.coordinator.recoverSessionAfterUnauthorized()
+                    let launch = AppLaunchController.shared
+                    if launch.guestSessionIsInstalled {
+                        let renewed = await launch.renewExpiredGuestSession()
+                        return renewed ? .recovered : .sessionEnded
+                    }
+                    return await authentication.coordinator.recoverSessionAfterUnauthorized()
                 }.value
             }
         }

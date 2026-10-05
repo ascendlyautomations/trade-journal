@@ -8,21 +8,26 @@ nonisolated enum DemoAuthRequired {
 /// In-memory trade journal for Explore Mode — reads from ``DemoCanonicalDataset``.
 nonisolated final class DemoTradeRepository: TradeRepository, @unchecked Sendable {
     private let ownerID: ProfileID
-    private var trades: [Trade]
-    private let accounts: [TradingAccount]
+    private let tradesOverride: [Trade]?
+    private let accountsOverride: [TradingAccount]?
+
+    /// Reads the installed snapshot on each call so a newer publish reaches an
+    /// already-built demo environment.
+    private var currentTrades: [Trade] { tradesOverride ?? DemoCanonicalDataset.trades() }
+    private var currentAccounts: [TradingAccount] { accountsOverride ?? DemoCanonicalDataset.accounts() }
 
     init(
         ownerID: ProfileID = DemoExperienceSupport.profileID,
-        trades: [Trade] = DemoCanonicalDataset.trades(),
-        accounts: [TradingAccount] = DemoCanonicalDataset.accounts()
+        trades: [Trade]? = nil,
+        accounts: [TradingAccount]? = nil
     ) {
         self.ownerID = ownerID
-        self.trades = trades
-        self.accounts = accounts
+        self.tradesOverride = trades
+        self.accountsOverride = accounts
     }
 
     func trade(id: TradeID) async throws -> Trade {
-        guard let trade = trades.first(where: { $0.id == id }) else {
+        guard let trade = currentTrades.first(where: { $0.id == id }) else {
             throw AppError.domain(.notFound(entity: "trade", id: id.rawValue))
         }
         return trade
@@ -30,7 +35,7 @@ nonisolated final class DemoTradeRepository: TradeRepository, @unchecked Sendabl
 
     func trades(ids: [TradeID]) async throws -> [Trade] {
         let wanted = Set(ids)
-        return trades.filter { wanted.contains($0.id) }
+        return currentTrades.filter { wanted.contains($0.id) }
     }
 
     func trades(
@@ -42,7 +47,7 @@ nonisolated final class DemoTradeRepository: TradeRepository, @unchecked Sendabl
         guard profileID == ownerID else {
             return CursorPage(items: [], nextCursor: nil)
         }
-        var list = trades
+        var list = currentTrades
         if let accountID {
             list = list.filter { $0.accountID == accountID }
         }
@@ -61,7 +66,7 @@ nonisolated final class DemoTradeRepository: TradeRepository, @unchecked Sendabl
         limit: Int
     ) async throws -> [Trade] {
         guard profileID == ownerID else { return [] }
-        var list = trades.filter { $0.entryAt >= entryFrom && $0.entryAt <= entryTo }
+        var list = currentTrades.filter { $0.entryAt >= entryFrom && $0.entryAt <= entryTo }
         if let accountID {
             list = list.filter { $0.accountID == accountID }
         }
@@ -77,7 +82,7 @@ nonisolated final class DemoTradeRepository: TradeRepository, @unchecked Sendabl
         guard profileID == ownerID else {
             return CursorPage(items: [], nextCursor: nil)
         }
-        var list = trades
+        var list = currentTrades
         if case .account(let accountID) = query.filters.account {
             list = list.filter { $0.accountID == accountID }
         }
@@ -116,7 +121,7 @@ nonisolated final class DemoTradeRepository: TradeRepository, @unchecked Sendabl
                 winRate: 0
             )
         }
-        let inInterval = trades.filter {
+        let inInterval = currentTrades.filter {
             $0.entryAt >= interval.start && $0.entryAt <= interval.end
         }
         let wins = inInterval.filter { ($0.realizedPnL?.amount ?? 0) > 0 }.count
@@ -138,7 +143,7 @@ nonisolated final class DemoTradeRepository: TradeRepository, @unchecked Sendabl
 
     func accounts(for profileID: ProfileID) async throws -> [TradingAccount] {
         guard profileID == ownerID else { return [] }
-        return accounts
+        return currentAccounts
     }
 
     func images(for tradeID: TradeID) async throws -> [TradeImage] {
@@ -178,7 +183,7 @@ nonisolated final class DemoTradeRepository: TradeRepository, @unchecked Sendabl
 
     func profileAccountInsights(for profileID: ProfileID) async throws -> [ProfileAccountInsight] {
         guard profileID == ownerID else { return [] }
-        return accounts.compactMap { account in
+        return currentAccounts.compactMap { account in
             let payouts = DemoCanonicalDataset.payoutEntries(for: account.id)
             let total = payouts.reduce(Decimal(0)) { $0 + $1.amount.amount }
             return ProfileAccountInsight(
@@ -267,11 +272,8 @@ nonisolated struct DemoProfileRepository: ProfileRepository {
     }
 
     func profile(id: ProfileID) async throws -> Profile {
-        if id == ownerID {
-            return DemoCanonicalDataset.profile()
-        }
-        if id == DemoExploreTradeRoom.hostProfileID {
-            return DemoExploreTradeRoom.hostProfile()
+        if let graphProfile = DemoGraph.profile(id: id) {
+            return graphProfile
         }
         if id.rawValue.hasPrefix("dev."), let fixture = FollowListFixtures.profile(id: id) {
             return fixture
@@ -317,7 +319,12 @@ nonisolated struct DemoProfileRepository: ProfileRepository {
 
     func updateProfile(_ profile: Profile) async throws -> Profile { throw DemoAuthRequired.error }
 
-    func ownerProfileForSettings(id: ProfileID) async throws -> Profile { throw DemoAuthRequired.error }
+    func ownerProfileForSettings(id: ProfileID) async throws -> Profile {
+        if id == ownerID || id == DemoExperienceSupport.profileID {
+            return DemoCanonicalDataset.profile()
+        }
+        throw DemoAuthRequired.error
+    }
 
     func updateProfileSettings(_ update: ProfileSettingsUpdate) async throws -> Profile {
         throw DemoAuthRequired.error
@@ -460,8 +467,44 @@ nonisolated struct DemoInteractionRepository: InteractionRepository {
 }
 
 nonisolated struct DemoVaultRepository: VaultRepository {
+    static func bundledCatalog(now: Date = Date()) -> (folders: [VaultFolder], items: [VaultItem]) {
+        let folder = VaultFolder(
+            id: VaultFolderID("demo.vault.reviews"),
+            name: "Setups to review",
+            createdAt: now.addingTimeInterval(-86400 * 20),
+            updatedAt: now.addingTimeInterval(-86400 * 2)
+        )
+        var items: [VaultItem] = []
+        for trade in DemoCanonicalDataset.trades().prefix(3) {
+            items.append(
+                VaultItem(
+                    id: VaultItemID("demo.vault.trade.\(trade.id.rawValue)"),
+                    ref: VaultContentRef(contentType: .trade, contentID: trade.id.rawValue),
+                    createdAt: trade.createdAt,
+                    folderIDs: [folder.id]
+                )
+            )
+        }
+        if let achievement = DemoCanonicalDataset.achievements().first {
+            items.append(
+                VaultItem(
+                    id: VaultItemID("demo.vault.achievement.\(achievement.id.rawValue)"),
+                    ref: VaultContentRef(contentType: .achievement, contentID: achievement.id.rawValue),
+                    createdAt: achievement.achievedAt,
+                    folderIDs: []
+                )
+            )
+        }
+        return ([folder], items)
+    }
+
     func state(for refs: [VaultContentRef]) async throws -> [VaultContentRef: VaultItemState] { [:] }
-    func folders() async throws -> [VaultFolder] { [] }
+    func folders() async throws -> [VaultFolder] {
+        if let snapshot = DemoSnapshotStore.shared.current {
+            return snapshot.vaultFolders
+        }
+        return Self.bundledCatalog().folders
+    }
     func createFolder(name: String) async throws -> VaultFolder { throw DemoAuthRequired.error }
     func renameFolder(id: VaultFolderID, name: String) async throws -> VaultFolder {
         throw DemoAuthRequired.error
@@ -483,6 +526,13 @@ nonisolated struct DemoVaultRepository: VaultRepository {
         cursor: String?,
         limit: Int
     ) async throws -> VaultListPage {
-        VaultListPage(items: [], nextCursor: nil)
+        _ = (cursor, limit)
+        let items = DemoSnapshotStore.shared.current?.vaultItems ?? Self.bundledCatalog().items
+        let filtered = items.filter { item in
+            let matchesType = filter.matches(item.ref.contentType)
+            let matchesFolder = folderID.map { item.folderIDs.contains($0) } ?? true
+            return matchesType && matchesFolder
+        }
+        return VaultListPage(items: filtered, nextCursor: nil)
     }
 }

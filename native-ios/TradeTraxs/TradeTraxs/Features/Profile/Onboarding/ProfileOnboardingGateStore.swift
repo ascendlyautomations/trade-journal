@@ -15,6 +15,16 @@ final class ProfileOnboardingGateStore: SessionBootstrapRefreshObserving {
         /// Transient connectivity while authoritative bootstrap is still pending (session preserved).
         case connectivityBlocked(String)
         case failed(String)
+
+        /// Onboarding or the main shell is ready. Creating Account must not cover that screen.
+        var presentsAuthenticatedDestination: Bool {
+            switch self {
+            case .required, .brokerOnboarding, .complete:
+                return true
+            case .idle, .resolving, .connectivityBlocked, .failed:
+                return false
+            }
+        }
     }
 
     private(set) var phase: Phase = .idle

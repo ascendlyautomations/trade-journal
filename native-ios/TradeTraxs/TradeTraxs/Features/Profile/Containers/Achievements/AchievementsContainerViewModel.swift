@@ -214,7 +214,9 @@ final class AchievementsContainerViewModel {
 
         if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
             hasLoaded = true
-            items = ProfileAchievementFixtures.samples(owner: profileID)
+            items = profileID == DemoExperienceSupport.profileID
+                ? DemoGraph.achievements(owner: profileID)
+                : ProfileAchievementFixtures.samples(owner: profileID)
             nextCursor = nil
             detailCache.seed(achievements: items)
             state = items.isEmpty ? .empty : .loaded(itemCount: items.count)

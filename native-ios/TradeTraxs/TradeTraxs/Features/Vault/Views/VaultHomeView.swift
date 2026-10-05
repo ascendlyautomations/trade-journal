@@ -15,7 +15,8 @@ struct VaultHomeView: View {
         _viewModel = State(
             initialValue: VaultHomeViewModel(
                 repository: data.vault,
-                navigationCoordinator: navigationCoordinator
+                navigationCoordinator: navigationCoordinator,
+                detailCache: data.detailCache
             )
         )
         _vaultStore = Bindable(wrappedValue: data.vaultStore)

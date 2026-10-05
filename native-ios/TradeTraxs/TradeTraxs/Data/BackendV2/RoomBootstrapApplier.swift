@@ -88,8 +88,12 @@ nonisolated enum RoomBootstrapApplier {
             throw BackendV2RPCError.decode("room bootstrap missing active section")
         }
 
-        let pinned = bootstrap.data.pinned_messages.compactMap { mapMessage($0) }
-        let main = bootstrap.data.messages.compactMap { mapMessage($0) }
+        let pinned = bootstrap.data.pinned_messages.compactMap {
+            RoomMessageDTOMapper.mapMessage($0, fallbackRoomID: resolvedRoomID)
+        }
+        let main = bootstrap.data.messages.compactMap {
+            RoomMessageDTOMapper.mapMessage($0, fallbackRoomID: resolvedRoomID)
+        }
         let roomMessages = pinned + main
         let displayMessages = roomMessages
             .map(RoomMessageMapping.displayMessage)
@@ -123,55 +127,4 @@ nonisolated enum RoomBootstrapApplier {
         )
     }
 
-    private static func mapMessage(_ dto: RoomDTO.Message) -> RoomMessage? {
-        guard let id = dto.id, let roomID = dto.room_id else { return nil }
-        let sender = dto.sender_id ?? dto.sender_profile_id ?? dto.user_id
-        guard let sender else { return nil }
-        let tradeID = dto.trade_id.flatMap { raw -> TradeID? in
-            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : TradeID(trimmed)
-        }
-        let imageURL = dto.image_url?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let media: [MediaReference] = {
-            guard let imageURL, !imageURL.isEmpty else { return [] }
-            return [MediaReference(id: imageURL, kind: .image, altText: nil)]
-        }()
-        return RoomMessage(
-            id: RoomMessageID(id),
-            roomID: RoomID(roomID),
-            senderProfileID: ProfileID(sender),
-            body: dto.body ?? dto.content,
-            attachedTradeID: tradeID,
-            media: media,
-            parentMessageID: dto.parent_message_id.map { RoomMessageID($0) },
-            channelID: dto.section_id.map { RoomChannelID($0) },
-            isPinned: dto.is_pinned ?? false,
-            createdAt: ISO8601.date(from: dto.created_at) ?? Date(),
-            reactions: (dto.room_message_reactions ?? []).compactMap { mapReaction($0, fallbackMessageID: RoomMessageID(id)) }
-        )
-    }
-
-    private static func mapReaction(
-        _ dto: RoomDTO.ReactionRow,
-        fallbackMessageID: RoomMessageID
-    ) -> RoomMessageReaction? {
-        guard let id = dto.id?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty,
-              let reaction = dto.reaction?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !reaction.isEmpty,
-              RoomMessageReactionSemantics.supportedEmojis.contains(reaction)
-        else { return nil }
-        let messageRaw = dto.message_id?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let messageID = messageRaw.flatMap { raw -> RoomMessageID? in
-            raw.isEmpty ? nil : RoomMessageID(raw)
-        } ?? fallbackMessageID
-        guard let userRaw = dto.user_id?.trimmingCharacters(in: .whitespacesAndNewlines), !userRaw.isEmpty
-        else { return nil }
-        return RoomMessageReaction(
-            id: id,
-            messageID: messageID,
-            userID: ProfileID(userRaw),
-            reaction: reaction,
-            createdAt: ISO8601.date(from: dto.created_at)
-        )
-    }
 }

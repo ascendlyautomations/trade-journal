@@ -35,6 +35,7 @@ struct AddTradeView: View {
         data: DataEnvironment,
         mode: AddTradeViewModel.Mode = .create,
         embeddedInTradeEntryHub: Bool = false,
+        restoredDraft: ContentDraft? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.embeddedInTradeEntryHub = embeddedInTradeEntryHub
@@ -54,6 +55,8 @@ struct AddTradeView: View {
                     supabase: data.supabase,
                     session: data.session
                 ),
+                contentDrafts: data.contentDraftRepository(),
+                restoredDraft: restoredDraft,
                 mode: mode,
                 onDismiss: onDismiss
             )
@@ -88,6 +91,18 @@ struct AddTradeView: View {
             navigationTitle: viewModel.navigationTitle,
             onCancel: requestDismiss
         ))
+        .toolbar {
+            if viewModel.showsSaveDraft {
+                ToolbarItem(placement: .primaryAction) {
+                    SaveDraftToolbarButton(
+                        isSaving: viewModel.isSavingDraft,
+                        isEnabled: viewModel.canSaveDraft
+                    ) {
+                        viewModel.saveDraft()
+                    }
+                }
+            }
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if viewModel.phase == .ready || viewModel.phase == .saving {
                 saveBar
@@ -676,6 +691,12 @@ struct AddTradeView: View {
                 .scrollContentBackground(.hidden)
                 .background(Color.clear)
                 .accessibilityIdentifier(accessibilityIdentifier)
+                .experienceTextInputProbe(
+                    screen: "addTrade",
+                    field: accessibilityIdentifier,
+                    text: text.wrappedValue,
+                    isFocused: false
+                )
         }
     }
 

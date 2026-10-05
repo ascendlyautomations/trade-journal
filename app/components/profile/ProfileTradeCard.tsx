@@ -247,7 +247,7 @@ export default function ProfileTradeCard({
             {profile.username || "User"}
           </p>
           <FeedPostMetaRow
-            label="Trade"
+            label={showCopyBadge ? "Copy Traded" : "Trade"}
             labelClassName="font-medium text-amber-400/90"
             createdAt={trade.created_at}
             suffix={
@@ -360,7 +360,7 @@ export default function ProfileTradeCard({
                     meta={
                       <>
                         <FeedPostMetaRow
-                          label="Trade"
+                          label={showCopyBadge ? "Copy Traded" : "Trade"}
                           labelClassName="font-medium text-amber-400/90"
                           createdAt={trade.created_at}
                         />

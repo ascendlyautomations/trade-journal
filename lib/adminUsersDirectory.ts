@@ -15,6 +15,7 @@ export type AdminUserListRow = {
   banned_reason: string | null
   banned_at: string | null
   is_beta_tester: boolean
+  is_hidden_from_community: boolean
   full_count: number
 }
 
@@ -94,6 +95,7 @@ export async function fetchAdminUserDirectory(
       banned_reason: o.banned_reason != null ? String(o.banned_reason) : null,
       banned_at: o.banned_at != null ? String(o.banned_at) : null,
       is_beta_tester: Boolean(o.is_beta_tester),
+      is_hidden_from_community: Boolean(o.is_hidden_from_community),
       full_count: parseDirectoryCount(o),
     }
   })

@@ -85,6 +85,17 @@ final class TraderDailyCheckInStore {
             isRefreshing = !isReady
         }
 
+        if DemoExperienceSupport.usesLocalBundledData(profileID) {
+            let today = profileID == DemoExperienceSupport.profileID
+                ? DemoCanonicalDataset.checkIns().first { $0.checkInDate == todayDateKey }
+                : nil
+            guard generation == loadGeneration, !Task.isCancelled else { return }
+            todayCheckIn = today
+            isReady = true
+            isRefreshing = false
+            return
+        }
+
         do {
             await SessionNetworkGate.shared.awaitReady()
             let dateKey = todayDateKey

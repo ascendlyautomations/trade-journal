@@ -60,8 +60,15 @@ final class CheckInHistoryViewModel: ScreenLifecycle {
             let endKey = TraderPsychologyAnalyticsFoundation.todayCheckInDateKey()
 
             let loadedTrades: [Trade]
-            if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+            let checkIns: [TraderDailyCheckIn]
+            if profileID == DemoExperienceSupport.profileID {
+                loadedTrades = DemoCanonicalDataset.trades()
+                checkIns = DemoCanonicalDataset.checkIns().filter {
+                    $0.checkInDate >= startKey && $0.checkInDate <= endKey
+                }
+            } else if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
                 loadedTrades = ProfileTradeFixtures.samples(owner: profileID)
+                checkIns = []
             } else {
                 loadedTrades = try await SessionOwnerTradesStore.shared.trades(
                     for: profileID,
@@ -69,9 +76,9 @@ final class CheckInHistoryViewModel: ScreenLifecycle {
                     repository: trades,
                     forceNetwork: forceNetwork
                 )
+                checkIns = try await dailyCheckIns.checkIns(for: profileID, from: startKey, to: endKey)
             }
             let eligible = loadedTrades.filter { $0.mode != .backtest }
-            let checkIns = try await dailyCheckIns.checkIns(for: profileID, from: startKey, to: endKey)
             let summaries = CheckInHistoryAggregator.buildSummaries(checkIns: checkIns, trades: eligible)
 
             CheckInHistorySessionStore.shared.update(

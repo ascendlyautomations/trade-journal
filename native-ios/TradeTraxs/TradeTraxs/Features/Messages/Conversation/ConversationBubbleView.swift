@@ -8,7 +8,6 @@ struct ConversationBubbleView: View {
     var viewerProfileID: ProfileID? = nil
     var sharedTrade: Trade? = nil
     var sharedPost: Post? = nil
-    var sharedPostAuthor: Profile? = nil
     var sharedReel: Reel? = nil
     var sharedReelAuthor: Profile? = nil
     var sharedAchievement: Achievement? = nil
@@ -173,7 +172,7 @@ struct ConversationBubbleView: View {
     private var bubbleContent: some View {
         Group {
             if item.message.kind == .tradeShare,
-               let tradeID = item.message.attachments.first?.tradeID
+               let tradeID = SharedContentMessageSupport.primaryTradeID(for: item.message)
             {
                 tradeShareBubble(tradeID: tradeID)
             } else if item.message.kind == .feedPostShare || item.message.kind == .profilePostShare {
@@ -341,18 +340,11 @@ struct ConversationBubbleView: View {
     }
 
     private func tradeShareBubble(tradeID: TradeID) -> some View {
-        Group {
-            if isSelectionMode {
-                tradeShareBubbleContent(tradeID: tradeID)
-            } else {
-                Button {
-                    ExperienceHaptics.play(.selection)
-                    onSharedTradeTap?(tradeID)
-                } label: {
-                    tradeShareBubbleContent(tradeID: tradeID)
-                }
-                .buttonStyle(.plain)
-            }
+        sharedMessageOpenInteraction(isEnabled: !isSelectionMode) {
+            ExperienceHaptics.play(.selection)
+            onSharedTradeTap?(tradeID)
+        } content: {
+            tradeShareBubbleContent(tradeID: tradeID)
         }
         .accessibilityIdentifier("conversation.bubble.trade")
     }
@@ -362,6 +354,7 @@ struct ConversationBubbleView: View {
             SharedTradeMessageCard(
                 trade: sharedTrade,
                 tradeID: tradeID,
+                messageID: item.id,
                 imagePipeline: imagePipeline,
                 isOutgoing: item.isOutgoing,
                 includesBackground: false
@@ -387,6 +380,7 @@ struct ConversationBubbleView: View {
                 SharedTradeMessageCard(
                     trade: sharedTrade,
                     tradeID: tradeID,
+                    messageID: item.id,
                     imagePipeline: imagePipeline,
                     isOutgoing: item.isOutgoing,
                     includesBackground: false
@@ -394,7 +388,6 @@ struct ConversationBubbleView: View {
             } else {
                 SharedPostMessageCard(
                     post: sharedPost,
-                    author: sharedPostAuthor,
                     imagePipeline: imagePipeline,
                     isOutgoing: item.isOutgoing,
                     includesBackground: false,
@@ -438,20 +431,37 @@ struct ConversationBubbleView: View {
 
     @ViewBuilder
     private func sharedContentBubble<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        Group {
-            if isSelectionMode {
-                sharedContentBubbleContent(content: content)
-            } else if let reference = item.message.sharedContent {
-                Button {
-                    ExperienceHaptics.play(.selection)
-                    onSharedContentTap?(reference)
-                } label: {
-                    sharedContentBubbleContent(content: content)
-                }
-                .buttonStyle(.plain)
-            } else {
+        if isSelectionMode || item.message.sharedContent == nil {
+            sharedContentBubbleContent(content: content)
+        } else if let reference = item.message.sharedContent {
+            sharedMessageOpenInteraction(isEnabled: true) {
+                ExperienceHaptics.play(.selection)
+                onSharedContentTap?(reference)
+            } content: {
                 sharedContentBubbleContent(content: content)
             }
+        }
+    }
+
+    /// Tap opens shared entity; long-press uses the same message action menu as text/image bubbles.
+    /// Avoid `Button` — it consumes press-and-hold before the bubble row can show reactions/delete.
+    @ViewBuilder
+    private func sharedMessageOpenInteraction<Content: View>(
+        isEnabled: Bool,
+        onTap: @escaping () -> Void,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        if isEnabled {
+            content()
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onTap)
+                .onLongPressGesture(minimumDuration: 0.38, maximumDistance: 12) {
+                    guard !isSelectionMode, showsActionMenu else { return }
+                    ExperienceHaptics.play(.impactLight)
+                    onLongPressForActionMenu?()
+                }
+        } else {
+            content()
         }
     }
 

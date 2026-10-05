@@ -40,6 +40,12 @@ struct CommentComposerView: View {
                     Task { await viewModel.submit() }
                 }
                 .accessibilityIdentifier("interaction.comment.composer")
+                .experienceTextInputProbe(
+                    screen: "comments",
+                    field: "interaction.comment.composer",
+                    text: viewModel.draft,
+                    isFocused: focused
+                )
 
                 Button {
                     Task { await viewModel.submit() }

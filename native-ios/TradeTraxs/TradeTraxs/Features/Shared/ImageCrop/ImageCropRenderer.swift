@@ -226,13 +226,18 @@ enum ImageCropRenderer {
     private static func downscaleIfNeeded(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
         let pixelSize = MediaImageOrientation.pixelSize(of: image)
         let longest = max(pixelSize.width, pixelSize.height)
-        guard longest > maxDimension, maxDimension > 0 else { return image }
+        guard longest.isFinite, longest > maxDimension,
+              maxDimension.isFinite, maxDimension > 0
+        else { return image }
 
         let scale = maxDimension / longest
         let target = CGSize(
             width: floor(pixelSize.width * scale),
             height: floor(pixelSize.height * scale)
         )
+        guard target.width.isFinite, target.height.isFinite,
+              target.width >= 1, target.height >= 1
+        else { return image }
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = 1
         format.opaque = false
@@ -248,7 +253,9 @@ private extension CGRect {
     func pixelIntegralClamped(to bounds: CGSize) -> CGRect {
         let maxW = bounds.width
         let maxH = bounds.height
-        guard maxW > 0, maxH > 0 else {
+        guard maxW.isFinite, maxH.isFinite, maxW > 0, maxH > 0,
+              origin.x.isFinite, origin.y.isFinite, width.isFinite, height.isFinite
+        else {
             return CGRect(x: 0, y: 0, width: 1, height: 1)
         }
 

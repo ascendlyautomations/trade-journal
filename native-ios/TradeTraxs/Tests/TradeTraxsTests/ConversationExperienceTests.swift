@@ -8,6 +8,87 @@ final class ConversationExperienceTests: XCTestCase {
         BackendV2FeatureFlags.resetFlagsForTests()
     }
 
+    func testComposerTextLayoutClampRejectsNonFiniteWidths() {
+        XCTAssertEqual(ComposerTextLayoutClamp.finiteProposalWidth(nil), 1)
+        XCTAssertEqual(ComposerTextLayoutClamp.finiteProposalWidth(.nan), 1)
+        XCTAssertEqual(ComposerTextLayoutClamp.finiteProposalWidth(.infinity), 1)
+        XCTAssertEqual(ComposerTextLayoutClamp.finiteProposalWidth(-4), 1)
+        XCTAssertEqual(ComposerTextLayoutClamp.finiteProposalWidth(0), 1)
+        XCTAssertEqual(ComposerTextLayoutClamp.finiteProposalWidth(320), 320)
+        XCTAssertEqual(ComposerTextLayoutClamp.finiteDimension(.nan, fallback: 36), 36)
+        XCTAssertEqual(ComposerTextLayoutClamp.finiteDimension(-1, fallback: 36), 36)
+        XCTAssertEqual(ComposerTextLayoutClamp.finiteDimension(48, fallback: 36), 48)
+        XCTAssertEqual(ComposerTextLayoutClamp.finiteCoordinate(.nan), 0)
+        XCTAssertEqual(ComposerTextLayoutClamp.finiteCoordinate(-12), -12)
+    }
+
+    func testScrollGeometrySignalDropsNonFiniteValuesAndSubpointJitter() {
+        let invalid = ConversationThreadScrollSupport.layoutSample(
+            contentHeight: .nan,
+            contentOffsetY: .infinity,
+            containerHeight: .nan
+        )
+        XCTAssertTrue(invalid.contentHeight.isFinite)
+        XCTAssertTrue(invalid.contentOffsetY.isFinite)
+        XCTAssertTrue(invalid.containerHeight.isFinite)
+        XCTAssertFalse(invalid.isNearBottom)
+        XCTAssertEqual(
+            ConversationThreadScrollSupport.ScrollGeometrySignal(
+                contentHeight: .nan,
+                contentOffsetY: .nan,
+                containerHeight: .infinity
+            ),
+            ConversationThreadScrollSupport.ScrollGeometrySignal(
+                contentHeight: .infinity,
+                contentOffsetY: .nan,
+                containerHeight: .nan
+            )
+        )
+
+        let baseline = ConversationThreadScrollSupport.layoutSample(
+            contentHeight: 800,
+            contentOffsetY: 400,
+            containerHeight: 400
+        )
+        let jitter = ConversationThreadScrollSupport.layoutSample(
+            contentHeight: 800.4,
+            contentOffsetY: 400.2,
+            containerHeight: 400.1
+        )
+        XCTAssertTrue(ConversationThreadScrollSupport.geometrySignalsMatch(baseline, jitter))
+        XCTAssertEqual(
+            ConversationThreadScrollSupport.ScrollGeometrySignal(
+                contentHeight: 800,
+                contentOffsetY: 400,
+                containerHeight: 400
+            ),
+            ConversationThreadScrollSupport.ScrollGeometrySignal(
+                contentHeight: 800.4,
+                contentOffsetY: 400.2,
+                containerHeight: 400.1
+            )
+        )
+
+        let grown = ConversationThreadScrollSupport.layoutSample(
+            contentHeight: 860,
+            contentOffsetY: 400,
+            containerHeight: 400
+        )
+        XCTAssertFalse(ConversationThreadScrollSupport.geometrySignalsMatch(baseline, grown))
+        XCTAssertNotEqual(
+            ConversationThreadScrollSupport.ScrollGeometrySignal(
+                contentHeight: .nan,
+                contentOffsetY: 0,
+                containerHeight: 0
+            ),
+            ConversationThreadScrollSupport.ScrollGeometrySignal(
+                contentHeight: 800,
+                contentOffsetY: 0,
+                containerHeight: 400
+            )
+        )
+    }
+
     func testComposerKeyboardReturnSendsWithoutTreatingPasteAsSubmit() {
         XCTAssertTrue(ComposerKeyboardSubmit.insertedReturn(from: "hello", to: "hello\n"))
         XCTAssertTrue(ComposerKeyboardSubmit.insertedReturn(from: "hello", to: "hel\nlo"))

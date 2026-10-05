@@ -35,6 +35,12 @@ final class PsychologyCoachViewModel {
             return
         }
 
+        if ExploreModeSupport.isActive {
+            aiReply = deterministicFallback
+            phase = .ready
+            return
+        }
+
         phase = .loading
         do {
             let response = try await ai.explainPsychologyCoach(
@@ -64,6 +70,13 @@ final class PsychologyCoachViewModel {
         guard !trimmed.isEmpty else { return }
 
         messages.append(PsychologyCoachAIMessage(role: "user", content: trimmed))
+        if ExploreModeSupport.isActive {
+            messages.append(
+                PsychologyCoachAIMessage(role: "assistant", content: deterministicFallback)
+            )
+            phase = .ready
+            return
+        }
         phase = .loading
 
         do {

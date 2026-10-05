@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct LoginView: View {
     @State private var viewModel: LoginViewModel
@@ -19,6 +20,14 @@ struct LoginView: View {
                 allowsDevelopmentBypass: allowsDevelopmentBypass
             )
         )
+        self.navigationCoordinator = navigationCoordinator
+    }
+
+    init(
+        viewModel: LoginViewModel,
+        navigationCoordinator: NavigationCoordinator
+    ) {
+        _viewModel = State(initialValue: viewModel)
         self.navigationCoordinator = navigationCoordinator
     }
 
@@ -67,7 +76,10 @@ struct LoginView: View {
                 .experiencePadding(.lg)
                 .frame(maxWidth: 480)
                 .frame(maxWidth: .infinity)
-                .frame(minHeight: geometry.size.height, alignment: .top)
+                .frame(
+                    minHeight: geometry.size.height.isFinite ? geometry.size.height : 0,
+                    alignment: .top
+                )
                 .padding(.top, ExperienceSpacing.sm)
             }
             .experienceFormScrollKeyboard()
@@ -96,6 +108,12 @@ struct LoginView: View {
         }
         .onChange(of: viewModel.mode) { _, _ in
             releaseLoginKeyboardFocus()
+        }
+        .onChange(of: viewModel.email) { _, _ in
+            viewModel.noteCredentialsEdited()
+        }
+        .onChange(of: viewModel.password) { _, _ in
+            viewModel.notePasswordEdited()
         }
         .onChange(of: AppLaunchController.shared.bootstrapGeneration) { _, _ in
             let appliedDemoExitIntent = applyDemoExitAuthIntentIfNeeded()
@@ -203,6 +221,10 @@ struct LoginView: View {
                 loginField: .email,
                 loginFocusedField: $focusedField
             )
+
+            if let notice = viewModel.duplicateEmailNotice {
+                DuplicateEmailSignInNotice(text: notice, color: colors.error)
+            }
 
             AuthTextField(
                 title: viewModel.mode == .signUp ? "Create Password" : "Password",
@@ -319,13 +341,41 @@ struct LoginView: View {
     }
 
     private var exploreTradeTraxsAction: some View {
-        ExperienceButton(
-            title: "Explore as Guest",
-            kind: .secondary,
-            accessibilityIdentifier: "auth.exploreDemo"
-        ) {
-            releaseLoginKeyboardFocus()
-            AppLaunchController.shared.enterDemoExplore()
+        let launch = AppLaunchController.shared
+        return VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            ExperienceButton(
+                title: "Explore as Guest",
+                kind: .secondary,
+                isLoading: launch.isGuestExploreRequestInFlight,
+                accessibilityIdentifier: "auth.exploreDemo"
+            ) {
+                releaseLoginKeyboardFocus()
+                launch.enterDemoExplore()
+            }
+
+            if launch.guestExploreFailurePresented {
+                Text(AppLaunchController.guestExploreFailureMessage)
+                    .experienceStyle(.footnote, color: colors.error)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("auth.guestExploreFailure")
+
+                HStack(spacing: ExperienceSpacing.sm) {
+                    ExperienceButton(
+                        title: "Retry",
+                        kind: .primary,
+                        accessibilityIdentifier: "auth.guestExploreRetry"
+                    ) {
+                        launch.enterDemoExplore()
+                    }
+                    ExperienceButton(
+                        title: "Back / Sign In",
+                        kind: .secondary,
+                        accessibilityIdentifier: "auth.guestExploreBack"
+                    ) {
+                        launch.dismissGuestExploreFailure()
+                    }
+                }
+            }
         }
     }
 
@@ -346,8 +396,34 @@ struct LoginView: View {
     }
 
     /// First logged-out landing only — returning users already default to Sign In via ``AuthLandingInstallState``.
+    /// A duplicate-email handoff has already chosen Sign In; do not send that form back to Create Account.
     private func applyFreshInstallLandingModeIfNeeded() {
+        guard viewModel.duplicateEmailNotice == nil else { return }
         guard AuthLandingInstallState.shared.initialLoginMode == .signUp else { return }
         viewModel.mode = .signUp
+    }
+}
+
+/// Real label so the duplicate-email notice is on screen, not only stored on the form model.
+private struct DuplicateEmailSignInNotice: UIViewRepresentable {
+    let text: String
+    let color: Color
+
+    func makeUIView(context: Context) -> UILabel {
+        let label = UILabel()
+        label.numberOfLines = 0
+        label.font = .systemFont(ofSize: UIFont.preferredFont(forTextStyle: .callout).pointSize, weight: .semibold)
+        label.textAlignment = .left
+        label.accessibilityIdentifier = "auth.duplicateEmailNotice"
+        label.setContentCompressionResistancePriority(.required, for: .vertical)
+        label.setContentHuggingPriority(.required, for: .vertical)
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return label
+    }
+
+    func updateUIView(_ label: UILabel, context: Context) {
+        label.text = text
+        label.textColor = UIColor(color)
+        label.accessibilityLabel = text
     }
 }

@@ -20,6 +20,10 @@ enum AdminRoute: Hashable, Codable {
     case productFeedback
     case productFeedbackDetail(AdminProductFeedbackSnapshot)
     case updates
+    case demoMode
+    case demoBrowse(String)
+    case demoEdit(entity: String, recordID: String, isNew: Bool)
+    case demoHistory
 }
 
 extension View {

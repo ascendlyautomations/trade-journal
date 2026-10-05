@@ -15,6 +15,7 @@ final class VaultHomeViewModel {
 
     private let repository: any VaultRepository
     private let navigationCoordinator: NavigationCoordinator
+    private let detailCache: DetailPresentationCache
 
     enum Phase: Equatable {
         case idle
@@ -23,9 +24,14 @@ final class VaultHomeViewModel {
         case failed(String)
     }
 
-    init(repository: any VaultRepository, navigationCoordinator: NavigationCoordinator) {
+    init(
+        repository: any VaultRepository,
+        navigationCoordinator: NavigationCoordinator,
+        detailCache: DetailPresentationCache
+    ) {
         self.repository = repository
         self.navigationCoordinator = navigationCoordinator
+        self.detailCache = detailCache
     }
 
     func onAppear(store: VaultStore) {
@@ -147,7 +153,16 @@ final class VaultHomeViewModel {
         ExperienceHaptics.play(.selection)
         switch item.ref.contentType {
         case .trade:
-            navigationCoordinator.pushSocialTrade(TradeID(item.ref.contentID))
+            let tradeID = TradeID(item.ref.contentID)
+            if let summary = detailCache.tradeSummary(id: tradeID) {
+                detailCache.seedPresentationSeed(summary)
+            } else if let preview = detailCache.previewTrade(id: tradeID) {
+                detailCache.ensurePresentationSeed(forPreview: preview)
+            }
+            #if DEBUG
+            SharedTradeOpenDiagnostics.tapped(tradeID: tradeID)
+            #endif
+            navigationCoordinator.pushSocialTrade(tradeID, cache: detailCache)
         case .profilePost, .feedPost:
             navigationCoordinator.pushPostDetail(PostID(item.ref.contentID))
         case .reel:

@@ -42,6 +42,54 @@ nonisolated enum ProfileStatisticsMetrics {
         static let profileFilterCases: [Mode] = [.all, .live, .funded, .eval]
     }
 
+    /// Rolling window for Profile → Stats (client-side filter on stats trade inputs).
+    enum Timeframe: String, CaseIterable, Identifiable, Sendable {
+        case allTime
+        case oneYear
+        case sixMonths
+        case threeMonths
+        case oneMonth
+        case oneWeek
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .allTime: return "All Time"
+            case .oneYear: return "1 Year"
+            case .sixMonths: return "6 Months"
+            case .threeMonths: return "3 Months"
+            case .oneMonth: return "1 Month"
+            case .oneWeek: return "1 Week"
+            }
+        }
+
+        /// Menu label on the filter row (compact).
+        var menuTitle: String { title }
+
+        var isAllTime: Bool { self == .allTime }
+
+        /// Inclusive lower bound for ``TradeInput.createdAt`` (matches SQL `profile_statistics_public_trades.created_at`).
+        func inclusiveStartDate(relativeTo now: Date = Date()) -> Date? {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+            switch self {
+            case .allTime:
+                return nil
+            case .oneYear:
+                return calendar.date(byAdding: .year, value: -1, to: now)
+            case .sixMonths:
+                return calendar.date(byAdding: .month, value: -6, to: now)
+            case .threeMonths:
+                return calendar.date(byAdding: .month, value: -3, to: now)
+            case .oneMonth:
+                return calendar.date(byAdding: .month, value: -1, to: now)
+            case .oneWeek:
+                return calendar.date(byAdding: .day, value: -7, to: now)
+            }
+        }
+    }
+
     struct TradeInput: Sendable, Equatable {
         var pnl: Decimal?
         var createdAt: Date?
@@ -104,7 +152,7 @@ nonisolated enum ProfileStatisticsMetrics {
     ) -> TradeInput {
         TradeInput(
             pnl: trade.realizedPnL?.amount,
-            createdAt: trade.exitAt ?? trade.entryAt,
+            createdAt: trade.createdAt,
             isLong: trade.side == .long,
             session: trade.sessionLabel,
             accountMode: resolveAccountMode(trade: trade, accountModes: accountModes),
@@ -149,8 +197,15 @@ nonisolated enum ProfileStatisticsMetrics {
         }
     }
 
-    static func compute(from trades: [TradeInput], selectedMode: Mode) -> Result {
-        let filtered = trades.filter { matchesMode($0, selectedMode) }
+    static func compute(
+        from trades: [TradeInput],
+        selectedMode: Mode,
+        selectedTimeframe: Timeframe = .allTime,
+        now: Date = Date()
+    ) -> Result {
+        let filtered = trades.filter {
+            matchesTimeframe($0, selectedTimeframe, now: now) && matchesMode($0, selectedMode)
+        }
         let analytics = selectedMode == .backtest ? filtered : excludingBacktest(filtered)
 
         let totalTrades = analytics.count
@@ -227,6 +282,16 @@ nonisolated enum ProfileStatisticsMetrics {
         if selected == .all { return true }
         guard let target = selected.tradingAccountMode else { return true }
         return trade.accountMode == target
+    }
+
+    static func matchesTimeframe(
+        _ trade: TradeInput,
+        _ timeframe: Timeframe,
+        now: Date = Date()
+    ) -> Bool {
+        guard let start = timeframe.inclusiveStartDate(relativeTo: now) else { return true }
+        guard let event = trade.createdAt else { return false }
+        return event >= start
     }
 
     /// Map `TradingAccountMode` → web filter / account_type string.

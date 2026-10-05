@@ -7,7 +7,7 @@ nonisolated enum TradeDTO {
 
     /// Mirrors web `PUBLIC_TRADE_SELECT` — non-owner social reads only.
     static let publicSocialSelect =
-        "id,user_id,created_at,date,trade_date,pnl,rr,points,contracts,session,ticker,direction,public_description,is_public,is_pinned,image_url,image_crop,image_display_mode,entry_time,exit_time,entry_price,exit_price,duration_seconds,duration_text,account_type,mode,market_condition,timeframe,trade_mode,trade_type,first_published_at,copied_account_ids,copy_trading_group_id"
+        "id,user_id,created_at,date,trade_date,pnl,rr,points,contracts,session,ticker,direction,public_description,is_public,is_pinned,image_url,image_crop,image_display_mode,entry_time,exit_time,entry_price,exit_price,duration_seconds,duration_text,account_type,mode,market_condition,timeframe,trade_mode,trade_type,first_published_at,copied_account_ids,copy_trading_group_id,source_account_id,participating_account_modes"
 
     /// Mirrors web `PUBLIC_TRADE_SELECT` / owner list fields used by Profile + Trade Detail.
     static let profileListSelect =
@@ -20,7 +20,7 @@ nonisolated enum TradeDTO {
 
     /// Owner Trade History — includes denormalized account_name for search.
     static let historyListSelect =
-        "id,user_id,account_id,account_name,created_at,date,trade_date,pnl,rr,points,contracts,session,ticker,direction,notes,public_description,is_public,is_pinned,image_url,entry_time,exit_time,entry_price,exit_price,account_type,mode,strategy,confidence,emotion,followed_plan,market_condition,timeframe,news_event,psychology_notes,exit_emotion,execution_rating,duration_seconds,duration_text,trade_mode,image_display_mode,reviewed,is_initial_import,import_source,import_fingerprint"
+        "id,user_id,account_id,account_name,created_at,date,trade_date,pnl,rr,points,contracts,session,ticker,direction,notes,public_description,is_public,is_pinned,image_url,entry_time,exit_time,entry_price,exit_price,account_type,mode,strategy,confidence,emotion,followed_plan,market_condition,timeframe,news_event,psychology_notes,exit_emotion,execution_rating,duration_seconds,duration_text,trade_mode,image_display_mode,reviewed,is_initial_import,import_source,import_fingerprint,source_account_id,copied_account_ids,copy_trading_group_id"
 
     /// Mirrors web `PROFILE_SUMMARY_TRADE_SELECT`.
     static let profileSummarySelect = "id,created_at,pnl,rr,mode,account_type"
@@ -70,6 +70,10 @@ nonisolated enum TradeDTO {
         var is_initial_import: Bool?
         var import_source: String?
         var import_fingerprint: String?
+        var source_account_id: String?
+        var copied_account_ids: [String]?
+        var copy_trading_group_id: String?
+        var participating_account_modes: [TradeParticipatingAccountModeWireV1]?
     }
 
     /// Lightweight overview row — web `fetchSummaryTrades`.

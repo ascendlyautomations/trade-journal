@@ -13,6 +13,7 @@ import {
 import { resolveTradePoints } from "@/lib/resolveTradePoints"
 import { isCopyTradedMode } from "@/lib/tradeMode"
 import type { ReelRow } from "@/lib/reels"
+import CopyTradePublicModeSummary from "@/app/components/trade/CopyTradePublicModeSummary"
 
 type FeedPostBodyProps = {
   pnl: number
@@ -21,6 +22,7 @@ type FeedPostBodyProps = {
   dirLabel: string
   accountTypeNorm: string
   accountTypeStyles: string
+  copyTradeModeSummary?: string | null
   rr: unknown
   publicDesc: string | null
   timingTrade: Record<string, unknown> | null
@@ -36,6 +38,7 @@ function FeedPostBody({
   dirLabel,
   accountTypeNorm,
   accountTypeStyles,
+  copyTradeModeSummary = null,
   rr,
   publicDesc,
   timingTrade,
@@ -60,9 +63,7 @@ function FeedPostBody({
             <span className="min-w-0 truncate">
               {tickerLabel} • {dirLabel}
             </span>
-            {showCopyBadge ? (
-              <CopyTradedBadge trade={timingTrade} className="shrink-0" />
-            ) : accountTypeNorm ? (
+            {!showCopyBadge && accountTypeNorm ? (
               <span
                 className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] md:text-xs ${accountTypeStyles}`}
               >
@@ -72,16 +73,18 @@ function FeedPostBody({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2 text-xs text-gray-300 md:text-sm">
-          {rr != null && rr !== "" ? (
-            <span className="tabular-nums">RR {formatRR(rr)}</span>
-          ) : null}
-          {resolvedPoints !== null ? (
-            <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] text-gray-200 md:text-sm">
-              {formatPoints(resolvedPoints)} pts
-            </span>
-          ) : null}
-        </div>
+        {!showCopyBadge ? (
+          <div className="flex shrink-0 items-center gap-2 text-xs text-gray-300 md:text-sm">
+            {rr != null && rr !== "" ? (
+              <span className="tabular-nums">RR {formatRR(rr)}</span>
+            ) : null}
+            {resolvedPoints !== null ? (
+              <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] text-gray-200 md:text-sm">
+                {formatPoints(resolvedPoints)} pts
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {publicDesc ? (
@@ -99,6 +102,24 @@ function FeedPostBody({
             trade={timingTrade ?? {}}
             onViewReel={onViewReel}
           />
+        </div>
+      ) : null}
+
+      {showCopyBadge ? (
+        <CopyTradePublicModeSummary summary={copyTradeModeSummary} />
+      ) : null}
+
+      {showCopyBadge ? (
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-gray-300 md:text-sm">
+          <CopyTradedBadge trade={timingTrade} className="shrink-0" />
+          {rr != null && rr !== "" ? (
+            <span className="tabular-nums">RR {formatRR(rr)}</span>
+          ) : null}
+          {resolvedPoints !== null ? (
+            <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] text-gray-200 md:text-sm">
+              {formatPoints(resolvedPoints)} pts
+            </span>
+          ) : null}
         </div>
       ) : null}
 

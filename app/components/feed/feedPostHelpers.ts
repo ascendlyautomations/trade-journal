@@ -3,6 +3,7 @@ import {
   normalizeFeedAccountType,
   resolveFeedTradeAccountType,
 } from "@/lib/feedAccountType"
+import { dedupeCopyTradeFeedPosts } from "@/lib/copyTradePresentation"
 import {
   resolveTradeAttachedReel,
   TRADE_ATTACHED_REEL_CARD_SELECT,
@@ -27,6 +28,8 @@ const FEED_TRADE_JOIN_SELECT = [
   "created_at",
   "public_description",
   "user_id",
+  "account_id",
+  "source_account_id",
   "ticker",
   "direction",
   "account_type",
@@ -181,6 +184,15 @@ export function dedupeFeedItems(items: FeedItem[]): FeedItem[] {
 
     seen.add(key)
     out.push(item)
+  }
+
+  const tradePosts = out.filter((item) => item.feedKind === "trade")
+  if (tradePosts.length > 0) {
+    const dedupedTrades = dedupeCopyTradeFeedPosts(tradePosts)
+    const dedupedIds = new Set(dedupedTrades.map((p) => String(p.id)))
+    return out.filter(
+      (item) => item.feedKind !== "trade" || dedupedIds.has(String(item.id))
+    )
   }
 
   return out

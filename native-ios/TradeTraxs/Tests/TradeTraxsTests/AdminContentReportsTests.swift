@@ -274,6 +274,10 @@ private final class MockAdminUsersRepositoryForReports: AdminUsersRepository, @u
         _ = (targetUserID, adminUserID)
     }
 
+    func setHiddenFromCommunity(targetUserID: ProfileID, adminUserID: ProfileID, hidden: Bool) async throws {
+        _ = (targetUserID, adminUserID, hidden)
+    }
+
     func fetchDeletionPreview(targetUserID: ProfileID) async throws -> AdminUserDeletionPreview {
         throw AppError.authentication(.sessionMissing)
     }

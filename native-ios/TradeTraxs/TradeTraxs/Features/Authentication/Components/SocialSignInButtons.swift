@@ -25,7 +25,7 @@ struct SocialSignInButtons: View {
                 onAppleInteractionBegan()
                 ExperienceKeyboard.dismiss()
 #if DEBUG
-                AppLog.authentication.debug("[AppleAuth] credential.request.started")
+                AppLog.authentication.debug("[AppleAuth] authorizationStarted")
 #endif
                 let nonce = AppleSignInNonce.generate()
                 currentNonce = nonce
@@ -75,9 +75,8 @@ struct SocialSignInButtons: View {
                 return
             }
 #if DEBUG
-            AppLog.authentication.debug(
-                "[AppleAuth] credential.request.succeeded identityToken.present=true authorizationCode.present=\(credential.authorizationCode != nil, privacy: .public) nonce.present=\(currentNonce != nil, privacy: .public)"
-            )
+            AppLog.authentication.debug("[AppleAuth] credentialReceived")
+            AppLog.authentication.debug("[AppleAuth] identityTokenAvailable=true")
 #endif
             guard let nonce = currentNonce, !nonce.isEmpty else {
                 onAppleFailure(AuthenticationError.providerTokenInvalid(.apple))

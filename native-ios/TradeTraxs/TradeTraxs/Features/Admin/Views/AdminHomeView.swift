@@ -8,6 +8,12 @@ struct AdminHomeView: View {
     var body: some View {
         List {
             Section {
+                adminRow("Demo Mode", systemImage: "play.rectangle", route: .demoMode)
+            } header: {
+                Text("Demo")
+            }
+
+            Section {
                 adminRow("Updates", systemImage: "megaphone", route: .updates)
                 adminRow("Users", systemImage: "person.2", route: .users)
                 adminRow("Content Reports", systemImage: "flag", route: .contentReports)

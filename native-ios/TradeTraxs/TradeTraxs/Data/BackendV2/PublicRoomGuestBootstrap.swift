@@ -167,7 +167,9 @@ nonisolated enum PublicRoomGuestBootstrapApplier {
             selectedChannelID = channels[0].id
         }
 
-        let roomMessages = bootstrap.data.messages.compactMap { mapMessage($0, roomID: resolvedRoomID) }
+        let roomMessages = bootstrap.data.messages.compactMap {
+            RoomMessageDTOMapper.mapMessage($0, fallbackRoomID: resolvedRoomID)
+        }
         let displayMessages = roomMessages
             .map(RoomMessageMapping.displayMessage)
             .sorted { $0.createdAt < $1.createdAt }
@@ -193,43 +195,6 @@ nonisolated enum PublicRoomGuestBootstrapApplier {
         )
     }
 
-    private static func mapMessage(_ dto: RoomDTO.Message, roomID: RoomID) -> RoomMessage? {
-        guard let id = dto.id else { return nil }
-        let sender = dto.sender_id ?? dto.sender_profile_id ?? dto.user_id
-        guard let sender else { return nil }
-        let tradeID = dto.trade_id.flatMap { raw -> TradeID? in
-            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : TradeID(trimmed)
-        }
-        let imageURL = dto.image_url?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let media: [MediaReference] = {
-            guard let imageURL, !imageURL.isEmpty else { return [] }
-            return [MediaReference(id: imageURL, kind: .image, altText: nil)]
-        }()
-        return RoomMessage(
-            id: RoomMessageID(id),
-            roomID: roomID,
-            senderProfileID: ProfileID(sender),
-            body: dto.body ?? dto.content,
-            attachedTradeID: tradeID,
-            media: media,
-            parentMessageID: dto.parent_message_id.map { RoomMessageID($0) },
-            channelID: dto.section_id.map { RoomChannelID($0) },
-            isPinned: dto.is_pinned ?? false,
-            createdAt: ISO8601.date(from: dto.created_at) ?? Date(),
-            reactions: (dto.room_message_reactions ?? []).compactMap { reaction in
-                guard let reactionID = reaction.id, let emoji = reaction.reaction, let user = reaction.user_id
-                else { return nil }
-                return RoomMessageReaction(
-                    id: reactionID,
-                    messageID: RoomMessageID(id),
-                    userID: ProfileID(user),
-                    reaction: emoji,
-                    createdAt: ISO8601.date(from: reaction.created_at)
-                )
-            }
-        )
-    }
 }
 
 enum PublicRoomGuestBootstrapLoader {

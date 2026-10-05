@@ -7,7 +7,6 @@ struct SocialTradeDetailView: View {
     let tradeID: TradeID
     let data: DataEnvironment
     let navigationCoordinator: NavigationCoordinator
-
     var body: some View {
         TradeDetailView(
             tradeID: tradeID,

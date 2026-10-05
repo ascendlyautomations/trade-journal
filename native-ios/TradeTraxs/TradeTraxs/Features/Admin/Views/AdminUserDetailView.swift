@@ -104,6 +104,10 @@ struct AdminUserDetailView: View {
                 SettingsInfoRow(title: "Subscription", value: viewModel.user.subscriptionStatus)
             }
             SettingsInfoRow(title: "Privacy", value: viewModel.user.isPrivate ? "Private" : "Public")
+            SettingsInfoRow(
+                title: "Community",
+                value: viewModel.user.isHiddenFromCommunity ? "Hidden" : "Visible"
+            )
             if !viewModel.user.referralCode.isEmpty {
                 SettingsInfoRow(title: "Referral code", value: viewModel.user.referralCode)
             }
@@ -137,6 +141,26 @@ struct AdminUserDetailView: View {
     }
 
     private var moderationSection: some View {
+        Group {
+        Section {
+            Toggle(isOn: Binding(
+                get: { viewModel.user.isHiddenFromCommunity },
+                set: { hidden in
+                    Task { _ = await viewModel.setHiddenFromCommunity(hidden) }
+                }
+            )) {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                    Text("Hide User From Community")
+                        .experienceStyle(.body, color: colors.primaryText)
+                    Text("Hidden users can use TradeTraxs normally but are not discoverable or visible to other users.")
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                }
+            }
+            .disabled(viewModel.moderationBusy)
+        } header: {
+            Text("Community visibility")
+        }
+
         Section("Moderation") {
             if viewModel.user.isBanned {
                 Button {
@@ -161,6 +185,7 @@ struct AdminUserDetailView: View {
                 Text(message)
                     .experienceStyle(.footnote, color: colors.loss)
             }
+        }
         }
     }
 

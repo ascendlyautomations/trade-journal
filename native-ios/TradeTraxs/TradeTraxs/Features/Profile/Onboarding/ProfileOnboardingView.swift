@@ -71,7 +71,10 @@ struct ProfileOnboardingView: View {
                 .experiencePadding(.lg)
                 .frame(maxWidth: 480)
                 .frame(maxWidth: .infinity)
-                .frame(minHeight: geometry.size.height, alignment: .top)
+                .frame(
+                    minHeight: geometry.size.height.isFinite ? geometry.size.height : 0,
+                    alignment: .top
+                )
                 .padding(.top, ExperienceSpacing.sm)
             }
             .experienceFormScrollKeyboard()
@@ -80,6 +83,9 @@ struct ProfileOnboardingView: View {
         .experienceKeyboardDismissOnTapOutside()
         .experienceProtectedFormDismiss()
         .experienceFormKeyboard(isFocused: $usernameFieldFocused)
+        .onAppear {
+            viewModel.applySignupNamePrefillIfBlank()
+        }
         .onChange(of: viewModel.usernameError) { _, error in
             if error != nil {
                 usernameFieldFocused = true

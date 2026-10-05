@@ -66,8 +66,10 @@ struct TradeDetailView: View {
                 )
             default:
                 content
+                    .onAppear { logContentRenderedIfReady() }
             }
         }
+        .id(viewModel.tradeID)
         .experienceScreenBackground()
         .experienceNavigationTitle(viewModel.trade?.symbol.ticker ?? "Trade")
         .toolbar(.hidden, for: .tabBar)
@@ -78,7 +80,7 @@ struct TradeDetailView: View {
                 }
             }
         }
-        .task {
+        .task(id: viewModel.tradeID) {
             viewModel.loadIfNeeded()
             if experience == .social {
                 let target = socialEngagementTarget(for: viewModel.tradeID)
@@ -93,6 +95,9 @@ struct TradeDetailView: View {
             }
         }
         .onChange(of: viewModel.trade?.id) { _, _ in
+            logContentRenderedIfReady()
+        }
+        .onChange(of: viewModel.trade?.id) { _, _ in
             tradeAI?.updateContext(trade: viewModel.trade, notes: viewModel.notes)
         }
         .onChange(of: viewModel.notes.count) { _, _ in
@@ -103,6 +108,7 @@ struct TradeDetailView: View {
             tradeAI?.updateContext(trade: viewModel.trade, notes: viewModel.notes)
         }
         .onAppear {
+            viewModel.loadIfNeeded()
             tradeAI?.updateContext(trade: viewModel.trade, notes: viewModel.notes)
         }
         .confirmationDialog(
@@ -313,27 +319,15 @@ struct TradeDetailView: View {
             )
         }
 
-        TradeDetailCompactHeader(
+        SocialTradeDetailHeader(
             trade: trade,
-            accountLine: viewModel.accountIdentityLine
+            accountLine: trade.mode == .copyTraded
+                ? viewModel.socialCopyTradeModeSummary
+                : viewModel.accountIdentityLine
         )
         .accessibilityIdentifier("detail.trade.headline")
 
-        PublicTradeMetaChipRow(trade: trade, layout: .wrap)
-            .accessibilityIdentifier("detail.trade.badges")
-
-        TradeDetailQuickStatsSection(trade: trade)
-
-        if let description = trade.publicCaption?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-            !description.isEmpty
-        {
-            Text(description)
-                .experienceStyle(.subheadline, color: colors.primaryText)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityIdentifier("detail.trade.description")
-        }
+        SocialTradePublicMetricsSection(trade: trade)
 
         EngagementBar(
             target: socialEngagementTarget(for: trade.id),
@@ -361,6 +355,14 @@ struct TradeDetailView: View {
 
     private func socialEngagementTarget(for tradeID: TradeID) -> InteractionTarget {
         data.detailCache.feedEngagementTarget(forTrade: tradeID) ?? .trade(tradeID)
+    }
+
+    private func logContentRenderedIfReady() {
+        #if DEBUG
+        if viewModel.trade != nil {
+            SharedTradeOpenDiagnostics.contentRendered(tradeID: viewModel.tradeID)
+        }
+        #endif
     }
 }
 

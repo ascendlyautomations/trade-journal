@@ -35,9 +35,9 @@ enum MessagingBootstrap: ScreenBootstrap {
         let viewer = await context.session.currentUserID.map { ProfileID($0.rawValue) }
 
         if let viewer, DemoExperienceSupport.usesExploreDemoInbox(viewer) {
-            let conversations = DemoExploreInboxFixtures.conversations(viewerID: viewer)
+            let conversations = DemoGraph.conversations(viewerID: viewer)
             context.inboxStore.replaceConversations(conversations)
-            let peers = DemoExploreInboxFixtures.profiles(for: conversations, viewerID: viewer)
+            let peers = conversations.flatMap(\.participantProfileIDs).compactMap(DemoGraph.profile(id:))
             for profile in peers {
                 context.detailCache.seed(profile)
             }
@@ -133,6 +133,22 @@ enum MessagingBootstrap: ScreenBootstrap {
     /// Trade Rooms–only path when the full inbox has not been bootstrapped yet.
     static func loadRoomsOnly(_ context: Context) async throws -> Result {
         let viewer = await context.session.currentUserID.map { ProfileID($0.rawValue) }
+
+        if let viewer, viewer == DemoExperienceSupport.profileID {
+            let room = DemoExploreTradeRoom.room()
+            context.inboxStore.replaceRooms(
+                [room],
+                previews: [room.id: DemoExploreTradeRoom.messages(roomID: room.id, viewerID: viewer).last?.body ?? ""],
+                activityAt: [room.id: Date()]
+            )
+            return Result(
+                viewerID: viewer,
+                peerProfiles: [:],
+                usedDevelopmentFixtures: true,
+                loadedConversations: context.inboxStore.hasLoaded,
+                loadedRooms: true
+            )
+        }
 
         if let viewer, MessagesInboxSupport.isLocalDevelopmentProfile(viewer) {
             TradeRoomsFixtures.seedInbox(context.inboxStore, viewerID: viewer)

@@ -208,6 +208,52 @@ final class DataLayerTests: XCTestCase {
         )
     }
 
+    func testProfileStatisticsTimeframeCombinesWithAccountMode() {
+        let now = Date(timeIntervalSince1970: 1_900_000_000)
+        let day: TimeInterval = 86_400
+        let rows: [ProfileStatisticsMetrics.TradeInput] = [
+            .init(
+                pnl: 100,
+                createdAt: now.addingTimeInterval(-10 * day),
+                isLong: true,
+                session: nil,
+                accountMode: .funded
+            ),
+            .init(
+                pnl: 50,
+                createdAt: now.addingTimeInterval(-100 * day),
+                isLong: true,
+                session: nil,
+                accountMode: .funded
+            ),
+            .init(
+                pnl: 25,
+                createdAt: now.addingTimeInterval(-5 * day),
+                isLong: true,
+                session: nil,
+                accountMode: .evaluation
+            ),
+        ]
+
+        let fundedOneMonth = ProfileStatisticsMetrics.compute(
+            from: rows,
+            selectedMode: .funded,
+            selectedTimeframe: .oneMonth,
+            now: now
+        )
+        XCTAssertEqual(fundedOneMonth.filteredTradeCount, 1)
+        XCTAssertEqual(fundedOneMonth.currentEquity, 100)
+
+        let allThreeMonths = ProfileStatisticsMetrics.compute(
+            from: rows,
+            selectedMode: .all,
+            selectedTimeframe: .threeMonths,
+            now: now
+        )
+        XCTAssertEqual(allThreeMonths.filteredTradeCount, 2)
+        XCTAssertEqual(allThreeMonths.currentEquity, 125)
+    }
+
     func testTradeMapperParseAccountModeDoesNotCollapseLiveIntoFunded() {
         XCTAssertEqual(TradingAccountMode.parseWireValue("live"), .live)
         XCTAssertEqual(TradingAccountMode.parseWireValue("funded"), .funded)

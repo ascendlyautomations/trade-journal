@@ -98,7 +98,10 @@ nonisolated struct DashboardTradeWireV1: Codable, Sendable, Equatable {
             reviewed: reviewed?.value,
             is_initial_import: is_initial_import?.value,
             import_source: import_source,
-            import_fingerprint: import_fingerprint
+            import_fingerprint: import_fingerprint,
+            source_account_id: source_account_id,
+            copied_account_ids: copied_account_ids,
+            copy_trading_group_id: copy_trading_group_id
         )
     }
 

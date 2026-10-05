@@ -67,6 +67,16 @@ nonisolated protocol SupabaseDatabaseExecuting: Sendable {
     func delete(from table: String, query: [URLQueryItem]) async throws
 
     func rpcData(functionName: String, parametersJSON: Data?) async throws -> Data
+
+    /// Guest-readable RPC. Uses the anon key and does not require a user access token.
+    func rpcDataAllowingAnon(functionName: String, parametersJSON: Data?) async throws -> Data
+}
+
+extension SupabaseDatabaseExecuting {
+    func rpcDataAllowingAnon(functionName: String, parametersJSON: Data?) async throws -> Data {
+        _ = (functionName, parametersJSON)
+        throw AppError.authentication(.notConfigured)
+    }
 }
 
 extension SupabaseDatabaseExecuting {
@@ -375,6 +385,17 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
             totalMs: RPCTransportTiming.milliseconds(from: preparedAt, to: responseReceivedAt)
         )
         return response.data
+    }
+
+    func rpcDataAllowingAnon(functionName: String, parametersJSON: Data?) async throws -> Data {
+        DatabaseRequestDebugLog.write(operation: "RPC", target: functionName, reason: "demo-snapshot")
+        return try await transport.send(
+            host: .supabase,
+            path: "/rest/v1/rpc/\(functionName)",
+            method: .post,
+            body: parametersJSON ?? Data("{}".utf8),
+            requiresAuthentication: false
+        ).data
     }
 }
 

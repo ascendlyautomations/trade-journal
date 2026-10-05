@@ -1,5 +1,15 @@
 import SwiftUI
 
+/// Row id for ``SettingsRoute/withdrawalDetail``. The settings path cannot carry the id.
+@MainActor
+enum WithdrawalDetailSelection {
+    static var historyItemID: String?
+
+    static func stage(_ historyItemID: String) {
+        self.historyItemID = historyItemID
+    }
+}
+
 /// Read-only withdrawal / payout history detail — optional post-as-achievement (no ledger mutation).
 struct WithdrawalDetailView: View {
     let historyItemID: String
@@ -11,6 +21,8 @@ struct WithdrawalDetailView: View {
     @State private var accountsViewModel: ManageAccountsViewModel
     @State private var didFinishHydrate = false
     @State private var showsEditor = false
+    @State private var editingEntryID: AccountPayoutEntryID?
+    @State private var editingAccountID: TradingAccountID?
     @State private var editorDraft = AccountPayoutEntryDraft(amountDigits: "", payoutDate: .now, note: "")
     @State private var confirmsDelete = false
     @State private var imageOwnerID: String?
@@ -87,16 +99,19 @@ struct WithdrawalDetailView: View {
         }
         .onAppear {
             accountsViewModel.seedWithdrawalsAccountsFromSessionCache()
+            if imageOwnerID == nil {
+                imageOwnerID = withdrawalsHistory.profileID?.rawValue
+            }
         }
         .task {
             await hydrate()
         }
         .sheet(isPresented: $showsEditor) {
-            if let item = historyItem, let entryID = item.ledgerEntryID {
+            if let editingEntryID, let editingAccountID {
                 AccountPayoutEditorSheet(
                     viewModel: accountsViewModel,
-                    accountID: item.accountID,
-                    editingEntryID: entryID,
+                    accountID: editingAccountID,
+                    editingEntryID: editingEntryID,
                     draft: $editorDraft,
                     isPresented: $showsEditor,
                     copy: .payoutHistory,
@@ -283,7 +298,14 @@ struct WithdrawalDetailView: View {
     }
 
     private func beginEdit() {
-        guard let item = historyItem, item.ledgerEntryID != nil else { return }
+        guard let item = historyItem, let entryID = item.ledgerEntryID else { return }
+        editingEntryID = entryID
+        editingAccountID = item.accountID
+        PayoutEditDiagnostics.open(
+            historyItemID: item.id,
+            editable: true,
+            surface: "editor"
+        )
         editorDraft = AccountPayoutEntryDraft(
             amountDigits: NumericInputFieldSupport.seedEditingText(
                 from: item.amount,

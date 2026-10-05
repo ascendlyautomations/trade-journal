@@ -104,10 +104,26 @@ actor DefaultTradingReportRepository: TradingReportRepository {
 
     private func loadEligibleTrades(forceNetwork: Bool) async throws -> [Trade] {
         let userID = await session.currentUserID
-        let profileID = ProfileID(userID?.rawValue ?? "dev.reports")
+        let demoActive = await AppLaunchController.shared.isDemoExperienceActive
+        guard case .viewer(let profileID) = SessionViewerIdentity.resolve(
+            userID: userID,
+            demoExperienceActive: demoActive
+        ) else {
+            throw AppError.unknown(message: SessionViewerIdentity.sessionUnavailableMessage)
+        }
+        let latestUserID = await session.currentUserID
+        guard SessionViewerIdentity.shouldCommit(
+            resolved: profileID,
+            userID: latestUserID,
+            demoExperienceActive: await AppLaunchController.shared.isDemoExperienceActive
+        ) else {
+            throw AppError.unknown(message: SessionViewerIdentity.sessionUnavailableMessage)
+        }
 
         let loaded: [Trade]
-        if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+        if profileID == DemoExperienceSupport.profileID {
+            loaded = DemoCanonicalDataset.trades()
+        } else if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
             loaded = ProfileTradeFixtures.samples(owner: profileID)
         } else {
             loaded = try await SessionOwnerTradesStore.shared.trades(
@@ -126,7 +142,9 @@ actor DefaultTradingReportRepository: TradingReportRepository {
     // MARK: - Notify (web `requestTradingReportNotification`)
 
     private func maybeNotify(userID: String?, snapshot: TradingReportsSnapshot) async {
-        guard let userID, !userID.hasPrefix("dev.") else { return }
+        guard let userID,
+              !DemoExperienceSupport.usesLocalBundledData(ProfileID(userID))
+        else { return }
         guard let transport = supabase.transport else { return }
 
         for periodKey: TradingReportPeriodKey in [.weeklyLast, .monthlyLast] {

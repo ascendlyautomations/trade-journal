@@ -718,25 +718,21 @@ final class TradeRoomsHomeViewModel {
         }
 
         if DemoExperienceSupport.usesLocalBundledSocialData(sessionViewer) {
+            let bootstrapScope = discoveryScope.bootstrapCacheScope
             let bootstrap: TradeRoomsHomeBootstrap
-            if inboxStore.rooms.isEmpty {
-                bootstrap = TradeRoomsHomeBootstrap(
+            if sessionViewer == DemoExperienceSupport.profileID {
+                bootstrap = DemoExploreTradeRoom.homeBootstrap(
                     viewerID: sessionViewer,
-                    scope: discoveryScope,
-                    yourRooms: [],
-                    suggested: [],
-                    popular: []
+                    scope: bootstrapScope
                 )
             } else {
-                let bootstrapScope = discoveryScope.bootstrapCacheScope
-                bootstrap = (try? await explore.tradeRoomsHomeBootstrap(
-                    scope: bootstrapScope,
-                    limit: bootstrapFetchLimit(for: bootstrapScope)
-                ))
-                    ?? TradeRoomsFixtures.homeBootstrap(viewerID: sessionViewer, scope: bootstrapScope)
+                bootstrap = TradeRoomsFixtures.homeBootstrap(
+                    viewerID: sessionViewer,
+                    scope: bootstrapScope
+                )
             }
             SessionTradeRoomsDiscoveryStore.shared.seed(bootstrap, for: sessionViewer)
-            applyHomeBootstrap(bootstrap, viewerID: sessionViewer, source: .network)
+            applyHomeBootstrap(bootstrap, viewerID: sessionViewer, source: .cache)
             discoveryPhase = .loaded
             #if DEBUG
             TradeRoomsHomeBootstrapProbe.bootstrapReturned(bootstrap)

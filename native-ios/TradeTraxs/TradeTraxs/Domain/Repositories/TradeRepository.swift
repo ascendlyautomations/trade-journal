@@ -274,7 +274,9 @@ nonisolated enum TradeHistoryLocalMatch {
         let filters = query.filters
         if trade.mode == .backtest { return false }
 
-        if case .account(let id) = filters.account, trade.accountID != id {
+        if case .account(let id) = filters.account,
+           !CopyTradePresentation.matchesParticipatingAccountFilter(trade: trade, accountID: id)
+        {
             return false
         }
 

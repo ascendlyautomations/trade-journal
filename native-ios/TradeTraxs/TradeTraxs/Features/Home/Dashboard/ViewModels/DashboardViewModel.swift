@@ -354,18 +354,21 @@ final class DashboardViewModel {
         )
     }
 
-    /// True while the V3 chart overlay for the current account scope is still resolving.
+    /// True only while the chart overlay for this account has not resolved.
+    /// A loaded empty series and a failed overlay both leave this spinner.
     var isEquityChartOverlayLoading: Bool {
         guard usesDashboardAnalyticsV3, analyticsV3Bootstrap != nil else { return false }
-        if selectedChartOverlayLoaded { return false }
         switch selectedAccountChartsAvailability {
         case .loading:
             return true
-        case .notRequested, .failed:
-            return accountChartHydrateTask != nil || aggregateChartHydrateTask != nil
-                || needsEquityChartOverlayFetch(ignoreSettlement: true)
+        case .failed:
+            return false
         case .loaded:
             return !selectedChartOverlayLoaded
+        case .notRequested:
+            if selectedChartOverlayLoaded { return false }
+            return accountChartHydrateTask != nil || aggregateChartHydrateTask != nil
+                || needsEquityChartOverlayFetch(ignoreSettlement: true)
         }
     }
 
@@ -918,12 +921,11 @@ final class DashboardViewModel {
         }
 
         let userID = await session.currentUserID
-        let profileID: ProfileID
-        if let userID {
-            profileID = ProfileID(userID.rawValue)
-        } else if SessionViewerGate.shared.allowsUnscopedFallback {
-            profileID = ProfileID("dev.screenshot")
-        } else {
+        let demoActive = AppLaunchController.shared.isDemoExperienceActive
+        guard case .viewer(let profileID) = SessionViewerIdentity.resolve(
+            userID: userID,
+            demoExperienceActive: demoActive
+        ) else {
             blockColdFinish = true
             return
         }
@@ -932,18 +934,42 @@ final class DashboardViewModel {
             return
         }
         self.profileID = profileID
+        if demoActive {
+            SessionViewerGate.shared.bind(profileID.rawValue)
+        }
         ensureAnalyticsReconciliationObserver()
 
         if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
-            await SessionNetworkGate.shared.awaitReady()
+            let latestUserID = await session.currentUserID
+            guard SessionViewerIdentity.shouldCommit(
+                resolved: profileID,
+                userID: latestUserID,
+                demoExperienceActive: AppLaunchController.shared.isDemoExperienceActive
+            ), canCommit(profileID: profileID, generation: activeGeneration) else {
+                blockColdFinish = true
+                return
+            }
+            if !DemoExperienceSupport.usesLocalBundledData(profileID) {
+                await SessionNetworkGate.shared.awaitReady()
+            }
+            var committedFixtures = false
             await DashboardLoadProbe.measure(
                 "dashboard.fixtures",
                 kind: .local,
                 blocksFirstUsefulRender: true
             ) {
+                let latestUserID = await session.currentUserID
+                guard SessionViewerIdentity.shouldCommit(
+                    resolved: profileID,
+                    userID: latestUserID,
+                    demoExperienceActive: AppLaunchController.shared.isDemoExperienceActive
+                ), canCommit(profileID: profileID, generation: activeGeneration) else {
+                    return
+                }
                 applyFixtures(profileID: profileID)
+                committedFixtures = true
             }
-            guard canCommit(profileID: profileID, generation: activeGeneration) else {
+            guard committedFixtures, canCommit(profileID: profileID, generation: activeGeneration) else {
                 blockColdFinish = true
                 return
             }
@@ -952,7 +978,9 @@ final class DashboardViewModel {
             DashboardLoadProbe.markFirstUsefulRender()
             DashboardLoadProbe.markFullHydration()
             AuthenticatedLaunchPhasing.markCriticalVisibleSurfaceReady(tab: .home)
-            await startRealtime(profileID: profileID)
+            if !DemoExperienceSupport.usesLocalBundledData(profileID) {
+                await startRealtime(profileID: profileID)
+            }
             loadTask = nil
             return
         }

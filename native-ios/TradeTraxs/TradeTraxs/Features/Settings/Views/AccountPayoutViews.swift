@@ -247,6 +247,13 @@ struct AccountPayoutEditorSheet: View {
                     imageWrite = .set(uploadedURL ?? "")
                 } catch {
                     localError = UserFacingError.message(for: error)
+                    if let editingEntryID {
+                        PayoutEditDiagnostics.saveFailed(
+                            entryID: editingEntryID.rawValue,
+                            accountID: accountID.rawValue,
+                            error: error
+                        )
+                    }
                     return
                 }
             }

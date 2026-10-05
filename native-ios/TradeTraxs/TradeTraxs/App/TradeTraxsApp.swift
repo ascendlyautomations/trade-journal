@@ -24,6 +24,7 @@ struct TradeTraxsApp: App {
                 currentUserProfile: appEnvironment.currentUserProfile,
                 appBootstrapState: appEnvironment.appBootstrapState,
                 profileOnboardingGate: appEnvironment.profileOnboardingGate,
+                postSignupTransition: appEnvironment.authentication.coordinator.postSignupTransition,
                 contentReportPresenter: appEnvironment.contentReportPresenter,
                 thirdPartyAIConsentPresenter: appEnvironment.thirdPartyAIConsentPresenter,
                 allowsDevelopmentBypass: appEnvironment.authentication.configuration.allowsDevelopmentSessionBypass
@@ -109,7 +110,7 @@ struct TradeTraxsApp: App {
         Task { @MainActor in
             try? await appEnvironment.authentication.coordinator.continueAsDevelopmentSessionIfAllowed()
             let userID = await appEnvironment.authentication.sessionBridge.currentUserID
-            let profileID = ProfileID(userID?.rawValue ?? "dev.screenshot")
+            let profileID = explicitScreenshotProfileID(userID: userID)
             let cache = appEnvironment.data.detailCache
             let coordinator = appEnvironment.navigation.coordinator
 
@@ -165,9 +166,8 @@ struct TradeTraxsApp: App {
             try? await appEnvironment.authentication.coordinator.continueAsDevelopmentSessionIfAllowed()
             try? await Task.sleep(nanoseconds: 500_000_000)
             appEnvironment.navigation.coordinator.open(.tab(.profile))
-            let profileID = ProfileID(
-                await appEnvironment.authentication.sessionBridge.currentUserID?.rawValue
-                    ?? "dev.screenshot"
+            let profileID = explicitScreenshotProfileID(
+                userID: await appEnvironment.authentication.sessionBridge.currentUserID
             )
             let trades = ProfileTradeFixtures.samples(owner: profileID)
             let store = appEnvironment.data.engagementStore
@@ -205,9 +205,8 @@ struct TradeTraxsApp: App {
             try? await appEnvironment.authentication.coordinator.continueAsDevelopmentSessionIfAllowed()
             try? await Task.sleep(nanoseconds: 500_000_000)
             appEnvironment.navigation.coordinator.open(.tab(.profile))
-            let profileID = ProfileID(
-                await appEnvironment.authentication.sessionBridge.currentUserID?.rawValue
-                    ?? "dev.screenshot"
+            let profileID = explicitScreenshotProfileID(
+                userID: await appEnvironment.authentication.sessionBridge.currentUserID
             )
             let posts = ProfilePostFixtures.samples(owner: profileID)
             let store = appEnvironment.data.engagementStore
@@ -249,9 +248,8 @@ struct TradeTraxsApp: App {
         Task { @MainActor in
             try? await appEnvironment.authentication.coordinator.continueAsDevelopmentSessionIfAllowed()
             try? await Task.sleep(nanoseconds: 500_000_000)
-            let profileID = ProfileID(
-                await appEnvironment.authentication.sessionBridge.currentUserID?.rawValue
-                    ?? "dev.screenshot"
+            let profileID = explicitScreenshotProfileID(
+                userID: await appEnvironment.authentication.sessionBridge.currentUserID
             )
             appEnvironment.navigation.coordinator.open(.tab(.profile))
             if wantsFollowers {
@@ -602,6 +600,18 @@ struct TradeTraxsApp: App {
         if args.contains("-networkDiagnosticEnd") {
             TradeTraxsNetworkDiagnostic.endSessionAndPrint()
         }
+    }
+
+    /// DEBUG screenshot launches only. A missing development session uses the named fixture id.
+    private func explicitScreenshotProfileID(userID: UserID?) -> ProfileID {
+        if case .viewer(let profileID) = SessionViewerIdentity.resolve(
+            userID: userID,
+            demoExperienceActive: false,
+            screenshotFixturesEnabled: true
+        ) {
+            return profileID
+        }
+        return SessionViewerIdentity.screenshotFixtureProfileID
     }
     #endif
 }

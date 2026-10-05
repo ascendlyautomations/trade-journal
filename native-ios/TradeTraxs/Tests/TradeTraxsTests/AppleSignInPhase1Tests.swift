@@ -172,8 +172,62 @@ final class AppleSignInPhase1Tests: XCTestCase {
         let misconfigured = UserFacingError.map(AuthenticationError.providerMisconfigured(.apple))
         XCTAssertTrue(misconfigured.message.contains("not configured"))
 
-        let invalidToken = UserFacingError.map(AuthenticationError.providerTokenInvalid(.apple))
-        XCTAssertTrue(invalidToken.message.contains("verify"))
+        XCTAssertEqual(
+            SignInFormErrorPresentation.inlineMessage(for: AuthenticationError.providerTokenInvalid(.apple)),
+            SignInFormErrorPresentation.appleFailure
+        )
+    }
+
+    func testCoordinatorAppleSignInMarksAuthenticatedShell() async throws {
+        let navigation = CompositionRoot.bootstrapNavigation()
+        let backend = InMemoryAuthenticationBackend()
+        let auth = CompositionRoot.bootstrapAuthenticationForTests(
+            navigation: navigation,
+            backend: backend
+        )
+        auth.manager.sessionBootstrap = AuthenticatedSessionBootstrap(
+            profiles: RecordingProfileRepository(existing: nil),
+            backend: backend
+        )
+
+        try await auth.coordinator.signInWithApple(
+            credential: AppleIDCredentialPayload(
+                idToken: "token",
+                nonce: "nonce",
+                fullName: nil,
+                email: nil
+            )
+        )
+
+        XCTAssertTrue(auth.manager.state.isSessionReady)
+        XCTAssertEqual(navigation.store.sessionPhase, .authenticated)
+    }
+
+    func testAppleSignInRemainsAuthenticatedWhenProfileBootstrapFails() async throws {
+        let navigation = CompositionRoot.bootstrapNavigation()
+        let backend = InMemoryAuthenticationBackend()
+        let auth = CompositionRoot.bootstrapAuthenticationForTests(
+            navigation: navigation,
+            backend: backend
+        )
+        let profiles = RecordingProfileRepository(existing: nil)
+        profiles.ensureThrows = true
+        auth.manager.sessionBootstrap = AuthenticatedSessionBootstrap(
+            profiles: profiles,
+            backend: backend
+        )
+
+        try await auth.coordinator.signInWithApple(
+            credential: AppleIDCredentialPayload(
+                idToken: "token",
+                nonce: "nonce",
+                fullName: nil,
+                email: nil
+            )
+        )
+
+        XCTAssertTrue(auth.manager.state.isSessionReady)
+        XCTAssertEqual(navigation.store.sessionPhase, .authenticated)
     }
 
     func testManagerSignInWithAppleCredentialRunsBootstrap() async throws {
@@ -244,6 +298,7 @@ final class AppleSignInPhase1Tests: XCTestCase {
 
 private final class RecordingProfileRepository: ProfileRepository, @unchecked Sendable {
     private var stored: Profile?
+    var ensureThrows = false
     private(set) var ensureCallCount = 0
     private(set) var insertCallCount = 0
     private(set) var updateCallCount = 0
@@ -270,6 +325,9 @@ private final class RecordingProfileRepository: ProfileRepository, @unchecked Se
 
     func ensureProfileExists(for profileID: ProfileID) async throws -> Profile {
         ensureCallCount += 1
+        if ensureThrows {
+            throw AppError.unknown(message: "simulated bootstrap failure")
+        }
         if let stored, stored.id == profileID {
             return stored
         }

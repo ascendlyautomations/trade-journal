@@ -49,6 +49,7 @@ struct AdminUserSummary: Sendable, Hashable, Identifiable, Codable {
     var bannedReason: String?
     var bannedAt: Date?
     var isBetaTester: Bool
+    var isHiddenFromCommunity: Bool
 }
 
 nonisolated struct AdminUserActivityCounts: Sendable, Equatable {
@@ -89,6 +90,7 @@ nonisolated protocol AdminUsersRepository: Sendable {
     func fetchActivityCounts(targetUserID: ProfileID) async throws -> AdminUserActivityCounts
     func banUser(targetUserID: ProfileID, adminUserID: ProfileID, reason: String) async throws
     func unbanUser(targetUserID: ProfileID, adminUserID: ProfileID) async throws
+    func setHiddenFromCommunity(targetUserID: ProfileID, adminUserID: ProfileID, hidden: Bool) async throws
     func fetchDeletionPreview(targetUserID: ProfileID) async throws -> AdminUserDeletionPreview
     func deleteUser(targetUserID: ProfileID) async throws
 }

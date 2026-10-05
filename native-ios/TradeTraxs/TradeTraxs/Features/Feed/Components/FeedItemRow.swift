@@ -297,14 +297,39 @@ struct FeedItemRow: View {
 
     private func tradeSummary(_ summary: TradeSummary) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            if summary.mode == .copyTraded {
+                Text("Copy Traded")
+                    .experienceStyle(.caption, color: colors.primaryText)
+                    .fontWeight(.semibold)
+                    .accessibilityIdentifier("feed.trade.copyTradedTitle")
+            }
+
             PublicTradeHeadlineRow(
                 ticker: summary.symbol.ticker,
                 realizedPnL: summary.realizedPnL
             )
             .accessibilityIdentifier("feed.trade.headline")
 
-            PublicTradeMetaChipRow(summary: summary)
+            PublicTradeMetaChipRow(summary: summary, showsSession: summary.mode != .copyTraded)
                 .accessibilityIdentifier("feed.trade.badges")
+
+            if summary.mode == .copyTraded {
+                Text(
+                    "\(TradeDisplay.sideTitle(summary.side)) • \(TradeDisplay.dateText(summary.entryAt))"
+                )
+                .experienceStyle(.caption, color: colors.secondaryText)
+                .lineLimit(2)
+                .accessibilityIdentifier("feed.trade.copySideTiming")
+
+                if let modeSummary = summary.copyTradePublicModeSummary,
+                   !modeSummary.isEmpty
+                {
+                    Text(modeSummary)
+                        .experienceStyle(.caption, color: colors.secondaryText)
+                        .lineLimit(2)
+                        .accessibilityIdentifier("feed.trade.copyModeSummary")
+                }
+            }
         }
     }
 

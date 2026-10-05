@@ -33,28 +33,43 @@ final class CreateAchievementViewModel {
     private let trades: any TradeRepository
     private let session: any SessionProviding
     private let uploadServices: GlobalUploadServices
+    private let objectStorage: (any ObjectStorageProviding)?
+    private let contentDrafts: (any ContentDraftRepository)?
     private let onDismiss: () -> Void
 
     private var viewerID: ProfileID?
     private var hasPrepared = false
     private var hasLoadedAccounts = false
     private var pendingWithdrawalLink: WithdrawalAchievementLinkage.Source?
+    private(set) var isSavingDraft = false
+    private var activeDraftID: UUID?
+    private var retainedDraftImagePath: String?
+    private var didClearDraftImage = false
+    private var didRestoreDraftMedia = false
 
     init(
         achievements: any AchievementRepository,
         trades: any TradeRepository,
         session: any SessionProviding,
         uploadServices: GlobalUploadServices,
+        objectStorage: (any ObjectStorageProviding)? = nil,
+        contentDrafts: (any ContentDraftRepository)? = nil,
         prefill: CreateAchievementPrefill? = nil,
+        restoredDraft: ContentDraft? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.achievements = achievements
         self.trades = trades
         self.session = session
         self.uploadServices = uploadServices
+        self.objectStorage = objectStorage
+        self.contentDrafts = contentDrafts
         self.onDismiss = onDismiss
         if let prefill {
             applyPrefill(prefill)
+        }
+        if let restoredDraft, restoredDraft.type == .achievement {
+            applyAchievementDraft(restoredDraft)
         }
     }
 
@@ -187,6 +202,77 @@ final class CreateAchievementViewModel {
     func clearImage() {
         finalImageData = nil
         finalImage = nil
+        didClearDraftImage = true
+    }
+
+    var showsSaveDraft: Bool {
+        contentDrafts != nil && ExploreModeSupport.canWriteContent
+    }
+
+    var canSaveDraft: Bool {
+        guard showsSaveDraft, !isSavingDraft, phase != .publishing else { return false }
+        let hasRetainedImage = retainedDraftImagePath != nil && !didClearDraftImage
+        return finalImageData != nil || hasRetainedImage || !makeAchievementDraftState(imagePath: nil).isMeaningfullyEmpty
+    }
+
+    func saveDraft() {
+        guard canSaveDraft, let contentDrafts else {
+            if showsSaveDraft, !isSavingDraft, phase != .publishing {
+                formError = "Nothing to save yet."
+            }
+            return
+        }
+        isSavingDraft = true
+        formError = nil
+        let draftID = activeDraftID ?? UUID()
+        let imageData = finalImageData
+        let previousPath = retainedDraftImagePath
+        let clearedImage = didClearDraftImage
+        let state = makeAchievementDraftState(imagePath: nil)
+        Task {
+            do {
+                var payloadState = state
+                if let imageData {
+                    payloadState.imageStoragePath = try await contentDrafts.uploadDraftImage(
+                        draftID: draftID,
+                        data: imageData
+                    )
+                    if let previousPath, previousPath != payloadState.imageStoragePath {
+                        await contentDrafts.deleteDraftMedia(paths: [previousPath])
+                    }
+                } else if clearedImage {
+                    if let previousPath {
+                        await contentDrafts.deleteDraftMedia(paths: [previousPath])
+                    }
+                } else {
+                    payloadState.imageStoragePath = previousPath
+                }
+                var payload = ContentDraftPayload()
+                payload.achievement = payloadState
+                guard !payload.isMeaningfullyEmpty else {
+                    isSavingDraft = false
+                    formError = "Nothing to save yet."
+                    return
+                }
+                let saved = try await contentDrafts.saveDraft(
+                    ContentDraft(
+                        id: draftID,
+                        userID: await session.currentUserID ?? UserID(""),
+                        type: .achievement,
+                        payload: payload,
+                        createdAt: Date(),
+                        updatedAt: Date()
+                    )
+                )
+                activeDraftID = saved.id
+                isSavingDraft = false
+                SaveSuccessConfirmationCenter.shared.present("Draft saved")
+                onDismiss()
+            } catch {
+                isSavingDraft = false
+                formError = UserFacingError.message(for: error)
+            }
+        }
     }
 
     #if DEBUG
@@ -236,6 +322,13 @@ final class CreateAchievementViewModel {
             withdrawalLink: pendingWithdrawalLink
         )
         let jobID = GlobalUploadCoordinator.shared.enqueueAchievement(spec: spec, services: uploadServices)
+        if let activeDraftID, let contentDrafts {
+            ContentDraftPublicationCleanup.shared.track(
+                jobID: jobID,
+                draftID: activeDraftID,
+                repository: contentDrafts
+            )
+        }
         clearImage()
         titleText = ""
         descriptionText = ""
@@ -264,7 +357,72 @@ final class CreateAchievementViewModel {
             phase = .failed("Sign in to create an achievement.")
             return
         }
+        await restorePendingDraftMediaIfNeeded()
         phase = .ready
+    }
+
+    private func applyAchievementDraft(_ draft: ContentDraft) {
+        guard let state = draft.payload.achievement else { return }
+        activeDraftID = draft.id
+        retainedDraftImagePath = state.imageStoragePath
+        kind = AchievementKind(rawValue: state.kind) ?? .milestone
+        titleText = state.title
+        descriptionText = state.body
+        payoutAmountText = state.payoutAmount
+        if let achievedAt = state.achievedAt.flatMap(ContentDraftDateCodec.date(from:)) {
+            self.achievedAt = achievedAt
+        }
+        isPublic = state.isPublic
+        if let accountID = state.accountID, !accountID.isEmpty {
+            selectedAccountID = TradingAccountID(accountID)
+        }
+        lockKind = state.lockKind
+        if let entryID = state.withdrawalLedgerEntryID, !entryID.isEmpty {
+            pendingWithdrawalLink = .ledgerEntry(AccountPayoutEntryID(entryID))
+        } else if let cycleID = state.withdrawalCycleID, !cycleID.isEmpty {
+            pendingWithdrawalLink = .payoutCycle(cycleID)
+        }
+    }
+
+    private func makeAchievementDraftState(imagePath: String?) -> AchievementComposerDraftState {
+        var state = AchievementComposerDraftState()
+        state.kind = kind.rawValue
+        state.title = titleText
+        state.body = descriptionText
+        state.payoutAmount = payoutAmountText
+        state.achievedAt = ContentDraftDateCodec.string(from: achievedAt)
+        state.isPublic = isPublic
+        state.accountID = selectedAccountID?.rawValue
+        state.lockKind = lockKind
+        state.imageStoragePath = imagePath
+        switch pendingWithdrawalLink {
+        case .ledgerEntry(let id):
+            state.withdrawalLedgerEntryID = id.rawValue
+        case .payoutCycle(let cycleID):
+            state.withdrawalCycleID = cycleID
+        case nil:
+            break
+        }
+        return state
+    }
+
+    private func restorePendingDraftMediaIfNeeded() async {
+        guard !didRestoreDraftMedia else { return }
+        didRestoreDraftMedia = true
+        guard let path = retainedDraftImagePath, let objectStorage else { return }
+        do {
+            let data = try await ContentDraftMediaDownload.imageData(
+                path: path,
+                session: session,
+                objectStorage: objectStorage
+            )
+            guard let image = UIImage(data: data) else { return }
+            finalImageData = data
+            finalImage = image
+            didClearDraftImage = false
+        } catch {
+            formError = "Couldn't restore the draft image."
+        }
     }
 
     func applyPrefill(_ prefill: CreateAchievementPrefill) {

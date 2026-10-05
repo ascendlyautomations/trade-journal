@@ -169,15 +169,17 @@ export async function insertCopyTradedTrades({
   }
 
   if (isPublic && trades.length > 0) {
-    const postRows = trades.map((trade) => ({
-      user_id: userId,
-      trade_id: trade.id,
-      image_url: tradeTemplate.image_url ?? null,
-      pnl: tradeTemplate.pnl ?? null,
-      rr: tradeTemplate.rr ?? null,
-      caption: postCaption ?? "",
-    }))
-    const { error: postError } = await client.from("posts").insert(postRows)
+    const canonicalTrade = trades[0]
+    const { error: postError } = await client.from("posts").insert([
+      {
+        user_id: userId,
+        trade_id: canonicalTrade.id,
+        image_url: tradeTemplate.image_url ?? null,
+        pnl: tradeTemplate.pnl ?? null,
+        rr: tradeTemplate.rr ?? null,
+        caption: postCaption ?? "",
+      },
+    ])
     if (postError) {
       console.error("[insertCopyTradedTrades] post insert error:", postError)
       return {

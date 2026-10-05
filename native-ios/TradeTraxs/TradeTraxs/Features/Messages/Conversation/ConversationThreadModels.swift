@@ -75,6 +75,55 @@ enum ConversationThreadScrollSupport {
         }
     }
 
+    /// Scroll callback payload. Equality ignores sub-point jitter and never carries NaN,
+    /// so equivalent frames do not republish scroll state.
+    struct ScrollGeometrySignal: Equatable {
+        var sample: LayoutSample
+
+        init(contentHeight: CGFloat, contentOffsetY: CGFloat, containerHeight: CGFloat) {
+            sample = ConversationThreadScrollSupport.layoutSample(
+                contentHeight: contentHeight,
+                contentOffsetY: contentOffsetY,
+                containerHeight: containerHeight
+            )
+        }
+
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            ConversationThreadScrollSupport.geometrySignalsMatch(lhs.sample, rhs.sample)
+        }
+    }
+
+    /// Non-finite inputs become a finite sample that is not treated as near the bottom.
+    /// `NaN == NaN` is false, and that inequality was retriggering scroll state forever.
+    static func layoutSample(
+        contentHeight: CGFloat,
+        contentOffsetY: CGFloat,
+        containerHeight: CGFloat
+    ) -> LayoutSample {
+        let inputsFinite = contentHeight.isFinite && contentOffsetY.isFinite && containerHeight.isFinite
+        let height = finite(contentHeight)
+        let offset = finite(contentOffsetY)
+        let container = finite(containerHeight)
+        let distance = height - offset - container
+        return LayoutSample(
+            contentHeight: height,
+            contentOffsetY: offset,
+            containerHeight: container,
+            isNearBottom: inputsFinite && distance.isFinite && distance <= bottomProximityThreshold
+        )
+    }
+
+    static func geometrySignalsMatch(_ lhs: LayoutSample, _ rhs: LayoutSample) -> Bool {
+        guard lhs.isNearBottom == rhs.isNearBottom else { return false }
+        return abs(lhs.contentHeight - rhs.contentHeight) < 1
+            && abs(lhs.containerHeight - rhs.containerHeight) < 1
+            && abs(lhs.distanceFromBottom - rhs.distanceFromBottom) < 1
+    }
+
+    private static func finite(_ value: CGFloat) -> CGFloat {
+        value.isFinite ? value : 0
+    }
+
     /// Synthetic scroll scope for Trade Room channels (coordinator conversation binding).
     static func roomChannelScrollScope(roomID: RoomID, channelID: RoomChannelID?) -> ConversationID {
         let channel = channelID?.rawValue ?? "none"

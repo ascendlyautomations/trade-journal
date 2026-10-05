@@ -35,6 +35,19 @@ final class ConversationInitialScrollLifecycleTests: XCTestCase {
         XCTAssertNil(coordinator.desiredScrollPositionID)
     }
 
+    func testRepeatedNearBottomReportDoesNotChangePinnedState() {
+        let coordinator = makeCoordinator()
+        coordinator.completeInitialScrollPosition(conversationID: conversationID)
+        let generation = coordinator.scrollCommandGeneration
+
+        coordinator.reportNearBottom(true, conversationID: conversationID)
+        coordinator.reportNearBottom(true, conversationID: conversationID)
+
+        XCTAssertEqual(coordinator.mode, .bottomPinned)
+        XCTAssertFalse(coordinator.showsNewMessagesIndicator)
+        XCTAssertEqual(coordinator.scrollCommandGeneration, generation)
+    }
+
     func testCompleteInitialScrollPositionEnablesNearBottomTracking() {
         let coordinator = makeCoordinator()
 

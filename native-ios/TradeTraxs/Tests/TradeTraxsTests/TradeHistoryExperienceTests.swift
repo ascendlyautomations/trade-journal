@@ -189,6 +189,57 @@ final class TradeHistoryExperienceTests: XCTestCase {
         await waitFor { viewModel.filters.result == .any }
     }
 
+    func testNilProductionViewerDoesNotLoadTradeFixtures() async {
+        let repository = TradeHistoryStubTradeRepository()
+        let viewModel = TradeHistoryViewModel(
+            trades: repository,
+            session: TradeHistoryStubSession(userID: nil),
+            detailCache: DetailPresentationCache(),
+            tradeDetailRepository: NullTradeDetailRepository(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+        viewModel.loadIfNeeded()
+        await waitFor {
+            if case .failed = viewModel.phase { return true }
+            return false
+        }
+        XCTAssertEqual(viewModel.phase, .failed(SessionViewerIdentity.sessionUnavailableMessage))
+        XCTAssertTrue(viewModel.items.isEmpty)
+        XCTAssertEqual(repository.historyCallCount, 0)
+    }
+
+    func testRealViewerLoadsOwnHistory() async {
+        let realID = "11111111-1111-4111-8111-111111111111"
+        let repository = TradeHistoryStubTradeRepository(empty: true)
+        let viewModel = TradeHistoryViewModel(
+            trades: repository,
+            session: TradeHistoryStubSession(userID: realID),
+            detailCache: DetailPresentationCache(),
+            tradeDetailRepository: NullTradeDetailRepository(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+        XCTAssertEqual(repository.historyOwners, [realID])
+        XCTAssertTrue(viewModel.items.isEmpty)
+    }
+
+    func testStaleScreenshotIdentityDoesNotPaintTradeFixtures() async {
+        let realID = "22222222-2222-4222-8222-222222222222"
+        let repository = TradeHistoryStubTradeRepository(empty: true)
+        let viewModel = TradeHistoryViewModel(
+            trades: repository,
+            session: TradeHistoryIdentityFlipSession(first: "dev.screenshot", then: realID),
+            detailCache: DetailPresentationCache(),
+            tradeDetailRepository: NullTradeDetailRepository(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded || viewModel.phase == .failed(SessionViewerIdentity.sessionUnavailableMessage) }
+        XCTAssertEqual(repository.historyOwners, [realID])
+        XCTAssertTrue(viewModel.items.isEmpty)
+    }
+
     func testPaginationAppendsUniqueAndCancelsStaleSearch() async {
         let store = NavigationStore()
         let coordinator = NavigationCoordinator(store: store)
@@ -371,6 +422,30 @@ final class TradeHistoryExperienceTests: XCTestCase {
 
 // MARK: - Stubs
 
+private final class TradeHistoryIdentityFlipSession: SessionProviding, @unchecked Sendable {
+    private let lock = NSLock()
+    private var upcoming: [String?]
+    private var current: String?
+
+    init(first: String?, then: String?) {
+        upcoming = [first, then]
+        current = first
+    }
+
+    var currentUserID: UserID? {
+        get async {
+            lock.lock()
+            let value = upcoming.isEmpty ? current : upcoming.removeFirst()
+            current = value
+            lock.unlock()
+            guard let value else { return nil }
+            return UserID(value)
+        }
+    }
+
+    var accessToken: String? { get async { nil } }
+}
+
 private struct TradeHistoryStubSession: SessionProviding {
     let userID: String?
     var currentUserID: UserID? {
@@ -457,12 +532,15 @@ private final class TradeHistoryStubTradeRepository: TradeRepository, @unchecked
         CursorPage(items: [], nextCursor: nil)
     }
 
+    var historyOwners: [String] = []
+
     func tradeHistory(
         ownedBy profileID: ProfileID,
         query: TradeHistoryQuery,
         page: PageRequest
     ) async throws -> CursorPage<Trade> {
         historyCallCount += 1
+        historyOwners.append(profileID.rawValue)
         return CursorPage(items: [], nextCursor: nil)
     }
 

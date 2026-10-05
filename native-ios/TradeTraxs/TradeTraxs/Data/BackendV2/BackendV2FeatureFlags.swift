@@ -94,6 +94,7 @@ nonisolated enum BackendV2FeatureFlags {
         .leaderboard,
         .calendar,
         .tradesList,
+        .profileTradesSummaryV2,
         .gettingStarted,
         .dashboardAnalyticsV3,
         .dashboardAnalyticsGRDB,

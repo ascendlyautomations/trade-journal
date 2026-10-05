@@ -44,7 +44,11 @@ final class CropEditorImagePreviewView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         guard let geometry else { return }
-        imageView.frame = geometry.previewImageFrame
+        let frame = geometry.previewImageFrame
+        guard frame.origin.x.isFinite, frame.origin.y.isFinite,
+              frame.size.width.isFinite, frame.size.height.isFinite
+        else { return }
+        imageView.frame = frame
     }
 }
 

@@ -15,6 +15,8 @@ import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 import TradeScreenshotPreview from "@/app/components/ui/TradeScreenshotPreview"
 import CopyTradedBadge from "@/app/components/trade/CopyTradedBadge"
 import TradeCopyTradingDetails from "@/app/components/trade/TradeCopyTradingDetails"
+import CopyTradeTradesPageAccounts from "@/app/components/trade/CopyTradeTradesPageAccounts"
+import type { CopyTradeWireRow } from "@/lib/copyTradePresentation"
 import ExpandableText from "@/app/components/ui/ExpandableText"
 import { isCopyTradedTrade } from "@/lib/tradeCopyTrading"
 import {
@@ -25,6 +27,7 @@ import { type ReelRow } from "@/lib/reels"
 
 export type TradesPageTradeCardProps = {
   trade: any
+  copyGroupMembers?: readonly CopyTradeWireRow[]
   showAdvanced: boolean
   accountRow?: any | null
   /** Optional account directory for Copy Trading source/destination labels. */
@@ -43,6 +46,7 @@ export type TradesPageTradeCardProps = {
 
 function TradesPageTradeCard({
   trade,
+  copyGroupMembers,
   showAdvanced,
   accountRow = null,
   accounts = [],
@@ -251,6 +255,18 @@ function TradesPageTradeCard({
             <span className="text-gray-400">Session:</span> {trade.session}
           </p>
 
+          {copyGroupMembers && copyGroupMembers.length > 0 ? (
+            <div className="mt-2 space-y-1">
+              <p className="text-xs font-semibold text-violet-200 md:text-sm">
+                Copy Traded
+              </p>
+              <CopyTradeTradesPageAccounts
+                members={copyGroupMembers}
+                accounts={accounts}
+              />
+            </div>
+          ) : null}
+
           <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
             {!isCopyTradedMode(trade) &&
             resolveTradeModeBadgeLabel(trade, accountRow) ? (
@@ -288,7 +304,7 @@ function TradesPageTradeCard({
               </span>
             ) : null}
 
-            {hasAccountLine ? (
+            {hasAccountLine && !copyGroupMembers?.length ? (
               <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-gray-300 md:text-sm">
                 <span className="min-w-0 break-words">{accountNameSizeLine}</span>
                 {accountNumberDisplay ? (

@@ -9,7 +9,9 @@ nonisolated enum MediaImageOrientation {
         }
 
         let pixelSize = orientedPixelSize(for: image)
-        guard pixelSize.width > 0, pixelSize.height > 0 else { return image }
+        guard pixelSize.width.isFinite, pixelSize.height.isFinite,
+              pixelSize.width > 0, pixelSize.height > 0
+        else { return image }
 
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = 1
@@ -50,10 +52,10 @@ nonisolated enum MediaImageOrientation {
         if let cgImage = image.cgImage {
             return CGSize(width: cgImage.width, height: cgImage.height)
         }
-        return CGSize(
-            width: image.size.width * image.scale,
-            height: image.size.height * image.scale
-        )
+        let width = image.size.width * image.scale
+        let height = image.size.height * image.scale
+        guard width.isFinite, height.isFinite else { return .zero }
+        return CGSize(width: width, height: height)
     }
 
     nonisolated private static func orientedPixelSize(for image: UIImage) -> CGSize {

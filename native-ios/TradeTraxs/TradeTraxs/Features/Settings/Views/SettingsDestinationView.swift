@@ -108,6 +108,20 @@ struct SettingsDestinationView: View {
                 CopyTradingAccountsView(data: data)
             case .payouts:
                 PayoutsScreenView(data: data, navigationCoordinator: navigationCoordinator)
+            case .withdrawalDetail:
+                if let historyItemID = WithdrawalDetailSelection.historyItemID {
+                    WithdrawalDetailView(
+                        historyItemID: historyItemID,
+                        data: data,
+                        navigationCoordinator: navigationCoordinator
+                    )
+                } else {
+                    ExperienceEmptyState(
+                        icon: .payouts,
+                        title: "Withdrawal unavailable",
+                        message: "Open this withdrawal again from Withdrawals."
+                    )
+                }
             case .privacy:
                 SettingsPrivacyView(data: data, profileStore: currentUserProfile)
             case .privacyBlockedAccounts:

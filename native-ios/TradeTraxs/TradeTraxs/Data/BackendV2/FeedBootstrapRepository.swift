@@ -235,8 +235,14 @@ enum FeedBootstrapLoader {
             throw error
         }
 
-        let applied = FeedBootstrapApplier.apply(bootstrap)
-        _ = FeedRpcProjectionSeeder.seed(bootstrap: bootstrap, detailCache: detailCache)
+        let copyTradePlan = CopyTradeFeedDedupe.plan(from: bootstrap.data.items)
+        var applied = FeedBootstrapApplier.apply(bootstrap)
+        applied.items = CopyTradeFeedDedupe.filterItems(applied.items, plan: copyTradePlan)
+        _ = FeedRpcProjectionSeeder.seed(
+            bootstrap: bootstrap,
+            detailCache: detailCache,
+            copyTradePlan: copyTradePlan
+        )
         let followingIDs = Set(
             bootstrap.data.following_ids_echo
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -257,6 +263,7 @@ enum FeedBootstrapLoader {
         var entries = FeedSupport.sortDescending(
             FeedBootstrap.buildEntriesFromSeededItems(applied.items, detailCache: detailCache)
         )
+        entries = CopyTradeFeedDedupe.dedupeTimeline(entries)
         if !guestPublicMode {
             entries = FeedViewerOwnershipFilter.filterEntries(entries, viewerID: viewerID)
         }
