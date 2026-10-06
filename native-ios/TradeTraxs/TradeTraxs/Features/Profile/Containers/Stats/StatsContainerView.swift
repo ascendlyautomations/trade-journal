@@ -152,21 +152,42 @@ struct StatsContainerView: View {
     }
 
     private var modeFilter: some View {
-        HStack(spacing: ExperienceSpacing.sm) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: ExperienceSpacing.xs) {
-                    ForEach(ProfileStatisticsMetrics.Mode.profileFilterCases) { mode in
-                        ExperienceChip(
-                            title: mode.title,
-                            isSelected: viewModel.selectedMode == mode
-                        ) {
-                            viewModel.setMode(mode)
-                        }
-                        .accessibilityIdentifier("profile.stats.mode.\(mode.rawValue)")
-                    }
+        ViewThatFits(in: .horizontal) {
+            statsFilterRow(fontSize: 14, horizontalPadding: 10, verticalPadding: 5, spacing: 6, chevronSize: 9)
+            statsFilterRow(fontSize: 12, horizontalPadding: 8, verticalPadding: 4, spacing: 4, chevronSize: 8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("profile.stats.filters")
+    }
+
+    private func statsFilterRow(
+        fontSize: CGFloat,
+        horizontalPadding: CGFloat,
+        verticalPadding: CGFloat,
+        spacing: CGFloat,
+        chevronSize: CGFloat
+    ) -> some View {
+        HStack(spacing: spacing) {
+            ForEach(ProfileStatisticsMetrics.Mode.profileFilterCases) { mode in
+                Button {
+                    viewModel.setMode(mode)
+                } label: {
+                    statsFilterBubble(
+                        title: mode.title,
+                        isSelected: viewModel.selectedMode == mode,
+                        showsChevron: false,
+                        fontSize: fontSize,
+                        horizontalPadding: horizontalPadding,
+                        verticalPadding: verticalPadding,
+                        chevronSize: chevronSize
+                    )
                 }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("profile.stats.mode.\(mode.rawValue)")
             }
-            .accessibilityLabel("Account mode filter")
+
+            Spacer(minLength: spacing)
 
             Menu {
                 ForEach(ProfileStatisticsMetrics.Timeframe.allCases) { timeframe in
@@ -181,27 +202,49 @@ struct StatsContainerView: View {
                     }
                 }
             } label: {
-                HStack(spacing: ExperienceSpacing.xxs) {
-                    Text(viewModel.selectedTimeframe.menuTitle)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
-                }
-                .font(ExperienceTypography.footnote)
-                .foregroundStyle(colors.primaryText)
-                .padding(.horizontal, ExperienceSpacing.sm)
-                .frame(minHeight: ExperienceAccessibility.minTouchTarget)
-                .background(colors.fillSecondary)
-                .clipShape(Capsule())
+                statsFilterBubble(
+                    title: viewModel.selectedTimeframe.menuTitle,
+                    isSelected: false,
+                    showsChevron: true,
+                    fontSize: fontSize,
+                    horizontalPadding: horizontalPadding,
+                    verticalPadding: verticalPadding,
+                    chevronSize: chevronSize
+                )
             }
+            .buttonStyle(.plain)
+            .layoutPriority(1)
             .accessibilityLabel("Timeframe")
             .accessibilityValue(viewModel.selectedTimeframe.menuTitle)
             .accessibilityIdentifier("profile.stats.timeframe")
-            .layoutPriority(1)
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("profile.stats.filters")
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func statsFilterBubble(
+        title: String,
+        isSelected: Bool,
+        showsChevron: Bool,
+        fontSize: CGFloat,
+        horizontalPadding: CGFloat,
+        verticalPadding: CGFloat,
+        chevronSize: CGFloat
+    ) -> some View {
+        HStack(spacing: 3) {
+            Text(title)
+                .font(.system(size: fontSize, weight: .medium))
+                .lineLimit(1)
+            if showsChevron {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: chevronSize, weight: .semibold))
+            }
+        }
+        .foregroundStyle(isSelected ? colors.onAccent : colors.primaryText)
+        .padding(.horizontal, horizontalPadding)
+        .padding(.vertical, verticalPadding)
+        .background(isSelected ? colors.accent : colors.fillSecondary)
+        .clipShape(Capsule())
+        .fixedSize(horizontal: true, vertical: true)
     }
 
     private func equityBlock(_ metrics: ProfileStatisticsMetrics.Result) -> some View {
@@ -243,13 +286,16 @@ struct StatsContainerView: View {
                 .experienceStyle(.caption2, color: colors.secondaryText)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
-                .frame(height: 180)
+                .padding(.vertical, ExperienceSpacing.xs)
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("profile.stats.equity.singleTradeNote")
                 .accessibilityLabel(ProfileStatsEquityCurvePresentation.singleTradeAccessibilityLabel)
         } else {
-            ProfileEquityCurveView(points: metrics.equityData)
-                .frame(height: 180)
+            Text("No equity data")
+                .experienceStyle(.footnote, color: colors.secondaryText)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, ExperienceSpacing.xs)
                 .accessibilityLabel("Equity curve")
                 .accessibilityIdentifier("profile.stats.equity.empty")
         }

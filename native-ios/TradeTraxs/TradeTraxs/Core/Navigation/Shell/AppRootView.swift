@@ -1,3 +1,4 @@
+import StoreKit
 import SwiftUI
 
 /// Root application chrome: Splash → Auth stack ↔ retained Main tabs + modal surface.
@@ -16,10 +17,12 @@ struct AppRootView: View {
     let allowsDevelopmentBypass: Bool
 
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.requestReview) private var requestReview
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appEnvironment) private var appEnvironment
     @Bindable private var launchController = AppLaunchController.shared
+    @Bindable private var gettingStartedStore = GettingStartedStore.shared
     @Bindable private var passwordRecovery = PasswordRecoveryModel.shared
     @State private var isLaunchBootstrapping = true
 
@@ -71,6 +74,16 @@ struct AppRootView: View {
                     }
                 }
             )
+            .applyThemeEnvironment(themeManager.themeEnvironment)
+        }
+        .sheet(isPresented: $gettingStartedStore.showsGettingStartedCompletion, onDismiss: {
+            if gettingStartedStore.consumeReviewRequestAfterCompletion() {
+                requestReview()
+            }
+        }) {
+            GettingStartedCompletionSheet {
+                gettingStartedStore.showsGettingStartedCompletion = false
+            }
             .applyThemeEnvironment(themeManager.themeEnvironment)
         }
         .sheet(isPresented: $thirdPartyAIConsentPresenter.isPresented, onDismiss: {

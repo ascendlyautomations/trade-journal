@@ -201,16 +201,15 @@ final class TradesContainerViewModel {
             if snapshot.trades.isEmpty {
                 if snapshot.didLoadTrades {
                     journalItems = []
+                    nextCursor = snapshot.tradesNextCursor
                     seedCachesFromItems()
                     updateStateForVisibleItems()
                     prefetchEngagement(for: [])
+                    acceptBootstrapPreviewOrHydrate(snapshot)
                 }
                 return
             }
-            journalItems = reconcileJournal(
-                snapshot: snapshot.trades,
-                loaded: journalItems
-            )
+            journalItems = mergedBootstrapJournal(snapshot: snapshot, summaries: snapshot.trades)
             #if DEBUG
             ProfileTradesHydrationDiagnostics.logHydration(
                 source: .bootstrap,
@@ -223,7 +222,7 @@ final class TradesContainerViewModel {
             seedCachesFromItems()
             updateStateForVisibleItems()
             prefetchEngagement(for: visibleItems.map(\.id))
-            hydrateAuthoritativeJournalIfNeeded()
+            acceptBootstrapPreviewOrHydrate(snapshot)
             return
         }
 
@@ -233,7 +232,7 @@ final class TradesContainerViewModel {
             hasLoaded: hasLoaded,
             didLoadAuthoritative: snapshot.didLoadTrades
         )
-        journalItems = reconcileJournal(snapshot: reconciled.items, loaded: journalItems)
+        journalItems = mergedBootstrapJournal(snapshot: snapshot, summaries: reconciled.items)
         #if DEBUG
         ProfileTradesHydrationDiagnostics.logHydration(
             source: .bootstrap,
@@ -249,7 +248,7 @@ final class TradesContainerViewModel {
         paginationErrorMessage = nil
         updateStateForVisibleItems()
         prefetchEngagement(for: visibleItems.map(\.id))
-        hydrateAuthoritativeJournalIfNeeded()
+        acceptBootstrapPreviewOrHydrate(snapshot)
     }
 
     /// Profile → Trades tab — ensure V2 journal hydration even after bootstrap `didLoadTrades`.
@@ -897,6 +896,78 @@ final class TradesContainerViewModel {
         journalItems.append(contentsOf: pageJournal.filter { !known.contains($0.id) })
     }
 
+    /// Bootstrap already returned this page. Keep it when the journal rows still
+    /// carry copy linkage and the cursor. Fetch V2 only when that preview is incomplete.
+    private func acceptBootstrapPreviewOrHydrate(_ snapshot: ProfileState) {
+        guard Self.bootstrapPreviewSatisfiesAuthoritativeJournal(
+            seeded: journalItems,
+            summaries: snapshot.trades,
+            didLoadTrades: snapshot.didLoadTrades
+        ) else {
+            hydrateAuthoritativeJournalIfNeeded()
+            return
+        }
+        hasAuthoritativeV2Journal = true
+    }
+
+    private func mergedBootstrapJournal(
+        snapshot: ProfileState,
+        summaries: [TradeSummary]
+    ) -> [TradeOwnerJournalSummary] {
+        if hasAuthoritativeV2Journal, !journalItems.isEmpty {
+            return reconcileJournal(snapshot: summaries, loaded: journalItems)
+        }
+        guard let preview = Self.journalPreview(snapshot.tradeJournalPreview, orderedLike: summaries) else {
+            return reconcileJournal(snapshot: summaries, loaded: journalItems)
+        }
+        if journalItems.isEmpty { return preview }
+        let existingByID = Dictionary(uniqueKeysWithValues: journalItems.map { ($0.id, $0) })
+        var merged = preview.map { row in
+            if let existing = existingByID[row.id],
+               ProfileTradesJournalMapping.journalRichness(existing) > ProfileTradesJournalMapping.journalRichness(row)
+            {
+                return existing
+            }
+            return row
+        }
+        let previewIDs = Set(preview.map(\.id))
+        merged.append(contentsOf: journalItems.filter { !previewIDs.contains($0.id) })
+        return merged
+    }
+
+    private static func journalPreview(
+        _ preview: [TradeOwnerJournalSummary],
+        orderedLike summaries: [TradeSummary]
+    ) -> [TradeOwnerJournalSummary]? {
+        guard !preview.isEmpty, preview.count == summaries.count else { return nil }
+        let byID = Dictionary(uniqueKeysWithValues: preview.map { ($0.id, $0) })
+        let ordered = summaries.compactMap { byID[$0.id] }
+        guard ordered.count == summaries.count else { return nil }
+        return ordered
+    }
+
+    /// True when the bootstrap page can be the first journal page, including its cursor.
+    private static func bootstrapPreviewSatisfiesAuthoritativeJournal(
+        seeded: [TradeOwnerJournalSummary],
+        summaries: [TradeSummary],
+        didLoadTrades: Bool
+    ) -> Bool {
+        guard didLoadTrades else { return false }
+        if summaries.isEmpty { return true }
+        let byID = Dictionary(uniqueKeysWithValues: seeded.map { ($0.id, $0) })
+        for summary in summaries {
+            guard let row = byID[summary.id] else { return false }
+            guard summary.mode == .copyTraded else { continue }
+            guard let copy = row.copyTrade else { return false }
+            let hasParticipants = copy.sourceAccountID != nil
+                || !copy.copiedAccountIDs.isEmpty
+                || !copy.participatingAccountModesByID.isEmpty
+                || row.accountID != nil
+            if !hasParticipants { return false }
+        }
+        return true
+    }
+
     private struct V2HydrationDecision {
         var shouldFetch: Bool
         var reason: String
@@ -1245,10 +1316,21 @@ nonisolated enum TradeDisplay {
 
     /// Shared social trade detail — entry/exit clock times on one line.
     static func socialSharedExecutionTimeRangeText(for trade: Trade) -> String {
-        let entry = executionTimeOnlyFormatter.string(from: trade.entryAt)
-        guard let exitAt = trade.exitAt else { return entry }
+        socialSharedExecutionTimeRangeText(entryAt: trade.entryAt, exitAt: trade.exitAt)
+    }
+
+    /// Entry/exit clock times from the trade's execution timestamps.
+    static func socialSharedExecutionTimeRangeText(entryAt: Date, exitAt: Date?) -> String {
+        let entry = executionTimeOnlyFormatter.string(from: entryAt)
+        guard let exitAt else { return entry }
         let exit = executionTimeOnlyFormatter.string(from: exitAt)
         return "\(entry) – \(exit)"
+    }
+
+    /// Feed copy-trade metadata — execution clocks, then the canonical trade date.
+    static func feedCopyExecutionMetadata(entryAt: Date, exitAt: Date?) -> String {
+        let times = socialSharedExecutionTimeRangeText(entryAt: entryAt, exitAt: exitAt)
+        return "\(times) • \(dateText(entryAt))"
     }
 
     /// Shared social trade detail — calendar day for the execution (entry day).

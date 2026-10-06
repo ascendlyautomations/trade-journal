@@ -28,6 +28,9 @@ struct ProfileState: Equatable {
     var activeStories: [Story] = []
 
     var trades: [TradeSummary] = []
+    /// First-page journal rows from profile bootstrap, including account and copy linkage.
+    /// Empty for summary-only snapshots such as disk cache.
+    var tradeJournalPreview: [TradeOwnerJournalSummary] = []
     var tradesNextCursor: String?
     var accountNames: [TradingAccountID: String] = [:]
     /// Owner-only display — never render on public Profile surfaces.

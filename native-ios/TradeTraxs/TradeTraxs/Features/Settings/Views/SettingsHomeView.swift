@@ -7,6 +7,7 @@ struct SettingsHomeView: View {
     @Environment(\.stackNavigation) private var stackNavigation
     @Environment(\.appEnvironment) private var appEnvironment
     @Environment(\.themeColors) private var colors
+    @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable private var launchController = AppLaunchController.shared
     @State private var confirmsLogout = false
@@ -78,6 +79,20 @@ struct SettingsHomeView: View {
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("settings.row.\(item.route.rawValue)")
                         .modifier(SettingsAppearanceTourTarget(isAppearance: item.route == .appearance))
+                    }
+                    if section.id == "support" {
+                        Button {
+                            ExperienceHaptics.play(.selection)
+                            guard let url = AppStoreProductReview.writeReviewURL() else { return }
+                            openURL(url)
+                        } label: {
+                            SettingsNavigationRow(
+                                title: "Leave a Rating",
+                                systemImage: "star"
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("settings.row.leaveRating")
                     }
                     if section.id == "personal" {
                         Button {

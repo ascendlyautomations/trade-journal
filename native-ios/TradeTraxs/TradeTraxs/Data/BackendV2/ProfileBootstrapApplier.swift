@@ -52,6 +52,7 @@ nonisolated enum ProfileBootstrapApplier {
         if let page = bootstrap.data.trades_page {
             let mapped = mapTradeSummaries(page.items, ownerID: profileID)
             state.trades = mapped.summaries
+            state.tradeJournalPreview = mapped.journal
             state.tradesNextCursor = page.page_meta.has_more ? page.page_meta.next_cursor : nil
             state.didLoadTrades = true
             detailCache.seed(publicTradeSummaries: mapped.summaries, for: profileID)
@@ -155,19 +156,22 @@ nonisolated enum ProfileBootstrapApplier {
     private static func mapTradeSummaries(
         _ rows: [DashboardTradeWireV1],
         ownerID: ProfileID
-    ) -> (summaries: [TradeSummary], skipped: Int) {
+    ) -> (summaries: [TradeSummary], journal: [TradeOwnerJournalSummary], skipped: Int) {
         var summaries: [TradeSummary] = []
+        var journal: [TradeOwnerJournalSummary] = []
         var skipped = 0
         for row in rows {
             let dto = row.asTradeDTO(ownerID: ownerID.rawValue)
             do {
                 let trade = try TradeMapper.mapToDomain(dto)
-                summaries.append(TradeSummaryMapper.summary(fromPartialListTrade: trade))
+                let item = TradeSummaryMapper.ownerJournal(fromListTrade: trade)
+                journal.append(item)
+                summaries.append(item.summary)
             } catch {
                 skipped += 1
             }
         }
-        return (summaries, skipped)
+        return (summaries, journal, skipped)
     }
 
     private static func mapAccountMetadata(from rows: [DashboardTradeWireV1]) -> (

@@ -7,6 +7,8 @@ struct CommentComposerView: View {
 
     @Environment(\.themeColors) private var colors
     @FocusState private var focused: Bool
+    /// Vertical `TextField` can report Return as both a newline and `onSubmit`.
+    @State private var keyboardSendScheduled = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
@@ -36,8 +38,11 @@ struct CommentComposerView: View {
                 .background(colors.fillPrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
                 .focused($focused)
                 .submitLabel(.send)
-                .onSubmit {
-                    Task { await viewModel.submit() }
+                .onSubmit(submitFromKeyboard)
+                .onChange(of: viewModel.draft) { previous, updated in
+                    guard ComposerKeyboardSubmit.insertedReturn(from: previous, to: updated) else { return }
+                    viewModel.draft = previous
+                    submitFromKeyboard()
                 }
                 .accessibilityIdentifier("interaction.comment.composer")
                 .experienceTextInputProbe(
@@ -75,6 +80,19 @@ struct CommentComposerView: View {
             focused = true
         }
         .experienceFormFocusSync($focused)
+    }
+
+    /// Return and the send button both call ``CommentsViewModel/submit()``.
+    /// One key press must not run it twice.
+    private func submitFromKeyboard() {
+        guard !keyboardSendScheduled else { return }
+        let text = viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !viewModel.isPosting else { return }
+        keyboardSendScheduled = true
+        Task { @MainActor in
+            await viewModel.submit()
+            keyboardSendScheduled = false
+        }
     }
 
     @ViewBuilder

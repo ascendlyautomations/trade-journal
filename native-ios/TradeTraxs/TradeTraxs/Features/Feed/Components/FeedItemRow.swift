@@ -121,8 +121,14 @@ struct FeedItemRow: View {
 
     private var mediaFooter: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            engagement
-            summary
+            if case .trade(_, let summary) = entry, summary.mode == .copyTraded {
+                tradeMetrics(summary)
+                engagement
+                copyTradeFeedFooter(summary)
+            } else {
+                engagement
+                summary
+            }
             feedCaptionPreview
             linkedEmbeds
         }
@@ -136,7 +142,11 @@ struct FeedItemRow: View {
     private var textLayout: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                summary
+                if case .trade(_, let summary) = entry, summary.mode == .copyTraded {
+                    tradeMetrics(summary)
+                } else {
+                    summary
+                }
                 feedCaptionPreview
                 linkedEmbeds
             }
@@ -149,6 +159,10 @@ struct FeedItemRow: View {
             )
 
             engagement
+
+            if case .trade(_, let summary) = entry, summary.mode == .copyTraded {
+                copyTradeFeedFooter(summary)
+            }
         }
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.bottom, ExperienceSpacing.md)
@@ -296,14 +310,11 @@ struct FeedItemRow: View {
     }
 
     private func tradeSummary(_ summary: TradeSummary) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            if summary.mode == .copyTraded {
-                Text("Copy Traded")
-                    .experienceStyle(.caption, color: colors.primaryText)
-                    .fontWeight(.semibold)
-                    .accessibilityIdentifier("feed.trade.copyTradedTitle")
-            }
+        tradeMetrics(summary)
+    }
 
+    private func tradeMetrics(_ summary: TradeSummary) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             PublicTradeHeadlineRow(
                 ticker: summary.symbol.ticker,
                 realizedPnL: summary.realizedPnL
@@ -312,25 +323,41 @@ struct FeedItemRow: View {
 
             PublicTradeMetaChipRow(summary: summary, showsSession: summary.mode != .copyTraded)
                 .accessibilityIdentifier("feed.trade.badges")
-
-            if summary.mode == .copyTraded {
-                Text(
-                    "\(TradeDisplay.sideTitle(summary.side)) • \(TradeDisplay.dateText(summary.entryAt))"
-                )
-                .experienceStyle(.caption, color: colors.secondaryText)
-                .lineLimit(2)
-                .accessibilityIdentifier("feed.trade.copySideTiming")
-
-                if let modeSummary = summary.copyTradePublicModeSummary,
-                   !modeSummary.isEmpty
-                {
-                    Text(modeSummary)
-                        .experienceStyle(.caption, color: colors.secondaryText)
-                        .lineLimit(2)
-                        .accessibilityIdentifier("feed.trade.copyModeSummary")
-                }
-            }
         }
+    }
+
+    private func copyTradeFeedFooter(_ summary: TradeSummary) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            copyTradedSummaryText(
+                modeSuffix: CopyTradePresentation.modeCountSegment(
+                    fromPublicSummary: summary.copyTradePublicModeSummary
+                )
+            )
+            .foregroundStyle(colors.primaryText)
+            .lineLimit(2)
+            .accessibilityIdentifier("feed.trade.copyTradedTitle")
+
+            Text(
+                TradeDisplay.feedCopyExecutionMetadata(
+                    entryAt: summary.entryAt,
+                    exitAt: summary.exitAt
+                )
+            )
+            .experienceStyle(.caption, color: colors.secondaryText)
+            .lineLimit(2)
+            .accessibilityIdentifier("feed.trade.copyExecutionTiming")
+        }
+    }
+
+    private func copyTradedSummaryText(modeSuffix: String?) -> Text {
+        let title = Text("Copy Traded")
+            .font(ExperienceTypography.font(.caption))
+            .fontWeight(.semibold)
+        guard let modeSuffix, !modeSuffix.isEmpty else { return title }
+        let modes = Text(" • \(modeSuffix)")
+            .font(ExperienceTypography.font(.caption))
+            .fontWeight(.regular)
+        return title + modes
     }
 
     // MARK: - Caption

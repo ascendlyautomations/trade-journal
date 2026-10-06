@@ -456,6 +456,29 @@ nonisolated enum CopyTradePresentation {
         return "Copy Traded on \(modes)"
     }
 
+    /// Mode-count tail of a canonical public copy summary — `2 Funded • 1 Eval`.
+    /// Returns nil when the summary has no participating modes.
+    static func modeCountSegment(fromPublicSummary summary: String?) -> String? {
+        guard let summary else { return nil }
+        let line = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !line.isEmpty else { return nil }
+
+        let acrossPrefix = "Copy Traded across "
+        if line.hasPrefix(acrossPrefix) {
+            guard let separator = line.range(of: " • ") else { return nil }
+            let suffix = line[separator.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+            return suffix.isEmpty ? nil : suffix
+        }
+
+        let onPrefix = "Copy Traded on "
+        if line.hasPrefix(onPrefix) {
+            let suffix = line.dropFirst(onPrefix.count).trimmingCharacters(in: .whitespacesAndNewlines)
+            return suffix.isEmpty ? nil : suffix
+        }
+
+        return nil
+    }
+
     static func modeCounts(accountModes: [TradingAccountMode?]) -> ModeCounts {
         var counts = ModeCounts()
         for mode in accountModes {

@@ -115,6 +115,10 @@ struct ExperienceCompactEmptyState: View {
     var message: String? = nil
     var actionTitle: String? = nil
     var action: (() -> Void)? = nil
+    var secondaryPrefix: String? = nil
+    var secondaryActionTitle: String? = nil
+    var secondaryAction: (() -> Void)? = nil
+    var secondaryAccessibilityIdentifier: String? = nil
     var accessibilityIdentifier: String = "emptyState"
 
     @Environment(\.themeColors) private var colors
@@ -147,11 +151,33 @@ struct ExperienceCompactEmptyState: View {
                 .foregroundStyle(colors.accent)
                 .padding(.top, ExperienceSpacing.xxs)
             }
+
+            if let secondaryActionTitle, let secondaryAction {
+                HStack(spacing: ExperienceSpacing.xxs) {
+                    if let secondaryPrefix, !secondaryPrefix.isEmpty {
+                        Text(secondaryPrefix)
+                            .font(.caption)
+                            .foregroundStyle(colors.secondaryText)
+                    }
+                    Button(secondaryActionTitle) {
+                        ExperienceHaptics.play(.selection)
+                        secondaryAction()
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(colors.accent)
+                }
+                .padding(.top, actionTitle == nil ? ExperienceSpacing.xxs : 0)
+                .accessibilityIdentifier(secondaryAccessibilityIdentifier ?? "\(accessibilityIdentifier).secondary")
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, ExperienceSpacing.md)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: hasSecondaryAction ? .contain : .combine)
         .experienceAccessibility(label: title, hint: message, identifier: accessibilityIdentifier)
+    }
+
+    private var hasSecondaryAction: Bool {
+        secondaryActionTitle != nil && secondaryAction != nil
     }
 }
 

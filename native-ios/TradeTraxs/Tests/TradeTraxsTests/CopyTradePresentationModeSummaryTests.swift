@@ -122,6 +122,66 @@ final class CopyTradePresentationModeSummaryTests: XCTestCase {
         XCTAssertTrue(ids.contains(copyC))
     }
 
+    func testFeedModeSuffixUsesCanonicalCountsOnly() {
+        let mixed = CopyTradePresentation.publicAcrossAccountsSummary(
+            participatingAccountCount: 3,
+            counts: .init(live: 0, funded: 2, eval: 1, sim: 0, backtest: 0)
+        )
+        XCTAssertEqual(
+            CopyTradePresentation.modeCountSegment(fromPublicSummary: mixed),
+            "2 Funded • 1 Eval"
+        )
+
+        let fundedOnly = CopyTradePresentation.publicAcrossAccountsSummary(
+            participatingAccountCount: 3,
+            counts: .init(live: 0, funded: 3, eval: 0, sim: 0, backtest: 0)
+        )
+        XCTAssertEqual(
+            CopyTradePresentation.modeCountSegment(fromPublicSummary: fundedOnly),
+            "3 Funded"
+        )
+
+        let ordered = CopyTradePresentation.publicModeSummary(
+            counts: .init(live: 1, funded: 2, eval: 0, sim: 0, backtest: 0)
+        )
+        XCTAssertEqual(
+            CopyTradePresentation.modeCountSegment(fromPublicSummary: ordered),
+            "1 Live • 2 Funded"
+        )
+
+        let evalSim = CopyTradePresentation.modeCountSegment(
+            from: .init(live: 0, funded: 0, eval: 2, sim: 1, backtest: 0)
+        )
+        XCTAssertEqual(evalSim, "2 Eval • 1 Sim")
+
+        let accountsOnly = CopyTradePresentation.publicAcrossAccountsSummary(
+            participatingAccountCount: 2,
+            counts: .init()
+        )
+        XCTAssertNil(CopyTradePresentation.modeCountSegment(fromPublicSummary: accountsOnly))
+        XCTAssertNil(CopyTradePresentation.modeCountSegment(fromPublicSummary: nil))
+        XCTAssertNil(CopyTradePresentation.modeCountSegment(fromPublicSummary: " "))
+    }
+
+    func testFeedCopyExecutionMetadataUsesEntryAndExitTimes() {
+        let entry = Date(timeIntervalSince1970: 1_700_000_000)
+        let exit = entry.addingTimeInterval(90 * 60)
+        let line = TradeDisplay.feedCopyExecutionMetadata(entryAt: entry, exitAt: exit)
+        XCTAssertEqual(
+            line,
+            "\(TradeDisplay.socialSharedExecutionTimeRangeText(entryAt: entry, exitAt: exit)) • \(TradeDisplay.dateText(entry))"
+        )
+        XCTAssertFalse(line.contains("Long"))
+        XCTAssertFalse(line.contains("Short"))
+
+        let open = TradeDisplay.feedCopyExecutionMetadata(entryAt: entry, exitAt: nil)
+        XCTAssertEqual(
+            open,
+            "\(TradeDisplay.socialSharedExecutionTimeRangeText(entryAt: entry, exitAt: nil)) • \(TradeDisplay.dateText(entry))"
+        )
+        XCTAssertFalse(open.contains("–"))
+    }
+
     private func journalRow(
         id: String,
         account: TradingAccountID?,

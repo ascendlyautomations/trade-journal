@@ -190,6 +190,10 @@ final class MessagesHomeViewModel {
         navigationCoordinator.pushMessages(.settings(.notifications))
     }
 
+    func exploreTradeRooms() {
+        navigationCoordinator.pushTradeRoomsHome()
+    }
+
     func presentNewChat() {
         ExperienceHaptics.play(.selection)
         showsNewChat = true

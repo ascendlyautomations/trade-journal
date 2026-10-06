@@ -64,6 +64,10 @@ struct MessagesHomeView: View {
                     message: "Start a conversation with another trader.",
                     actionTitle: "Start a Conversation",
                     action: { viewModel.presentNewChat() },
+                    secondaryPrefix: "Or",
+                    secondaryActionTitle: "Explore Trade Rooms",
+                    secondaryAction: { viewModel.exploreTradeRooms() },
+                    secondaryAccessibilityIdentifier: "messages.emptyState.exploreTradeRooms",
                     accessibilityIdentifier: "messages.emptyState"
                 )
                 .experienceScreenContentAreaFill(alignment: .center)

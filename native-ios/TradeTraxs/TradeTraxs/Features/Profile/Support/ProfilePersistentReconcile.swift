@@ -96,6 +96,7 @@ nonisolated enum ProfilePersistentReconcile {
         if existing.didLoadTrades, !incoming.didLoadTrades, incoming.trades.isEmpty {
             next.didLoadTrades = true
             next.trades = existing.trades
+            next.tradeJournalPreview = existing.tradeJournalPreview
             if incoming.tradesNextCursor == nil {
                 next.tradesNextCursor = existing.tradesNextCursor
             }

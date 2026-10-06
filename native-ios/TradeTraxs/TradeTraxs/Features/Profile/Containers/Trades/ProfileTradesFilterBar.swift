@@ -35,15 +35,21 @@ struct ProfileTradesFilterBar: View {
                     }
                 }
             } label: {
-                Label(viewModel.sort.title, systemImage: "arrow.up.arrow.down")
-                    .font(ExperienceTypography.footnote)
-                    .foregroundStyle(colors.primaryText)
-                    .lineLimit(1)
-                    .padding(.horizontal, ExperienceSpacing.sm)
-                    .frame(minHeight: ExperienceAccessibility.minTouchTarget)
-                    .background(colors.fillSecondary)
-                    .clipShape(Capsule())
+                HStack(spacing: ExperienceSpacing.xxs) {
+                    Text(viewModel.sort.title)
+                        .experienceStyle(.callout, color: colors.primaryText)
+                        .lineLimit(1)
+                    Image(systemName: "arrow.up.arrow.down")
+                        .font(ExperienceTypography.callout)
+                        .imageScale(.small)
+                        .foregroundStyle(colors.primaryText)
+                }
+                .padding(.horizontal, ExperienceSpacing.sm)
+                .padding(.vertical, ExperienceSpacing.xs)
+                .background(colors.fillSecondary)
+                .clipShape(Capsule())
             }
+            .buttonStyle(.plain)
             .accessibilityLabel("Sort trades")
             .accessibilityValue(viewModel.sort.title)
             .accessibilityIdentifier("profile.trades.sort")

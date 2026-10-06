@@ -26,6 +26,11 @@ final class GettingStartedStore {
     private var trustLocalProfilePostHint = false
 
     var isCollapsed = false
+    /// One-time completion celebration. Presentation only — not a checklist signal.
+    var showsGettingStartedCompletion = false
+
+    private var hasEstablishedCompletionBaseline = false
+    private var reviewAfterCompletionDismissal = false
 
     /// Permanent dismiss (X) is allowed only when every checklist task is complete.
     var canPermanentlyDismiss: Bool {
@@ -91,6 +96,19 @@ final class GettingStartedStore {
         persistedCompletion = .empty
         trustLocalProfilePostHint = false
         isCollapsed = false
+        showsGettingStartedCompletion = false
+        hasEstablishedCompletionBaseline = false
+        reviewAfterCompletionDismissal = false
+    }
+
+    /// Call after the completion sheet leaves the screen. True only the first time.
+    func consumeReviewRequestAfterCompletion() -> Bool {
+        guard reviewAfterCompletionDismissal else { return false }
+        reviewAfterCompletionDismissal = false
+        if let viewerID {
+            GettingStartedPreferences.markCompletionReviewRequested(userID: viewerID.rawValue)
+        }
+        return true
     }
 
     /// Apply monotonic checklist signal updates immediately (no RPC).
@@ -215,10 +233,25 @@ final class GettingStartedStore {
             }
         }
         merged = GettingStartedContentSignalReconcile.normalizedPostFlags(merged)
+        let previousAllComplete = progress.allComplete
+        let nextAllComplete = GettingStartedChecklistPolicy.computeProgress(from: merged).allComplete
+        let celebrate = shouldCelebrateCompletion(
+            previousAllComplete: previousAllComplete,
+            nextAllComplete: nextAllComplete,
+            hasSeenCompletionPopup: merged.hasSeenOnboardingCompletePopup
+        )
+        if celebrate {
+            merged.hasSeenOnboardingCompletePopup = true
+        }
+        hasEstablishedCompletionBaseline = true
         if merged != signals {
             signals = merged
             progress = GettingStartedChecklistPolicy.computeProgress(from: merged)
-            reconcileServerCompletionIfNeeded()
+            if celebrate {
+                beginCompletionCelebration()
+            } else {
+                reconcileServerCompletionIfNeeded()
+            }
         }
         guard persist, let viewerID else { return }
         persistedCompletion = GettingStartedSignalsMonotonic.merge(
@@ -240,6 +273,33 @@ final class GettingStartedStore {
         var hint = GettingStartedSignals.empty
         hint.hasEverJoinedOtherRoom = true
         return hint
+    }
+
+    private func shouldCelebrateCompletion(
+        previousAllComplete: Bool,
+        nextAllComplete: Bool,
+        hasSeenCompletionPopup: Bool
+    ) -> Bool {
+        guard let viewerID, !DemoExperienceSupport.usesLocalBundledData(viewerID) else { return false }
+        guard !showsGettingStartedCompletion else { return false }
+        return GettingStartedCompletionMilestone.shouldCelebrate(
+            hasEstablishedBaseline: hasEstablishedCompletionBaseline,
+            previousAllComplete: previousAllComplete,
+            nextAllComplete: nextAllComplete,
+            hasSeenCompletionPopup: hasSeenCompletionPopup
+        )
+    }
+
+    private func beginCompletionCelebration() {
+        showsGettingStartedCompletion = true
+        if let viewerID,
+           !GettingStartedPreferences.hasRequestedCompletionReview(userID: viewerID.rawValue) {
+            reviewAfterCompletionDismissal = true
+        }
+        guard let rpc else { return }
+        Task {
+            _ = await GettingStartedCompletionMarker.markSeenIfNeeded(rpc: rpc)
+        }
     }
 
     private func reconcileServerCompletionIfNeeded() {
@@ -292,6 +352,20 @@ enum GettingStartedPreferences {
 
     static func clearSessionDismissed(userID: String) {
         UserDefaults.standard.removeObject(forKey: "\(sessionDismissKeyBase):\(userID)")
+    }
+
+    private static let completionReviewKeyBase = "tradetraxs_getting_started_review_requested_v1"
+
+    static func hasRequestedCompletionReview(userID: String) -> Bool {
+        UserDefaults.standard.bool(forKey: "\(completionReviewKeyBase):\(userID)")
+    }
+
+    static func markCompletionReviewRequested(userID: String) {
+        UserDefaults.standard.set(true, forKey: "\(completionReviewKeyBase):\(userID)")
+    }
+
+    static func clearCompletionReviewRequested(userID: String) {
+        UserDefaults.standard.removeObject(forKey: "\(completionReviewKeyBase):\(userID)")
     }
 }
 

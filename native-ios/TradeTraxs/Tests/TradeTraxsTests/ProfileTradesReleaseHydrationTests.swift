@@ -57,6 +57,78 @@ final class ProfileTradesReleaseHydrationTests: XCTestCase {
         XCTAssertTrue(BackendV2FeatureFlags.productionShippedFlags.contains(.profileTradesSummaryV2))
     }
 
+    func testSufficientBootstrapPreviewDoesNotRefetchTheFirstPage() {
+        BackendV2FeatureFlags.setFlagForTests(.profile, enabled: true)
+        BackendV2FeatureFlags.setFlagForTests(.profileTradesSummaryV2, enabled: true)
+        defer {
+            BackendV2FeatureFlags.setFlagForTests(.profile, enabled: nil)
+            BackendV2FeatureFlags.setFlagForTests(.profileTradesSummaryV2, enabled: nil)
+        }
+
+        let viewModel = makeViewModel()
+        var bootstrap = ProfileState()
+        bootstrap.phase = .loaded
+        bootstrap.didBootstrap = true
+        bootstrap.didLoadTrades = true
+        bootstrap.tradeJournalPreview = v2JournalRows()
+        bootstrap.trades = bootstrap.tradeJournalPreview.map(\.summary)
+        bootstrap.tradesNextCursor = "2026-10-05T04:11:26.139000Z|5c0ecd0e-9936-4b2f-aa4f-536ff4dac24a"
+        bootstrap.accountModes = publicAccountModes()
+        viewModel.applyBootstrap(bootstrap)
+        viewModel.hydrateAuthoritativeJournalIfNeeded()
+
+        XCTAssertFalse(viewModel.isHydratingAuthoritativeJournal)
+        XCTAssertEqual(viewModel.nextCursor, bootstrap.tradesNextCursor)
+        XCTAssertEqual(viewModel.visibleItems.count, 1)
+        XCTAssertEqual(
+            viewModel.visibleItems[0].copyTradePublicModeSummary,
+            "Copy Traded across 3 accounts • 2 Funded • 1 Eval"
+        )
+    }
+
+    func testSummaryOnlyCopyBootstrapStillRequestsAuthoritativeJournal() {
+        BackendV2FeatureFlags.setFlagForTests(.profile, enabled: true)
+        BackendV2FeatureFlags.setFlagForTests(.profileTradesSummaryV2, enabled: true)
+        defer {
+            BackendV2FeatureFlags.setFlagForTests(.profile, enabled: nil)
+            BackendV2FeatureFlags.setFlagForTests(.profileTradesSummaryV2, enabled: nil)
+        }
+
+        let viewModel = makeViewModel()
+        var bootstrap = ProfileState()
+        bootstrap.phase = .loaded
+        bootstrap.didBootstrap = true
+        bootstrap.didLoadTrades = true
+        bootstrap.trades = reducedBootstrapSummaries()
+        bootstrap.tradesNextCursor = "2026-10-05T04:11:26.139000Z|5c0ecd0e-9936-4b2f-aa4f-536ff4dac24a"
+        bootstrap.accountModes = publicAccountModes()
+        viewModel.applyBootstrap(bootstrap)
+
+        XCTAssertTrue(viewModel.isHydratingAuthoritativeJournal)
+        XCTAssertEqual(viewModel.nextCursor, bootstrap.tradesNextCursor)
+    }
+
+    func testEmptyBootstrapPageDoesNotRequestAnotherTradePage() {
+        BackendV2FeatureFlags.setFlagForTests(.profile, enabled: true)
+        BackendV2FeatureFlags.setFlagForTests(.profileTradesSummaryV2, enabled: true)
+        defer {
+            BackendV2FeatureFlags.setFlagForTests(.profile, enabled: nil)
+            BackendV2FeatureFlags.setFlagForTests(.profileTradesSummaryV2, enabled: nil)
+        }
+
+        let viewModel = makeViewModel()
+        var bootstrap = ProfileState()
+        bootstrap.phase = .loaded
+        bootstrap.didBootstrap = true
+        bootstrap.didLoadTrades = true
+        viewModel.applyBootstrap(bootstrap)
+        viewModel.hydrateAuthoritativeJournalIfNeeded()
+
+        XCTAssertFalse(viewModel.isHydratingAuthoritativeJournal)
+        XCTAssertNil(viewModel.nextCursor)
+        XCTAssertTrue(viewModel.visibleItems.isEmpty)
+    }
+
     func testBootstrapThenV2ThenBootstrapReconcileKeepsFullCopySummary() {
         BackendV2FeatureFlags.setFlagForTests(.profileTradesSummaryV2, enabled: true)
         defer { BackendV2FeatureFlags.setFlagForTests(.profileTradesSummaryV2, enabled: nil) }
@@ -114,6 +186,19 @@ final class ProfileTradesReleaseHydrationTests: XCTestCase {
         XCTAssertEqual(
             visible[0].copyTradePublicModeSummary,
             "Copy Traded across 3 accounts • 2 Funded • 1 Eval"
+        )
+    }
+
+    private func makeViewModel() -> TradesContainerViewModel {
+        let environment = CompositionRoot.bootstrapAppEnvironment()
+        return TradesContainerViewModel(
+            profileID: profileID,
+            trades: environment.data.trades,
+            session: environment.data.session,
+            rpc: environment.data.rpc,
+            navigationCoordinator: environment.navigation.coordinator,
+            detailCache: environment.data.detailCache,
+            tradeDetailRepository: environment.data.tradeDetailRepository
         )
     }
 
