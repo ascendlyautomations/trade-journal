@@ -442,22 +442,6 @@ struct TradeDetailJournalSection: View {
             EmptyView()
         } else {
             VStack(alignment: .leading, spacing: TradeDetailLayout.groupSpacing) {
-                if !detailRows.isEmpty {
-                    VStack(alignment: .leading, spacing: TradeDetailLayout.groupSpacing) {
-                        TradeDetailSectionHeader(title: "Details")
-                        TradeDetailGroupedSurface {
-                            VStack(spacing: 6) {
-                                ForEach(Array(detailRows.enumerated()), id: \.offset) { index, row in
-                                    detailRow(label: row.0, value: row.1)
-                                    if index < detailRows.count - 1 {
-                                        TradeDetailStatDivider()
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
                 if !noteBodies.isEmpty {
                     VStack(alignment: .leading, spacing: TradeDetailLayout.groupSpacing) {
                         TradeDetailSectionHeader(title: "Notes")
@@ -468,6 +452,22 @@ struct TradeDetailJournalSection: View {
                                         .experienceStyle(.subheadline, color: colors.primaryText)
                                         .fixedSize(horizontal: false, vertical: true)
                                     if index < noteBodies.count - 1 {
+                                        TradeDetailStatDivider()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if !detailRows.isEmpty {
+                    VStack(alignment: .leading, spacing: TradeDetailLayout.groupSpacing) {
+                        TradeDetailSectionHeader(title: "Details")
+                        TradeDetailGroupedSurface {
+                            VStack(spacing: 6) {
+                                ForEach(Array(detailRows.enumerated()), id: \.offset) { index, row in
+                                    detailRow(label: row.0, value: row.1)
+                                    if index < detailRows.count - 1 {
                                         TradeDetailStatDivider()
                                     }
                                 }

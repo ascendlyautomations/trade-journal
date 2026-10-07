@@ -40,7 +40,8 @@ final class CurrentUserProfileStore {
     private var loadedProfileID: ProfileID?
     private var loadedAvatarKey: String?
     private var confirmedOwnerProfile: Profile?
-    private var ownerProfileMutationRevision: UInt64 = 0
+    /// Bumped after a confirmed owner Settings save — Profile tab observes this to refresh without re-bootstrap.
+    private(set) var ownerProfileMutationRevision: UInt64 = 0
     private let loadGenerationCounter = LoadGenerationCounter()
 
     init(
@@ -100,11 +101,16 @@ final class CurrentUserProfileStore {
 
         ownerProfileMutationRevision &+= 1
         let previousAvatarRef = self.profile?.avatar
-        let resolved = resolveOwnerProfileFromNetwork(profile)
+
+        // Publish the fresh save before reconcile — otherwise a prior confirmed snapshot
+        // can overwrite the new Settings mutation inside ``resolveOwnerProfileFromNetwork(_:)``.
+        var resolved = applyingPreferredAvatar(profile)
+        SessionBootstrapStore.shared.applyOwnerProfileMutation(resolved)
+        confirmedOwnerProfile = resolved
+        resolved = resolveOwnerProfileFromNetwork(profile)
         confirmedOwnerProfile = resolved
 
         profileStoreSeed(profile: resolved, stats: stats)
-        SessionBootstrapStore.shared.applyOwnerProfileMutation(resolved)
         cacheConfirmedOwnerProfileOnDisk(resolved)
 
         if let localAvatar {

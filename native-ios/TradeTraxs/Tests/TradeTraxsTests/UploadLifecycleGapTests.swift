@@ -74,6 +74,68 @@ final class UploadLifecycleGapTests: XCTestCase {
         XCTAssertTrue(storage.deleted[0].path.hasPrefix("user-lifecycle/opt/"))
     }
 
+    func testFailedClipPreparationRetryDoesNotReplayCachedFailure() async throws {
+        let ownedURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("lifecycle-prep-source-\(UUID().uuidString).mp4")
+        try Data([0x00, 0x01, 0x02, 0x03]).write(to: ownedURL)
+        defer { try? FileManager.default.removeItem(at: ownedURL) }
+
+        struct CachedPrepFailure: Error {}
+        let preparationTaskID = "prep-retry-\(UUID().uuidString)"
+        await ReelBackgroundPreparationRegistry.shared.testingSeedCachedFailure(
+            preparationTaskID: preparationTaskID,
+            selectionID: preparationTaskID,
+            ownedSourceURL: ownedURL,
+            error: CachedPrepFailure()
+        )
+
+        do {
+            _ = try await ReelBackgroundPreparationRegistry.shared.awaitPrepared(
+                preparationTaskID: preparationTaskID
+            )
+            XCTFail("Expected cached failure")
+        } catch is CachedPrepFailure {
+            // expected
+        }
+
+        await ReelBackgroundPreparationRegistry.shared.prepareForRetryIfFailed(
+            preparationTaskID: preparationTaskID,
+            selectionID: preparationTaskID,
+            ownedSourceURL: ownedURL,
+            contentType: "video/mp4"
+        )
+
+        let taskRunning = await ReelBackgroundPreparationRegistry.shared.testingPreparationTaskIsRunning(
+            preparationTaskID: preparationTaskID
+        )
+        XCTAssertTrue(taskRunning, "Retry should start a new preparation task")
+
+        do {
+            _ = try await ReelBackgroundPreparationRegistry.shared.awaitPrepared(
+                preparationTaskID: preparationTaskID
+            )
+        } catch is CachedPrepFailure {
+            XCTFail("Retry replayed the cached preparation failure")
+        } catch {
+            // Encoder may fail on stub bytes — still not the cached failure type.
+        }
+    }
+
+    func testAmbiguousTransportFailureClassification() {
+        XCTAssertTrue(UploadRetryRecovery.isAmbiguousTransportFailure(CancellationError()))
+        XCTAssertTrue(UploadRetryRecovery.isAmbiguousTransportFailure(NetworkError.cancelled))
+        XCTAssertTrue(
+            UploadRetryRecovery.isAmbiguousTransportFailure(
+                NSError(domain: NSURLErrorDomain, code: NSURLErrorTimedOut)
+            )
+        )
+        XCTAssertFalse(
+            UploadRetryRecovery.isAmbiguousTransportFailure(
+                AppError.domain(.conflict(message: "duplicate"))
+            )
+        )
+    }
+
     func testClipRetryAfterVerificationFailureDoesNotInsertAgain() async throws {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("lifecycle-clip-\(UUID().uuidString).mp4")

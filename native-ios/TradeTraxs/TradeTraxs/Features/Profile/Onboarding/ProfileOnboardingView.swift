@@ -313,11 +313,14 @@ struct ProfileOnboardingView: View {
             Text("Bio")
                 .experienceStyle(.caption, color: colors.secondaryText)
 
-            TextField("Optional — tell traders about yourself", text: $viewModel.bio, axis: .vertical)
-                .lineLimit(2...4)
-                .textInputAutocapitalization(.sentences)
-                    .padding(.vertical, ExperienceSpacing.xxs)
-                .frame(minHeight: 44, maxHeight: 88, alignment: .topLeading)
+            ProfileBioTextField(
+                text: $viewModel.bio,
+                placeholder: "Optional — tell traders about yourself",
+                minHeight: 44,
+                maxHeight: 88
+            )
+            .padding(.vertical, ExperienceSpacing.xxs)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .padding(.vertical, ExperienceSpacing.xxs)
     }

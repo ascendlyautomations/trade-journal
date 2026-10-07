@@ -347,7 +347,7 @@ struct SettingsSubscriptionView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .listRowBackground(isSelected ? colors.accent.opacity(0.12) : nil)
+        .modifier(SubscriptionPlanListRowBackground(isSelected: isSelected))
         .accessibilityIdentifier("settings.subscription.product.\(product.id)")
     }
 
@@ -490,5 +490,19 @@ struct SettingsSubscriptionView: View {
     private func planDuration(_ product: StoreKitTraxProProduct) -> String {
         let label = product.subscriptionPeriodLabel
         return label == "Subscription" ? product.displayName : label
+    }
+}
+
+/// Unselected plan rows only — avoids system grouped brown in dark mode without global UIKit appearance.
+private struct SubscriptionPlanListRowBackground: ViewModifier {
+    let isSelected: Bool
+    @Environment(\.themeColors) private var colors
+
+    func body(content: Content) -> some View {
+        if isSelected {
+            content.listRowBackground(colors.accent.opacity(0.12))
+        } else {
+            content.experienceDashboardListRow()
+        }
     }
 }

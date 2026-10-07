@@ -37,6 +37,26 @@ final class MediaDeliveryOptimizationTests: XCTestCase {
         XCTAssertLessThan(PhotosPickerImageDecoder.pickerDecodeMaxPixelSize, 12_000)
     }
 
+    func testNinetySecondUploadLimitRejectsOnlyLongerVideos() {
+        XCTAssertFalse(VideoUploadDurationValidation.exceedsUploadLimit(durationSeconds: 90))
+        XCTAssertFalse(VideoUploadDurationValidation.exceedsUploadLimit(durationSeconds: 89.1))
+        XCTAssertTrue(VideoUploadDurationValidation.exceedsUploadLimit(durationSeconds: 90.01))
+        XCTAssertTrue(VideoUploadDurationValidation.exceedsUploadLimit(durationSeconds: 120))
+        XCTAssertEqual(VideoUploadDurationValidation.alertTitle, "Video Too Long")
+        XCTAssertEqual(
+            VideoUploadDurationValidation.alertMessage,
+            "This video is too long to upload. Please choose a video under 90 seconds."
+        )
+        XCTAssertEqual(VideoUploadDurationValidation.chooseAnotherTitle, "Choose Another Video")
+    }
+
+    func testStoryDurationPreflightUsesTenSecondCap() {
+        XCTAssertFalse(StoryMediaDuration.exceedsLimit(durationSeconds: 10))
+        XCTAssertFalse(StoryMediaDuration.exceedsLimit(durationSeconds: 9.5))
+        XCTAssertTrue(StoryMediaDuration.exceedsLimit(durationSeconds: 10.06))
+        XCTAssertTrue(StoryMediaDuration.exceedsLimit(durationSeconds: 90))
+    }
+
     func testStoryVideoLimitsMatchPublishPipeline() {
         let story = MediaVideoPreparation.Limits.story
         XCTAssertEqual(story.maxDurationSeconds, StoryMediaDuration.maxVideoDurationSeconds)

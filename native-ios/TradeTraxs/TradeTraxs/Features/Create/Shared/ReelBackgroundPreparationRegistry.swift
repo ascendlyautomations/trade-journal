@@ -20,6 +20,30 @@ actor ReelBackgroundPreparationRegistry {
 
     private var entries: [String: Entry] = [:]
 
+    /// Clears a cached failure and starts a fresh encode when the user retries an upload.
+    func prepareForRetryIfFailed(
+        preparationTaskID: String,
+        selectionID: String,
+        ownedSourceURL: URL,
+        contentType: String
+    ) {
+        if let entry = entries[preparationTaskID] {
+            if case .success = entry.result {
+                return
+            }
+            if entry.task != nil {
+                return
+            }
+            entries.removeValue(forKey: preparationTaskID)
+        }
+        startIfNeeded(
+            preparationTaskID: preparationTaskID,
+            selectionID: selectionID,
+            ownedSourceURL: ownedSourceURL,
+            contentType: contentType
+        )
+    }
+
     func startIfNeeded(
         preparationTaskID: String,
         selectionID: String,
@@ -104,4 +128,26 @@ actor ReelBackgroundPreparationRegistry {
     func releaseAfterUpload(preparationTaskID: String) {
         entries.removeValue(forKey: preparationTaskID)
     }
+
+    #if DEBUG
+    /// Tests only — simulates a failed background preparation without running the encoder.
+    func testingSeedCachedFailure(
+        preparationTaskID: String,
+        selectionID: String,
+        ownedSourceURL: URL,
+        error: Error
+    ) {
+        entries[preparationTaskID] = Entry(
+            selectionID: selectionID,
+            ownedSourceURL: ownedSourceURL,
+            adoptedForUpload: true,
+            result: .failure(error),
+            task: nil
+        )
+    }
+
+    func testingPreparationTaskIsRunning(preparationTaskID: String) -> Bool {
+        entries[preparationTaskID]?.task != nil
+    }
+    #endif
 }

@@ -1,12 +1,15 @@
 /** Canonical production site URL (www). */
 export const SITE_URL = "https://www.tradetraxs.com"
 
-/** Default Open Graph / Twitter card image (1200×630). */
-export const DEFAULT_OG_IMAGE_PATH = "/og-image.png"
+/** Default Open Graph / Twitter image: official square app logo. */
+export const DEFAULT_OG_IMAGE_PATH = "/App_Logo.png"
 
-export const OG_IMAGE_WIDTH = 1200
+export const OG_IMAGE_WIDTH = 1254
 
-export const OG_IMAGE_HEIGHT = 630
+export const OG_IMAGE_HEIGHT = 1254
+
+/** Square logo reads cleanly as a compact card. Large cards crop it. */
+export const DEFAULT_TWITTER_CARD = "summary" as const
 
 export const DEFAULT_OG_IMAGE_ALT =
   "TradeTraxs, social trading platform, AI trading journal, and advanced analytics"

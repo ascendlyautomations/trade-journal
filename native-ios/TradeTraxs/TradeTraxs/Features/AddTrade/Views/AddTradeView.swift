@@ -279,6 +279,9 @@ struct AddTradeView: View {
         .onChange(of: clipVideoItem) { _, item in
             Task { await loadClipVideo(item) }
         }
+        .videoTooLongAlert(isPresented: $viewModel.showsVideoTooLongAlert) {
+            clipVideoItem = nil
+        }
         .experienceFormKeyboard(focus: $focusedField)
         .accessibilityIdentifier("addTrade.root")
     }
@@ -1048,13 +1051,26 @@ struct AddTradeView: View {
     private func loadClipVideo(_ item: PhotosPickerItem?) async {
         guard let item else { return }
         do {
+            try VideoUploadDurationValidation.throwIfPhotoLibraryExceedsReelUploadLimit(item)
+        } catch {
+            if VideoUploadDurationValidation.isTooLong(error) {
+                viewModel.showsVideoTooLongAlert = true
+                return
+            }
+        }
+
+        do {
             if let movie = try await item.loadTransferable(type: MovieFileTransferable.self) {
                 viewModel.applyClipVideo(from: movie.url, contentType: "video/quicktime")
             } else {
                 viewModel.formError = "Couldn't read that video. Try MP4 or MOV."
             }
         } catch {
-            viewModel.formError = "Couldn't read that video. Try MP4 or MOV."
+            if VideoUploadDurationValidation.isTooLong(error) {
+                viewModel.showsVideoTooLongAlert = true
+            } else {
+                viewModel.formError = "Couldn't read that video. Try MP4 or MOV."
+            }
         }
     }
 

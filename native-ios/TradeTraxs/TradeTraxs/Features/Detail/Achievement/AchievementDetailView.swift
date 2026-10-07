@@ -158,6 +158,7 @@ struct AchievementDetailView: View {
                     }
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
         }
     }
 

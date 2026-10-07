@@ -93,6 +93,7 @@ final class ProfileScreenViewModel {
 
     func onAppear(currentUserProfile: CurrentUserProfileStore) {
         seedOwnerCacheIfNeeded(from: currentUserProfile)
+        syncOwnerProfileFromCurrentUserStore()
         FollowMutationCoordinator.shared.registerActiveProfile(screen: self)
         ProfileOwnerHeaderStatsCoordinator.shared.registerActiveProfile(screen: self)
         SocialRealtimeRepairSurfaces.shared.profileViewModel = self
@@ -822,6 +823,19 @@ final class ProfileScreenViewModel {
         return isOwnerTarget
     }
 
+    /// Applies the canonical session owner profile when Settings saved while this screen was off-screen or stale.
+    func syncOwnerProfileFromCurrentUserStore() {
+        guard case .currentUser = target else { return }
+        guard let sessionProfile = currentUserProfile.profile else { return }
+        let resolved = currentUserProfile.resolveOwnerProfileFromNetwork(sessionProfile)
+        if let current = state.profile,
+           OwnerProfileMutationEquivalence.ownerSettingsMatch(current, resolved)
+        {
+            return
+        }
+        applyOwnerProfileHeaderUpdate(profile: resolved, localAvatar: currentUserProfile.avatarUIImage)
+    }
+
     /// Shared session profile store published a new owner header (avatar / identity).
     func applyOwnerProfileHeaderUpdate(profile: Profile, localAvatar: UIImage?) {
         guard isOwnerTarget, matchesOwner(profile.id) else { return }
@@ -831,9 +845,20 @@ final class ProfileScreenViewModel {
         var next = state
         next.profile = resolved
         next.lastUpdated = Date()
-        state = next
-        data.detailCache.seed(resolved)
+        applyLocalState(
+            next,
+            skipPostsBootstrap: true,
+            skipClipsBootstrap: true,
+            skipTradesBootstrap: true
+        )
         contentStore.adoptOwnerProfileHeader(from: resolved, localAvatar: localAvatar)
+        Task {
+            await persistProfileStateIfPossible(state, source: .network)
+            await ProfilePersistedCacheCoordinator.patchOwnerProfileHeader(
+                profile: resolved,
+                session: data.session
+            )
+        }
     }
 
     private func profileApplyingSessionPreferredAvatar(_ profile: Profile) -> Profile {

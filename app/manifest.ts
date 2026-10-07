@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next"
-import { DEFAULT_OG_IMAGE_PATH, SITE_NAME, SITE_URL } from "@/lib/site"
+import { SITE_NAME, SITE_URL } from "@/lib/site"
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -29,7 +29,7 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
     screenshots: [
       {
-        src: DEFAULT_OG_IMAGE_PATH,
+        src: "/og-image.png",
         sizes: "1200x630",
         type: "image/png",
         form_factor: "wide",

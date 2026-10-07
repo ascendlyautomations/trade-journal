@@ -48,6 +48,7 @@ import {
   usernameChangesRemaining,
   validateProfileUsernameNotEmpty,
 } from "@/lib/profileUsername"
+import { constrainProfileBio } from "@/lib/profileBio"
 import { TRADER_TYPE_OPTIONS, normalizeTraderType } from "@/lib/traderType"
 import { mirrorAccountSettingsUsernameChangeCount } from "@/lib/profileSplitMirrorWrites"
 
@@ -156,7 +157,7 @@ function applySettingsFormSeed(
   if (!seed) return
   setters.setName(seed.name)
   setters.setUsername(seed.username)
-  setters.setBio(seed.bio)
+  setters.setBio(constrainProfileBio(seed.bio))
   setters.setIsPrivate(seed.isPrivate)
   setters.setAvatarPreview(seed.avatarPreview)
   setters.setTradingStyle(seed.tradingStyle)
@@ -543,7 +544,7 @@ export default function SettingsPage() {
     const updatePayload = {
       name: name.trim() || null,
       is_private: isPrivate,
-      bio,
+      bio: constrainProfileBio(bio),
       avatar_url: avatarUrl,
       trading_style: tradingStyle,
       trader_type: traderType.trim() || null,
@@ -566,7 +567,7 @@ export default function SettingsPage() {
       is_private: isPrivate,
       username: cleanUsername,
       username_change_count: usernameChanged ? changeCount + 1 : changeCount,
-      bio,
+      bio: constrainProfileBio(bio),
       avatar_url: avatarUrl,
       trading_style: tradingStyle,
       trader_type: traderType.trim() || null,
@@ -1118,7 +1119,7 @@ export default function SettingsPage() {
                     ref={bioTextareaRef}
                     id="settings-bio"
                     value={bio}
-                    onChange={(e) => setBio(e.target.value)}
+                    onChange={(e) => setBio(constrainProfileBio(e.target.value))}
                     placeholder="Tell others about your trading"
                     rows={3}
                     className="w-full resize-none overflow-hidden rounded-xl border border-white/10 bg-black/30 p-3 leading-normal placeholder:text-gray-400"

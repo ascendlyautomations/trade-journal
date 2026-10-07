@@ -44,6 +44,7 @@ final class GlobalUploadCoordinator {
                 line: job.displayLine,
                 progress: nil,
                 showsRetry: true,
+                retryJobID: job.id,
                 activeCount: 1
             )
         }
@@ -53,6 +54,7 @@ final class GlobalUploadCoordinator {
                 line: job.displayLine,
                 progress: job.progress,
                 showsRetry: job.phase == .failed,
+                retryJobID: job.phase == .failed ? job.id : nil,
                 activeCount: 1
             )
         }
@@ -75,6 +77,7 @@ final class GlobalUploadCoordinator {
             line: line,
             progress: combined,
             showsRetry: !failures.isEmpty,
+            retryJobID: nil,
             activeCount: visible.count
         )
     }
@@ -98,7 +101,13 @@ final class GlobalUploadCoordinator {
         )
         retryReel[jobID] = (spec, services, ReelUploadCheckpoint())
         startTask(jobID: jobID, kind: .reel, intent: .enqueue) { [weak self] generation in
-            await self?.runReel(jobID: jobID, spec: spec, services: services, runGeneration: generation)
+            await self?.runReel(
+                jobID: jobID,
+                spec: spec,
+                services: services,
+                checkpoint: ReelUploadCheckpoint(),
+                runGeneration: generation
+            )
         }
         return jobID
     }
@@ -262,6 +271,15 @@ final class GlobalUploadCoordinator {
             originalFileName: spec.originalFileName ?? "story.jpg",
             contentType: spec.contentType
         )
+        if let videoURL = spec.localVideoFileURL,
+           let retained = try? UploadJobMediaRetention.copyVideoForRetryJob(
+               source: videoURL,
+               jobID: jobID,
+               prefix: "story-upload"
+           )
+        {
+            storySpec.localVideoFileURL = retained
+        }
         storySuccessHandlers[jobID] = onSuccess
         insertJob(
             UploadJob(
@@ -292,7 +310,7 @@ final class GlobalUploadCoordinator {
         guard jobs.first(where: { $0.id == jobID })?.phase == .failed else { return }
         terminalJobIDs.remove(jobID)
         completedGenerations.removeValue(forKey: jobID)
-        if let (spec, services, _) = retryReel[jobID] {
+        if let (spec, services, checkpoint) = retryReel[jobID] {
             updateJob(jobID) { job in
                 job.phase = .preparing
                 job.progress = nil
@@ -300,7 +318,13 @@ final class GlobalUploadCoordinator {
                 job.showsSuccessFlash = false
             }
             startTask(jobID: jobID, kind: .reel, intent: .retry) { [weak self] generation in
-                await self?.runReel(jobID: jobID, spec: spec, services: services, runGeneration: generation)
+                await self?.runReel(
+                    jobID: jobID,
+                    spec: spec,
+                    services: services,
+                    checkpoint: checkpoint,
+                    runGeneration: generation
+                )
             }
             return
         }
@@ -480,10 +504,12 @@ final class GlobalUploadCoordinator {
         jobID: String,
         spec: ReelUploadSpec,
         services: GlobalUploadServices,
+        checkpoint: ReelUploadCheckpoint,
         runGeneration: UInt64
     ) async {
         guard jobRunIsLive(jobID: jobID, generation: runGeneration, stage: "runReel.entry") else { return }
 
+        var workingSpec = spec
         var publishDraft = spec.snapshot.asDraft
         let preparationTaskID = spec.preparationTaskID
 
@@ -494,6 +520,14 @@ final class GlobalUploadCoordinator {
                 updateJob(jobID) { job in
                     job.phase = .preparing
                     job.progress = nil
+                }
+                if let ownedSource = spec.snapshot.ownedSourceURL ?? Optional(spec.snapshot.localVideoURL) {
+                    await ReelBackgroundPreparationRegistry.shared.prepareForRetryIfFailed(
+                        preparationTaskID: preparationTaskID,
+                        selectionID: spec.snapshot.selectionID,
+                        ownedSourceURL: ownedSource,
+                        contentType: spec.snapshot.contentType
+                    )
                 }
                 let package = try await ReelBackgroundPreparationRegistry.shared.awaitPrepared(
                     preparationTaskID: preparationTaskID
@@ -521,6 +555,13 @@ final class GlobalUploadCoordinator {
                     captionOverride: nil
                 )
                 publishDraft = uploadSnapshot.asDraft
+                workingSpec.snapshot = uploadSnapshot
+                persistReelRetry(
+                    jobID: jobID,
+                    spec: workingSpec,
+                    services: services,
+                    checkpoint: retryReel[jobID]?.2 ?? checkpoint
+                )
             }
 
             ClipPublishDiagnostics.logPostingStarted(publishID: jobID)
@@ -595,6 +636,14 @@ final class GlobalUploadCoordinator {
             }
             await completeJob(jobID: jobID, kind: .reel, runGeneration: runGeneration)
         } catch {
+            workingSpec.snapshot = ReelDraftSnapshot(draft: publishDraft, captionOverride: nil)
+            let currentCheckpoint = retryReel[jobID]?.2 ?? checkpoint
+            persistReelRetry(
+                jobID: jobID,
+                spec: workingSpec,
+                services: services,
+                checkpoint: currentCheckpoint
+            )
             await failJob(jobID: jobID, error: error, runGeneration: runGeneration)
         }
         await UploadProgressRelay.shared.unregister(jobID: jobID)
@@ -1509,6 +1558,15 @@ final class GlobalUploadCoordinator {
         guard var entry = retryReel[jobID] else { return }
         entry.2.savedReelID = reelID
         retryReel[jobID] = entry
+    }
+
+    private func persistReelRetry(
+        jobID: String,
+        spec: ReelUploadSpec,
+        services: GlobalUploadServices,
+        checkpoint: ReelUploadCheckpoint
+    ) {
+        retryReel[jobID] = (spec, services, checkpoint)
     }
 
     private func verifySavedReel(

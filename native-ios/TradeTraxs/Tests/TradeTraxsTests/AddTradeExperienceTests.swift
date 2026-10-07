@@ -532,11 +532,11 @@ final class AddTradeExperienceTests: XCTestCase {
         XCTAssertEqual(UserCustomInstrumentStore.shared.customSymbols(for: profileID).first, "TEST")
     }
 
-    func testInstrumentCatalogMostUsedFallsBackToDefaults() {
+    func testInstrumentCatalogMostUsedEmptyWithoutTradeHistory() {
         let cache = DetailPresentationCache()
         let profileID = ProfileID("live-empty-history")
         let mostUsed = InstrumentCatalog.mostUsedSymbols(for: profileID, detailCache: cache)
-        XCTAssertEqual(mostUsed, InstrumentPickerCatalog.defaultMostUsed)
+        XCTAssertTrue(mostUsed.isEmpty)
     }
 
     func testInstrumentCatalogUsesTradeHistoryWhenAvailable() {
@@ -569,6 +569,24 @@ final class AddTradeExperienceTests: XCTestCase {
 
         let mostUsed = InstrumentCatalog.mostUsedSymbols(for: profileID, detailCache: cache, limit: 4)
         XCTAssertEqual(mostUsed.first, "MGC")
+    }
+
+    func testInstrumentCatalogRanksByFrequencyThenRecency() {
+        let cache = DetailPresentationCache()
+        let profileID = ProfileID("live-frequency")
+        let older = Date(timeIntervalSince1970: 100)
+        let newer = Date(timeIntervalSince1970: 500)
+        let trades = [
+            makeInstrumentHistoryTrade(id: "t1", profileID: profileID, ticker: "NQ", at: newer),
+            makeInstrumentHistoryTrade(id: "t2", profileID: profileID, ticker: "ES", at: newer),
+            makeInstrumentHistoryTrade(id: "t3", profileID: profileID, ticker: "ES", at: older),
+            makeInstrumentHistoryTrade(id: "t4", profileID: profileID, ticker: "MNQ", at: older),
+        ]
+        SessionOwnerTradesStore.shared.seed(trades, for: profileID, detailCache: cache)
+        defer { SessionOwnerTradesStore.shared.invalidate(profileID: profileID) }
+
+        let mostUsed = InstrumentCatalog.mostUsedSymbols(for: profileID, detailCache: cache, limit: 4)
+        XCTAssertEqual(mostUsed, ["ES", "NQ", "MNQ"])
     }
 
     func testInstrumentPickerSnapshotIncludesBuiltInFutures() {
@@ -773,6 +791,36 @@ extension AddTradeExperienceTests {
             ),
         ]
     }
+}
+
+private func makeInstrumentHistoryTrade(
+    id: String,
+    profileID: ProfileID,
+    ticker: String,
+    at: Date
+) -> Trade {
+    Trade(
+        id: TradeID(id),
+        ownerProfileID: profileID,
+        accountID: nil,
+        symbol: Symbol(ticker: ticker),
+        side: .long,
+        mode: .live,
+        quantity: 1,
+        entryPrice: 100,
+        exitPrice: 101,
+        entryAt: at,
+        exitAt: at,
+        realizedPnL: Money(amount: 1),
+        riskReward: nil,
+        points: nil,
+        sessionLabel: nil,
+        visibility: .private,
+        publicCaption: nil,
+        thumbnail: nil,
+        createdAt: at,
+        updatedAt: at
+    )
 }
 
 private struct AddTradeVisibilityStubRepository: TradeRepository {

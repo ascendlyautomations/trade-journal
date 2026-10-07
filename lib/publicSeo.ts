@@ -7,7 +7,13 @@ import {
 import { isProfileUuidSegment } from "@/lib/profileRoutes"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
 import { createSupabaseAdmin } from "@/lib/supabaseAdmin"
-import { DEFAULT_OG_IMAGE_ALT, DEFAULT_OG_IMAGE_PATH, SITE_NAME, SITE_URL } from "@/lib/site"
+import {
+  DEFAULT_OG_IMAGE_ALT,
+  DEFAULT_OG_IMAGE_PATH,
+  DEFAULT_TWITTER_CARD,
+  SITE_NAME,
+  SITE_URL,
+} from "@/lib/site"
 
 const PROFILE_SEO_SELECT = "id, username, name, is_private, created_at" as const
 const TRADE_SEO_SELECT = "id, ticker, is_public, user_id, created_at" as const
@@ -169,7 +175,7 @@ export function buildProfileMetadata(profile: ProfileSeoData | null): Metadata {
       ...(canonicalPath ? { url: `${SITE_URL}${canonicalPath}` } : {}),
     },
     twitter: {
-      card: "summary_large_image",
+      card: DEFAULT_TWITTER_CARD,
       title: ogTitle,
       description: ogDescription,
       images: [DEFAULT_OG_IMAGE_PATH],
@@ -217,7 +223,7 @@ export function buildTradeMetadata(
       images: [{ url: DEFAULT_OG_IMAGE_PATH, alt: DEFAULT_OG_IMAGE_ALT }],
     },
     twitter: {
-      card: "summary_large_image",
+      card: DEFAULT_TWITTER_CARD,
       title,
       description,
       images: [DEFAULT_OG_IMAGE_PATH],

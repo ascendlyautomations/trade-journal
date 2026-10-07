@@ -35,6 +35,7 @@ import {
   DEFAULT_OG_IMAGE_PATH,
   DEFAULT_SITE_DESCRIPTION,
   HOME_PAGE_TITLE,
+  DEFAULT_TWITTER_CARD,
   OG_IMAGE_HEIGHT,
   OG_IMAGE_WIDTH,
   SITE_KEYWORDS,
@@ -103,7 +104,7 @@ export const metadata: Metadata = {
     ],
   },
   twitter: {
-    card: "summary_large_image",
+    card: DEFAULT_TWITTER_CARD,
     site: TWITTER_HANDLE,
     creator: TWITTER_HANDLE,
     title: HOME_PAGE_TITLE,

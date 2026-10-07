@@ -53,8 +53,11 @@ struct SettingsProfileView: View {
                         .textInputAutocapitalization(.words)
                 }
                 SettingsLabeledField(title: "Bio") {
-                    TextField("Tell traders about yourself", text: $viewModel.draftBio, axis: .vertical)
-                        .lineLimit(3...6)
+                    ProfileBioTextField(
+                        text: $viewModel.draftBio,
+                        placeholder: "Tell traders about yourself",
+                        maxHeight: 88
+                    )
                 }
             } header: {
                 Text("Profile")

@@ -7,7 +7,11 @@ enum InstrumentCatalog {
         for profileID: ProfileID,
         detailCache: DetailPresentationCache
     ) -> InstrumentPickerSnapshot {
-        InstrumentPickerSnapshot(
+        SessionOwnerTradesStore.shared.hydrateFromDiskIfNeeded(
+            for: profileID,
+            detailCache: detailCache
+        )
+        return InstrumentPickerSnapshot(
             mostUsed: mostUsedSymbols(for: profileID, detailCache: detailCache),
             custom: UserCustomInstrumentStore.shared.customSymbols(for: profileID),
             futures: InstrumentPickerCatalog.futures,
@@ -23,14 +27,7 @@ enum InstrumentCatalog {
         detailCache: DetailPresentationCache,
         limit: Int = 8
     ) -> [String] {
-        let fromHistory = tradeHistoryTickers(for: profileID, detailCache: detailCache, limit: limit)
-        if fromHistory.count >= 4 {
-            return fromHistory
-        }
-        return mergeUnique(
-            fromHistory + InstrumentPickerCatalog.defaultMostUsed,
-            limit: limit
-        )
+        tradeHistoryTickers(for: profileID, detailCache: detailCache, limit: limit)
     }
 
     @discardableResult
@@ -68,34 +65,35 @@ enum InstrumentCatalog {
             byID[trade.id] = trade
         }
 
-        let sorted = byID.values.sorted {
-            ($0.exitAt ?? $0.entryAt) > ($1.exitAt ?? $1.entryAt)
+        struct TickerUsage {
+            var ticker: String
+            var count: Int
+            var lastUsed: Date
         }
 
-        var seen = Set<String>()
-        var result: [String] = []
-        for trade in sorted {
+        var usageByKey: [String: TickerUsage] = [:]
+        for trade in byID.values {
             let ticker = UserCustomInstrumentStore.normalize(trade.symbol.ticker)
             guard !ticker.isEmpty else { continue }
             let key = ticker.lowercased()
-            guard seen.insert(key).inserted else { continue }
-            result.append(ticker)
-            if result.count >= limit { break }
+            let usedAt = trade.exitAt ?? trade.entryAt
+            if var existing = usageByKey[key] {
+                existing.count += 1
+                if usedAt > existing.lastUsed {
+                    existing.lastUsed = usedAt
+                }
+                usageByKey[key] = existing
+            } else {
+                usageByKey[key] = TickerUsage(ticker: ticker, count: 1, lastUsed: usedAt)
+            }
         }
-        return result
-    }
 
-    private static func mergeUnique(_ symbols: [String], limit: Int) -> [String] {
-        var seen = Set<String>()
-        var result: [String] = []
-        for symbol in symbols {
-            let normalized = UserCustomInstrumentStore.normalize(symbol)
-            guard !normalized.isEmpty else { continue }
-            let key = normalized.lowercased()
-            guard seen.insert(key).inserted else { continue }
-            result.append(normalized)
-            if result.count >= limit { break }
-        }
-        return result
+        return usageByKey.values
+            .sorted {
+                if $0.count != $1.count { return $0.count > $1.count }
+                return $0.lastUsed > $1.lastUsed
+            }
+            .prefix(limit)
+            .map(\.ticker)
     }
 }

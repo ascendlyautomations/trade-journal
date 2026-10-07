@@ -308,6 +308,11 @@ struct CreateStoryView: View {
         guard let item else { return }
         mediaItem = nil
         if item.isVideoPickerItem {
+            if let seconds = StoryMediaDuration.photoLibraryDurationSeconds(for: item),
+               StoryMediaDuration.exceedsLimit(durationSeconds: seconds) {
+                viewModel.reportPickerError(StoryMediaDuration.durationExceededMessage)
+                return
+            }
             do {
                 guard let movie = try await item.loadTransferable(type: MovieFileTransferable.self) else {
                     viewModel.reportPickerError("Couldn't load video.")

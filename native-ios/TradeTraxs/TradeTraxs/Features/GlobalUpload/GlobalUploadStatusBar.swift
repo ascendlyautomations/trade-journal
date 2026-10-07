@@ -7,42 +7,54 @@ struct GlobalUploadStatusBar: View {
     @Environment(\.themeEnvironment) private var theme
 
     var body: some View {
-        Button {
-            coordinator.isQueuePresented = true
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(presentation.line)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(theme.colors.textPrimary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                    Spacer(minLength: 8)
-                    if presentation.showsRetry {
-                        Text("Retry")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(theme.colors.accent)
+        HStack(spacing: 0) {
+            Button {
+                coordinator.isQueuePresented = true
+            } label: {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(presentation.line)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(theme.colors.textPrimary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                        Spacer(minLength: 8)
+                        if presentation.showsRetry, presentation.retryJobID == nil {
+                            Text("Retry")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(theme.colors.accent)
+                        }
+                    }
+                    if let progress = presentation.progress, progress.isFinite {
+                        ProgressView(value: min(1, max(0, progress)))
+                            .tint(theme.colors.accent)
+                    } else if !presentation.showsRetry {
+                        ProgressView()
+                            .controlSize(.small)
                     }
                 }
-                if let progress = presentation.progress, progress.isFinite {
-                    ProgressView(value: min(1, max(0, progress)))
-                        .tint(theme.colors.accent)
-                } else if !presentation.showsRetry {
-                    ProgressView()
-                        .controlSize(.small)
-                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(theme.colors.navigationBackground.opacity(0.98))
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(theme.colors.border)
-                    .frame(height: 0.5)
+            .buttonStyle(.plain)
+
+            if presentation.showsRetry, let retryJobID = presentation.retryJobID {
+                Button("Retry") {
+                    coordinator.retry(jobID: retryJobID)
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(theme.colors.accent)
+                .padding(.trailing, 16)
+                .accessibilityIdentifier("globalUpload.statusBar.retry")
             }
         }
-        .buttonStyle(.plain)
+        .background(theme.colors.navigationBackground.opacity(0.98))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(theme.colors.border)
+                .frame(height: 0.5)
+        }
         .accessibilityIdentifier("globalUpload.statusBar")
     }
 }
@@ -95,24 +107,6 @@ struct GlobalUploadQueueSheet: View {
     }
 }
 
-/// Inserts the upload banner below the navigation bar and above scrollable stack content.
-/// Apply only to tab-root ``NavigationStack`` views in ``MainTabShellView`` — not the outer ``TabView``.
-struct GlobalUploadNavigationInsetModifier: ViewModifier {
-    @Bindable var coordinator: GlobalUploadCoordinator
-
-    func body(content: Content) -> some View {
-        content
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if let presentation = coordinator.barPresentation {
-                    GlobalUploadStatusBar(
-                        coordinator: coordinator,
-                        presentation: presentation
-                    )
-                }
-            }
-    }
-}
-
 /// Upload queue sheet — attach once on ``MainTabShellView`` (not per tab stack).
 struct GlobalUploadQueueSheetModifier: ViewModifier {
     @Bindable var coordinator: GlobalUploadCoordinator
@@ -126,14 +120,10 @@ struct GlobalUploadQueueSheetModifier: ViewModifier {
 }
 
 extension View {
+    /// Lays out the upload banner in page content (above scroll areas / below navigation chrome).
     @MainActor
-    func globalUploadNavigationInset() -> some View {
-        globalUploadNavigationInset(coordinator: GlobalUploadCoordinator.shared)
-    }
-
-    @MainActor
-    func globalUploadNavigationInset(coordinator: GlobalUploadCoordinator) -> some View {
-        modifier(GlobalUploadNavigationInsetModifier(coordinator: coordinator))
+    func globalUploadPageLayout() -> some View {
+        modifier(GlobalUploadPageLayoutModifier())
     }
 
     @MainActor

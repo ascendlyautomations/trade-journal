@@ -18,6 +18,7 @@ import {
 import { TRADER_TYPE_OPTIONS, normalizeTraderType } from "@/lib/traderType"
 import CustomSelect from "@/app/components/CustomSelect"
 import { useAutoResizeTextarea } from "@/lib/useAutoResizeTextarea"
+import { constrainProfileBio } from "@/lib/profileBio"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import { feedbackPresets } from "@/lib/feedbackPresets"
@@ -87,7 +88,9 @@ export default function ProfileOnboarding({
     )
   )
   const [name, setName] = useState(initialName ? String(initialName) : "")
-  const [bio, setBio] = useState(initialBio ? String(initialBio) : "")
+  const [bio, setBio] = useState(
+    initialBio ? constrainProfileBio(String(initialBio)) : ""
+  )
   const bioTextareaRef = useAutoResizeTextarea(bio, { minLines: 3, maxLines: 3 })
   const [tradingStyle, setTradingStyle] = useState(
     initialTradingStyle ? String(initialTradingStyle) : ""
@@ -209,7 +212,7 @@ export default function ProfileOnboarding({
       const patch = {
         username: u,
         name: name.trim() || null,
-        bio: bio.trim() || null,
+        bio: constrainProfileBio(bio).trim() || null,
         trading_style: tradingStyle.trim(),
         trader_type: traderType.trim(),
         primary_market: primaryMarket.trim() || null,
@@ -375,7 +378,7 @@ export default function ProfileOnboarding({
               rows={3}
               className={`${inputClass} mb-4 resize-none overflow-hidden leading-normal`}
               value={bio}
-              onChange={(e) => setBio(e.target.value)}
+              onChange={(e) => setBio(constrainProfileBio(e.target.value))}
             />
           </div>
 

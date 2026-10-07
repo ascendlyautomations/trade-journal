@@ -138,6 +138,9 @@ struct CreateReelView: View {
             guard let item else { return }
             viewModel.importFromPhotosPicker(item)
         }
+        .videoTooLongAlert(isPresented: $viewModel.showsVideoTooLongAlert) {
+            videoItem = nil
+        }
         .accessibilityIdentifier("createReel.root")
     }
 

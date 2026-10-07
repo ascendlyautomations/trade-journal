@@ -76,6 +76,9 @@ final class FollowListViewModel {
         phase == .loaded && !items.isEmpty && visibleItems.isEmpty
     }
 
+    /// Bumped by ``FollowMutationCoordinator`` — read from views so follow buttons stay in sync across screens.
+    var followRevision: Int { FollowMutationCoordinator.shared.revision }
+
     func loadIfNeeded() {
         guard !hasLoaded, loadTask == nil else { return }
         loadTask = Task { await performLoad(forceNetwork: false) }
@@ -108,12 +111,9 @@ final class FollowListViewModel {
     }
 
     func isFollowing(_ profile: Profile) -> Bool {
-        // Shared source of truth — DetailPresentationCache edge, then local set.
-        if let edge = detailCache.viewerFollowEdge(for: profile.id) {
-            return edge
-        }
-        if viewerFollowingIDs.contains(profile.id) {
-            return true
+        guard profile.id != viewerID else { return false }
+        if kind == .following, isOwnList {
+            return items.contains { $0.id == profile.id }
         }
         guard let viewerID else { return false }
         return FollowMutationCoordinator.shared.isFollowing(viewer: viewerID, target: profile.id)
@@ -153,12 +153,10 @@ final class FollowListViewModel {
 
         if !forceNetwork, let cached = cachedList(), !cached.isEmpty {
             items = cached
-            viewerFollowingIDs = detailCache.viewerFollowingIDs() ?? []
             hasLoaded = true
             phase = .loaded
-            if detailCache.viewerFollowingIDs() == nil {
-                await loadViewerFollowing(forceNetwork: false)
-            }
+            await loadViewerFollowing(forceNetwork: false)
+            syncViewerFollowingFromCache()
             loadTask = nil
             return
         }
@@ -203,6 +201,7 @@ final class FollowListViewModel {
             hasLoaded = true
             phase = .loaded
             await loadViewerFollowing(forceNetwork: forceNetwork)
+            syncViewerFollowingFromCache()
         } catch {
             guard !Task.isCancelled else { return }
             if items.isEmpty {
@@ -255,53 +254,47 @@ final class FollowListViewModel {
             viewerFollowingIDs = cached
             return
         }
-        if !forceNetwork,
-           let shared = await SessionFollowingStore.shared.cached(viewerID: viewerID.rawValue)
-        {
-            let ids = Set(shared.map { ProfileID($0) })
-            viewerFollowingIDs = ids
-            detailCache.seedViewerFollowingIDs(ids)
-            return
-        }
-        if !forceNetwork, let cachedFollowing = detailCache.following(for: viewerID) {
-            let ids = Set(cachedFollowing.map(\.id))
-            viewerFollowingIDs = ids
-            detailCache.seedViewerFollowingIDs(ids)
-            await SessionFollowingStore.shared.seed(
-                viewerID: viewerID.rawValue,
-                ids: Set(ids.map(\.rawValue))
-            )
-            return
+        if !forceNetwork {
+            await FollowMutationCoordinator.shared.hydrateViewerFollowingRelationshipsIfNeeded(viewer: viewerID)
+            if let cached = detailCache.viewerFollowingIDs() {
+                viewerFollowingIDs = cached
+                return
+            }
         }
         if ProfileSectionSupport.isLocalDevelopmentProfile(viewerID)
             || ProfileSectionSupport.isLocalDevelopmentProfile(listOwnerID)
         {
             let ids = Set(FollowListFixtures.following(owner: viewerID).map(\.id))
             viewerFollowingIDs = ids
-            detailCache.seedViewerFollowingIDs(ids)
+            FollowMutationCoordinator.shared.seedViewerFollowingRelationships(ids: ids, viewer: viewerID)
             return
         }
         do {
-            let page = try await profiles.following(
-                of: viewerID,
-                page: PageRequest(limit: FollowListPagination.pageSize)
-            )
-            let ids = Set(page.items.map(\.id))
+            let ids = try await fetchCompleteViewerFollowingIDs(viewerID: viewerID)
             viewerFollowingIDs = ids
-            detailCache.seedViewerFollowingIDs(ids)
-            detailCache.seed(following: page.items, for: viewerID)
-            await SessionFollowingStore.shared.seedComplete(
-                viewerID: viewerID.rawValue,
-                ids: Set(ids.map(\.rawValue))
-            )
-            let generation = RelationshipWriteGeneration.bump(viewerID: viewerID)
-            RelationshipFollowingPersistence.saveComplete(
-                ids: ids.map(\.rawValue),
-                viewerID: viewerID,
-                generation: generation
-            )
+            FollowMutationCoordinator.shared.seedViewerFollowingRelationships(ids: ids, viewer: viewerID)
         } catch {
             // Soft-fail — buttons default to Follow.
+        }
+    }
+
+    private func fetchCompleteViewerFollowingIDs(viewerID: ProfileID) async throws -> Set<ProfileID> {
+        var ids = Set<ProfileID>()
+        var cursor: String?
+        repeat {
+            let page = try await profiles.following(
+                of: viewerID,
+                page: PageRequest(cursor: cursor, limit: FollowListPagination.pageSize)
+            )
+            ids.formUnion(page.items.map(\.id))
+            cursor = page.nextCursor
+        } while cursor != nil
+        return ids
+    }
+
+    private func syncViewerFollowingFromCache() {
+        if let ids = detailCache.viewerFollowingIDs() {
+            viewerFollowingIDs = ids
         }
     }
 
@@ -325,6 +318,7 @@ final class FollowListViewModel {
 
         do {
             try await profiles.follow(from: viewerID, to: profile.id)
+            syncViewerFollowingFromCache()
         } catch {
             viewerFollowingIDs = previous
             FollowMutationCoordinator.shared.applyEdgeChange(
@@ -332,6 +326,7 @@ final class FollowListViewModel {
                 target: profile.id,
                 isFollowing: false
             )
+            syncViewerFollowingFromCache()
             ExperienceHaptics.play(.warning)
         }
     }
@@ -362,6 +357,7 @@ final class FollowListViewModel {
 
         do {
             try await profiles.unfollow(from: viewerID, to: profile.id)
+            syncViewerFollowingFromCache()
         } catch {
             viewerFollowingIDs = previous
             FollowMutationCoordinator.shared.applyEdgeChange(
@@ -373,6 +369,7 @@ final class FollowListViewModel {
                 items.insert(profile, at: 0)
                 seedListCache(items)
             }
+            syncViewerFollowingFromCache()
             ExperienceHaptics.play(.warning)
         }
     }

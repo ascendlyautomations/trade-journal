@@ -186,7 +186,7 @@ final class FollowMutationCoordinator {
         revision += 1
     }
 
-    /// Shared read for any screen — prefer edge map, then complete following set.
+    /// Shared read for any screen — prefer complete following set, then pairwise edge.
     func isFollowing(viewer: ProfileID, target: ProfileID) -> Bool {
         resolvedIsFollowing(viewer: viewer, target: target)
     }
@@ -273,11 +273,11 @@ final class FollowMutationCoordinator {
     // MARK: - Private
 
     private func resolvedIsFollowing(viewer: ProfileID, target: ProfileID) -> Bool {
-        if let edge = detailCache?.viewerFollowEdge(for: target) {
-            return edge
-        }
         if let set = detailCache?.viewerFollowingIDs() {
             return set.contains(target)
+        }
+        if let edge = detailCache?.viewerFollowEdge(for: target) {
+            return edge
         }
         return false
     }

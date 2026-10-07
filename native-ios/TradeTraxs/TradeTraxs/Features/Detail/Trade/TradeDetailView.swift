@@ -182,6 +182,7 @@ struct TradeDetailView: View {
                 .padding(.top, ExperienceSpacing.xs)
                 .padding(.bottom, ExperienceSpacing.lg)
             }
+            .scrollDismissesKeyboard(.interactively)
         }
         .overlay {
             if viewModel.isDeleting {
@@ -276,6 +277,12 @@ struct TradeDetailView: View {
 
         TradeDetailQuickStatsSection(trade: trade)
 
+        TradeDetailJournalSection(
+            trade: trade,
+            notes: viewModel.notes,
+            isOwner: viewModel.isOwner
+        )
+
         if let media = viewModel.mediaReference {
             TradeDetailMediaView(
                 mediaID: trade.id.rawValue,
@@ -295,12 +302,6 @@ struct TradeDetailView: View {
         if let tickerHistory = viewModel.ownerAnalytics?.tickerHistory {
             TradeDetailTickerHistorySection(history: tickerHistory)
         }
-
-        TradeDetailJournalSection(
-            trade: trade,
-            notes: viewModel.notes,
-            isOwner: viewModel.isOwner
-        )
 
         if let tradeAI {
             TradeAISectionView(viewModel: tradeAI)

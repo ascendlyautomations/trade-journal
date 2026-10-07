@@ -36,6 +36,7 @@ struct MainTabShellView: View {
             }
         }
         .tabViewStyle(.tabBarOnly)
+        .globalUploadPageLayout()
         .experienceAppChrome(usesFeedOpaqueChrome: store.selectedTab == .feed)
         .globalUploadQueueSheet(coordinator: globalUploadCoordinator)
         .proUpgradeSheet()
@@ -204,7 +205,7 @@ struct HomeNavigationStack: View {
             }
         }
         .environment(\.stackNavigation, StackNavigation.home(store: store))
-        .mainTabGlobalUploadNavigationChrome()
+        .modifier(LegacyDemoLeaveButtonInsetModifier())
     }
 
     private var homePath: Binding<[HomeRoute]> {
@@ -475,7 +476,7 @@ struct FeedNavigationStack: View {
             }
         }
         .environment(\.stackNavigation, StackNavigation.feed(store: store))
-        .mainTabGlobalUploadNavigationChrome()
+        .modifier(LegacyDemoLeaveButtonInsetModifier())
     }
 
     private var feedPath: Binding<[FeedRoute]> {
@@ -647,7 +648,7 @@ struct MessagesNavigationStack: View {
             }
         }
         .environment(\.stackNavigation, StackNavigation.messages(store: store))
-        .mainTabGlobalUploadNavigationChrome()
+        .modifier(LegacyDemoLeaveButtonInsetModifier())
     }
 
     private var messagesPath: Binding<[MessagesRoute]> {
@@ -799,7 +800,7 @@ struct ProfileNavigationStack: View {
             }
         }
         .environment(\.stackNavigation, StackNavigation.profile(store: store))
-        .mainTabGlobalUploadNavigationChrome()
+        .modifier(LegacyDemoLeaveButtonInsetModifier())
     }
 
     private var profilePath: Binding<[ProfileRoute]> {
@@ -1020,18 +1021,8 @@ private struct ProfileTabBarIcon: View {
     }
 }
 
-// MARK: - Global upload layout (tab navigation stacks only)
-
-private extension View {
-    /// Banner sits below the navigation bar; page content shifts down via layout (not overlay).
-    func mainTabGlobalUploadNavigationChrome() -> some View {
-        globalUploadNavigationInset(coordinator: GlobalUploadCoordinator.shared)
-            .modifier(LegacyDemoLeaveButtonInsetModifier())
-    }
-}
-
 /// iOS 18 has no tab-bar accessory. iOS 26 uses ``tabViewBottomAccessory`` on the shell.
-private struct LegacyDemoLeaveButtonInsetModifier: ViewModifier {
+struct LegacyDemoLeaveButtonInsetModifier: ViewModifier {
     @Bindable private var launchController = AppLaunchController.shared
 
     func body(content: Content) -> some View {

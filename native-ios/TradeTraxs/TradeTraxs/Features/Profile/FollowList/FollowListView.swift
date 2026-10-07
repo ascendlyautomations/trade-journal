@@ -100,7 +100,8 @@ struct FollowListView: View {
     }
 
     private var listContent: some View {
-        List {
+        let _ = viewModel.followRevision
+        return List {
             if viewModel.showsFilteredEmpty {
                 Text("No results for “\(viewModel.searchText)”")
                     .experienceStyle(.subheadline, color: colors.secondaryText)

@@ -174,6 +174,7 @@ struct ClipDetailView: View {
                     }
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
         }
         .overlay {
             if viewModel.isDeleting {

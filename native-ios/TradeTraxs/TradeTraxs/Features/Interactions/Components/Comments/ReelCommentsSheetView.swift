@@ -58,6 +58,7 @@ struct ReelCommentsSheetView: View {
                 .padding(.horizontal, ExperienceSpacing.lg)
                 .padding(.vertical, ExperienceSpacing.sm)
             }
+            .scrollDismissesKeyboard(.interactively)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Divider()

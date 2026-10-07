@@ -3,6 +3,7 @@ import {
   DEFAULT_OG_IMAGE_ALT,
   DEFAULT_OG_IMAGE_PATH,
   DEFAULT_SITE_DESCRIPTION,
+  DEFAULT_TWITTER_CARD,
   OG_IMAGE_HEIGHT,
   OG_IMAGE_WIDTH,
   SITE_NAME,
@@ -58,7 +59,7 @@ export function buildSeoMetadata({
       images: [ogImageEntry(ogImagePath)],
     },
     twitter: {
-      card: "summary_large_image",
+      card: DEFAULT_TWITTER_CARD,
       title: pageTitle,
       description,
       images: [ogImagePath],

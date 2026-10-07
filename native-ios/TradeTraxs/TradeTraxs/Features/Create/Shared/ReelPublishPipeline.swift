@@ -95,7 +95,7 @@ enum ReelPublishPipeline {
                 stage: "databaseInsert",
                 error: error
             )
-            if insertedReel == nil {
+            if insertedReel == nil, !UploadRetryRecovery.isAmbiguousTransportFailure(error) {
                 try? await objectStorage.delete(
                     bucket: StorageBucket.reels.rawValue,
                     path: uploaded.videoStoragePath

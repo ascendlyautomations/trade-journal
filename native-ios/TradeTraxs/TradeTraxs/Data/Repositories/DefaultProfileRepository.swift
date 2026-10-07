@@ -194,7 +194,7 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         let body = ProfileDTO.OnboardingCompletionBody(
             username: ProfileUsernamePolicy.normalize(submission.username),
             name: ProfileDisplayNamePolicy.normalized(submission.displayName),
-            bio: ProfileDisplayNamePolicy.normalized(submission.bio),
+            bio: ProfileBioPolicy.persisted(submission.bio),
             trading_style: submission.tradingStyle.trimmingCharacters(in: .whitespacesAndNewlines),
             trader_type: submission.traderType.rawValue,
             primary_market: Self.trimmedNonEmpty(submission.primaryMarket),
@@ -275,7 +275,7 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         var body = ProfileDTO.UpdateBody(
             username: usernameChanged ? normalizedUsername : nil,
             name: ProfileDisplayNamePolicy.normalized(update.displayName),
-            bio: update.bio,
+            bio: ProfileBioPolicy.persisted(update.bio),
             avatar_url: nil,
             trader_type: update.traderType?.rawValue,
             trading_style: update.tradingStyle,

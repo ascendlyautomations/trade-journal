@@ -35,6 +35,7 @@ final class AddTradeViewModel {
     private(set) var selectedAccountID: TradingAccountID?
     private(set) var fieldErrors: [Field: String] = [:]
     var formError: String?
+    var showsVideoTooLongAlert = false
     private(set) var isUploadingMedia = false
 
     var symbolText = ""
@@ -541,10 +542,11 @@ final class AddTradeViewModel {
     }
 
     func applyClipVideo(from url: URL, contentType: String?) {
-        isPreparingClipVideo = true
         formError = nil
         Task {
             do {
+                try await VideoUploadDurationValidation.validateReelUploadDuration(at: url)
+                isPreparingClipVideo = true
                 let prepared = try await ReelEncodingPipeline.prepareForUpload(
                     from: url,
                     contentType: contentType
@@ -566,7 +568,11 @@ final class AddTradeViewModel {
                 )
                 ExperienceHaptics.play(.selection)
             } catch {
-                formError = Self.userMessage(for: error)
+                if VideoUploadDurationValidation.isTooLong(error) {
+                    showsVideoTooLongAlert = true
+                } else {
+                    formError = Self.userMessage(for: error)
+                }
             }
             isPreparingClipVideo = false
         }
@@ -1153,15 +1159,30 @@ final class AddTradeViewModel {
             return .create
         }()
 
+        let jobID = UUID().uuidString
+        let reelSnapshot: ReelDraftSnapshot? = {
+            guard let reelDraft = reelDraft else { return nil }
+            if reelDraft.videoAssetState == .preparedDelivery,
+               let captured = try? ReelEncodingPipeline.captureUploadSnapshot(
+                   from: reelDraft,
+                   publishID: jobID,
+                   captionOverride: nil
+               )
+            {
+                return captured
+            }
+            return ReelDraftSnapshot(draft: reelDraft, captionOverride: nil)
+        }()
+
         return TradeSaveUploadSpec(
-            jobID: UUID().uuidString,
+            jobID: jobID,
             authorID: viewerID,
             mode: uploadMode,
             draft: draft,
             screenshotData: screenshotData,
             removeExistingScreenshot: removeExistingScreenshot,
             existingImageURL: existingImageURL,
-            reelSnapshot: reelDraft.map { ReelDraftSnapshot(draft: $0, captionOverride: nil) },
+            reelSnapshot: reelSnapshot,
             linkedReelID: linkedReel?.id,
             tradeIsPublic: shareToProfile,
             lastAccountID: account.id

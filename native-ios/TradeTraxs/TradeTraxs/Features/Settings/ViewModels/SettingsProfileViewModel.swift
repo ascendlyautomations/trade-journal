@@ -137,7 +137,7 @@ final class SettingsProfileViewModel {
         let update = ProfileSettingsUpdate(
             profileID: profile.id,
             displayName: draftDisplayName.trimmingCharacters(in: .whitespacesAndNewlines),
-            bio: draftBio.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            bio: ProfileBioPolicy.persisted(draftBio),
             tradingStyle: draftTradingStyle.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
             primaryMarket: draftPrimaryMarket.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
             isPrivate: draftIsPrivate,
@@ -202,27 +202,7 @@ final class SettingsProfileViewModel {
 
     func setTraderType(_ type: TraderType) {
         guard draftTraderType != type else { return }
-        if AppLaunchController.shared.isDemoExperienceActive {
-            errorMessage = "Profile changes need a TradeTraxs account."
-            return
-        }
         draftTraderType = type
-        guard var current = profile else { return }
-        let previous = current.traderType
-        guard previous != type else { return }
-        current.traderType = type
-        profile = current
-        Task {
-            do {
-                let updated = try await profiles.updateProfile(current)
-                commitConfirmedProfileMutation(updated)
-            } catch {
-                draftTraderType = previous
-                profile?.traderType = previous
-                errorMessage = "Couldn't update trader type."
-                ExperienceHaptics.play(.warning)
-            }
-        }
     }
 
     func persistCroppedAvatar(_ image: UIImage) {
@@ -308,7 +288,7 @@ final class SettingsProfileViewModel {
 
         self.profile = profile
         draftDisplayName = profile.displayName
-        draftBio = profile.bio ?? ""
+        draftBio = ProfileBioPolicy.constrained(profile.bio ?? "")
         draftTradingStyle = profile.tradingStyle ?? ""
         draftPrimaryMarket = profile.primaryMarket ?? ""
         draftIsPrivate = profile.isPrivate

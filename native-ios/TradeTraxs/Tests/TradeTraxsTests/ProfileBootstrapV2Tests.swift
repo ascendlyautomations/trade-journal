@@ -120,6 +120,56 @@ final class ProfileBootstrapV2Tests: XCTestCase {
         XCTAssertEqual(trades.items.count, count)
     }
 
+    func testRepeatedOwnerSettingsSaveDoesNotRevertToPriorConfirmedSnapshot() {
+        let environment = CompositionRoot.bootstrapAppEnvironment()
+        let store = environment.currentUserProfile
+
+        var first = DemoCanonicalDataset.profile()
+        first.bio = "First save"
+        store.applyConfirmedOwnerProfile(first)
+        XCTAssertEqual(store.profile?.bio, "First save")
+
+        var second = first
+        second.displayName = "Updated Name"
+        second.bio = "Second save"
+        store.applyConfirmedOwnerProfile(second)
+
+        XCTAssertEqual(store.profile?.displayName, "Updated Name")
+        XCTAssertEqual(store.profile?.bio, "Second save")
+    }
+
+    func testOwnerSettingsSaveSyncsProfileScreenFromSessionStore() {
+        let environment = CompositionRoot.bootstrapAppEnvironment()
+        let store = environment.currentUserProfile
+        let screen = ProfileScreenViewModel(
+            target: .currentUser,
+            currentUserProfile: store,
+            navigationCoordinator: environment.navigation.coordinator,
+            authenticationCoordinator: nil,
+            data: environment.data,
+            showsOwnerChrome: true
+        )
+
+        var stale = DemoCanonicalDataset.profile()
+        stale.displayName = "Before Save"
+        stale.bio = "Old bio"
+        screen.applyOwnerProfileHeaderUpdate(profile: stale, localAvatar: nil)
+        XCTAssertEqual(screen.state.profile?.displayName, "Before Save")
+
+        var confirmed = stale
+        confirmed.displayName = "After Save"
+        confirmed.bio = "New bio"
+        store.applyConfirmedOwnerProfile(confirmed)
+
+        screen.syncOwnerProfileFromCurrentUserStore()
+        XCTAssertEqual(screen.state.profile?.displayName, "After Save")
+        XCTAssertEqual(screen.state.profile?.bio, "New bio")
+        XCTAssertEqual(
+            environment.data.detailCache.profile(id: confirmed.id)?.displayName,
+            "After Save"
+        )
+    }
+
     func testFollowEdgeCacheDoesNotPoisonIncompleteFollowingSet() {
         let cache = DetailPresentationCache()
         let a = ProfileID("user-a")

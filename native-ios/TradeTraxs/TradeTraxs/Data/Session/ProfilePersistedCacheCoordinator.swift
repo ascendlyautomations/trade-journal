@@ -253,6 +253,34 @@ enum ProfilePersistedCacheCoordinator {
         )
     }
 
+    /// Owner Settings save — keep tab/disk profile snapshots aligned with the session store.
+    static func patchOwnerProfileHeader(
+        profile: Profile,
+        session: any SessionProviding
+    ) async {
+        guard let userID = await session.currentUserID else { return }
+        let viewerID = ProfileID(userID.rawValue)
+        guard viewerID == profile.id else { return }
+
+        if var state = ProfileSessionStore.shared.restore(
+            viewerID: viewerID,
+            targetProfileID: profile.id
+        ) ?? ProfileDiskCache.loadSnapshot(viewerID: viewerID, targetProfileID: profile.id)
+            .map(mapBlobToState)
+        {
+            state.profile = profile
+            state.lastUpdated = Date()
+            persist(viewerID: viewerID, targetProfileID: profile.id, state: state)
+        }
+
+        SocialEntityPersistedCacheCoordinator.saveProfile(
+            profile,
+            viewerID: viewerID,
+            source: .profile,
+            mergeMode: .merge
+        )
+    }
+
     static func patchProfileHeader(
         viewerID: ProfileID,
         targetProfileID: ProfileID,

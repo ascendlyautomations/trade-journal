@@ -202,6 +202,48 @@ final class SettingsExperienceTests: XCTestCase {
         XCTAssertEqual(messagesSettingsRoutes(in: store), [.notifications])
     }
 
+    func testTraderTypeAndTradingStyleChangesPreserveUnsavedDraftUntilSave() async {
+        let profileID = SettingsFixtures.viewerID
+        let repository = SettingsProfileDraftTestRepository(profile: SettingsFixtures.profile())
+        let viewModel = SettingsProfileViewModel(
+            profiles: repository,
+            session: SettingsStubSession(userID: profileID.rawValue)
+        )
+
+        await viewModel.refresh()
+
+        viewModel.draftDisplayName = "New Name"
+        viewModel.draftUsername = "newusername"
+        viewModel.draftBio = "New Bio"
+
+        viewModel.setTraderType(.options)
+
+        XCTAssertEqual(viewModel.draftDisplayName, "New Name")
+        XCTAssertEqual(viewModel.draftUsername, "newusername")
+        XCTAssertEqual(viewModel.draftBio, "New Bio")
+        XCTAssertEqual(viewModel.draftTraderType, .options)
+        XCTAssertEqual(repository.updateProfileCalls, 0)
+
+        viewModel.draftTradingStyle = "Scalping"
+
+        XCTAssertEqual(viewModel.draftDisplayName, "New Name")
+        XCTAssertEqual(viewModel.draftUsername, "newusername")
+        XCTAssertEqual(viewModel.draftBio, "New Bio")
+        XCTAssertEqual(viewModel.draftTraderType, .options)
+
+        viewModel.save()
+        await waitFor { !viewModel.isSaving && !repository.updateProfileSettingsCalls.isEmpty }
+
+        XCTAssertEqual(repository.updateProfileSettingsCalls.count, 1)
+        let update = repository.updateProfileSettingsCalls[0]
+        XCTAssertEqual(update.displayName, "New Name")
+        XCTAssertEqual(update.username, "newusername")
+        XCTAssertEqual(update.bio, "New Bio")
+        XCTAssertEqual(update.traderType, .options)
+        XCTAssertEqual(update.tradingStyle, "Scalping")
+        XCTAssertEqual(repository.updateProfileCalls, 0)
+    }
+
     private func profileSettingsRoutes(in store: NavigationStore) -> [SettingsRoute] {
         store.paths.profile.compactMap { route in
             if case .settings(let settings) = route { return settings }
@@ -296,4 +338,83 @@ private struct SettingsStubBillingRepository: BillingRepository {
     func refreshEntitlements(for profileID: ProfileID) async throws -> BillingStatus {
         try await status(for: profileID)
     }
+}
+
+private final class SettingsProfileDraftTestRepository: ProfileRepository, @unchecked Sendable {
+    var ownerProfile: Profile
+    private(set) var updateProfileSettingsCalls: [ProfileSettingsUpdate] = []
+    private(set) var updateProfileCalls = 0
+
+    init(profile: Profile) {
+        ownerProfile = profile
+    }
+
+    func currentUser() async throws -> User {
+        User(id: UserID(ownerProfile.id.rawValue), email: nil, createdAt: .now)
+    }
+
+    func profile(id: ProfileID) async throws -> Profile {
+        ownerProfile
+    }
+
+    func profile(username: String) async throws -> Profile {
+        ownerProfile
+    }
+
+    func updateProfile(_ profile: Profile) async throws -> Profile {
+        updateProfileCalls += 1
+        ownerProfile = profile
+        return profile
+    }
+
+    func ownerProfileForSettings(id: ProfileID) async throws -> Profile {
+        ownerProfile
+    }
+
+    func updateProfileSettings(_ update: ProfileSettingsUpdate) async throws -> Profile {
+        updateProfileSettingsCalls.append(update)
+        ownerProfile.displayName = update.displayName
+        ownerProfile.bio = update.bio
+        ownerProfile.tradingStyle = update.tradingStyle
+        ownerProfile.primaryMarket = update.primaryMarket
+        ownerProfile.isPrivate = update.isPrivate
+        ownerProfile.username = update.username
+        ownerProfile.usernameChangeCount = update.usernameChangeCount
+        if let traderType = update.traderType {
+            ownerProfile.traderType = traderType
+        }
+        return ownerProfile
+    }
+
+    func stats(for profileID: ProfileID) async throws -> ProfileStats {
+        ProfileStats(
+            profileID: profileID,
+            followerCount: 0,
+            followingCount: 0,
+            postCount: 0,
+            tradeCount: 0,
+            publicTradeCount: 0
+        )
+    }
+
+    func wallPosts(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Post> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+
+    func wallPost(id: PostID) async throws -> Post {
+        throw AppError.notImplemented(feature: "wallPost")
+    }
+
+    func followState(from viewer: ProfileID, to target: ProfileID) async throws -> FollowState { .none }
+    func follow(from viewer: ProfileID, to target: ProfileID) async throws {}
+    func unfollow(from viewer: ProfileID, to target: ProfileID) async throws {}
+    func followers(of profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Profile> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+
+    func following(of profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Profile> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+
+    func creator(for profileID: ProfileID) async throws -> Creator? { nil }
 }

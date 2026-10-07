@@ -46,6 +46,7 @@ final class ContentDraftsListModel {
 
 struct ContentDraftsListView: View {
     @State private var model: ContentDraftsListModel
+    @State private var pendingDelete: ContentDraft?
     let onOpen: (ContentDraft) -> Void
 
     @Environment(\.themeColors) private var colors
@@ -72,25 +73,15 @@ struct ContentDraftsListView: View {
             } else {
                 List {
                     ForEach(model.drafts) { draft in
-                        Button {
-                            onOpen(draft)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(draft.listTitle)
-                                    .experienceStyle(.body, color: colors.primaryText)
-                                    .lineLimit(2)
-                                    .multilineTextAlignment(.leading)
-                                Text(draft.updatedLabel)
-                                    .experienceStyle(.caption, color: colors.secondaryText)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, ExperienceSpacing.xxs)
-                        }
-                        .buttonStyle(.plain)
+                        ContentDraftListRow(
+                            draft: draft,
+                            onOpen: { onOpen(draft) },
+                            onDelete: { pendingDelete = draft }
+                        )
                         .accessibilityIdentifier("contentDrafts.row.\(draft.id.uuidString)")
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
-                                Task { await model.delete(draft) }
+                                pendingDelete = draft
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
@@ -102,6 +93,25 @@ struct ContentDraftsListView: View {
         }
         .experienceScreenBackground()
         .experienceNavigationTitle("Drafts")
+        .confirmationDialog(
+            "Delete draft?",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Draft", role: .destructive) {
+                guard let draft = pendingDelete else { return }
+                pendingDelete = nil
+                Task { await model.delete(draft) }
+            }
+            Button("Cancel", role: .cancel) {
+                pendingDelete = nil
+            }
+        } message: {
+            Text("This draft will be permanently deleted.")
+        }
         .overlay {
             if model.isLoading && model.drafts.isEmpty {
                 ProgressView()
@@ -110,5 +120,46 @@ struct ContentDraftsListView: View {
         .refreshable { await model.reload() }
         .task { model.loadIfNeeded() }
         .accessibilityIdentifier("contentDrafts.list")
+    }
+}
+
+private struct ContentDraftListRow: View {
+    let draft: ContentDraft
+    let onOpen: () -> Void
+    let onDelete: () -> Void
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+            Button(action: onOpen) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(draft.listTitle)
+                        .experienceStyle(.body, color: colors.primaryText)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    Text(draft.updatedLabel)
+                        .experienceStyle(.caption, color: colors.secondaryText)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            HStack(spacing: ExperienceSpacing.md) {
+                Button("Edit", action: onOpen)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(colors.primaryText)
+                    .accessibilityIdentifier("contentDrafts.edit.\(draft.id.uuidString)")
+
+                Button("Delete", role: .destructive, action: onDelete)
+                    .font(.subheadline.weight(.medium))
+                    .accessibilityIdentifier("contentDrafts.delete.\(draft.id.uuidString)")
+            }
+            .buttonStyle(.plain)
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .padding(.vertical, ExperienceSpacing.xxs)
+        .experienceDashboardListRow()
     }
 }

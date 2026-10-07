@@ -97,5 +97,7 @@ struct GlobalUploadBarPresentation: Equatable {
     var line: String
     var progress: Double?
     var showsRetry: Bool
+    /// When set, the banner Retry control restarts this failed job.
+    var retryJobID: String?
     var activeCount: Int
 }

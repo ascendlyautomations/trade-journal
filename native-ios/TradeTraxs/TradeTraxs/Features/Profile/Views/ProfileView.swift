@@ -157,6 +157,10 @@ struct ProfileView: View {
             headerViewModel.onAppear()
             screen.onAppear(currentUserProfile: currentUserProfile)
         }
+        .onChange(of: currentUserProfile.ownerProfileMutationRevision) { _, _ in
+            guard showsOwnerChrome else { return }
+            screen.syncOwnerProfileFromCurrentUserStore()
+        }
         .onDisappear {
             if SocialRealtimeRepairSurfaces.shared.profileViewModel === screen {
                 SocialRealtimeRepairSurfaces.shared.profileViewModel = nil

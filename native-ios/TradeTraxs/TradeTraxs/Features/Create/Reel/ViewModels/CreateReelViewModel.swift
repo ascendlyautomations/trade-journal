@@ -27,6 +27,7 @@ final class CreateReelViewModel {
     private(set) var backgroundPreparationState: BackgroundPreparationState = .idle
     private(set) var isFullVideoImportInProgress = false
     var formError: String?
+    var showsVideoTooLongAlert = false
     private(set) var uploadProgress: Double = 0
     private(set) var pickerTrades: [Trade] = []
     private(set) var isLoadingTrades = false
@@ -142,6 +143,14 @@ final class CreateReelViewModel {
 
     /// Single entry for PhotosPicker selections — loads provider once, then prepares.
     func importFromPhotosPicker(_ item: PhotosPickerItem) {
+        do {
+            try VideoUploadDurationValidation.throwIfPhotoLibraryExceedsReelUploadLimit(item)
+        } catch {
+            if VideoUploadDurationValidation.isTooLong(error) {
+                showsVideoTooLongAlert = true
+                return
+            }
+        }
         let itemID = item.itemIdentifier ?? UUID().uuidString
         if itemID == lastImportedItemIdentifier {
             if videoPipelineTask != nil || isFullVideoImportInProgress {
@@ -163,7 +172,6 @@ final class CreateReelViewModel {
         let preservedLinkedTradeSummary = draft?.linkedTradeSummary
         let previousDraft = draft
 
-        currentSelectionID = selectionID
         let fastOpenStarted = ContinuousClock.now
         ClipFastOpenDiagnostics.logSelectionReceived(selectionID: selectionID)
         VideoImportDiagnostics.logSelectionReceived(id: selectionID)
@@ -175,22 +183,15 @@ final class CreateReelViewModel {
         backgroundPreparationState = .idle
 
         cleanupDraftFiles(previousDraft)
-        presentComposerShell(
-            selectionID: selectionID,
-            preservedLinkedTradeID: preservedLinkedTradeID,
-            preservedLinkedTradeSummary: preservedLinkedTradeSummary
-        )
-        ClipFastOpenDiagnostics.logComposerPresented(
-            selectionID: selectionID,
-            elapsedMs: Self.elapsedMilliseconds(since: fastOpenStarted)
-        )
 
         videoPipelineTask = Task {
             await runPhotosPickerImportPipeline(
                 generation: generation,
                 selectionID: selectionID,
                 photosItem: item,
-                fastOpenStarted: fastOpenStarted
+                fastOpenStarted: fastOpenStarted,
+                preservedLinkedTradeID: preservedLinkedTradeID,
+                preservedLinkedTradeSummary: preservedLinkedTradeSummary
             )
         }
     }
@@ -205,7 +206,6 @@ final class CreateReelViewModel {
         let preservedLinkedTradeSummary = draft?.linkedTradeSummary
         let previousDraft = draft
 
-        currentSelectionID = selectionID
         lastImportedItemIdentifier = nil
         let fastOpenStarted = ContinuousClock.now
         ClipFastOpenDiagnostics.logSelectionReceived(selectionID: selectionID)
@@ -218,15 +218,6 @@ final class CreateReelViewModel {
         backgroundPreparationState = .idle
 
         cleanupDraftFiles(previousDraft)
-        presentComposerShell(
-            selectionID: selectionID,
-            preservedLinkedTradeID: preservedLinkedTradeID,
-            preservedLinkedTradeSummary: preservedLinkedTradeSummary
-        )
-        ClipFastOpenDiagnostics.logComposerPresented(
-            selectionID: selectionID,
-            elapsedMs: Self.elapsedMilliseconds(since: fastOpenStarted)
-        )
 
         videoPipelineTask = Task {
             await runLocalFileImportPipeline(
@@ -234,9 +225,56 @@ final class CreateReelViewModel {
                 selectionID: selectionID,
                 localFileURL: url,
                 localContentType: contentType,
-                fastOpenStarted: fastOpenStarted
+                fastOpenStarted: fastOpenStarted,
+                preservedLinkedTradeID: preservedLinkedTradeID,
+                preservedLinkedTradeSummary: preservedLinkedTradeSummary
             )
         }
+    }
+
+    private func rejectImportedVideoIfTooLong(
+        _ owned: ReelVideoImport.OwnedSource,
+        generation: UInt64,
+        selectionID: String
+    ) async -> Bool {
+        let seconds: Double
+        do {
+            seconds = try await VideoUploadDurationValidation.durationSeconds(at: owned.url)
+        } catch {
+            return false
+        }
+        guard VideoUploadDurationValidation.exceedsUploadLimit(durationSeconds: seconds) else { return false }
+        guard selectionGeneration == generation else {
+            ReelVideoImport.cleanup(selectionID: selectionID)
+            return true
+        }
+        ReelVideoImport.cleanup(selectionID: selectionID)
+        rejectOverlongSelection()
+        return true
+    }
+
+    private func rejectOverlongSelection() {
+        videoPipelineTask?.cancel()
+        videoPipelineTask = nil
+        cancelBackgroundPreparation(for: currentSelectionID)
+        cleanupDraftFiles(draft)
+        draft = nil
+        currentSelectionID = nil
+        lastImportedItemIdentifier = nil
+        backgroundPreparationState = .idle
+        isFullVideoImportInProgress = false
+        uploadProgress = 0
+        phase = .ready
+        formError = nil
+        showsVideoTooLongAlert = true
+    }
+
+    private func rejectDurationBeforeComposerShell(generation: UInt64) {
+        guard selectionGeneration == generation else { return }
+        currentSelectionID = nil
+        lastImportedItemIdentifier = nil
+        isFullVideoImportInProgress = false
+        showsVideoTooLongAlert = true
     }
 
     func clearVideo() {
@@ -381,9 +419,13 @@ final class CreateReelViewModel {
         generation: UInt64,
         selectionID: String,
         photosItem: PhotosPickerItem,
-        fastOpenStarted: ContinuousClock.Instant
+        fastOpenStarted: ContinuousClock.Instant,
+        preservedLinkedTradeID: TradeID?,
+        preservedLinkedTradeSummary: String?
     ) async {
+        var prefetchedMovie: ReelVideoImport.PreflightedPickerMovie?
         defer {
+            ReelVideoImport.releasePreflightedPickerMovie(prefetchedMovie)
             if selectionGeneration == generation {
                 videoPipelineTask = nil
                 isFullVideoImportInProgress = false
@@ -391,6 +433,27 @@ final class CreateReelViewModel {
         }
 
         do {
+            try VideoUploadDurationValidation.throwIfPhotoLibraryExceedsReelUploadLimit(photosItem)
+            prefetchedMovie = try await ReelVideoImport.preflightPhotosPickerMovie(photosItem)
+
+            guard selectionGeneration == generation else { return }
+
+            await MainActor.run {
+                guard selectionGeneration == generation else { return }
+                currentSelectionID = selectionID
+                presentComposerShell(
+                    selectionID: selectionID,
+                    preservedLinkedTradeID: preservedLinkedTradeID,
+                    preservedLinkedTradeSummary: preservedLinkedTradeSummary
+                )
+                ClipFastOpenDiagnostics.logComposerPresented(
+                    selectionID: selectionID,
+                    elapsedMs: Self.elapsedMilliseconds(since: fastOpenStarted)
+                )
+            }
+
+            guard selectionGeneration == generation else { return }
+
             let posterStarted = ContinuousClock.now
             let importStarted = ContinuousClock.now
 
@@ -413,8 +476,10 @@ final class CreateReelViewModel {
             ClipFastOpenDiagnostics.logFullVideoImportStarted(selectionID: selectionID)
             let owned = try await ReelVideoImport.importFromPhotosPicker(
                 photosItem,
-                selectionID: selectionID
+                selectionID: selectionID,
+                prefetchedMovie: prefetchedMovie
             )
+            prefetchedMovie = nil
             let resolvedPoster = await lightweightPosterTask.value
 
             guard selectionGeneration == generation else {
@@ -433,6 +498,10 @@ final class CreateReelViewModel {
                 bytes: owned.byteCount
             )
 
+            if await rejectImportedVideoIfTooLong(owned, generation: generation, selectionID: selectionID) {
+                return
+            }
+
             try await finishOwnedVideoImport(
                 generation: generation,
                 selectionID: selectionID,
@@ -444,6 +513,16 @@ final class CreateReelViewModel {
             guard selectionGeneration == generation else { return }
         } catch {
             guard selectionGeneration == generation else { return }
+            if VideoUploadDurationValidation.isTooLong(error) {
+                if draft?.selectionID == selectionID {
+                    rejectOverlongSelection()
+                } else {
+                    await MainActor.run {
+                        rejectDurationBeforeComposerShell(generation: generation)
+                    }
+                }
+                return
+            }
             formError = Self.userMessage(for: error)
             backgroundPreparationState = .idle
             isFullVideoImportInProgress = false
@@ -460,7 +539,9 @@ final class CreateReelViewModel {
         selectionID: String,
         localFileURL: URL,
         localContentType: String?,
-        fastOpenStarted: ContinuousClock.Instant
+        fastOpenStarted: ContinuousClock.Instant,
+        preservedLinkedTradeID: TradeID?,
+        preservedLinkedTradeSummary: String?
     ) async {
         defer {
             if selectionGeneration == generation {
@@ -469,11 +550,31 @@ final class CreateReelViewModel {
             }
         }
 
-        ClipFastOpenDiagnostics.logFullVideoImportStarted(selectionID: selectionID)
-        let importStarted = ContinuousClock.now
-
         do {
-            let owned = try ReelVideoImport.importFromLocalFile(
+            try await VideoUploadDurationValidation.validateReelUploadDuration(at: localFileURL)
+
+            guard selectionGeneration == generation else { return }
+
+            await MainActor.run {
+                guard selectionGeneration == generation else { return }
+                currentSelectionID = selectionID
+                presentComposerShell(
+                    selectionID: selectionID,
+                    preservedLinkedTradeID: preservedLinkedTradeID,
+                    preservedLinkedTradeSummary: preservedLinkedTradeSummary
+                )
+                ClipFastOpenDiagnostics.logComposerPresented(
+                    selectionID: selectionID,
+                    elapsedMs: Self.elapsedMilliseconds(since: fastOpenStarted)
+                )
+            }
+
+            guard selectionGeneration == generation else { return }
+
+            ClipFastOpenDiagnostics.logFullVideoImportStarted(selectionID: selectionID)
+            let importStarted = ContinuousClock.now
+
+            let owned = try await ReelVideoImport.importFromLocalFile(
                 localFileURL,
                 contentType: localContentType,
                 selectionID: selectionID
@@ -495,6 +596,10 @@ final class CreateReelViewModel {
                 bytes: owned.byteCount
             )
 
+            if await rejectImportedVideoIfTooLong(owned, generation: generation, selectionID: selectionID) {
+                return
+            }
+
             try await finishOwnedVideoImport(
                 generation: generation,
                 selectionID: selectionID,
@@ -506,6 +611,16 @@ final class CreateReelViewModel {
             guard selectionGeneration == generation else { return }
         } catch {
             guard selectionGeneration == generation else { return }
+            if VideoUploadDurationValidation.isTooLong(error) {
+                if draft?.selectionID == selectionID {
+                    rejectOverlongSelection()
+                } else {
+                    await MainActor.run {
+                        rejectDurationBeforeComposerShell(generation: generation)
+                    }
+                }
+                return
+            }
             formError = Self.userMessage(for: error)
             backgroundPreparationState = .idle
             isFullVideoImportInProgress = false
@@ -797,6 +912,10 @@ final class CreateReelViewModel {
                 await MainActor.run {
                     guard selectionGeneration == generation, !adopted else { return }
                     guard draft?.selectionID == selectionID else { return }
+                    if VideoUploadDurationValidation.isTooLong(error) {
+                        rejectOverlongSelection()
+                        return
+                    }
                     let message = Self.userMessage(for: error)
                     backgroundPreparationState = .failed(message)
                     formError = message

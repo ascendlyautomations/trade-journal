@@ -99,6 +99,19 @@ final class RelationshipStateTests: XCTestCase {
         XCTAssertFalse(disk?.contains(target.rawValue) ?? true)
     }
 
+    func testCompleteFollowingSetOverridesStalePairwiseEdge() {
+        let cache = DetailPresentationCache()
+        configureCoordinator(cache: cache)
+        let other = ProfileID("dddddddd-dddd-dddd-dddd-dddddddddddd")
+        cache.setViewerFollows(target, isFollowing: false)
+        cache.seedViewerFollowingIDs([target, other])
+        XCTAssertEqual(
+            FollowMutationCoordinator.shared.isFollowing(viewer: viewerA, target: target),
+            true,
+            "Complete following set must win over a stale not-following edge from profile bootstrap"
+        )
+    }
+
     func testFollowRequestIsNotFollowingInCompleteSet() async {
         let cache = DetailPresentationCache()
         configureCoordinator(cache: cache)

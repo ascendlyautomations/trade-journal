@@ -98,6 +98,9 @@ enum MediaVideoPreparation {
     ) async throws -> PreparedLocalVideo {
         try Task.checkCancellation()
         try validateSourceFile(url: sourceURL, contentType: contentType, limits: limits)
+        if limits.maxDurationSeconds == Self.maxDurationSeconds {
+            try await VideoUploadDurationValidation.validateFileBeforeUpload(at: sourceURL)
+        }
 
         let ext = sourceURL.pathExtension.isEmpty ? "mov" : sourceURL.pathExtension
         let stagedSource = FileManager.default.temporaryDirectory

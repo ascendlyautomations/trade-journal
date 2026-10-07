@@ -5,8 +5,6 @@ import Foundation
 /// P&L math remains in ``FuturesInstrumentRegistry`` for symbols with known specs.
 /// Web has no separate catalog; native provides quick picks while still storing `trades.ticker`.
 nonisolated enum InstrumentPickerCatalog {
-    static let defaultMostUsed = ["NQ", "MNQ", "ES", "MES"]
-
     static let futures: [String] = [
         "ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K",
         "CL", "MCL", "NG",

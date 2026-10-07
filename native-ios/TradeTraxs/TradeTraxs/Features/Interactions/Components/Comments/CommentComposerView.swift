@@ -80,6 +80,11 @@ struct CommentComposerView: View {
             focused = true
         }
         .experienceFormFocusSync($focused)
+        .background {
+            CommentComposerKeyboardVisibility()
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
     }
 
     /// Return and the send button both call ``CommentsViewModel/submit()``.

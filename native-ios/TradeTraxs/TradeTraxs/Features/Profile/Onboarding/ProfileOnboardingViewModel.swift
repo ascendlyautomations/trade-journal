@@ -61,7 +61,9 @@ final class ProfileOnboardingViewModel {
            started.count >= 10 {
             self.startedTrading = String(started.prefix(10))
         }
-        self.bio = snapshot.bio?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.bio = ProfileBioPolicy.constrained(
+            snapshot.bio?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        )
         self.existingAvatarURL = snapshot.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmptyOrNil
         if let existingAvatarURL {
             prefilledAvatarReference = MediaReference(id: existingAvatarURL, kind: .image, altText: nil)
@@ -177,7 +179,7 @@ final class ProfileOnboardingViewModel {
                 profileID: snapshot.profileID,
                 username: normalizedUsername,
                 displayName: ProfileDisplayNamePolicy.normalized(displayName),
-                bio: bio.nonEmptyOrNil,
+                bio: ProfileBioPolicy.persisted(bio),
                 tradingStyle: tradingStyle.trimmingCharacters(in: .whitespacesAndNewlines),
                 traderType: traderType,
                 startedTrading: String(startedTrading.prefix(10)),

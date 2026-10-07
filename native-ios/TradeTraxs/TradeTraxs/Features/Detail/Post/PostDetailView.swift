@@ -136,6 +136,7 @@ struct PostDetailView: View {
                     }
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
         }
         .overlay {
             if viewModel.isDeleting {

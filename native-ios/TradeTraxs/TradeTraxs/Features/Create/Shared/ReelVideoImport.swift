@@ -14,6 +14,11 @@ enum ReelVideoImport {
         var byteCount: Int
     }
 
+    /// Provider temp file retained after duration preflight when PhotoKit metadata was unavailable.
+    struct PreflightedPickerMovie: Sendable {
+        var url: URL
+    }
+
     private static let importFolderName = "TradeTraxsReelImport"
 
     static func importDirectory() throws -> URL {
@@ -29,26 +34,65 @@ enum ReelVideoImport {
             .appendingPathComponent("source-\(selectionID).\(ext)", isDirectory: false)
     }
 
-    /// Loads the movie representation exactly once, then copies into app-owned storage.
-    static func importFromPhotosPicker(
-        _ item: PhotosPickerItem,
-        selectionID: String
-    ) async throws -> OwnedSource {
-        VideoImportDiagnostics.logProviderLoadStarted(id: selectionID)
-        let providerURL: URL
+    /// When PhotoKit duration is missing, loads the provider once and validates duration before any owned copy.
+    static func preflightPhotosPickerMovie(_ item: PhotosPickerItem) async throws -> PreflightedPickerMovie? {
+        try VideoUploadDurationValidation.throwIfPhotoLibraryExceedsReelUploadLimit(item)
+        if VideoUploadDurationValidation.photoLibraryDurationSeconds(for: item) != nil {
+            return nil
+        }
+
+        VideoImportDiagnostics.logProviderLoadStarted(id: "preflight")
         do {
             guard let movie = try await item.loadTransferable(type: MovieFileTransferable.self) else {
                 throw AppError.unknown(message: "Couldn't read that video. Try MP4 or MOV.")
             }
-            providerURL = movie.url
-            VideoImportDiagnostics.logProviderLoadCompleted(id: selectionID)
+            try await VideoUploadDurationValidation.validateReelUploadDuration(at: movie.url)
+            return PreflightedPickerMovie(url: movie.url)
         } catch {
             VideoImportDiagnostics.logImportFailed(
-                id: selectionID,
+                id: "preflight",
                 stage: "providerLoad",
                 message: sanitized(error.localizedDescription)
             )
             throw error
+        }
+    }
+
+    static func releasePreflightedPickerMovie(_ movie: PreflightedPickerMovie?) {
+        cleanup(url: movie?.url)
+    }
+
+    /// Loads the movie representation exactly once, then copies into app-owned storage.
+    static func importFromPhotosPicker(
+        _ item: PhotosPickerItem,
+        selectionID: String,
+        prefetchedMovie: PreflightedPickerMovie? = nil
+    ) async throws -> OwnedSource {
+        if prefetchedMovie == nil {
+            try VideoUploadDurationValidation.throwIfPhotoLibraryExceedsReelUploadLimit(item)
+        }
+
+        let providerURL: URL
+        if let prefetchedMovie {
+            providerURL = prefetchedMovie.url
+            VideoImportDiagnostics.logProviderLoadCompleted(id: selectionID)
+        } else {
+            VideoImportDiagnostics.logProviderLoadStarted(id: selectionID)
+            do {
+                guard let movie = try await item.loadTransferable(type: MovieFileTransferable.self) else {
+                    throw AppError.unknown(message: "Couldn't read that video. Try MP4 or MOV.")
+                }
+                providerURL = movie.url
+                VideoImportDiagnostics.logProviderLoadCompleted(id: selectionID)
+            } catch {
+                VideoImportDiagnostics.logImportFailed(
+                    id: selectionID,
+                    stage: "providerLoad",
+                    message: sanitized(error.localizedDescription)
+                )
+                throw error
+            }
+            try await VideoUploadDurationValidation.validateReelUploadDuration(at: providerURL)
         }
 
         defer {
@@ -71,7 +115,8 @@ enum ReelVideoImport {
         _ url: URL,
         contentType: String?,
         selectionID: String
-    ) throws -> OwnedSource {
+    ) async throws -> OwnedSource {
+        try await VideoUploadDurationValidation.validateReelUploadDuration(at: url)
         VideoImportDiagnostics.logOwnedCopyStarted(id: selectionID)
         let owned = try copyToOwnedStorage(
             from: url,
