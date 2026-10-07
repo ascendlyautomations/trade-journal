@@ -113,6 +113,29 @@ final class ProfileScreenViewModel {
 
     func onDisappearProfileEntityRealtime() {}
 
+    /// Clears tab payloads when the viewer blocks the profile currently on screen.
+    func hideContentForViewerBlockedPeerIfNeeded() {
+        guard !state.isOwner, !contentStore.isOwner else { return }
+        guard let targetID = state.profileID ?? contentStore.resolvedProfileID else { return }
+        guard UserBlockCoordinator.shared.cachedStatus(for: targetID)?.blockedByMe == true else { return }
+
+        var next = state
+        next.trades = []
+        next.tradeJournalPreview = []
+        next.tradesNextCursor = nil
+        next.posts = []
+        next.clips = []
+        next.achievements = []
+        next.pinnedContent = []
+        next.activeStories = []
+        next.canViewTrades = false
+        next.didLoadTrades = true
+        next.didLoadPosts = true
+        next.didLoadClips = true
+        next.didLoadAchievements = true
+        applyLocalState(next)
+    }
+
     private func bindProfileEntityRealtime() {}
 
     /// Owner journal header metrics — keep shell + ``ProfileContentStore`` aligned with detail cache.

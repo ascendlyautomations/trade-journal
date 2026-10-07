@@ -2,17 +2,19 @@ import SwiftUI
 
 struct ContentReportSheet: View {
     @State private var viewModel: ContentReportSheetViewModel
+    @State private var blockErrorMessage: String?
+    @State private var isBlockingUser = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.themeColors) private var colors
 
     var onDismiss: () -> Void
-    var onBlockUser: ((ProfileID) -> Void)?
+    var onBlockUser: ((ProfileID) async throws -> Void)?
 
     init(
         request: ContentReportRequest,
         repository: any ContentReportRepository,
         onDismiss: @escaping () -> Void,
-        onBlockUser: ((ProfileID) -> Void)? = nil
+        onBlockUser: ((ProfileID) async throws -> Void)? = nil
     ) {
         _viewModel = State(
             initialValue: ContentReportSheetViewModel(
@@ -138,10 +140,28 @@ struct ContentReportSheet: View {
 
             if let blockID = viewModel.request.blockUserOffer, let onBlockUser {
                 Button("Block this user", role: .destructive) {
-                    onBlockUser(blockID)
-                    close()
+                    Task {
+                        isBlockingUser = true
+                        blockErrorMessage = nil
+                        defer { isBlockingUser = false }
+                        do {
+                            try await onBlockUser(blockID)
+                            close()
+                        } catch {
+                            blockErrorMessage = UserFacingError.message(for: error)
+                            ExperienceHaptics.play(.warning)
+                        }
+                    }
                 }
                 .buttonStyle(.bordered)
+                .disabled(isBlockingUser)
+
+                if let blockErrorMessage {
+                    Text(blockErrorMessage)
+                        .experienceStyle(.footnote, color: colors.warning)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, ExperienceSpacing.lg)
+                }
             }
 
             Button("Done") {

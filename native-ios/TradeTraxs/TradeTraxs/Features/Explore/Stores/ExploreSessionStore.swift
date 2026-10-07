@@ -29,7 +29,7 @@ final class ExploreSessionStore {
         tradersNextCursor: String?,
         clearFailures: Bool = true
     ) {
-        suggestedTraders = traders
+        suggestedTraders = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(traders)
         popularRooms = rooms
         if let suggestedRooms {
             self.suggestedRooms = suggestedRooms
@@ -50,7 +50,9 @@ final class ExploreSessionStore {
 
     func appendTraders(_ traders: [ExploreTraderSuggestion], nextCursor: String?) {
         let existing = Set(suggestedTraders.map(\.id))
-        suggestedTraders.append(contentsOf: traders.filter { !existing.contains($0.id) })
+        let additions = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(traders)
+            .filter { !existing.contains($0.id) }
+        suggestedTraders.append(contentsOf: additions)
         tradersNextCursor = nextCursor
     }
 

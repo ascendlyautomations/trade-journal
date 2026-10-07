@@ -161,6 +161,14 @@ struct ProfileView: View {
             guard showsOwnerChrome else { return }
             screen.syncOwnerProfileFromCurrentUserStore()
         }
+        .onChange(of: headerViewModel.blockedByMe) { _, blocked in
+            if blocked {
+                screen.hideContentForViewerBlockedPeerIfNeeded()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .userBlockListDidChange)) { _ in
+            screen.hideContentForViewerBlockedPeerIfNeeded()
+        }
         .onDisappear {
             if SocialRealtimeRepairSurfaces.shared.profileViewModel === screen {
                 SocialRealtimeRepairSurfaces.shared.profileViewModel = nil

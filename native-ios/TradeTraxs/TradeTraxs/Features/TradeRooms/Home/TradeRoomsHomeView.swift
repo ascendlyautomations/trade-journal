@@ -344,6 +344,7 @@ struct TradeRoomsHomeView: View {
             .foregroundStyle(colors.secondaryText)
             .textCase(.uppercase)
             .tracking(0.35)
+            .padding(.bottom, ExperienceSpacing.xxs)
     }
 
     @ViewBuilder

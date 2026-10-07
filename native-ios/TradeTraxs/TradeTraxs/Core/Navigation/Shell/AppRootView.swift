@@ -64,14 +64,14 @@ struct AppRootView: View {
                 repository: appEnvironment.data.contentReports,
                 onDismiss: { contentReportPresenter.dismiss() },
                 onBlockUser: { profileID in
-                    Task {
-                        _ = try? await UserBlockCoordinator.shared.setBlocked(
-                            otherID: profileID,
-                            conversationID: nil,
-                            blocked: true,
-                            messages: appEnvironment.data.messages
-                        )
-                    }
+                    let username = appEnvironment.data.detailCache.profile(id: profileID)?.username
+                    try await UserBlockCoordinator.shared.setBlocked(
+                        otherID: profileID,
+                        conversationID: nil,
+                        blocked: true,
+                        peerUsername: username,
+                        messages: appEnvironment.data.messages
+                    )
                 }
             )
             .applyThemeEnvironment(themeManager.themeEnvironment)

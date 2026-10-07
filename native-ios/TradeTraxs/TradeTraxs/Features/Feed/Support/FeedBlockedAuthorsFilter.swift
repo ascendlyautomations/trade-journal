@@ -61,6 +61,21 @@ final class FeedBlockedAuthorsFilter {
         }
     }
 
+    func filterTraderSuggestions(_ suggestions: [ExploreTraderSuggestion]) -> [ExploreTraderSuggestion] {
+        guard !blockedPeerIDs.isEmpty else { return suggestions }
+        return suggestions.filter { !contains($0.id) }
+    }
+
+    func filterLeaderboardEntries(_ entries: [LeaderboardEntry]) -> [LeaderboardEntry] {
+        guard !blockedPeerIDs.isEmpty else { return entries }
+        return entries.filter { !contains($0.profileID) }
+    }
+
+    func unionBlockedPeers(into exclude: inout Set<ProfileID>) {
+        guard !blockedPeerIDs.isEmpty else { return }
+        exclude.formUnion(blockedPeerIDs)
+    }
+
 #if DEBUG
     func resetForTesting() {
         blockedPeerIDs = []

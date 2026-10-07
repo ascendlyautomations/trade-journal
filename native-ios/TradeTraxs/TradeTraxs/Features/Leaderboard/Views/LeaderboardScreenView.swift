@@ -22,7 +22,8 @@ struct LeaderboardScreenView: View {
                 session: data.session,
                 detailCache: data.detailCache,
                 navigationCoordinator: navigationCoordinator,
-                rpc: data.rpc
+                rpc: data.rpc,
+                messages: data.messages
             )
         )
         self.imagePipeline = data.imagePipeline

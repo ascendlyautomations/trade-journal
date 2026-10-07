@@ -22,7 +22,8 @@ struct ExploreHomeView: View {
                 session: data.session,
                 detailCache: data.detailCache,
                 navigationCoordinator: navigationCoordinator,
-                rpc: data.rpc
+                rpc: data.rpc,
+                messages: data.messages
             )
         )
         self.imagePipeline = data.imagePipeline
@@ -208,7 +209,7 @@ struct ExploreHomeView: View {
             .padding(.horizontal, ExperienceSpacing.md)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: ExperienceSpacing.sm) {
+                LazyHStack(alignment: .top, spacing: ExperienceSpacing.sm) {
                     ForEach(viewModel.suggestedTradeRooms) { room in
                         ExploreRoomCard(room: room, imagePipeline: imagePipeline) {
                             viewModel.openRoom(room)
@@ -217,14 +218,18 @@ struct ExploreHomeView: View {
                 }
                 .padding(.horizontal, ExperienceSpacing.md)
             }
+            .frame(height: dynamicTypeSize.isAccessibilitySize ? nil : ExploreTraderCard.railHeight)
+            .padding(.bottom, ExperienceSpacing.xs)
             .accessibilityIdentifier("explore.suggestedRooms.rail")
         }
+        .padding(.bottom, ExperienceSpacing.sm)
     }
 
     // MARK: - Search
 
     @ViewBuilder
     private var searchContent: some View {
+        let _ = viewModel.followRevision
         if viewModel.searchPhase == .searching && viewModel.searchPeople.isEmpty && viewModel.searchRooms.isEmpty {
             ProgressView("Searching…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -245,18 +250,15 @@ struct ExploreHomeView: View {
                 if !viewModel.searchPeople.isEmpty {
                     Section("People") {
                         ForEach(viewModel.searchPeople) { trader in
-                            Button {
-                                viewModel.openTrader(trader)
-                            } label: {
-                                ExploreTraderListRow(
-                                    trader: trader,
-                                    profile: viewModel.resolvedProfile(for: trader),
-                                    imagePipeline: imagePipeline,
-                                    isFollowing: viewModel.isFollowing(trader),
-                                    onToggleFollow: { viewModel.toggleFollow(trader) }
-                                )
-                            }
-                            .buttonStyle(.plain)
+                            ExploreTraderListRow(
+                                trader: trader,
+                                profile: viewModel.resolvedProfile(for: trader),
+                                imagePipeline: imagePipeline,
+                                isFollowing: viewModel.isFollowing(trader),
+                                showsFollowControl: viewModel.showsFollowControl(for: trader),
+                                onOpen: { viewModel.openTrader(trader) },
+                                onToggleFollow: { viewModel.toggleFollow(trader) }
+                            )
                             .listRowBackground(colors.backgroundPrimary)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 if viewModel.isFollowing(trader) {
@@ -307,24 +309,18 @@ struct ExploreHomeView: View {
                             TradeRoomDiscoveryRow(
                                 room: room,
                                 joinState: viewModel.joinState(for: room.id),
+                                presentation: .plainList,
                                 imagePipeline: imagePipeline,
                                 onOpen: { viewModel.openRoom(room) },
                                 onJoin: { Task { await viewModel.joinSearchRoom(room) } }
                             )
-                            .listRowInsets(EdgeInsets(
-                                top: ExperienceSpacing.xs,
-                                leading: ExperienceSpacing.md,
-                                bottom: ExperienceSpacing.xs,
-                                trailing: ExperienceSpacing.md
-                            ))
                             .listRowBackground(colors.backgroundPrimary)
-                            .listRowSeparator(.hidden)
                             .accessibilityIdentifier("explore.search.room.\(room.id.rawValue)")
                         }
                     }
                 }
             }
-            .experienceInsetGroupedListStyle(pageBackground: false)
+            .experiencePlainListStyle()
             .accessibilityIdentifier("explore.search.results")
         }
     }

@@ -17,8 +17,10 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
     private let navigationCoordinator: NavigationCoordinator
     private let store: LeaderboardSessionStore
     private let rpc: (any RPCClient)?
+    private let messages: (any MessageRepository)?
 
     private var bootstrapTask: Task<Void, Never>?
+    @ObservationIgnored private nonisolated(unsafe) var blockListObserver: NSObjectProtocol?
     private var filterGeneration: UInt64 = 0
     /// Bumps when ``LeaderboardSessionStore/profilesByID`` changes so views re-resolve avatars.
     private(set) var profileRevision: UInt64 = 0
@@ -32,7 +34,8 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         detailCache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator,
         store: LeaderboardSessionStore? = nil,
-        rpc: (any RPCClient)? = nil
+        rpc: (any RPCClient)? = nil,
+        messages: (any MessageRepository)? = nil
     ) {
         self.leaderboard = leaderboard
         self.profiles = profiles
@@ -42,6 +45,16 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
         self.navigationCoordinator = navigationCoordinator
         self.store = store ?? .shared
         self.rpc = rpc
+        self.messages = messages
+        blockListObserver = DiscoveryBlockedPeersObserver.install(messages: messages) { [weak self] in
+            self?.applyBlockedPeersToVisibleLeaderboard()
+        }
+    }
+
+    deinit {
+        if let blockListObserver {
+            NotificationCenter.default.removeObserver(blockListObserver)
+        }
     }
 
     // MARK: - Facades
@@ -83,6 +96,7 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
     func refresh() async {
         bootstrapTask?.cancel()
         state.isRefreshing = true
+        await DiscoveryBlockedPeersObserver.sync(messages: messages, force: true)
         await performBootstrap(forceNetwork: true, resetting: true)
         state.isRefreshing = false
     }
@@ -247,6 +261,7 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
 
     private func performBootstrap(forceNetwork: Bool, resetting: Bool) async {
         let startedGeneration = filterGeneration
+        await DiscoveryBlockedPeersObserver.sync(messages: messages, force: forceNetwork)
         if resetting, !state.isRefreshing, !store.hasBootstrapped {
             state.phase = .loading
         } else if resetting, !state.isRefreshing {
@@ -382,10 +397,11 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
     }
 
     private func visibleProfileIDsForCurrentFilters() -> [ProfileID] {
-        Array(
+        let entries = FeedBlockedAuthorsFilter.shared.filterLeaderboardEntries(store.rawEntries)
+        return Array(
             Set(
                 LeaderboardPresentation.rankedRows(
-                    entries: store.rawEntries,
+                    entries: entries,
                     profiles: store.profilesByID,
                     verified: store.verifiedIDs,
                     followers: store.followerCounts,
@@ -408,8 +424,9 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
     }
 
     private func applyStoreToState(didPlayPodiumEntrance: Bool) {
+        let entries = FeedBlockedAuthorsFilter.shared.filterLeaderboardEntries(store.rawEntries)
         var next = LeaderboardPresentation.buildState(
-            entries: store.rawEntries,
+            entries: entries,
             profiles: store.profilesByID,
             verified: store.verifiedIDs,
             followers: store.followerCounts,
@@ -434,6 +451,10 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
             profiles: store.profilesByID
         )
         #endif
+    }
+
+    private func applyBlockedPeersToVisibleLeaderboard() {
+        applyStoreToState(didPlayPodiumEntrance: state.didPlayPodiumEntrance)
     }
 
     private func makeContext(cursor: String?, forceNetwork: Bool) -> LeaderboardBootstrap.Context {

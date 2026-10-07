@@ -857,6 +857,7 @@ final class ConversationViewModel {
                 otherID: peerID,
                 conversationID: conversationID,
                 blocked: shouldBlock,
+                peerUsername: peerProfile?.username ?? conversation?.peerUsername,
                 messages: messagesRepo,
                 inboxStore: inboxStore
             )

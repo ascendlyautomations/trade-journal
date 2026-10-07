@@ -123,3 +123,30 @@ nonisolated struct PsychologyEnrichedTrade: Hashable, Sendable {
     var tradeNumberInDay: Int
     var previousTradeWasLoss: Bool
 }
+
+/// Dashboard-only gate copy — does not change analytics thresholds or insight generation.
+nonisolated struct PsychologyInsightsUnlockProgress: Equatable, Sendable {
+    static let requiredCount = 5
+
+    var tradingDayCheckInCount: Int
+    var tradeCount: Int
+
+    static var zero: Self { Self(tradingDayCheckInCount: 0, tradeCount: 0) }
+
+    var showsRequirementMessage: Bool {
+        tradingDayCheckInCount < Self.requiredCount || tradeCount < Self.requiredCount
+    }
+
+    /// Check-ins on Eastern trade dates present in the same filtered trade set psychology analyzes.
+    static func compute(trades: [Trade], checkIns: [TraderDailyCheckIn]) -> Self {
+        let checkInByDate = Dictionary(uniqueKeysWithValues: checkIns.map { ($0.checkInDate, $0) })
+        let tradingDaysWithCheckIn = Set(
+            trades.map { TraderPsychologyAnalyticsFoundation.tradeDateKey(for: $0) }
+                .filter { checkInByDate[$0] != nil }
+        )
+        return Self(
+            tradingDayCheckInCount: tradingDaysWithCheckIn.count,
+            tradeCount: trades.count
+        )
+    }
+}

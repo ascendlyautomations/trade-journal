@@ -13,7 +13,12 @@ struct ExploreRoomCard: View {
         dynamicTypeSize < .accessibility1
     }
 
+    private let cardWidth: CGFloat = 148
+    private let cardHeight: CGFloat = ExploreTraderCard.railHeight
     private let avatarSize: CGFloat = 52
+    private let nameRowHeight: CGFloat = 18
+    private let detailRowHeight: CGFloat = 14
+    private let textRowSpacing: CGFloat = 2
 
     private var descriptionPreview: String? {
         guard let raw = room.description?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -24,52 +29,65 @@ struct ExploreRoomCard: View {
 
     var body: some View {
         Button(action: onOpen) {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
                 TradeRoomCircularAvatar(
                     imageReference: room.imageReference,
                     imagePipeline: imagePipeline,
-                    diameter: avatarSize
+                    diameter: avatarSize,
+                    placeholderIconColor: colors.secondaryText
                 )
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: textRowSpacing) {
                     HStack(spacing: 4) {
                         Text(room.name)
-                            .experienceStyle(.subheadline, color: colors.primaryText)
-                            .fontWeight(.semibold)
+                            .font(ExperienceTypography.subheadline.weight(.semibold))
+                            .foregroundStyle(colors.primaryText)
                             .lineLimit(1)
                         if room.isOfficial {
                             TradeRoomOfficialBadge(style: .checkmark)
                         }
                     }
+                    .frame(height: usesCompactLayout ? nameRowHeight : nil, alignment: .center)
 
                     if let descriptionPreview {
                         Text(descriptionPreview)
                             .experienceStyle(.caption, color: colors.secondaryText)
-                            .lineLimit(usesCompactLayout ? 2 : 4)
-                            .fixedSize(horizontal: false, vertical: true)
+                            .lineLimit(usesCompactLayout ? 1 : 2)
+                            .truncationMode(.tail)
+                            .fixedSize(horizontal: false, vertical: !usesCompactLayout)
+                            .frame(height: usesCompactLayout ? detailRowHeight : nil, alignment: .leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     if let memberCount = room.memberCount {
                         Text("\(ProfileDisplay.compactCount(memberCount)) members")
                             .experienceStyle(.caption, color: colors.secondaryText)
-                            .lineLimit(1)
+                            .lineLimit(usesCompactLayout ? 1 : 2)
+                            .truncationMode(.tail)
+                            .frame(height: usesCompactLayout ? detailRowHeight : nil, alignment: .leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     if let owner = room.ownerDisplayLabel {
                         Text(owner)
                             .experienceStyle(.caption2, color: colors.tertiaryText)
-                            .lineLimit(1)
+                            .lineLimit(usesCompactLayout ? 1 : 2)
+                            .truncationMode(.tail)
+                            .frame(height: usesCompactLayout ? detailRowHeight : nil, alignment: .leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
-            .padding(ExperienceSpacing.sm)
-            .frame(width: 148, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                    .fill(colors.surfacePrimary)
-            )
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.plain)
+        .padding(ExperienceSpacing.sm)
+        .frame(width: cardWidth, height: usesCompactLayout ? cardHeight : nil, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                .fill(colors.surfacePrimary)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
         .contextMenu {
             Button(action: onOpen) {
                 Label("Open", systemImage: "person.3")

@@ -35,8 +35,10 @@ final class ExploreViewModel {
     private let navigationCoordinator: NavigationCoordinator
     private let store: ExploreSessionStore
     private let rpc: (any RPCClient)?
+    private let messages: (any MessageRepository)?
 
     private var viewerID: ProfileID?
+    @ObservationIgnored private nonisolated(unsafe) var blockListObserver: NSObjectProtocol?
     private var bootstrapTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
     private var searchGeneration: UInt64 = 0
@@ -58,7 +60,8 @@ final class ExploreViewModel {
         navigationCoordinator: NavigationCoordinator,
         store: ExploreSessionStore? = nil,
         rpc: (any RPCClient)? = nil,
-        joinCoordinator: TradeRoomJoinActionCoordinator? = nil
+        joinCoordinator: TradeRoomJoinActionCoordinator? = nil,
+        messages: (any MessageRepository)? = nil
     ) {
         self.explore = explore
         self.search = search
@@ -70,21 +73,40 @@ final class ExploreViewModel {
         self.store = store ?? .shared
         self.rpc = rpc
         self.joinCoordinator = joinCoordinator ?? .shared
+        self.messages = messages
+        blockListObserver = DiscoveryBlockedPeersObserver.install(messages: messages) { [weak self] in
+            self?.applyBlockedPeersToVisibleDiscovery()
+        }
     }
 
-    var suggestedTraders: [ExploreTraderSuggestion] { store.suggestedTraders }
+    deinit {
+        if let blockListObserver {
+            NotificationCenter.default.removeObserver(blockListObserver)
+        }
+    }
+
+    var suggestedTraders: [ExploreTraderSuggestion] {
+        FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(store.suggestedTraders)
+    }
     var suggestedRooms: [ExploreRoomSuggestion] { store.suggestedRooms }
     var popularRooms: [ExploreRoomSuggestion] { store.popularRooms }
 
     /// Suggested discovery rows — excludes rooms the viewer already joined (inbox / RPC flags).
     var suggestedTradeRooms: [ExploreRoomSuggestion] {
         let joinedInbox = Set(MessagesInboxStore.shared.rooms.map(\.id))
-        return suggestedRooms.filter { room in
-            !joinedInbox.contains(room.id)
-                && room.isJoined != true
-                && room.isMember != true
+        func eligible(_ rooms: [ExploreRoomSuggestion]) -> [ExploreRoomSuggestion] {
+            rooms.filter { room in
+                !joinedInbox.contains(room.id)
+                    && room.isJoined != true
+                    && room.isMember != true
+            }
         }
+        let fromSuggested = eligible(suggestedRooms)
+        if !fromSuggested.isEmpty { return fromSuggested }
+        return eligible(popularRooms)
     }
+
+    var followRevision: Int { FollowMutationCoordinator.shared.revision }
     var viewerFollowingIDs: Set<ProfileID> { store.viewerFollowingIDs }
     var tradersFailedMessage: String? { store.tradersFailedMessage }
     var roomsFailedMessage: String? { store.roomsFailedMessage }
@@ -112,7 +134,11 @@ final class ExploreViewModel {
         if store.hasBootstrapped {
             phase = .loaded
             hydrateTask?.cancel()
-            hydrateTask = Task { await rehydrateStoredTradersIfNeeded() }
+            hydrateTask = Task {
+                await DiscoveryBlockedPeersObserver.sync(messages: messages, force: false)
+                applyBlockedPeersToVisibleDiscovery()
+                await rehydrateStoredTradersIfNeeded()
+            }
             return
         }
         guard bootstrapTask == nil else { return }
@@ -131,6 +157,7 @@ final class ExploreViewModel {
         bootstrapTask?.cancel()
         store.invalidate()
         phase = .loading
+        await DiscoveryBlockedPeersObserver.sync(messages: messages, force: true)
         await bootstrap()
     }
 
@@ -156,20 +183,22 @@ final class ExploreViewModel {
         if viewerID == DemoExperienceSupport.profileID {
             let lowered = query.lowercased()
             let exclude = viewerID ?? DemoExperienceSupport.profileID
-            searchPeople = DemoGraph.traders(excluding: exclude).filter {
+            let matches = DemoGraph.traders(excluding: exclude).filter {
                 $0.profile.displayName.lowercased().contains(lowered)
                     || $0.profile.username.lowercased().contains(lowered)
             }
+            searchPeople = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(matches)
             searchRooms = []
             return
         }
         if forceFixtures || (viewerID.map(isLocalDevelopment) ?? false) {
             let lowered = query.lowercased()
             let exclude = viewerID ?? ExploreFixtures.viewerID
-            searchPeople = ExploreFixtures.traders(excluding: exclude).filter {
+            let matches = ExploreFixtures.traders(excluding: exclude).filter {
                 $0.profile.displayName.lowercased().contains(lowered)
                     || $0.profile.username.lowercased().contains(lowered)
             }
+            searchPeople = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(matches)
             searchRooms = ExploreFixtures.rooms().filter {
                 $0.name.lowercased().contains(lowered) || $0.slug.lowercased().contains(lowered)
             }
@@ -201,7 +230,13 @@ final class ExploreViewModel {
     }
 
     func isFollowing(_ trader: ExploreTraderSuggestion) -> Bool {
-        viewerFollowingIDs.contains(trader.id)
+        guard let viewerID else { return viewerFollowingIDs.contains(trader.id) }
+        return FollowMutationCoordinator.shared.isFollowing(viewer: viewerID, target: trader.id)
+    }
+
+    func showsFollowControl(for trader: ExploreTraderSuggestion) -> Bool {
+        guard let viewerID else { return true }
+        return viewerID != trader.id
     }
 
     var pendingUnfollow: ExploreTraderSuggestion?
@@ -342,6 +377,7 @@ final class ExploreViewModel {
         if let raw = await session.currentUserID?.rawValue {
             viewerID = ProfileID(raw)
         }
+        await DiscoveryBlockedPeersObserver.sync(messages: messages, force: false)
 
         if let viewerID, viewerID == DemoExperienceSupport.profileID {
             let traders = DemoGraph.traders(excluding: viewerID)
@@ -354,8 +390,8 @@ final class ExploreViewModel {
                     memberCount: DemoExploreTradeRoom.room().memberCount,
                     ownerProfileID: DemoExploreTradeRoom.hostProfileID,
                     roomKind: .community,
-                    isJoined: true,
-                    isMember: true
+                    isJoined: false,
+                    isMember: false
                 )
             ]
             DemoGraph.seedFeedCache(detailCache, viewerID: viewerID)
@@ -413,10 +449,11 @@ final class ExploreViewModel {
             store.updateAvatarConfirmedAbsent(confirmedAbsent)
             for trader in hydrated { detailCache.seed(trader.profile) }
             let suggestedRooms = await suggestedRoomsTask
+            let resolvedSuggestedRooms = suggestedRooms.isEmpty ? applied.rooms : suggestedRooms
             store.applyBootstrap(
                 traders: hydrated,
                 rooms: applied.rooms,
-                suggestedRooms: suggestedRooms,
+                suggestedRooms: resolvedSuggestedRooms,
                 following: applied.followingIDs,
                 tradersNextCursor: applied.tradersNextCursor
             )
@@ -450,6 +487,7 @@ final class ExploreViewModel {
         if let cachedFollowing = detailCache.viewerFollowingIDs() {
             exclude.formUnion(cachedFollowing)
         }
+        FeedBlockedAuthorsFilter.shared.unionBlockedPeers(into: &exclude)
 
         let apiProfiles = Dictionary(uniqueKeysWithValues: (page?.items ?? []).map { ($0.id, $0) })
         let ranked = ExploreTraderRanking.rank(
@@ -524,6 +562,7 @@ final class ExploreViewModel {
         let traderProfiles = store.suggestedTraders.map(\.profile)
         var exclude = store.viewerFollowingIDs
         if let viewerID { exclude.insert(viewerID) }
+        FeedBlockedAuthorsFilter.shared.unionBlockedPeers(into: &exclude)
         let reranked = ExploreTraderRanking.rank(
             profiles: traderProfiles,
             tradeSummaries: summaries,
@@ -581,6 +620,7 @@ final class ExploreViewModel {
         var exclude = store.viewerFollowingIDs
         if let viewerID { exclude.insert(viewerID) }
         exclude.formUnion(store.suggestedTraders.map(\.id))
+        FeedBlockedAuthorsFilter.shared.unionBlockedPeers(into: &exclude)
         let ranked = ExploreTraderRanking.rank(
             profiles: page.items,
             excluding: exclude,
@@ -704,7 +744,7 @@ final class ExploreViewModel {
             )
             store.updateAvatarConfirmedAbsent(searchConfirmedAbsent)
             guard !Task.isCancelled, generation == searchGeneration else { return }
-            searchPeople = hydratedPeople
+            searchPeople = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(hydratedPeople)
             searchRooms = roomHits
             searchPhase = .idle
         } catch {
@@ -729,13 +769,14 @@ final class ExploreViewModel {
     }
 
     private func loadSuggestedTradeRooms(viewerID: ProfileID) async -> [ExploreRoomSuggestion] {
-        if let cached = SessionTradeRoomsDiscoveryStore.shared.cached(for: viewerID, scope: .all),
-           !cached.suggested.isEmpty
-        {
-            return cached.suggested
+        if let cached = SessionTradeRoomsDiscoveryStore.shared.cached(for: viewerID, scope: .all) {
+            if !cached.suggested.isEmpty { return cached.suggested }
+            if !cached.popular.isEmpty { return cached.popular }
         }
         do {
-            return try await explore.discoverRooms(mode: .suggested, scope: .all, limit: 12)
+            let suggested = try await explore.discoverRooms(mode: .suggested, scope: .all, limit: 12)
+            if !suggested.isEmpty { return suggested }
+            return try await explore.discoverRooms(mode: .popular, scope: .all, limit: 12)
         } catch {
             return []
         }
@@ -787,6 +828,17 @@ final class ExploreViewModel {
         store.applyRoomMetadata(from: room)
         if let index = searchRooms.firstIndex(where: { $0.id == room.id }) {
             searchRooms[index].applyMetadata(from: room)
+        }
+    }
+
+    private func applyBlockedPeersToVisibleDiscovery() {
+        let filteredTraders = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(store.suggestedTraders)
+        if filteredTraders.count != store.suggestedTraders.count {
+            store.replaceTraders(filteredTraders)
+        }
+        let filteredSearch = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(searchPeople)
+        if filteredSearch.count != searchPeople.count {
+            searchPeople = filteredSearch
         }
     }
 

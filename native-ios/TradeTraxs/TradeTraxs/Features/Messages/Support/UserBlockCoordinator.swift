@@ -38,6 +38,7 @@ final class UserBlockCoordinator {
         otherID: ProfileID,
         conversationID: ConversationID?,
         blocked: Bool,
+        peerUsername: String? = nil,
         messages: any MessageRepository,
         inboxStore: MessagesInboxStore? = nil
     ) async throws -> DmBlockStatus {
@@ -73,7 +74,19 @@ final class UserBlockCoordinator {
         }
 
         NotificationCenter.default.post(name: .userBlockListDidChange, object: nil)
+
+        if blocked, status.blockedByMe {
+            presentBlockSuccessToast(username: peerUsername)
+        }
+
         return status
+    }
+
+    private func presentBlockSuccessToast(username: String?) {
+        let trimmed = username?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let handle = trimmed.hasPrefix("@") ? String(trimmed.dropFirst()) : trimmed
+        guard !handle.isEmpty else { return }
+        SaveSuccessConfirmationCenter.shared.present("\(handle) Blocked")
     }
 }
 

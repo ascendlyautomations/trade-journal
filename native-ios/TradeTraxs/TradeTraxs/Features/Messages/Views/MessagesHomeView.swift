@@ -18,6 +18,11 @@ struct MessagesHomeView: View {
         static let limit = 4
     }
 
+    /// Tighter gap (~50% of default inset-grouped section spacing) between adjacent inbox blocks.
+    private enum InboxAdjacentSectionSpacing {
+        static let tightened = ExperienceSpacing.sm
+    }
+
     init(
         data: DataEnvironment,
         navigationCoordinator: NavigationCoordinator
@@ -264,6 +269,11 @@ struct MessagesHomeView: View {
                         inboxSectionToggle(expanded: $directMessagesSectionExpanded)
                     }
                 }
+                .messagesInboxListSectionSpacing(
+                    viewModel.ownedTradeRoomItem != nil
+                        ? InboxAdjacentSectionSpacing.tightened
+                        : nil
+                )
             }
 
             if !viewModel.joinedTradeRoomItems.isEmpty {
@@ -280,6 +290,11 @@ struct MessagesHomeView: View {
                         Text("Trade Rooms")
                     }
                 }
+                .messagesInboxListSectionSpacing(
+                    !viewModel.directMessageItems.isEmpty
+                        ? InboxAdjacentSectionSpacing.tightened
+                        : nil
+                )
             }
         }
         .experienceInsetGroupedListStyle(pageBackground: false)
@@ -493,6 +508,15 @@ struct MessagesHomeView: View {
 // MARK: - Shared inbox row chrome (DM + Trade Room)
 
 private extension View {
+    @ViewBuilder
+    func messagesInboxListSectionSpacing(_ spacing: CGFloat?) -> some View {
+        if let spacing {
+            listSectionSpacing(spacing)
+        } else {
+            self
+        }
+    }
+
     /// Inset grouped list row — matches Direct Messages and Trade Rooms on Messages home.
     func messagesInboxConversationListRowStyle(colors: SemanticColorPalette) -> some View {
         listRowBackground(colors.backgroundPrimary)

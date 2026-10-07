@@ -19,6 +19,7 @@ final class ProfileHeaderViewModel {
     private(set) var isOpeningMessage = false
     private(set) var blockStatus: DmBlockStatus?
     private(set) var isUpdatingBlock = false
+    var blockErrorMessage: String?
 
     init(
         store: ProfileContentStore,
@@ -171,15 +172,18 @@ final class ProfileHeaderViewModel {
         isUpdatingBlock = true
         defer { isUpdatingBlock = false }
         do {
+            blockErrorMessage = nil
             let status = try await UserBlockCoordinator.shared.setBlocked(
                 otherID: targetID,
                 conversationID: nil,
                 blocked: !blockedByMe,
+                peerUsername: store.profile?.username,
                 messages: messages
             )
             blockStatus = status
             ExperienceHaptics.play(.success)
         } catch {
+            blockErrorMessage = UserFacingError.message(for: error)
             ExperienceHaptics.play(.warning)
         }
     }

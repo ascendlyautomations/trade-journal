@@ -49,6 +49,58 @@ nonisolated enum ExploreTraderRanking {
         return !id.isEmpty
     }
 
+    /// Stable partition: keep relative order within avatar / no-avatar groups.
+    static func preservingOrderPreferringProfilePictures(
+        _ traders: [ExploreTraderSuggestion],
+        profile: (ExploreTraderSuggestion) -> Profile
+    ) -> [ExploreTraderSuggestion] {
+        var withPicture: [ExploreTraderSuggestion] = []
+        var withoutPicture: [ExploreTraderSuggestion] = []
+        for trader in traders {
+            if hasValidProfilePicture(profile(trader)) {
+                withPicture.append(trader)
+            } else {
+                withoutPicture.append(trader)
+            }
+        }
+        return withPicture + withoutPicture
+    }
+
+    /// Lower tier = stronger username/display-name match (client-side tie-break for search).
+    static func profileSearchMatchTier(query: String, profile: Profile) -> Int {
+        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return 99 }
+        let username = profile.username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let displayName = profile.displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if username == normalized { return 0 }
+        if username.hasPrefix(normalized) { return 1 }
+        if displayName == normalized { return 2 }
+        if displayName.contains(normalized) { return 3 }
+        if username.contains(normalized) { return 4 }
+        return 5
+    }
+
+    /// Preserve stronger text matches first; prefer avatars only within the same match tier.
+    static func orderingSearchResults(
+        _ traders: [ExploreTraderSuggestion],
+        query: String,
+        profile: (ExploreTraderSuggestion) -> Profile
+    ) -> [ExploreTraderSuggestion] {
+        traders.enumerated()
+            .sorted { lhs, rhs in
+                let leftProfile = profile(lhs.element)
+                let rightProfile = profile(rhs.element)
+                let leftTier = profileSearchMatchTier(query: query, profile: leftProfile)
+                let rightTier = profileSearchMatchTier(query: query, profile: rightProfile)
+                if leftTier != rightTier { return leftTier < rightTier }
+                let leftAvatar = hasValidProfilePicture(leftProfile)
+                let rightAvatar = hasValidProfilePicture(rightProfile)
+                if leftAvatar != rightAvatar { return leftAvatar && !rightAvatar }
+                return lhs.offset < rhs.offset
+            }
+            .map(\.element)
+    }
+
     static func identityLine(for profile: Profile) -> String? {
         var parts: [String] = []
         if let type = profile.traderType {

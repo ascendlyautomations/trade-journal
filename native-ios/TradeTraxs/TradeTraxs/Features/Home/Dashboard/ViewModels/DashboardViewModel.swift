@@ -18,6 +18,7 @@ final class DashboardViewModel {
     private(set) var phase: DashboardLoadPhase = .idle
     private(set) var summary: DashboardChartMetrics.Summary?
     private(set) var psychologyReport: PsychologyAnalyticsReport?
+    private(set) var psychologyInsightsUnlockProgress: PsychologyInsightsUnlockProgress = .zero
     private(set) var psychologyGuardrailNotices: [PsychologyGuardrailNotice] = []
     private(set) var accounts: [TradingAccount] = []
     private(set) var accountNames: [TradingAccountID: String] = [:]
@@ -147,6 +148,7 @@ final class DashboardViewModel {
         isRefreshing = false
         summary = nil
         psychologyReport = nil
+        psychologyInsightsUnlockProgress = .zero
         psychologyGuardrailNotices = []
         accounts = []
         accountNames = [:]
@@ -2486,11 +2488,16 @@ final class DashboardViewModel {
             accountFilter: accountFilter,
             dateRange: dateRange
         )
+        let sessionCheckIns = SessionDailyCheckInsStore.shared.checkIns
         let report = TraderPsychologyAnalyticsEngine.buildReport(
             trades: trades,
-            checkIns: SessionDailyCheckInsStore.shared.checkIns
+            checkIns: sessionCheckIns
         )
         psychologyReport = report
+        psychologyInsightsUnlockProgress = PsychologyInsightsUnlockProgress.compute(
+            trades: trades,
+            checkIns: sessionCheckIns
+        )
         PsychologyAnalyticsSessionStore.shared.update(report)
 
         let facts = PsychologyCoachFactsBuilder.build(

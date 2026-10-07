@@ -308,10 +308,19 @@ struct DashboardHomeView: View {
                         .padding(.horizontal, ExperienceSpacing.md)
                         .padding(.bottom, ExperienceSpacing.sm)
                     }
+                    DashboardInsightsSection(
+                        title: "Insights",
+                        subtitle: "Coaching from your recent activity",
+                        insights: summary.insights,
+                        unlockProgress: viewModel.psychologyInsightsUnlockProgress
+                    )
+                    .padding(.bottom, ExperienceSpacing.lg)
+
                     PsychologyInsightsSection(
                         title: "Psychology Insights",
                         subtitle: "Patterns from your trades and daily check-ins",
                         cards: viewModel.psychologyReport?.dashboardCards ?? [],
+                        unlockProgress: viewModel.psychologyInsightsUnlockProgress,
                         onSelect: { card in
                             viewModel.openPsychologyAnalytics(
                                 highlightSection: viewModel.psychologySectionID(for: card.category)
@@ -320,13 +329,6 @@ struct DashboardHomeView: View {
                         onViewAll: {
                             viewModel.openPsychologyAnalytics()
                         }
-                    )
-                    .padding(.bottom, ExperienceSpacing.lg)
-
-                    DashboardInsightsSection(
-                        title: "Insights",
-                        subtitle: "Coaching from your recent activity",
-                        insights: summary.insights
                     )
                     .padding(.bottom, ExperienceSpacing.xxxl)
                 }

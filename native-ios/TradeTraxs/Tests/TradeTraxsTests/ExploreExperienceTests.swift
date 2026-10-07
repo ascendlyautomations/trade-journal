@@ -181,6 +181,62 @@ final class ExploreExperienceTests: XCTestCase {
         XCTAssertEqual(ranked.first?.id, highWithoutAvatar.id)
     }
 
+    func testPreservingOrderPreferringProfilePicturesKeepsRelativeOrderWithinGroups() {
+        let avatarA = exploreSuggestion(id: "a", username: "aa", avatarID: "https://cdn.example.com/a.jpg")
+        let noAvatarB = exploreSuggestion(id: "b", username: "bb", avatarID: nil)
+        let avatarC = exploreSuggestion(id: "c", username: "cc", avatarID: "https://cdn.example.com/c.jpg")
+        let noAvatarD = exploreSuggestion(id: "d", username: "dd", avatarID: nil)
+        let ordered = ExploreTraderRanking.preservingOrderPreferringProfilePictures(
+            [noAvatarB, avatarA, noAvatarD, avatarC]
+        ) { $0.profile }
+        XCTAssertEqual(ordered.map(\.id), [avatarA.id, avatarC.id, noAvatarB.id, noAvatarD.id])
+    }
+
+    func testSearchOrderingPrefersExactMatchOverAvatarOnlyBoost() {
+        let exactNoAvatar = exploreSuggestion(id: "exact", username: "alex", avatarID: nil)
+        let partialWithAvatar = exploreSuggestion(id: "partial", username: "alexandra", avatarID: "pic.jpg")
+        let ordered = ExploreTraderRanking.orderingSearchResults(
+            [partialWithAvatar, exactNoAvatar],
+            query: "alex"
+        ) { $0.profile }
+        XCTAssertEqual(ordered.first?.id, exactNoAvatar.id)
+    }
+
+    func testSearchOrderingPrefersAvatarWithinSameMatchTier() {
+        let withAvatar = exploreSuggestion(id: "with", username: "teamalpha", avatarID: "pic.jpg")
+        let withoutAvatar = exploreSuggestion(id: "without", username: "teamalpha2", avatarID: nil)
+        let ordered = ExploreTraderRanking.orderingSearchResults(
+            [withoutAvatar, withAvatar],
+            query: "team"
+        ) { $0.profile }
+        XCTAssertEqual(ordered.map(\.id), [withAvatar.id, withoutAvatar.id])
+    }
+
+    private func exploreSuggestion(id: String, username: String, avatarID: String?) -> ExploreTraderSuggestion {
+        let avatar = avatarID.map { MediaReference(id: $0, kind: .image, altText: nil) }
+        let profile = Profile(
+            id: ProfileID(id),
+            userID: UserID(id),
+            username: username,
+            displayName: username.capitalized,
+            bio: "Bio",
+            avatar: avatar,
+            traderType: .futures,
+            tradingStyle: nil,
+            primaryMarket: nil,
+            startedTradingAt: nil,
+            isPrivate: false,
+            isCreator: false,
+            createdAt: .now
+        )
+        return ExploreTraderSuggestion(
+            profile: profile,
+            followerCount: 0,
+            score: 3,
+            identityLine: nil
+        )
+    }
+
     func testRankingExcludesPrivateSelfAndLowScore() {
         let viewer = ExploreFixtures.viewerID
         let privateProfile = Profile(

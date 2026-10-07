@@ -175,6 +175,79 @@ final class FeedBlockFilterTests: XCTestCase {
             messages: FeedBlockStubMessageRepository()
         )
     }
+
+    func testBlockedPeerExcludedFromTraderSuggestions() {
+        let blocked = ProfileID("blocked-trader")
+        let visible = ProfileID("visible-trader")
+        let suggestions = [
+            makeExploreTraderSuggestion(id: blocked, username: "blocked"),
+            makeExploreTraderSuggestion(id: visible, username: "visible"),
+        ]
+        FeedBlockedAuthorsFilter.shared.noteBlock(peerID: blocked)
+        let filtered = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(suggestions)
+        XCTAssertEqual(filtered.map(\.id), [visible])
+    }
+
+    func testBlockedPeerExcludedFromLeaderboardEntries() {
+        let blocked = ProfileID("blocked-leader")
+        let visible = ProfileID("visible-leader")
+        let entries = [
+            LeaderboardEntry(
+                rank: 1,
+                profileID: blocked,
+                username: "blocked",
+                totalPnL: Money(amount: 100),
+                tradeCount: 2,
+                averageRiskReward: nil,
+                winRate: nil,
+                profitFactor: nil,
+                expectancy: nil,
+                winStreak: 0,
+                profitPercent: nil,
+                consistency: nil
+            ),
+            LeaderboardEntry(
+                rank: 2,
+                profileID: visible,
+                username: "visible",
+                totalPnL: Money(amount: 50),
+                tradeCount: 1,
+                averageRiskReward: nil,
+                winRate: nil,
+                profitFactor: nil,
+                expectancy: nil,
+                winStreak: 0,
+                profitPercent: nil,
+                consistency: nil
+            ),
+        ]
+        FeedBlockedAuthorsFilter.shared.noteBlock(peerID: blocked)
+        let filtered = FeedBlockedAuthorsFilter.shared.filterLeaderboardEntries(entries)
+        XCTAssertEqual(filtered.map(\.profileID), [visible])
+    }
+}
+
+private func makeExploreTraderSuggestion(id: ProfileID, username: String) -> ExploreTraderSuggestion {
+    ExploreTraderSuggestion(
+        profile: Profile(
+            id: id,
+            userID: UserID(id.rawValue),
+            username: username,
+            displayName: username,
+            bio: nil,
+            avatar: nil,
+            traderType: nil,
+            tradingStyle: nil,
+            primaryMarket: nil,
+            startedTradingAt: nil,
+            isPrivate: false,
+            isCreator: false,
+            createdAt: .now
+        ),
+        followerCount: 0,
+        score: 0,
+        identityLine: nil
+    )
 }
 
 private struct FeedBlockStubMessageRepository: MessageRepository {

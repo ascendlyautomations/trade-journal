@@ -11,20 +11,34 @@ final class SuggestedTradersViewModel {
         case failed(String)
     }
 
+    enum SearchPhase: Equatable {
+        case idle
+        case searching
+        case failed(String)
+    }
+
     private(set) var phase: Phase = .idle
+    private(set) var searchPhase: SearchPhase = .idle
+    private(set) var searchResults: [ExploreTraderSuggestion] = []
+    var searchText = ""
     private(set) var isLoadingMore = false
     private(set) var loadMoreFailedMessage: String?
 
     private let explore: any ExploreRepository
+    private let search: any SearchRepository
     private let profiles: any ProfileRepository
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
     private let navigationCoordinator: NavigationCoordinator
     private let store: ExploreSessionStore
+    private let messages: (any MessageRepository)?
 
     private var viewerID: ProfileID?
+    @ObservationIgnored private nonisolated(unsafe) var blockListObserver: NSObjectProtocol?
     private var loadTask: Task<Void, Never>?
     private var loadMoreTask: Task<Void, Never>?
+    private var searchTask: Task<Void, Never>?
+    private var searchGeneration: UInt64 = 0
     private var loadGeneration = 0
     private var inFlightFollow: Set<ProfileID> = []
 
@@ -32,23 +46,54 @@ final class SuggestedTradersViewModel {
 
     init(
         explore: any ExploreRepository,
+        search: any SearchRepository,
         profiles: any ProfileRepository,
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator,
-        store: ExploreSessionStore? = nil
+        store: ExploreSessionStore? = nil,
+        messages: (any MessageRepository)? = nil
     ) {
         self.explore = explore
+        self.search = search
         self.profiles = profiles
         self.session = session
         self.detailCache = detailCache
         self.navigationCoordinator = navigationCoordinator
         self.store = store ?? .shared
+        self.messages = messages
+        blockListObserver = DiscoveryBlockedPeersObserver.install(messages: messages) { [weak self] in
+            self?.applyBlockedPeersToVisibleResults()
+        }
+    }
+
+    deinit {
+        if let blockListObserver {
+            NotificationCenter.default.removeObserver(blockListObserver)
+        }
+    }
+
+    var isSearching: Bool {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
     }
 
     var traders: [ExploreTraderSuggestion] {
-        guard let viewerID else { return store.suggestedTraders }
-        return store.suggestedTraders.filter { $0.id != viewerID }
+        let base: [ExploreTraderSuggestion]
+        if let viewerID {
+            base = store.suggestedTraders.filter { $0.id != viewerID }
+        } else {
+            base = store.suggestedTraders
+        }
+        let unblocked = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(base)
+        return ExploreTraderRanking.preservingOrderPreferringProfilePictures(unblocked) { resolvedProfile(for: $0) }
+    }
+
+    var displayedTraders: [ExploreTraderSuggestion] {
+        isSearching ? searchResults : traders
+    }
+
+    var showsSearchEmpty: Bool {
+        isSearching && searchPhase == .idle && searchResults.isEmpty
     }
 
     var canLoadMore: Bool { store.tradersNextCursor != nil }
@@ -63,6 +108,8 @@ final class SuggestedTradersViewModel {
         guard loadTask == nil else { return }
         loadTask = Task {
             await resolveViewerID()
+            await DiscoveryBlockedPeersObserver.sync(messages: messages, force: false)
+            applyBlockedPeersToVisibleResults()
             if store.hasBootstrapped, !store.suggestedTraders.isEmpty {
                 phase = .loaded
                 await hydrateVisibleTraders(
@@ -86,6 +133,7 @@ final class SuggestedTradersViewModel {
         loadGeneration += 1
         let generation = loadGeneration
         await resolveViewerID()
+        await DiscoveryBlockedPeersObserver.sync(messages: messages, force: true)
 
         let hadTraders = !traders.isEmpty
         if !hadTraders {
@@ -96,7 +144,7 @@ final class SuggestedTradersViewModel {
     }
 
     func loadMoreIfNeeded() {
-        guard canLoadMore, !isLoadingMore, loadMoreTask == nil else { return }
+        guard !isSearching, canLoadMore, !isLoadingMore, loadMoreTask == nil else { return }
         isLoadingMore = true
         loadMoreFailedMessage = nil
         let generation = loadGeneration
@@ -124,11 +172,71 @@ final class SuggestedTradersViewModel {
     }
 
     func isFollowing(_ trader: ExploreTraderSuggestion) -> Bool {
-        store.viewerFollowingIDs.contains(trader.id)
+        guard let viewerID else { return store.viewerFollowingIDs.contains(trader.id) }
+        return FollowMutationCoordinator.shared.isFollowing(viewer: viewerID, target: trader.id)
+    }
+
+    func showsFollowControl(for trader: ExploreTraderSuggestion) -> Bool {
+        guard let viewerID else { return true }
+        return viewerID != trader.id
+    }
+
+    func searchChanged() {
+        searchTask?.cancel()
+        searchGeneration &+= 1
+        let generation = searchGeneration
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count >= 2 else {
+            searchResults = []
+            searchPhase = .idle
+            return
+        }
+
+        if viewerID == DemoExperienceSupport.profileID {
+            let lowered = query.lowercased()
+            let exclude = viewerID ?? DemoExperienceSupport.profileID
+            let filtered = DemoGraph.traders(excluding: exclude).filter {
+                $0.profile.displayName.lowercased().contains(lowered)
+                    || $0.profile.username.lowercased().contains(lowered)
+            }
+            searchResults = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(
+                ExploreTraderRanking.orderingSearchResults(filtered, query: query) {
+                    resolvedProfile(for: $0)
+                }
+            )
+            searchPhase = .idle
+            return
+        }
+
+        if let viewerID, isLocalDevelopment(viewerID) {
+            let lowered = query.lowercased()
+            let filtered = ExploreFixtures.traders(excluding: viewerID).filter {
+                $0.profile.displayName.lowercased().contains(lowered)
+                    || $0.profile.username.lowercased().contains(lowered)
+            }
+            searchResults = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(
+                ExploreTraderRanking.orderingSearchResults(filtered, query: query) {
+                    resolvedProfile(for: $0)
+                }
+            )
+            searchPhase = .idle
+            return
+        }
+
+        searchPhase = .searching
+        searchTask = Task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled, generation == searchGeneration else { return }
+            await performSearch(query: query, generation: generation)
+        }
     }
 
     func toggleFollow(_ trader: ExploreTraderSuggestion) {
         guard let viewerID, viewerID != trader.id else { return }
+        if AppLaunchController.shared.isDemoExperienceActive {
+            DemoModeAuthGatePresenter.shared.requireAuthentication()
+            return
+        }
         guard !inFlightFollow.contains(trader.id) else { return }
         if isFollowing(trader) {
             ExperienceHaptics.play(.warning)
@@ -249,6 +357,7 @@ final class SuggestedTradersViewModel {
         var exclude = store.viewerFollowingIDs
         if let viewerID { exclude.insert(viewerID) }
         exclude.formUnion(store.suggestedTraders.map(\.id))
+        FeedBlockedAuthorsFilter.shared.unionBlockedPeers(into: &exclude)
 
         let ranked = ExploreTraderRanking.rank(
             profiles: page.items,
@@ -320,6 +429,7 @@ final class SuggestedTradersViewModel {
         } else {
             exclude.formUnion(store.viewerFollowingIDs)
         }
+        FeedBlockedAuthorsFilter.shared.unionBlockedPeers(into: &exclude)
         return ExploreTraderRanking.rank(
             profiles: profiles,
             excluding: exclude,
@@ -338,6 +448,113 @@ final class SuggestedTradersViewModel {
             copy.identityLine = copy.identityLine ?? old.identityLine
             copy.profile = old.profile.mergingCachedPresentation(with: copy.profile)
             return copy
+        }
+    }
+
+    private func performSearch(query: String, generation: UInt64) async {
+        do {
+            let page = try await search.search(
+                query: query,
+                kinds: [.profile],
+                page: PageRequest(limit: 24),
+                excludingProfileID: viewerID
+            )
+            guard !Task.isCancelled, generation == searchGeneration else { return }
+
+            let profileIDs = page.items.compactMap { item -> ProfileID? in
+                guard item.kind == .profile, let id = item.profileID, id != viewerID else { return nil }
+                return id
+            }
+            var confirmedAbsent = store.avatarConfirmedAbsentIDs
+            let fetchedProfiles = (try? await SessionProfileStore.shared.profiles(
+                ids: profileIDs,
+                detailCache: detailCache,
+                repository: profiles,
+                acceptCached: { ExploreProfileHydration.isAvatarResolved($0, confirmedAbsent: confirmedAbsent) }
+            )) ?? []
+            let authoritative = Dictionary(uniqueKeysWithValues: fetchedProfiles.map { ($0.id, $0) })
+            for profile in fetchedProfiles {
+                if profile.avatar == nil {
+                    confirmedAbsent.insert(profile.id)
+                } else {
+                    confirmedAbsent.remove(profile.id)
+                }
+            }
+            store.updateAvatarConfirmedAbsent(confirmedAbsent)
+
+            var people: [ExploreTraderSuggestion] = []
+            for result in page.items where result.kind == .profile {
+                guard let id = result.profileID, id != viewerID else { continue }
+                let profile = authoritative[id]
+                    ?? detailCache.profile(id: id)?.mergingCachedPresentation(with: Profile(
+                        id: id,
+                        userID: UserID(id.rawValue),
+                        username: result.title,
+                        displayName: result.subtitle ?? result.title,
+                        bio: nil,
+                        avatar: nil,
+                        traderType: nil,
+                        tradingStyle: nil,
+                        primaryMarket: nil,
+                        startedTradingAt: nil,
+                        isPrivate: false,
+                        isCreator: false,
+                        createdAt: .now
+                    ))
+                    ?? Profile(
+                        id: id,
+                        userID: UserID(id.rawValue),
+                        username: result.title,
+                        displayName: result.subtitle ?? result.title,
+                        bio: nil,
+                        avatar: nil,
+                        traderType: nil,
+                        tradingStyle: nil,
+                        primaryMarket: nil,
+                        startedTradingAt: nil,
+                        isPrivate: false,
+                        isCreator: false,
+                        createdAt: .now
+                    )
+                people.append(
+                    ExploreTraderSuggestion(
+                        profile: profile,
+                        followerCount: 0,
+                        score: 0,
+                        identityLine: ExploreTraderRanking.identityLine(for: profile)
+                    )
+                )
+            }
+            var searchConfirmedAbsent = store.avatarConfirmedAbsentIDs
+            let (hydratedPeople, _) = await ExploreProfileHydration.hydrateTraders(
+                people,
+                authoritativeProfiles: authoritative,
+                detailCache: detailCache,
+                repository: profiles,
+                confirmedAbsent: &searchConfirmedAbsent
+            )
+            store.updateAvatarConfirmedAbsent(searchConfirmedAbsent)
+            guard !Task.isCancelled, generation == searchGeneration else { return }
+            searchResults = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(
+                ExploreTraderRanking.orderingSearchResults(hydratedPeople, query: query) {
+                    resolvedProfile(for: $0)
+                }
+            )
+            searchPhase = .idle
+        } catch {
+            guard !Task.isCancelled, generation == searchGeneration else { return }
+            searchPhase = .failed(UserFacingError.message(for: error))
+        }
+    }
+
+    private func applyBlockedPeersToVisibleResults() {
+        let filteredTraders = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(store.suggestedTraders)
+        if filteredTraders.count != store.suggestedTraders.count {
+            store.replaceTraders(filteredTraders)
+        }
+        let filteredSearch = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(searchResults)
+        if filteredSearch.count != searchResults.count {
+            searchResults = filteredSearch
         }
     }
 

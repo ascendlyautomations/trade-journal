@@ -6,6 +6,7 @@ struct TradeRoomCircularAvatar: View {
     let imageReference: MediaReference?
     let imagePipeline: any ImagePipeline
     var diameter: CGFloat = 32
+    var placeholderIconColor: Color?
 
     @Environment(\.themeColors) private var colors
     @State private var logoImage: Image?
@@ -19,7 +20,7 @@ struct TradeRoomCircularAvatar: View {
             } else {
                 ZStack {
                     colors.fillSecondary
-                    ExperienceIcon(icon: .rooms, size: .sm, color: colors.accent)
+                    ExperienceIcon(icon: .rooms, size: .sm, color: placeholderIconColor ?? colors.accent)
                 }
             }
         }

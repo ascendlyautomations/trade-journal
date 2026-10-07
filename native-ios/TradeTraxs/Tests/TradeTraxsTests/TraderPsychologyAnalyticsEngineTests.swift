@@ -183,6 +183,43 @@ final class TraderPsychologyAnalyticsEngineTests: XCTestCase {
         XCTAssertFalse(report.sections.isEmpty)
     }
 
+    func testPsychologyInsightsUnlockProgressUsesTradingDaysAndEligibleTrades() {
+        let trades = [
+            makeTrade(id: "1", pnl: 10, offsetHours: 0, dayOffset: 0),
+            makeTrade(id: "2", pnl: 10, offsetHours: 1, dayOffset: 0),
+            makeTrade(id: "3", pnl: 10, offsetHours: 0, dayOffset: 1),
+            makeTrade(id: "4", pnl: 10, offsetHours: 0, dayOffset: 2),
+        ]
+        let dayWithTwoTrades = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: trades[0])
+        let secondDay = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: trades[2])
+        let checkIns = [
+            makeCheckIn(date: dayWithTwoTrades, stress: 2, sleepHours: 8),
+            makeCheckIn(date: secondDay, stress: 2, sleepHours: 8),
+            makeCheckIn(date: "2099-01-01", stress: 2, sleepHours: 8),
+        ]
+
+        let progress = PsychologyInsightsUnlockProgress.compute(trades: trades, checkIns: checkIns)
+
+        XCTAssertEqual(progress.tradeCount, 4)
+        XCTAssertEqual(progress.tradingDayCheckInCount, 2)
+        XCTAssertTrue(progress.showsRequirementMessage)
+    }
+
+    func testPsychologyInsightsUnlockProgressHidesRequirementWhenBothMet() {
+        let trades = (0..<5).map { makeTrade(id: "\($0)", pnl: 10, offsetHours: 0, dayOffset: $0) }
+        let checkIns = trades.map {
+            makeCheckIn(
+                date: TraderPsychologyAnalyticsFoundation.tradeDateKey(for: $0),
+                stress: 2,
+                sleepHours: 8
+            )
+        }
+
+        let progress = PsychologyInsightsUnlockProgress.compute(trades: trades, checkIns: checkIns)
+
+        XCTAssertFalse(progress.showsRequirementMessage)
+    }
+
     // MARK: - Fixtures
 
     private func makeTrade(

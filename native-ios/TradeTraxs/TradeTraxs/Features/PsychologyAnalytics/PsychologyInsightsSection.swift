@@ -4,6 +4,7 @@ struct PsychologyInsightsSection: View {
     let title: String
     var subtitle: String? = nil
     let cards: [PsychologyInsightCard]
+    var unlockProgress: PsychologyInsightsUnlockProgress = .zero
     var onSelect: (PsychologyInsightCard) -> Void
     var onViewAll: () -> Void
 
@@ -41,7 +42,11 @@ struct PsychologyInsightsSection: View {
 
             if isSectionExpanded {
                 if cards.isEmpty {
-                    emptyState
+                    if unlockProgress.showsRequirementMessage {
+                        requirementEmptyState
+                    } else {
+                        emptyState
+                    }
                 } else {
                     VStack(spacing: ExperienceSpacing.xs) {
                         ForEach(visibleCards) { card in
@@ -77,6 +82,17 @@ struct PsychologyInsightsSection: View {
             icon: .chart,
             title: "Not enough data yet",
             message: "Log check-ins and trade psychology to unlock insights."
+        )
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.bottom, ExperienceSpacing.xs)
+    }
+
+    private var requirementEmptyState: some View {
+        ExperienceEmptyState(
+            icon: .chart,
+            title: "5 Daily Check-Ins & 5 Trades Required",
+            message: "Log check-ins and trade psychology to unlock insights.",
+            accessibilityIdentifier: "dashboard.psychologyInsights.requirements"
         )
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.bottom, ExperienceSpacing.xs)

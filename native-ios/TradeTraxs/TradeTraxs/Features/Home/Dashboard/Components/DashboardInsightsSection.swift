@@ -4,6 +4,7 @@ struct DashboardInsightsSection: View {
     let title: String
     var subtitle: String? = nil
     let insights: [DashboardInsightItem]
+    var unlockProgress: PsychologyInsightsUnlockProgress = .zero
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -32,12 +33,11 @@ struct DashboardInsightsSection: View {
 
             if isSectionExpanded {
                 if insights.isEmpty {
-                    ExperienceEmptyState(
-                        icon: .chart,
-                        title: "No insights yet",
-                        message: "Log more trades to surface coaching recommendations."
-                    )
-                    .padding(.bottom, ExperienceSpacing.xs)
+                    if unlockProgress.showsRequirementMessage {
+                        requirementEmptyState
+                    } else {
+                        emptyState
+                    }
                 } else {
                     VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
                         ForEach(visibleInsights) { insight in
@@ -65,6 +65,25 @@ struct DashboardInsightsSection: View {
             }
         }
         .accessibilityIdentifier("dashboard.insights")
+    }
+
+    private var emptyState: some View {
+        ExperienceEmptyState(
+            icon: .chart,
+            title: "No insights yet",
+            message: "Log more trades to surface coaching recommendations."
+        )
+        .padding(.bottom, ExperienceSpacing.xs)
+    }
+
+    private var requirementEmptyState: some View {
+        ExperienceEmptyState(
+            icon: .chart,
+            title: "5 Daily Check-Ins & 5 Trades Required",
+            message: "Log more trades to surface coaching recommendations.",
+            accessibilityIdentifier: "dashboard.insights.requirements"
+        )
+        .padding(.bottom, ExperienceSpacing.xs)
     }
 
     private func insightCard(_ insight: DashboardInsightItem) -> some View {

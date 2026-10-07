@@ -24,6 +24,19 @@ struct ProfileHeaderView: View {
             ExperienceMotion.preferred(ExperienceMotion.navigation, reduceMotion: reduceMotion),
             value: store.phase
         )
+        .alert(
+            "Couldn’t update block",
+            isPresented: Binding(
+                get: { viewModel.blockErrorMessage != nil },
+                set: { if !$0 { viewModel.blockErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                viewModel.blockErrorMessage = nil
+            }
+        } message: {
+            Text(viewModel.blockErrorMessage ?? "")
+        }
         .confirmationDialog(
             viewModel.blockConfirmationTitle,
             isPresented: $viewModel.showsBlockConfirmation,
