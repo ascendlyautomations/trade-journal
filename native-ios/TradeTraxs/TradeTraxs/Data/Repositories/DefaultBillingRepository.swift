@@ -203,9 +203,9 @@ nonisolated struct DefaultBillingRepository: BillingRepository, MonetizationConf
     private func applyEnforcementCaps(_ status: BillingStatus) -> BillingStatus {
         var status = status
         if IosSubscriptionReleaseConfiguration.appliesFreeTierUsageCaps, !status.hasTraxProAccess {
-            status.dailyTradeLimit = FreeTierPolicy.dailyTradeLimit
-            status.dailyPostLimit = FreeTierPolicy.dailyPostLimit
-            status.dailyMessageLimit = FreeTierPolicy.dailyDirectMessageLimit
+            status.dailyTradeLimit = nil
+            status.dailyPostLimit = nil
+            status.dailyMessageLimit = nil
             status.maxTradeEntryAccounts = FreeTierPolicy.maxTradeEntryAccounts
         }
         return status

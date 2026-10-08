@@ -183,12 +183,7 @@ final class SettingsSubscriptionViewModel {
             || productsState == .loading
     }
 
-    let traxProFeatureHighlights: [String] = [
-        "Trade AI analysis on your trades",
-        "Higher daily trade, post, and message limits",
-        "More active trading accounts",
-        "Advanced psychology and analytics tools",
-    ]
+    let traxProFeatureHighlights: [String] = ProUpgradeMarketing.benefitLines
 
     func loadIfNeeded() {
         guard !hasLoaded else { return }
@@ -384,9 +379,9 @@ final class SettingsSubscriptionViewModel {
                     plan: .free,
                     lifecycle: .none,
                     isProEntitled: false,
-                    dailyTradeLimit: FreeTierPolicy.dailyTradeLimit,
-                    dailyPostLimit: FreeTierPolicy.dailyPostLimit,
-                    dailyMessageLimit: FreeTierPolicy.dailyDirectMessageLimit,
+                    dailyTradeLimit: nil,
+                    dailyPostLimit: nil,
+                    dailyMessageLimit: nil,
                     maxTradeEntryAccounts: FreeTierPolicy.maxTradeEntryAccounts
                 )
                 errorMessage = nil

@@ -56,6 +56,11 @@ struct CommentRowView: View {
                 HStack(spacing: ExperienceSpacing.xs) {
                     Text(comment.authorUsername.map { "@\($0)" } ?? "Trader")
                         .experienceStyle(.footnote, color: colors.primaryText)
+                        .lineLimit(1)
+                    ProfileTradeTraxsIdentityBadge(
+                        profileID: comment.authorProfileID,
+                        size: .inline
+                    )
                     Text(TradeDisplay.dateText(comment.createdAt))
                         .experienceStyle(.caption, color: colors.tertiaryText)
                     Spacer(minLength: 0)

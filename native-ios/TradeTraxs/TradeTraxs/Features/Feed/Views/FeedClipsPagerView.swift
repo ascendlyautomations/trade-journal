@@ -407,9 +407,7 @@ private struct FeedClipsPageView: View {
                                 .foregroundStyle(.white)
                                 .lineLimit(1)
                                 .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
-                            if resolvedProfile.isCreator {
-                                TradeTraxsVerifiedBadge(size: .compact)
-                            }
+                            ProfileTradeTraxsIdentityBadge(profile: resolvedProfile, size: .compact)
                         }
                     }
                     .contentShape(Rectangle())

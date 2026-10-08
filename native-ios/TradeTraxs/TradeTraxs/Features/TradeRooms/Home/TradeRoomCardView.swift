@@ -23,9 +23,6 @@ struct TradeRoomCardView: View {
                             color: colors.primaryText
                         )
                         .lineLimit(1)
-                    if item.ownerIsVerified {
-                        TradeTraxsVerifiedBadge(size: .compact)
-                    }
                     Spacer(minLength: 4)
                     if let timestamp = item.timestamp {
                         Text(MessagesInboxSupport.relativeTimestamp(timestamp))

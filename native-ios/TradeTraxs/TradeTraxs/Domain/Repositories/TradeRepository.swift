@@ -41,6 +41,11 @@ nonisolated protocol TradeRepository: Sendable {
     func accounts(for profileID: ProfileID) async throws -> [TradingAccount]
     /// Web `insertTradingAccount`.
     func createAccount(ownerID: ProfileID, draft: TradingAccountDraft) async throws -> TradingAccount
+    /// Web `/api/accounts/select-free-slots` → `select_free_plan_trade_accounts`.
+    func selectFreePlanTradeAccounts(
+        ownerID: ProfileID,
+        accountIDs: [TradingAccountID]
+    ) async throws
     /// Web `updateTradingAccount` (+ denormalized trade name/size sync).
     func updateAccount(id: TradingAccountID, ownerID: ProfileID, draft: TradingAccountDraft) async throws -> TradingAccount
     /// Soft-hide from pickers — web `setTradingAccountActive` (not delete).
@@ -85,6 +90,20 @@ nonisolated protocol TradeRepository: Sendable {
 }
 
 extension TradeRepository {
+    /// Web Backtest Lab — owner rows where `mode == backtest` (journal list excludes these).
+    func backtestLabTrades(ownedBy profileID: ProfileID) async throws -> [Trade] {
+        let loaded = try await trades(
+            ownedBy: profileID,
+            accountID: nil,
+            entryFrom: Date(timeIntervalSince1970: 0),
+            entryTo: Date(timeIntervalSinceReferenceDate: 60 * 60 * 24 * 365 * 50),
+            limit: 10_000
+        )
+        return loaded
+            .filter { $0.mode == .backtest }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
     /// Stubs journal a single row. Production inserts one row per linked account.
     func saveCopyTraded(_ draft: TradeDraft) async throws -> [Trade] {
         [try await save(draft)]
@@ -141,6 +160,13 @@ extension TradeRepository {
 
     func createAccount(ownerID: ProfileID, draft: TradingAccountDraft) async throws -> TradingAccount {
         throw AppError.notImplemented(feature: "createAccount")
+    }
+
+    func selectFreePlanTradeAccounts(
+        ownerID: ProfileID,
+        accountIDs: [TradingAccountID]
+    ) async throws {
+        throw AppError.notImplemented(feature: "selectFreePlanTradeAccounts")
     }
 
     func updateAccount(id: TradingAccountID, ownerID: ProfileID, draft: TradingAccountDraft) async throws -> TradingAccount {

@@ -87,20 +87,12 @@ struct TradeHistoryView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    viewModel.openFilters()
+                    viewModel.openBacktestLab()
                 } label: {
-                    Image(systemName: "slider.horizontal.3")
-                        .overlay(alignment: .topTrailing) {
-                            if viewModel.showsFilterIndicator {
-                                Circle()
-                                    .fill(colors.accent)
-                                    .frame(width: 7, height: 7)
-                                    .offset(x: 4, y: -4)
-                            }
-                        }
+                    Image(systemName: "clock.arrow.circlepath")
                 }
-                .accessibilityLabel("Filters")
-                .accessibilityIdentifier("trades.filters")
+                .accessibilityLabel("Backtest Lab")
+                .accessibilityIdentifier("trades.backtest")
             }
         }
         .sheet(isPresented: $viewModel.showsFilterSheet) {

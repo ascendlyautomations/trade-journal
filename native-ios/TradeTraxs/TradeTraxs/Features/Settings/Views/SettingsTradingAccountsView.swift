@@ -40,6 +40,14 @@ struct SettingsTradingAccountsView: View {
         _viewModel = State(initialValue: viewModel)
     }
 
+    private var showsFreePlanTradeEntryReconfigure: Bool {
+        guard let profileID = viewModel.viewerProfileID else { return false }
+        guard !TradeEntryEntitlementGate.viewerHasTraxProAccess(profileID: profileID) else {
+            return false
+        }
+        return viewModel.accounts.count > FreeTierPolicy.maxTradeEntryAccounts
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if !viewModel.accounts.isEmpty {
@@ -132,6 +140,13 @@ struct SettingsTradingAccountsView: View {
                             )
                         )
                         .accessibilityIdentifier("manageAccounts.dropdownIntro")
+
+                    if showsFreePlanTradeEntryReconfigure {
+                        Button("Choose accounts for new trades") {
+                            FreePlanAccountSlotRequestStore.shared.requestManualOpen()
+                        }
+                        .accessibilityIdentifier("manageAccounts.chooseTradeEntrySlots")
+                    }
 
                     ForEach(viewModel.filteredAccounts) { account in
                         HStack(alignment: .center, spacing: ExperienceSpacing.sm) {

@@ -90,6 +90,7 @@ final class SettingsPrivacyViewModel {
 @MainActor
 final class SettingsBlockedAccountsViewModel {
     private let messages: any MessageRepository
+    private let detailCache: DetailPresentationCache
     private let navigationCoordinator: NavigationCoordinator
 
     private(set) var items: [BlockedAccount] = []
@@ -97,8 +98,13 @@ final class SettingsBlockedAccountsViewModel {
     private(set) var errorMessage: String?
     private(set) var actionInFlight: ProfileID?
 
-    init(messages: any MessageRepository, navigationCoordinator: NavigationCoordinator) {
+    init(
+        messages: any MessageRepository,
+        detailCache: DetailPresentationCache,
+        navigationCoordinator: NavigationCoordinator
+    ) {
         self.messages = messages
+        self.detailCache = detailCache
         self.navigationCoordinator = navigationCoordinator
     }
 
@@ -111,7 +117,16 @@ final class SettingsBlockedAccountsViewModel {
         isLoading = items.isEmpty
         defer { isLoading = false }
         do {
-            items = try await messages.fetchBlockedAccounts()
+            let fetched = try await messages.fetchBlockedAccounts()
+            items = fetched.map { account in
+                let profile: Profile
+                if let cached = detailCache.profile(id: account.id) {
+                    profile = cached.mergingCachedPresentation(with: account.profile)
+                } else {
+                    profile = account.profile
+                }
+                return BlockedAccount(profile: profile, blockedAt: account.blockedAt)
+            }
             errorMessage = nil
         } catch {
             errorMessage = UserFacingError.message(for: error)

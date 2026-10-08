@@ -30,7 +30,7 @@ enum ProGateReason: Sendable {
         case .limit:
             return "Free Plan Limit Reached"
         case .feature:
-            return "TradeTraxs Pro Required"
+            return "TraxPro Required"
         }
     }
 
@@ -39,42 +39,42 @@ enum ProGateReason: Sendable {
         case .limit(let kind):
             switch kind {
             case .accountCount:
-                return "Your Free plan includes up to \(FreeTierPolicy.maxTradeEntryAccounts) trading accounts."
+                return "Your Free plan includes up to \(FreeTierPolicy.maxTradeEntryAccounts) trading accounts total."
             case .dailyTrades:
-                return "Your Free plan includes \(FreeTierPolicy.dailyTradeLimit) manual trades per day."
+                return "Manual trade entry is included on the Free plan."
             case .dailyPosts:
-                return "Your Free plan includes \(FreeTierPolicy.dailyPostLimit) posts per day."
+                return "Posts are included on the Free plan."
             case .dailyClips:
-                return "Your Free plan includes \(FreeTierPolicy.dailyReelLimit) clips per day."
+                return "Your Free plan includes \(FreeTierPolicy.dailyClipLimit) Clips per UTC calendar day."
             case .dailyDirectMessages:
-                return "Your Free plan includes \(FreeTierPolicy.dailyDirectMessageLimit) direct messages every 24 hours."
+                return "Direct messages are included on the Free plan."
             case .csvImportCooldown:
-                return "Free accounts can import one CSV every \(FreeTierPolicy.csvImportCooldownDays) days."
+                return "CSV import is included on the Free plan."
             }
         case .feature(let feature):
             switch feature {
             case .copyTrading:
                 return "Copy Trading lets you record one trade across multiple linked accounts."
             case .aiAnalyst:
-                return "AI Trade Analyst is available with TradeTraxs Pro."
+                return "AI Trade Analyst is available with TraxPro."
             case .backtestLab:
-                return "Backtest Lab is available with TradeTraxs Pro."
+                return "Backtest Lab is available with TraxPro."
             case .propFirm:
-                return "Prop Firm Mode is available with TradeTraxs Pro."
+                return "Advanced Prop Firm Analytics are available with TraxPro."
             case .premiumAnalytics:
-                return "Advanced analytics are available with TradeTraxs Pro."
+                return "Advanced performance analytics are available with TraxPro."
             case .tradingReports:
-                return "Trading reports are available with TradeTraxs Pro."
+                return "Trading reports are available with TraxPro."
             case .performanceExports:
-                return "Performance exports are available with TradeTraxs Pro."
+                return "Performance exports are available with TraxPro."
             case .generic:
-                return "This feature is available with TradeTraxs Pro."
+                return "This feature is available with TraxPro."
             }
         }
     }
 
     var upsellFooter: String {
-        "Upgrade to TradeTraxs Pro for unlimited access and all Pro features."
+        "Upgrade to TraxPro for unlimited active accounts, unlimited Clips, and professional tools."
     }
 
     /// Legacy subtitle — prefer ``detailMessage`` in new UI.
@@ -93,6 +93,7 @@ enum ProGateReasonParser {
         case "FREE_PLAN_DAILY_POST_LIMIT": return .dailyPosts
         case "FREE_PLAN_DAILY_CLIP_LIMIT", "FREE_PLAN_REELS_LIMIT": return .dailyClips
         case "FREE_PLAN_DAILY_DM_LIMIT": return .dailyDirectMessages
+        case "TRAXPRO_COPY_TRADING_REQUIRED": return nil
         default:
             if upper.contains("CSV"), upper.contains("IMPORT") || upper.contains("COOLDOWN") {
                 return .csvImportCooldown
@@ -211,6 +212,9 @@ enum ProGateReasonParser {
 
     private static func feature(fromMessage message: String) -> ProFeatureKind? {
         let lowered = message.lowercased()
+        if lowered.contains("traxpro_copy_trading") {
+            return .copyTrading
+        }
         if lowered.contains("copy trading") || lowered.contains("copy_trading") {
             return .copyTrading
         }

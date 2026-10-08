@@ -8,11 +8,9 @@ nonisolated enum PaginationPolicy {
 
 /// Free-tier capability caps (business rules, not billing transport).
 nonisolated enum FreeTierPolicy {
-    static let dailyTradeLimit = 3
-    static let dailyPostLimit = 3
-    static let dailyReelLimit = 3
-    static let dailyDirectMessageLimit = 25
+    /// Clips per UTC calendar day on Free (TraxPro unlimited). Internal `reels` table unchanged.
+    static let dailyClipLimit = 4
+    /// Legacy name — same as ``dailyClipLimit``.
+    static let dailyReelLimit = dailyClipLimit
     static let maxTradeEntryAccounts = 3
-    /// Free-plan CSV cooldown — keep in sync with ``lib/csvImportGate.ts`` `FREE_PLAN_CSV_IMPORT_COOLDOWN_DAYS`.
-    static let csvImportCooldownDays = 3
 }

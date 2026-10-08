@@ -228,6 +228,14 @@ final class TradeHistoryViewModel {
         showsFilterSheet = true
     }
 
+    func openBacktestLab() {
+        ExperienceHaptics.play(.selection)
+        if ProAccessGate.presentFeatureIfNeeded(.backtestLab, profileID: ownerAccountsProfileID) {
+            return
+        }
+        navigationCoordinator.pushHome(.backtest)
+    }
+
     func applyDraftFilters() {
         ExperienceHaptics.play(.selection)
         filters = draftFilters
@@ -450,6 +458,11 @@ final class TradeHistoryViewModel {
     func handleJournalMutation() {
         switch TradeJournalMutationStore.shared.latest {
         case .created(let trade), .updated(let trade):
+            if trade.mode == .backtest {
+                items.removeAll { $0.id == trade.id }
+                persistSnapshot()
+                return
+            }
             if let profileID,
                let snap = TradeHistorySessionStore.shared.restore(
                    profileID: profileID,

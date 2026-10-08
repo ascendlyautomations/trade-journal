@@ -127,11 +127,14 @@ struct SettingsDestinationView: View {
             case .privacyBlockedAccounts:
                 SettingsBlockedAccountsView(
                     messages: data.messages,
+                    detailCache: data.detailCache,
+                    imagePipeline: data.imagePipeline,
                     navigationCoordinator: navigationCoordinator
                 )
             case .privacyMutedAccounts:
                 SettingsMutedAccountsView(
                     messages: data.messages,
+                    imagePipeline: data.imagePipeline,
                     navigationCoordinator: navigationCoordinator
                 )
             case .privacyMessageAudience:

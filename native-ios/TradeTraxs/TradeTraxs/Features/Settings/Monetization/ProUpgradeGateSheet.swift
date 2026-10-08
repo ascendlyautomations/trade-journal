@@ -97,9 +97,9 @@ struct ProUpgradeGateSheet: View {
 
     private var benefitList: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            Text("TradeTraxs Pro")
+            Text("TraxPro")
                 .experienceStyle(.headline, color: colors.primaryText)
-            Text("Unlock everything in TradeTraxs.")
+            Text("Powerful tools for serious traders.")
                 .experienceStyle(.subheadline, color: colors.secondaryText)
             ForEach(ProUpgradeMarketing.benefitLines, id: \.self) { line in
                 HStack(alignment: .top, spacing: ExperienceSpacing.xs) {
@@ -196,14 +196,13 @@ struct ProUpgradeGateSheet: View {
 
 enum ProUpgradeMarketing {
     static let benefitLines: [String] = [
-        "Unlimited manual trades",
         "Unlimited trading accounts",
-        "Copy Trading",
-        "AI Trade Analyst",
-        "Backtest Lab",
-        "Prop Firm Mode",
-        "Advanced analytics",
+        "Advanced Prop Firm Analytics",
+        "Advanced performance analytics",
+        "AI Trade Analyst & Psychology Coach",
         "Trading reports",
-        "Performance exports",
+        "Backtest Lab",
+        "Copy Trading",
+        "Unlimited Clips",
     ]
 }

@@ -5,6 +5,7 @@ struct DirectMessageInboxItem: Identifiable, Hashable, Sendable {
     var id: ConversationID { conversation.id }
     var conversation: Conversation
     var peer: Profile?
+    var peerProfileID: ProfileID?
     var displayName: String
     var username: String?
     var preview: String

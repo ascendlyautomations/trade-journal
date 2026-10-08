@@ -299,9 +299,7 @@ struct NewChatPickerView: View {
                     Text(profile.displayName)
                         .experienceStyle(.body, color: colors.primaryText)
                         .lineLimit(1)
-                    if profile.isCreator {
-                        TradeTraxsVerifiedBadge(size: .inline)
-                    }
+                    ProfileTradeTraxsIdentityBadge(profile: profile, size: .inline)
                 }
                 Text("@\(profile.username)")
                     .experienceStyle(.caption, color: colors.secondaryText)

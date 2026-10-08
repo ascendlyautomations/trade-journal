@@ -7,6 +7,7 @@ import UIKit
 final class ProfileOnboardingViewModel {
     var username = ""
     var tradingStyle = ""
+    var primaryMarket = ""
     var traderType: TraderType?
     var startedTrading = StartedTradingDatePolicy.localTodayInput()
     var bio = ""
@@ -53,6 +54,7 @@ final class ProfileOnboardingViewModel {
             profileID: snapshot.profileID
         )
         self.tradingStyle = snapshot.tradingStyle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.primaryMarket = snapshot.primaryMarket?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if let parsed = TraderType.parse(snapshot.traderType) {
             self.traderType = parsed
         }
@@ -175,6 +177,7 @@ final class ProfileOnboardingViewModel {
                 avatarUploadError = nil
             }
 
+            let trimmedPrimaryMarket = primaryMarket.trimmingCharacters(in: .whitespacesAndNewlines)
             let submission = ProfileOnboardingSubmission(
                 profileID: snapshot.profileID,
                 username: normalizedUsername,
@@ -184,7 +187,7 @@ final class ProfileOnboardingViewModel {
                 traderType: traderType,
                 startedTrading: String(startedTrading.prefix(10)),
                 avatarURL: avatarURL,
-                primaryMarket: nil
+                primaryMarket: trimmedPrimaryMarket.isEmpty ? nil : trimmedPrimaryMarket
             )
 
             let profile = try await profiles.completeProfileOnboarding(submission)
@@ -195,6 +198,7 @@ final class ProfileOnboardingViewModel {
                 onboardingCompleted: true,
                 traderType: profile.traderType?.rawValue,
                 tradingStyle: profile.tradingStyle,
+                primaryMarket: profile.primaryMarket,
                 startedTrading: submission.startedTrading,
                 bio: profile.bio,
                 avatarURL: avatarURL

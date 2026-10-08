@@ -32,9 +32,7 @@ struct FeedAuthorHeader: View {
                             Text(displayName)
                                 .experienceStyle(.headline, color: colors.primaryText)
                                 .lineLimit(1)
-                            if resolvedProfile.isCreator {
-                                TradeTraxsVerifiedBadge(size: .compact)
-                            }
+                            ProfileTradeTraxsIdentityBadge(profile: resolvedProfile, size: .compact)
                         }
 
                         HStack(spacing: 4) {

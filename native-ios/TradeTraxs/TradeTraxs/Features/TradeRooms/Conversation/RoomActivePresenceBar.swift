@@ -85,9 +85,15 @@ struct RoomActivePresenceSheet: View {
                                     if !member.profile.displayName.isEmpty,
                                        member.profile.displayName != member.profile.username
                                     {
-                                        Text(member.profile.displayName)
-                                            .experienceStyle(.caption, color: colors.tertiaryText)
-                                            .lineLimit(1)
+                                        HStack(spacing: 4) {
+                                            Text(member.profile.displayName)
+                                                .experienceStyle(.caption, color: colors.tertiaryText)
+                                                .lineLimit(1)
+                                            ProfileTradeTraxsIdentityBadge(
+                                                profile: member.profile,
+                                                size: .inline
+                                            )
+                                        }
                                     }
                                 }
                                 Spacer(minLength: 0)

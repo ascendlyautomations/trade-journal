@@ -592,6 +592,11 @@ final class ProfileExperienceTests: XCTestCase {
         XCTAssertEqual(ProfileTradingStyleField.placeholder, "e.g. scalping, Supply & Demand, ICT/SMC")
     }
 
+    func testProfilePrimaryMarketFieldCopy() {
+        XCTAssertEqual(ProfilePrimaryMarketField.label, "Primary Market")
+        XCTAssertEqual(ProfilePrimaryMarketField.placeholder, "e.g. Futures, Options")
+    }
+
     func testCurrentUserProfileStoreLoadsOnce() async throws {
         let fixture = makeFixture()
         let store = CurrentUserProfileStore(

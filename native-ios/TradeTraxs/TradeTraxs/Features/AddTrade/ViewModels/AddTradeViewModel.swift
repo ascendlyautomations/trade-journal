@@ -5,6 +5,8 @@ import UIKit
 @Observable
 @MainActor
 final class AddTradeViewModel {
+    /// Sentinel ``Picker`` tag — not a real account id (Add Trade account menu only).
+    static let addAccountPickerTag = "__add_trade_add_account__"
     enum Phase: Equatable {
         case idle
         case loadingAccounts
@@ -21,6 +23,7 @@ final class AddTradeViewModel {
     enum Field: Hashable {
         case account
         case symbol
+        case strategy
         case entry
         case exit
         case contracts
@@ -221,6 +224,11 @@ final class AddTradeViewModel {
         ownerAccountSource().first(where: { $0.id == selectedAccountID })
     }
 
+    /// Backtest accounts surface Strategy/Setup above direction in the Trade section.
+    var prioritizesStrategySetupField: Bool {
+        selectedAccount?.mode == .backtest
+    }
+
     /// Accounts that may receive new trades: owned and active. Dropdown visibility is separate.
     var eligibleAccounts: [TradingAccount] {
         ownerAccountSource().filter(\.isActive)
@@ -233,9 +241,13 @@ final class AddTradeViewModel {
     /// Picker list — active accounts toggled ON in Settings (`show_in_account_dropdowns`).
     var accountsForPicker: [TradingAccount] {
         let preserveID = isEditing ? editingOriginalAccountID : selectedAccountID
+        let tier = viewerID.map { TradeEntryEntitlementGate.viewerTier(profileID: $0) } ?? .free
         return TradingAccountDropdownFilter.visibleForManualTradePicker(
             from: ownerAccountSource(),
-            preservingSelection: preserveID
+            preservingSelection: preserveID,
+            tradeEntryAllowed: {
+                TradeEntryEntitlementGate.accountAllowsNewTrade($0, viewerTier: tier)
+            }
         )
     }
 
@@ -1334,6 +1346,11 @@ final class AddTradeViewModel {
         if ticker.isEmpty {
             errors[.symbol] = "Symbol is required"
         }
+        if prioritizesStrategySetupField,
+           strategyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            errors[.strategy] = "Strategy / setup is required for backtest trades"
+        }
         if let group = selectedCopyGroup {
             if let block = validateCopyGroupBeforeSave(group) {
                 errors[.account] = block
@@ -1720,8 +1737,8 @@ final class AddTradeViewModel {
                 case .unsupportedMode: return "Unsupported account mode."
                 case .message(let m): return m
                 }
-            case .businessRule(.dailyLimitExceeded(let cap)):
-                return "Free plan daily trade limit reached (\(cap)/day)."
+            case .businessRule(.dailyLimitExceeded):
+                return "Couldn't save trade. Please try again."
             case .permission(.notAuthenticated):
                 return "Sign in to add trades."
             default:
@@ -1729,8 +1746,8 @@ final class AddTradeViewModel {
             }
         }
         let text = String(describing: error).lowercased()
-        if text.contains("daily") || text.contains("free_plan") {
-            return "Free plan daily trade limit reached (\(FreeTierPolicy.dailyTradeLimit)/day)."
+        if text.contains("free_plan_account_limit") {
+            return "Free plan allows up to \(FreeTierPolicy.maxTradeEntryAccounts) trading accounts total. TraxPro unlocks unlimited accounts."
         }
         if text.contains("can_add_trades") || text.contains("read_only") || text.contains("accountreadonly") {
             return "This account can't accept new trades."

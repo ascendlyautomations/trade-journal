@@ -169,9 +169,17 @@ export async function saveManualTrade(
     profileRow
   )
   if (!entryGate.ok) {
+    const code =
+      entryGate.code === "ownership"
+        ? "account_ownership"
+        : entryGate.code === "read_only"
+          ? "account_read_only"
+          : entryGate.code === "selection_required"
+            ? "account_slot_selection"
+            : "save"
     return {
       ok: false,
-      code: entryGate.code === "ownership" ? "account_ownership" : "save",
+      code,
       message: entryGate.message,
     }
   }

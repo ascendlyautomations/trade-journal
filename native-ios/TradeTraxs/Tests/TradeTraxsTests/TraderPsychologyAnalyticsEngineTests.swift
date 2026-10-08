@@ -205,6 +205,22 @@ final class TraderPsychologyAnalyticsEngineTests: XCTestCase {
         XCTAssertTrue(progress.showsRequirementMessage)
     }
 
+    func testDashboardInsightsUnlockRequirementIsTradesOnly() {
+        let belowTrades = PsychologyInsightsUnlockProgress(
+            tradingDayCheckInCount: 0,
+            tradeCount: 3
+        )
+        XCTAssertTrue(belowTrades.showsDashboardInsightsRequirementMessage)
+        XCTAssertEqual(belowTrades.displayTradeCountForGate, 3)
+
+        let metTradesNoCheckIns = PsychologyInsightsUnlockProgress(
+            tradingDayCheckInCount: 0,
+            tradeCount: 5
+        )
+        XCTAssertFalse(metTradesNoCheckIns.showsDashboardInsightsRequirementMessage)
+        XCTAssertTrue(metTradesNoCheckIns.showsRequirementMessage)
+    }
+
     func testPsychologyInsightsUnlockProgressHidesRequirementWhenBothMet() {
         let trades = (0..<5).map { makeTrade(id: "\($0)", pnl: 10, offsetHours: 0, dayOffset: $0) }
         let checkIns = trades.map {

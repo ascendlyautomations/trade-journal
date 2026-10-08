@@ -1,15 +1,17 @@
-/** Canonical TradeTraxs Free & Pro plan copy — single source for all pricing surfaces. */
+/** Canonical TradeTraxs Free & TraxPro plan copy — single source for all pricing surfaces. */
 
 import {
+  FREE_PLAN_ACTIVE_TRADING_ACCOUNTS_LABEL,
+  FREE_PLAN_BROKER_INTEGRATIONS_LABEL,
   FREE_PLAN_DAILY_CLIP_PRICING_LABEL,
-  FREE_PLAN_DAILY_POST_PRICING_LABEL,
-  FREE_PLAN_DAILY_TRADE_PRICING_LABEL,
+  FREE_PLAN_UNLIMITED_CSV_IMPORTS_LABEL,
+  FREE_PLAN_UNLIMITED_MANUAL_TRADES_LABEL,
+  FREE_PLAN_UNLIMITED_POSTS_LABEL,
 } from "./freePlanDailyLimits.ts"
 import {
-  FREE_PLAN_DAILY_DM_PRICING_LABEL,
+  FREE_PLAN_UNLIMITED_DIRECT_MESSAGES_PRICING_LABEL,
   FREE_PLAN_UNLIMITED_TRADE_ROOM_MESSAGES_PRICING_LABEL,
 } from "./freePlanMessagingLimits.ts"
-import { FREE_PLAN_CSV_IMPORT_PRICING_LABEL } from "./csvImportGate.ts"
 
 export type TradeTraxsPlanId = "free" | "pro"
 
@@ -23,37 +25,32 @@ export type TradeTraxsPlan = {
   name: string
   description: string
   features: readonly string[]
-  /** Label above the feature list (Pro: incremental value over Free). */
   featuresHeading?: string
-  /** Grouped Pro features for pricing cards (headings + bullets). */
   featureGroups?: readonly TradeTraxsPlanFeatureGroup[]
 }
 
-/** Stable labels referenced by marketing comparison tables. */
 export const TRADETRAXS_FEATURE_LABELS = {
-  basicAnalytics: "Basic Analytics",
-  premiumAnalytics: "Premium Analytics & Performance Insights",
-  unlimitedTrades: "Unlimited Trades",
-  unlimitedDirectMessages: "Unlimited Direct Messages",
-  unlimitedTradingAccounts: "Unlimited Trading Accounts",
-  csvImport: "CSV Import",
-  unlimitedCsvImport: "Unlimited CSV Imports",
-  aiTradeAnalyst: "AI Analyst",
-  weeklyMonthlyReports: "Weekly & Monthly Trading Reports",
+  basicAnalytics: "Basic Dashboard & core performance analytics",
+  premiumAnalytics: "Advanced performance analytics",
+  unlimitedTradingAccounts: "Unlimited active trading accounts",
+  unlimitedClips: "Unlimited Clips",
+  aiTradeAnalyst: "AI Trade Analyst",
+  aiPsychologyCoach: "AI Psychology Coach",
+  aiTradeAnalystAndCoach: "AI Trade Analyst & Psychology Coach",
+  weeklyMonthlyReports: "Trading reports",
   backtestLab: "Backtest Lab",
-  propFirmMode: "Prop Firm Mode",
-  performanceImageExports: "Performance Image Exports",
-  copyTradingGroups: "Copy Trading Groups",
-  copyTradingGroupsDetail: "Automatically journal the same trade across multiple accounts",
+  advancedPropFirmAnalytics: "Advanced Prop Firm Analytics",
+  copyTradingGroups: "Copy Trading",
+  copyTradingGroupsDetail:
+    "Automatically journal the same trade across multiple accounts",
 } as const
 
 /** @deprecated Prefer {@link TRADETRAXS_FEATURE_LABELS}. */
 export const TRADETRAXS_PRO_FEATURE_LABELS = {
   ...TRADETRAXS_FEATURE_LABELS,
-  weeklyReports: "Weekly Reports",
-  monthlyReports: "Monthly Reports",
-  profitFactor: "Profit Factor",
-  brandedShareCards: "Branded Share Cards",
+  propFirmMode: TRADETRAXS_FEATURE_LABELS.advancedPropFirmAnalytics,
+  weeklyReports: "Trading reports",
+  monthlyReports: "Trading reports",
   advancedPerformanceInsights: TRADETRAXS_FEATURE_LABELS.premiumAnalytics,
 } as const
 
@@ -61,57 +58,39 @@ export const TRADETRAXS_FREE_PLAN: TradeTraxsPlan = {
   id: "free",
   name: "TradeTraxs Free",
   description:
-    "Track trades manually, explore the community, and review core performance stats. No credit card required.",
+    "Generous journaling, CSV imports, broker connections, community, and core analytics. No credit card required.",
   features: [
-    FREE_PLAN_DAILY_TRADE_PRICING_LABEL,
-    FREE_PLAN_DAILY_POST_PRICING_LABEL,
+    FREE_PLAN_UNLIMITED_MANUAL_TRADES_LABEL,
+    FREE_PLAN_UNLIMITED_CSV_IMPORTS_LABEL,
+    FREE_PLAN_BROKER_INTEGRATIONS_LABEL,
+    FREE_PLAN_ACTIVE_TRADING_ACCOUNTS_LABEL,
+    FREE_PLAN_UNLIMITED_DIRECT_MESSAGES_PRICING_LABEL,
+    FREE_PLAN_UNLIMITED_POSTS_LABEL,
     FREE_PLAN_DAILY_CLIP_PRICING_LABEL,
     FREE_PLAN_UNLIMITED_TRADE_ROOM_MESSAGES_PRICING_LABEL,
-    FREE_PLAN_DAILY_DM_PRICING_LABEL,
-    FREE_PLAN_CSV_IMPORT_PRICING_LABEL,
-    "Manual Trade Entry",
     TRADETRAXS_FEATURE_LABELS.basicAnalytics,
-    "Basic Calendar",
-    "Public & Private Profiles",
-    "Feed, Posts & Clips",
-    "Following, Comments & Likes",
-    "Public Trade Sharing",
+    "Psychology check-ins & payout recording",
+    "Feed, Explore, profiles, Vault, leaderboards",
+    "Posts, Clips, stories, achievements",
+    "Following, comments, likes & sharing",
   ],
 }
 
-/** Pro feature list heading — shown above incremental Pro features on pricing surfaces. */
 export const TRADETRAXS_PRO_FEATURES_HEADING = "Everything in Free, plus:"
 
 export const TRADETRAXS_PRO_FEATURE_GROUPS: readonly TradeTraxsPlanFeatureGroup[] =
   [
     {
-      heading: "Unlimited Trading",
+      heading: "TraxPro",
       features: [
-        TRADETRAXS_FEATURE_LABELS.unlimitedTrades,
         TRADETRAXS_FEATURE_LABELS.unlimitedTradingAccounts,
-        TRADETRAXS_FEATURE_LABELS.unlimitedCsvImport,
-        TRADETRAXS_FEATURE_LABELS.unlimitedDirectMessages,
-      ],
-    },
-    {
-      heading: "AI Tools",
-      features: [
-        TRADETRAXS_FEATURE_LABELS.aiTradeAnalyst,
+        TRADETRAXS_FEATURE_LABELS.advancedPropFirmAnalytics,
+        TRADETRAXS_FEATURE_LABELS.premiumAnalytics,
+        TRADETRAXS_FEATURE_LABELS.aiTradeAnalystAndCoach,
         TRADETRAXS_FEATURE_LABELS.weeklyMonthlyReports,
-      ],
-    },
-    {
-      heading: "Advanced Analytics",
-      features: [TRADETRAXS_FEATURE_LABELS.premiumAnalytics],
-    },
-    {
-      heading: "Professional Tools",
-      features: [
         TRADETRAXS_FEATURE_LABELS.backtestLab,
-        TRADETRAXS_FEATURE_LABELS.propFirmMode,
-        TRADETRAXS_FEATURE_LABELS.performanceImageExports,
         TRADETRAXS_FEATURE_LABELS.copyTradingGroups,
-        TRADETRAXS_FEATURE_LABELS.copyTradingGroupsDetail,
+        TRADETRAXS_FEATURE_LABELS.unlimitedClips,
       ],
     },
     {
@@ -128,9 +107,9 @@ function flattenProFeatureGroups(
 
 export const TRADETRAXS_PRO_PLAN: TradeTraxsPlan = {
   id: "pro",
-  name: "TradeTraxs Pro",
+  name: "TraxPro",
   description:
-    "Unlock unlimited journaling, AI-powered analysis, premium analytics, and professional tools built to help you trade with consistency.",
+    "Powerful tools for serious traders — unlimited accounts and Clips, advanced analytics, AI coaching, reports, Backtest Lab, and Copy Trading.",
   featuresHeading: TRADETRAXS_PRO_FEATURES_HEADING,
   featureGroups: TRADETRAXS_PRO_FEATURE_GROUPS,
   features: flattenProFeatureGroups(TRADETRAXS_PRO_FEATURE_GROUPS),
@@ -145,7 +124,6 @@ export function getTradeTraxsPlan(id: TradeTraxsPlanId): TradeTraxsPlan {
   return PLANS[id]
 }
 
-/** Comma- or semicolon-separated feature list for FAQ / prose. */
 export function formatPlanFeaturesList(
   plan: TradeTraxsPlan,
   separator = ", "
@@ -153,7 +131,6 @@ export function formatPlanFeaturesList(
   return plan.features.join(separator)
 }
 
-/** Settings / subscription section label above the active plan's feature list. */
 export function getPlanFeaturesSectionHeading(
   planId: TradeTraxsPlanId
 ): string {

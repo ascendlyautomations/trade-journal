@@ -24,7 +24,6 @@ import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { usePlatformPresentation } from "@/app/components/platform/usePlatformPresentation"
 import { feedbackPresets, persistentSuccess } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
-import { assertCsvImportAllowedForFreePlan } from "@/lib/csvImportGate"
 import { csvTradesHaveFutureDate } from "@/lib/tradeDateValidation"
 import {
   buildQuickInputPatchFromCsvTrade,
@@ -108,14 +107,6 @@ export default function Home() {
     if (!userId) {
       showPopup({ type: "info", message: "Please log in first" })
       setLoading(false)
-      return
-    }
-
-    const csvGate = await assertCsvImportAllowedForFreePlan(supabase, userId)
-    if (!csvGate.ok) {
-      showPopup(feedbackPresets.csvImportUnavailable(csvGate.daysUntilNextImport))
-      setLoading(false)
-      resetCsvInput()
       return
     }
 

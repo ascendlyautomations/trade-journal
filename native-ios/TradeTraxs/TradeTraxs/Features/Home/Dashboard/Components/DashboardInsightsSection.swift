@@ -33,7 +33,7 @@ struct DashboardInsightsSection: View {
 
             if isSectionExpanded {
                 if insights.isEmpty {
-                    if unlockProgress.showsRequirementMessage {
+                    if unlockProgress.showsDashboardInsightsRequirementMessage {
                         requirementEmptyState
                     } else {
                         emptyState
@@ -79,7 +79,7 @@ struct DashboardInsightsSection: View {
     private var requirementEmptyState: some View {
         ExperienceEmptyState(
             icon: .chart,
-            title: "5 Daily Check-Ins & 5 Trades Required",
+            title: "5 Trades Required",
             message: "Log more trades to surface coaching recommendations.",
             accessibilityIdentifier: "dashboard.insights.requirements"
         )

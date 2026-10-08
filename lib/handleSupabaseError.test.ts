@@ -10,30 +10,23 @@ import {
 describe("toUserFacingErrorMessage", () => {
   it("maps internal ALL_CAPS codes to friendly copy", () => {
     assert.equal(
-      toUserFacingErrorMessage({ message: "FREE_PLAN_DAILY_POST_LIMIT" }),
-      USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_POST_LIMIT
-    )
-    assert.equal(
-      toUserFacingErrorMessage({ message: "FREE_PLAN_DAILY_TRADE_LIMIT" }),
-      USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_TRADE_LIMIT
-    )
-    assert.equal(
       toUserFacingErrorMessage({ message: "FREE_PLAN_DAILY_CLIP_LIMIT" }),
       USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_CLIP_LIMIT
     )
     assert.equal(
-      toUserFacingErrorMessage({ message: "FREE_PLAN_DAILY_DM_LIMIT" }),
-      USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_DM_LIMIT
+      toUserFacingErrorMessage({ message: "TRAXPRO_COPY_TRADING_REQUIRED" }),
+      USER_FACING_ERROR_MESSAGES.TRAXPRO_COPY_TRADING_REQUIRED
     )
   })
 
-  it("preserves human-readable postgres sentences", () => {
+  it("preserves human-readable postgres clip sentences", () => {
     assert.equal(
       toUserFacingErrorMessage({
         code: "P0001",
-        message: "You've reached the Free plan limit of 3 trades every 24 hours.",
+        message:
+          "You've reached the Free plan limit of 4 Clips per UTC calendar day.",
       }),
-      "You've reached the Free plan limit of 3 trades every 24 hours."
+      USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_CLIP_LIMIT
     )
   })
 
@@ -42,9 +35,9 @@ describe("toUserFacingErrorMessage", () => {
       toUserFacingErrorMessage({
         code: "P0001",
         message: "P0001",
-        hint: "You've reached the Free plan limit of 3 trades every 24 hours.",
+        hint: "You've reached the Free plan limit of 4 Clips per UTC calendar day.",
       }),
-      "You've reached the Free plan limit of 3 trades every 24 hours."
+      USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_CLIP_LIMIT
     )
   })
 
@@ -75,8 +68,8 @@ describe("toUserFacingErrorMessage", () => {
 describe("handleSupabaseError", () => {
   it("re-exports toUserFacingErrorMessage", () => {
     assert.equal(
-      handleSupabaseError({ message: "FREE_PLAN_DAILY_POST_LIMIT" }),
-      USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_POST_LIMIT
+      handleSupabaseError({ message: "FREE_PLAN_DAILY_CLIP_LIMIT" }),
+      USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_CLIP_LIMIT
     )
   })
 })
@@ -84,29 +77,14 @@ describe("handleSupabaseError", () => {
 describe("supabaseMutationFeedback", () => {
   it("keeps caller title and friendly description for internal codes", () => {
     const feedback = supabaseMutationFeedback(
-      { message: "FREE_PLAN_DAILY_POST_LIMIT" },
-      "Post Failed"
+      { message: "FREE_PLAN_DAILY_CLIP_LIMIT" },
+      "Clip Failed"
     )
-    assert.equal(feedback.title, "Post Failed")
+    assert.equal(feedback.title, "Clip Failed")
     assert.equal(
       feedback.message,
-      USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_POST_LIMIT
+      USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_CLIP_LIMIT
     )
     assert.equal(feedback.type, "error")
-  })
-
-  it("keeps caller title and database sentence for human-readable errors", () => {
-    const feedback = supabaseMutationFeedback(
-      {
-        message:
-          "You've reached the Free plan limit of 3 trades every 24 hours.",
-      },
-      "Save Failed"
-    )
-    assert.equal(feedback.title, "Save Failed")
-    assert.equal(
-      feedback.message,
-      "You've reached the Free plan limit of 3 trades every 24 hours."
-    )
   })
 })

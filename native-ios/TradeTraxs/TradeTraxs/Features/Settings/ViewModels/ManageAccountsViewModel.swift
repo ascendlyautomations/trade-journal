@@ -15,6 +15,8 @@ final class ManageAccountsViewModel {
     private(set) var formError: String?
     private var hasLoaded = false
     private var viewerID: ProfileID?
+
+    var viewerProfileID: ProfileID? { viewerID }
     private(set) var isLoadingPayouts = false
     private(set) var payoutError: String?
 
@@ -189,7 +191,20 @@ final class ManageAccountsViewModel {
     }
 
     func create(_ draft: TradingAccountDraft) async -> Bool {
-        await mutate {
+        if let viewerID {
+            let tier = TradeEntryEntitlementGate.viewerTier(profileID: viewerID)
+            if !FreePlanTradeAccountPolicy.canCreateAnotherAccount(accounts: accounts, viewerTier: tier),
+               ProMonetizationPolicy.canPresentProPaywall(
+                   demoModeActive: ExploreModeSupport.isActive,
+                   enforcement: IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled,
+                   paywallEnabled: IosSubscriptionReleaseConfiguration.iosPaywallEnabled
+               )
+            {
+                ProUpgradeCoordinator.shared.present(reason: .limit(.accountCount))
+                return false
+            }
+        }
+        return await mutate {
             guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
             let created = try await trades.createAccount(ownerID: viewerID, draft: draft)
             accounts = Self.sorted(accounts + [created])

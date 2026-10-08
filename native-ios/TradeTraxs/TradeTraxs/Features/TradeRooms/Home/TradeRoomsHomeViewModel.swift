@@ -529,7 +529,10 @@ final class TradeRoomsHomeViewModel {
                 TradeRoomInboxItem(
                     room: room,
                     ownerName: nil,
-                    ownerIsVerified: false,
+                    ownerIsVerified: TradeTraxsOfficialAccountPolicy.showsTradeTraxsIdentityBadge(
+                        owner: nil,
+                        ownerProfileID: room.ownerProfileID
+                    ),
                     preview: room.description ?? "No messages yet",
                     timestamp: inboxStore.roomActivityAt[room.id],
                     unreadCount: 0,
@@ -946,7 +949,10 @@ final class TradeRoomsHomeViewModel {
             return TradeRoomInboxItem(
                 room: room,
                 ownerName: owner?.displayName,
-                ownerIsVerified: owner?.isCreator == true,
+                ownerIsVerified: TradeTraxsOfficialAccountPolicy.showsTradeTraxsIdentityBadge(
+                    owner: owner,
+                    ownerProfileID: room.ownerProfileID
+                ),
                 preview: inboxStore.roomPreviews[room.id] ?? room.description ?? "No messages yet",
                 timestamp: inboxStore.roomActivityAt[room.id],
                 unreadCount: inboxStore.roomUnread[room.id] ?? 0,

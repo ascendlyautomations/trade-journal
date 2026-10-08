@@ -61,7 +61,7 @@ nonisolated protocol MessageRepository: Sendable {
     func setDmUserBlock(conversationID: ConversationID, blocked: Bool) async throws -> DmBlockStatus
     /// Profile-level block without an existing conversation — `set_user_block`.
     func setUserBlock(otherID: ProfileID, blocked: Bool) async throws -> DmBlockStatus
-    /// Blocked accounts list — `user_blocks` + embedded profiles (RLS: own rows).
+    /// Blocked accounts list — `list_blocked_accounts` (definer profile read for blocked peers).
     func fetchBlockedAccounts() async throws -> [BlockedAccount]
     /// Bidirectional block peers — `get_active_block_peer_ids` (Feed filtering).
     func fetchActiveBlockPeerIDs() async throws -> Set<ProfileID>

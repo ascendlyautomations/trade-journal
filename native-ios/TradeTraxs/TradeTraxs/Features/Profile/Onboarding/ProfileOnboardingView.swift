@@ -336,6 +336,8 @@ struct ProfileOnboardingView: View {
                 ExperienceDivider()
                 tradingStyleRow
                 ExperienceDivider()
+                primaryMarketRow
+                ExperienceDivider()
                 startedTradingRow
             }
         }
@@ -374,6 +376,19 @@ struct ProfileOnboardingView: View {
         }
         .padding(.vertical, ExperienceSpacing.xxs)
         .accessibilityIdentifier("profile.onboarding.tradingStyle")
+    }
+
+    private var primaryMarketRow: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            Text(ProfilePrimaryMarketField.label)
+                .experienceStyle(.caption, color: colors.secondaryText)
+
+            TextField(ProfilePrimaryMarketField.placeholder, text: $viewModel.primaryMarket)
+                .textInputAutocapitalization(.words)
+                .padding(.vertical, ExperienceSpacing.xxs)
+        }
+        .padding(.vertical, ExperienceSpacing.xxs)
+        .accessibilityIdentifier("profile.onboarding.primaryMarket")
     }
 
     private var startedTradingRow: some View {

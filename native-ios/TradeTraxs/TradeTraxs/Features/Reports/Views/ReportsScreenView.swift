@@ -5,6 +5,7 @@ struct ReportsScreenView: View {
     @State private var viewModel: ReportsScreenViewModel
     @State private var isPerformanceExpanded = false
     @State private var isPsychologyExpanded = false
+    @State private var entitlementGateRevision = 0
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -28,23 +29,33 @@ struct ReportsScreenView: View {
 
     var body: some View {
         Group {
-            switch viewModel.phase {
-            case .failed(let message) where viewModel.cards.allSatisfy({ $0.availability != .ready })
-                && viewModel.psychologyCards.allSatisfy({ $0.availability != .ready }):
-                ExperienceErrorState(
-                    title: "Couldn't load Reports",
-                    message: message,
-                    onRetry: { Task { await viewModel.refresh() } }
-                )
-            default:
+            if restrictsTradingReportsCatalog {
                 catalogScroll
+            } else {
+                switch viewModel.phase {
+                case .failed(let message) where viewModel.cards.allSatisfy({ $0.availability != .ready })
+                    && viewModel.psychologyCards.allSatisfy({ $0.availability != .ready }):
+                    ExperienceErrorState(
+                        title: "Couldn't load Reports",
+                        message: message,
+                        onRetry: { Task { await viewModel.refresh() } }
+                    )
+                default:
+                    catalogScroll
+                }
             }
         }
         .experienceScreenBackground()
         .experienceNavigationTitle("Reports")
         .toolbar(.hidden, for: .tabBar)
-        .refreshable { await viewModel.refresh() }
-        .task { await viewModel.bootstrapIfNeeded() }
+        .refreshable {
+            guard !restrictsTradingReportsCatalog else { return }
+            await viewModel.refresh()
+        }
+        .task(id: restrictsTradingReportsCatalog) {
+            guard !restrictsTradingReportsCatalog else { return }
+            await viewModel.bootstrapIfNeeded()
+        }
         .sheet(isPresented: $viewModel.showsPeriodPicker) {
             PsychologyReportPeriodPickerView(
                 periods: viewModel.periodPickerPeriods,
@@ -62,6 +73,25 @@ struct ReportsScreenView: View {
             .experienceSheetChrome()
         }
         .accessibilityIdentifier("reports.home")
+        .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { _ in
+            entitlementGateRevision += 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .monetizationConfigurationDidChange)) { _ in
+            entitlementGateRevision += 1
+        }
+    }
+
+    private var restrictsTradingReportsCatalog: Bool {
+        _ = entitlementGateRevision
+        return ProMonetizationPolicy.shouldRestrictTradingReportsCatalog(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: reportsViewerProfileID
+        )
+    }
+
+    private var reportsViewerProfileID: ProfileID? {
+        guard let bootstrap = SessionBootstrapStore.shared.last else { return nil }
+        return ProfileID(bootstrap.data.viewer.id)
     }
 
     private var catalogScroll: some View {
@@ -71,8 +101,13 @@ struct ReportsScreenView: View {
                     .padding(.horizontal, ExperienceSpacing.md)
                     .padding(.top, ExperienceSpacing.xs)
 
-                performanceSection
-                psychologySection
+                if restrictsTradingReportsCatalog {
+                    tradingReportsUpgradeBlock
+                        .padding(.horizontal, ExperienceSpacing.md)
+                } else {
+                    performanceSection
+                    psychologySection
+                }
             }
             .padding(.bottom, ExperienceSpacing.xxxl)
             .animation(
@@ -99,6 +134,32 @@ struct ReportsScreenView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var tradingReportsUpgradeBlock: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            Text("TraxPro reports")
+                .experienceStyle(.headline, color: colors.primaryText)
+            Text("Performance and psychology report reviews are included with TraxPro.")
+                .experienceStyle(.footnote, color: colors.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                ExperienceHaptics.play(.selection)
+                ProUpgradeCoordinator.shared.present(reason: .feature(.tradingReports))
+            } label: {
+                Text("Upgrade to TraxPro")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("reports.upgrade.traxpro")
+        }
+        .padding(ExperienceSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
+            cornerRadius: ExperienceRadius.md,
+            style: .continuous
+        ))
+        .accessibilityIdentifier("reports.traxpro.gate")
     }
 
     private var performanceSection: some View {

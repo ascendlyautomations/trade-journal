@@ -142,9 +142,7 @@ struct ProfileHeaderView: View {
                         .accessibilityAddTraits(.isHeader)
                         .accessibilityIdentifier("profile.displayName")
 
-                    if profile.isCreator {
-                        TradeTraxsVerifiedBadge(size: .standard)
-                    }
+                    ProfileTradeTraxsIdentityBadge(profile: profile, size: .standard)
                 }
 
                 Text("@\(profile.username)")

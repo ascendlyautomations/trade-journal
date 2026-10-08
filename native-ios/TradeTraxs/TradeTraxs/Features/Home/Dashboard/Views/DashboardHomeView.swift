@@ -10,12 +10,16 @@ struct DashboardHomeView: View {
     @State private var dailyCheckInStore = TraderDailyCheckInStore.shared
     @Bindable private var brokerImportEligibilityStore = BrokerImportEligibilityStore.shared
     @Bindable private var withdrawalsHistory = WithdrawalsHistoryStore.shared
+    @State private var entitlementGateRevision = 0
+    @State private var dashboardScrollHeaderTracker = FeedScrollAwareHeaderTracker()
+    @State private var dashboardScrollChromeHidden = false
     private let navigationCoordinator: NavigationCoordinator
     private let data: DataEnvironment?
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.tabIsActive) private var tabIsActive
+    @Environment(\.navigationEnvironment) private var navigationEnvironment
 
     init(
         data: DataEnvironment,
@@ -110,6 +114,16 @@ struct DashboardHomeView: View {
                 .contextualTourTarget(.dashboardNotifications)
             }
         }
+        .modifier(
+            DashboardScrollAwareHeaderHostModifier(
+                reduceMotion: reduceMotion,
+                experimentActive: dashboardScrollAwareHeaderActive,
+                navigationBarVisibility: dashboardScrollAwareNavigationBarVisibility,
+                homePathDepth: navigationEnvironment.store.paths.home.count,
+                chromeHidden: $dashboardScrollChromeHidden,
+                onReset: resetDashboardScrollAwareHeader
+            )
+        )
         .refreshable {
             await viewModel.refresh()
             await brokerImportEligibilityStore.refreshAndWait(fromUserAction: true)
@@ -185,6 +199,108 @@ struct DashboardHomeView: View {
             ContextualTourDebug.log(line)
         }
         .accessibilityIdentifier("dashboard.home")
+        .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { _ in
+            entitlementGateRevision += 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .monetizationConfigurationDidChange)) { _ in
+            entitlementGateRevision += 1
+        }
+        .onChange(of: viewModel.accountFilter) { _, _ in
+            resetDashboardScrollAwareHeader()
+        }
+        .onChange(of: viewModel.dateRange) { _, _ in
+            resetDashboardScrollAwareHeader()
+        }
+    }
+
+    private var dashboardFilterBarChrome: some View {
+        DashboardFilterBar(viewModel: viewModel)
+            .padding(.horizontal, ExperienceSpacing.sm)
+            .padding(.top, ExperienceSpacing.xs)
+            .padding(.bottom, ExperienceSpacing.sm)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                colors.backgroundPrimary
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .accessibilityIdentifier("dashboard.filters")
+    }
+
+    private var dashboardScrollAwareHeaderActive: Bool {
+        FeedScrollAwareHeaderExperiment.dashboardScrollHeaderEnabled
+            && tabIsActive
+            && navigationEnvironment.store.paths.home.isEmpty
+            && viewModel.summary != nil
+    }
+
+    private var dashboardScrollAwareNavigationBarVisibility: Visibility {
+        dashboardScrollAwareHeaderActive && dashboardScrollChromeHidden ? .hidden : .visible
+    }
+
+    private func resetDashboardScrollAwareHeader() {
+        dashboardScrollHeaderTracker.reset()
+        dashboardScrollChromeHidden = false
+    }
+
+    private var hidesPremiumDashboardCharts: Bool {
+        _ = entitlementGateRevision
+        return ProMonetizationPolicy.shouldHidePremiumDashboardCharts(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: viewModel.ownerAccountsProfileID
+        )
+    }
+
+    private var restrictsPremiumPsychologyAndAI: Bool {
+        _ = entitlementGateRevision
+        return ProMonetizationPolicy.shouldRestrictPremiumPsychologyAndAI(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: viewModel.ownerAccountsProfileID
+        )
+    }
+
+    private var restrictsPropFirmMode: Bool {
+        _ = entitlementGateRevision
+        return ProMonetizationPolicy.shouldRestrictPropFirmMode(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: viewModel.ownerAccountsProfileID
+        )
+    }
+
+    private var psychologyAnalyticsUpgradeSection: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            Text("Psychology Insights")
+                .experienceStyle(.headline, color: colors.primaryText)
+                .padding(.horizontal, ExperienceSpacing.md)
+            Text("Patterns from your trades and daily check-ins")
+                .experienceStyle(.footnote, color: colors.tertiaryText)
+                .padding(.horizontal, ExperienceSpacing.md)
+
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                Text("TraxPro psychology analytics")
+                    .experienceStyle(.headline, color: colors.primaryText)
+                Text("Advanced psychology analytics and coaching are included with TraxPro.")
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    ProUpgradeCoordinator.shared.present(reason: .feature(.premiumAnalytics))
+                } label: {
+                    Text("Upgrade to TraxPro")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("dashboard.psychology.upgrade.traxpro")
+            }
+            .padding(ExperienceSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
+                cornerRadius: ExperienceRadius.md,
+                style: .continuous
+            ))
+            .padding(.horizontal, ExperienceSpacing.md)
+            .accessibilityIdentifier("dashboard.psychology.traxpro.gate")
+        }
+        .accessibilityIdentifier("dashboard.psychologyInsights")
     }
 
     /// Dashboard chrome that owns the tour anchors is on screen.
@@ -234,10 +350,7 @@ struct DashboardHomeView: View {
         ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                DashboardFilterBar(viewModel: viewModel)
-                    .padding(.horizontal, ExperienceSpacing.sm)
-                    .padding(.top, ExperienceSpacing.xs)
-                    .padding(.bottom, ExperienceSpacing.sm)
+                dashboardFilterBarChrome
 
                 if let summary = viewModel.summary {
                     if gettingStartedStore.shouldShowDashboardCard {
@@ -268,7 +381,7 @@ struct DashboardHomeView: View {
                     }
                     .contextualTourTarget(.dashboardPerformance)
 
-                    if let propStatus = viewModel.propFirmStatus {
+                    if let propStatus = viewModel.propFirmStatus, !restrictsPropFirmMode {
                         PropFirmStatusCard(
                             snapshot: propStatus,
                             onOpenDetails: { viewModel.openPropFirmDetails() }
@@ -293,7 +406,8 @@ struct DashboardHomeView: View {
                         onBrowseHour: { viewModel.browseHour(label: $0) },
                         onBrowseLong: { viewModel.browseLong() },
                         onBrowseShort: { viewModel.browseShort() },
-                        onBrowseHoldBucket: { viewModel.browseHoldBucket(label: $0) }
+                        onBrowseHoldBucket: { viewModel.browseHoldBucket(label: $0) },
+                        hidesPremiumDashboardCharts: hidesPremiumDashboardCharts
                     )
                     .padding(.bottom, ExperienceSpacing.xxl)
 
@@ -316,21 +430,26 @@ struct DashboardHomeView: View {
                     )
                     .padding(.bottom, ExperienceSpacing.lg)
 
-                    PsychologyInsightsSection(
-                        title: "Psychology Insights",
-                        subtitle: "Patterns from your trades and daily check-ins",
-                        cards: viewModel.psychologyReport?.dashboardCards ?? [],
-                        unlockProgress: viewModel.psychologyInsightsUnlockProgress,
-                        onSelect: { card in
-                            viewModel.openPsychologyAnalytics(
-                                highlightSection: viewModel.psychologySectionID(for: card.category)
-                            )
-                        },
-                        onViewAll: {
-                            viewModel.openPsychologyAnalytics()
-                        }
-                    )
-                    .padding(.bottom, ExperienceSpacing.xxxl)
+                    if restrictsPremiumPsychologyAndAI {
+                        psychologyAnalyticsUpgradeSection
+                            .padding(.bottom, ExperienceSpacing.xxxl)
+                    } else {
+                        PsychologyInsightsSection(
+                            title: "Psychology Insights",
+                            subtitle: "Patterns from your trades and daily check-ins",
+                            cards: viewModel.psychologyReport?.dashboardCards ?? [],
+                            unlockProgress: viewModel.psychologyInsightsUnlockProgress,
+                            onSelect: { card in
+                                viewModel.openPsychologyAnalytics(
+                                    highlightSection: viewModel.psychologySectionID(for: card.category)
+                                )
+                            },
+                            onViewAll: {
+                                viewModel.openPsychologyAnalytics()
+                            }
+                        )
+                        .padding(.bottom, ExperienceSpacing.xxxl)
+                    }
                 }
             }
             .opacity(contentRevealed || reduceMotion ? 1 : 0.001)
@@ -350,6 +469,35 @@ struct DashboardHomeView: View {
                 revealContentIfNeeded()
             }
         }
+        .modifier(
+            ScrollAwareHeaderScrollModifier(
+                isActive: dashboardScrollAwareHeaderActive,
+                reduceMotion: reduceMotion,
+                debugSurface: "dashboard.scroll",
+                trackingMode: .dashboardNavigationBar,
+                tracker: $dashboardScrollHeaderTracker,
+                chromeHidden: $dashboardScrollChromeHidden
+            )
+        )
+        #if DEBUG
+        .background {
+            FeedScrollChromeUIKitProbe(label: "dashboard.scroll")
+        }
+        .onAppear {
+            FeedScrollAwareHeaderDiagnostics.logScrollListenerAttached(
+                isActive: dashboardScrollAwareHeaderActive,
+                surface: "dashboard.scroll"
+            )
+            Task {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                guard dashboardScrollAwareHeaderActive else { return }
+                FeedScrollAwareHeaderDiagnostics.logNoGeometryActionsWarning(
+                    surface: "dashboard.scroll",
+                    secondsVisible: 3
+                )
+            }
+        }
+        #endif
         .scrollBounceBehavior(.basedOnSize, axes: .vertical)
         .onChange(of: ContextualTourCoordinator.shared.scrollTarget) { _, target in
             guard let target else { return }

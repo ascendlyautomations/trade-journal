@@ -218,6 +218,11 @@ final class TradeDetailViewModel {
         navigationCoordinator.editTrade(tradeID)
     }
 
+    func openAuthor() {
+        guard let profileID = trade?.ownerProfileID else { return }
+        navigationCoordinator.pushOtherProfile(profileID)
+    }
+
     func deleteTrade() async -> Bool {
         guard isOwner, !isDeleting else { return false }
         isDeleting = true

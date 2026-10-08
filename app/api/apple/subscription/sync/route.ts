@@ -8,6 +8,7 @@ import {
   verifyAppleTransactionId,
 } from "@/lib/appleSubscription"
 import { buildTraxProEntitlementSnapshot } from "@/lib/traxProEntitlement"
+import { enableAllAccountsForTradeEntry } from "@/lib/enableAllAccountsForTradeEntry"
 
 export const runtime = "nodejs"
 
@@ -132,6 +133,10 @@ export async function POST(req: Request) {
     }
 
     const snapshot = buildTraxProEntitlementSnapshot(profile, appleSubscription)
+
+    if (snapshot.traxProActive) {
+      await enableAllAccountsForTradeEntry(supabaseServiceRole, user.id)
+    }
 
     return Response.json({
       traxProActive: snapshot.traxProActive,

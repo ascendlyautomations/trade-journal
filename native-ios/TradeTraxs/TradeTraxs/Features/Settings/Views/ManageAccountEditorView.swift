@@ -74,7 +74,15 @@ struct ManageAccountEditorView: View {
                     Text("Prop Firm").tag(TradingAccountCategory.propFirm)
                     Text("Backtest").tag(TradingAccountCategory.backtest)
                 }
-                .onChange(of: draft.category) { _, category in
+                .onChange(of: draft.category) { previous, category in
+                    if category == .backtest,
+                       ProAccessGate.presentFeatureIfNeeded(
+                           .backtestLab,
+                           profileID: viewModel.viewerProfileID
+                       ) {
+                        draft.category = previous
+                        return
+                    }
                     draft.mode = ManageAccountsViewModel.defaultMode(for: category)
                     if category != .propFirm {
                         draft.propFirmRules = nil

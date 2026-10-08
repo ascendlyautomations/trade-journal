@@ -33,47 +33,47 @@ export type ProLimitPayload = {
   message: string
 }
 
-export const TRADETRAXS_PRO_DISPLAY_NAME = "TradeTraxs Pro"
+export const TRADETRAXS_PRO_DISPLAY_NAME = "TraxPro"
 
 export function proGateSubtitle(reason: ProGateReason): string {
   switch (reason.type) {
     case "limit":
       switch (reason.limit) {
         case "account_count":
-          return "You've reached your Free plan limit of 3 trading accounts."
+          return "You've reached your Free plan limit of 3 trading accounts total."
         case "daily_trades":
-          return "You've used your 3 Free trades for today."
+          return "This action is included on the Free plan."
         case "daily_posts":
-          return "You've used your 3 Free posts for today."
+          return "This action is included on the Free plan."
         case "daily_clips":
-          return "You've used your 3 Free clips for today."
+          return "You've reached the Free plan limit of 4 Clips per UTC calendar day."
         case "daily_direct_messages":
-          return "You've reached the Free plan limit of 25 direct messages in 24 hours."
+          return "Direct messaging is included on the Free plan."
         case "csv_import_cooldown":
-          return "Free accounts can import a CSV once every 3 days."
+          return "CSV import is included on the Free plan."
       }
       break
     case "feature":
       switch (reason.feature) {
         case "ai_analyst":
-          return "AI Analyst is available with TradeTraxs Pro."
+          return "AI Trade Analyst is available with TraxPro."
         case "backtest_lab":
-          return "Backtest Lab is available with TradeTraxs Pro."
+          return "Backtest Lab is available with TraxPro."
         case "prop_firm":
-          return "Prop Firm Mode is available with TradeTraxs Pro."
+          return "Advanced Prop Firm Analytics are available with TraxPro."
         case "copy_trading":
-          return "Copy Trading is available with TradeTraxs Pro."
+          return "Copy Trading is available with TraxPro."
         case "premium_analytics":
-          return "Premium analytics are available with TradeTraxs Pro."
+          return "Advanced performance analytics are available with TraxPro."
         case "trading_reports":
-          return "Weekly and monthly trading reports are available with TradeTraxs Pro."
+          return "Trading reports are available with TraxPro."
         case "performance_exports":
-          return "Performance exports are available with TradeTraxs Pro."
+          return "Performance exports are available with TraxPro."
         case "generic":
-          return "This feature is available with TradeTraxs Pro."
+          return "This feature is available with TraxPro."
       }
   }
-  return "This feature is available with TradeTraxs Pro."
+  return "This feature is available with TraxPro."
 }
 
 const LEGACY_LIMIT_MAP: Record<string, ProLimitKind> = {
@@ -95,6 +95,10 @@ export function proLimitKindFromLegacyCode(code: string): ProLimitKind | null {
 }
 
 export function proGateReasonFromLegacyError(code: string): ProGateReason | null {
+  const head = code.trim().split(":")[0]?.trim().toUpperCase() ?? ""
+  if (head === "TRAXPRO_COPY_TRADING_REQUIRED") {
+    return { type: "feature", feature: "copy_trading" }
+  }
   const limit = proLimitKindFromLegacyCode(code)
   if (limit) return { type: "limit", limit }
   return null

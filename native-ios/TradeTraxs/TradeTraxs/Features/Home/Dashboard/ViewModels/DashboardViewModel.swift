@@ -495,9 +495,13 @@ final class DashboardViewModel {
             if case .account(let id) = accountFilter { return id }
             return nil
         }()
-        return OwnerAccountDropdownSupport.menuAccounts(
+        let resolved = OwnerAccountDropdownSupport.menuAccounts(
             profileID: profileID,
             fallback: accounts,
+            preservingSelection: selectedID
+        )
+        return DashboardAccountScopePolicy.menuAccounts(
+            from: resolved,
             preservingSelection: selectedID
         )
     }
@@ -647,6 +651,9 @@ final class DashboardViewModel {
     func handleJournalMutation() {
         switch TradeJournalMutationStore.shared.latest {
         case .created(let trade), .updated(let trade):
+            if !includesTradeInDashboardScope(trade) {
+                return
+            }
             if usesDashboardAnalyticsV3 {
                 if AnalyticsReconciliationGate.isEnabled {
                     break
@@ -714,6 +721,10 @@ final class DashboardViewModel {
     }
 
     func setAccountFilter(_ filter: DashboardAccountFilter) {
+        let filter = DashboardAccountScopePolicy.sanitizedFilter(
+            filter,
+            accounts: ownerAccountSource()
+        )
         guard accountFilter != filter else { return }
         ExperienceHaptics.play(.selection)
         accountChartHydrateTask?.cancel()
@@ -736,7 +747,11 @@ final class DashboardViewModel {
            payoutCyclesByAccount[id] == nil,
            let profileID,
            let account = accounts.first(where: { $0.id == id }),
-           PropFirmPayoutPolicy.supportsRecordPayout(for: account)
+           PropFirmPayoutPolicy.supportsRecordPayout(for: account),
+           !ProMonetizationPolicy.shouldRestrictPropFirmMode(
+               demoModeActive: ExploreModeSupport.isActive,
+               profileID: profileID
+           )
         {
             Task {
                 await hydratePropFirmPayoutCycles(
@@ -1508,13 +1523,20 @@ final class DashboardViewModel {
                 $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
             }
             accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
+            reconcileDashboardAccountFilterIfNeeded()
             let accountTypes = Dictionary(
                 uniqueKeysWithValues: accounts.map {
                     ($0.id, ProfileStatisticsMetrics.accountTypeString(for: $0.mode))
                 }
             )
-            tradeInputs = list.map { trade in
-                DashboardChartMetrics.Input(
+            let accountModes = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
+            tradeInputs = list.compactMap { trade -> DashboardChartMetrics.Input? in
+                let accountMode = trade.accountID.flatMap { accountModes[$0] }
+                guard DashboardAccountScopePolicy.includesTradeInDashboardStatistics(
+                    trade: trade,
+                    accountMode: accountMode
+                ) else { return nil }
+                return DashboardChartMetrics.Input(
                     trade: trade,
                     accountType: trade.accountID.flatMap { accountTypes[$0] }
                 )
@@ -1524,6 +1546,7 @@ final class DashboardViewModel {
 
     private func upsertTrade(_ trade: Trade) {
         guard hasLoaded else { return }
+        guard includesTradeInDashboardScope(trade) else { return }
         SessionNetworkProbe.record(.localMutation, resource: "dashboard.trades", detail: trade.id.rawValue)
         let accountType = trade.accountID.flatMap { id in
             accounts.first(where: { $0.id == id }).map {
@@ -1557,7 +1580,39 @@ final class DashboardViewModel {
             $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
         accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
+        reconcileDashboardAccountFilterIfNeeded()
         recompute()
+    }
+
+    private func ownerAccountSource() -> [TradingAccount] {
+        OwnerAccountDropdownSupport.resolvedAccounts(
+            profileID: profileID,
+            fallback: accounts,
+            detailCache: detailCache
+        )
+    }
+
+    private func reconcileDashboardAccountFilterIfNeeded() {
+        let sanitized = DashboardAccountScopePolicy.sanitizedFilter(
+            accountFilter,
+            accounts: ownerAccountSource()
+        )
+        guard sanitized != accountFilter else { return }
+        accountFilter = sanitized
+        lastAccountScopedSummary = nil
+        lastAccountScopedFilter = nil
+        equityChartSummary = nil
+        equityChartAccountFilter = nil
+    }
+
+    private func includesTradeInDashboardScope(_ trade: Trade) -> Bool {
+        let accountMode = trade.accountID.flatMap { id in
+            accounts.first(where: { $0.id == id })?.mode
+        }
+        return DashboardAccountScopePolicy.includesTradeInDashboardStatistics(
+            trade: trade,
+            accountMode: accountMode
+        )
     }
 
     private func reloadAccountsOnly() async {
@@ -1608,13 +1663,15 @@ final class DashboardViewModel {
                 $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
             }
             accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
+            reconcileDashboardAccountFilterIfNeeded()
             let accountTypes = Dictionary(
                 uniqueKeysWithValues: accounts.map {
                     ($0.id, ProfileStatisticsMetrics.accountTypeString(for: $0.mode))
                 }
             )
-            tradeInputs = tradeInputs.map { input in
-                DashboardChartMetrics.Input(
+            tradeInputs = tradeInputs.compactMap { input in
+                guard includesTradeInDashboardScope(input.trade) else { return nil }
+                return DashboardChartMetrics.Input(
                     trade: input.trade,
                     accountType: input.trade.accountID.flatMap { accountTypes[$0] } ?? input.accountType
                 )
@@ -2611,6 +2668,10 @@ final class DashboardViewModel {
         forceNetwork: Bool
     ) async {
         guard !accountIDs.isEmpty else { return }
+        guard !ProMonetizationPolicy.shouldRestrictPropFirmMode(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        ) else { return }
 
         var pending: [TradingAccountID] = []
         for accountID in accountIDs {

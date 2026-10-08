@@ -15,7 +15,7 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         "\(publicProfileSelect),username_change_count"
 
     private static let onboardingFieldsSelect =
-        "id,username,name,onboarding_completed,trader_type,trading_style,started_trading,bio,avatar_url"
+        "id,username,name,onboarding_completed,trader_type,trading_style,primary_market,started_trading,bio,avatar_url"
 
     init(
         supabase: SupabaseInfrastructure,

@@ -15,10 +15,10 @@ describe("proGateReason", () => {
   })
 
   it("builds PRO_LIMIT_REACHED payloads", () => {
-    const payload = buildProLimitPayload("csv_import_cooldown")
+    const payload = buildProLimitPayload("daily_clips")
     assert.equal(payload.code, PRO_LIMIT_REACHED_CODE)
-    assert.equal(payload.limit, "csv_import_cooldown")
-    assert.match(payload.message, /3 days/)
+    assert.equal(payload.limit, "daily_clips")
+    assert.match(payload.message, /4 Clips/)
   })
 
   it("parses structured API errors", () => {
@@ -37,10 +37,10 @@ describe("proGateReason", () => {
     assert.equal(parsed?.limit, "daily_clips")
   })
 
-  it("uses TradeTraxs Pro in feature subtitles", () => {
+  it("uses TraxPro in feature subtitles", () => {
     assert.match(
       proGateSubtitle({ type: "feature", feature: "copy_trading" }),
-      /TradeTraxs Pro/
+      /TraxPro/
     )
   })
 })

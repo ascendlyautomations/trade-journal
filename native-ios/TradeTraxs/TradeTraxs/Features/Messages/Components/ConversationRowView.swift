@@ -16,6 +16,11 @@ struct ConversationRowView: View {
                     Text(item.displayName)
                         .experienceStyle(item.unreadCount > 0 ? .headline : .body, color: colors.primaryText)
                         .lineLimit(1)
+                    if let peer = item.peer {
+                        ProfileTradeTraxsIdentityBadge(profile: peer, size: .inline)
+                    } else if let peerID = item.peerProfileID {
+                        ProfileTradeTraxsIdentityBadge(profileID: peerID, size: .inline)
+                    }
                     if item.isMuted {
                         Image(systemName: "bell.slash.fill")
                             .font(.caption2)

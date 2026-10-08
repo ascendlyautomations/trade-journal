@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
-import { countTradeEntryEnabledAccounts } from "@/lib/freePlanAccountSlots"
+import { countTotalTradingAccounts } from "@/lib/freePlanAccountSlots"
 
 function isImportedType(t: string | null | undefined) {
   return String(t ?? "")
@@ -11,7 +11,7 @@ function isImportedType(t: string | null | undefined) {
 /**
  * Ensures this account_name is registered for the user before a non-imported trade is saved.
  * Free users may register a new name only when they have fewer than FREE_PLAN_ACCOUNT_LIMIT
- * entry-enabled accounts — unless that name already exists on public.accounts (not a new slot).
+ * total trading accounts — unless that name already exists on public.accounts (not a new slot).
  */
 export async function ensureManualUserAccountRegistered(
   supabase: SupabaseClient,
@@ -64,7 +64,7 @@ export async function ensureManualUserAccountRegistered(
     if (!existingTradingAccount) {
       const { data: tradingAccounts, error: countErr } = await supabase
         .from("accounts")
-        .select("id, can_add_trades")
+        .select("id")
         .eq("user_id", userId)
 
       if (countErr) {
@@ -73,7 +73,7 @@ export async function ensureManualUserAccountRegistered(
       }
 
       if (
-        countTradeEntryEnabledAccounts(tradingAccounts ?? []) >=
+        countTotalTradingAccounts(tradingAccounts ?? []) >=
         FREE_PLAN_ACCOUNT_LIMIT
       ) {
         return { ok: false, reason: "limit" }

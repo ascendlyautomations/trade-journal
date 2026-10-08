@@ -137,7 +137,7 @@ struct ClipDetailView: View {
                             displayName: viewModel.authorDisplayName,
                             username: viewModel.authorUsername,
                             dateText: TradeDisplay.dateText(reel.createdAt),
-                            showsVerifiedBadge: viewModel.author?.isCreator == true,
+                            showsVerifiedBadge: viewModel.author?.showsTradeTraxsIdentityBadge == true,
                             isOwner: viewModel.isOwner,
                             contentLink: .reel(reel.id),
                             ownerProfileID: reel.authorProfileID,

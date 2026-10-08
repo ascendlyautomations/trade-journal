@@ -5,10 +5,13 @@ import XCTest
 final class TradeEntryEntitlementGateTests: XCTestCase {
     override func tearDown() {
         SessionBootstrapStore.shared.clear()
+        IosSubscriptionReleaseConfiguration.resetTestOverrides()
+        MonetizationRuntimeConfiguration.shared.resetToFailClosed()
         super.tearDown()
     }
 
-    func testFreeViewerAllowsHistoricalCanAddTradesFalseInCopyGroup() {
+    func testFreeViewerBlocksReadOnlyAccountWhenEnforcementOn() {
+        IosSubscriptionReleaseConfiguration.setTestOverrides(paywall: nil, enforcement: true)
         let owner = ProfileID("user.copy.gate")
         let accounts = [
             makeAccount(id: "a1", owner: owner, canAdd: true),
@@ -18,9 +21,21 @@ final class TradeEntryEntitlementGateTests: XCTestCase {
         PersistedEntitlementSnapshotStore.clear(userID: owner.rawValue)
 
         XCTAssertNil(TradeEntryEntitlementGate.validateAccountsForNewTrades(accounts, profileID: owner))
-        XCTAssertTrue(
+        XCTAssertFalse(
             TradeEntryEntitlementGate.accountAllowsNewTrade(accounts[1], viewerTier: .free)
         )
+    }
+
+    func testEnforcementOffIgnoresCanAddTradesForFreeViewer() {
+        IosSubscriptionReleaseConfiguration.setTestOverrides(paywall: nil, enforcement: false)
+        let owner = ProfileID("user.copy.gate.off")
+        let accounts = [
+            makeAccount(id: "a1", owner: owner, canAdd: false),
+        ]
+        XCTAssertTrue(
+            TradeEntryEntitlementGate.accountAllowsNewTrade(accounts[0], viewerTier: .free)
+        )
+        XCTAssertNil(TradeEntryEntitlementGate.validateAccountsForNewTrades(accounts, profileID: owner))
     }
 
     func testProViewerAllowsReadOnlyFlagAccounts() {

@@ -43,9 +43,9 @@ final class SubscriptionComplianceTests: XCTestCase {
                 plan: .free,
                 lifecycle: .none,
                 isProEntitled: false,
-                dailyTradeLimit: FreeTierPolicy.dailyTradeLimit,
-                dailyPostLimit: FreeTierPolicy.dailyPostLimit,
-                dailyMessageLimit: FreeTierPolicy.dailyDirectMessageLimit,
+                dailyTradeLimit: nil,
+                dailyPostLimit: nil,
+                dailyMessageLimit: nil,
                 maxTradeEntryAccounts: FreeTierPolicy.maxTradeEntryAccounts
             )
         )

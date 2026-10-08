@@ -18,11 +18,7 @@ import {
   filterAccountsForDropdown,
   filterAccountsForTradeEntry,
 } from "@/lib/freePlanAccountSlots"
-import {
-  assertCsvImportAllowedForFreePlan,
-  FREE_PLAN_CSV_IMPORT_COOLDOWN_DAYS,
-  markProfileCsvImportUsed,
-} from "@/lib/csvImportGate"
+import { markProfileCsvImportUsed } from "@/lib/csvImportGate"
 import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount"
 import {
   ensureAccountsLoaded,
@@ -415,14 +411,8 @@ export default function InputTradeForm({
       )
     }
 
-    const csvGate = await assertCsvImportAllowedForFreePlan(supabase, uid)
-    if (!csvGate.ok) {
-      setCsvImportBlocked(true)
-      setCsvDaysUntilNextImport(csvGate.daysUntilNextImport)
-    } else {
-      setCsvImportBlocked(false)
-      setCsvDaysUntilNextImport(null)
-    }
+    setCsvImportBlocked(false)
+    setCsvDaysUntilNextImport(null)
   }, [contextProfile])
 
   const fetchAccountsForUser = useCallback(async (userId: string) => {
@@ -1738,21 +1728,6 @@ export default function InputTradeForm({
         return
       }
 
-      const csvGate = await assertCsvImportAllowedForFreePlan(supabase, userId)
-      if (!csvGate.ok) {
-        setCsvImportBlocked(true)
-        setCsvDaysUntilNextImport(csvGate.daysUntilNextImport)
-        if (
-          enforceFreeLimits &&
-          !presentLimit("csv_import_cooldown")
-        ) {
-          showPopup(
-            feedbackPresets.csvSubscriptionLimit(csvGate.daysUntilNextImport)
-          )
-        }
-        return
-      }
-
       if (csvTradesHaveFutureDate(parsedTrades)) {
         showPopup(feedbackPresets.csvImportFutureTradeDate())
         return
@@ -1777,14 +1752,9 @@ export default function InputTradeForm({
       showPopup(feedbackPresets.importSuccess(parsedTrades.length))
       notifyGettingStartedChecklistMaybeCompleted()
 
-      if (!isProActive(planProfile ?? contextProfile)) {
-        const { error: flagErr } = await markProfileCsvImportUsed(supabase, userId)
-        if (flagErr) {
-          console.error("markProfileCsvImportUsed:", flagErr)
-        } else {
-          setCsvImportBlocked(true)
-          setCsvDaysUntilNextImport(FREE_PLAN_CSV_IMPORT_COOLDOWN_DAYS)
-        }
+      const { error: flagErr } = await markProfileCsvImportUsed(supabase, userId)
+      if (flagErr) {
+        console.error("markProfileCsvImportUsed:", flagErr)
       }
 
       onParsedTradesClear?.()

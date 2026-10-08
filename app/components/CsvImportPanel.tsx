@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useRef, useState } from "react"
 import Papa from "papaparse"
 import { supabase } from "@/lib/supabaseClient"
 import {
@@ -45,15 +45,7 @@ import type { QuickTradeCsvFormPatch } from "@/lib/parseQuickCsvPaste"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
-import {
-  assertCsvImportAllowedForFreePlan,
-  csvImportLimitMessage,
-  FREE_PLAN_CSV_IMPORT_COOLDOWN_DAYS,
-  fetchCsvImportGateStatus,
-  markProfileCsvImportUsed,
-} from "@/lib/csvImportGate"
-import { isProActive } from "@/lib/subscription"
-import { useProGate } from "@/lib/useProGate"
+import { markProfileCsvImportUsed } from "@/lib/csvImportGate"
 
 export type CsvImportPanelProps = {
   /** Smaller preview + less chrome (e.g. onboarding modal) */
@@ -95,8 +87,7 @@ export default function CsvImportPanel({
   onSingleTradeDetected,
 }: CsvImportPanelProps) {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
-  const { user, profile } = useUserProfile()
-  const { presentLimit, fromError } = useProGate(profile)
+  const { user } = useUserProfile()
   const { runUpload } = useUploadProgress()
   const [parsed, setParsed] = useState<CsvRow[]>([])
   const [loading, setLoading] = useState(false)
@@ -107,10 +98,6 @@ export default function CsvImportPanel({
   const [failureModalOpen, setFailureModalOpen] = useState(false)
   const [failureReason, setFailureReason] = useState("")
   const [submittingSupport, setSubmittingSupport] = useState(false)
-  const [csvImportBlocked, setCsvImportBlocked] = useState(false)
-  const [csvDaysUntilNextImport, setCsvDaysUntilNextImport] = useState<
-    number | null
-  >(null)
   const importingRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const lastCsvFileRef = useRef<File | null>(null)
@@ -120,52 +107,11 @@ export default function CsvImportPanel({
     setLoading(false)
   }
 
-  useEffect(() => {
-    if (!user?.id) {
-      setCsvImportBlocked(false)
-      setCsvDaysUntilNextImport(null)
-      return
-    }
-
-    void fetchCsvImportGateStatus(supabase, user.id).then((status) => {
-      if (status.allowed) {
-        setCsvImportBlocked(false)
-        setCsvDaysUntilNextImport(null)
-        return
-      }
-      setCsvImportBlocked(true)
-      setCsvDaysUntilNextImport(status.daysUntilNextImport)
-    })
-  }, [user?.id])
-
-  function showCsvSubscriptionLimit(daysUntilNextImport?: number) {
-    if (
-      presentLimit("csv_import_cooldown") ||
-      fromError({ message: "FREE_PLAN_CSV_COOLDOWN" })
-    ) {
-      return
-    }
-    showPopup(
-      feedbackPresets.csvSubscriptionLimit(
-        daysUntilNextImport ?? csvDaysUntilNextImport ?? undefined
-      )
-    )
-  }
-
   async function ensureCsvImportAllowed(): Promise<boolean> {
     if (!user?.id) {
       showPopup(feedbackPresets.importFailed("Please log in first."))
       return false
     }
-
-    const gate = await assertCsvImportAllowedForFreePlan(supabase, user.id)
-    if (!gate.ok) {
-      setCsvImportBlocked(true)
-      setCsvDaysUntilNextImport(gate.daysUntilNextImport)
-      showCsvSubscriptionLimit(gate.daysUntilNextImport)
-      return false
-    }
-
     return true
   }
 
@@ -221,11 +167,6 @@ export default function CsvImportPanel({
   }
 
   async function handleFile(file: File) {
-    if (csvImportBlocked) {
-      showCsvSubscriptionLimit()
-      return
-    }
-
     if (!(await ensureCsvImportAllowed())) {
       return
     }
@@ -538,17 +479,12 @@ export default function CsvImportPanel({
             }
           }
 
-          if (!isProActive(profile)) {
-            const { error: csvFlagErr } = await markProfileCsvImportUsed(
-              supabase,
-              user.id
-            )
-            if (csvFlagErr) {
-              console.error("markProfileCsvImportUsed:", csvFlagErr)
-            } else {
-              setCsvImportBlocked(true)
-              setCsvDaysUntilNextImport(FREE_PLAN_CSV_IMPORT_COOLDOWN_DAYS)
-            }
+          const { error: csvFlagErr } = await markProfileCsvImportUsed(
+            supabase,
+            user.id
+          )
+          if (csvFlagErr) {
+            console.error("markProfileCsvImportUsed:", csvFlagErr)
           }
 
           const skipped = summary.failed
@@ -617,15 +553,8 @@ export default function CsvImportPanel({
           brokerName={brokerHint ?? diagnostics.formatLabel}
           importedRowCount={parsed.length}
           importableRowCount={parsed.length}
-          canImport={
-            !csvImportBlocked &&
-            (!requireSelectedAccount || Boolean(selectedAccount))
-          }
-          importDisabledHint={
-            csvImportBlocked
-              ? "Free plan CSV import limit reached."
-              : "Select an account before importing."
-          }
+          canImport={!requireSelectedAccount || Boolean(selectedAccount)}
+          importDisabledHint="Select an account before importing."
           importing={loading}
           onImportRows={() => void handleImport()}
         />
@@ -636,19 +565,13 @@ export default function CsvImportPanel({
         id={fileInputId}
         type="file"
         accept=".csv"
-        disabled={csvImportBlocked || loading}
+        disabled={loading}
         onChange={(e) => {
           const file = e.target.files?.[0]
           if (file) void handleFile(file)
         }}
         className="block w-full text-sm text-gray-300 file:mr-3 file:min-h-[44px] file:rounded-lg file:border-0 file:bg-emerald-500/20 file:px-3 file:py-2.5 file:text-sm file:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
       />
-
-      {csvImportBlocked ? (
-        <p className="whitespace-pre-line text-xs leading-relaxed text-amber-200/90">
-          {csvImportLimitMessage(csvDaysUntilNextImport ?? undefined)}
-        </p>
-      ) : null}
 
       {parsed.length > 0 ? (
         <p className="text-xs text-gray-400">
@@ -721,11 +644,7 @@ export default function CsvImportPanel({
         <button
           type="button"
           onClick={() => void handleImport()}
-          disabled={
-            loading ||
-            csvImportBlocked ||
-            (requireSelectedAccount && !selectedAccount)
-          }
+          disabled={loading || (requireSelectedAccount && !selectedAccount)}
           className="w-full rounded-xl bg-blue-500 px-4 py-2.5 font-semibold text-white transition hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
         >
           {loading ? "Importing trades…" : "Import trades"}

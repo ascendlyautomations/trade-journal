@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Compact account menu for Trade History.
+/// Compact account + filters row for Trade History.
 struct TradeHistoryFilterBar: View {
     @Bindable var viewModel: TradeHistoryViewModel
     @Environment(\.themeColors) private var colors
@@ -9,8 +9,37 @@ struct TradeHistoryFilterBar: View {
         HStack(spacing: ExperienceSpacing.sm) {
             accountMenu
             Spacer(minLength: 0)
+            filtersButton
         }
         .accessibilityIdentifier("trades.filterBar")
+    }
+
+    private var filtersButton: some View {
+        Button {
+            viewModel.openFilters()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.footnote.weight(.semibold))
+                Text("Filters")
+                    .experienceStyle(.footnote, color: colors.primaryText)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, ExperienceSpacing.sm)
+            .frame(minHeight: 32)
+            .background(colors.fillSecondary, in: Capsule())
+            .overlay(alignment: .topTrailing) {
+                if viewModel.showsFilterIndicator {
+                    Circle()
+                        .fill(colors.accent)
+                        .frame(width: 7, height: 7)
+                        .offset(x: 4, y: -4)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Filters")
+        .accessibilityIdentifier("trades.filters")
     }
 
     private var accountMenu: some View {

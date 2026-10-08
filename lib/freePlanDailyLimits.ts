@@ -1,66 +1,37 @@
-/** Free tier limits per UTC calendar day (Pro unlimited). */
+/** Free tier Clips cap per UTC calendar day (TraxPro unlimited). */
 
-export const FREE_PLAN_DAILY_TRADE_LIMIT = 3
+export const FREE_PLAN_DAILY_CLIP_LIMIT = 4
 
-export const FREE_PLAN_DAILY_POST_LIMIT = 3
+export type FreePlanDailyLimitKind = "clip"
 
-export const FREE_PLAN_DAILY_CLIP_LIMIT = 3
-
-export type FreePlanDailyLimitKind = "trade" | "post" | "clip"
-
-export function formatFreePlanDailyLimitMessage(
-  limit: number,
-  resource: "trade" | "post" | "clip"
-): string {
-  const label = limit === 1 ? resource : `${resource}s`
-  return `You've reached the Free plan limit of ${limit} ${label} every 24 hours.`
+export function formatFreePlanDailyClipLimitMessage(limit: number): string {
+  const label = limit === 1 ? "Clip" : "Clips"
+  return `You've reached the Free plan limit of ${limit} ${label} per UTC calendar day.`
 }
 
-export const FREE_PLAN_DAILY_TRADE_LIMIT_MESSAGE = formatFreePlanDailyLimitMessage(
-  FREE_PLAN_DAILY_TRADE_LIMIT,
-  "trade"
+export const FREE_PLAN_DAILY_CLIP_LIMIT_MESSAGE = formatFreePlanDailyClipLimitMessage(
+  FREE_PLAN_DAILY_CLIP_LIMIT
 )
 
-export const FREE_PLAN_DAILY_POST_LIMIT_MESSAGE = formatFreePlanDailyLimitMessage(
-  FREE_PLAN_DAILY_POST_LIMIT,
-  "post"
-)
+export const FREE_PLAN_DAILY_CLIP_LIMIT_UPGRADE_MESSAGE = `${FREE_PLAN_DAILY_CLIP_LIMIT_MESSAGE}\n\nUpgrade to TraxPro for unlimited Clips.`
 
-export const FREE_PLAN_DAILY_CLIP_LIMIT_MESSAGE = formatFreePlanDailyLimitMessage(
-  FREE_PLAN_DAILY_CLIP_LIMIT,
-  "clip"
-)
-
-/** Modal / upgrade prompt copy with Pro upsell. */
-export const FREE_PLAN_DAILY_TRADE_LIMIT_UPGRADE_MESSAGE = `${FREE_PLAN_DAILY_TRADE_LIMIT_MESSAGE}\n\nUpgrade to TradeTraxs Pro for unlimited trade journaling.`
-
-export const FREE_PLAN_DAILY_POST_LIMIT_UPGRADE_MESSAGE = `${FREE_PLAN_DAILY_POST_LIMIT_MESSAGE}\n\nUpgrade to TradeTraxs Pro for unlimited posting.`
-
-export const FREE_PLAN_DAILY_CLIP_LIMIT_UPGRADE_MESSAGE = `${FREE_PLAN_DAILY_CLIP_LIMIT_MESSAGE}\n\nUpgrade to TradeTraxs Pro for unlimited clips.`
-
-/** Pricing surfaces — e.g. "3 Trades / day". */
-export function formatFreePlanDailyLimitPricingLabel(
-  limit: number,
-  resource: "Trade" | "Post" | "Clip"
+export function formatFreePlanDailyClipPricingLabel(
+  limit = FREE_PLAN_DAILY_CLIP_LIMIT
 ): string {
-  const plural = limit === 1 ? resource : `${resource}s`
-  return `${limit} ${plural} / day`
+  const label = limit === 1 ? "Clip" : "Clips"
+  return `${limit} ${label} / day`
 }
 
-export const FREE_PLAN_DAILY_TRADE_PRICING_LABEL = formatFreePlanDailyLimitPricingLabel(
-  FREE_PLAN_DAILY_TRADE_LIMIT,
-  "Trade"
-)
+export const FREE_PLAN_DAILY_CLIP_PRICING_LABEL =
+  formatFreePlanDailyClipPricingLabel()
 
-export const FREE_PLAN_DAILY_POST_PRICING_LABEL = formatFreePlanDailyLimitPricingLabel(
-  FREE_PLAN_DAILY_POST_LIMIT,
-  "Post"
-)
-
-export const FREE_PLAN_DAILY_CLIP_PRICING_LABEL = formatFreePlanDailyLimitPricingLabel(
-  FREE_PLAN_DAILY_CLIP_LIMIT,
-  "Clip"
-)
+export const FREE_PLAN_UNLIMITED_MANUAL_TRADES_LABEL = "Unlimited manual trade entries"
+export const FREE_PLAN_UNLIMITED_POSTS_LABEL = "Unlimited posts"
+export const FREE_PLAN_ACTIVE_TRADING_ACCOUNTS_LABEL =
+  "Up to 3 trading accounts (choose which receive new trades after TraxPro)"
+export const FREE_PLAN_UNLIMITED_CSV_IMPORTS_LABEL = "Unlimited CSV imports"
+export const FREE_PLAN_BROKER_INTEGRATIONS_LABEL =
+  "Broker integrations (Tradovate, Rithmic, and supported connections)"
 
 type SupabaseErrorShape = {
   message?: string
@@ -75,7 +46,7 @@ function errorBlob(error: unknown): string {
   return [e.message, e.hint, e.details, e.code].filter(Boolean).join(" ").toLowerCase()
 }
 
-/** Detect known free-plan daily limit violations from Supabase/Postgres errors. */
+/** Detect Free-plan daily Clip limit violations from Supabase/Postgres errors. */
 export function parseFreePlanDailyLimitError(
   error: unknown
 ): FreePlanDailyLimitKind | null {
@@ -83,34 +54,12 @@ export function parseFreePlanDailyLimitError(
   if (!blob) return null
 
   if (
-    blob.includes("free_plan_daily_trade_limit") ||
-    (blob.includes("trade") &&
-      (blob.includes("per day") ||
-        blob.includes("per 24 hours") ||
-        blob.includes("every 24 hours")) &&
-      (blob.includes("limit") || blob.includes("allows only")))
-  ) {
-    return "trade"
-  }
-
-  if (
-    blob.includes("free_plan_daily_post_limit") ||
-    (blob.includes("post") &&
-      (blob.includes("per day") ||
-        blob.includes("per 24 hours") ||
-        blob.includes("every 24 hours")) &&
-      (blob.includes("limit") || blob.includes("allows only")))
-  ) {
-    return "post"
-  }
-
-  if (
     blob.includes("free_plan_daily_clip_limit") ||
     blob.includes("free_plan_reels_limit") ||
     ((blob.includes("clip") || blob.includes("reel")) &&
-      (blob.includes("per day") ||
-        blob.includes("per 24 hours") ||
-        blob.includes("every 24 hours")) &&
+      (blob.includes("per utc") ||
+        blob.includes("per day") ||
+        blob.includes("calendar day")) &&
       (blob.includes("limit") || blob.includes("allows only")))
   ) {
     return "clip"

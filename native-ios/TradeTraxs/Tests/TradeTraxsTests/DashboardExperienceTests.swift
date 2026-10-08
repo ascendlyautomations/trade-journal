@@ -510,6 +510,109 @@ final class DashboardExperienceTests: XCTestCase {
         XCTAssertEqual(summary.winLoss.map(\.count).reduce(0, +), 1)
     }
 
+    func testDashboardAccountScopePolicyExcludesBacktestFromMenu() {
+        let owner = ProfileID("user.dashboard.scope")
+        let live = TradingAccount(
+            id: TradingAccountID("acct.live"),
+            ownerProfileID: owner,
+            name: "Live",
+            category: .personal,
+            mode: .live,
+            size: nil,
+            isActive: true,
+            canAddTrades: true,
+            accountNumber: nil
+        )
+        let backtest = TradingAccount(
+            id: TradingAccountID("acct.backtest"),
+            ownerProfileID: owner,
+            name: "Backtest Lab",
+            category: .backtest,
+            mode: .backtest,
+            size: nil,
+            isActive: true,
+            canAddTrades: true,
+            accountNumber: nil
+        )
+        let menu = DashboardAccountScopePolicy.menuAccounts(
+            from: [backtest, live],
+            preservingSelection: backtest.id
+        )
+        XCTAssertEqual(menu.map(\.id), [live.id])
+    }
+
+    func testDashboardAccountScopePolicyFallsBackToAllAccountsForBacktestSelection() {
+        let owner = ProfileID("user.dashboard.scope")
+        let backtest = TradingAccount(
+            id: TradingAccountID("acct.backtest"),
+            ownerProfileID: owner,
+            name: "Backtest Lab",
+            category: .backtest,
+            mode: .backtest,
+            size: nil,
+            isActive: true,
+            canAddTrades: true,
+            accountNumber: nil
+        )
+        let sanitized = DashboardAccountScopePolicy.sanitizedFilter(
+            .account(backtest.id),
+            accounts: [backtest]
+        )
+        XCTAssertEqual(sanitized, .all)
+    }
+
+    func testDashboardAccountScopePolicyRejectsBacktestTradeRows() {
+        let owner = ProfileID("user.dashboard.scope")
+        let liveAccountID = TradingAccountID("acct.live")
+        let now = Date()
+        let liveTrade = Trade(
+            id: TradeID("live-trade"),
+            ownerProfileID: owner,
+            accountID: liveAccountID,
+            symbol: Symbol(ticker: "ES"),
+            side: .long,
+            mode: .live,
+            quantity: 1,
+            entryPrice: 1,
+            exitPrice: 2,
+            entryAt: now,
+            exitAt: now,
+            realizedPnL: Money(amount: 50),
+            riskReward: 1,
+            points: nil,
+            sessionLabel: nil,
+            visibility: .private,
+            publicCaption: nil,
+            thumbnail: nil,
+            notePreview: nil,
+            createdAt: now,
+            updatedAt: now
+        )
+        var backtestTrade = liveTrade
+        backtestTrade.id = TradeID("bt-trade")
+        backtestTrade.mode = .backtest
+        backtestTrade.realizedPnL = Money(amount: 9_999)
+
+        XCTAssertTrue(
+            DashboardAccountScopePolicy.includesTradeInDashboardStatistics(
+                trade: liveTrade,
+                accountMode: .live
+            )
+        )
+        XCTAssertFalse(
+            DashboardAccountScopePolicy.includesTradeInDashboardStatistics(
+                trade: backtestTrade,
+                accountMode: .backtest
+            )
+        )
+        XCTAssertFalse(
+            DashboardAccountScopePolicy.includesTradeInDashboardStatistics(
+                trade: liveTrade,
+                accountMode: .backtest
+            )
+        )
+    }
+
     func testMaxDrawdownMatchesPeakToTrough() {
         let profileID = ProfileID("dev.dashboard")
         let now = Date()

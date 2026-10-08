@@ -546,7 +546,7 @@ export default function Navbar() {
     beta?: boolean
   }[] = [
     { label: "Calendar", href: "/calendar" },
-    { label: "Prop Firm Mode", href: "/analytics/propfirm", proOnly: true },
+    { label: "Advanced Prop Firm Analytics", href: "/analytics/propfirm", proOnly: true },
     { label: "AI Analyst", href: "/analyst", proOnly: true },
     { label: "Achievements", href: "/achievements" },
     { label: "Backtest Lab", href: "/backtest", proOnly: true },

@@ -109,7 +109,7 @@ struct AchievementDetailView: View {
                             displayName: viewModel.authorDisplayName,
                             username: viewModel.authorUsername,
                             dateText: TradeDisplay.dateText(achievement.achievedAt),
-                            showsVerifiedBadge: viewModel.author?.isCreator == true,
+                            showsVerifiedBadge: viewModel.author?.showsTradeTraxsIdentityBadge == true,
                             isOwner: viewModel.isOwner,
                             contentLink: .achievement(achievement.id),
                             ownerProfileID: achievement.ownerProfileID,
@@ -121,6 +121,7 @@ struct AchievementDetailView: View {
                                     showsDeleteConfirm = true
                                 }
                                 : nil,
+                            onOpenAuthor: { viewModel.openAuthor() },
                             vaultRef: VaultContentRef(
                                 contentType: .achievement,
                                 contentID: achievement.id.rawValue
@@ -131,29 +132,36 @@ struct AchievementDetailView: View {
                         .padding(.top, ExperienceSpacing.sm)
                         .padding(.bottom, ExperienceSpacing.md)
 
-                        InteractiveImageView(
-                            mediaID: achievement.id.rawValue,
-                            reference: achievement.image,
-                            purpose: .postImage,
-                            imagePipeline: imagePipeline,
-                            emptyIcon: .leaderboard,
-                            accessibilityIdentifier: "detail.achievement.media",
-                            deliveryQuality: .fullResolution,
-                            auditSurface: "detail",
-                            onDoubleTapLike: {
-                                Task {
-                                    if let achievement = viewModel.achievement {
-                                        await data.engagementStore.ensureLiked(
-                                            on: engagementTarget(for: achievement)
-                                        )
+                        if achievementHasAttachedImage(achievement) {
+                            InteractiveImageView(
+                                mediaID: achievement.id.rawValue,
+                                reference: achievement.image,
+                                purpose: .postImage,
+                                imagePipeline: imagePipeline,
+                                emptyIcon: .leaderboard,
+                                accessibilityIdentifier: "detail.achievement.media",
+                                deliveryQuality: .fullResolution,
+                                auditSurface: "detail",
+                                onDoubleTapLike: {
+                                    Task {
+                                        if let achievement = viewModel.achievement {
+                                            await data.engagementStore.ensureLiked(
+                                                on: engagementTarget(for: achievement)
+                                            )
+                                        }
                                     }
                                 }
-                            }
-                        )
+                            )
+                        }
 
                         achievementBody(achievement, scrollProxy: proxy)
                             .padding(.horizontal, ExperienceSpacing.lg)
-                            .padding(.top, ExperienceSpacing.md)
+                            .padding(
+                                .top,
+                                achievementHasAttachedImage(achievement)
+                                    ? ExperienceSpacing.md
+                                    : ExperienceSpacing.sm
+                            )
                             .padding(.bottom, ExperienceSpacing.xl)
                     }
                 }
@@ -167,6 +175,10 @@ struct AchievementDetailView: View {
         scrollProxy: ScrollViewProxy
     ) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+            if !achievementHasAttachedImage(achievement) {
+                achievementTextContent(achievement)
+            }
+
             EngagementBar(
                 target: engagementTarget(for: achievement),
                 store: data.engagementStore,
@@ -184,21 +196,8 @@ struct AchievementDetailView: View {
                 )
             )
 
-            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                achievementTitleRow(achievement)
-
-                achievementMetadataTags(achievement)
-
-                if let description = achievement.description?
-                    .trimmingCharacters(in: .whitespacesAndNewlines),
-                   !description.isEmpty
-                {
-                    Text(description)
-                        .experienceStyle(.body, color: colors.primaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .accessibilityIdentifier("detail.achievement.description")
-                }
+            if achievementHasAttachedImage(achievement) {
+                achievementTextContent(achievement)
             }
 
             CommentsSectionView(
@@ -211,6 +210,31 @@ struct AchievementDetailView: View {
     }
 
     private static let commentsAnchorID = "detail.achievement.comments"
+
+    private func achievementHasAttachedImage(_ achievement: Achievement) -> Bool {
+        guard let image = achievement.image else { return false }
+        return !image.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    @ViewBuilder
+    private func achievementTextContent(_ achievement: Achievement) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            achievementTitleRow(achievement)
+
+            achievementMetadataTags(achievement)
+
+            if let description = achievement.description?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !description.isEmpty
+            {
+                Text(description)
+                    .experienceStyle(.body, color: colors.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("detail.achievement.description")
+            }
+        }
+    }
 
     private func engagementTarget(forRouteID achievementID: AchievementID) -> InteractionTarget {
         data.detailCache.feedEngagementTarget(forAchievement: achievementID)

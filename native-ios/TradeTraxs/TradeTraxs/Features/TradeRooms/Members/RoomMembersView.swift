@@ -53,19 +53,21 @@ struct RoomMembersView: View {
             case .loaded:
                 List {
                     ForEach(viewModel.filteredMembers) { item in
-                        RoomMemberRowView(item: item, imagePipeline: imagePipeline) {
-                            if viewModel.canManageRoom, viewModel.canManageMember(item) {
-                                selectedMember = item
-                            } else {
-                                viewModel.openProfile(item.id)
-                            }
-                        }
+                        RoomMemberRowView(
+                            item: item,
+                            imagePipeline: imagePipeline,
+                            showsManageButton: viewModel.canShowManageMember(item),
+                            onManage: { selectedMember = item },
+                            onOpen: { viewModel.openProfile(item.id) }
+                        )
                         .experienceDashboardListRow()
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            if viewModel.canManageMember(item) {
-                                Button("Ban", role: .destructive) {
+                            if viewModel.canBanMember(item) {
+                                Button("Ban Member", role: .destructive) {
                                     viewModel.requestMemberAction(.ban(item.id))
                                 }
+                            }
+                            if viewModel.canRemoveMember(item) {
                                 Button("Remove", role: .destructive) {
                                     viewModel.requestMemberAction(.remove(item.id))
                                 }
@@ -95,22 +97,17 @@ struct RoomMembersView: View {
             }
         }
         .sheet(item: $selectedMember) { member in
-            memberActionsSheet(member)
+            memberManagementSheet(member)
         }
-        .confirmationDialog(
-            memberActionDialogTitle,
-            isPresented: $viewModel.showsMemberActionConfirmation,
-            titleVisibility: .visible
-        ) {
-            if let action = viewModel.pendingMemberAction {
-                Button(viewModel.memberActionButtonTitle(for: action), role: .destructive) {
-                    Task { await viewModel.confirmMemberAction() }
-                }
-                Button("Cancel", role: .cancel) {
-                    viewModel.pendingMemberAction = nil
-                }
-            }
-        }
+        .roomMemberModerationConfirmations(
+            showsRemoveConfirmation: $viewModel.showsMemberActionConfirmation,
+            showsBanConfirmation: $viewModel.showsBanMemberConfirmation,
+            removeDialogTitle: memberActionDialogTitle,
+            onConfirmRemove: { Task { await viewModel.confirmMemberAction() } },
+            onConfirmBan: { Task { await viewModel.confirmMemberAction() } },
+            onCancelRemove: { viewModel.pendingMemberAction = nil },
+            onCancelBan: { viewModel.cancelBanMember() }
+        )
         .searchable(
             text: $viewModel.searchText,
             placement: .navigationBarDrawer(displayMode: .always),
@@ -123,36 +120,26 @@ struct RoomMembersView: View {
     }
 
     @ViewBuilder
-    private func memberActionsSheet(_ member: RoomMemberItem) -> some View {
-        NavigationStack {
-            List {
-                Section {
-                    RoomMemberRowView(item: member, imagePipeline: imagePipeline) {}
-                        .disabled(true)
-                }
-                Section {
-                    Button("View Profile") {
-                        selectedMember = nil
-                        viewModel.openProfile(member.id)
-                    }
-                    Button("Remove from Room", role: .destructive) {
-                        selectedMember = nil
-                        viewModel.requestMemberAction(.remove(member.id))
-                    }
-                    Button("Ban from Room", role: .destructive) {
-                        selectedMember = nil
-                        viewModel.requestMemberAction(.ban(member.id))
-                    }
-                }
-            }
-            .experienceNavigationTitle("Member")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { selectedMember = nil }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
+    private func memberManagementSheet(_ member: RoomMemberItem) -> some View {
+        RoomMemberManagementSheet(
+            member: member,
+            imagePipeline: imagePipeline,
+            canRemove: viewModel.canRemoveMember(member),
+            canBan: viewModel.canBanMember(member),
+            onViewProfile: {
+                selectedMember = nil
+                viewModel.openProfile(member.id)
+            },
+            onRemove: {
+                selectedMember = nil
+                viewModel.requestMemberAction(.remove(member.id))
+            },
+            onBan: {
+                selectedMember = nil
+                viewModel.requestMemberAction(.ban(member.id))
+            },
+            onDismiss: { selectedMember = nil }
+        )
     }
 
     private var memberActionDialogTitle: String {

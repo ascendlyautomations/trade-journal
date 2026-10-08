@@ -299,7 +299,8 @@ nonisolated enum TradeMapper: DTOMapper {
             date: now,
             is_initial_import: nil,
             import_source: draft.importSource?.rawValue,
-            import_fingerprint: draft.importFingerprint
+            import_fingerprint: draft.importFingerprint,
+            trade_mode: draft.mode == .copyTraded ? "copy_traded" : draft.mode.rawValue
         )
     }
 
@@ -400,12 +401,18 @@ nonisolated enum TradeMapper: DTOMapper {
             return mapMode(raw)
         }
         if let raw = normalizedWireValue(mode) {
+            if raw.lowercased() == "backtest" {
+                return .backtest
+            }
             if mapDenormalizedAccountMode(accountType: nil, mode: raw) != nil {
                 return .live
             }
             return mapMode(raw)
         }
         if let raw = normalizedWireValue(accountType) {
+            if raw.lowercased() == "backtest" {
+                return .backtest
+            }
             if mapDenormalizedAccountMode(accountType: raw, mode: nil) != nil {
                 return .live
             }

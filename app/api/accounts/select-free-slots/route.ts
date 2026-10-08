@@ -1,14 +1,16 @@
+import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
-import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
+import type { Database } from "@/lib/database.types"
+import { getRouteUser } from "@/app/api/_lib/getRouteUser"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 import { proLimitResponseFromError } from "@/lib/server/proLimitFromError"
+import { FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
 
 export const runtime = "nodejs"
 
 /**
- * Compatibility endpoint. Previously marked unselected accounts read-only.
- * It now confirms ownership of any ids in the body and enables trade entry
- * on every account the caller owns. Creating accounts is still capped separately.
+ * Applies Free-plan trade-entry slot selection via `select_free_plan_trade_accounts`.
+ * Pro callers re-enable all accounts server-side.
  */
 export async function POST(req: Request) {
   try {
@@ -36,39 +38,46 @@ export async function POST(req: Request) {
       )
     }
 
-    if (accountIds.length > 0) {
-      const { data: owned, error: ownedErr } = await supabaseServiceRole
-        .from("accounts")
-        .select("id")
-        .eq("user_id", user.id)
-        .in("id", accountIds)
-
-      if (ownedErr) {
-        console.error("[select-free-slots] ownership lookup", ownedErr)
-        return NextResponse.json(
-          { error: "Could not verify accounts." },
-          { status: 500 }
-        )
-      }
-
-      if ((owned ?? []).length !== accountIds.length) {
-        return NextResponse.json(
-          { error: "All selected accounts must belong to you." },
-          { status: 400 }
-        )
-      }
+    if (accountIds.length > FREE_PLAN_ACCOUNT_LIMIT) {
+      return NextResponse.json(
+        {
+          error: `Choose at most ${FREE_PLAN_ACCOUNT_LIMIT} accounts for new trades.`,
+        },
+        { status: 400 }
+      )
     }
 
-    const { error: enableErr } = await supabaseServiceRole
-      .from("accounts")
-      .update({ can_add_trades: true })
-      .eq("user_id", user.id)
+    const authHeader = req.headers.get("authorization") || ""
+    const bearer = authHeader.startsWith("Bearer ")
+      ? authHeader.slice("Bearer ".length).trim()
+      : ""
 
-    if (enableErr) {
-      console.error("[select-free-slots] enable", enableErr)
-      const proLimit = proLimitResponseFromError(enableErr, 403)
+    const supabase = createClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: { persistSession: false, autoRefreshToken: false },
+        global: bearer ? { headers: { Authorization: `Bearer ${bearer}` } } : {},
+      }
+    )
+
+    const { error: rpcErr } = await supabase.rpc("select_free_plan_trade_accounts", {
+      p_account_ids: accountIds,
+    })
+
+    if (rpcErr) {
+      console.error("[select-free-slots] rpc", rpcErr)
+      const proLimit = proLimitResponseFromError(rpcErr, 403)
       if (proLimit) return proLimit
-      return NextResponse.json({ error: "Could not update accounts." }, { status: 500 })
+      return NextResponse.json(
+        {
+          error: toUserFacingErrorMessage(
+            rpcErr,
+            "Could not save account selection."
+          ),
+        },
+        { status: 400 }
+      )
     }
 
     return NextResponse.json({ ok: true })

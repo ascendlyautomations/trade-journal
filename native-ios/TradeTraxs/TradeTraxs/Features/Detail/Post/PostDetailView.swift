@@ -103,7 +103,7 @@ struct PostDetailView: View {
                             displayName: viewModel.authorDisplayName,
                             username: viewModel.authorUsername,
                             dateText: TradeDisplay.dateText(post.createdAt),
-                            showsVerifiedBadge: viewModel.author?.isCreator == true,
+                            showsVerifiedBadge: viewModel.author?.showsTradeTraxsIdentityBadge == true,
                             isOwner: viewModel.isOwner,
                             contentLink: .post(post.id),
                             ownerProfileID: post.authorProfileID,
@@ -117,6 +117,7 @@ struct PostDetailView: View {
                                 ExperienceHaptics.play(.warning)
                                 showsDeleteConfirm = true
                             } : nil,
+                            onOpenAuthor: { viewModel.openAuthor() },
                             vaultRef: VaultContentRef(
                                 contentType: .profilePost,
                                 contentID: post.id.rawValue
@@ -127,11 +128,13 @@ struct PostDetailView: View {
                         .padding(.top, ExperienceSpacing.sm)
                         .padding(.bottom, ExperienceSpacing.md)
 
-                        mediaCarousel(post)
+                        if !post.media.isEmpty {
+                            mediaCarousel(post)
+                        }
 
                         postBody(post, scrollProxy: proxy)
                             .padding(.horizontal, ExperienceSpacing.lg)
-                            .padding(.top, ExperienceSpacing.md)
+                            .padding(.top, post.media.isEmpty ? ExperienceSpacing.sm : ExperienceSpacing.md)
                             .padding(.bottom, ExperienceSpacing.xl)
                     }
                 }
@@ -151,6 +154,10 @@ struct PostDetailView: View {
 
     private func postBody(_ post: Post, scrollProxy: ScrollViewProxy) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+            if post.media.isEmpty {
+                caption(post)
+            }
+
             EngagementBar(
                 target: .profilePost(post.id),
                 store: data.engagementStore,
@@ -165,7 +172,9 @@ struct PostDetailView: View {
                 vaultRef: VaultContentRef(contentType: .profilePost, contentID: post.id.rawValue)
             )
 
-            caption(post)
+            if !post.media.isEmpty {
+                caption(post)
+            }
 
             CommentsSectionView(
                 target: .profilePost(post.id),
@@ -178,14 +187,7 @@ struct PostDetailView: View {
 
     @ViewBuilder
     private func mediaCarousel(_ post: Post) -> some View {
-        if post.media.isEmpty {
-            ZStack {
-                colors.fillPrimary
-                ExperienceIcon(icon: .photo, size: .xl, color: colors.tertiaryText)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 200)
-        } else if post.media.count == 1 {
+        if post.media.count == 1 {
             InteractiveImageView(
                 mediaID: post.id.rawValue,
                 reference: post.media[0],

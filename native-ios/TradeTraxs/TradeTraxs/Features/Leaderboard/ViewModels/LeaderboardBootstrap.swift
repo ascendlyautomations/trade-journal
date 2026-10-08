@@ -59,7 +59,7 @@ enum LeaderboardBootstrap: ScreenBootstrap {
                 trades: trades,
                 entries: resolved.entries,
                 profiles: profiles,
-                verified: Set(profiles.values.filter(\.isCreator).map(\.id)),
+                verified: Set(profiles.values.filter(\.showsTradeTraxsIdentityBadge).map(\.id)),
                 followers: LeaderboardFixtures.followerCounts(from: resolved.entries),
                 following: Set(resolved.entries.dropFirst(min(3, resolved.entries.count)).prefix(2).map(\.profileID)),
                 friends: Set(resolved.entries.dropFirst(min(1, resolved.entries.count)).prefix(2).map(\.profileID)),

@@ -10,6 +10,7 @@ struct TradeDetailView: View {
     @State private var showsShareSheet = false
     @State private var showsVaultSheet = false
     @State private var contentRevealed = false
+    @State private var entitlementGateRevision = 0
     private let imagePipeline: any ImagePipeline
     private let data: DataEnvironment
     private let experience: TradeDetailExperience
@@ -91,7 +92,9 @@ struct TradeDetailView: View {
             ])
             if let tradeAI {
                 tradeAI.updateContext(trade: viewModel.trade, notes: viewModel.notes)
-                await tradeAI.loadHistoryIfNeeded()
+                if !restrictsPremiumTradeAI {
+                    await tradeAI.loadHistoryIfNeeded()
+                }
             }
         }
         .onChange(of: viewModel.trade?.id) { _, _ in
@@ -155,6 +158,12 @@ struct TradeDetailView: View {
                 contentRevealed = true
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { _ in
+            entitlementGateRevision += 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .monetizationConfigurationDidChange)) { _ in
+            entitlementGateRevision += 1
+        }
     }
 
     @ViewBuilder
@@ -209,7 +218,7 @@ struct TradeDetailView: View {
             username: viewModel.authorUsername,
             subtitle: viewModel.accountIdentityLine,
             dateText: TradeDisplay.dateText(trade.entryAt),
-            showsVerifiedBadge: viewModel.author?.isCreator == true,
+            showsVerifiedBadge: viewModel.author?.showsTradeTraxsIdentityBadge == true,
             isOwner: viewModel.isOwner,
             contentLink: .trade(trade.id),
             ownerProfileID: trade.ownerProfileID,
@@ -221,6 +230,7 @@ struct TradeDetailView: View {
                 ExperienceHaptics.play(.warning)
                 showsDeleteConfirm = true
             } : nil,
+            onOpenAuthor: { viewModel.openAuthor() },
             vaultRef: VaultContentRef(contentType: .trade, contentID: trade.id.rawValue),
             accessibilityIdentifier: "detail.trade.identity"
         )
@@ -306,6 +316,16 @@ struct TradeDetailView: View {
         if let tradeAI {
             TradeAISectionView(viewModel: tradeAI)
         }
+    }
+
+    private var restrictsPremiumTradeAI: Bool {
+        _ = entitlementGateRevision
+        guard experience == .journal else { return false }
+        let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+        return ProMonetizationPolicy.shouldRestrictPremiumPsychologyAndAI(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        )
     }
 
     // MARK: - Social (public)

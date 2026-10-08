@@ -1,34 +1,45 @@
 import SwiftUI
+import UIKit
 
 struct SettingsPrivacyAccountRow: View {
     let profile: Profile
+    let imagePipeline: any ImagePipeline
     let actionTitle: String
     var isActionDisabled: Bool = false
     let onAction: () -> Void
     let onOpenProfile: () -> Void
 
     @Environment(\.themeColors) private var colors
+    @State private var avatarImage: Image?
 
     var body: some View {
         HStack(spacing: ExperienceSpacing.sm) {
             Button(action: onOpenProfile) {
                 HStack(spacing: ExperienceSpacing.sm) {
                     ExperienceAvatar(
-                        initials: String(profile.displayName.prefix(1)),
-                        image: nil,
+                        initials: ProfileDisplay.initials(
+                            displayName: profile.displayName,
+                            username: profile.username
+                        ),
+                        image: avatarImage,
                         size: 44
                     )
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(profile.displayName)
+                        Text(profile.settingsPrivacyUsernameLine)
                             .experienceStyle(.body, color: colors.primaryText)
                             .lineLimit(1)
-                        Text("@\(profile.username)")
-                            .experienceStyle(.footnote, color: colors.secondaryText)
-                            .lineLimit(1)
+                        if let displayName = profile.settingsPrivacyDisplayNameLine {
+                            Text(displayName)
+                                .experienceStyle(.footnote, color: colors.secondaryText)
+                                .lineLimit(1)
+                        }
                     }
                 }
             }
             .buttonStyle(.plain)
+            .task(id: profile.avatar?.id) {
+                await loadAvatar()
+            }
 
             Spacer(minLength: ExperienceSpacing.xs)
 
@@ -40,6 +51,27 @@ struct SettingsPrivacyAccountRow: View {
         .padding(.vertical, ExperienceSpacing.xxs)
         .accessibilityElement(children: .contain)
     }
+
+    private func loadAvatar() async {
+        guard let reference = profile.avatar else {
+            avatarImage = nil
+            return
+        }
+        do {
+            let data = try await imagePipeline.data(
+                for: ImageRequest(
+                    reference: reference,
+                    purpose: .profileAvatar,
+                    maxPixelSize: 128
+                )
+            )
+            if let ui = UIImage(data: data) {
+                avatarImage = Image(uiImage: ui)
+            }
+        } catch {
+            avatarImage = nil
+        }
+    }
 }
 
 struct SettingsBlockedAccountsView: View {
@@ -47,10 +79,19 @@ struct SettingsBlockedAccountsView: View {
 
     @Environment(\.themeColors) private var colors
 
-    init(messages: any MessageRepository, navigationCoordinator: NavigationCoordinator) {
+    private let imagePipeline: any ImagePipeline
+
+    init(
+        messages: any MessageRepository,
+        detailCache: DetailPresentationCache,
+        imagePipeline: any ImagePipeline,
+        navigationCoordinator: NavigationCoordinator
+    ) {
+        self.imagePipeline = imagePipeline
         _viewModel = State(
             initialValue: SettingsBlockedAccountsViewModel(
                 messages: messages,
+                detailCache: detailCache,
                 navigationCoordinator: navigationCoordinator
             )
         )
@@ -76,6 +117,7 @@ struct SettingsBlockedAccountsView: View {
                     ForEach(viewModel.items) { account in
                         SettingsPrivacyAccountRow(
                             profile: account.profile,
+                            imagePipeline: imagePipeline,
                             actionTitle: "Unblock",
                             isActionDisabled: viewModel.actionInFlight == account.id,
                             onAction: { viewModel.unblock(account) },
@@ -108,7 +150,14 @@ struct SettingsMutedAccountsView: View {
 
     @Environment(\.themeColors) private var colors
 
-    init(messages: any MessageRepository, navigationCoordinator: NavigationCoordinator) {
+    private let imagePipeline: any ImagePipeline
+
+    init(
+        messages: any MessageRepository,
+        imagePipeline: any ImagePipeline,
+        navigationCoordinator: NavigationCoordinator
+    ) {
+        self.imagePipeline = imagePipeline
         _viewModel = State(
             initialValue: SettingsMutedAccountsViewModel(
                 messages: messages,
@@ -139,6 +188,7 @@ struct SettingsMutedAccountsView: View {
                     ForEach(viewModel.items) { peer in
                         SettingsPrivacyAccountRow(
                             profile: peer.profile,
+                            imagePipeline: imagePipeline,
                             actionTitle: "Unmute",
                             isActionDisabled: viewModel.actionInFlight == peer.id,
                             onAction: { viewModel.unmute(peer) },

@@ -8,6 +8,7 @@ nonisolated struct ProfileOnboardingSnapshot: Sendable, Equatable {
     var onboardingCompleted: Bool
     var traderType: String?
     var tradingStyle: String?
+    var primaryMarket: String?
     var startedTrading: String?
     var bio: String?
     var avatarURL: String?
@@ -19,6 +20,7 @@ nonisolated struct ProfileOnboardingSnapshot: Sendable, Equatable {
         onboardingCompleted: Bool = false,
         traderType: String? = nil,
         tradingStyle: String? = nil,
+        primaryMarket: String? = nil,
         startedTrading: String? = nil,
         bio: String? = nil,
         avatarURL: String? = nil
@@ -29,6 +31,7 @@ nonisolated struct ProfileOnboardingSnapshot: Sendable, Equatable {
         self.onboardingCompleted = onboardingCompleted
         self.traderType = traderType
         self.tradingStyle = tradingStyle
+        self.primaryMarket = primaryMarket
         self.startedTrading = startedTrading
         self.bio = bio
         self.avatarURL = avatarURL
@@ -77,6 +80,7 @@ nonisolated extension ProfileOnboardingSnapshot {
             onboardingCompleted: session.onboarding_completed == true,
             traderType: session.trader_type,
             tradingStyle: session.trading_style,
+            primaryMarket: session.primary_market,
             startedTrading: session.started_trading,
             bio: session.bio,
             avatarURL: resolvedAvatarURL(viewer: viewer, session: session)
@@ -117,6 +121,7 @@ nonisolated extension ProfileOnboardingSnapshot {
             onboardingCompleted: dto.onboarding_completed == true,
             traderType: dto.trader_type,
             tradingStyle: dto.trading_style,
+            primaryMarket: dto.primary_market,
             startedTrading: dto.started_trading,
             bio: dto.bio,
             avatarURL: dto.avatar_url

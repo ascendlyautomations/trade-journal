@@ -419,6 +419,7 @@ final class MessagesHomeViewModel {
         return DirectMessageInboxItem(
             conversation: conversation,
             peer: peer,
+            peerProfileID: peerID,
             displayName: displayName,
             username: username,
             preview: (preview?.isEmpty == false ? preview! : "No messages yet"),
@@ -440,7 +441,10 @@ final class MessagesHomeViewModel {
         return TradeRoomInboxItem(
             room: room,
             ownerName: owner?.displayName,
-            ownerIsVerified: owner?.isCreator == true,
+            ownerIsVerified: TradeTraxsOfficialAccountPolicy.showsTradeTraxsIdentityBadge(
+                owner: owner,
+                ownerProfileID: room.ownerProfileID
+            ),
             preview: preview,
             timestamp: inboxStore.roomActivityAt[room.id],
             unreadCount: inboxStore.roomUnread[room.id] ?? 0,

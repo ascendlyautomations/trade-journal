@@ -18,6 +18,8 @@ struct DetailIdentityHeader: View {
     var deleteTitle: String = "Delete"
     var onEdit: (() -> Void)? = nil
     var onDelete: (() -> Void)? = nil
+    /// Avatar + author name open profile (Feed-style); nil keeps header non-interactive.
+    var onOpenAuthor: (() -> Void)? = nil
     var vaultRef: VaultContentRef? = nil
     var accessibilityIdentifier: String = "detail.identity"
 
@@ -33,13 +35,44 @@ struct DetailIdentityHeader: View {
 
     var body: some View {
         // Equal row spacing; menu overlaid so it does not inflate the name-row height.
+        Group {
+            if let onOpenAuthor {
+                Button(action: onOpenAuthor) {
+                    identityRow
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            } else {
+                identityRow
+            }
+        }
+        .sheet(isPresented: $isSharePresented) {
+            if let url = contentLink?.url {
+                DetailShareSheet(items: [shareText, url])
+            } else {
+                DetailShareSheet(items: [shareText])
+            }
+        }
+        .sheet(isPresented: $showsVaultSheet) {
+            if let vaultRef {
+                VaultDestinationSheet(
+                    ref: vaultRef,
+                    store: appEnvironment.data.vaultStore
+                )
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    private var identityRow: some View {
         HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
             ExperienceAvatar(
                 initials: initials,
                 image: avatar,
                 size: 44
             )
-            .accessibilityHidden(true)
+            .accessibilityHidden(onOpenAuthor == nil)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
@@ -75,40 +108,23 @@ struct DetailIdentityHeader: View {
                     .experienceStyle(.caption, color: colors.tertiaryText)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .overlay(alignment: .topTrailing) {
-                DetailOverflowMenu(
-                    isOwner: isOwner,
-                    onShare: contentLink == nil ? nil : { isSharePresented = true },
-                    onCopyLink: contentLink.map { link in
-                        { DetailOverflowActions.copyLink(link) }
-                    },
-                    onAddToVault: vaultRef == nil || isVaulted ? nil : { openVaultSheet() },
-                    onManageInVault: vaultRef == nil || !isVaulted ? nil : { openVaultSheet() },
-                    onReport: reportAction,
-                    editTitle: editTitle,
-                    deleteTitle: deleteTitle,
-                    onEdit: onEdit,
-                    onDelete: onDelete
-                )
-            }
         }
-        .sheet(isPresented: $isSharePresented) {
-            if let url = contentLink?.url {
-                DetailShareSheet(items: [shareText, url])
-            } else {
-                DetailShareSheet(items: [shareText])
-            }
+        .overlay(alignment: .topTrailing) {
+            DetailOverflowMenu(
+                isOwner: isOwner,
+                onShare: contentLink == nil ? nil : { isSharePresented = true },
+                onCopyLink: contentLink.map { link in
+                    { DetailOverflowActions.copyLink(link) }
+                },
+                onAddToVault: vaultRef == nil || isVaulted ? nil : { openVaultSheet() },
+                onManageInVault: vaultRef == nil || !isVaulted ? nil : { openVaultSheet() },
+                onReport: reportAction,
+                editTitle: editTitle,
+                deleteTitle: deleteTitle,
+                onEdit: onEdit,
+                onDelete: onDelete
+            )
         }
-        .sheet(isPresented: $showsVaultSheet) {
-            if let vaultRef {
-                VaultDestinationSheet(
-                    ref: vaultRef,
-                    store: appEnvironment.data.vaultStore
-                )
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier(accessibilityIdentifier)
     }
 
     private func openVaultSheet() {

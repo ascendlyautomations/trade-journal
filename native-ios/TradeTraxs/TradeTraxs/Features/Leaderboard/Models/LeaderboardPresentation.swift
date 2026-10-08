@@ -157,7 +157,7 @@ enum LeaderboardPresentation {
             rank: rank,
             profileID: entry.profileID,
             profile: profile,
-            isVerified: verified.contains(entry.profileID) || profile.isCreator,
+            isVerified: verified.contains(entry.profileID) || profile.showsTradeTraxsIdentityBadge,
             primaryMetricText: "",
             secondaryMetricText: "",
             trend: .flat,

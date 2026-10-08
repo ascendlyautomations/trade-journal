@@ -1,66 +1,23 @@
-import assert from "node:assert/strict"
 import { describe, it } from "node:test"
+import assert from "node:assert/strict"
 import {
-  csvImportLimitMessage,
   evaluateCsvImportGate,
-  FREE_PLAN_CSV_IMPORT_COOLDOWN_MS,
+  FREE_PLAN_CSV_IMPORT_PRICING_LABEL,
+  assertCsvImportAllowedForFreePlan,
 } from "./csvImportGate.ts"
 
 describe("csvImportGate", () => {
-  it("allows TraxPro users regardless of last import", () => {
-    const status = evaluateCsvImportGate(
-      {
-        is_pro: false,
-        last_csv_import_at: new Date().toISOString(),
-      },
-      true
+  it("always allows CSV import on Free", () => {
+    assert.deepEqual(evaluateCsvImportGate(), { allowed: true })
+    assert.equal(FREE_PLAN_CSV_IMPORT_PRICING_LABEL, "Unlimited CSV imports")
+  })
+
+  it("assertCsvImportAllowedForFreePlan is always ok", async () => {
+    const result = await assertCsvImportAllowedForFreePlan(
+      {} as never,
+      "user-id"
     )
-    assert.equal(status.allowed, true)
-  })
-
-  it("allows manual Pro when traxProActive is true", () => {
-    const status = evaluateCsvImportGate(
-      {
-        is_pro: true,
-        last_csv_import_at: new Date().toISOString(),
-      },
-      true
-    )
-    assert.equal(status.allowed, true)
-  })
-
-  it("allows free users with no prior import", () => {
-    const status = evaluateCsvImportGate({
-      is_pro: false,
-      last_csv_import_at: null,
-    })
-    assert.equal(status.allowed, true)
-  })
-
-  it("blocks free users within the 3-day cooldown", () => {
-    const status = evaluateCsvImportGate({
-      is_pro: false,
-      last_csv_import_at: new Date().toISOString(),
-    })
-    assert.equal(status.allowed, false)
-    if (!status.allowed) {
-      assert.ok(status.daysUntilNextImport >= 1)
-    }
-  })
-
-  it("allows free users after the cooldown elapses", () => {
-    const last = new Date(Date.now() - FREE_PLAN_CSV_IMPORT_COOLDOWN_MS - 1000)
-    const status = evaluateCsvImportGate({
-      is_pro: false,
-      last_csv_import_at: last.toISOString(),
-    })
-    assert.equal(status.allowed, true)
-  })
-
-  it("includes days remaining in the limit message", () => {
-    const message = csvImportLimitMessage(2)
-    assert.match(message, /every 3 days/)
-    assert.match(message, /2 days/)
-    assert.match(message, /Upgrade to Pro/)
+    assert.deepEqual(result, { ok: true })
   })
 })
+export {}

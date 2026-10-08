@@ -23,9 +23,7 @@ struct FollowListRowView: View {
                                 .font(.system(.subheadline, design: .default).weight(.semibold))
                                 .foregroundStyle(colors.primaryText)
                                 .lineLimit(1)
-                            if profile.isCreator {
-                                TradeTraxsVerifiedBadge(size: .compact)
-                            }
+                            ProfileTradeTraxsIdentityBadge(profile: profile, size: .compact)
                         }
                         Text("@\(profile.username)")
                             .font(.system(.footnote, design: .default))

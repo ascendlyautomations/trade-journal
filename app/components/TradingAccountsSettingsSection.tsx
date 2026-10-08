@@ -29,7 +29,7 @@ import {
   matchesTradingAccountSearch,
   type TradingAccountListItem,
 } from "@/lib/tradingAccounts"
-import { countTradeEntryEnabledAccounts } from "@/lib/freePlanAccountSlots"
+import { useFreePlanAccountSlotSelection } from "@/app/components/FreePlanAccountSlotShell"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { useProGate } from "@/lib/useProGate"
 
@@ -63,6 +63,7 @@ export default function TradingAccountsSettingsSection({
 }: Props) {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const { profile } = useUserProfile()
+  const freePlanSlots = useFreePlanAccountSlotSelection()
   const { presentLimit, fromError, enforceFreeLimits } = useProGate(profile)
   const [accounts, setAccounts] = useState<TradingAccountListItem[]>([])
   const [loading, setLoading] = useState(Boolean(userId))
@@ -81,7 +82,7 @@ export default function TradingAccountsSettingsSection({
   const canCreateMore =
     isPro ||
     !enforceFreeLimits ||
-    countTradeEntryEnabledAccounts(accounts) < FREE_PLAN_ACCOUNT_LIMIT
+    accounts.length < FREE_PLAN_ACCOUNT_LIMIT
 
   const editFormValues = useMemo(
     () =>
@@ -317,6 +318,16 @@ export default function TradingAccountsSettingsSection({
           Manage which accounts appear in trade logging. Inactive accounts stay
           linked to existing trades but are hidden from the account picker.
         </p>
+
+        {freePlanSlots?.canReconfigureActiveAccounts ? (
+          <button
+            type="button"
+            className="mt-3 text-sm font-medium text-blue-300 hover:text-blue-200"
+            onClick={() => freePlanSlots.openSelection()}
+          >
+            Choose accounts for new trades (up to {FREE_PLAN_ACCOUNT_LIMIT})
+          </button>
+        ) : null}
 
         {loading && accounts.length === 0 ? (
           <p className="mt-4 text-sm text-gray-400">Loading accounts…</p>

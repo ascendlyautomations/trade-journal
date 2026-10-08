@@ -3,7 +3,7 @@ import { entitlementEnforcementEnabled } from "@/lib/server/monetizationConfig"
 import { isProActive } from "@/lib/subscription"
 import {
   accountCanAddTrades,
-  countTradeEntryEnabledAccounts,
+  countTotalTradingAccounts,
 } from "@/lib/freePlanAccountSlots"
 import {
   assertRequiredAccountValue,
@@ -64,7 +64,7 @@ export type CreateTradingAccountPayload = {
 export const FREE_PLAN_ACCOUNT_LIMIT = 3
 
 export const FREE_PLAN_ACCOUNT_LIMIT_MESSAGE =
-  "Free plan allows up to 3 active accounts. Upgrade to Pro for unlimited accounts."
+  "Free plan allows up to 3 trading accounts total. Upgrade to TraxPro for unlimited accounts."
 
 export function formatTradingAccountSize(size: unknown): string {
   return formatAccountBalanceForDisplay(size)
@@ -172,7 +172,7 @@ export async function loadTradingAccounts(
   }
 }
 
-/** Free plan: at most FREE_PLAN_ACCOUNT_LIMIT accounts with can_add_trades. */
+/** Free plan: at most FREE_PLAN_ACCOUNT_LIMIT total accounts (all statuses count). */
 export async function assertCanCreateTradingAccount(
   client: SupabaseClient,
   userId: string,
@@ -185,7 +185,7 @@ export async function assertCanCreateTradingAccount(
 
   const { data: existingAccounts, error: countErr } = await client
     .from("accounts")
-    .select("id, can_add_trades")
+    .select("id")
     .eq("user_id", userId)
 
   if (countErr) {
@@ -194,7 +194,7 @@ export async function assertCanCreateTradingAccount(
   }
 
   if (
-    countTradeEntryEnabledAccounts(existingAccounts ?? []) >= FREE_PLAN_ACCOUNT_LIMIT
+    countTotalTradingAccounts(existingAccounts ?? []) >= FREE_PLAN_ACCOUNT_LIMIT
   ) {
     return { ok: false, message: FREE_PLAN_ACCOUNT_LIMIT_MESSAGE }
   }

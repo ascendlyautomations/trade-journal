@@ -46,7 +46,10 @@ final class CSVImportViewModel {
     }
 
     var eligibleAccounts: [TradingAccount] {
-        let base = TradingAccountDropdownFilter.selectableForNewTrades(accounts)
+        let tier = ownerProfileID.map { TradeEntryEntitlementGate.viewerTier(profileID: $0) } ?? .free
+        let base = TradingAccountDropdownFilter.selectableForNewTrades(accounts) {
+            TradeEntryEntitlementGate.accountAllowsNewTrade($0, viewerTier: tier)
+        }
         let resolved = OwnerAccountDropdownSupport.resolvedAccounts(
             profileID: ownerProfileID,
             fallback: accounts

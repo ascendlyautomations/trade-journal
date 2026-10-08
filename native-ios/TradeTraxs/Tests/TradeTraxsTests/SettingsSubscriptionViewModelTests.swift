@@ -288,9 +288,9 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
         viewModel.loadIfNeeded()
         await waitFor { viewModel.status != nil }
 
-        XCTAssertEqual(viewModel.status?.dailyTradeLimit, FreeTierPolicy.dailyTradeLimit)
-        XCTAssertEqual(viewModel.status?.dailyPostLimit, FreeTierPolicy.dailyPostLimit)
-        XCTAssertEqual(viewModel.status?.dailyMessageLimit, FreeTierPolicy.dailyDirectMessageLimit)
+        XCTAssertNil(viewModel.status?.dailyTradeLimit)
+        XCTAssertNil(viewModel.status?.dailyPostLimit)
+        XCTAssertNil(viewModel.status?.dailyMessageLimit)
         XCTAssertEqual(viewModel.status?.maxTradeEntryAccounts, FreeTierPolicy.maxTradeEntryAccounts)
     }
 
@@ -312,9 +312,9 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
             plan: .free,
             lifecycle: .none,
             isProEntitled: false,
-            dailyTradeLimit: FreeTierPolicy.dailyTradeLimit,
-            dailyPostLimit: FreeTierPolicy.dailyPostLimit,
-            dailyMessageLimit: FreeTierPolicy.dailyDirectMessageLimit,
+            dailyTradeLimit: nil,
+            dailyPostLimit: nil,
+            dailyMessageLimit: nil,
             maxTradeEntryAccounts: FreeTierPolicy.maxTradeEntryAccounts
         )
     }

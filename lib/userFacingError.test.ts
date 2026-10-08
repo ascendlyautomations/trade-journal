@@ -13,12 +13,13 @@ test("maps duplicate key to friendly username message", () => {
   assert.equal(msg, USER_FACING_ERROR_MESSAGES.USERNAME_TAKEN)
 })
 
-test("maps P0001 free plan trade limit", () => {
+test("maps P0001 free plan clip hint sentence", () => {
   const msg = toUserFacingErrorMessage({
     code: "P0001",
-    message: "You've reached the Free plan limit of 3 trades every 24 hours.",
+    message:
+      "You've reached the Free plan limit of 4 Clips per UTC calendar day.",
   })
-  assert.equal(msg, USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_TRADE_LIMIT)
+  assert.equal(msg, USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_CLIP_LIMIT)
 })
 
 test("maps P0001 free plan clip limit", () => {
@@ -29,12 +30,12 @@ test("maps P0001 free plan clip limit", () => {
   assert.equal(msg, USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_CLIP_LIMIT)
 })
 
-test("maps P0001 free plan DM limit", () => {
+test("maps copy trading TraxPro requirement", () => {
   const msg = toUserFacingErrorMessage({
     code: "P0001",
-    message: "FREE_PLAN_DAILY_DM_LIMIT",
+    message: "TRAXPRO_COPY_TRADING_REQUIRED",
   })
-  assert.equal(msg, USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_DM_LIMIT)
+  assert.equal(msg, USER_FACING_ERROR_MESSAGES.TRAXPRO_COPY_TRADING_REQUIRED)
 })
 
 test("maps foreign key violation", () => {

@@ -9,6 +9,7 @@ struct MessageBubbleActionMenu: View {
     var onRetry: (() -> Void)?
     var onDelete: (() -> Void)?
     var deleteTitle: String = "Delete"
+    var onManageUser: (() -> Void)?
     var onReport: (() -> Void)?
     let onDismiss: () -> Void
 
@@ -60,6 +61,9 @@ struct MessageBubbleActionMenu: View {
                     if let onDelete {
                         actionRow(title: deleteTitle, systemImage: "trash", role: .destructive, action: onDelete)
                     }
+                    if let onManageUser {
+                        actionRow(title: "Manage User", systemImage: "person.crop.circle", role: nil, action: onManageUser)
+                    }
                     if let onReport {
                         actionRow(title: "Report", systemImage: "flag", role: nil, action: onReport)
                     }
@@ -81,7 +85,7 @@ struct MessageBubbleActionMenu: View {
     }
 
     private var showsActionRows: Bool {
-        onCopy != nil || onRetry != nil || onDelete != nil || onReport != nil
+        onCopy != nil || onRetry != nil || onDelete != nil || onManageUser != nil || onReport != nil
     }
 
     private func actionRow(

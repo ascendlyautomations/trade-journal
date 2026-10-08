@@ -429,6 +429,7 @@ nonisolated enum ProfileDTO {
         var onboarding_completed: Bool?
         var trader_type: String?
         var trading_style: String?
+        var primary_market: String?
         var started_trading: String?
         var bio: String?
         var avatar_url: String?
@@ -756,6 +757,14 @@ nonisolated enum MessageDTO {
     struct MutedPeerRow: Codable, Sendable {
         var conversation_id: String?
         var peer_id: String?
+        var username: String?
+        var name: String?
+        var avatar_url: String?
+    }
+
+    struct BlockedAccountRow: Codable, Sendable {
+        var blocked_id: String?
+        var created_at: String?
         var username: String?
         var name: String?
         var avatar_url: String?

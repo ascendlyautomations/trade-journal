@@ -260,6 +260,23 @@ final class DataLayerTests: XCTestCase {
         XCTAssertEqual(TradingAccountMode.parseWireValue("evaluation"), .evaluation)
     }
 
+    func testTradeMapperPreservesBacktestExecutionWhenModeColumnIsAccountBacktest() throws {
+        var dto = TradeDTO.Trade()
+        dto.id = "bt-1"
+        dto.user_id = "user-1"
+        dto.ticker = "MNQ"
+        dto.direction = "Long"
+        dto.mode = "backtest"
+        dto.account_type = "backtest"
+        dto.contracts = FlexibleNumber(1)
+        dto.entry_time = ISO8601.string(from: Date())
+        dto.created_at = ISO8601.string(from: Date())
+        dto.trade_mode = nil
+        let trade = try TradeMapper.mapToDomain(dto)
+        XCTAssertEqual(trade.mode, .backtest)
+        XCTAssertEqual(trade.accountMode, .backtest)
+    }
+
     func testTradingAccountMapperPrefersAccountsNameColumn() throws {
         let dto = TradeDTO.Account(
             id: "a1",

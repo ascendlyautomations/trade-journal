@@ -16,9 +16,6 @@ struct TradeRoomInboxRowView: View {
                     Text(item.room.name)
                         .experienceStyle(item.unreadCount > 0 ? .headline : .body, color: colors.primaryText)
                         .lineLimit(1)
-                    if item.ownerIsVerified {
-                        TradeTraxsVerifiedBadge(size: .inline)
-                    }
                     if item.isMuted {
                         Text("Muted")
                             .font(.caption2.weight(.semibold))

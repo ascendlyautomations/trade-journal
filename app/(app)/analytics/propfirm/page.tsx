@@ -1186,7 +1186,7 @@ export default function PropFirmPage() {
     return (
       <PropfirmPageShell>
         <LockedFeature
-          title="Prop Firm Mode"
+          title="Advanced Prop Firm Analytics"
           feature="prop_firm"
           className="mx-auto max-w-lg"
           onUpgradeClick={() => presentFeature("prop_firm")}

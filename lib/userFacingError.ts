@@ -1,9 +1,4 @@
-import {
-  FREE_PLAN_DAILY_CLIP_LIMIT_MESSAGE,
-  FREE_PLAN_DAILY_POST_LIMIT_MESSAGE,
-  FREE_PLAN_DAILY_TRADE_LIMIT_MESSAGE,
-} from "./freePlanDailyLimits.ts"
-import { FREE_PLAN_DAILY_DM_LIMIT_MESSAGE } from "./freePlanMessagingLimits.ts"
+import { FREE_PLAN_DAILY_CLIP_LIMIT_MESSAGE } from "./freePlanDailyLimits.ts"
 import { parseProLimitPayload } from "./proGateReason.ts"
 
 /**
@@ -11,20 +6,17 @@ import { parseProLimitPayload } from "./proGateReason.ts"
  * Add new mappings here only — do not scatter conditionals across the app.
  */
 export const USER_FACING_ERROR_MESSAGES = {
-  FREE_PLAN_DAILY_POST_LIMIT: FREE_PLAN_DAILY_POST_LIMIT_MESSAGE,
-  FREE_PLAN_DAILY_TRADE_LIMIT: FREE_PLAN_DAILY_TRADE_LIMIT_MESSAGE,
   FREE_PLAN_DAILY_CLIP_LIMIT: FREE_PLAN_DAILY_CLIP_LIMIT_MESSAGE,
-  FREE_PLAN_DAILY_DM_LIMIT: FREE_PLAN_DAILY_DM_LIMIT_MESSAGE,
+  TRAXPRO_COPY_TRADING_REQUIRED:
+    "Copy Trading is available with TraxPro.",
   /** @deprecated Prefer {@link USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_CLIP_LIMIT}. */
   FREE_PLAN_REELS_LIMIT: FREE_PLAN_DAILY_CLIP_LIMIT_MESSAGE,
   FREE_PLAN_ACCOUNT_LIMIT:
-    "Free plan allows up to 3 active accounts. Upgrade to Pro for unlimited accounts.",
-  /** @deprecated Legacy slot-selection era — not current product behavior. */
+    "Free plan allows up to 3 trading accounts total. Upgrade to TraxPro for unlimited accounts.",
   ACCOUNT_READ_ONLY:
-    "This trading account can't accept new trades right now.",
-  /** @deprecated Legacy slot-selection era — not current product behavior. */
+    "This account is read-only on the Free plan. Choose it as one of your 3 active accounts or upgrade to TraxPro to add trades.",
   ACCOUNT_SLOT_SELECTION_REQUIRED:
-    "Choose up to 3 accounts to keep active for new trades.",
+    "Choose up to 3 accounts to keep active for new trades. Your other accounts stay available in read-only mode.",
   ACCOUNT_OWNERSHIP_MISMATCH: "That trading account does not belong to you.",
   RATE_LIMIT_EXCEEDED:
     "You're doing that too often. Please wait a moment and try again.",
@@ -194,47 +186,14 @@ function mapFreePlanMessage(text: string): string | null {
   if (!lower.includes("free") && !lower.includes("upgrade to pro")) return null
 
   if (
-    lower.includes("post") &&
-    (lower.includes("24 hour") ||
-      lower.includes("every 24 hours") ||
-      lower.includes("daily"))
-  ) {
-    return USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_POST_LIMIT
-  }
-  if (
-    lower.includes("trade") &&
-    (lower.includes("24 hour") ||
-      lower.includes("every 24 hours") ||
-      lower.includes("daily") ||
-      lower.includes("3"))
-  ) {
-    return USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_TRADE_LIMIT
-  }
-  if (
-    lower.includes("direct message") ||
-    lower.includes("free_plan_daily_dm_limit")
-  ) {
-    if (
-      lower.includes("24 hour") ||
-      lower.includes("every 24 hours") ||
-      lower.includes("daily") ||
-      lower.includes("limit") ||
-      lower.includes("free_plan_daily_dm_limit") ||
-      lower.includes("25")
-    ) {
-      return USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_DM_LIMIT
-    }
-  }
-  if (
     lower.includes("clip") ||
-    lower.includes("reel") ||
     lower.includes("free_plan_daily_clip_limit") ||
     lower.includes("free_plan_reels_limit")
   ) {
     if (
-      lower.includes("24 hour") ||
-      lower.includes("every 24 hours") ||
-      lower.includes("daily") ||
+      lower.includes("utc") ||
+      lower.includes("calendar day") ||
+      lower.includes("per day") ||
       lower.includes("limit") ||
       lower.includes("free_plan_daily_clip_limit") ||
       lower.includes("free_plan_reels_limit")

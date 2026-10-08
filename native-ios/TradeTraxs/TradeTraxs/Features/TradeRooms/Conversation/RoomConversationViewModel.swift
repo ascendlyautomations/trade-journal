@@ -58,6 +58,11 @@ final class RoomConversationViewModel {
     var pendingDeleteMessage: ConversationBubbleItem?
     var showsDeleteMessageConfirmation = false
     var deleteErrorMessage: String?
+    var managedMemberSheetItem: RoomMemberItem?
+    var pendingMemberAction: ManageRoomViewModel.MemberAction?
+    var showsMemberActionConfirmation = false
+    var showsBanMemberConfirmation = false
+    var memberModerationErrorMessage: String?
     var showsLeaveRoomConfirmation = false
 
     /// Prefer resolved UUID after slug deep-link lookup.
@@ -761,13 +766,26 @@ final class RoomConversationViewModel {
     }
 
     func canDeleteMessage(_ item: ConversationBubbleItem) -> Bool {
-        guard item.isOutgoing else { return false }
         guard item.message.kind != .system else { return false }
-        if item.sendState == .failed { return true }
+        if item.sendState == .failed {
+            return item.isOutgoing
+        }
         guard item.sendState == .sent else { return false }
         guard !ConversationMessageMerge.isOptimisticMessageID(item.message.id) else { return false }
         guard !deletingMessageIDs.contains(item.id) else { return false }
-        return true
+        return RoomMessageModerationPolicy.canDeleteMessage(
+            viewerID: viewerID,
+            senderProfileID: item.message.senderProfileID,
+            isRoomOwner: isOwner
+        )
+    }
+
+    func isOwnerModerationDelete(_ item: ConversationBubbleItem) -> Bool {
+        RoomMessageModerationPolicy.isOwnerDeletingAnotherMembersMessage(
+            viewerID: viewerID,
+            senderProfileID: item.message.senderProfileID,
+            isRoomOwner: isOwner
+        )
     }
 
     func requestDeleteMessage(_ item: ConversationBubbleItem) {
@@ -775,6 +793,163 @@ final class RoomConversationViewModel {
         ExperienceHaptics.play(.warning)
         pendingDeleteMessage = item
         showsDeleteMessageConfirmation = true
+    }
+
+    func canManageMessageMember(_ item: ConversationBubbleItem) -> Bool {
+        RoomMessageModerationPolicy.canManageMessageMember(
+            viewerID: viewerID,
+            senderProfileID: item.message.senderProfileID,
+            roomOwnerProfileID: room?.ownerProfileID,
+            messageKind: item.message.kind,
+            sendState: item.sendState
+        )
+    }
+
+    func requestManageMember(_ item: ConversationBubbleItem) {
+        guard canManageMessageMember(item),
+              let member = memberItem(for: item.message.senderProfileID)
+        else { return }
+        ExperienceHaptics.play(.selection)
+        managedMemberSheetItem = member
+    }
+
+    func canBanMember(_ item: RoomMemberItem) -> Bool {
+        guard let room else { return false }
+        return RoomMessageModerationPolicy.canBanMember(
+            viewerID: viewerID,
+            targetProfileID: item.id,
+            roomOwnerProfileID: room.ownerProfileID
+        )
+    }
+
+    func canRemoveMember(_ item: RoomMemberItem) -> Bool {
+        guard let room else { return false }
+        guard TradeRoomManagementPermission.canManage(room: room, viewerID: viewerID),
+              let viewerID
+        else { return false }
+        return item.role != .owner && item.id != viewerID && item.id != room.ownerProfileID
+    }
+
+    func requestMemberAction(_ action: ManageRoomViewModel.MemberAction) {
+        pendingMemberAction = action
+        switch action {
+        case .ban:
+            showsBanMemberConfirmation = true
+        case .remove:
+            showsMemberActionConfirmation = true
+        }
+    }
+
+    func cancelBanMember() {
+        pendingMemberAction = nil
+        showsBanMemberConfirmation = false
+    }
+
+    func memberActionTitle(for action: ManageRoomViewModel.MemberAction) -> String {
+        switch action {
+        case .remove: return "Remove this member from the room?"
+        case .ban: return "Ban this member from the room?"
+        }
+    }
+
+    func confirmMemberAction() async {
+        guard let action = pendingMemberAction else { return }
+        switch action {
+        case .ban(let profileID):
+            await banMember(profileID: profileID)
+        case .remove(let profileID):
+            await removeMember(profileID: profileID)
+        }
+    }
+
+    private func memberItem(for profileID: ProfileID) -> RoomMemberItem? {
+        if let profile = senderProfile(for: profileID) {
+            return RoomMemberItem(
+                profile: profile,
+                role: profileID == room?.ownerProfileID ? .owner : .member,
+                joinedAt: nil,
+                isOnline: false
+            )
+        }
+        return nil
+    }
+
+    private func removeMember(profileID: ProfileID) async {
+        memberModerationErrorMessage = nil
+        guard let member = memberItem(for: profileID),
+              canRemoveMember(member),
+              let viewerID
+        else { return }
+        pendingMemberAction = nil
+        showsMemberActionConfirmation = false
+        if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID)
+            || roomID.rawValue.hasPrefix("dev-")
+        {
+            managedMemberSheetItem = nil
+            ExperienceHaptics.play(.success)
+            return
+        }
+        do {
+            try await RoomMemberModerationExecutor.removeMember(
+                roomID: resolvedRoomID,
+                profileID: profileID,
+                rooms: rooms,
+                inboxStore: inboxStore,
+                viewerID: viewerID
+            )
+            managedMemberSheetItem = nil
+            await refreshRoomMemberCount(viewerID: viewerID)
+            ExperienceHaptics.play(.success)
+        } catch {
+            memberModerationErrorMessage = ConversationThreadSupport.message(for: error)
+            ExperienceHaptics.play(.error)
+        }
+    }
+
+    private func banMember(profileID: ProfileID) async {
+        memberModerationErrorMessage = nil
+        guard isOwner,
+              let viewerID,
+              let room,
+              RoomMessageModerationPolicy.canBanMember(
+                viewerID: viewerID,
+                targetProfileID: profileID,
+                roomOwnerProfileID: room.ownerProfileID
+              )
+        else { return }
+        pendingMemberAction = nil
+        showsBanMemberConfirmation = false
+        if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID)
+            || roomID.rawValue.hasPrefix("dev-")
+        {
+            managedMemberSheetItem = nil
+            ExperienceHaptics.play(.success)
+            return
+        }
+        do {
+            try await RoomMemberModerationExecutor.banMember(
+                roomID: resolvedRoomID,
+                profileID: profileID,
+                bannedBy: viewerID,
+                rooms: rooms,
+                inboxStore: inboxStore,
+                viewerID: viewerID
+            )
+            managedMemberSheetItem = nil
+            await refreshRoomMemberCount(viewerID: viewerID)
+            ExperienceHaptics.play(.success)
+        } catch {
+            memberModerationErrorMessage = ConversationThreadSupport.message(for: error)
+            ExperienceHaptics.play(.error)
+        }
+    }
+
+    private func refreshRoomMemberCount(viewerID: ProfileID) async {
+        let activeCount = (try? await rooms.activeMemberCounts(for: [resolvedRoomID]))?[resolvedRoomID]
+        if let activeCount, var updated = room {
+            updated.memberCount = activeCount
+            room = updated
+        }
     }
 
     func cancelDeleteMessage() {

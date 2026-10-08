@@ -20,6 +20,7 @@ final class RoomMembersViewModel {
     var searchText = ""
     var pendingMemberAction: ManageRoomViewModel.MemberAction?
     var showsMemberActionConfirmation = false
+    var showsBanMemberConfirmation = false
     var statusMessage: String?
 
     private let rooms: any RoomRepository
@@ -79,53 +80,90 @@ final class RoomMembersViewModel {
 
     func requestMemberAction(_ action: ManageRoomViewModel.MemberAction) {
         pendingMemberAction = action
-        showsMemberActionConfirmation = true
+        switch action {
+        case .ban:
+            showsBanMemberConfirmation = true
+        case .remove:
+            showsMemberActionConfirmation = true
+        }
+    }
+
+    func cancelBanMember() {
+        pendingMemberAction = nil
+        showsBanMemberConfirmation = false
     }
 
     func confirmMemberAction() async {
-        guard canManageRoom,
-              let management = rooms as? any RoomManagementRepository,
-              let viewerID,
-              let room,
-              let action = pendingMemberAction
-        else { return }
-        let targetID: ProfileID
+        guard let action = pendingMemberAction else { return }
         switch action {
-        case .remove(let profileID), .ban(let profileID):
-            targetID = profileID
+        case .ban(let profileID):
+            await banMember(profileID: profileID)
+        case .remove(let profileID):
+            await removeMember(profileID: profileID)
         }
-        guard targetID != viewerID, targetID != room.ownerProfileID else { return }
+    }
+
+    private func removeMember(profileID: ProfileID) async {
+        guard canManageRoom,
+              let viewerID,
+              let room
+        else { return }
+        guard profileID != viewerID, profileID != room.ownerProfileID else { return }
         pendingMemberAction = nil
         showsMemberActionConfirmation = false
         do {
-            switch action {
-            case .remove(let profileID):
-                try await management.removeMember(roomID: roomID, profileID: profileID)
-                statusMessage = "Member removed."
-            case .ban(let profileID):
-                try await management.banMember(
-                    roomID: roomID,
-                    profileID: profileID,
-                    bannedBy: viewerID
-                )
-                statusMessage = "Member banned."
-            }
-            members.removeAll { $0.id == targetID }
-            let activeCount = (try? await rooms.activeMemberCounts(for: [roomID]))?[roomID] ?? members.count
-            if var updated = self.room {
-                updated.memberCount = activeCount
-                self.room = updated
-            }
-            RoomMemberCountSync.apply(
+            try await RoomMemberModerationExecutor.removeMember(
                 roomID: roomID,
-                count: activeCount,
+                profileID: profileID,
+                rooms: rooms,
                 inboxStore: inboxStore,
                 viewerID: viewerID
             )
+            statusMessage = "Member removed."
+            await applyMemberRemovedLocally(profileID: profileID, viewerID: viewerID)
             ExperienceHaptics.play(.success)
         } catch {
             statusMessage = ConversationThreadSupport.message(for: error)
             ExperienceHaptics.play(.error)
+        }
+    }
+
+    private func banMember(profileID: ProfileID) async {
+        guard isOwner,
+              let viewerID,
+              let room
+        else { return }
+        guard RoomMessageModerationPolicy.canBanMember(
+            viewerID: viewerID,
+            targetProfileID: profileID,
+            roomOwnerProfileID: room.ownerProfileID
+        ) else { return }
+        pendingMemberAction = nil
+        showsBanMemberConfirmation = false
+        do {
+            try await RoomMemberModerationExecutor.banMember(
+                roomID: roomID,
+                profileID: profileID,
+                bannedBy: viewerID,
+                rooms: rooms,
+                inboxStore: inboxStore,
+                viewerID: viewerID
+            )
+            statusMessage = "Member banned."
+            await applyMemberRemovedLocally(profileID: profileID, viewerID: viewerID)
+            ExperienceHaptics.play(.success)
+        } catch {
+            statusMessage = ConversationThreadSupport.message(for: error)
+            ExperienceHaptics.play(.error)
+        }
+    }
+
+    private func applyMemberRemovedLocally(profileID: ProfileID, viewerID: ProfileID) async {
+        members.removeAll { $0.id == profileID }
+        let activeCount = (try? await rooms.activeMemberCounts(for: [roomID]))?[roomID] ?? members.count
+        if var updated = room {
+            updated.memberCount = activeCount
+            room = updated
         }
     }
 
@@ -134,7 +172,20 @@ final class RoomMembersViewModel {
         navigationCoordinator?.open(navigationHost.manageRoom(roomID))
     }
 
-    func canManageMember(_ item: RoomMemberItem) -> Bool {
+    func canShowManageMember(_ item: RoomMemberItem) -> Bool {
+        isOwner && (canBanMember(item) || canRemoveMember(item))
+    }
+
+    func canBanMember(_ item: RoomMemberItem) -> Bool {
+        guard let room else { return false }
+        return RoomMessageModerationPolicy.canBanMember(
+            viewerID: viewerID,
+            targetProfileID: item.id,
+            roomOwnerProfileID: room.ownerProfileID
+        )
+    }
+
+    func canRemoveMember(_ item: RoomMemberItem) -> Bool {
         guard canManageRoom, let viewerID, let room else { return false }
         return item.role != .owner
             && item.id != viewerID

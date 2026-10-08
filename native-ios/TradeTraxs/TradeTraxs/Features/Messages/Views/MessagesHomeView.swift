@@ -63,19 +63,8 @@ struct MessagesHomeView: View {
                     )
                 }
             case .loaded where viewModel.showsEmpty:
-                ExperienceCompactEmptyState(
-                    icon: .messages,
-                    title: "No conversations yet",
-                    message: "Start a conversation with another trader.",
-                    actionTitle: "Start a Conversation",
-                    action: { viewModel.presentNewChat() },
-                    secondaryPrefix: "Or",
-                    secondaryActionTitle: "Explore Trade Rooms",
-                    secondaryAction: { viewModel.exploreTradeRooms() },
-                    secondaryAccessibilityIdentifier: "messages.emptyState.exploreTradeRooms",
-                    accessibilityIdentifier: "messages.emptyState"
-                )
-                .experienceScreenContentAreaFill(alignment: .center)
+                messagesEmptyState
+                    .experienceScreenContentAreaFill(alignment: .center)
             case .loaded:
                 inboxList
             }
@@ -502,6 +491,53 @@ struct MessagesHomeView: View {
             .padding()
             .frame(width: 320)
             .messagesInboxConversationPreviewBackground(colors: colors)
+    }
+
+    private var messagesEmptyState: some View {
+        VStack(spacing: ExperienceSpacing.xs) {
+            ExperienceIcon(icon: .messages, size: .md, color: colors.tertiaryText)
+
+            Text("No conversations yet")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(colors.primaryText)
+                .multilineTextAlignment(.center)
+
+            Text("Start a conversation with another trader.")
+                .font(.caption)
+                .foregroundStyle(colors.secondaryText)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button("Start a Conversation") {
+                ExperienceHaptics.play(.selection)
+                viewModel.presentNewChat()
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(colors.accent)
+            .padding(.top, ExperienceSpacing.xxs)
+
+            Text("Or")
+                .font(.caption)
+                .foregroundStyle(colors.secondaryText)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, ExperienceSpacing.xxs)
+
+            Button("Explore Trade Rooms") {
+                ExperienceHaptics.play(.selection)
+                viewModel.exploreTradeRooms()
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(colors.accent)
+            .accessibilityIdentifier("messages.emptyState.exploreTradeRooms")
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, ExperienceSpacing.md)
+        .accessibilityElement(children: .contain)
+        .experienceAccessibility(
+            label: "No conversations yet",
+            hint: "Start a conversation with another trader.",
+            identifier: "messages.emptyState"
+        )
     }
 }
 

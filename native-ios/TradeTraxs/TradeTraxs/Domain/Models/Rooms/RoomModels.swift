@@ -170,6 +170,16 @@ nonisolated struct RoomManagedMember: Hashable, Sendable, Identifiable {
     var role: RoomMemberRole
     var joinedAt: Date?
     var tags: [RoomMemberTag]
+
+    var asMemberListItem: RoomMemberItem {
+        RoomMemberItem(
+            profile: profile,
+            role: role,
+            joinedAt: joinedAt,
+            isOnline: false,
+            tags: tags
+        )
+    }
 }
 
 nonisolated struct RoomBanRecord: Hashable, Sendable, Identifiable {

@@ -17,6 +17,7 @@ struct ManageRoomView: View {
     @Environment(\.themeColors) private var colors
     @State private var navigationSection: ManageRoomSection?
     @State private var selectedMember: RoomManagedMember?
+    @State private var memberForTags: RoomManagedMember?
     @State private var photoItem: PhotosPickerItem?
     @State private var cropSourceImage: UIImage?
     @State private var editingTag: RoomMemberTag?
@@ -98,23 +99,30 @@ struct ManageRoomView: View {
         } message: {
             Text(channelDeleteMessage)
         }
-        .confirmationDialog(
-            memberActionTitle,
-            isPresented: Binding(
-                get: { viewModel.pendingMemberAction != nil },
-                set: { if !$0 { viewModel.pendingMemberAction = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            if let action = viewModel.pendingMemberAction {
-                Button(actionButtonTitle(action), role: .destructive) {
-                    Task { await viewModel.confirmMemberAction(action) }
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
+        .roomMemberModerationConfirmations(
+            showsRemoveConfirmation: $viewModel.showsMemberActionConfirmation,
+            showsBanConfirmation: $viewModel.showsBanMemberConfirmation,
+            removeDialogTitle: manageRoomMemberActionDialogTitle,
+            onConfirmRemove: { Task { await viewModel.confirmMemberAction() } },
+            onConfirmBan: { Task { await viewModel.confirmMemberAction() } },
+            onCancelRemove: { viewModel.pendingMemberAction = nil },
+            onCancelBan: { viewModel.cancelBanMember() }
+        )
         .sheet(item: $selectedMember) { member in
-            memberActionsSheet(member)
+            manageRoomMemberSheet(member)
+        }
+        .sheet(item: $memberForTags) { member in
+            NavigationStack {
+                memberTagsEditor(member)
+                    .experienceNavigationTitle("Manage Tags")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") { memberForTags = nil }
+                        }
+                    }
+            }
+            .experienceScreenBackground()
+            .presentationBackground(colors.sheetBackground)
         }
         .sheet(item: $editingTag) { tag in
             tagEditorSheet(tag)
@@ -333,15 +341,23 @@ struct ManageRoomView: View {
     private var membersScreen: some View {
         List {
             ForEach(viewModel.members) { member in
-                Button {
-                    selectedMember = member
-                } label: {
-                    managedMemberRow(member)
-                }
-                .disabled(member.role == .owner)
+                RoomMemberRowView(
+                    item: member.asMemberListItem,
+                    imagePipeline: imagePipeline,
+                    showsManageButton: viewModel.canShowManageMember(member),
+                    onManage: { selectedMember = member },
+                    onOpen: {
+                        if viewModel.canShowManageMember(member) {
+                            selectedMember = member
+                        } else {
+                            viewModel.openProfile(member.profile.id)
+                        }
+                    }
+                )
+                .experienceDashboardListRow()
             }
         }
-        .experienceInsetGroupedListStyle(pageBackground: false)
+        .experienceInsetGroupedListStyle(pageBackground: true)
         .experienceNavigationTitle("Members")
         .refreshable { await viewModel.refreshMembersAndBans() }
     }
@@ -431,38 +447,38 @@ struct ManageRoomView: View {
     }
 
     @ViewBuilder
-    private func memberActionsSheet(_ member: RoomManagedMember) -> some View {
-        NavigationStack {
-            List {
-                Section {
-                    managedMemberRow(member)
+    private func manageRoomMemberSheet(_ member: RoomManagedMember) -> some View {
+        RoomMemberManagementSheet(
+            member: member.asMemberListItem,
+            imagePipeline: imagePipeline,
+            canRemove: viewModel.canRemoveMember(member),
+            canBan: viewModel.canBanMember(member),
+            onViewProfile: {
+                selectedMember = nil
+                viewModel.openProfile(member.profile.id)
+            },
+            onRemove: {
+                selectedMember = nil
+                viewModel.requestMemberAction(.remove(member.profile.id))
+            },
+            onBan: {
+                selectedMember = nil
+                viewModel.requestMemberAction(.ban(member.profile.id))
+            },
+            onDismiss: { selectedMember = nil },
+            onManageTags: viewModel.canManageRoom
+                ? {
+                    let managed = member
+                    selectedMember = nil
+                    memberForTags = managed
                 }
-                Section {
-                    Button("View Profile") {
-                        selectedMember = nil
-                        viewModel.openProfile(member.profile.id)
-                    }
-                    NavigationLink("Manage Tags") {
-                        memberTagsEditor(member)
-                    }
-                    Button("Remove from Room", role: .destructive) {
-                        selectedMember = nil
-                        viewModel.pendingMemberAction = .remove(member.profile.id)
-                    }
-                    Button("Ban from Room", role: .destructive) {
-                        selectedMember = nil
-                        viewModel.pendingMemberAction = .ban(member.profile.id)
-                    }
-                }
-            }
-            .experienceNavigationTitle("Member")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { selectedMember = nil }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
+                : nil
+        )
+    }
+
+    private var manageRoomMemberActionDialogTitle: String {
+        guard let action = viewModel.pendingMemberAction else { return "" }
+        return viewModel.memberActionTitle(for: action)
     }
 
     private func memberTagsEditor(_ member: RoomManagedMember) -> some View {
@@ -485,7 +501,8 @@ struct ManageRoomView: View {
                 .disabled(viewModel.isMutatingTag)
             }
         }
-        .experienceNavigationTitle("Manage Tags")
+        .experienceInsetGroupedListStyle(pageBackground: true)
+        .scrollContentBackground(.hidden)
     }
 
     @ViewBuilder
@@ -575,24 +592,6 @@ struct ManageRoomView: View {
         }
     }
 
-    private func managedMemberRow(_ member: RoomManagedMember) -> some View {
-        HStack(spacing: ExperienceSpacing.md) {
-            FollowListAvatarView(profile: member.profile, imagePipeline: imagePipeline)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(member.profile.displayName)
-                    .experienceStyle(.subheadline, color: colors.primaryText)
-                Text("@\(member.profile.username)")
-                    .experienceStyle(.caption, color: colors.secondaryText)
-                RoomMemberTagChipsView(
-                    tags: member.tags,
-                    showsOwnerBadge: member.role == .owner
-                )
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, ExperienceSpacing.xxs)
-    }
-
     private func hubRow(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack {
@@ -606,20 +605,6 @@ struct ManageRoomView: View {
         }
     }
 
-    private var memberActionTitle: String {
-        switch viewModel.pendingMemberAction {
-        case .remove: return "Remove this member from the room?"
-        case .ban: return "Ban this member from the room?"
-        case nil: return ""
-        }
-    }
-
-    private func actionButtonTitle(_ action: ManageRoomViewModel.MemberAction) -> String {
-        switch action {
-        case .remove: return "Remove Member"
-        case .ban: return "Ban Member"
-        }
-    }
 }
 
 /// Shows the authoritative saved room image, an in-progress crop preview, or the empty placeholder.

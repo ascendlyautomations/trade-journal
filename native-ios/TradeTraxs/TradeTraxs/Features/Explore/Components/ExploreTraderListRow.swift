@@ -41,9 +41,7 @@ struct ExploreTraderListRow: View {
                                 .experienceStyle(.subheadline, color: colors.primaryText)
                                 .fontWeight(.semibold)
                                 .lineLimit(1)
-                            if profile.isCreator {
-                                TradeTraxsVerifiedBadge(size: .inline)
-                            }
+                            ProfileTradeTraxsIdentityBadge(profile: profile, size: .inline)
                         }
                         Text("@\(profile.username)")
                             .experienceStyle(.caption, color: colors.secondaryText)

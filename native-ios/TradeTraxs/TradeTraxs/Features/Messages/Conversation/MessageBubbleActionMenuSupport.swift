@@ -22,6 +22,7 @@ enum MessageBubbleActionMenuSupport {
         deleteMenuTitle: String,
         onRetry: (() -> Void)?,
         onDelete: (() -> Void)?,
+        onManageUser: (() -> Void)? = nil,
         onReport: (() -> Void)?,
         onSelectEmoji: @escaping (String) -> Void,
         onDismiss: @escaping () -> Void
@@ -40,6 +41,7 @@ enum MessageBubbleActionMenuSupport {
 
         let retryAction: (() -> Void)? = item.sendState == .failed ? onRetry : nil
         let deleteAction: (() -> Void)? = canDelete ? onDelete : nil
+        let manageAction: (() -> Void)? = onManageUser
         let reportAction: (() -> Void)? = !item.isOutgoing ? onReport : nil
 
         return MessageBubbleActionMenu(
@@ -50,6 +52,7 @@ enum MessageBubbleActionMenuSupport {
             onRetry: retryAction,
             onDelete: deleteAction,
             deleteTitle: deleteMenuTitle,
+            onManageUser: manageAction,
             onReport: reportAction,
             onDismiss: onDismiss
         )
@@ -60,6 +63,7 @@ enum MessageBubbleActionMenuSupport {
         reactionConfiguration: MessageReactionConfiguration?,
         canDelete: Bool,
         onRetry: (() -> Void)?,
+        onManageUser: (() -> Void)? = nil,
         onReport: (() -> Void)?
     ) -> Int {
         var count = 0
@@ -68,6 +72,7 @@ enum MessageBubbleActionMenuSupport {
         }
         if item.sendState == .failed, onRetry != nil { count += 1 }
         if canDelete { count += 1 }
+        if onManageUser != nil { count += 1 }
         if !item.isOutgoing, onReport != nil { count += 1 }
         _ = reactionConfiguration
         return count

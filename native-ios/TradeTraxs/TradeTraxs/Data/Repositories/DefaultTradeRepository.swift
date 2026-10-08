@@ -821,6 +821,26 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         }
     }
 
+    func selectFreePlanTradeAccounts(
+        ownerID: ProfileID,
+        accountIDs: [TradingAccountID]
+    ) async throws {
+        struct Params: Encodable {
+            var p_account_ids: [String]
+        }
+        let payload = Params(p_account_ids: accountIDs.map(\.rawValue))
+        let data = try JSONEncoder().encode(payload)
+        do {
+            _ = try await supabase.database.rpcData(
+                functionName: "select_free_plan_trade_accounts",
+                parametersJSON: data
+            )
+        } catch {
+            throw Self.mapAccountMutationError(error)
+        }
+        _ = ownerID
+    }
+
     func createAccount(ownerID: ProfileID, draft: TradingAccountDraft) async throws -> TradingAccount {
         let size = NumericInputFieldSupport.plainNumericString(from: draft.sizeDigits)
         guard !size.isEmpty else {
@@ -1080,7 +1100,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             || text.localizedCaseInsensitiveContains("can_add_trades")
         {
             return AppError.unknown(
-                message: "Free plan allows up to \(FreeTierPolicy.maxTradeEntryAccounts) active accounts. TraxPro is required for unlimited accounts."
+                message: "Free plan allows up to \(FreeTierPolicy.maxTradeEntryAccounts) trading accounts total. TraxPro is required for unlimited accounts."
             )
         }
         if let app = error as? AppError { return app }

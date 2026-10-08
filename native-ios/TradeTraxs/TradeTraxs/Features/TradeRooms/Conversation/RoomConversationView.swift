@@ -186,7 +186,12 @@ struct RoomConversationView: View {
                 onClose: { viewModel.closeActivePresence() }
             )
         }
-        .alert("Delete Message?", isPresented: $viewModel.showsDeleteMessageConfirmation) {
+        .alert(
+            viewModel.pendingDeleteMessage.map { viewModel.isOwnerModerationDelete($0) } == true
+                ? "Delete this member's message?"
+                : "Delete Message?",
+            isPresented: $viewModel.showsDeleteMessageConfirmation
+        ) {
             Button("Delete", role: .destructive) {
                 Task { await viewModel.confirmDeleteMessage() }
             }
@@ -194,7 +199,54 @@ struct RoomConversationView: View {
                 viewModel.cancelDeleteMessage()
             }
         } message: {
-            Text("This message will be removed for everyone in this Trade Room.")
+            if let pending = viewModel.pendingDeleteMessage, viewModel.isOwnerModerationDelete(pending) {
+                Text("This message will be permanently removed for everyone in this Trade Room.")
+            } else {
+                Text("This message will be removed for everyone in this Trade Room.")
+            }
+        }
+        .sheet(item: $viewModel.managedMemberSheetItem) { member in
+            RoomMemberManagementSheet(
+                member: member,
+                imagePipeline: imagePipeline,
+                canRemove: viewModel.canRemoveMember(member),
+                canBan: viewModel.canBanMember(member),
+                onViewProfile: {
+                    viewModel.managedMemberSheetItem = nil
+                    viewModel.openProfile(member.id)
+                },
+                onRemove: {
+                    viewModel.managedMemberSheetItem = nil
+                    viewModel.requestMemberAction(.remove(member.id))
+                },
+                onBan: {
+                    viewModel.managedMemberSheetItem = nil
+                    viewModel.requestMemberAction(.ban(member.id))
+                },
+                onDismiss: { viewModel.managedMemberSheetItem = nil }
+            )
+        }
+        .roomMemberModerationConfirmations(
+            showsRemoveConfirmation: $viewModel.showsMemberActionConfirmation,
+            showsBanConfirmation: $viewModel.showsBanMemberConfirmation,
+            removeDialogTitle: conversationMemberActionDialogTitle,
+            onConfirmRemove: { Task { await viewModel.confirmMemberAction() } },
+            onConfirmBan: { Task { await viewModel.confirmMemberAction() } },
+            onCancelRemove: { viewModel.pendingMemberAction = nil },
+            onCancelBan: { viewModel.cancelBanMember() }
+        )
+        .alert(
+            "Couldn't update member",
+            isPresented: Binding(
+                get: { viewModel.memberModerationErrorMessage != nil },
+                set: { if !$0 { viewModel.memberModerationErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                viewModel.memberModerationErrorMessage = nil
+            }
+        } message: {
+            Text(viewModel.memberModerationErrorMessage ?? "")
         }
         .confirmationDialog(
             "Leave this Trade Room?",
@@ -477,6 +529,7 @@ struct RoomConversationView: View {
                             reactionConfiguration: reactions,
                             canDelete: viewModel.canDeleteMessage(bubble),
                             onRetry: { Task { await viewModel.retry(bubble) } },
+                            onManageUser: roomMessageManageAction(for: bubble),
                             onReport: incomingRoomMessageReportAction(for: bubble)
                         )
                     )
@@ -491,6 +544,7 @@ struct RoomConversationView: View {
                         deleteMenuTitle: "Delete Message",
                         onRetry: { Task { await viewModel.retry(bubble) } },
                         onDelete: { viewModel.requestDeleteMessage(bubble) },
+                        onManageUser: roomMessageManageAction(for: bubble),
                         onReport: incomingRoomMessageReportAction(for: bubble),
                         onSelectEmoji: { emoji in
                             Task { await viewModel.toggleReaction(messageID: messageID, emoji: emoji) }
@@ -790,6 +844,19 @@ struct RoomConversationView: View {
                 message: bubble.message,
                 presenter: appEnvironment.contentReportPresenter
             )
+        }
+    }
+
+    private var conversationMemberActionDialogTitle: String {
+        guard let action = viewModel.pendingMemberAction else { return "" }
+        return viewModel.memberActionTitle(for: action)
+    }
+
+    private func roomMessageManageAction(for bubble: ConversationBubbleItem) -> (() -> Void)? {
+        guard viewModel.canManageMessageMember(bubble) else { return nil }
+        return {
+            actionMenuMessageID = nil
+            viewModel.requestManageMember(bubble)
         }
     }
 }

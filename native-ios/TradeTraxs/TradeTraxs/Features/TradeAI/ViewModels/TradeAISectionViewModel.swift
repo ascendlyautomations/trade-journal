@@ -87,6 +87,10 @@ final class TradeAISectionViewModel {
 
     private func submit(displayText: String, promptKey: String) async {
         guard !isAnalyzing else { return }
+        if Self.isPremiumAnalysisRestricted {
+            ProUpgradeCoordinator.shared.present(reason: .feature(.aiAnalyst))
+            return
+        }
         guard let context else {
             errorMessage = "Trade is still loading. Try again in a moment."
             return
@@ -169,6 +173,14 @@ final class TradeAISectionViewModel {
             print("[TradeAITrace] persistence.failed surfacedToUser=true")
             #endif
         }
+    }
+
+    private static var isPremiumAnalysisRestricted: Bool {
+        let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+        return ProMonetizationPolicy.shouldRestrictPremiumPsychologyAndAI(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        )
     }
 
     /// Maps AppError / NetworkError to readable copy (never raw `NetworkError error N`).

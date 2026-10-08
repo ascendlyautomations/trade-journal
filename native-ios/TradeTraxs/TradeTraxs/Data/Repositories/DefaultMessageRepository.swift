@@ -593,47 +593,27 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
     }
 
     func fetchBlockedAccounts() async throws -> [BlockedAccount] {
-        guard let userID = await session.currentUserID else {
+        guard await session.currentUserID != nil else {
             throw AppError.domain(.permission(.notAuthenticated))
         }
-        let rows: [MessageDTO.UserBlockRow] = try await supabase.database.select(
-            MessageDTO.UserBlockRow.self,
-            from: "user_blocks",
-            query: [
-                SupabaseQuery.select(
-                    "blocked_id,created_at,profiles:profiles!user_blocks_blocked_id_fkey(id,username,name,avatar_url)"
-                ),
-                SupabaseQuery.eq("blocker_id", userID.rawValue),
-                URLQueryItem(name: "order", value: "created_at.desc"),
-            ]
+        let data = try await supabase.database.rpcData(
+            functionName: "list_blocked_accounts",
+            parametersJSON: Data("{}".utf8)
         )
+        let rows = try JSONDecoder().decode([MessageDTO.BlockedAccountRow].self, from: data)
         return rows.compactMap { row in
             guard let blockedID = row.blocked_id?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !blockedID.isEmpty
             else { return nil }
-            let embedded = row.profiles
-            let profile = Profile(
+            let blockedAt = ISO8601.date(from: row.created_at ?? "")
+            let profile = MessagingPrivacyProfileFactory.profile(
                 id: ProfileID(blockedID),
-                userID: UserID(blockedID),
-                username: embedded?.username ?? "user",
-                displayName: embedded?.name?.nilIfEmpty ?? embedded?.username ?? "User",
-                bio: nil,
-                avatar: embedded?.avatar_url.flatMap { url in
-                    let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
-                    return trimmed.isEmpty ? nil : MediaReference(id: trimmed, kind: .image, altText: nil)
-                },
-                traderType: nil,
-                tradingStyle: nil,
-                primaryMarket: nil,
-                startedTradingAt: nil,
-                isPrivate: false,
-                isCreator: false,
-                createdAt: ISO8601.date(from: row.created_at ?? "") ?? .distantPast
+                username: row.username,
+                displayName: row.name,
+                avatarURL: row.avatar_url,
+                createdAt: blockedAt ?? .distantPast
             )
-            return BlockedAccount(
-                profile: profile,
-                blockedAt: ISO8601.date(from: row.created_at ?? "")
-            )
+            return BlockedAccount(profile: profile, blockedAt: blockedAt)
         }
     }
 
@@ -649,23 +629,11 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
                   let conversationRaw = row.conversation_id?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !conversationRaw.isEmpty
             else { return nil }
-            let profile = Profile(
+            let profile = MessagingPrivacyProfileFactory.profile(
                 id: ProfileID(peerRaw),
-                userID: UserID(peerRaw),
-                username: row.username ?? "user",
-                displayName: row.name?.nilIfEmpty ?? row.username ?? "User",
-                bio: nil,
-                avatar: row.avatar_url.flatMap { url in
-                    let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
-                    return trimmed.isEmpty ? nil : MediaReference(id: trimmed, kind: .image, altText: nil)
-                },
-                traderType: nil,
-                tradingStyle: nil,
-                primaryMarket: nil,
-                startedTradingAt: nil,
-                isPrivate: false,
-                isCreator: false,
-                createdAt: .distantPast
+                username: row.username,
+                displayName: row.name,
+                avatarURL: row.avatar_url
             )
             return MutedDirectMessagePeer(
                 profile: profile,

@@ -54,6 +54,8 @@ final class ManageRoomViewModel {
     private(set) var viewerID: ProfileID?
     var statusMessage: String?
     var pendingMemberAction: MemberAction?
+    var showsMemberActionConfirmation = false
+    var showsBanMemberConfirmation = false
     var pendingChannelDelete: ChannelDeleteConfirmation?
     var isSavingDetails = false
     var isMutatingMember = false
@@ -346,7 +348,48 @@ final class ManageRoomViewModel {
         }
     }
 
-    func confirmMemberAction(_ action: MemberAction) async {
+    func requestMemberAction(_ action: MemberAction) {
+        pendingMemberAction = action
+        switch action {
+        case .ban:
+            showsBanMemberConfirmation = true
+        case .remove:
+            showsMemberActionConfirmation = true
+        }
+    }
+
+    func cancelBanMember() {
+        pendingMemberAction = nil
+        showsBanMemberConfirmation = false
+    }
+
+    func memberActionTitle(for action: MemberAction) -> String {
+        switch action {
+        case .remove: return "Remove this member from the room?"
+        case .ban: return "Ban this member from the room?"
+        }
+    }
+
+    func canBanMember(_ member: RoomManagedMember) -> Bool {
+        guard let room else { return false }
+        return RoomMessageModerationPolicy.canBanMember(
+            viewerID: viewerID,
+            targetProfileID: member.id,
+            roomOwnerProfileID: room.ownerProfileID
+        )
+    }
+
+    func canRemoveMember(_ member: RoomManagedMember) -> Bool {
+        guard canManageRoom, let viewerID, let room else { return false }
+        return member.role != .owner && member.id != viewerID && member.id != room.ownerProfileID
+    }
+
+    func canShowManageMember(_ member: RoomManagedMember) -> Bool {
+        isOwner && (canBanMember(member) || canRemoveMember(member))
+    }
+
+    func confirmMemberAction() async {
+        guard let action = pendingMemberAction else { return }
         guard canManageRoom, let viewerID, let room else { return }
         let targetID: ProfileID
         switch action {
@@ -354,21 +397,37 @@ final class ManageRoomViewModel {
             targetID = profileID
         }
         guard targetID != viewerID, targetID != room.ownerProfileID else { return }
-        isMutatingMember = true
-        defer {
-            isMutatingMember = false
-            pendingMemberAction = nil
+        if case .ban = action {
+            guard RoomMessageModerationPolicy.canBanMember(
+                viewerID: viewerID,
+                targetProfileID: targetID,
+                roomOwnerProfileID: room.ownerProfileID
+            ) else { return }
         }
+        pendingMemberAction = nil
+        showsMemberActionConfirmation = false
+        showsBanMemberConfirmation = false
+        isMutatingMember = true
+        defer { isMutatingMember = false }
         do {
             switch action {
             case .remove(let profileID):
-                try await rooms.removeMember(roomID: roomID, profileID: profileID)
-                statusMessage = "Member removed."
-            case .ban(let profileID):
-                try await rooms.banMember(
+                try await RoomMemberModerationExecutor.removeMember(
                     roomID: roomID,
                     profileID: profileID,
-                    bannedBy: viewerID
+                    rooms: rooms,
+                    inboxStore: inboxStore,
+                    viewerID: viewerID
+                )
+                statusMessage = "Member removed."
+            case .ban(let profileID):
+                try await RoomMemberModerationExecutor.banMember(
+                    roomID: roomID,
+                    profileID: profileID,
+                    bannedBy: viewerID,
+                    rooms: rooms,
+                    inboxStore: inboxStore,
+                    viewerID: viewerID
                 )
                 statusMessage = "Member banned."
             }
@@ -382,7 +441,14 @@ final class ManageRoomViewModel {
     }
 
     func unban(_ ban: RoomBanRecord) async {
-        guard canManageRoom else { return }
+        guard canManageRoom,
+              let viewerID,
+              let room,
+              RoomMessageModerationPolicy.isRoomOwner(
+                roomOwnerProfileID: room.ownerProfileID,
+                viewerID: viewerID
+              )
+        else { return }
         isMutatingMember = true
         defer { isMutatingMember = false }
         do {

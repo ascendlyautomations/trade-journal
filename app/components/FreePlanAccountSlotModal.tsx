@@ -139,8 +139,8 @@ export default function FreePlanAccountSlotModal({
         <div className="space-y-4">
           <div className="space-y-2 text-sm leading-relaxed text-gray-300">
             <p>
-              The Free plan supports up to {FREE_PLAN_ACCOUNT_LIMIT} active
-              trading accounts.
+              The Free plan supports up to {FREE_PLAN_ACCOUNT_LIMIT} accounts
+              that can receive new trades.
             </p>
             <p>
               Choose which accounts you&apos;d like to keep active. You can keep

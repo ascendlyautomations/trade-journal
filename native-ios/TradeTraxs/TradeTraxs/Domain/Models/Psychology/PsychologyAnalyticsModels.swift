@@ -137,6 +137,15 @@ nonisolated struct PsychologyInsightsUnlockProgress: Equatable, Sendable {
         tradingDayCheckInCount < Self.requiredCount || tradeCount < Self.requiredCount
     }
 
+    /// Dashboard coaching Insights empty state — trades only (not Psychology Insights).
+    var showsDashboardInsightsRequirementMessage: Bool {
+        tradeCount < Self.requiredCount
+    }
+
+    var displayTradeCountForGate: Int {
+        min(tradeCount, Self.requiredCount)
+    }
+
     /// Check-ins on Eastern trade dates present in the same filtered trade set psychology analyzes.
     static func compute(trades: [Trade], checkIns: [TraderDailyCheckIn]) -> Self {
         let checkInByDate = Dictionary(uniqueKeysWithValues: checkIns.map { ($0.checkInDate, $0) })

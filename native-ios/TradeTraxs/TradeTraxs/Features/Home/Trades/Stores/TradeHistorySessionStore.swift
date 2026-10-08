@@ -79,6 +79,14 @@ final class TradeHistorySessionStore {
 
     func noteUpserted(_ summary: TradeOwnerJournalSummary) {
         SessionNetworkProbe.record(.localMutation, resource: "trades.history", detail: summary.id.rawValue)
+        if TradeSummaryMapper.listMatchTrade(from: summary).mode == .backtest {
+            for key in snapshots.keys {
+                guard var snap = snapshots[key] else { continue }
+                snap.items.removeAll { $0.id == summary.id }
+                snapshots[key] = snap
+            }
+            return
+        }
         for key in snapshots.keys {
             guard var snap = snapshots[key] else { continue }
             guard snap.schemaVersion == Self.snapshotSchemaVersion else { continue }

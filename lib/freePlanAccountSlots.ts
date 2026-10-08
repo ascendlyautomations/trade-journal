@@ -1,14 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { isProActive } from "./subscription.ts"
+
+/** Keep aligned with ``FREE_PLAN_ACCOUNT_LIMIT`` in ``tradingAccounts.ts``. */
+export const FREE_PLAN_TRADE_ENTRY_SLOT_LIMIT = 3
 
 export type AccountTradeEntryRow = {
   id?: string | null
   can_add_trades?: boolean | null
 }
 
-/**
- * Free-plan account-creation quota flag (`can_add_trades = true`).
- * Not trade-entry authorization. Missing values count as enabled for that quota.
- */
+/** True when the account may receive new trades on Free (default true for legacy rows). */
 export function accountCanAddTrades(
   account: AccountTradeEntryRow | null | undefined
 ): boolean {
@@ -22,23 +23,32 @@ export function countTradeEntryEnabledAccounts(
   return accounts.filter((row) => accountCanAddTrades(row)).length
 }
 
-/**
- * Slot selection used to mark extra accounts read-only. Trade entry no longer
- * uses that picker, so the prompt stays off. Account creation still uses
- * {@link countTradeEntryEnabledAccounts}.
- */
-export function needsFreePlanAccountSlotSelection(
-  _profile: unknown,
-  _accounts: readonly AccountTradeEntryRow[]
-): boolean {
-  return false
+/** Every user-created row in `accounts` consumes a Free creation slot. */
+export function countTotalTradingAccounts(
+  accounts: readonly { id?: string | null }[]
+): number {
+  return accounts.length
 }
 
-/** Active accounts that may receive new trades. Dropdown visibility is separate. */
+/**
+ * Free user must pick up to FREE_PLAN_ACCOUNT_LIMIT entry-enabled accounts
+ * when they currently have more than that limit with can_add_trades = true.
+ */
+export function needsFreePlanAccountSlotSelection(
+  profile: Parameters<typeof isProActive>[0],
+  accounts: readonly AccountTradeEntryRow[]
+): boolean {
+  if (isProActive(profile)) return false
+  return countTradeEntryEnabledAccounts(accounts) > FREE_PLAN_TRADE_ENTRY_SLOT_LIMIT
+}
+
+/** Accounts allowed in Manual / Quick / CSV / sync pickers. */
 export function filterAccountsForTradeEntry<
   T extends AccountTradeEntryRow & { is_active?: boolean | null },
 >(accounts: readonly T[]): T[] {
-  return accounts.filter((row) => row.is_active !== false)
+  return accounts.filter(
+    (row) => accountCanAddTrades(row) && row.is_active !== false
+  )
 }
 
 /** Normal account dropdowns: active and `show_in_account_dropdowns`. */
@@ -53,31 +63,30 @@ export function filterAccountsForDropdown<
   )
 }
 
-/** @deprecated Retired Free-plan read-only UX — do not show in product UI. */
 export const ACCOUNT_READ_ONLY_BADGE = "Read Only"
 
-/** @deprecated Retired slot-selection flow. */
 export const ACCOUNT_SLOT_SELECTION_REQUIRED_MESSAGE =
-  "Choose up to 3 accounts to keep active for new trades."
+  "Choose up to 3 accounts to keep active for new trades. Your other accounts stay available in read-only mode."
 
-/** @deprecated Retired read-only trade entry messaging. */
 export const ACCOUNT_READ_ONLY_TRADE_MESSAGE =
-  "This trading account can't accept new trades right now."
+  "This account is read-only on the Free plan. Choose it as one of your 3 active accounts or upgrade to TraxPro to add trades."
 
-/** Ownership check before inserting a trade. `can_add_trades` is not consulted. */
+/** Server-side gate before inserting a trade against an accounts row. */
 export async function assertAccountAllowsNewTrades(
   client: SupabaseClient,
   userId: string,
   accountId: string | null | undefined,
-  _profile: unknown
+  profile: Parameters<typeof isProActive>[0]
 ): Promise<
   | { ok: true }
   | {
       ok: false
-      code: "ownership" | "missing_account"
+      code: "read_only" | "selection_required" | "ownership" | "missing_account"
       message: string
     }
 > {
+  if (isProActive(profile)) return { ok: true }
+
   const id = String(accountId ?? "").trim()
   if (!id) {
     return {
@@ -87,11 +96,10 @@ export async function assertAccountAllowsNewTrades(
     }
   }
 
-  const { data: target, error } = await client
+  const { data: rows, error } = await client
     .from("accounts")
-    .select("id, user_id")
-    .eq("id", id)
-    .maybeSingle()
+    .select("id, user_id, can_add_trades")
+    .eq("user_id", userId)
 
   if (error) {
     console.error("[assertAccountAllowsNewTrades]", error)
@@ -102,8 +110,17 @@ export async function assertAccountAllowsNewTrades(
     }
   }
 
+  const accounts = rows ?? []
+  if (needsFreePlanAccountSlotSelection(profile, accounts)) {
+    return {
+      ok: false,
+      code: "selection_required",
+      message: ACCOUNT_SLOT_SELECTION_REQUIRED_MESSAGE,
+    }
+  }
+
+  const target = accounts.find((row) => String(row.id) === id)
   if (!target) {
-    // Legacy trades without a matching accounts row — allow (DB trigger also allows).
     return { ok: true }
   }
 
@@ -112,6 +129,14 @@ export async function assertAccountAllowsNewTrades(
       ok: false,
       code: "ownership",
       message: "That trading account does not belong to you.",
+    }
+  }
+
+  if (!accountCanAddTrades(target)) {
+    return {
+      ok: false,
+      code: "read_only",
+      message: ACCOUNT_READ_ONLY_TRADE_MESSAGE,
     }
   }
 

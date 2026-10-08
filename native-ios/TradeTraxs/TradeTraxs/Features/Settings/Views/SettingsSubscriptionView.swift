@@ -240,32 +240,19 @@ struct SettingsSubscriptionView: View {
 
     private var proBenefitList: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            benefitRow(
-                title: "Trades",
-                detail: "No daily trade limit."
-            )
-            benefitRow(
-                title: "Trading accounts",
-                detail: "No limit on active trading accounts."
-            )
-            benefitRow(
-                title: "Advanced analytics",
-                detail: "Advanced psychology and analytics tools."
-            )
-            benefitRow(
-                title: "Trade AI",
-                detail: "Trade AI analysis on your trades."
-            )
+            ForEach(ProUpgradeMarketing.benefitLines, id: \.self) { line in
+                benefitRow(title: line, detail: "")
+            }
         }
     }
 
     private func freeLimitList(_ status: BillingStatus) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            featureRow(title: "Trades", detail: "\(dailyTrades(status)) a day")
-            featureRow(title: "Posts", detail: "\(dailyPosts(status)) a day")
-            featureRow(title: "Clips", detail: "\(FreeTierPolicy.dailyReelLimit) a day")
-            featureRow(title: "Messages", detail: "\(dailyMessages(status)) a day")
-            featureRow(title: "Accounts", detail: "\(activeAccounts(status)) active")
+            featureRow(title: "Manual trades", detail: "Unlimited")
+            featureRow(title: "CSV imports", detail: "Unlimited")
+            featureRow(title: "Posts & DMs", detail: "Unlimited")
+            featureRow(title: "Clips", detail: "\(FreeTierPolicy.dailyClipLimit) per UTC day")
+            featureRow(title: "Active accounts", detail: "\(activeAccounts(status)) max")
         }
     }
 
@@ -464,23 +451,13 @@ struct SettingsSubscriptionView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .experienceStyle(.subheadline, color: colors.primaryText)
-                Text(detail)
-                    .experienceStyle(.caption, color: colors.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
+                if !detail.isEmpty {
+                    Text(detail)
+                        .experienceStyle(.caption, color: colors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
-    }
-
-    private func dailyTrades(_ status: BillingStatus) -> Int {
-        status.dailyTradeLimit ?? FreeTierPolicy.dailyTradeLimit
-    }
-
-    private func dailyPosts(_ status: BillingStatus) -> Int {
-        status.dailyPostLimit ?? FreeTierPolicy.dailyPostLimit
-    }
-
-    private func dailyMessages(_ status: BillingStatus) -> Int {
-        status.dailyMessageLimit ?? FreeTierPolicy.dailyDirectMessageLimit
     }
 
     private func activeAccounts(_ status: BillingStatus) -> Int {

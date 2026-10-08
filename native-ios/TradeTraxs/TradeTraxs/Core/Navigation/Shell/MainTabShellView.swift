@@ -40,6 +40,7 @@ struct MainTabShellView: View {
         .experienceAppChrome(usesFeedOpaqueChrome: store.selectedTab == .feed)
         .globalUploadQueueSheet(coordinator: globalUploadCoordinator)
         .proUpgradeSheet()
+        .freePlanAccountSlotOverlay()
         .sheet(isPresented: Binding(
             get: { postTradeReflectionGate.pendingTrade != nil },
             set: { isPresented in
@@ -241,13 +242,18 @@ struct HomeNavigationStack: View {
                 navigationCoordinator: coordinator
             )
         case .propFirm(let accountID):
-            PropFirmDetailView(
+            PropFirmHomeRouteView(
                 accountID: accountID,
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
         case .reports:
             ReportsScreenView(
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .backtest:
+            BacktestLabView(
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
@@ -269,21 +275,11 @@ struct HomeNavigationStack: View {
                 navigationCoordinator: coordinator
             )
         case .report(let reportID):
-            if PsychologyReportPeriodRef.parse(reportID: reportID) != nil {
-                PsychologyReportDetailView(reportID: reportID, data: appEnvironment.data)
-            } else if let yearRef = TradingReportYearRef.parse(reportID: reportID) {
-                YearlyReportDetailView(
-                    year: yearRef.year,
-                    data: appEnvironment.data,
-                    navigationCoordinator: coordinator
-                )
-            } else {
-                ReportDetailView(
-                    reportID: reportID,
-                    data: appEnvironment.data,
-                    navigationCoordinator: coordinator
-                )
-            }
+            ReportDetailHomeRouteView(
+                reportID: reportID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
         case .checkInHistory:
             CheckInHistoryView(data: appEnvironment.data, navigationCoordinator: coordinator)
         case .checkInDay(let dateKey):
@@ -369,34 +365,9 @@ struct HomeNavigationStack: View {
                 SettingsHomeView(authenticationCoordinator: authenticationCoordinator)
             }
         case .psychologyAnalytics:
-            if let report = PsychologyAnalyticsSessionStore.shared.report {
-                PsychologyAnalyticsDetailView(
-                    report: report,
-                    highlightedSectionID: PsychologyAnalyticsSessionStore.shared.highlightedSectionID,
-                    onOpenCoach: {
-                        coordinator.pushHome(.psychologyCoach)
-                    },
-                    onOpenCheckInHistory: {
-                        coordinator.pushHome(.checkInHistory)
-                    }
-                )
-            } else {
-                ExperienceEmptyState(
-                    icon: .chart,
-                    title: "No analytics yet",
-                    message: "Return to Dashboard after logging more trades and check-ins."
-                )
-            }
+            PsychologyAnalyticsHomeRouteView(navigationCoordinator: coordinator)
         case .psychologyCoach:
-            if let facts = PsychologyCoachSessionStore.shared.facts {
-                PsychologyCoachView(facts: facts, ai: appEnvironment.data.ai)
-            } else {
-                ExperienceEmptyState(
-                    icon: .chart,
-                    title: "Coach unavailable",
-                    message: "Open Psychology Analytics from Dashboard first."
-                )
-            }
+            PsychologyCoachHomeRouteView(ai: appEnvironment.data.ai)
         case .settings(let settingsRoute):
             SettingsDestinationView(
                 route: settingsRoute,
@@ -978,6 +949,256 @@ private struct CreateTabPlaceholder: View {
         Color.clear
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityHidden(true)
+    }
+}
+
+/// Gates `HomeRoute.propFirm` — confirmed Free users get the upgrade sheet instead of Prop Firm Mode detail.
+private struct PropFirmHomeRouteView: View {
+    let accountID: TradingAccountID
+    let data: DataEnvironment
+    let navigationCoordinator: NavigationCoordinator
+
+    @State private var entitlementGateRevision = 0
+    @State private var didPresentUpgradeGate = false
+
+    private var restrictsPropFirmMode: Bool {
+        _ = entitlementGateRevision
+        let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+        return ProMonetizationPolicy.shouldRestrictPropFirmMode(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        )
+    }
+
+    var body: some View {
+        Group {
+            if restrictsPropFirmMode {
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .experienceScreenBackground()
+            } else {
+                PropFirmDetailView(
+                    accountID: accountID,
+                    data: data,
+                    navigationCoordinator: navigationCoordinator
+                )
+            }
+        }
+        .onAppear { presentUpgradeGateIfNeeded() }
+        .onChange(of: restrictsPropFirmMode) { _, restricted in
+            if restricted {
+                presentUpgradeGateIfNeeded()
+            } else {
+                didPresentUpgradeGate = false
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { _ in
+            entitlementGateRevision += 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .monetizationConfigurationDidChange)) { _ in
+            entitlementGateRevision += 1
+        }
+    }
+
+    private func presentUpgradeGateIfNeeded() {
+        guard restrictsPropFirmMode else { return }
+        guard !didPresentUpgradeGate else { return }
+        didPresentUpgradeGate = true
+        ProUpgradeCoordinator.shared.present(reason: .feature(.propFirm))
+    }
+}
+
+/// Gates `HomeRoute.psychologyAnalytics` for confirmed Free users.
+private struct PsychologyAnalyticsHomeRouteView: View {
+    let navigationCoordinator: NavigationCoordinator
+
+    @State private var entitlementGateRevision = 0
+    @State private var didPresentUpgradeGate = false
+
+    private var restrictsPremiumPsychologyAndAI: Bool {
+        _ = entitlementGateRevision
+        let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+        return ProMonetizationPolicy.shouldRestrictPremiumPsychologyAndAI(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        )
+    }
+
+    var body: some View {
+        Group {
+            if restrictsPremiumPsychologyAndAI {
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .experienceScreenBackground()
+            } else if let report = PsychologyAnalyticsSessionStore.shared.report {
+                PsychologyAnalyticsDetailView(
+                    report: report,
+                    highlightedSectionID: PsychologyAnalyticsSessionStore.shared.highlightedSectionID,
+                    onOpenCoach: {
+                        navigationCoordinator.pushHome(.psychologyCoach)
+                    },
+                    onOpenCheckInHistory: {
+                        navigationCoordinator.pushHome(.checkInHistory)
+                    }
+                )
+            } else {
+                ExperienceEmptyState(
+                    icon: .chart,
+                    title: "No analytics yet",
+                    message: "Return to Dashboard after logging more trades and check-ins."
+                )
+            }
+        }
+        .onAppear { presentUpgradeGateIfNeeded() }
+        .onChange(of: restrictsPremiumPsychologyAndAI) { _, restricted in
+            if restricted {
+                presentUpgradeGateIfNeeded()
+            } else {
+                didPresentUpgradeGate = false
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { _ in
+            entitlementGateRevision += 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .monetizationConfigurationDidChange)) { _ in
+            entitlementGateRevision += 1
+        }
+    }
+
+    private func presentUpgradeGateIfNeeded() {
+        guard restrictsPremiumPsychologyAndAI else { return }
+        guard !didPresentUpgradeGate else { return }
+        didPresentUpgradeGate = true
+        ProUpgradeCoordinator.shared.present(reason: .feature(.premiumAnalytics))
+    }
+}
+
+/// Gates `HomeRoute.psychologyCoach` for confirmed Free users.
+private struct PsychologyCoachHomeRouteView: View {
+    let ai: any AIRepository
+
+    @State private var entitlementGateRevision = 0
+    @State private var didPresentUpgradeGate = false
+
+    private var restrictsPremiumPsychologyAndAI: Bool {
+        _ = entitlementGateRevision
+        let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+        return ProMonetizationPolicy.shouldRestrictPremiumPsychologyAndAI(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        )
+    }
+
+    var body: some View {
+        Group {
+            if restrictsPremiumPsychologyAndAI {
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .experienceScreenBackground()
+            } else if let facts = PsychologyCoachSessionStore.shared.facts {
+                PsychologyCoachView(facts: facts, ai: ai)
+            } else {
+                ExperienceEmptyState(
+                    icon: .chart,
+                    title: "Coach unavailable",
+                    message: "Open Psychology Analytics from Dashboard first."
+                )
+            }
+        }
+        .onAppear { presentUpgradeGateIfNeeded() }
+        .onChange(of: restrictsPremiumPsychologyAndAI) { _, restricted in
+            if restricted {
+                presentUpgradeGateIfNeeded()
+            } else {
+                didPresentUpgradeGate = false
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { _ in
+            entitlementGateRevision += 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .monetizationConfigurationDidChange)) { _ in
+            entitlementGateRevision += 1
+        }
+    }
+
+    private func presentUpgradeGateIfNeeded() {
+        guard restrictsPremiumPsychologyAndAI else { return }
+        guard !didPresentUpgradeGate else { return }
+        didPresentUpgradeGate = true
+        ProUpgradeCoordinator.shared.present(reason: .feature(.premiumAnalytics))
+    }
+}
+
+/// Gates `HomeRoute.report` — confirmed Free users see the upgrade sheet instead of report detail.
+private struct ReportDetailHomeRouteView: View {
+    let reportID: ReportID
+    let data: DataEnvironment
+    let navigationCoordinator: NavigationCoordinator
+
+    @State private var entitlementGateRevision = 0
+    @State private var didPresentUpgradeGate = false
+
+    private var restrictsTradingReportsCatalog: Bool {
+        _ = entitlementGateRevision
+        let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+        return ProMonetizationPolicy.shouldRestrictTradingReportsCatalog(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        )
+    }
+
+    var body: some View {
+        Group {
+            if restrictsTradingReportsCatalog {
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .experienceScreenBackground()
+            } else {
+                reportDetailContent
+            }
+        }
+        .onAppear {
+            presentUpgradeGateIfNeeded()
+        }
+        .onChange(of: restrictsTradingReportsCatalog) { _, restricted in
+            if restricted {
+                presentUpgradeGateIfNeeded()
+            } else {
+                didPresentUpgradeGate = false
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { _ in
+            entitlementGateRevision += 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .monetizationConfigurationDidChange)) { _ in
+            entitlementGateRevision += 1
+        }
+    }
+
+    @ViewBuilder
+    private var reportDetailContent: some View {
+        if PsychologyReportPeriodRef.parse(reportID: reportID) != nil {
+            PsychologyReportDetailView(reportID: reportID, data: data)
+        } else if let yearRef = TradingReportYearRef.parse(reportID: reportID) {
+            YearlyReportDetailView(
+                year: yearRef.year,
+                data: data,
+                navigationCoordinator: navigationCoordinator
+            )
+        } else {
+            ReportDetailView(
+                reportID: reportID,
+                data: data,
+                navigationCoordinator: navigationCoordinator
+            )
+        }
+    }
+
+    private func presentUpgradeGateIfNeeded() {
+        guard restrictsTradingReportsCatalog else { return }
+        guard !didPresentUpgradeGate else { return }
+        didPresentUpgradeGate = true
+        ProUpgradeCoordinator.shared.present(reason: .feature(.tradingReports))
     }
 }
 

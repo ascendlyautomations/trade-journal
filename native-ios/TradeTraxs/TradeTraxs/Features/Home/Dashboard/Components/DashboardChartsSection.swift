@@ -14,6 +14,8 @@ struct DashboardChartsSection: View {
     var onBrowseLong: (() -> Void)?
     var onBrowseShort: (() -> Void)?
     var onBrowseHoldBucket: ((String) -> Void)?
+    /// When true, hides Drawdown, Hold Time, and Setup Performance only (confirmed Free + monetization gates).
+    var hidesPremiumDashboardCharts: Bool = false
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -33,8 +35,10 @@ struct DashboardChartsSection: View {
             }
 
             behaviorGroup
-            executionGroup
-            riskGroup
+            if !hidesPremiumDashboardCharts {
+                executionGroup
+                riskGroup
+            }
         }
         .padding(.horizontal, ExperienceSpacing.md)
         .accessibilityIdentifier("dashboard.charts")
@@ -103,7 +107,8 @@ struct DashboardChartsSection: View {
                     DashboardSymbolRankedBarsView(rows: summary.symbolPerformance)
                 }
             }
-            if let strategies = summary.strategyHighlights,
+            if !hidesPremiumDashboardCharts,
+               let strategies = summary.strategyHighlights,
                strategies.best != nil || strategies.worst != nil {
                 chartBlock(
                     title: "Setup Performance",

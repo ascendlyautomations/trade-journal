@@ -22,6 +22,7 @@ struct AddTradeView: View {
     @State private var isTradeReviewExpanded = false
     @State private var showsBrokerIntegrations = false
     @State private var createAccountSheet: CreateAccountSheetPresentation?
+    @State private var accountCreateSheetPending = false
     @FocusState private var focusedField: AddTradeViewModel.Field?
 
     @Environment(\.themeColors) private var colors
@@ -238,8 +239,13 @@ struct AddTradeView: View {
                 .experienceSheetChrome(detents: [.large])
             }
         }
-        .sheet(item: $createAccountSheet) { presentation in
-            ManageAccountCreateAccountSheet(data: presentation.data)
+        .sheet(item: $createAccountSheet, onDismiss: {
+            accountCreateSheetPending = false
+        }) { presentation in
+            ManageAccountCreateAccountSheet(
+                data: presentation.data,
+                navigationCoordinator: navigationEnvironment.coordinator
+            )
         }
         .task {
             viewModel.loadIfNeeded()
@@ -249,8 +255,9 @@ struct AddTradeView: View {
         }
         .onChange(of: AccountMutationStore.shared.revision) { _, _ in
             viewModel.reloadAccountsAfterMutation()
-            if createAccountSheet != nil, AccountMutationStore.shared.latestAccountID != nil {
+            if accountCreateSheetPending, AccountMutationStore.shared.latestAccountID != nil {
                 createAccountSheet = nil
+                accountCreateSheetPending = false
             }
         }
         .onChange(of: viewModel.phase) { _, phase in
@@ -424,6 +431,17 @@ struct AddTradeView: View {
                 }
                 instrumentRow
                     .addTradeFormRow()
+                if viewModel.prioritizesStrategySetupField {
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                        strategySetupField
+                        if let error = viewModel.fieldErrors[.strategy] {
+                            Text(error)
+                                .foregroundStyle(colors.loss)
+                                .font(.caption)
+                        }
+                    }
+                    .addTradeFormRow()
+                }
                 Picker("Direction", selection: $viewModel.side) {
                     Text("Long").tag(TradeSide.long)
                     Text("Short").tag(TradeSide.short)
@@ -604,12 +622,18 @@ struct AddTradeView: View {
         }
     }
 
+    private var strategySetupField: some View {
+        TextField("Strategy / setup", text: $viewModel.strategyText)
+            .textInputAutocapitalization(.sentences)
+            .accessibilityIdentifier("addTrade.strategy")
+    }
+
     private var tradeReviewSection: some View {
         Section {
             DisclosureGroup(isExpanded: $isTradeReviewExpanded) {
-                TextField("Strategy / setup", text: $viewModel.strategyText)
-                    .textInputAutocapitalization(.sentences)
-                    .accessibilityIdentifier("addTrade.strategy")
+                if !viewModel.prioritizesStrategySetupField {
+                    strategySetupField
+                }
 
                 inlineNotesEditor(
                     text: $viewModel.notesText,
@@ -907,7 +931,9 @@ struct AddTradeView: View {
             Picker("Account", selection: Binding(
                 get: { viewModel.accountPickerSelectionTag },
                 set: { newValue in
-                    if newValue.isEmpty {
+                    if newValue == AddTradeViewModel.addAccountPickerTag {
+                        presentCreateTradingAccount()
+                    } else if newValue.isEmpty {
                         viewModel.clearAccountSelection()
                     } else {
                         viewModel.selectAccount(TradingAccountID(newValue))
@@ -921,6 +947,10 @@ struct AddTradeView: View {
                     OwnerAccountDropdownPickerLabel(account: account)
                         .tag(account.id.rawValue)
                 }
+                Divider()
+                Text("+ Add Account")
+                    .foregroundStyle(colors.accent)
+                    .tag(AddTradeViewModel.addAccountPickerTag)
             }
             .accessibilityIdentifier("addTrade.account")
             .onAppear {
@@ -938,6 +968,7 @@ struct AddTradeView: View {
             viewModel.openManageAccounts()
             return
         }
+        accountCreateSheetPending = true
         createAccountSheet = CreateAccountSheetPresentation(data: brokerData)
     }
 

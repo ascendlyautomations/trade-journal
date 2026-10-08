@@ -13,11 +13,16 @@ struct ActivityRowView: View {
             HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
                 avatar
                 VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                    Text(row.primaryText)
-                        .experienceStyle(.body, color: colors.primaryText)
-                        .fontWeight(row.isUnread ? .semibold : .regular)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(row.primaryText)
+                            .experienceStyle(.body, color: colors.primaryText)
+                            .fontWeight(row.isUnread ? .semibold : .regular)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let actor = row.actor {
+                            ProfileTradeTraxsIdentityBadge(profile: actor, size: .inline)
+                        }
+                    }
                     if let secondary = row.secondaryText {
                         Text(secondary)
                             .experienceStyle(.caption, color: colors.secondaryText)

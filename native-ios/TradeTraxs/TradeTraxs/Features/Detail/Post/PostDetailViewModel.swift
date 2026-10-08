@@ -87,6 +87,11 @@ final class PostDetailViewModel {
         }
     }
 
+    func openAuthor() {
+        guard let profileID = post?.authorProfileID else { return }
+        navigationCoordinator.pushOtherProfile(profileID)
+    }
+
     private func performLoad(forceNetwork: Bool = false) async {
         if !forceNetwork, let seed = cache.post(id: postID) {
             post = seed

@@ -39,6 +39,35 @@ final class MessagingPrivacyTests: XCTestCase {
         XCTAssertEqual(SettingsRoute.privacyMessageAudience.title, "Who Can Message Me")
     }
 
+    func testMessagingPrivacyProfileFactoryAndPresentationLines() {
+        let profileID = ProfileID("11111111-1111-1111-1111-111111111111")
+        let profile = MessagingPrivacyProfileFactory.profile(
+            id: profileID,
+            username: "trader_joe",
+            displayName: "Joe Trader",
+            avatarURL: "https://cdn.example/avatar.jpg"
+        )
+        XCTAssertEqual(profile.username, "trader_joe")
+        XCTAssertEqual(profile.settingsPrivacyUsernameLine, "@trader_joe")
+        XCTAssertEqual(profile.settingsPrivacyDisplayNameLine, "Joe Trader")
+
+        let handleOnly = MessagingPrivacyProfileFactory.profile(
+            id: profileID,
+            username: "trader_joe",
+            displayName: nil,
+            avatarURL: nil
+        )
+        XCTAssertNil(handleOnly.settingsPrivacyDisplayNameLine)
+
+        let missing = MessagingPrivacyProfileFactory.profile(
+            id: profileID,
+            username: nil,
+            displayName: nil,
+            avatarURL: nil
+        )
+        XCTAssertEqual(missing.settingsPrivacyUsernameLine, "Blocked account")
+    }
+
     @MainActor
     func testUserBlockCoordinatorCachesStatus() async {
         let peerID = ProfileID("peer-1")

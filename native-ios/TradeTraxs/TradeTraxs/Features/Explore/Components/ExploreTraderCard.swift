@@ -45,9 +45,7 @@ struct ExploreTraderCard: View {
                                 .font(ExperienceTypography.subheadline.weight(.semibold))
                                 .foregroundStyle(colors.primaryText)
                                 .lineLimit(1)
-                            if profile.isCreator {
-                                TradeTraxsVerifiedBadge(size: .inline)
-                            }
+                            ProfileTradeTraxsIdentityBadge(profile: profile, size: .inline)
                         }
                         .frame(height: usesCompactLayout ? nameRowHeight : nil, alignment: .center)
 

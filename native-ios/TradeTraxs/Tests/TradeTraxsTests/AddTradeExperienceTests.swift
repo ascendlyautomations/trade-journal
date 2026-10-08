@@ -479,6 +479,47 @@ final class AddTradeExperienceTests: XCTestCase {
         XCTAssertEqual(store.presentedFullScreen, .importCSV)
     }
 
+    func testBacktestAccountRequiresStrategyBeforeSave() async {
+        // Non-`dev.*` viewer so `loadAccounts` uses cache + stub repository (not dev fixtures).
+        let owner = ProfileID("user.real")
+        let backtest = TradingAccount(
+            id: TradingAccountID("acct.backtest.lab"),
+            ownerProfileID: owner,
+            name: "Backtest Lab",
+            category: .backtest,
+            mode: .backtest,
+            size: nil,
+            isActive: true,
+            canAddTrades: true,
+            accountNumber: nil
+        )
+        let cache = DetailPresentationCache()
+        cache.seed(accounts: [backtest], for: owner)
+        let viewModel = AddTradeViewModel(
+            trades: AddTradeVisibilityStubRepository(accounts: [backtest]),
+            feed: AddTradeStubFeedRepository(),
+            session: AddTradeStubSession(userID: owner.rawValue),
+            detailCache: cache,
+            uploadService: AddTradeStubUpload(),
+            objectStorage: AddTradeStubStorage(),
+            onDismiss: {}
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .ready }
+        viewModel.selectAccount(backtest.id)
+        XCTAssertEqual(viewModel.selectedAccountID, backtest.id)
+        viewModel.symbolText = "MNQ"
+        viewModel.contractsText = "1"
+        viewModel.pnlText = "100"
+        viewModel.strategyText = "   "
+        viewModel.save()
+        await waitFor { viewModel.fieldErrors[.strategy] != nil }
+        XCTAssertEqual(
+            viewModel.fieldErrors[.strategy],
+            "Strategy / setup is required for backtest trades"
+        )
+    }
+
     func testCustomInstrumentNormalizesAndApplies() async {
         let cache = DetailPresentationCache()
         let viewModel = AddTradeViewModel(

@@ -89,6 +89,11 @@ final class AchievementDetailViewModel {
         }
     }
 
+    func openAuthor() {
+        guard let profileID = achievement?.ownerProfileID else { return }
+        navigationCoordinator.pushOtherProfile(profileID)
+    }
+
     private func performLoad(forceNetwork: Bool = false) async {
         if !forceNetwork, let seed = cache.achievement(id: achievementID) {
             achievement = seed

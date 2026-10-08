@@ -1,12 +1,9 @@
 import Foundation
 
-/// Client-side trade-entry checks. Owned accounts accept trades; ownership is enforced by the repository and Postgres.
+/// Client-side trade-entry checks aligned with Postgres `trades_enforce_account_can_add_trades`.
 @MainActor
 enum TradeEntryEntitlementGate {
-    enum ViewerTier: Sendable {
-        case pro
-        case free
-    }
+    typealias ViewerTier = TradeEntryViewerTier
 
     static func viewerTier(profileID: ProfileID) -> ViewerTier {
         if let record = PersistedEntitlementSnapshotStore.load(userID: profileID.rawValue) {
@@ -29,16 +26,27 @@ enum TradeEntryEntitlementGate {
         viewerTier(profileID: profileID) == .pro
     }
 
-    static func accountAllowsNewTrade(_: TradingAccount, viewerTier _: ViewerTier) -> Bool {
-        true
+    static func accountAllowsNewTrade(_ account: TradingAccount, viewerTier: ViewerTier) -> Bool {
+        guard IosSubscriptionReleaseConfiguration.appliesFreeTierUsageCaps else { return true }
+        switch viewerTier {
+        case .pro:
+            return true
+        case .free:
+            return FreePlanTradeAccountPolicy.accountCanAddTrades(account)
+        }
     }
 
-    /// Copy-group members are journalable together. `canAddTrades` is not a write gate.
     static func validateAccountsForNewTrades(
-        _: [TradingAccount],
-        profileID _: ProfileID
+        _ accounts: [TradingAccount],
+        profileID: ProfileID
     ) -> String? {
-        nil
+        guard IosSubscriptionReleaseConfiguration.appliesFreeTierUsageCaps else { return nil }
+        let tier = viewerTier(profileID: profileID)
+        guard tier == .free else { return nil }
+        if FreePlanTradeAccountPolicy.needsSlotSelection(accounts: accounts, viewerTier: tier) {
+            return "Choose up to \(FreeTierPolicy.maxTradeEntryAccounts) accounts to keep active for new trades."
+        }
+        return nil
     }
 
     private static func sessionProfileIndicatesTraxPro(profileID: ProfileID) -> Bool {
