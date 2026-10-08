@@ -474,7 +474,7 @@ struct DashboardHomeView: View {
                 isActive: dashboardScrollAwareHeaderActive,
                 reduceMotion: reduceMotion,
                 debugSurface: "dashboard.scroll",
-                trackingMode: .dashboardNavigationBar,
+                trackingMode: .navigationBarInsetStable,
                 tracker: $dashboardScrollHeaderTracker,
                 chromeHidden: $dashboardScrollChromeHidden
             )

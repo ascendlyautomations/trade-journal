@@ -5,46 +5,37 @@ struct ScrollAwareHeaderScrollModifier: ViewModifier {
     let isActive: Bool
     let reduceMotion: Bool
     let debugSurface: String
-    var trackingMode: FeedScrollAwareHeaderTrackingMode = .timelineNormalized
+    var trackingMode: FeedScrollAwareHeaderTrackingMode = .navigationBarInsetStable
     @Binding var tracker: FeedScrollAwareHeaderTracker
     @Binding var chromeHidden: Bool
 
     func body(content: Content) -> some View {
         if isActive {
-            #if DEBUG
             content
-                .onScrollGeometryChange(for: FeedScrollChromeDebugSample.self) { geometry in
-                    FeedScrollChromeDebugSample(
+                .onScrollGeometryChange(for: FeedScrollChromeGeometrySample.self) { geometry in
+                    FeedScrollChromeGeometrySample(
                         normalizedOffsetY: geometry.contentOffset.y + geometry.contentInsets.top,
                         rawOffsetY: geometry.contentOffset.y,
-                        contentInsetTop: geometry.contentInsets.top,
-                        contentHeight: geometry.contentSize.height,
-                        containerHeight: geometry.containerSize.height
+                        contentInsetTop: geometry.contentInsets.top
                     )
                 } action: { _, sample in
                     let result = applyScrollSample(sample: sample)
+                    #if DEBUG
                     FeedScrollAwareHeaderDiagnostics.logScrollGeometryAction(
-                        sample: sample,
+                        sample: FeedScrollChromeDebugSample(
+                            normalizedOffsetY: sample.normalizedOffsetY,
+                            rawOffsetY: sample.rawOffsetY,
+                            contentInsetTop: sample.contentInsetTop,
+                            contentHeight: 0,
+                            containerHeight: 0
+                        ),
                         trackerHidden: result.hidden,
                         visibilityChanged: result.changed,
                         scrollListenerActive: isActive,
                         surface: debugSurface
                     )
+                    #endif
                 }
-            #else
-            content
-                .onScrollGeometryChange(for: FeedScrollChromeSample.self) { geometry in
-                    FeedScrollChromeSample(
-                        normalizedOffsetY: geometry.contentOffset.y + geometry.contentInsets.top
-                    )
-                } action: { _, sample in
-                    applyScrollSample(
-                        normalizedOffsetY: sample.normalizedOffsetY,
-                        rawOffsetY: sample.normalizedOffsetY,
-                        contentInsetTop: 0
-                    )
-                }
-            #endif
         } else {
             content
                 #if DEBUG
@@ -58,16 +49,14 @@ struct ScrollAwareHeaderScrollModifier: ViewModifier {
         }
     }
 
-    #if DEBUG
     @discardableResult
-    private func applyScrollSample(sample: FeedScrollChromeDebugSample) -> (changed: Bool, hidden: Bool) {
+    private func applyScrollSample(sample: FeedScrollChromeGeometrySample) -> (changed: Bool, hidden: Bool) {
         applyScrollSample(
             normalizedOffsetY: sample.normalizedOffsetY,
             rawOffsetY: sample.rawOffsetY,
             contentInsetTop: sample.contentInsetTop
         )
     }
-    #endif
 
     @discardableResult
     private func applyScrollSample(

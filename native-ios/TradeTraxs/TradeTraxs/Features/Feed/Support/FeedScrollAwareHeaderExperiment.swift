@@ -15,15 +15,27 @@ enum FeedScrollAwareHeaderExperiment {
 
 /// How scroll samples map to tracker coordinates (Feed vs Dashboard nav-only chrome).
 enum FeedScrollAwareHeaderTrackingMode {
-    /// `contentOffset.y + contentInsets.top` — category bar uses fixed overlay padding on Feed.
+    /// Navigation bar hide/show changes top inset; track with stable raw offset + reference inset.
+    case navigationBarInsetStable
+    /// Legacy alias — do not use normalized-only tracking when toggling toolbar visibility (Release loop).
     case timelineNormalized
-    /// Navigation bar hide/show changes top inset; track with a stable reference inset (nav visible).
     case dashboardNavigationBar
+
+    var usesInsetStableNavigationTracking: Bool {
+        switch self {
+        case .navigationBarInsetStable, .dashboardNavigationBar:
+            return true
+        case .timelineNormalized:
+            return false
+        }
+    }
 }
 
-/// Normalized vertical scroll sample for timeline chrome (offset + top content inset).
-struct FeedScrollChromeSample: Equatable {
+/// Scroll geometry sample for `onScrollGeometryChange` (Debug and Release must match).
+struct FeedScrollChromeGeometrySample: Equatable {
     var normalizedOffsetY: CGFloat
+    var rawOffsetY: CGFloat
+    var contentInsetTop: CGFloat
 }
 
 /// Interprets vertical scroll offset changes with hysteresis to avoid header flicker.
@@ -62,7 +74,7 @@ struct FeedScrollAwareHeaderTracker {
         contentInsetTop: CGFloat,
         mode: FeedScrollAwareHeaderTrackingMode
     ) -> Bool {
-        if mode == .dashboardNavigationBar,
+        if mode.usesInsetStableNavigationTracking,
            let previousRaw = lastRawOffsetY,
            let previousInset = lastContentInsetTop,
            abs(rawOffsetY - previousRaw) < 1,
@@ -76,7 +88,7 @@ struct FeedScrollAwareHeaderTracker {
         switch mode {
         case .timelineNormalized:
             offsetY = normalizedOffsetY
-        case .dashboardNavigationBar:
+        case .navigationBarInsetStable, .dashboardNavigationBar:
             if !isChromeHidden {
                 referenceContentInsetTop = contentInsetTop
             }

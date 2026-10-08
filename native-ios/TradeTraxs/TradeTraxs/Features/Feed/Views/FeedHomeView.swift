@@ -405,6 +405,7 @@ struct FeedHomeView: View {
                 isActive: feedScrollAwareHeaderActive,
                 reduceMotion: reduceMotion,
                 debugSurface: "feed.list",
+                trackingMode: .navigationBarInsetStable,
                 tracker: $feedScrollHeaderTracker,
                 chromeHidden: $feedScrollChromeHidden
             )
