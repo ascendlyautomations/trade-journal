@@ -14,8 +14,9 @@ enum TradeImportReminderScheduler {
 
     static let notificationType = "trade_import_reminder"
 
-    static let notificationTitle = "TradeTraxs"
-    static let notificationBody = "Did you import any trades today?"
+    static let notificationTitle = "Traded today?"
+    static let notificationBody =
+        "Don't forget to log your trades! Import them into TradeTraxs to keep your journal up to date."
 
     private static let morningHour = 11
     private static let morningMinute = 15

@@ -18,9 +18,10 @@ struct MessagesHomeView: View {
         static let limit = 4
     }
 
-    /// Tighter gap (~50% of default inset-grouped section spacing) between adjacent inbox blocks.
-    private enum InboxAdjacentSectionSpacing {
-        static let tightened = ExperienceSpacing.sm
+    /// Inset-grouped section gaps and header-to-first-row spacing on Messages home.
+    private enum MessagesInboxLayout {
+        static let sectionSpacing = ExperienceSpacing.xs
+        static let headerToFirstRowCompression = ExperienceSpacing.xxs
     }
 
     init(
@@ -209,7 +210,7 @@ struct MessagesHomeView: View {
             }
 
             if !viewModel.pinnedItems.isEmpty {
-                Section("Pinned") {
+                Section {
                     ForEach(viewModel.pinnedItems) { item in
                         conversationButton(item)
                             .messagesInboxConversationListRowStyle(colors: colors)
@@ -223,17 +224,21 @@ struct MessagesHomeView: View {
                                 conversationPreview(item)
                             }
                     }
+                } header: {
+                    messagesInboxSectionHeader("Pinned")
                 }
             }
 
             if let ownedRoom = viewModel.ownedTradeRoomItem {
-                Section("Your Trade Room") {
+                Section {
                     tradeRoomRow(ownedRoom)
+                } header: {
+                    messagesInboxSectionHeader("Your Trade Room")
                 }
             }
 
             if !viewModel.directMessageItems.isEmpty {
-                Section("Direct Messages") {
+                Section {
                     ForEach(displayedDirectMessageItems) { item in
                         conversationButton(item)
                             .messagesInboxConversationListRowStyle(colors: colors)
@@ -257,12 +262,9 @@ struct MessagesHomeView: View {
                     if showsDirectMessagesSectionToggle {
                         inboxSectionToggle(expanded: $directMessagesSectionExpanded)
                     }
+                } header: {
+                    messagesInboxSectionHeader("Direct Messages")
                 }
-                .messagesInboxListSectionSpacing(
-                    viewModel.ownedTradeRoomItem != nil
-                        ? InboxAdjacentSectionSpacing.tightened
-                        : nil
-                )
             }
 
             if !viewModel.joinedTradeRoomItems.isEmpty {
@@ -274,18 +276,11 @@ struct MessagesHomeView: View {
                         inboxSectionToggle(expanded: $tradeRoomsSectionExpanded)
                     }
                 } header: {
-                    HStack(spacing: ExperienceSpacing.xs) {
-                        ExperienceIcon(icon: .rooms, size: .sm, color: colors.accent)
-                        Text("Trade Rooms")
-                    }
+                    messagesTradeRoomsSectionHeader
                 }
-                .messagesInboxListSectionSpacing(
-                    !viewModel.directMessageItems.isEmpty
-                        ? InboxAdjacentSectionSpacing.tightened
-                        : nil
-                )
             }
         }
+        .listSectionSpacing(MessagesInboxLayout.sectionSpacing)
         .experienceInsetGroupedListStyle(pageBackground: false)
         .scrollDismissesKeyboard(.interactively)
         .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: viewModel.searchText)
@@ -333,6 +328,19 @@ struct MessagesHomeView: View {
     private func previewSlice<T>(_ items: [T], expanded: Bool) -> [T] {
         guard !expanded, items.count > InboxSectionPreview.limit else { return items }
         return Array(items.prefix(InboxSectionPreview.limit))
+    }
+
+    private func messagesInboxSectionHeader(_ title: String) -> some View {
+        Text(title)
+            .padding(.bottom, -MessagesInboxLayout.headerToFirstRowCompression)
+    }
+
+    private var messagesTradeRoomsSectionHeader: some View {
+        HStack(spacing: ExperienceSpacing.xs) {
+            ExperienceIcon(icon: .rooms, size: .sm, color: colors.accent)
+            Text("Trade Rooms")
+        }
+        .padding(.bottom, -MessagesInboxLayout.headerToFirstRowCompression)
     }
 
     private func inboxSectionToggle(expanded: Binding<Bool>) -> some View {
@@ -544,15 +552,6 @@ struct MessagesHomeView: View {
 // MARK: - Shared inbox row chrome (DM + Trade Room)
 
 private extension View {
-    @ViewBuilder
-    func messagesInboxListSectionSpacing(_ spacing: CGFloat?) -> some View {
-        if let spacing {
-            listSectionSpacing(spacing)
-        } else {
-            self
-        }
-    }
-
     /// Inset grouped list row — matches Direct Messages and Trade Rooms on Messages home.
     func messagesInboxConversationListRowStyle(colors: SemanticColorPalette) -> some View {
         listRowBackground(colors.backgroundPrimary)

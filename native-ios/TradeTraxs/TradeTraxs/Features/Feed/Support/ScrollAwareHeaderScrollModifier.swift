@@ -6,47 +6,55 @@ struct ScrollAwareHeaderScrollModifier: ViewModifier {
     let reduceMotion: Bool
     let debugSurface: String
     var trackingMode: FeedScrollAwareHeaderTrackingMode = .navigationBarInsetStable
+    /// When false, only the binding updates; ancestor applies `.animation` (Feed host — avoids stacked `withAnimation`).
+    var appliesChromeVisibilityAnimation = true
     @Binding var tracker: FeedScrollAwareHeaderTracker
     @Binding var chromeHidden: Bool
 
     func body(content: Content) -> some View {
-        if isActive {
-            content
-                .onScrollGeometryChange(for: FeedScrollChromeGeometrySample.self) { geometry in
-                    FeedScrollChromeGeometrySample(
-                        normalizedOffsetY: geometry.contentOffset.y + geometry.contentInsets.top,
-                        rawOffsetY: geometry.contentOffset.y,
-                        contentInsetTop: geometry.contentInsets.top
-                    )
-                } action: { _, sample in
-                    let result = applyScrollSample(sample: sample)
-                    #if DEBUG
-                    FeedScrollAwareHeaderDiagnostics.logScrollGeometryAction(
-                        sample: FeedScrollChromeDebugSample(
-                            normalizedOffsetY: sample.normalizedOffsetY,
-                            rawOffsetY: sample.rawOffsetY,
-                            contentInsetTop: sample.contentInsetTop,
-                            contentHeight: 0,
-                            containerHeight: 0
-                        ),
-                        trackerHidden: result.hidden,
-                        visibilityChanged: result.changed,
-                        scrollListenerActive: isActive,
-                        surface: debugSurface
-                    )
-                    #endif
-                }
-        } else {
-            content
+        content
+            .onScrollGeometryChange(for: FeedScrollChromeGeometrySample.self) { geometry in
+                FeedScrollChromeGeometrySample(
+                    normalizedOffsetY: geometry.contentOffset.y + geometry.contentInsets.top,
+                    rawOffsetY: geometry.contentOffset.y,
+                    contentInsetTop: geometry.contentInsets.top,
+                    contentHeight: geometry.contentSize.height,
+                    containerHeight: geometry.containerSize.height
+                )
+            } action: { _, sample in
+                guard isActive else { return }
+                guard sample.hasValidScrollMetrics else { return }
+                let result = applyScrollSample(sample: sample)
                 #if DEBUG
-                .onAppear {
-                    FeedScrollAwareHeaderDiagnostics.logScrollListenerAttached(
-                        isActive: false,
-                        surface: "\(debugSurface).inactive"
-                    )
-                }
+                FeedScrollAwareHeaderDiagnostics.logScrollGeometryAction(
+                    sample: FeedScrollChromeDebugSample(
+                        normalizedOffsetY: sample.normalizedOffsetY,
+                        rawOffsetY: sample.rawOffsetY,
+                        contentInsetTop: sample.contentInsetTop,
+                        contentHeight: sample.contentHeight,
+                        containerHeight: sample.containerHeight
+                    ),
+                    trackerHidden: result.hidden,
+                    visibilityChanged: result.changed,
+                    scrollListenerActive: isActive,
+                    surface: debugSurface
+                )
                 #endif
-        }
+            }
+            #if DEBUG
+            .onAppear {
+                FeedScrollAwareHeaderDiagnostics.logScrollListenerAttached(
+                    isActive: isActive,
+                    surface: debugSurface
+                )
+            }
+            .onChange(of: isActive) { _, active in
+                FeedScrollAwareHeaderDiagnostics.logScrollListenerAttached(
+                    isActive: active,
+                    surface: "\(debugSurface).gate"
+                )
+            }
+            #endif
     }
 
     @discardableResult
@@ -78,7 +86,7 @@ struct ScrollAwareHeaderScrollModifier: ViewModifier {
     }
 
     private func applyChromeHidden(_ hidden: Bool) {
-        if reduceMotion {
+        if reduceMotion || !appliesChromeVisibilityAnimation {
             chromeHidden = hidden
         } else {
             withAnimation(FeedScrollAwareHeaderExperiment.animation) {

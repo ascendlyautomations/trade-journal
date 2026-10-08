@@ -139,6 +139,32 @@ struct FeedClipPosterImage: View {
     @Environment(\.themeColors) private var colors
     @State private var displayImage: UIImage?
 
+    init(
+        thumbnail: MediaReference?,
+        video: MediaReference,
+        imagePipeline: any ImagePipeline,
+        objectStorage: any ObjectStorageProviding,
+        feedItemID: String? = nil,
+        contentMode: ContentMode = .fill,
+        mediaBucket: StorageBucket = .reels,
+        allowsVideoFrameExtraction: Bool = false
+    ) {
+        self.thumbnail = thumbnail
+        self.video = video
+        self.imagePipeline = imagePipeline
+        self.objectStorage = objectStorage
+        self.feedItemID = feedItemID
+        self.contentMode = contentMode
+        self.mediaBucket = mediaBucket
+        self.allowsVideoFrameExtraction = allowsVideoFrameExtraction
+        let cacheKey = video.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cacheKey.isEmpty, let restored = FeedDisplayImageSessionCache.uiImage(forEntryID: cacheKey) {
+            _displayImage = State(initialValue: restored)
+        } else {
+            _displayImage = State(initialValue: nil)
+        }
+    }
+
     var body: some View {
         Group {
             if let displayImage {
@@ -164,6 +190,7 @@ struct FeedClipPosterImage: View {
     }
 
     private func loadDisplayImage() async {
+        if displayImage != nil { return }
         let itemID = feedItemID ?? video.id
         let scale = displayScale
         let image = await VideoPosterFrameLoader.loadPoster(
@@ -177,7 +204,11 @@ struct FeedClipPosterImage: View {
         )
         guard !Task.isCancelled else { return }
         displayImage = image
-        if image != nil {
+        if let image {
+            let cacheKey = video.id.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !cacheKey.isEmpty {
+                FeedDisplayImageSessionCache.store(image: image, forEntryID: cacheKey)
+            }
             FeedMediaReadyProbe.log(itemID: itemID, kind: "clip-thumbnail", source: "poster")
             if let feedItemID {
                 FeedImageViewportReadiness.noteMediaResolved(entryID: feedItemID, outcome: .loaded)

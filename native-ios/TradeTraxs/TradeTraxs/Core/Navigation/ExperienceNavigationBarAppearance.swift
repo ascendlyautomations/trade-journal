@@ -6,6 +6,9 @@ enum ExperienceNavigationBarAppearance {
     /// Mirrored by ``MainTabShellView`` — drives ``syncShellBarChrome()`` on tab/theme changes.
     nonisolated(unsafe) static var usesFeedOpaqueChrome = false
 
+    /// Set only by ``DashboardHomeView`` while the Dashboard root is visible (Home tab, empty path).
+    nonisolated(unsafe) static var dashboardScrollHeaderOpaqueNavBarActive = false
+
     static func configureArrowOnlyBackButtons() {
         // Hides the previous screen title beside the system back chevron on pushed pages.
         let hiddenTitleOffset = UIOffset(horizontal: -1000, vertical: 0)
@@ -47,7 +50,7 @@ enum ExperienceNavigationBarAppearance {
     }
 
     static func syncShellBarChrome(colors: SemanticColorPalette = ThemePaletteAnchor.current) {
-        if usesFeedOpaqueChrome {
+        if usesFeedOpaqueChrome || dashboardScrollHeaderOpaqueNavBarActive {
             configureOpaqueBarChrome(colors: colors)
         } else {
             configureDefaultBarChrome(colors: colors)
@@ -55,7 +58,8 @@ enum ExperienceNavigationBarAppearance {
         ExperienceGroupedListAppearance.sync(colors: colors)
     }
 
-    /// Opaque nav + tab chrome — Feed tab only; matches ``SemanticColorPalette/navigationBackground``.
+    /// Opaque nav bar (`isTranslucent = false`) — Feed tab and Dashboard scroll-header experiment.
+    /// Uses the same ``SemanticColorPalette/navigationBackground`` as default Home chrome.
     static func configureOpaqueBarChrome(colors: SemanticColorPalette = ThemePaletteAnchor.current) {
         let background = UIColor(colors.navigationBackground)
 

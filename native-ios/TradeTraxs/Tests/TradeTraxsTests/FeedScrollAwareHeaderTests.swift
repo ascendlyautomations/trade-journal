@@ -109,4 +109,94 @@ final class FeedScrollAwareHeaderTests: XCTestCase {
         ))
         XCTAssertTrue(tracker.isChromeHidden)
     }
+
+    /// Feed feedback loop: toolbar hide (inset 0) then show (inset 47, compensated raw) must not reveal/hide again.
+    func testNavigationBarHideShowCompensationDoesNotToggleChrome() {
+        var tracker = FeedScrollAwareHeaderTracker()
+        _ = tracker.apply(
+            normalizedOffsetY: 0,
+            rawOffsetY: -47,
+            contentInsetTop: 47,
+            mode: .navigationBarInsetStable
+        )
+        XCTAssertTrue(
+            tracker.apply(
+                normalizedOffsetY: 20,
+                rawOffsetY: -27,
+                contentInsetTop: 47,
+                mode: .navigationBarInsetStable
+            )
+        )
+        XCTAssertTrue(tracker.isChromeHidden)
+
+        XCTAssertFalse(
+            tracker.apply(
+                normalizedOffsetY: 18.33,
+                rawOffsetY: 18.33,
+                contentInsetTop: 0,
+                mode: .navigationBarInsetStable
+            )
+        )
+        XCTAssertFalse(
+            tracker.apply(
+                normalizedOffsetY: 65.33,
+                rawOffsetY: 18.33,
+                contentInsetTop: 47,
+                mode: .navigationBarInsetStable
+            )
+        )
+        XCTAssertFalse(
+            tracker.apply(
+                normalizedOffsetY: 18.33,
+                rawOffsetY: -28.67,
+                contentInsetTop: 47,
+                mode: .navigationBarInsetStable
+            )
+        )
+        XCTAssertTrue(tracker.isChromeHidden)
+    }
+
+    /// Inset compensation must not clear scroll-up accumulation (Dashboard partial-header symptom).
+    func testInsetCompensationPreservesScrollUpAccumulation() {
+        var tracker = FeedScrollAwareHeaderTracker()
+        _ = tracker.apply(
+            normalizedOffsetY: 0,
+            rawOffsetY: -47,
+            contentInsetTop: 47,
+            mode: .navigationBarInsetStable
+        )
+        XCTAssertTrue(
+            tracker.apply(
+                normalizedOffsetY: 24,
+                rawOffsetY: -23,
+                contentInsetTop: 47,
+                mode: .navigationBarInsetStable
+            )
+        )
+        XCTAssertTrue(tracker.isChromeHidden)
+
+        _ = tracker.apply(
+            normalizedOffsetY: 20,
+            rawOffsetY: 20,
+            contentInsetTop: 0,
+            mode: .navigationBarInsetStable
+        )
+        XCTAssertFalse(
+            tracker.apply(
+                normalizedOffsetY: 65.33,
+                rawOffsetY: 18.33,
+                contentInsetTop: 47,
+                mode: .navigationBarInsetStable
+            )
+        )
+        XCTAssertTrue(
+            tracker.apply(
+                normalizedOffsetY: 58,
+                rawOffsetY: 11,
+                contentInsetTop: 47,
+                mode: .navigationBarInsetStable
+            )
+        )
+        XCTAssertFalse(tracker.isChromeHidden)
+    }
 }

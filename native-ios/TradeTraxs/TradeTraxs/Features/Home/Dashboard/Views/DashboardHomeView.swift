@@ -124,6 +124,12 @@ struct DashboardHomeView: View {
                 onReset: resetDashboardScrollAwareHeader
             )
         )
+        .modifier(
+            DashboardScrollHeaderOpaqueNavBarLifecycleModifier(
+                experimentActive: dashboardOpaqueNavBarExperimentActive,
+                colors: colors
+            )
+        )
         .refreshable {
             await viewModel.refresh()
             await brokerImportEligibilityStore.refreshAndWait(fromUserAction: true)
@@ -240,6 +246,15 @@ struct DashboardHomeView: View {
     private func resetDashboardScrollAwareHeader() {
         dashboardScrollHeaderTracker.reset()
         dashboardScrollChromeHidden = false
+    }
+
+    /// Feed-equivalent opaque UIKit nav bar while testing scroll-header restore (Dashboard root only).
+    private var dashboardOpaqueNavBarExperimentActive: Bool {
+        DashboardScrollHeaderOpaqueNavBarExperiment.matchesFeedOpaqueNavigationBar
+            && FeedScrollAwareHeaderExperiment.dashboardScrollHeaderEnabled
+            && tabIsActive
+            && navigationEnvironment.store.paths.home.isEmpty
+            && viewModel.summary != nil
     }
 
     private var hidesPremiumDashboardCharts: Bool {

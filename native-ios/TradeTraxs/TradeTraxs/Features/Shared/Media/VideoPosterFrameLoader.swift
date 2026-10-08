@@ -49,6 +49,9 @@ enum VideoPosterFrameLoader {
         guard !cacheKey.isEmpty else { return nil }
 
         if let cached = await Cache.shared.image(for: cacheKey) {
+            await MainActor.run {
+                FeedDisplayImageSessionCache.store(image: cached, forEntryID: cacheKey)
+            }
             return cached
         }
 
@@ -58,18 +61,27 @@ enum VideoPosterFrameLoader {
            let image = await decodeThumbnail(thumbnail, pipeline: imagePipeline, displayScale: displayScale)
         {
             await Cache.shared.store(image, for: cacheKey)
+            await MainActor.run {
+                FeedDisplayImageSessionCache.store(image: image, forEntryID: cacheKey)
+            }
             return image
         }
 
         guard allowsVideoFrameExtraction else { return nil }
 
-        return await Cache.shared.coalesce(cacheKey: cacheKey) {
+        let generated = await Cache.shared.coalesce(cacheKey: cacheKey) {
             await generatePosterFromVideo(
                 video: video,
                 storage: storage,
                 bucket: bucket
             )
         }
+        if let generated {
+            await MainActor.run {
+                FeedDisplayImageSessionCache.store(image: generated, forEntryID: cacheKey)
+            }
+        }
+        return generated
     }
 
     private static func decodeThumbnail(

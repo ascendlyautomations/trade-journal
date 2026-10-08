@@ -54,6 +54,38 @@ struct InteractiveImageView: View {
     @State private var showLikeHeart = false
     @State private var wantsFullResolution = false
 
+    init(
+        mediaID: String,
+        reference: MediaReference?,
+        purpose: ImagePurpose,
+        imagePipeline: any ImagePipeline,
+        emptyIcon: AppIcon = .photo,
+        accessibilityIdentifier: String = "interactive.media",
+        deliveryQuality: ImageDeliveryQuality = .feedDisplay,
+        auditSurface: String = "",
+        onSingleTap: (() -> Void)? = nil,
+        onDoubleTapLike: (() -> Void)? = nil
+    ) {
+        self.mediaID = mediaID
+        self.reference = reference
+        self.purpose = purpose
+        self.imagePipeline = imagePipeline
+        self.emptyIcon = emptyIcon
+        self.accessibilityIdentifier = accessibilityIdentifier
+        self.deliveryQuality = deliveryQuality
+        self.auditSurface = auditSurface
+        self.onSingleTap = onSingleTap
+        self.onDoubleTapLike = onDoubleTapLike
+        if auditSurface == "feed", let restored = FeedDisplayImageSessionCache.uiImage(forEntryID: mediaID) {
+            _displayImage = State(initialValue: restored)
+        } else {
+            _displayImage = State(initialValue: nil)
+        }
+        _didFail = State(initialValue: false)
+        _showLikeHeart = State(initialValue: false)
+        _wantsFullResolution = State(initialValue: false)
+    }
+
     var body: some View {
         Group {
             if let displayImage {
@@ -120,7 +152,7 @@ struct InteractiveImageView: View {
             } else if didFail || reference == nil {
                 placeholder
             } else {
-                loading
+                loadingPlaceholder
             }
         }
         .overlay {
@@ -142,13 +174,27 @@ struct InteractiveImageView: View {
         .frame(height: 200)
     }
 
-    private var loading: some View {
-        ZStack {
-            colors.fillPrimary
-            ExperienceLoadingSpinner()
+    @ViewBuilder
+    private var loadingPlaceholder: some View {
+        if auditSurface == "feed",
+           let aspect = FeedDisplayImageSessionCache.aspectRatio(forEntryID: mediaID),
+           aspect.isFinite,
+           aspect > 0
+        {
+            ZStack {
+                colors.fillPrimary
+                ExperienceLoadingSpinner()
+            }
+            .aspectRatio(aspect, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+        } else {
+            ZStack {
+                colors.fillPrimary
+                ExperienceLoadingSpinner()
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 200)
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 200)
     }
 
     private func presentLikeFeedback() {
@@ -184,6 +230,14 @@ struct InteractiveImageView: View {
         guard let reference else {
             displayImage = nil
             didFail = false
+            return
+        }
+
+        if auditSurface == "feed",
+           displayImage != nil,
+           !wantsFullResolution,
+           deliveryQuality != .fullResolution
+        {
             return
         }
 
@@ -345,6 +399,9 @@ struct InteractiveImageView: View {
         #endif
 
         displayImage = normalized
+        if auditSurface == "feed" {
+            FeedDisplayImageSessionCache.store(image: normalized, forEntryID: mediaID)
+        }
         if let traceID {
             FeedImageTimingTrace.event(traceID, "image.assigned", detail: source)
         }

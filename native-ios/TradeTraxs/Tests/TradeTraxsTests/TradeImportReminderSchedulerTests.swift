@@ -28,7 +28,11 @@ final class TradeImportReminderSchedulerTests: XCTestCase {
     }
 
     func testNotificationCopy() {
-        XCTAssertEqual(TradeImportReminderScheduler.notificationBody, "Did you import any trades today?")
+        XCTAssertEqual(TradeImportReminderScheduler.notificationTitle, "Traded today?")
+        XCTAssertEqual(
+            TradeImportReminderScheduler.notificationBody,
+            "Don't forget to log your trades! Import them into TradeTraxs to keep your journal up to date."
+        )
     }
 
     func testDateComponentsUseAmericaNewYork() {

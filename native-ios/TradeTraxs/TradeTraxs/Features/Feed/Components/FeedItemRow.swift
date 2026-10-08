@@ -121,12 +121,10 @@ struct FeedItemRow: View {
 
     private var mediaFooter: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            if case .trade(_, let summary) = entry, summary.mode == .copyTraded {
-                tradeMetrics(summary)
-                engagement
-                copyTradeFeedFooter(summary)
+            engagement
+            if case .trade(_, let summary) = entry {
+                tradePostDetails(summary)
             } else {
-                engagement
                 summary
             }
             feedCaptionPreview
@@ -141,27 +139,35 @@ struct FeedItemRow: View {
 
     private var textLayout: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                if case .trade(_, let summary) = entry, summary.mode == .copyTraded {
-                    tradeMetrics(summary)
-                } else {
-                    summary
+            if case .trade(_, let summary) = entry {
+                engagement
+                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                    tradePostDetails(summary)
+                    feedCaptionPreview
+                    linkedEmbeds
                 }
-                feedCaptionPreview
-                linkedEmbeds
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .experienceDoubleTapLike(
-                target: entry.interactionTarget,
-                store: engagementStore,
-                onSingleTap: onOpen
-            )
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .experienceDoubleTapLike(
+                    target: entry.interactionTarget,
+                    store: engagementStore,
+                    onSingleTap: onOpen
+                )
+            } else {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                    summary
+                    feedCaptionPreview
+                    linkedEmbeds
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .experienceDoubleTapLike(
+                    target: entry.interactionTarget,
+                    store: engagementStore,
+                    onSingleTap: onOpen
+                )
 
-            engagement
-
-            if case .trade(_, let summary) = entry, summary.mode == .copyTraded {
-                copyTradeFeedFooter(summary)
+                engagement
             }
         }
         .padding(.horizontal, ExperienceSpacing.md)
@@ -311,6 +317,15 @@ struct FeedItemRow: View {
 
     private func tradeSummary(_ summary: TradeSummary) -> some View {
         tradeMetrics(summary)
+    }
+
+    /// Trade metrics and copy-trade metadata — always below the engagement row.
+    @ViewBuilder
+    private func tradePostDetails(_ summary: TradeSummary) -> some View {
+        tradeMetrics(summary)
+        if summary.mode == .copyTraded {
+            copyTradeFeedFooter(summary)
+        }
     }
 
     private func tradeMetrics(_ summary: TradeSummary) -> some View {

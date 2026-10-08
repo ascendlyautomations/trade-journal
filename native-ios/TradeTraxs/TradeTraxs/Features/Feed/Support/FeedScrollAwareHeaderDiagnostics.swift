@@ -20,8 +20,27 @@ enum FeedScrollAwareHeaderDiagnostics {
             boot feedEnabled=\(FeedScrollAwareHeaderExperiment.isEnabled, privacy: .public) \
             dashboardEnabled=\(FeedScrollAwareHeaderExperiment.dashboardScrollHeaderEnabled, privacy: .public) \
             threshold=\(FeedScrollAwareHeaderExperiment.directionThreshold, privacy: .public) \
-            categoryClearance=\(FeedScrollAwareHeaderExperiment.categoryBarClearance, privacy: .public)
+            categoryClearance=\(FeedScrollAwareHeaderExperiment.categoryBarClearance, privacy: .public) \
+            isolationSuppressScrollToHide=\(FeedScrollHeaderIsolation.suppressScrollToHide, privacy: .public)
             """
+        )
+    }
+
+    /// Logged when isolation mode is on — if Xcode still reports Observation feedback loops, cause is likely outside scroll-to-hide.
+    static func logScrollHeaderIsolationActive(surface: String) {
+        guard FeedScrollHeaderIsolation.suppressScrollToHide else { return }
+        log.notice(
+            """
+            isolation surface=\(surface, privacy: .public) scrollToHide=off \
+            navAndCategory=forcedVisible scrollListener=inactive \
+            hint=watch Xcode for Observation tracking feedback loop while scrolling Feed
+            """
+        )
+    }
+
+    static func logScrollHeaderIsolationChromeLeak() {
+        log.error(
+            "isolation chromeHidden=true while scrollToHide suppressed — unexpected header state mutation"
         )
     }
 

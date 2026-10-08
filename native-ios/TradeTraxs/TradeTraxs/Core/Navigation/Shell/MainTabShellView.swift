@@ -466,24 +466,28 @@ struct FeedNavigationStack: View {
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
+            .feedPushedDetailNavigationChrome()
         case .post(let postID):
             PostDetailView(
                 postID: postID,
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
+            .feedPushedDetailNavigationChrome()
         case .reel(let reelID):
             ClipDetailView(
                 reelID: reelID,
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
+            .feedPushedDetailNavigationChrome()
         case .achievement(let achievementID):
             AchievementDetailView(
                 achievementID: achievementID,
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
+            .feedPushedDetailNavigationChrome()
         case .profile(let profileID):
             ProfileView(
                 profileID: profileID,

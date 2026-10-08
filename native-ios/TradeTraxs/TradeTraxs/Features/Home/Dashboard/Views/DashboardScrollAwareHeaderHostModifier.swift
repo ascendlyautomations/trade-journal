@@ -6,6 +6,7 @@ struct DashboardScrollAwareHeaderHostModifier: ViewModifier {
     let experimentActive: Bool
     let navigationBarVisibility: Visibility
     let homePathDepth: Int
+    var categoryOverlayHidden: Bool = false
     @Binding var chromeHidden: Bool
     let onReset: () -> Void
 
@@ -26,7 +27,7 @@ struct DashboardScrollAwareHeaderHostModifier: ViewModifier {
                     chromeHidden: chromeHidden,
                     experimentActive: experimentActive,
                     navVisibility: navigationBarVisibility == .hidden ? "hidden" : "visible",
-                    categoryOverlayHidden: false
+                    categoryOverlayHidden: categoryOverlayHidden
                 )
                 #endif
             }

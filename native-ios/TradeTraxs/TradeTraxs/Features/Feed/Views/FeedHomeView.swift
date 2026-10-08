@@ -74,111 +74,11 @@ struct FeedHomeView: View {
     }
 
     var body: some View {
-        Group {
-            switch viewModel.phase {
-            case .idle, .loading:
-                if viewModel.entries.isEmpty {
-                    FeedSkeleton()
-                } else if viewModel.contentFilter == .clips {
-                    clipsExperience
-                } else {
-                    feedList
-                }
-            case .failed(let message):
-                if viewModel.entries.isEmpty {
-                    ExperienceErrorState(
-                        title: "Couldn't load feed",
-                        message: message,
-                        onRetry: { Task { await viewModel.refresh() } }
-                    )
-                } else if viewModel.contentFilter == .clips {
-                    clipsExperience
-                } else {
-                    feedList
-                }
-            case .loaded where viewModel.isQueryReloadInProgress && viewModel.visibleEntries.isEmpty:
-                if viewModel.contentFilter == .clips {
-                    clipsExperience
-                } else {
-                    FeedSkeleton()
-                }
-            case .loaded where viewModel.showsEmpty:
-                if viewModel.contentFilter == .clips {
-                    clipsEmptyState
-                } else {
-                    VStack(spacing: 0) {
-                        if viewModel.scope == .following {
-                            storiesSection
-                        }
-                        ExperienceEmptyState(
-                            icon: .feed,
-                            title: emptyTitle,
-                            message: emptyMessage
-                        )
-                    }
-                    .padding(.top, feedTimelineCategoryClearance)
-                }
-            case .loaded:
-                if viewModel.contentFilter == .clips {
-                    clipsExperience
-                } else {
-                    feedList
-                }
-            }
-        }
-        .experienceScreenBackground()
-        .experienceFeedClipsChrome(isActive: viewModel.contentFilter == .clips)
-        .experienceNavigationTitle("Feed")
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                FeedScopeToggle(
-                    scope: Binding(
-                        get: {
-                            _ = feedScopeSession.revision
-                            return viewModel.scope
-                        },
-                        set: { viewModel.setScope($0) }
-                    )
-                )
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    navigationEnvironment.coordinator.open(.feed(.explore))
-                } label: {
-                    Image(systemName: "magnifyingglass")
-                        .contextualTourTarget(.feedExplore)
-                }
-                .accessibilityLabel("Explore")
-                .accessibilityIdentifier("feed.explore")
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    navigationEnvironment.coordinator.open(.feed(.rooms))
-                } label: {
-                    Image(systemName: "person.3")
-                        .contextualTourTarget(.feedTradeRooms)
-                }
-                .accessibilityLabel("Trade Rooms")
-                .accessibilityIdentifier("feed.rooms")
-            }
-        }
-        .toolbar(feedScrollAwareNavigationBarVisibility, for: .navigationBar)
-        .animation(
-            reduceMotion ? nil : FeedScrollAwareHeaderExperiment.animation,
-            value: feedScrollChromeHidden
-        )
-        .modifier(
-            FeedClipsViewportLayoutModifier(
-                isClips: viewModel.contentFilter == .clips,
-                categoryBar: contentFilterBar,
-                hideCategoryBar: feedScrollChromeHidden && feedScrollAwareHeaderActive,
-                reduceMotion: reduceMotion
-            )
-        )
-        .feedClipsBoundsLogging(isEnabled: viewModel.contentFilter == .clips)
-        .modifier(FeedHomeRefreshModifier(isEnabled: viewModel.contentFilter != .clips) {
-            await viewModel.refresh()
-        })
+        feedHomeLifecycleDecorated
+    }
+
+    private var feedHomeLifecycleDecorated: some View {
+        feedHomeChromeDecorated
         .task(id: tabIsActive) {
             guard tabIsActive else {
                 syncFeedPlaybackSurfaceActive(reason: "tabChanged")
@@ -253,9 +153,6 @@ struct FeedHomeView: View {
         }
         .onChange(of: navigationEnvironment.store.paths.feed.count) { _, _ in
             syncFeedPlaybackSurfaceActive(reason: "navigatedAway")
-            if !navigationEnvironment.store.paths.feed.isEmpty {
-                resetFeedScrollAwareHeader()
-            }
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase != .active {
@@ -287,10 +184,23 @@ struct FeedHomeView: View {
             )
         }
         .accessibilityIdentifier("feed.home")
-        #if DEBUG
         .onAppear {
+            if FeedScrollHeaderIsolation.suppressScrollToHide {
+                resetFeedScrollAwareHeader()
+            }
+            #if DEBUG
             FeedScrollAwareHeaderDiagnostics.logBootConfiguration()
             logFeedScrollChromeContext(surface: "feed.home")
+            if FeedScrollHeaderIsolation.suppressScrollToHide {
+                FeedScrollAwareHeaderDiagnostics.logScrollHeaderIsolationActive(surface: "feed.home")
+            }
+            #endif
+        }
+        #if DEBUG
+        .onChange(of: feedScrollChromeHidden) { _, hidden in
+            if FeedScrollHeaderIsolation.suppressScrollToHide, hidden {
+                FeedScrollAwareHeaderDiagnostics.logScrollHeaderIsolationChromeLeak()
+            }
         }
         .onChange(of: feedScrollAwareHeaderActive) { _, active in
             FeedScrollAwareHeaderDiagnostics.logExperimentGateChange(
@@ -298,14 +208,6 @@ struct FeedHomeView: View {
                 isEnabled: FeedScrollAwareHeaderExperiment.isEnabled,
                 isClips: viewModel.contentFilter == .clips,
                 feedPathDepth: navigationEnvironment.store.paths.feed.count
-            )
-        }
-        .onChange(of: feedScrollChromeHidden) { _, hidden in
-            FeedScrollAwareHeaderDiagnostics.logChromeHiddenState(
-                chromeHidden: hidden,
-                experimentActive: feedScrollAwareHeaderActive,
-                navVisibility: feedScrollAwareNavigationBarVisibility == .hidden ? "hidden" : "visible",
-                categoryOverlayHidden: hidden && feedScrollAwareHeaderActive
             )
         }
         .onChange(of: viewModel.phase) { _, _ in
@@ -320,6 +222,122 @@ struct FeedHomeView: View {
         #endif
     }
 
+    private var feedHomeChromeDecorated: some View {
+        feedPhaseContent
+            .experienceScreenBackground()
+            .experienceFeedClipsChrome(isActive: viewModel.contentFilter == .clips)
+            .experienceNavigationTitle("Feed")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    FeedScopeToggle(
+                        scope: Binding(
+                            get: {
+                                _ = feedScopeSession.revision
+                                return viewModel.scope
+                            },
+                            set: { viewModel.setScope($0) }
+                        )
+                    )
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        navigationEnvironment.coordinator.open(.feed(.explore))
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                            .contextualTourTarget(.feedExplore)
+                    }
+                    .accessibilityLabel("Explore")
+                    .accessibilityIdentifier("feed.explore")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        navigationEnvironment.coordinator.open(.feed(.rooms))
+                    } label: {
+                        Image(systemName: "person.3")
+                            .contextualTourTarget(.feedTradeRooms)
+                    }
+                    .accessibilityLabel("Trade Rooms")
+                    .accessibilityIdentifier("feed.rooms")
+                }
+            }
+            .modifier(
+                DashboardScrollAwareHeaderHostModifier(
+                    reduceMotion: reduceMotion,
+                    experimentActive: feedScrollAwareHeaderActive,
+                    navigationBarVisibility: feedScrollAwareNavigationBarVisibility,
+                    homePathDepth: navigationEnvironment.store.paths.feed.count,
+                    categoryOverlayHidden: feedScrollChromeHidden && feedScrollAwareHeaderActive,
+                    chromeHidden: $feedScrollChromeHidden,
+                    onReset: resetFeedScrollAwareHeader
+                )
+            )
+            .modifier(
+                FeedClipsViewportLayoutModifier(
+                    isClips: viewModel.contentFilter == .clips,
+                    categoryBar: contentFilterBar,
+                    hideCategoryBar: feedScrollChromeHidden && feedScrollAwareHeaderActive,
+                    reduceMotion: reduceMotion
+                )
+            )
+            .feedClipsBoundsLogging(isEnabled: viewModel.contentFilter == .clips)
+            .modifier(FeedHomeRefreshModifier(isEnabled: viewModel.contentFilter != .clips) {
+                await viewModel.refresh()
+            })
+    }
+
+    @ViewBuilder
+    private var feedPhaseContent: some View {
+        switch viewModel.phase {
+        case .idle, .loading:
+            if viewModel.entries.isEmpty {
+                FeedSkeleton()
+            } else if viewModel.contentFilter == .clips {
+                clipsExperience
+            } else {
+                feedList
+            }
+        case .failed(let message):
+            if viewModel.entries.isEmpty {
+                ExperienceErrorState(
+                    title: "Couldn't load feed",
+                    message: message,
+                    onRetry: { Task { await viewModel.refresh() } }
+                )
+            } else if viewModel.contentFilter == .clips {
+                clipsExperience
+            } else {
+                feedList
+            }
+        case .loaded where viewModel.isQueryReloadInProgress && viewModel.visibleEntries.isEmpty:
+            if viewModel.contentFilter == .clips {
+                clipsExperience
+            } else {
+                FeedSkeleton()
+            }
+        case .loaded where viewModel.showsEmpty:
+            if viewModel.contentFilter == .clips {
+                clipsEmptyState
+            } else {
+                VStack(spacing: 0) {
+                    if viewModel.scope == .following {
+                        storiesSection
+                    }
+                    ExperienceEmptyState(
+                        icon: .feed,
+                        title: emptyTitle,
+                        message: emptyMessage
+                    )
+                }
+            }
+        case .loaded:
+            if viewModel.contentFilter == .clips {
+                clipsExperience
+            } else {
+                feedList
+            }
+        }
+    }
+
     private var contentFilterBar: some View {
         FeedContentToggle(
             filter: viewModel.contentFilter,
@@ -329,75 +347,73 @@ struct FeedHomeView: View {
         .padding(.top, ExperienceSpacing.sm)
         .padding(.bottom, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            colors.backgroundPrimary
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
+        .background(colors.backgroundPrimary)
         .accessibilityIdentifier("feed.header.contentFilter")
         .contextualTourTarget(.feedContentFilters)
     }
 
     private var feedList: some View {
         ScrollView {
-            LazyVStack(spacing: 0) {
+            VStack(spacing: 0) {
                 if viewModel.scope == .following {
                     storiesSection
                     FeedSectionSeparator()
                 }
 
-                ForEach(viewModel.visibleEntries) { entry in
-                    FeedItemRow(
-                        entry: entry,
-                        author: viewModel.author(for: entry.authorProfileID),
-                        imagePipeline: imagePipeline,
-                        engagementStore: engagementStore,
-                        vaultStore: vaultStore,
-                        detailCache: detailCache,
-                        playbackCoordinator: playbackCoordinator,
-                        onOpen: { openFeedEntry(entry) },
-                        onOpenAuthor: { viewModel.openAuthor(entry.authorProfileID) },
-                        onOpenLinkedTrade: { viewModel.openLinkedTrade($0) },
-                        onOpenLinkedClip: { reelID in
-                            playbackCoordinator.releaseAllPlayers()
-                            viewModel.openLinkedClip(reelID)
-                        },
-                        viewerID: viewModel.viewerID,
-                        onReport: reportAction(for: entry),
-                        onShare: {
-                            shareTarget = SharedContentShareTarget.from(
-                                entry: entry,
-                                author: viewModel.author(for: entry.authorProfileID)
+                LazyVStack(spacing: 0) {
+                    ForEach(viewModel.visibleEntries) { entry in
+                        FeedItemRow(
+                            entry: entry,
+                            author: viewModel.author(for: entry.authorProfileID),
+                            imagePipeline: imagePipeline,
+                            engagementStore: engagementStore,
+                            vaultStore: vaultStore,
+                            detailCache: detailCache,
+                            playbackCoordinator: playbackCoordinator,
+                            onOpen: { openFeedEntry(entry) },
+                            onOpenAuthor: { viewModel.openAuthor(entry.authorProfileID) },
+                            onOpenLinkedTrade: { viewModel.openLinkedTrade($0) },
+                            onOpenLinkedClip: { reelID in
+                                playbackCoordinator.releaseAllPlayers()
+                                viewModel.openLinkedClip(reelID)
+                            },
+                            viewerID: viewModel.viewerID,
+                            onReport: reportAction(for: entry),
+                            onShare: {
+                                shareTarget = SharedContentShareTarget.from(
+                                    entry: entry,
+                                    author: viewModel.author(for: entry.authorProfileID)
+                                )
+                            }
+                        )
+                        .onAppear {
+                            #if DEBUG
+                            FeedScrollRowLifecycleDiagnostics.logRowAppear(
+                                entryID: entry.id,
+                                restoredFromSessionCache: FeedDisplayImageSessionCache.uiImage(forEntryID: entry.id) != nil
+                            )
+                            #endif
+                            Task { await viewModel.loadMoreIfNeeded(currentID: entry.id) }
+                            guard shouldPrefetchFeedImagesWhenRowAppears(entryID: entry.id) else { return }
+                            FeedImagePrefetch.prefetchNearby(
+                                entries: viewModel.visibleEntries,
+                                currentEntryID: entry.id,
+                                pipeline: imagePipeline
                             )
                         }
-                    )
-                    .onAppear {
-                        Task { await viewModel.loadMoreIfNeeded(currentID: entry.id) }
-                        FeedImagePrefetch.prefetchNearby(
-                            entries: viewModel.visibleEntries,
-                            currentEntryID: entry.id,
-                            pipeline: imagePipeline
-                        )
                     }
-                    .transition(
-                        reduceMotion
-                            ? .opacity
-                            : .asymmetric(
-                                insertion: .opacity.combined(with: .move(edge: .top)),
-                                removal: .opacity
-                            )
-                    )
-                }
 
-                if viewModel.isLoadingMore {
-                    ProgressView()
-                        .padding(.vertical, ExperienceSpacing.md)
+                    if viewModel.isLoadingMore {
+                        ProgressView()
+                            .padding(.vertical, ExperienceSpacing.md)
+                    }
                 }
             }
-            .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: viewModel.visibleEntryIDs)
             .padding(.top, feedTimelineCategoryClearance)
             .environment(\.feedScrollViewportFrame, scrollViewportFrame)
         }
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame in
+            guard !framesApproximatelyEqual(scrollViewportFrame, frame) else { return }
             scrollViewportFrame = frame
         }
         .modifier(
@@ -406,6 +422,7 @@ struct FeedHomeView: View {
                 reduceMotion: reduceMotion,
                 debugSurface: "feed.list",
                 trackingMode: .navigationBarInsetStable,
+                appliesChromeVisibilityAnimation: false,
                 tracker: $feedScrollHeaderTracker,
                 chromeHidden: $feedScrollChromeHidden
             )
@@ -424,6 +441,9 @@ struct FeedHomeView: View {
                 isActive: feedScrollAwareHeaderActive,
                 surface: "feed.list"
             )
+            if FeedScrollHeaderIsolation.suppressScrollToHide {
+                FeedScrollAwareHeaderDiagnostics.logScrollHeaderIsolationActive(surface: "feed.list")
+            }
             logFeedScrollChromeContext(surface: "feed.list")
             Task {
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
@@ -438,6 +458,15 @@ struct FeedHomeView: View {
         .onChange(of: viewModel.visibleEntryIDs) { _, _ in
             scheduleFeedImageCacheWarmAndViewportGate()
         }
+    }
+
+    /// Prefetch runs only near the list tail — upward scroll remounts must not restart utility prefetch work.
+    private func shouldPrefetchFeedImagesWhenRowAppears(entryID: String) -> Bool {
+        guard let index = viewModel.visibleEntries.firstIndex(where: { $0.id == entryID }) else {
+            return false
+        }
+        let tailWindow = max(0, viewModel.visibleEntries.count - 6)
+        return index >= tailWindow
     }
 
     private func scheduleFeedImageCacheWarmAndViewportGate() {
@@ -546,16 +575,19 @@ struct FeedHomeView: View {
     }
 
     private var feedScrollAwareHeaderActive: Bool {
-        FeedScrollAwareHeaderExperiment.isEnabled
+        guard !FeedScrollHeaderIsolation.suppressScrollToHide else { return false }
+        return FeedScrollAwareHeaderExperiment.isEnabled
+            && tabIsActive
             && viewModel.contentFilter != .clips
             && navigationEnvironment.store.paths.feed.isEmpty
+            && !viewModel.visibleEntries.isEmpty
     }
 
     private var feedScrollAwareNavigationBarVisibility: Visibility {
         feedScrollAwareHeaderActive && feedScrollChromeHidden ? .hidden : .visible
     }
 
-    /// Scroll padding under the nav bar when the category strip is an overlay (experiment timeline).
+    /// Fixed scroll padding under the nav bar while the category strip is a non-scrolling overlay (height never collapses on chrome transitions).
     private var feedTimelineCategoryClearance: CGFloat {
         guard FeedScrollAwareHeaderExperiment.isEnabled,
               viewModel.contentFilter != .clips
@@ -566,6 +598,13 @@ struct FeedHomeView: View {
     private func resetFeedScrollAwareHeader() {
         feedScrollHeaderTracker.reset()
         feedScrollChromeHidden = false
+    }
+
+    private func framesApproximatelyEqual(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
+        abs(lhs.origin.x - rhs.origin.x) < 0.5
+            && abs(lhs.origin.y - rhs.origin.y) < 0.5
+            && abs(lhs.size.width - rhs.size.width) < 0.5
+            && abs(lhs.size.height - rhs.size.height) < 0.5
     }
 
     #if DEBUG
@@ -630,7 +669,7 @@ private struct FeedHomeRefreshModifier: ViewModifier {
 }
 
 /// Clips mode uses a structural VStack so the pager starts exactly below the category bar.
-/// Other feed modes keep the floating top inset layout.
+/// Timeline scroll-aware mode: category overlay + fixed top padding (see ``FeedScrollAwareHeaderExperiment/categoryBarClearance``).
 private struct FeedClipsViewportLayoutModifier<CategoryBar: View>: ViewModifier {
     let isClips: Bool
     let categoryBar: CategoryBar

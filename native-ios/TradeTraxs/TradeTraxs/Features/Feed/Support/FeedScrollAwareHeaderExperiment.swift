@@ -36,6 +36,22 @@ struct FeedScrollChromeGeometrySample: Equatable {
     var normalizedOffsetY: CGFloat
     var rawOffsetY: CGFloat
     var contentInsetTop: CGFloat
+    var contentHeight: CGFloat
+    var containerHeight: CGFloat
+
+    /// Offset-driven equality only — layout-height flicker during nav chrome must not republish scroll actions.
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.normalizedOffsetY == rhs.normalizedOffsetY
+            && lhs.rawOffsetY == rhs.rawOffsetY
+            && lhs.contentInsetTop == rhs.contentInsetTop
+    }
+
+    var hasValidScrollMetrics: Bool {
+        contentHeight.isFinite
+            && containerHeight.isFinite
+            && containerHeight > 1
+            && contentHeight > 0
+    }
 }
 
 /// Interprets vertical scroll offset changes with hysteresis to avoid header flicker.
@@ -76,33 +92,59 @@ struct FeedScrollAwareHeaderTracker {
     ) -> Bool {
         if mode.usesInsetStableNavigationTracking,
            let previousRaw = lastRawOffsetY,
-           let previousInset = lastContentInsetTop,
-           abs(rawOffsetY - previousRaw) < 1,
-           abs(contentInsetTop - previousInset) > 8 {
-            lastRawOffsetY = rawOffsetY
-            lastContentInsetTop = contentInsetTop
-            return false
+           let previousInset = lastContentInsetTop {
+            let insetDelta = contentInsetTop - previousInset
+            if abs(insetDelta) > 8 {
+                let rawDelta = rawOffsetY - previousRaw
+                // UIKit compensates contentOffset when navigation inset changes (Feed log: inset ±47, raw ∓47).
+                if abs(rawDelta + insetDelta) < 6 {
+                    lastRawOffsetY = rawOffsetY
+                    lastContentInsetTop = contentInsetTop
+                    if !isChromeHidden {
+                        referenceContentInsetTop = contentInsetTop
+                    }
+                    lastOffsetY = trackingOffsetY(
+                        normalizedOffsetY: normalizedOffsetY,
+                        rawOffsetY: rawOffsetY,
+                        contentInsetTop: contentInsetTop,
+                        mode: mode
+                    )
+                    return false
+                }
+                if abs(rawOffsetY - previousRaw) < 1 {
+                    lastRawOffsetY = rawOffsetY
+                    lastContentInsetTop = contentInsetTop
+                    return false
+                }
+            }
         }
 
-        let offsetY: CGFloat
-        switch mode {
-        case .timelineNormalized:
-            offsetY = normalizedOffsetY
-        case .navigationBarInsetStable, .dashboardNavigationBar:
-            if !isChromeHidden {
-                referenceContentInsetTop = contentInsetTop
-            }
-            let referenceInset = referenceContentInsetTop ?? contentInsetTop
-            offsetY = rawOffsetY + referenceInset
-            lastRawOffsetY = rawOffsetY
-            lastContentInsetTop = contentInsetTop
+        if mode.usesInsetStableNavigationTracking, !isChromeHidden {
+            referenceContentInsetTop = contentInsetTop
         }
+
+        let offsetY = trackingOffsetY(
+            normalizedOffsetY: normalizedOffsetY,
+            rawOffsetY: rawOffsetY,
+            contentInsetTop: contentInsetTop,
+            mode: mode
+        )
+        lastRawOffsetY = rawOffsetY
+        lastContentInsetTop = contentInsetTop
 
         if offsetY <= FeedScrollAwareHeaderExperiment.topRevealOffsetY {
             accumulatedDelta = 0
-            lastOffsetY = offsetY
-            guard isChromeHidden else { return false }
+            guard isChromeHidden else {
+                lastOffsetY = offsetY
+                return false
+            }
             isChromeHidden = false
+            syncScrollSampleAfterChromeVisibilityChange(
+                normalizedOffsetY: normalizedOffsetY,
+                rawOffsetY: rawOffsetY,
+                contentInsetTop: contentInsetTop,
+                mode: mode
+            )
             return true
         }
 
@@ -123,6 +165,12 @@ struct FeedScrollAwareHeaderTracker {
             accumulatedDelta = 0
             guard !isChromeHidden else { return false }
             isChromeHidden = true
+            syncScrollSampleAfterChromeVisibilityChange(
+                normalizedOffsetY: normalizedOffsetY,
+                rawOffsetY: rawOffsetY,
+                contentInsetTop: contentInsetTop,
+                mode: mode
+            )
             return true
         }
 
@@ -130,9 +178,55 @@ struct FeedScrollAwareHeaderTracker {
             accumulatedDelta = 0
             guard isChromeHidden else { return false }
             isChromeHidden = false
+            syncScrollSampleAfterChromeVisibilityChange(
+                normalizedOffsetY: normalizedOffsetY,
+                rawOffsetY: rawOffsetY,
+                contentInsetTop: contentInsetTop,
+                mode: mode
+            )
             return true
         }
 
         return false
+    }
+
+    /// Re-anchor after toolbar show/hide so the next sample is not a layout-induced delta.
+    private mutating func syncScrollSampleAfterChromeVisibilityChange(
+        normalizedOffsetY: CGFloat,
+        rawOffsetY: CGFloat,
+        contentInsetTop: CGFloat,
+        mode: FeedScrollAwareHeaderTrackingMode
+    ) {
+        if mode.usesInsetStableNavigationTracking, !isChromeHidden {
+            referenceContentInsetTop = contentInsetTop
+        }
+        lastRawOffsetY = rawOffsetY
+        lastContentInsetTop = contentInsetTop
+        lastOffsetY = trackingOffsetY(
+            normalizedOffsetY: normalizedOffsetY,
+            rawOffsetY: rawOffsetY,
+            contentInsetTop: contentInsetTop,
+            mode: mode
+        )
+        accumulatedDelta = 0
+    }
+
+    /// Visible nav: raw + reference inset (ignore inset-only jumps). Hidden nav: normalized — inset is 0 and reference inset must not inflate offsetY.
+    private func trackingOffsetY(
+        normalizedOffsetY: CGFloat,
+        rawOffsetY: CGFloat,
+        contentInsetTop: CGFloat,
+        mode: FeedScrollAwareHeaderTrackingMode
+    ) -> CGFloat {
+        switch mode {
+        case .timelineNormalized:
+            return normalizedOffsetY
+        case .navigationBarInsetStable, .dashboardNavigationBar:
+            if isChromeHidden {
+                return normalizedOffsetY
+            }
+            let referenceInset = referenceContentInsetTop ?? contentInsetTop
+            return rawOffsetY + referenceInset
+        }
     }
 }
