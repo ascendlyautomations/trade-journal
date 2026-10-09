@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/expired-stories",
-      "schedule": "15 * * * *"
+      "schedule": "15 7 * * *"
     }
   ]
 }
