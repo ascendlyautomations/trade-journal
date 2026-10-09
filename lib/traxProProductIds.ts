@@ -27,6 +27,14 @@ const DEFAULT_PRODUCT_IDS: Record<TraxProAppleProductKey, string> = {
   yearly: "com.tradetraxs.traxpro.yearly",
 }
 
+/**
+ * App Store Connect monthly id aligned with six-month/yearly (`traxpro.*`).
+ * Legacy code defaults used `traxspro.monthly`; live ASC / TestFlight builds may
+ * sell this id while six-month/yearly already use `traxpro.*`.
+ */
+export const TRAXPRO_APPLE_MONTHLY_PRODUCT_ID_CANONICAL =
+  "com.tradetraxs.traxpro.monthly"
+
 const ENV_KEYS: Record<TraxProAppleProductKey, string> = {
   monthly: "APPLE_IAP_PRODUCT_ID_MONTHLY",
   sixMonth: "APPLE_IAP_PRODUCT_ID_SIX_MONTH",
@@ -66,6 +74,9 @@ export function resolveTraxProBillingIntervalFromAppleProductId(
   const normalized = productId.trim()
   for (const product of getTraxProAppleProducts()) {
     if (product.productId === normalized) return product.billingInterval
+  }
+  if (normalized === TRAXPRO_APPLE_MONTHLY_PRODUCT_ID_CANONICAL) {
+    return "monthly"
   }
   return null
 }

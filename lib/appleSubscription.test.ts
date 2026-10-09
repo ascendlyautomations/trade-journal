@@ -240,13 +240,13 @@ describe("TraxPro product IDs", () => {
     )
     assert.equal(
       isKnownTraxProAppleProductId("com.tradetraxs.traxpro.monthly"),
-      false
+      true
     )
     assert.equal(
       resolveTraxProBillingIntervalFromAppleProductId(
         "com.tradetraxs.traxpro.monthly"
       ),
-      null
+      "monthly"
     )
   })
 })

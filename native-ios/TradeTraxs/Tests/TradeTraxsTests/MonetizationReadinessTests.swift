@@ -161,8 +161,9 @@ final class MonetizationReadinessTests: XCTestCase {
         let monthly = "com.tradetraxs.traxspro.monthly"
         XCTAssertEqual(TraxProProductConfiguration.defaultMonthlyProductID, monthly)
         XCTAssertEqual(TraxProProductConfiguration.billingInterval(for: monthly), .monthly)
-        XCTAssertNil(
-            TraxProProductConfiguration.billingInterval(for: "com.tradetraxs.traxpro.monthly")
+        XCTAssertEqual(
+            TraxProProductConfiguration.billingInterval(for: "com.tradetraxs.traxpro.monthly"),
+            .monthly
         )
         XCTAssertEqual(TraxProProductConfiguration.allProductIDs, [
             TraxProProductConfiguration.monthlyProductID,
