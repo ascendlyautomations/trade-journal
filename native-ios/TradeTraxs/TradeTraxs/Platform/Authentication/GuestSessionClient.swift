@@ -6,7 +6,8 @@ struct GuestSessionIssuance: Sendable, Equatable {
     var expiresAt: Date?
 }
 
-/// Asks the project to mint a read-only session for the designated showcase account.
+/// Asks the project to mint a read-only session for the designated showcase account
+/// (``GuestShowcaseAccount`` / `SHOWCASE_USER_ID` on the `guest-session` edge function).
 /// No password and no refresh token are returned.
 enum GuestSessionClient {
     /// Test seam. Production uses ``liveIssue``.

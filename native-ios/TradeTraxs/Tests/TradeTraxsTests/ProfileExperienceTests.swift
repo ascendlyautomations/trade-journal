@@ -593,8 +593,8 @@ final class ProfileExperienceTests: XCTestCase {
     }
 
     func testProfilePrimaryMarketFieldCopy() {
-        XCTAssertEqual(ProfilePrimaryMarketField.label, "Primary Market")
-        XCTAssertEqual(ProfilePrimaryMarketField.placeholder, "e.g. Futures, Options")
+        XCTAssertEqual(ProfilePrimaryMarketField.label, "Primary Ticker")
+        XCTAssertEqual(ProfilePrimaryMarketField.placeholder, "e.g. NQ, ES")
     }
 
     func testCurrentUserProfileStoreLoadsOnce() async throws {

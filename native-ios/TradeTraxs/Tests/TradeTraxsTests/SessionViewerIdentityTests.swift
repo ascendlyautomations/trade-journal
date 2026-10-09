@@ -23,7 +23,7 @@ final class SessionViewerIdentityTests: XCTestCase {
     }
 
     func testGuestSessionUsesRealAccountInsteadOfDemoFixture() {
-        let userID = UserID("7063f0d0-c701-4b1a-82f8-e4c360d4d2ec")
+        let userID = GuestShowcaseAccount.productionUserID
         let resolution = SessionViewerIdentity.resolve(
             userID: userID,
             demoExperienceActive: true,

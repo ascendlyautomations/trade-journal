@@ -8,6 +8,6 @@ nonisolated enum ProfileTradingStyleField {
 
 /// Copy for `profiles.primary_market` (free text) — matches Settings → Profile.
 nonisolated enum ProfilePrimaryMarketField {
-    static let label = "Primary Market"
-    static let placeholder = "e.g. Futures, Options"
+    static let label = "Primary Ticker"
+    static let placeholder = "e.g. NQ, ES"
 }

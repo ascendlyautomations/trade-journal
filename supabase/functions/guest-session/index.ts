@@ -1,6 +1,16 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 
-const SHOWCASE_USER_ID = "7063f0d0-c701-4b1a-82f8-e4c360d4d2ec"
+/** Default production showcase account — override with SHOWCASE_USER_ID secret/env. */
+const DEFAULT_SHOWCASE_USER_ID = "3daf15b8-2f5d-48c8-ac98-75bca6c878f4"
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function resolveShowcaseUserId(): string | null {
+  const configured = Deno.env.get("SHOWCASE_USER_ID")?.trim()
+  const candidate = configured && configured.length > 0 ? configured : DEFAULT_SHOWCASE_USER_ID
+  return UUID_RE.test(candidate) ? candidate.toLowerCase() : null
+}
 
 function json(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -24,6 +34,9 @@ function payload(accessToken: string): Record<string, unknown> | null {
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405)
 
+  const showcaseUserId = resolveShowcaseUserId()
+  if (!showcaseUserId) return json({ error: "showcase_misconfigured" }, 500)
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL")
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")
@@ -35,7 +48,7 @@ Deno.serve(async (req: Request) => {
     "Content-Type": "application/json",
   }
 
-  const userResponse = await fetch(`${supabaseUrl}/auth/v1/admin/users/${SHOWCASE_USER_ID}`, {
+  const userResponse = await fetch(`${supabaseUrl}/auth/v1/admin/users/${showcaseUserId}`, {
     headers: adminHeaders,
   })
   if (!userResponse.ok) return json({ error: "showcase_unavailable" }, 500)
@@ -85,6 +98,6 @@ Deno.serve(async (req: Request) => {
     access_token: accessToken,
     token_type: "bearer",
     expires_at: expiresAt,
-    user_id: SHOWCASE_USER_ID,
+    user_id: showcaseUserId,
   })
 })

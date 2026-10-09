@@ -30,7 +30,7 @@ final class GuestSessionEntryTests: XCTestCase {
     func testRealSignInReplacesGuestBearerForAuthenticatedTransport() async throws {
         let launch = AppLaunchController.shared
         let manager = launch.environment.authentication.manager
-        let showcaseID = UserID("7063f0d0-c701-4b1a-82f8-e4c360d4d2ec")
+        let showcaseID = GuestShowcaseAccount.productionUserID
         let realUserID = UserID("de0ad507-1111-4111-8111-111111111111")
         let guest = GuestSessionIssuance(
             userID: showcaseID,
@@ -76,7 +76,7 @@ final class GuestSessionEntryTests: XCTestCase {
         _ = await coordinator.resetForAuthenticatedSessionEnd(authGeneration: priorEnd)
 
         let guest = GuestSessionIssuance(
-            userID: UserID("7063f0d0-c701-4b1a-82f8-e4c360d4d2ec"),
+            userID: GuestShowcaseAccount.productionUserID,
             accessToken: "guest.access.token",
             expiresAt: Date().addingTimeInterval(3_600)
         )
@@ -150,7 +150,7 @@ final class GuestSessionEntryTests: XCTestCase {
         guard launch.deferredProductionBootstrapAvailable else {
             throw XCTSkip("Production bootstrap was already consumed in this process")
         }
-        let showcaseID = UserID("7063f0d0-c701-4b1a-82f8-e4c360d4d2ec")
+        let showcaseID = GuestShowcaseAccount.productionUserID
         GuestSessionClient.issuer = { _ in
             GuestSessionIssuance(
                 userID: showcaseID,
@@ -230,14 +230,14 @@ final class GuestSessionEntryTests: XCTestCase {
         GuestSessionClient.issuer = { _ in
             await counter.increment()
             return GuestSessionIssuance(
-                userID: UserID("7063f0d0-c701-4b1a-82f8-e4c360d4d2ec"),
+                userID: GuestShowcaseAccount.productionUserID,
                 accessToken: "guest.renewed",
                 expiresAt: Date().addingTimeInterval(3_600)
             )
         }
         await launch.installGuestSessionForTesting(
             GuestSessionIssuance(
-                userID: UserID("7063f0d0-c701-4b1a-82f8-e4c360d4d2ec"),
+                userID: GuestShowcaseAccount.productionUserID,
                 accessToken: "guest.expired",
                 expiresAt: Date().addingTimeInterval(-30)
             )
@@ -251,7 +251,7 @@ final class GuestSessionEntryTests: XCTestCase {
         let session = manager.sessionManagerForNetworking.currentSession
         XCTAssertEqual(session?.accessToken, "guest.renewed")
         XCTAssertNil(session?.refreshToken)
-        XCTAssertEqual(session?.userID.rawValue, "7063f0d0-c701-4b1a-82f8-e4c360d4d2ec")
+        XCTAssertEqual(session?.userID.rawValue, GuestShowcaseAccount.productionUserIDRaw)
         XCTAssertTrue(launch.isDemoExperienceActive)
         XCTAssertTrue(launch.guestSessionIsInstalled)
         XCTAssertFalse(launch.guestExploreFailurePresented)
@@ -266,7 +266,7 @@ final class GuestSessionEntryTests: XCTestCase {
         let event = launch.environment.authentication.manager.lastEvent
         await launch.installGuestSessionForTesting(
             GuestSessionIssuance(
-                userID: UserID("7063f0d0-c701-4b1a-82f8-e4c360d4d2ec"),
+                userID: GuestShowcaseAccount.productionUserID,
                 accessToken: "guest.expired",
                 expiresAt: Date().addingTimeInterval(-30)
             )
@@ -280,7 +280,7 @@ final class GuestSessionEntryTests: XCTestCase {
         XCTAssertTrue(launch.guestExploreFailurePresented)
         XCTAssertNil(launch.environment.authentication.manager.sessionManagerForNetworking.currentSession)
         XCTAssertEqual(launch.environment.authentication.manager.lastEvent, event)
-        XCTAssertFalse(DemoExperienceSupport.usesLocalBundledData(ProfileID("7063f0d0-c701-4b1a-82f8-e4c360d4d2ec")))
+        XCTAssertFalse(DemoExperienceSupport.usesLocalBundledData(GuestShowcaseAccount.productionProfileID))
     }
 
     func testConcurrentGuestReissueUsesOneRequest() async throws {
@@ -290,14 +290,14 @@ final class GuestSessionEntryTests: XCTestCase {
             await counter.increment()
             try? await Task.sleep(nanoseconds: 150_000_000)
             return GuestSessionIssuance(
-                userID: UserID("7063f0d0-c701-4b1a-82f8-e4c360d4d2ec"),
+                userID: GuestShowcaseAccount.productionUserID,
                 accessToken: "guest.once",
                 expiresAt: Date().addingTimeInterval(3_600)
             )
         }
         await launch.installGuestSessionForTesting(
             GuestSessionIssuance(
-                userID: UserID("7063f0d0-c701-4b1a-82f8-e4c360d4d2ec"),
+                userID: GuestShowcaseAccount.productionUserID,
                 accessToken: "guest.expired",
                 expiresAt: Date().addingTimeInterval(-5)
             )

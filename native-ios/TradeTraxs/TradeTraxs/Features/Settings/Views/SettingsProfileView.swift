@@ -70,8 +70,8 @@ struct SettingsProfileView: View {
                         .textInputAutocapitalization(.words)
                 }
                 .accessibilityIdentifier("settings.profile.tradingStyle")
-                SettingsLabeledField(title: "Primary Market") {
-                    TextField("e.g. Futures, Options", text: $viewModel.draftPrimaryMarket)
+                SettingsLabeledField(title: ProfilePrimaryMarketField.label) {
+                    TextField(ProfilePrimaryMarketField.placeholder, text: $viewModel.draftPrimaryMarket)
                         .textInputAutocapitalization(.words)
                 }
             } header: {
