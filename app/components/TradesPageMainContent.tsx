@@ -321,7 +321,7 @@ function TradesPageMainContent({
               isNativeIos ? "mt-2" : "mt-2.5"
             }`}
           >
-            {displayedTrades.length === 0 ? (
+            {displayedTradeItems.length === 0 ? (
               <div className="md:col-span-2">
                 <EmptyState
                   title={

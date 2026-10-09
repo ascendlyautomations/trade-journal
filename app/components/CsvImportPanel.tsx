@@ -44,6 +44,7 @@ import {
 import type { QuickTradeCsvFormPatch } from "@/lib/parseQuickCsvPaste"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 import { useUserProfile } from "@/lib/useUserProfile"
+import { useProGate } from "@/lib/useProGate"
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import { markProfileCsvImportUsed } from "@/lib/csvImportGate"
 
@@ -87,7 +88,8 @@ export default function CsvImportPanel({
   onSingleTradeDetected,
 }: CsvImportPanelProps) {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
-  const { user } = useUserProfile()
+  const { user, profile } = useUserProfile()
+  const { fromError } = useProGate(profile)
   const { runUpload } = useUploadProgress()
   const [parsed, setParsed] = useState<CsvRow[]>([])
   const [loading, setLoading] = useState(false)

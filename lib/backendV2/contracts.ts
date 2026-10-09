@@ -34,6 +34,7 @@ export type AccountSummaryV1 = {
   type: string | null
   currency: string | null
   is_active: boolean
+  can_add_trades?: boolean | null
 }
 
 export type BadgeCountsV1 = {

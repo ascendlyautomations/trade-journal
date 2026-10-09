@@ -17,6 +17,9 @@ export type CopyTradeWireRow = {
   source_account_id?: unknown
   account_id?: unknown
   account_type?: unknown
+  account_name?: unknown
+  account_size?: unknown
+  account_number?: unknown
   /** Profile copy linkage — authoritative `accounts.mode` for this row. */
   account_mode?: unknown
   mode?: unknown

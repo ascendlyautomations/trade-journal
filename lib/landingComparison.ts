@@ -8,6 +8,7 @@
  * Wording aligns with {@link TRADETRAXS_PRO_PLAN} / pricing page where applicable.
  */
 
+import { FREE_PLAN_UNLIMITED_MANUAL_TRADES_LABEL } from "./freePlanDailyLimits.ts"
 import {
   TRADETRAXS_FEATURE_LABELS,
   TRADETRAXS_PRO_FEATURE_LABELS,
@@ -36,9 +37,9 @@ export const LANDING_COMPARISON_FEATURE_LABELS = {
   propFirmMode: TRADETRAXS_PRO_FEATURE_LABELS.propFirmMode,
   communityTradeRooms: "Trade Rooms",
   performanceAnalytics: TRADETRAXS_FEATURE_LABELS.premiumAnalytics,
-  brandedShareCards: TRADETRAXS_FEATURE_LABELS.performanceImageExports,
+  brandedShareCards: "Branded performance share cards",
   backtestLab: TRADETRAXS_PRO_FEATURE_LABELS.backtestLab,
-  unlimitedTradeJournaling: TRADETRAXS_PRO_FEATURE_LABELS.unlimitedTrades,
+  unlimitedTradeJournaling: FREE_PLAN_UNLIMITED_MANUAL_TRADES_LABEL,
   multipleTradingAccounts: TRADETRAXS_PRO_FEATURE_LABELS.unlimitedTradingAccounts,
   screenshotUploads: "Screenshot Uploads",
   tradingReels: "Trading Clips",

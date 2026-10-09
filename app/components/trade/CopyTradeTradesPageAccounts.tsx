@@ -21,17 +21,25 @@ function accountLine(
   const accountId = String(trade.account_id ?? "").trim()
   const matched = accounts.find((row) => String(row.id) === accountId)
   const name = matched?.name ?? trade.account_name
+  const wireSize =
+    trade.account_size != null && trade.account_size !== ""
+      ? String(trade.account_size)
+      : null
+  const wireNumber =
+    trade.account_number != null && trade.account_number !== ""
+      ? String(trade.account_number)
+      : null
   const label =
     formatTradingAccountSelectorLabel({
       name: name != null ? String(name) : null,
-      size: matched?.account_size ?? trade.account_size,
-      account_number: matched?.account_number ?? trade.account_number,
-      mode: matched?.mode ?? trade.mode ?? trade.account_type,
+      size: matched?.account_size ?? wireSize,
+      account_number: matched?.account_number ?? wireNumber,
+      mode: String(matched?.mode ?? trade.mode ?? trade.account_type ?? "").trim() || null,
     }) || String(name ?? "Account").trim()
   const modeLabel = String(matched?.mode ?? trade.mode ?? trade.account_type ?? "")
     .trim()
   const num = safeAccountNumberLabel(
-    matched?.account_number ?? trade.account_number
+    matched?.account_number ?? wireNumber
   )
   const parts = [label]
   if (modeLabel) parts.push(modeLabel.charAt(0).toUpperCase() + modeLabel.slice(1))
