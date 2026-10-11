@@ -15,6 +15,7 @@ struct SocialSignInButtons: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.colorScheme) private var colorScheme
     @State private var currentNonce: String?
+    @State private var appleCredentialDeliveredForCurrentAuthorization = false
 
     private var socialButtonHeight: CGFloat { ExperienceAccessibility.minTouchTarget }
 
@@ -22,6 +23,7 @@ struct SocialSignInButtons: View {
         VStack(spacing: ExperienceSpacing.sm) {
             SignInWithAppleButton(.continue) { request in
                 guard isEnabled, !isLoading else { return }
+                appleCredentialDeliveredForCurrentAuthorization = false
                 onAppleInteractionBegan()
                 ExperienceKeyboard.dismiss()
 #if DEBUG
@@ -61,51 +63,61 @@ struct SocialSignInButtons: View {
     private func handleAppleCompletion(_ result: Result<ASAuthorization, Error>) {
         switch result {
         case .success(let authorization):
-            guard isEnabled else { return }
-            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
-                  let tokenData = credential.identityToken,
-                  let idToken = String(data: tokenData, encoding: .utf8)
-            else {
-#if DEBUG
-                AppLog.authentication.debug(
-                    "[AppleAuth] credential.request.failed reason=missingIdentityToken identityToken.present=false authorizationCode.present=\((authorization.credential as? ASAuthorizationAppleIDCredential)?.authorizationCode != nil, privacy: .public)"
-                )
-#endif
-                onAppleFailure(AuthenticationError.providerTokenInvalid(.apple))
-                return
-            }
-#if DEBUG
-            AppLog.authentication.debug("[AppleAuth] credentialReceived")
-            AppLog.authentication.debug("[AppleAuth] identityTokenAvailable=true")
-#endif
-            guard let nonce = currentNonce, !nonce.isEmpty else {
-                onAppleFailure(AuthenticationError.providerTokenInvalid(.apple))
-                return
-            }
-            ExperienceHaptics.play(.selection)
-            let authorizationCode = credential.authorizationCode.flatMap {
+            AppleAuthReleaseTrace.authorizationCompleted(outcome: "success")
+            let appleCredential = authorization.credential as? ASAuthorizationAppleIDCredential
+            let idToken = appleCredential?.identityToken.flatMap { String(data: $0, encoding: .utf8) }
+            let authorizationCode = appleCredential?.authorizationCode.flatMap {
                 String(data: $0, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
             }
-            onAppleCredential(
-                AppleIDCredentialPayload(
-                    idToken: idToken,
-                    nonce: nonce,
-                    authorizationCode: authorizationCode?.isEmpty == false ? authorizationCode : nil,
-                    fullName: credential.fullName?.formattedDisplayName(),
-                    email: ProfileDisplayNamePolicy.normalized(credential.email)
-                )
+            let route = SocialSignInAppleCompletionRouting.routeSuccessfulAuthorization(
+                idToken: idToken,
+                rawNonce: currentNonce,
+                authorizationCode: authorizationCode,
+                fullName: appleCredential?.fullName?.formattedDisplayName(),
+                email: ProfileDisplayNamePolicy.normalized(appleCredential?.email),
+                credentialAlreadyDelivered: appleCredentialDeliveredForCurrentAuthorization
             )
-            currentNonce = nil
+            switch route {
+            case .deliver(let payload):
+#if DEBUG
+                AppLog.authentication.debug("[AppleAuth] credentialReceived")
+                AppLog.authentication.debug("[AppleAuth] identityTokenAvailable=true")
+#endif
+                ExperienceHaptics.play(.selection)
+                appleCredentialDeliveredForCurrentAuthorization = true
+                currentNonce = nil
+                AppleAuthReleaseTrace.credentialHandoffToViewModel()
+                onAppleCredential(payload)
+            case .duplicateDelivery:
+                AppleAuthReleaseTrace.authorizationCompleted(outcome: "duplicateIgnored")
+#if DEBUG
+                AppLog.authentication.debug("[AppleAuth] credential.request.duplicateIgnored")
+#endif
+            case .missingIdentityToken:
+#if DEBUG
+                AppLog.authentication.debug(
+                    "[AppleAuth] credential.request.failed reason=missingIdentityToken identityToken.present=false authorizationCode.present=\(appleCredential?.authorizationCode != nil, privacy: .public)"
+                )
+#endif
+                currentNonce = nil
+                onAppleFailure(AuthenticationError.providerTokenInvalid(.apple))
+            case .missingNonce:
+                currentNonce = nil
+                onAppleFailure(AuthenticationError.providerTokenInvalid(.apple))
+            }
 
         case .failure(let error):
             currentNonce = nil
+            appleCredentialDeliveredForCurrentAuthorization = false
             if let authError = error as? ASAuthorizationError, authError.code == .canceled {
+                AppleAuthReleaseTrace.authorizationCompleted(outcome: "cancelled")
 #if DEBUG
                 AppLog.authentication.debug("[AppleAuth] credential.request.cancelled")
 #endif
                 onAppleCancelled()
                 return
             }
+            AppleAuthReleaseTrace.authorizationCompleted(outcome: "failure")
 #if DEBUG
             AppLog.authentication.debug(
                 "[AppleAuth] credential.request.failed errorType=\(String(describing: type(of: error)), privacy: .public) error=\(String(describing: error), privacy: .public)"

@@ -99,15 +99,38 @@ struct AppleSubscriptionSyncClient: AppleSubscriptionSyncClienting {
     func fetchEntitlement() async throws -> BillingEntitlementResponse {
         let response = try await transport.send(
             host: .bff,
-            path: "/api/billing/entitlement",
+            path: BillingEntitlementFailureLog.requestPath,
             method: .get,
             body: nil,
             requiresAuthentication: true
         )
         guard (200 ... 299).contains(response.statusCode) else {
+            BillingEntitlementFailureLog.log(
+                stage: "response",
+                category: Self.httpFailureCategory(statusCode: response.statusCode),
+                httpStatus: String(response.statusCode)
+            )
             throw AppError.unknown(message: "Billing entitlement fetch failed (\(response.statusCode))")
         }
-        return try transport.decoder.decode(BillingEntitlementResponse.self, from: response)
+        do {
+            return try transport.decoder.decode(BillingEntitlementResponse.self, from: response)
+        } catch {
+            BillingEntitlementFailureLog.log(error, stage: "decode")
+            throw error
+        }
+    }
+
+    private static func httpFailureCategory(statusCode: Int) -> String {
+        switch statusCode {
+        case 401:
+            return "unauthorized"
+        case 403:
+            return "forbidden"
+        case 500 ... 599:
+            return "server"
+        default:
+            return "client"
+        }
     }
 
     private static func parseErrorMessage(from data: Data) -> String? {

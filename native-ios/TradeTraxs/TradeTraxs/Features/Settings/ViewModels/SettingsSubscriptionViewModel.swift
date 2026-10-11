@@ -192,16 +192,25 @@ final class SettingsSubscriptionViewModel {
             status = cached
         }
         logSubscriptionScreen()
-        Task { await refreshAll(reloadProducts: true) }
+        Task { await refreshAll() }
     }
 
     func applyForegroundEntitlementRefresh(_ refreshed: BillingStatus) {
         status = refreshed
         errorMessage = nil
+        // A failed Plan load leaves StoreKit idle. A later entitlement update must start it,
+        // or the purchase section stays on "Loading plans…" with no request in flight.
+        guard shouldLoadStoreKitProductsForDisplay else { return }
+        switch productsState {
+        case .loaded, .loading:
+            return
+        case .idle, .failed:
+            Task { await loadProductsIfNeeded(force: false) }
+        }
     }
 
     func refresh() async {
-        await refreshAll(reloadProducts: showsFreePlanDetails)
+        await refreshAll()
     }
 
     func retryLoadProducts() {
@@ -332,7 +341,7 @@ final class SettingsSubscriptionViewModel {
         navigationCoordinator.open(.settingsStack([.home, .subscription]))
     }
 
-    private func refreshAll(reloadProducts: Bool) async {
+    private func refreshAll() async {
         let blocking = status == nil
         if blocking {
             isLoading = true
@@ -346,12 +355,15 @@ final class SettingsSubscriptionViewModel {
 
         guard let userID = await session.currentUserID else {
             errorMessage = "Sign in to view your plan."
+            BillingEntitlementFailureLog.log(stage: "plan", category: "signedOut", httpStatus: "none")
             return
         }
 
         await reconcileEntitlements(profileID: ProfileID(userID.rawValue))
         logSubscriptionScreen()
-        let shouldLoadProducts = reloadProducts && shouldLoadStoreKitProductsForDisplay
+        // Decide from the entitlement just returned. The pre-refresh status is nil on
+        // the reviewer's failure screen, and using it skips StoreKit after Retry succeeds.
+        let shouldLoadProducts = shouldLoadStoreKitProductsForDisplay
         logProductLoadStarted(shouldLoadProducts)
         if shouldLoadProducts {
             await loadProductsIfNeeded(force: false)
@@ -387,6 +399,7 @@ final class SettingsSubscriptionViewModel {
                 errorMessage = nil
             } else if status == nil {
                 errorMessage = UserFacingError.message(for: error)
+                BillingEntitlementFailureLog.logPlanStageIfNeeded(error)
             }
         }
     }

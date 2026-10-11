@@ -747,26 +747,6 @@ final class AuthenticationManager {
         await SessionNetworkGate.shared.markReady()
         let mergedHint = OAuthFirstLoginHint.merged(explicit: firstLoginHint, session: session)
         stageOnboardingDisplayName(session: session, explicit: firstLoginHint, merged: mergedHint)
-        applyAuthenticated(
-            session,
-            event: lifecycle.succeeded(userID: session.userID, provider: session.provider)
-        )
-        if lifecycle == .signUp {
-            AuthLifecycleTrace.log(
-                operation: "signUp.completed",
-                authGeneration: authGeneration,
-                sessionGeneration: restorationGeneration,
-                phase: "authenticated",
-                decision: "allowed",
-                reason: "supabaseSessionPersisted"
-            )
-        }
-#if DEBUG
-        if session.provider == .apple {
-            AppLog.authentication.debug("[AppleAuth] sessionApplied")
-        }
-#endif
-        refreshCoordinator.schedule(for: session)
 
 #if DEBUG
         if session.provider == .apple {
@@ -797,6 +777,27 @@ final class AuthenticationManager {
 #endif
             }
         }
+
+        applyAuthenticated(
+            session,
+            event: lifecycle.succeeded(userID: session.userID, provider: session.provider)
+        )
+        if lifecycle == .signUp {
+            AuthLifecycleTrace.log(
+                operation: "signUp.completed",
+                authGeneration: authGeneration,
+                sessionGeneration: restorationGeneration,
+                phase: "authenticated",
+                decision: "allowed",
+                reason: "supabaseSessionPersisted"
+            )
+        }
+#if DEBUG
+        if session.provider == .apple {
+            AppLog.authentication.debug("[AppleAuth] sessionApplied")
+        }
+#endif
+        refreshCoordinator.schedule(for: session)
     }
 
     /// Available before the authenticated shell can open onboarding.

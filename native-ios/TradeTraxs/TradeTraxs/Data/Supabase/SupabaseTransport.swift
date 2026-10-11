@@ -60,7 +60,7 @@ nonisolated struct SupabaseTransport: Sendable {
             request = try requestBuilder.makeRequest(endpoint: endpoint, body: body)
         } catch {
             // Surface missing BFF/base URL as AppError.transport (user-facing), not raw NetworkError.
-            throw SupabaseErrorMapping.mapNetwork(error)
+            throw mapFailure(error, path: path)
         }
         do {
             let response = try await client.send(request)
@@ -75,8 +75,17 @@ nonisolated struct SupabaseTransport: Sendable {
             #endif
             return response
         } catch {
-            throw SupabaseErrorMapping.mapNetwork(error)
+            throw mapFailure(error, path: path)
         }
+    }
+
+    /// Entitlement failures are classified before mapping, which collapses 401 and 403
+    /// into a session error and drops the HTTP status.
+    private func mapFailure(_ error: Error, path: String) -> AppError {
+        if path == BillingEntitlementFailureLog.requestPath {
+            BillingEntitlementFailureLog.log(error, stage: "transport")
+        }
+        return SupabaseErrorMapping.mapNetwork(error)
     }
 
     func sendDecodable<T: Decodable>(

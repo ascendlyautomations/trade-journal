@@ -192,6 +192,28 @@ export function buildTraxProEntitlementSnapshot(
   }
 }
 
+function isProfilesRowMissingError(error: { code?: string } | null): boolean {
+  return error?.code === "PGRST116"
+}
+
+async function entitlementSnapshotWithoutProfileRow(
+  supabase: SupabaseClient<Database>,
+  userId: string
+): Promise<{ ok: true; snapshot: TraxProEntitlementSnapshot }> {
+  const appleSubscription = await loadActiveAppleSubscriptionForUser(
+    supabase,
+    userId
+  )
+  const launchAccess = await loadLaunchAccessPolicy(supabase)
+  return {
+    ok: true,
+    snapshot: buildTraxProEntitlementSnapshot(null, appleSubscription, {
+      launchAccess,
+      profileCreatedAt: null,
+    }),
+  }
+}
+
 export async function loadTraxProEntitlementSnapshot(
   supabase: SupabaseClient<Database>,
   userId: string
@@ -206,6 +228,9 @@ export async function loadTraxProEntitlementSnapshot(
     .single()
 
   if (error || !profileRow) {
+    if (isProfilesRowMissingError(error) || (!error && !profileRow)) {
+      return entitlementSnapshotWithoutProfileRow(supabase, userId)
+    }
     return { ok: false, reason: "Could not load profile" }
   }
 

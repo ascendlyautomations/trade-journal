@@ -115,4 +115,11 @@ describe("isTraxProActive unified entitlement", () => {
     assert.equal(snapshot.traxProActive, false)
     assert.equal(snapshot.source, "none")
   })
+
+  it("missing profile row defaults to free until profile exists", () => {
+    const snapshot = buildTraxProEntitlementSnapshot(null, null)
+    assert.equal(snapshot.traxProActive, false)
+    assert.equal(snapshot.source, "none")
+    assert.equal(snapshot.profile, null)
+  })
 })

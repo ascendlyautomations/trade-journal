@@ -43,7 +43,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
             XCTFail("Expected loaded products")
         }
         XCTAssertTrue(viewModel.showsApplePurchaseSection)
-        XCTAssertEqual(viewModel.subscribeButtonTitle, "Subscribe to TraxPro")
+        XCTAssertEqual(viewModel.subscribeButtonTitle, "Upgrade to Pro")
     }
 
     func testVerifiedPurchaseSyncsAndUnlocksPro() async {
@@ -279,6 +279,102 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
         XCTAssertEqual(capture.appAccountToken, user)
     }
 
+    func testRetryAfterEntitlementFailureLoadsStoreKitProducts() async {
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
+        let userID = UUID().uuidString
+        var status = freeStatus()
+        status.profileID = ProfileID(userID)
+        let billing = FailThenSucceedBilling(status: status, failures: 1)
+        let metrics = StoreKitStubMetrics()
+        let viewModel = SettingsSubscriptionViewModel(
+            billing: billing,
+            storeKit: StubStoreKit(products: [sampleProduct()], metrics: metrics),
+            session: SubscriptionTestSession(userID: userID),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.errorMessage != nil }
+
+        XCTAssertNil(viewModel.status)
+        XCTAssertEqual(viewModel.planTitle, "—")
+        XCTAssertEqual(viewModel.errorMessage, "Please try again.")
+        XCTAssertEqual(metrics.loadCount, 0)
+        XCTAssertFalse(viewModel.showsApplePurchaseSection)
+
+        await viewModel.refresh()
+
+        XCTAssertEqual(viewModel.planTitle, "Free")
+        XCTAssertNil(viewModel.errorMessage)
+        XCTAssertEqual(metrics.loadCount, 1)
+        XCTAssertTrue(viewModel.showsApplePurchaseSection)
+        if case .loaded(let products) = viewModel.productsState {
+            XCTAssertEqual(products.map(\.id), ["com.tradetraxs.traxspro.monthly"])
+        } else {
+            XCTFail("Expected StoreKit products after entitlement recovery")
+        }
+    }
+
+    func testForegroundEntitlementRecoveryLoadsStoreKitProducts() async {
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
+        let userID = UUID().uuidString
+        var status = freeStatus()
+        status.profileID = ProfileID(userID)
+        let metrics = StoreKitStubMetrics()
+        let viewModel = SettingsSubscriptionViewModel(
+            billing: FailThenSucceedBilling(status: status, failures: 1),
+            storeKit: StubStoreKit(products: [sampleProduct()], metrics: metrics),
+            session: SubscriptionTestSession(userID: userID),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.errorMessage != nil }
+
+        XCTAssertNil(viewModel.status)
+        XCTAssertEqual(viewModel.planTitle, "—")
+        XCTAssertEqual(metrics.loadCount, 0)
+
+        viewModel.applyForegroundEntitlementRefresh(status)
+        await waitFor { metrics.loadCount == 1 }
+
+        XCTAssertEqual(viewModel.planTitle, "Free")
+        XCTAssertNil(viewModel.errorMessage)
+        XCTAssertTrue(viewModel.showsApplePurchaseSection)
+        XCTAssertTrue(viewModel.showsRestorePurchases)
+        if case .loaded(let products) = viewModel.productsState {
+            XCTAssertEqual(products.map(\.id), ["com.tradetraxs.traxspro.monthly"])
+        } else {
+            XCTFail("Expected StoreKit products after a foreground entitlement update")
+        }
+    }
+
+    func testFailedStoreKitLoadRetriesOnNextEntitlementRefresh() async {
+        IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
+        let metrics = StoreKitStubMetrics()
+        metrics.productLoadFailuresRemaining = 1
+        let viewModel = makeViewModel(
+            billing: StubBilling(status: freeStatus()),
+            storeKit: StubStoreKit(products: [sampleProduct()], metrics: metrics)
+        )
+
+        viewModel.loadIfNeeded()
+        await waitFor {
+            if case .failed = viewModel.productsState { return true }
+            return false
+        }
+        XCTAssertEqual(viewModel.planTitle, "Free")
+        XCTAssertEqual(metrics.loadCount, 1)
+
+        await viewModel.refresh()
+
+        XCTAssertEqual(metrics.loadCount, 2)
+        if case .loaded = viewModel.productsState {
+        } else {
+            XCTFail("Expected a later refresh to load StoreKit products")
+        }
+    }
+
     func testFreeTierDisplayMatchesPolicy() async {
         IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
         let viewModel = makeViewModel(
@@ -377,6 +473,34 @@ private struct StubBilling: BillingRepository {
     }
 }
 
+private final class FailThenSucceedBilling: BillingRepository, @unchecked Sendable {
+    let status: BillingStatus
+    private var failuresRemaining: Int
+
+    init(status: BillingStatus, failures: Int) {
+        self.status = status
+        self.failuresRemaining = failures
+    }
+
+    func status(for profileID: ProfileID) async throws -> BillingStatus {
+        var copy = status
+        copy.profileID = profileID
+        return copy
+    }
+
+    func subscription(for profileID: ProfileID) async throws -> Subscription? { nil }
+
+    func refreshEntitlements(for profileID: ProfileID) async throws -> BillingStatus {
+        if failuresRemaining > 0 {
+            failuresRemaining -= 1
+            throw AppError.transport(.server(statusCode: 500, message: "{\"error\":\"Could not load profile\"}"))
+        }
+        var copy = status
+        copy.profileID = profileID
+        return copy
+    }
+}
+
 private final class MutableBillingRepository: BillingRepository, @unchecked Sendable {
     private var current: BillingStatus
     var nextStatus: BillingStatus?
@@ -421,6 +545,8 @@ final class StoreKitStubMetrics: @unchecked Sendable {
     var syncVerifiedCalls = 0
     var listenerStarted = false
     var syncVerifiedShouldFail = false
+    var loadCount = 0
+    var productLoadFailuresRemaining = 0
 }
 
 private struct StubStoreKit: StoreKitSubscriptionServicing {
@@ -431,7 +557,14 @@ private struct StubStoreKit: StoreKitSubscriptionServicing {
     var metrics: StoreKitStubMetrics? = nil
     var offerCodeRedemptionError: Error? = nil
 
-    func loadProducts() async throws -> [StoreKitTraxProProduct] { products }
+    func loadProducts() async throws -> [StoreKitTraxProProduct] {
+        metrics?.loadCount += 1
+        if let metrics, metrics.productLoadFailuresRemaining > 0 {
+            metrics.productLoadFailuresRemaining -= 1
+            throw URLError(.cannotConnectToHost)
+        }
+        return products
+    }
     func purchase(productID: String, appAccountToken: UUID?) async -> StoreKitPurchaseOutcome {
         capture?.appAccountToken = appAccountToken
         return purchaseOutcome
