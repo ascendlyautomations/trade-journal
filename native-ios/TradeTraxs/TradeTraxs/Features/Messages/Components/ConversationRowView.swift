@@ -13,13 +13,15 @@ struct ConversationRowView: View {
             avatar
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xs) {
-                    Text(item.displayName)
-                        .experienceStyle(item.unreadCount > 0 ? .headline : .body, color: colors.primaryText)
-                        .lineLimit(1)
-                    if let peer = item.peer {
-                        ProfileTradeTraxsIdentityBadge(profile: peer, size: .inline)
-                    } else if let peerID = item.peerProfileID {
-                        ProfileTradeTraxsIdentityBadge(profileID: peerID, size: .inline)
+                    HStack(alignment: .center, spacing: ExperienceSpacing.xs) {
+                        Text(item.displayName)
+                            .experienceStyle(item.unreadCount > 0 ? .headline : .body, color: colors.primaryText)
+                            .lineLimit(1)
+                        if let peer = item.peer {
+                            ProfileTradeTraxsIdentityBadge(profile: peer, size: .inline)
+                        } else if let peerID = item.peerProfileID {
+                            ProfileTradeTraxsIdentityBadge(profileID: peerID, size: .inline)
+                        }
                     }
                     if item.isMuted {
                         Image(systemName: "bell.slash.fill")

@@ -209,7 +209,6 @@ final class SessionAccountsStore {
                 guard let dash = incomingByID[prior.id] else { return prior }
                 var merged = prior
                 merged.isActive = dash.isActive
-                merged.canAddTrades = dash.canAddTrades
                 return merged
             }
         case (.dashboard, .rest):

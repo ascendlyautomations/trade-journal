@@ -605,7 +605,12 @@ enum CompositionRoot {
                 }
                 if IosSubscriptionReleaseConfiguration.iosPaywallEnabled {
                     await data.storeKitSubscriptions.startTransactionListenerIfNeeded()
-                    try? await data.storeKitSubscriptions.syncVerifiedTransactionsToServer()
+                    do {
+                        try await data.storeKitSubscriptions.syncVerifiedTransactionsToServer()
+                        await authLifecycle.refreshBillingEntitlementsOnForeground?()
+                    } catch {
+                        // A failed StoreKit upload does not change the last entitlement snapshot.
+                    }
                 }
             }
         }

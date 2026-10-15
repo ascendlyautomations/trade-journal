@@ -76,6 +76,7 @@ struct LeaderboardPodiumView: View {
                     imagePipeline: imagePipeline,
                     size: emphasized ? 68 : 52
                 )
+                .id(row.profileID)
                 Text(rankBadge(row.rank))
                     .font(.system(size: emphasized ? 13 : 11, weight: .bold))
                     .foregroundStyle(colors.onAccent)

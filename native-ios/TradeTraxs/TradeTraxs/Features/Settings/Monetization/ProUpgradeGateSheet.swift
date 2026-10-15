@@ -9,6 +9,7 @@ struct ProUpgradeGateSheet: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
 
     init(
         reason: ProGateReason,
@@ -115,6 +116,8 @@ struct ProUpgradeGateSheet: View {
 
     private var primaryActions: some View {
         VStack(spacing: ExperienceSpacing.sm) {
+            purchaseDisclosure
+
             Button {
                 Task { await viewModel.purchaseSelectedPlan() }
             } label: {
@@ -146,6 +149,55 @@ struct ProUpgradeGateSheet: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
+        }
+    }
+
+    /// Visible before the purchase button. Same copy and links as Settings → Plan.
+    private var purchaseDisclosure: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            if let product = viewModel.selectedProduct {
+                Text(product.displayName)
+                    .experienceStyle(.headline, color: colors.primaryText)
+                    .accessibilityIdentifier("proUpgrade.selectedTitle")
+                Text(product.subscriptionPeriodLabel)
+                    .experienceStyle(.subheadline, color: colors.secondaryText)
+                    .accessibilityIdentifier("proUpgrade.selectedDuration")
+                Text(product.displayPrice)
+                    .experienceStyle(.headline, color: colors.primaryText)
+                    .accessibilityIdentifier("proUpgrade.selectedPrice")
+            }
+
+            Text(SubscriptionPresentationPolicy.autoRenewDisclosure(selectedProduct: viewModel.selectedProduct))
+                .experienceStyle(.caption, color: colors.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("proUpgrade.autoRenew")
+
+            HStack(spacing: ExperienceSpacing.xs) {
+                Spacer(minLength: 0)
+                Button {
+                    openURL(LegalDocuments.privacy)
+                } label: {
+                    Text("Privacy Policy")
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("proUpgrade.privacy")
+
+                Text("•")
+                    .experienceStyle(.footnote, color: colors.tertiaryText)
+
+                Button {
+                    openURL(LegalDocuments.terms)
+                } label: {
+                    Text("Terms of Use")
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("proUpgrade.terms")
+
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, ExperienceSpacing.xxs)
         }
     }
 

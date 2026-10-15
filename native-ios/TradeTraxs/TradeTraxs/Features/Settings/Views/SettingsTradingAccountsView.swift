@@ -48,6 +48,24 @@ struct SettingsTradingAccountsView: View {
         return viewModel.accounts.count > FreeTierPolicy.maxTradeEntryAccounts
     }
 
+    /// Free viewers only. Pro keeps the single "Your Accounts" list.
+    private var showsFreePlanAccountGroups: Bool {
+        guard let profileID = viewModel.viewerProfileID else { return false }
+        return !TradeEntryEntitlementGate.viewerHasTraxProAccess(profileID: profileID)
+    }
+
+    private var freePlanActiveSlotCount: Int {
+        FreePlanTradeAccountPolicy.countTradeEntryEnabled(viewModel.accounts)
+    }
+
+    private var freePlanActiveAccounts: [TradingAccount] {
+        viewModel.filteredAccounts.filter(FreePlanTradeAccountPolicy.accountCanAddTrades)
+    }
+
+    private var freePlanReadOnlyAccounts: [TradingAccount] {
+        viewModel.filteredAccounts.filter { !FreePlanTradeAccountPolicy.accountCanAddTrades($0) }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if !viewModel.accounts.isEmpty {
@@ -126,117 +144,18 @@ struct SettingsTradingAccountsView: View {
                 } header: {
                     Text("Your Accounts")
                 }
+            } else if showsFreePlanAccountGroups {
+                freePlanGroupedAccountSections
             } else {
                 Section {
-                    Text("Choose which accounts appear in account selectors throughout TradeTraxs.")
-                        .experienceStyle(.footnote, color: colors.secondaryText)
-                        .lineLimit(3)
-                        .listRowInsets(
-                            EdgeInsets(
-                                top: 0,
-                                leading: ExperienceSpacing.md,
-                                bottom: ExperienceSpacing.xxs,
-                                trailing: ExperienceSpacing.md
-                            )
-                        )
-                        .accessibilityIdentifier("manageAccounts.dropdownIntro")
-
-                    if showsFreePlanTradeEntryReconfigure {
-                        Button("Choose accounts for new trades") {
-                            FreePlanAccountSlotRequestStore.shared.requestManualOpen()
-                        }
-                        .accessibilityIdentifier("manageAccounts.chooseTradeEntrySlots")
-                    }
-
+                    accountListIntro
                     ForEach(viewModel.filteredAccounts) { account in
-                        HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
-                            CompactAccountDropdownToggle(
-                                isOn: Binding(
-                                    get: { viewModel.showInAccountDropdowns(for: account.id) },
-                                    set: { show in
-                                        guard !AppLaunchController.shared.isDemoExperienceActive else { return }
-                                        Task {
-                                            await viewModel.setShowInAccountDropdowns(
-                                                id: account.id,
-                                                show: show
-                                            )
-                                        }
-                                    }
-                                ),
-                                accessibilityIdentifier:
-                                    "manageAccounts.showInDropdowns.\(account.id.rawValue)",
-                                isOnAccessibilityValue: viewModel.showInAccountDropdowns(
-                                    for: account.id
-                                )
-                            )
-
-                            Button {
-                                guard !AppLaunchController.shared.isDemoExperienceActive else { return }
-                                editorPresentation = .edit(account)
-                            } label: {
-                                HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
-                                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                                        Text(viewModel.rowTitle(for: account))
-                                            .experienceStyle(.body, color: colors.primaryText)
-                                        Text(viewModel.rowSubtitle(for: account))
-                                            .experienceStyle(.footnote, color: colors.secondaryText)
-                                        if let note = account.note, !note.isEmpty {
-                                            Text(note)
-                                                .experienceStyle(.caption, color: colors.tertiaryText)
-                                                .lineLimit(2)
-                                        }
-                                    }
-                                    Spacer(minLength: ExperienceSpacing.sm)
-                                    Image(systemName: "chevron.right")
-                                        .font(.footnote.weight(.semibold))
-                                        .foregroundStyle(colors.tertiaryText)
-                                }
-                                .padding(.vertical, ExperienceSpacing.xxs)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .accessibilityIdentifier("settings.account.\(account.id.rawValue)")
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            if AppLaunchController.shared.isDemoExperienceActive {
-                                EmptyView()
-                            } else {
-                            Button {
-                                ExperienceHaptics.play(.selection)
-                                Task {
-                                    await viewModel.setActive(id: account.id, isActive: !account.isActive)
-                                }
-                            } label: {
-                                Text(account.isActive ? "Deactivate" : "Activate")
-                            }
-                            .tint(account.isActive ? colors.secondaryText : colors.accent)
-                            }
-                        }
-                        .contextMenu {
-                            if !AppLaunchController.shared.isDemoExperienceActive {
-                            Button {
-                                editorPresentation = .edit(account)
-                            } label: {
-                                Label("Edit", systemImage: "square.and.pencil")
-                            }
-                            Button {
-                                ExperienceHaptics.play(.selection)
-                                Task {
-                                    await viewModel.setActive(id: account.id, isActive: !account.isActive)
-                                }
-                            } label: {
-                                Label(
-                                    account.isActive ? "Deactivate" : "Activate",
-                                    systemImage: account.isActive ? "pause.circle" : "checkmark.circle"
-                                )
-                            }
-                            }
-                        }
+                        accountRow(account, tradeEntryBadge: nil)
                     }
                 } header: {
                     Text("Your Accounts")
                 } footer: {
-                    Text("Swipe to activate or deactivate. Deactivated accounts stay in history but hide from trade pickers.")
+                    accountListFooter
                 }
             }
             }
@@ -292,6 +211,176 @@ struct SettingsTradingAccountsView: View {
         }
         .accessibilityIdentifier("settings.tradingAccounts")
     }
+
+    private enum TradeEntryAccountBadge {
+        case active
+        case readOnly
+    }
+
+    private var accountListIntro: some View {
+        Text("Choose which accounts appear in account selectors throughout TradeTraxs.")
+            .experienceStyle(.footnote, color: colors.secondaryText)
+            .lineLimit(3)
+            .listRowInsets(
+                EdgeInsets(
+                    top: 0,
+                    leading: ExperienceSpacing.md,
+                    bottom: ExperienceSpacing.xxs,
+                    trailing: ExperienceSpacing.md
+                )
+            )
+            .accessibilityIdentifier("manageAccounts.dropdownIntro")
+    }
+
+    @ViewBuilder
+    private var freePlanGroupedAccountSections: some View {
+        Section {
+            accountListIntro
+            if showsFreePlanTradeEntryReconfigure {
+                Button("Choose accounts for new trades") {
+                    FreePlanAccountSlotRequestStore.shared.requestManualOpen()
+                }
+                .accessibilityIdentifier("manageAccounts.chooseTradeEntrySlots")
+            }
+        }
+
+        if !freePlanActiveAccounts.isEmpty {
+            Section {
+                ForEach(freePlanActiveAccounts) { account in
+                    accountRow(account, tradeEntryBadge: .active)
+                }
+            } header: {
+                Text("Active Accounts (\(freePlanActiveSlotCount)/\(FreeTierPolicy.maxTradeEntryAccounts))")
+            } footer: {
+                if freePlanReadOnlyAccounts.isEmpty {
+                    accountListFooter
+                }
+            }
+        }
+
+        if !freePlanReadOnlyAccounts.isEmpty {
+            Section {
+                ForEach(freePlanReadOnlyAccounts) { account in
+                    accountRow(account, tradeEntryBadge: .readOnly)
+                }
+            } header: {
+                Text("Read-Only Accounts")
+            } footer: {
+                accountListFooter
+            }
+        }
+    }
+
+    private var accountListFooter: some View {
+        Text("Swipe to activate or deactivate. Deactivated accounts stay in history but hide from trade pickers.")
+    }
+
+    private func accountRow(
+        _ account: TradingAccount,
+        tradeEntryBadge: TradeEntryAccountBadge?
+    ) -> some View {
+        HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+            CompactAccountDropdownToggle(
+                isOn: Binding(
+                    get: { viewModel.showInAccountDropdowns(for: account.id) },
+                    set: { show in
+                        guard !AppLaunchController.shared.isDemoExperienceActive else { return }
+                        Task {
+                            await viewModel.setShowInAccountDropdowns(
+                                id: account.id,
+                                show: show
+                            )
+                        }
+                    }
+                ),
+                accessibilityIdentifier:
+                    "manageAccounts.showInDropdowns.\(account.id.rawValue)",
+                isOnAccessibilityValue: viewModel.showInAccountDropdowns(
+                    for: account.id
+                )
+            )
+
+            Button {
+                guard !AppLaunchController.shared.isDemoExperienceActive else { return }
+                editorPresentation = .edit(account)
+            } label: {
+                HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                        HStack(spacing: ExperienceSpacing.xs) {
+                            Text(viewModel.rowTitle(for: account))
+                                .experienceStyle(.body, color: colors.primaryText)
+                            if let tradeEntryBadge {
+                                tradeEntryStatusBadge(tradeEntryBadge)
+                            }
+                        }
+                        Text(viewModel.rowSubtitle(for: account))
+                            .experienceStyle(.footnote, color: colors.secondaryText)
+                        if let note = account.note, !note.isEmpty {
+                            Text(note)
+                                .experienceStyle(.caption, color: colors.tertiaryText)
+                                .lineLimit(2)
+                        }
+                    }
+                    Spacer(minLength: ExperienceSpacing.sm)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(colors.tertiaryText)
+                }
+                .padding(.vertical, ExperienceSpacing.xxs)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .accessibilityIdentifier("settings.account.\(account.id.rawValue)")
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if AppLaunchController.shared.isDemoExperienceActive {
+                EmptyView()
+            } else {
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    Task {
+                        await viewModel.setActive(id: account.id, isActive: !account.isActive)
+                    }
+                } label: {
+                    Text(account.isActive ? "Deactivate" : "Activate")
+                }
+                .tint(account.isActive ? colors.secondaryText : colors.accent)
+            }
+        }
+        .contextMenu {
+            if !AppLaunchController.shared.isDemoExperienceActive {
+                Button {
+                    editorPresentation = .edit(account)
+                } label: {
+                    Label("Edit", systemImage: "square.and.pencil")
+                }
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    Task {
+                        await viewModel.setActive(id: account.id, isActive: !account.isActive)
+                    }
+                } label: {
+                    Label(
+                        account.isActive ? "Deactivate" : "Activate",
+                        systemImage: account.isActive ? "pause.circle" : "checkmark.circle"
+                    )
+                }
+            }
+        }
+    }
+
+    private func tradeEntryStatusBadge(_ badge: TradeEntryAccountBadge) -> some View {
+        let title = badge == .active ? "Active" : "Read-Only"
+        let tint = badge == .active ? colors.accent : colors.secondaryText
+        return Text(title)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(tint.opacity(0.12), in: Capsule())
+            .accessibilityLabel(badge == .active ? "Active account" : "Read-only account")
+    }
+
 
     private var brokerIntegrationsRow: some View {
         HStack(spacing: ExperienceSpacing.sm) {

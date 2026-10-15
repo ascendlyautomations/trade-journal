@@ -89,7 +89,7 @@ final class ManageAccountsViewModel {
         Task { await loadAccounts(requiresFullOwnerSnapshot: true) }
     }
 
-    /// Cache-first accounts for Withdrawals — awaits load; never exits while accounts are still loading.
+    /// Cache-first accounts for Withdrawals. One awaited load; an empty list is final.
     func ensureAccountsReadyForWithdrawals() async {
         WithdrawalsTrace.log("ensureAccountsStarted")
         if let userID = await session.currentUserID {
@@ -110,19 +110,6 @@ final class ManageAccountsViewModel {
                 hasLoaded = true
             }
             await loadAccounts(requiresFullOwnerSnapshot: true)
-        }
-        let deadline = Date().addingTimeInterval(15)
-        while accounts.isEmpty, Date() < deadline {
-            if isLoading {
-                try? await Task.sleep(nanoseconds: 50_000_000)
-                continue
-            }
-            if errorMessage != nil {
-                WithdrawalsTrace.log("earlyReturn", detail: "accountsError=\(errorMessage ?? "")")
-                break
-            }
-            await loadAccounts(requiresFullOwnerSnapshot: true)
-            try? await Task.sleep(nanoseconds: 50_000_000)
         }
         WithdrawalsTrace.log(
             "accountsResolved",
