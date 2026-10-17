@@ -19,7 +19,8 @@ import {
 import { READABLE_SECONDARY_CLASS } from "@/lib/readableTextStyles"
 import { formatEST } from "@/lib/formatEST"
 import { formatCurrency } from "@/lib/formatCurrency"
-import { formatDecimal } from "@/lib/formatDisplay"
+import { formatProfitFactor } from "@/lib/formatDisplay"
+import ChartWhenSized from "@/app/components/dashboard/ChartWhenSized"
 
 export type EquityChartPoint = {
   date: string
@@ -30,7 +31,7 @@ export type DashboardEquityCurveProps = {
   data: EquityChartPoint[]
   variant: "mobile" | "desktop" | "hero"
   isPro?: boolean
-  profitFactor?: number
+  profitFactor?: number | null
   currentStreak?: number
   avgDay?: number
   consistency?: number
@@ -69,7 +70,7 @@ export default function DashboardEquityCurve({
         {showEmpty ? (
           <ChartEmptyState />
         ) : (
-        <div className="h-[268px] w-full">
+        <ChartWhenSized height={268} className="w-full">
           <ResponsiveContainer width="100%" height={268}>
             <LineChart
               data={data}
@@ -127,7 +128,7 @@ export default function DashboardEquityCurve({
               />
             </LineChart>
           </ResponsiveContainer>
-        </div>
+        </ChartWhenSized>
         )}
       </div>
     )
@@ -147,8 +148,11 @@ export default function DashboardEquityCurve({
         {showEmpty ? (
           <ChartEmptyState />
         ) : (
-          <div className="tt-dash-equity-plot rounded-lg bg-black/20">
-            <ResponsiveContainer width="100%" height="100%">
+          <ChartWhenSized
+            height={360}
+            className="tt-dash-equity-plot rounded-lg bg-black/20"
+          >
+            <ResponsiveContainer width="100%" height={360}>
               <LineChart
                 data={data}
                 margin={{ top: 16, right: 12, left: 4, bottom: 8 }}
@@ -208,7 +212,7 @@ export default function DashboardEquityCurve({
                 />
               </LineChart>
             </ResponsiveContainer>
-          </div>
+          </ChartWhenSized>
         )}
       </div>
     )
@@ -224,7 +228,7 @@ export default function DashboardEquityCurve({
         <ChartEmptyState />
       ) : (
       <>
-      <div className="w-full h-[300px]">
+      <ChartWhenSized height={300} className="w-full">
         <ResponsiveContainer width="100%" height={300}>
           <LineChart
             data={data}
@@ -290,18 +294,20 @@ export default function DashboardEquityCurve({
             />
           </LineChart>
         </ResponsiveContainer>
-      </div>
+      </ChartWhenSized>
 
       {isPro ? (
       <div className="flex flex-wrap gap-3 mt-4">
         <div
           className={`px-3 py-2 rounded-lg text-sm font-medium backdrop-blur-md transition-all duration-200 hover:scale-[1.03] ${
-            profitFactor >= 1
-              ? "text-green-400 bg-green-500/10 border border-green-500/20"
-              : "text-red-400 bg-red-500/10 border border-red-500/20"
+            profitFactor == null
+              ? "text-white bg-white/5 border border-white/10"
+              : profitFactor >= 1
+                ? "text-green-400 bg-green-500/10 border border-green-500/20"
+                : "text-red-400 bg-red-500/10 border border-red-500/20"
           }`}
         >
-          Profit Factor: {formatDecimal(profitFactor)}
+          Profit Factor: {formatProfitFactor(profitFactor)}
         </div>
 
         <div

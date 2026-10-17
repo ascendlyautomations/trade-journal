@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Modal from "@/app/components/ui/Modal"
-import ConfirmModal from "@/app/components/ui/ConfirmModal"
 import { buttonVariants, cn } from "@/app/components/ui"
 import {
   FREE_PLAN_ACCOUNT_LIMIT,
@@ -25,13 +24,12 @@ export type FreePlanSlotAccountOption = {
 type FreePlanAccountSlotModalProps = {
   open: boolean
   accounts: FreePlanSlotAccountOption[]
+  /** Saved can_add_trades = true ids when that set is already 1–3. */
+  initialSelectedIds?: string[]
   saving?: boolean
   error?: string | null
   onConfirm: (accountIds: string[]) => void | Promise<void>
 }
-
-const ZERO_SELECTION_CONFIRM_MESSAGE =
-  "You haven't selected any active accounts. You'll still have access to all historical data, but you won't be able to add new trades until you activate or create an account. Continue?"
 
 function formatBrokerLabel(category: string | null): string {
   const raw = String(category ?? "").trim()
@@ -56,12 +54,14 @@ function formatLastTradeDate(value: string | null): string {
 export default function FreePlanAccountSlotModal({
   open,
   accounts,
+  initialSelectedIds = [],
   saving = false,
   error = null,
   onConfirm,
 }: FreePlanAccountSlotModalProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [confirmZeroOpen, setConfirmZeroOpen] = useState(false)
+  const [userEdited, setUserEdited] = useState(false)
+  const [localError, setLocalError] = useState<string | null>(null)
 
   const sortedAccounts = useMemo(
     () =>
@@ -75,18 +75,31 @@ export default function FreePlanAccountSlotModal({
   )
 
   const accountKey = accounts.map((a) => a.id).join(",")
+  const initialKey = initialSelectedIds.join(",")
 
   useEffect(() => {
     if (!open) {
       setSelectedIds([])
-      setConfirmZeroOpen(false)
+      setUserEdited(false)
+      setLocalError(null)
       return
     }
-    setSelectedIds([])
-    setConfirmZeroOpen(false)
-  }, [open, accountKey])
+    if (userEdited) return
+    const known = new Set(accounts.map((account) => account.id))
+    const restored = initialSelectedIds.filter((id) => known.has(id))
+    setSelectedIds(
+      restored.length >= 1 && restored.length <= FREE_PLAN_ACCOUNT_LIMIT
+        ? restored
+        : []
+    )
+    // Restore from the saved id set when the modal opens. Skip while the user is editing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, accountKey, initialKey, userEdited])
 
   function toggleAccount(id: string) {
+    if (saving) return
+    setUserEdited(true)
+    setLocalError(null)
     setSelectedIds((prev) => {
       if (prev.includes(id)) return prev.filter((x) => x !== id)
       if (prev.length >= FREE_PLAN_ACCOUNT_LIMIT) return prev
@@ -96,16 +109,17 @@ export default function FreePlanAccountSlotModal({
 
   function handleKeepSelectedClick() {
     if (saving) return
-    if (selectedIds.length === 0) {
-      setConfirmZeroOpen(true)
+    if (
+      selectedIds.length < 1 ||
+      selectedIds.length > FREE_PLAN_ACCOUNT_LIMIT
+    ) {
+      setLocalError(
+        `Select 1 to ${FREE_PLAN_ACCOUNT_LIMIT} accounts to keep active.`
+      )
       return
     }
+    setLocalError(null)
     void onConfirm(selectedIds)
-  }
-
-  async function handleConfirmZero() {
-    setConfirmZeroOpen(false)
-    await onConfirm([])
   }
 
   return (
@@ -124,7 +138,11 @@ export default function FreePlanAccountSlotModal({
             </p>
             <button
               type="button"
-              disabled={saving}
+              disabled={
+                saving ||
+                selectedIds.length < 1 ||
+                selectedIds.length > FREE_PLAN_ACCOUNT_LIMIT
+              }
               onClick={handleKeepSelectedClick}
               className={cn(
                 buttonVariants({ variant: "primary", size: "md" }),
@@ -143,16 +161,16 @@ export default function FreePlanAccountSlotModal({
               that can receive new trades.
             </p>
             <p>
-              Choose which accounts you&apos;d like to keep active. You can keep
-              anywhere from 0 to {FREE_PLAN_ACCOUNT_LIMIT} accounts. Any accounts
-              you don&apos;t keep will remain available in read-only mode with
-              all trade history preserved.
+              Choose which accounts you&apos;d like to keep active. Select 1 to{" "}
+              {FREE_PLAN_ACCOUNT_LIMIT} accounts. Any accounts you don&apos;t
+              keep stay available in read-only mode with all trade history
+              preserved.
             </p>
           </div>
 
-          {error ? (
+          {localError || error ? (
             <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-              {error}
+              {localError || error}
             </p>
           ) : null}
 
@@ -232,17 +250,6 @@ export default function FreePlanAccountSlotModal({
           </ul>
         </div>
       </Modal>
-
-      <ConfirmModal
-        open={confirmZeroOpen}
-        title="Continue?"
-        description={ZERO_SELECTION_CONFIRM_MESSAGE}
-        confirmLabel="Continue"
-        cancelLabel="Cancel"
-        loading={saving}
-        onCancel={() => setConfirmZeroOpen(false)}
-        onConfirm={handleConfirmZero}
-      />
     </>
   )
 }

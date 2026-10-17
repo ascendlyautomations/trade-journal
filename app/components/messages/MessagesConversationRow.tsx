@@ -64,8 +64,10 @@ function MessagesConversationRow({
   return (
     <div
       onClick={() => onOpen(conversationId)}
-      className={`relative bg-white/5 border border-white/10 p-4 rounded-xl cursor-pointer hover:bg-white/10 transition${
-        selected ? " tt-msg-selected xl:border-blue-400/40 xl:bg-white/10" : ""
+      className={`relative cursor-pointer rounded-xl border p-4 transition ${
+        selected
+          ? "border-blue-400/40 bg-blue-500/20"
+          : "border-white/10 bg-white/5 hover:bg-white/10"
       }`}
     >
       <button
@@ -75,13 +77,13 @@ function MessagesConversationRow({
           e.stopPropagation()
           onToggleMenu(conversationId)
         }}
-        className="absolute right-3 top-3 z-10 px-2 py-1 rounded bg-black/40 hover:bg-black/60 text-sm text-white cursor-pointer"
+        className="absolute right-3 top-3 z-10 cursor-pointer rounded-lg border border-white/10 bg-white/10 px-2 py-1 text-sm text-white hover:bg-white/20"
       >
         ⋯
       </button>
       {isMenuOpen ? (
         <div
-          className="absolute right-3 top-10 z-20 w-40 rounded-lg border border-white/10 bg-[#0f172a] py-1 shadow-lg"
+          className="absolute right-3 top-10 z-20 w-40 rounded-lg border border-white/10 bg-card/95 py-1 shadow-lg backdrop-blur-md"
           onClick={(e) => e.stopPropagation()}
         >
           <button

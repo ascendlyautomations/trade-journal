@@ -13,7 +13,7 @@ export default function CreateTradeRoomSection({
 }: CreateTradeRoomSectionProps) {
   return (
     <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
-      <h2 className="text-xl font-semibold text-white">Create Trade Room</h2>
+      <h2 className="text-xl font-semibold text-blue-300">Create Trade Room</h2>
       <p className="mt-2 text-sm leading-relaxed text-gray-400">
         Build your own community, chat with traders, share trades, and grow
         together.

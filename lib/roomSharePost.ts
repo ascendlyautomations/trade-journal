@@ -1,3 +1,5 @@
+import { resolveStoredRoomImageUrl } from "@/lib/storageOptimizedMedia"
+
 export type RoomSharePostFields = {
   room_id?: string | null
   room_name?: string | null
@@ -22,7 +24,7 @@ export function isRoomSharePost(
 export function resolveRoomShareLogo(logo: string | null | undefined): string {
   const raw = logo != null ? String(logo).trim() : ""
   if (!raw) return "/default-avatar.png"
-  return raw
+  return resolveStoredRoomImageUrl(raw) ?? raw
 }
 
 export function formatRoomMemberCount(count: number): string {

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { resolveStoredRoomImageUrl } from "@/lib/storageOptimizedMedia"
 import { isPublicDiscoveryRoom } from "@/lib/betaHub"
 import { filterRoomsWithPublicOwners } from "@/lib/publicProfileDiscovery"
 import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
@@ -26,7 +27,7 @@ export function resolveRoomAvatarUrl(room: {
 }): string | null {
   for (const value of [room.imageUrl, room.avatarUrl]) {
     if (value != null && String(value).trim() !== "") {
-      return String(value).trim()
+      return resolveStoredRoomImageUrl(String(value).trim())
     }
   }
   return null

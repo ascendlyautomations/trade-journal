@@ -44,6 +44,12 @@ export function formatDecimal(value: number, maxFractionDigits = 2): string {
   })
 }
 
+/** Null means there are no losing trades. A real 0 is still shown as 0. */
+export function formatProfitFactor(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—"
+  return formatDecimal(value)
+}
+
 export function formatRR(value: unknown, empty = "—"): string {
   return formatNumberUnknown(value, empty)
 }

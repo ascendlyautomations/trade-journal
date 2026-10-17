@@ -199,8 +199,9 @@ final class TradesContainerViewModel {
                 return
             }
             if snapshot.trades.isEmpty {
-                if snapshot.didLoadTrades {
-                    journalItems = []
+                // An empty first page is authoritative only when nothing is loaded yet.
+                // It must not erase pages already fetched, or latch that empty page as the whole journal.
+                if snapshot.didLoadTrades, journalItems.isEmpty {
                     nextCursor = snapshot.tradesNextCursor
                     seedCachesFromItems()
                     updateStateForVisibleItems()
@@ -230,7 +231,8 @@ final class TradesContainerViewModel {
             snapshotItems: snapshot.trades,
             loadedItems: items,
             hasLoaded: hasLoaded,
-            didLoadAuthoritative: snapshot.didLoadTrades
+            didLoadAuthoritative: snapshot.didLoadTrades,
+            orderedBy: \.createdAt
         )
         journalItems = mergedBootstrapJournal(snapshot: snapshot, summaries: reconciled.items)
         #if DEBUG
@@ -722,7 +724,11 @@ final class TradesContainerViewModel {
 
             if usedV2Journal {
                 hasAuthoritativeV2Journal = true
-                applyAuthoritativeJournalPage(pageJournal, reset: reset)
+                applyAuthoritativeJournalPage(
+                    pageJournal,
+                    reset: reset,
+                    pageIsPartial: newCursor != nil
+                )
             } else {
                 let preserveIDs = ownerPublicTradePreserveIDs()
                 let pageSummaries = pageJournal.map(\.summary)
@@ -732,7 +738,11 @@ final class TradesContainerViewModel {
                         incoming: pageSummaries,
                         preserveIDs: preserveIDs
                     ).items
-                    var next = reconcileJournal(snapshot: reconciled, loaded: journalItems)
+                    var next = reconcileJournal(
+                        snapshot: reconciled,
+                        loaded: journalItems,
+                        snapshotIsPartial: newCursor != nil
+                    )
                     let pageByID = Dictionary(uniqueKeysWithValues: pageJournal.map { ($0.id, $0) })
                     next = next.map { pageByID[$0.id] ?? $0 }
                     journalItems = next
@@ -865,14 +875,17 @@ final class TradesContainerViewModel {
 
     private func reconcileJournal(
         snapshot: [TradeSummary],
-        loaded: [TradeOwnerJournalSummary]
+        loaded: [TradeOwnerJournalSummary],
+        snapshotIsPartial: Bool
     ) -> [TradeOwnerJournalSummary] {
         guard !loaded.isEmpty else {
             return ProfileTradesJournalMapping.journalItems(from: snapshot)
         }
         let reconciled = ProfileSectionSupport.reconcileLoadedSnapshot(
             snapshot: snapshot,
-            loaded: loaded.map(\.summary)
+            loaded: loaded.map(\.summary),
+            orderedBy: \.createdAt,
+            snapshotIsPartial: snapshotIsPartial
         )
         return ProfileTradesJournalMapping.replaceSummaries(
             reconciled,
@@ -883,11 +896,21 @@ final class TradesContainerViewModel {
 
     private func applyAuthoritativeJournalPage(
         _ pageJournal: [TradeOwnerJournalSummary],
-        reset: Bool
+        reset: Bool,
+        pageIsPartial: Bool
     ) {
         guard !pageJournal.isEmpty else { return }
-        if reset || journalItems.isEmpty {
+        if journalItems.isEmpty {
             journalItems = pageJournal
+            return
+        }
+        if reset {
+            journalItems = ProfileSectionSupport.reconcileLoadedSnapshot(
+                snapshot: pageJournal,
+                loaded: journalItems,
+                orderedBy: \.summary.createdAt,
+                snapshotIsPartial: pageIsPartial
+            )
             return
         }
         let pageByID = Dictionary(uniqueKeysWithValues: pageJournal.map { ($0.id, $0) })
@@ -914,11 +937,20 @@ final class TradesContainerViewModel {
         snapshot: ProfileState,
         summaries: [TradeSummary]
     ) -> [TradeOwnerJournalSummary] {
+        let pageIsPartial = snapshot.tradesNextCursor != nil
         if hasAuthoritativeV2Journal, !journalItems.isEmpty {
-            return reconcileJournal(snapshot: summaries, loaded: journalItems)
+            return reconcileJournal(
+                snapshot: summaries,
+                loaded: journalItems,
+                snapshotIsPartial: pageIsPartial
+            )
         }
         guard let preview = Self.journalPreview(snapshot.tradeJournalPreview, orderedLike: summaries) else {
-            return reconcileJournal(snapshot: summaries, loaded: journalItems)
+            return reconcileJournal(
+                snapshot: summaries,
+                loaded: journalItems,
+                snapshotIsPartial: pageIsPartial
+            )
         }
         if journalItems.isEmpty { return preview }
         let existingByID = Dictionary(uniqueKeysWithValues: journalItems.map { ($0.id, $0) })
@@ -931,7 +963,15 @@ final class TradesContainerViewModel {
             return row
         }
         let previewIDs = Set(preview.map(\.id))
-        merged.append(contentsOf: journalItems.filter { !previewIDs.contains($0.id) })
+        let newest = preview.map(\.summary.createdAt).max()
+        let oldest = preview.map(\.summary.createdAt).min()
+        let extras = journalItems.filter { row in
+            if previewIDs.contains(row.id) { return false }
+            let stamp = row.summary.createdAt
+            if let newest, stamp > newest { return true }
+            return pageIsPartial && oldest.map { stamp < $0 } == true
+        }
+        merged.append(contentsOf: extras)
         return merged
     }
 
@@ -953,7 +993,7 @@ final class TradesContainerViewModel {
         didLoadTrades: Bool
     ) -> Bool {
         guard didLoadTrades else { return false }
-        if summaries.isEmpty { return true }
+        if summaries.isEmpty { return seeded.isEmpty }
         let byID = Dictionary(uniqueKeysWithValues: seeded.map { ($0.id, $0) })
         for summary in summaries {
             guard let row = byID[summary.id] else { return false }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import { getCachedTrades } from "@/lib/appDataCache"
 import { supabase } from "@/lib/supabaseClient"
 import {
   ensureBrokerEnrichmentPendingCountLoaded,
@@ -36,17 +37,18 @@ export default function BrokerEnrichmentInboxBanner() {
   async function handleReview() {
     if (!user?.id || loadingReview) return
     setLoadingReview(true)
-    const { data } = await supabase
-      .from("trades")
-      .select("id")
-      .eq("user_id", user.id)
-      .eq("import_source", "tradovate")
-      .eq("broker_enrichment_status", "pending")
-      .order("created_at", { ascending: true })
-      .limit(50)
+    const cached = getCachedTrades(user.id) ?? []
+    const ids = cached
+      .filter(
+        (row) =>
+          String(row.import_source ?? "") === "tradovate" &&
+          row.broker_enrichment_status === "pending"
+      )
+      .map((row) => String(row.id ?? ""))
+      .filter((id) => id.length > 0)
+      .slice(0, 50)
 
     setLoadingReview(false)
-    const ids = (data ?? []).map((row) => String(row.id))
     if (ids.length === 0) {
       void refresh()
       return

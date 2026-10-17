@@ -88,8 +88,7 @@ final class ClipsContainerViewModel {
 
         if hasLoaded {
             if snapshot.clips.isEmpty {
-                if snapshot.didLoadClips {
-                    items = []
+                if items.isEmpty, snapshot.didLoadClips {
                     detailCache.seed(reels: [])
                     state = .empty
                     prefetchEngagement(for: [])
@@ -98,7 +97,8 @@ final class ClipsContainerViewModel {
             }
             items = ProfileSectionSupport.reconcileLoadedSnapshot(
                 snapshot: snapshot.clips,
-                loaded: items
+                loaded: items,
+                orderedBy: \.createdAt
             )
             #if DEBUG
             ProfileClipsSync.logReconciled(
@@ -118,7 +118,8 @@ final class ClipsContainerViewModel {
             snapshotItems: snapshot.clips,
             loadedItems: items,
             hasLoaded: hasLoaded,
-            didLoadAuthoritative: snapshot.didLoadClips
+            didLoadAuthoritative: snapshot.didLoadClips,
+            orderedBy: \.createdAt
         )
         items = reconciled.items
         hasLoaded = reconciled.hasLoaded
@@ -316,7 +317,12 @@ final class ClipsContainerViewModel {
             }
             let beforeCount = items.count
             let serverMerged = OwnerProfileOptimisticStore.merging(overlay: overlay, into: pageReels)
-            items = OwnerProfileOptimisticStore.merging(overlay: serverMerged, into: [])
+            items = ProfileSectionSupport.reconcileLoadedSnapshot(
+                snapshot: serverMerged,
+                loaded: items,
+                orderedBy: \.createdAt,
+                snapshotIsPartial: cursor != nil
+            )
             nextCursor = cursor
             detailCache.seed(reels: items)
             hasLoaded = true

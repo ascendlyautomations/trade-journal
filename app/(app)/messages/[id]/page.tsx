@@ -81,8 +81,8 @@ import {
 import { DmSenderNameLine } from "@/app/components/messages/DmSenderNameLine"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import {
-  DELETED_USER_LABEL,
-  isDirectConversationPeerDeleted,
+  isOrphanedDirectConversation,
+  ORPHANED_DM_HIDDEN_EVENT,
 } from "@/lib/deletedUserDisplay"
 import { profilePostPublicUrl } from "@/lib/storagePublicUrl"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
@@ -328,7 +328,7 @@ function DmMessageActionMenu({
 
       {menuOpen ? (
         <div
-          className={`absolute top-7 z-50 w-40 rounded-lg border border-white/10 bg-[#0b1f3a] shadow-lg ${
+          className={`absolute top-7 z-50 w-40 rounded-lg border border-white/10 bg-card/95 shadow-lg backdrop-blur-md ${
             alignRight ? "right-1" : "left-1"
           }`}
         >
@@ -743,7 +743,7 @@ function PostMessageBubble({
               <FeedPostScreenshot
                 imageSrc={imageSrc}
                 variant="message"
-                wrapperClassName="mb-3 w-full overflow-hidden rounded-lg border border-white/10 bg-black/30"
+                wrapperClassName="mb-3 w-full overflow-hidden rounded-lg border border-white/10 bg-white/5"
                 onImageClick={setLightboxImageUrl}
               />
             ) : null}
@@ -1177,6 +1177,7 @@ export default function DMPage() {
   const bottomAnchorRef = useRef<HTMLDivElement>(null)
   const userIdRef = useRef<string | null>(null)
   const conversationIdRef = useRef<string | null>(null)
+  const conversationGroupRef = useRef(false)
 
   const keepComposerVisibleAboveKeyboard = useCallback(() => {
     const el = scrollRef.current
@@ -1303,6 +1304,25 @@ export default function DMPage() {
   useEffect(() => {
     conversationIdRef.current = activeConversationId
   }, [activeConversationId])
+
+  useEffect(() => {
+    conversationGroupRef.current = conversation?.is_group === true
+  }, [conversation?.is_group])
+
+  useEffect(() => {
+    if (!user?.id || !conversation?.id || conversation.is_group === true) return
+    if (
+      !isOrphanedDirectConversation(false, participants, user.id)
+    ) {
+      return
+    }
+    window.dispatchEvent(
+      new CustomEvent(ORPHANED_DM_HIDDEN_EVENT, {
+        detail: { conversationId: conversation.id },
+      })
+    )
+    router.replace("/messages")
+  }, [user?.id, conversation?.id, conversation?.is_group, participants, router])
 
   useEffect(() => {
     setActiveConversationSession(user?.id ?? null, activeConversationId)
@@ -1587,16 +1607,42 @@ export default function DMPage() {
         }
 
         if (payload.eventType === "UPDATE") {
+          const next = payload.new as {
+            id?: string
+            sender_anonymized?: boolean
+            profiles?: unknown
+          }
           setMessagesWithCache((prev) =>
             prev.map((msg) => {
-              if (msg.id !== (payload.new as { id: string }).id) return msg
-              const next = payload.new as any
+              if (msg.id !== next.id) return msg
               return {
+                ...msg,
                 ...next,
                 profiles: next.profiles ?? msg.profiles,
               }
             })
           )
+          if (
+            next.sender_anonymized === true &&
+            !conversationGroupRef.current
+          ) {
+            const cid = conversationIdRef.current
+            const uid = userIdRef.current
+            if (cid && uid) {
+              void supabase
+                .from("conversation_participants")
+                .select("user_id")
+                .eq("conversation_id", cid)
+                .then(({ data }) => {
+                  if (conversationIdRef.current !== cid) return
+                  if (
+                    isOrphanedDirectConversation(false, data ?? [], uid)
+                  ) {
+                    setParticipants(data ?? [])
+                  }
+                })
+            }
+          }
         }
       }
     )
@@ -3349,18 +3395,11 @@ export default function DMPage() {
     setActiveMenuId(null)
   }
 
-  const peerDeleted = isDirectConversationPeerDeleted(
-    Boolean(conversation?.is_group),
-    otherUser?.username,
-    messages.length > 0
-  )
   const title = conversation?.is_group
     ? conversation?.name || "Group Chat"
-    : peerDeleted
-      ? DELETED_USER_LABEL
-      : otherUser?.username
-        ? `@${otherUser.username}`
-        : "Loading..."
+    : otherUser?.username
+      ? `@${otherUser.username}`
+      : "user"
   const memberCount = participants.length
   const members = participants.map((m: any) => ({
     ...m,
@@ -3512,7 +3551,7 @@ export default function DMPage() {
 
               <button
                 onClick={() => router.push("/messages")}
-                className="p-2 md:text-sm md:px-3 md:py-1 md:bg-white/10 md:rounded md:hover:bg-white/20"
+                className="rounded-lg p-2 md:border md:border-white/10 md:bg-white/10 md:px-3 md:py-1 md:text-sm md:hover:bg-white/15"
               >
                 ←
               </button>
@@ -3537,7 +3576,7 @@ export default function DMPage() {
                     <span className="text-sm font-semibold">
                       {conversation?.name || "Group Chat"}
                     </span>
-                  ) : otherUser?.id && !peerDeleted ? (
+                  ) : otherUser?.id && otherUser?.username ? (
                     <ProfileUsernameLink
                       userId={otherUser.id}
                       username={otherUser.username}
@@ -3565,7 +3604,7 @@ export default function DMPage() {
                     setGroupName(conversation?.name || "")
                     setShowConversationSettings(true)
                   }}
-                  className="p-2 md:px-3 md:py-1 md:bg-white/10 md:rounded md:hover:bg-white/20 md:text-sm"
+                  className="rounded-lg p-2 md:border md:border-white/10 md:bg-white/10 md:px-3 md:py-1 md:text-sm md:hover:bg-white/15"
                 >
                   ⚙️
                 </button>
@@ -4220,17 +4259,17 @@ export default function DMPage() {
 
       {showAddMembers && conversation?.is_group ? (
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4 text-white"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 text-white backdrop-blur-sm"
           onClick={() => {
             setShowAddMembers(false)
             setSelectedUsers([])
           }}
         >
           <div
-            className="bg-[#0b1f3a] border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl"
+            className="w-full max-w-md rounded-2xl border border-white/10 bg-card/90 p-6 shadow-xl backdrop-blur-md"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-white text-xl font-semibold mb-2">
+            <h2 className="mb-2 text-xl font-semibold text-blue-300">
               Add Members
             </h2>
             <p className="text-gray-400 text-sm">
@@ -4245,10 +4284,10 @@ export default function DMPage() {
                     key={u.id}
                     type="button"
                     onClick={() => toggleUser(u)}
-                    className={`flex w-full items-center gap-3 p-3 rounded-lg cursor-pointer transition ${
+                    className={`flex w-full cursor-pointer items-center gap-3 rounded-lg border p-3 transition ${
                       selected
-                        ? "bg-blue-500/20"
-                        : "hover:bg-white/10"
+                        ? "border-blue-400/40 bg-blue-500/20"
+                        : "border-transparent hover:bg-white/10"
                     }`}
                   >
                     <ProfileAvatarImg
@@ -4287,14 +4326,14 @@ export default function DMPage() {
 
       {showTradePicker ? (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 text-white backdrop-blur-sm"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 text-white backdrop-blur-sm"
           onClick={() => setShowTradePicker(false)}
         >
           <div
-            className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0b1f3a] p-6 shadow-2xl"
+            className="w-full max-w-md rounded-2xl border border-white/10 bg-card/90 p-6 shadow-xl backdrop-blur-md"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="mb-3 text-xl font-semibold text-white">
+            <h2 className="mb-3 text-xl font-semibold text-blue-300">
               Send a trade
             </h2>
             <div className="max-h-80 space-y-2 overflow-y-auto">

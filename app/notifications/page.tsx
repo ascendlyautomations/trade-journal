@@ -3,7 +3,7 @@
 import "../socialDesktopTheme.css"
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   ProfileAvatarLink,
   ProfileUsernameLink,
@@ -519,6 +519,15 @@ export default function NotificationsPage() {
   const [clearing, setClearing] = useState(false)
   const [dismissingIds, setDismissingIds] = useState<Set<string>>(new Set())
   const [activeTab, setActiveTab] = useState<NotificationCenterTab>("all")
+  const searchParams = useSearchParams()
+  const joinRequestId = searchParams.get("joinRequest")?.trim() ?? ""
+  const [joinAction, setJoinAction] = useState<"approve" | "decline" | null>(null)
+  const [joinError, setJoinError] = useState<string | null>(null)
+  const [joinResolvedStatus, setJoinResolvedStatus] = useState<
+    "approved" | "rejected" | null
+  >(null)
+  const focusedJoinRequestRef = useRef<string | null>(null)
+  const markedJoinRequestRef = useRef<string | null>(null)
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
   const paintedFromCacheRef = useRef(false)
 
@@ -708,6 +717,97 @@ export default function NotificationsPage() {
     [notifications]
   )
 
+  const joinRequestCard = useMemo(() => {
+    if (!joinRequestId) return null
+    return (
+      groupedCards.find((card) => {
+        if (card.kind !== "trade_room_join_request") return false
+        const meta = parseTradeRoomJoinRequestContent(card.notification.content)
+        return meta?.join_request_id === joinRequestId
+      }) ?? null
+    )
+  }, [groupedCards, joinRequestId])
+
+  const openJoinRequest =
+    joinRequestCard?.kind === "trade_room_join_request" ? joinRequestCard : null
+  const joinRequestMeta = openJoinRequest
+    ? parseTradeRoomJoinRequestContent(openJoinRequest.notification.content)
+    : null
+  const joinRequestSender = openJoinRequest?.notification.sender_id
+    ? sendersById[openJoinRequest.notification.sender_id]
+    : undefined
+  const joinRequestStatus =
+    joinResolvedStatus ?? joinRequestMeta?.request_status ?? "pending"
+
+  useEffect(() => {
+    setJoinError(null)
+    setJoinResolvedStatus(null)
+  }, [joinRequestId])
+
+  useEffect(() => {
+    if (!joinRequestId) {
+      focusedJoinRequestRef.current = null
+      return
+    }
+    if (focusedJoinRequestRef.current === joinRequestId) return
+    focusedJoinRequestRef.current = joinRequestId
+    setActiveTab("rooms")
+  }, [joinRequestId])
+
+  useEffect(() => {
+    if (!joinRequestId || loading || !openJoinRequest) return
+    document.getElementById("join-request-target")?.scrollIntoView({
+      block: "nearest",
+    })
+  }, [joinRequestId, loading, openJoinRequest, activeTab])
+
+  function closeJoinRequest() {
+    if (joinAction) return
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete("joinRequest")
+    const next = params.toString()
+    router.replace(next ? `/notifications?${next}` : "/notifications", {
+      scroll: false,
+    })
+  }
+
+  async function respondToJoinRequest(action: "approve" | "decline") {
+    if (!joinRequestId || joinAction) return
+    if (isDemoModeActive()) {
+      requestDemoSignup("save")
+      return
+    }
+
+    setJoinAction(action)
+    setJoinError(null)
+    try {
+      const response = await fetch(`/api/trade-room-join-requests/${action}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId: joinRequestId }),
+      })
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string
+      }
+      if (!response.ok) {
+        setJoinError(
+          typeof body.error === "string" && body.error.trim()
+            ? body.error
+            : "Could not update this join request."
+        )
+        return
+      }
+      setJoinResolvedStatus(action === "approve" ? "approved" : "rejected")
+      await fetchNotifications()
+      window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
+    } catch {
+      setJoinError("Could not update this join request.")
+    } finally {
+      setJoinAction(null)
+    }
+  }
+
   const tabCards = useMemo(
     () => filterGroupedCardsByTab(groupedCards, activeTab),
     [groupedCards, activeTab]
@@ -891,9 +991,18 @@ export default function NotificationsPage() {
       sendersById
     )
 
+    const isOpenJoinRequest =
+      Boolean(joinRequestId) &&
+      card.kind === "trade_room_join_request" &&
+      parseTradeRoomJoinRequestContent(card.notification.content)
+        ?.join_request_id === joinRequestId
+
     return (
-      <GroupedNotificationCardView
+      <div
         key={key}
+        id={isOpenJoinRequest ? "join-request-target" : undefined}
+      >
+      <GroupedNotificationCardView
         card={card}
         sendersById={sendersById}
         expanded={expandedKeys.has(key)}
@@ -907,6 +1016,7 @@ export default function NotificationsPage() {
         }}
         onDismiss={() => void dismissIds(ids)}
       />
+      </div>
     )
   }
 
@@ -917,6 +1027,14 @@ export default function NotificationsPage() {
       ),
     [sections]
   )
+
+  useEffect(() => {
+    if (!joinRequestId || !openJoinRequest) return
+    if (openJoinRequest.notification.read) return
+    if (markedJoinRequestRef.current === joinRequestId) return
+    markedJoinRequestRef.current = joinRequestId
+    void markIdsRead([openJoinRequest.notification.id])
+  }, [joinRequestId, openJoinRequest])
 
   if ((profileLoading && !profile) || (loading && notifications.length === 0)) {
     return (
@@ -1057,6 +1175,71 @@ export default function NotificationsPage() {
         </div>
       </div>
       </NativeIosPullToRefresh>
+
+      <Modal
+        open={Boolean(joinRequestId)}
+        onClose={closeJoinRequest}
+        title="Trade room request"
+        size="sm"
+        closeDisabled={Boolean(joinAction)}
+        footer={
+          joinRequestStatus === "pending" && openJoinRequest ? (
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={Boolean(joinAction)}
+                onClick={() => void respondToJoinRequest("decline")}
+                className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-gray-200 transition hover:bg-white/10 disabled:opacity-50"
+              >
+                {joinAction === "decline" ? "Declining…" : "Decline"}
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(joinAction)}
+                onClick={() => void respondToJoinRequest("approve")}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-50"
+              >
+                {joinAction === "approve" ? "Approving…" : "Approve"}
+              </button>
+            </div>
+          ) : (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={closeJoinRequest}
+                className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-gray-200 transition hover:bg-white/10"
+              >
+                Close
+              </button>
+            </div>
+          )
+        }
+      >
+        {loading && !openJoinRequest ? (
+          <p className="text-sm text-gray-300">Loading this request…</p>
+        ) : openJoinRequest ? (
+          <div className="space-y-2 text-sm text-gray-300">
+            <p>
+              {formatTradeRoomJoinRequestMessage(
+                senderDisplayName(joinRequestSender),
+                joinRequestMeta?.room_name
+              )}
+            </p>
+            <p className="text-gray-400">
+              {joinRequestStatus === "approved"
+                ? "Approved"
+                : joinRequestStatus === "rejected"
+                  ? "Declined"
+                  : "Waiting for your decision"}
+            </p>
+            {joinError ? <p className="text-red-300">{joinError}</p> : null}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-300">
+            This join request is no longer in your notifications.
+          </p>
+        )}
+      </Modal>
 
       <Modal
         open={showClearConfirm}

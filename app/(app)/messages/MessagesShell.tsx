@@ -1,6 +1,6 @@
 "use client"
 
-import "../../communicationDesktopTheme.css"
+import "./messagesGlassTheme.css"
 import {
   useCallback,
   useEffect,
@@ -56,7 +56,10 @@ import {
 } from "../../components/ui"
 import { SkeletonMessagesConversationList } from "../../components/ui/skeletons"
 import { useUserProfile } from "@/lib/UserProfileProvider"
-import { DELETED_USER_LABEL, isDirectConversationPeerDeleted } from "@/lib/deletedUserDisplay"
+import {
+  isOrphanedDirectConversation,
+  ORPHANED_DM_HIDDEN_EVENT,
+} from "@/lib/deletedUserDisplay"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import {
@@ -106,14 +109,9 @@ function mapDmRowToInboxConversation(
   const profile = otherUser?.profiles ?? null
 
   const isGroup = conv.is_group
-  const hasHistory = Boolean(conv.last_message?.trim())
-  const peerDeleted = isDirectConversationPeerDeleted(
-    isGroup,
-    profile?.username,
-    hasHistory
-  )
-  const peerLabel = peerDeleted ? DELETED_USER_LABEL : profile?.username || "user"
+  const peerLabel = profile?.username?.trim() || "user"
   const displayName = isGroup ? conv.name || "Group Chat" : peerLabel
+  const peerId = isGroup ? null : (profile?.id || otherUser?.user_id || null)
 
   return {
     id: conv.id,
@@ -122,22 +120,25 @@ function mapDmRowToInboxConversation(
     name: conv.name || null,
     displayName,
     username: peerLabel,
-    otherUserId: isGroup
-      ? null
-      : peerDeleted
-        ? null
-        : (profile?.id ?? otherUser?.user_id ?? null),
-    profileUserId: isGroup
-      ? null
-      : peerDeleted
-        ? null
-        : (profile?.id ?? otherUser?.user_id ?? null),
+    otherUserId: peerId,
+    profileUserId: peerId,
     avatar_url: isGroup ? conv.avatar_url ?? null : profile?.avatar_url ?? null,
     participants,
     lastMessage: conv.last_message || "No messages yet",
     last_message_at: conv.last_message_at || null,
     unreadCount,
   }
+}
+
+function omitOrphanedDirectConversations(list: any[], viewerId: string) {
+  return list.filter(
+    (conversation) =>
+      !isOrphanedDirectConversation(
+        conversation?.is_group === true,
+        conversation?.participants,
+        viewerId
+      )
+  )
 }
 
 function sortConversationsDesc(list: any[]) {
@@ -455,8 +456,9 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
           )
         )
 
-        const sorted = sortConversationsDesc(
-          applyInboxPatchesToConversations(convoData)
+        const sorted = omitOrphanedDirectConversations(
+          sortConversationsDesc(applyInboxPatchesToConversations(convoData)),
+          userId
         )
         setConversations(sorted)
         setInboxLoadError(null)
@@ -539,8 +541,9 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
       lastMessage: firstMapped?.lastMessage ?? null,
     })
 
-    const sorted = sortConversationsDesc(
-      applyInboxPatchesToConversations(convoData)
+    const sorted = omitOrphanedDirectConversations(
+      sortConversationsDesc(applyInboxPatchesToConversations(convoData)),
+      userId
     )
 
     traceMessagesInbox("step:5-before-setState", {
@@ -578,7 +581,14 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
     })
 
     if (cached) {
-      setConversations(cached.conversations)
+      const visible = omitOrphanedDirectConversations(
+        cached.conversations,
+        userId
+      )
+      if (visible.length !== cached.conversations.length) {
+        writeMessagesInboxSession(userId, visible)
+      }
+      setConversations(visible)
       setLoading(false)
     }
 
@@ -590,6 +600,30 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
       fetchUnreadCountForConversationShared(userId, conversationId),
     []
   )
+
+  useEffect(() => {
+    if (!user?.id) return
+    const viewerId = user.id
+
+    function hideOrphanedConversation(event: Event) {
+      const conversationId = (
+        event as CustomEvent<{ conversationId?: string }>
+      ).detail?.conversationId
+      if (!conversationId) return
+      setConversations((prev) => {
+        const next = prev.filter((conversation) => conversation.id !== conversationId)
+        if (next.length !== prev.length) {
+          writeMessagesInboxSession(viewerId, next)
+        }
+        return next
+      })
+    }
+
+    window.addEventListener(ORPHANED_DM_HIDDEN_EVENT, hideOrphanedConversation)
+    return () => {
+      window.removeEventListener(ORPHANED_DM_HIDDEN_EVENT, hideOrphanedConversation)
+    }
+  }, [user?.id])
 
   useEffect(() => {
     if (!user?.id) return
@@ -947,13 +981,18 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
     )
   }
 
+  const visibleConversations = useMemo(() => {
+    if (!authUser?.id) return conversations
+    return omitOrphanedDirectConversations(conversations, authUser.id)
+  }, [conversations, authUser?.id])
+
   const filteredConversations = useMemo(() => {
     const query = search.trim().toLowerCase()
     const list = query
-      ? conversations.filter((c) =>
+      ? visibleConversations.filter((c) =>
           (c.displayName || c.username).toLowerCase().includes(query)
         )
-      : conversations
+      : visibleConversations
 
     return list.map((c) => ({
       id: c.id,
@@ -968,21 +1007,21 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
       avatar_url: c.avatar_url ?? null,
       unreadCount: c.unreadCount ?? 0,
     }))
-  }, [conversations, search])
+  }, [visibleConversations, search])
 
   const showSkeleton =
-    !authUser?.id || (loading && conversations.length === 0)
+    !authUser?.id || (loading && visibleConversations.length === 0)
   const showEmptyNoConversations =
     !showSkeleton &&
     !inboxLoadError &&
     filteredConversations.length === 0 &&
-    conversations.length === 0
+    visibleConversations.length === 0
   const showInboxLoadError =
-    !showSkeleton && !!inboxLoadError && conversations.length === 0
+    !showSkeleton && !!inboxLoadError && visibleConversations.length === 0
   const showEmptySearch =
     !showSkeleton &&
     filteredConversations.length === 0 &&
-    conversations.length > 0
+    visibleConversations.length > 0
 
   useEffect(() => {
     traceMessagesInbox("step:6-after-render", {
@@ -1034,7 +1073,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <div className="tt-phase2-dark flex min-h-0 w-full flex-col xl:mx-auto xl:h-[var(--app-viewport-height)] xl:max-w-[1560px] xl:flex-row xl:gap-4">
+      <div className="tt-messages flex min-h-0 w-full flex-col xl:mx-auto xl:h-[var(--app-viewport-height)] xl:max-w-[1560px] xl:flex-row xl:gap-4 xl:px-6 xl:py-3">
       <div
         className={
           onThread
@@ -1043,7 +1082,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
         }
       >
       <div
-        className="flex h-[var(--app-viewport-height)] min-h-0 w-full flex-col overflow-hidden text-white xl:h-full"
+        className="tt-messages-pane flex h-[var(--app-viewport-height)] min-h-0 w-full flex-col overflow-hidden text-white xl:h-full"
       >
         <div
           data-tt-native-surface="messages"
@@ -1060,7 +1099,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search conversations..."
-            className="mt-4 mb-3 w-full shrink-0 rounded border border-white/10 bg-white/10 p-3 text-white placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+            className="tt-messages-search mb-3 mt-4 w-full shrink-0 rounded-xl border border-white/10 bg-white/5 p-3 text-white placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
           />
 
           <PlatformMessagesWebInboxActions>
@@ -1193,14 +1232,14 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
 
       {showGroupModal && (
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 text-white"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 text-white backdrop-blur-sm"
           onClick={() => setShowGroupModal(false)}
         >
           <div
-            className="bg-[#0b1f3a] border border-white/10 rounded-2xl p-6 w-full max-w-lg shadow-2xl text-white"
+            className="w-full max-w-lg rounded-2xl border border-white/10 bg-card/90 p-6 text-white shadow-xl backdrop-blur-md"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-white text-xl font-semibold mb-4">
+            <h2 className="mb-4 text-xl font-semibold text-blue-300">
               Create Group Chat
             </h2>
 
@@ -1262,7 +1301,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
               {groupSelectedUsers.map((selectedUser) => (
                 <div
                   key={selectedUser.id}
-                  className="flex items-center gap-1 rounded bg-blue-500 px-2 py-1 text-xs"
+                  className="flex items-center gap-1 rounded-lg bg-blue-500 px-2 py-1 text-xs"
                 >
                   {selectedUser.username}
                   <button
@@ -1302,14 +1341,14 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
 
       {showDMModal && (
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 text-white"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 text-white backdrop-blur-sm"
           onClick={() => setShowDMModal(false)}
         >
           <div
-            className="bg-[#0b1f3a] border border-white/10 rounded-2xl p-6 w-full max-w-lg shadow-2xl text-white"
+            className="w-full max-w-lg rounded-2xl border border-white/10 bg-card/90 p-6 text-white shadow-xl backdrop-blur-md"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-white text-xl font-semibold mb-4">
+            <h2 className="mb-4 text-xl font-semibold text-blue-300">
               New Chat
             </h2>
 
@@ -1358,7 +1397,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
               {dmSelectedUsers.map((selectedUser) => (
                 <div
                   key={selectedUser.id}
-                  className="flex items-center gap-1 rounded bg-blue-500 px-2 py-1 text-xs"
+                  className="flex items-center gap-1 rounded-lg bg-blue-500 px-2 py-1 text-xs"
                 >
                   {selectedUser.username}
                   <button

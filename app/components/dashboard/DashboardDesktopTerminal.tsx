@@ -13,7 +13,7 @@ import {
 import type { HoldTimeStats } from "@/lib/dashboardHoldTimeStats"
 import type { LongShortPerformance } from "@/lib/dashboardLongShortStats"
 import { formatCurrency } from "@/lib/formatCurrency"
-import { formatDecimal, formatRR } from "@/lib/formatDisplay"
+import { formatProfitFactor, formatRR } from "@/lib/formatDisplay"
 import { formatHoldDurationSeconds } from "@/lib/tradeTimingDisplay"
 
 type ExpectancySummary = { expectancy: number } | null
@@ -38,7 +38,7 @@ export type DashboardDesktopTerminalProps = {
   winRate: number
   winCount: number
   lossCount: number
-  profitFactor: number
+  profitFactor: number | null
   avgRR: number | null
   expectancyData: ExpectancySummary
   bestDay: number
@@ -355,9 +355,15 @@ export default function DashboardDesktopTerminal({
             <MetricLine label="Win Rate" value={`${winRate.toFixed(1)}%`} />
             <MetricLine
               label="Profit Factor"
-              value={formatDecimal(profitFactor)}
+              value={formatProfitFactor(profitFactor)}
               valueClassName={
-                profitFactor >= 1 ? "text-green-400" : profitFactor > 0 ? "text-red-400" : "text-white"
+                profitFactor == null
+                  ? "text-white"
+                  : profitFactor >= 1
+                    ? "text-green-400"
+                    : profitFactor > 0
+                      ? "text-red-400"
+                      : "text-white"
               }
             />
             <MetricLine label="Avg RR" value={formatRR(avgRR)} />

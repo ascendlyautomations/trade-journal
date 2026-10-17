@@ -20,6 +20,30 @@ export function isDirectConversationPeerDeleted(
   )
 }
 
+export const ORPHANED_DM_HIDDEN_EVENT = "tj-orphaned-dm-hidden"
+
+/**
+ * Confirmed permanent deletion of the other person in a 1:1 chat.
+ * Account deletion removes that user's conversation_participants row and
+ * leaves the viewer. A missing profile, avatar, or username is not enough:
+ * the other participant row must be absent while the viewer is still present.
+ * An empty participant list is treated as incomplete data, not deletion.
+ */
+export function isOrphanedDirectConversation(
+  isGroup: boolean,
+  participants: Array<{ user_id?: string | null }> | null | undefined,
+  viewerUserId: string | null | undefined
+): boolean {
+  if (isGroup) return false
+  const viewer = viewerUserId?.trim() ?? ""
+  if (!viewer || !participants?.length) return false
+  const ids = participants
+    .map((participant) => String(participant?.user_id ?? "").trim())
+    .filter((id) => id.length > 0)
+  if (!ids.includes(viewer)) return false
+  return !ids.some((id) => id !== viewer)
+}
+
 type MessageSenderFields = {
   sender_id?: string | null
   sender_anonymized?: boolean | null

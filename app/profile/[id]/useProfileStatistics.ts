@@ -12,6 +12,7 @@ import {
   computeProfileOverviewWinRate,
   type ProfilePublicStatsAggregate,
 } from "@/lib/profilePublicStatistics"
+import { computeTradeOutcomeStreaks } from "@/lib/userStreaksLogic"
 
 type UseProfileStatisticsOptions = {
   visibleTrades: ProfileTradeRow[]
@@ -167,30 +168,9 @@ export function useProfileStatistics({
       ) {
         return "—"
       }
-      const ordered = [...profileOverviewTrades].sort(
-        (a, b) =>
-          new Date(a.created_at ?? 0).getTime() -
-          new Date(b.created_at ?? 0).getTime()
-      )
-      let streak = 0
-      let sign: 1 | -1 | 0 = 0
-      for (const trade of ordered) {
-        const pnl = Number(trade.pnl) || 0
-        const nextSign: 1 | -1 | 0 = pnl > 0 ? 1 : pnl < 0 ? -1 : 0
-        if (nextSign === 0) {
-          streak = 0
-          sign = 0
-          continue
-        }
-        if (nextSign === sign) {
-          streak += 1
-        } else {
-          sign = nextSign
-          streak = 1
-        }
-      }
-      if (sign === 1 && streak > 0) return `W${streak}`
-      if (sign === -1 && streak > 0) return `L${streak}`
+      const streaks = computeTradeOutcomeStreaks(profileOverviewTrades)
+      if (streaks.currentWin > 0) return `W${streaks.currentWin}`
+      if (streaks.currentLoss > 0) return `L${streaks.currentLoss}`
       return "—"
     })()
 
@@ -216,31 +196,11 @@ export function useProfileStatistics({
     const profitPerTrade = totalTrades > 0 ? totalPnl / totalTrades : null
 
     const { maxWinStreak, maxLossStreak } = (() => {
-      const ordered = [...analyticsTrades].sort(
-        (a, b) =>
-          new Date(a.created_at ?? 0).getTime() -
-          new Date(b.created_at ?? 0).getTime()
-      )
-      let currentWin = 0
-      let currentLoss = 0
-      let maxWin = 0
-      let maxLoss = 0
-      for (const trade of ordered) {
-        const pnl = Number(trade.pnl) || 0
-        if (pnl > 0) {
-          currentWin += 1
-          currentLoss = 0
-        } else if (pnl < 0) {
-          currentLoss += 1
-          currentWin = 0
-        } else {
-          currentWin = 0
-          currentLoss = 0
-        }
-        if (currentWin > maxWin) maxWin = currentWin
-        if (currentLoss > maxLoss) maxLoss = currentLoss
+      const streaks = computeTradeOutcomeStreaks(analyticsTrades)
+      return {
+        maxWinStreak: streaks.longestWin,
+        maxLossStreak: streaks.longestLoss,
       }
-      return { maxWinStreak: maxWin, maxLossStreak: maxLoss }
     })()
 
     const sessionCounts = analyticsTrades.reduce<Record<string, number>>(

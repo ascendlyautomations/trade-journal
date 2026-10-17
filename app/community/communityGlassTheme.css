@@ -1,0 +1,16 @@
+/**
+ * Community / Trade Rooms surfaces.
+ * Scoped to this route so Messages keeps its own desktop theme.
+ * Colors follow the existing glass-blue page gradient and card tokens.
+ * Native iOS wrapper layout stays in globals.css.
+ */
+
+.tt-community {
+  color: #e5e7eb;
+}
+
+.tt-community [data-tt-trade-rooms-shell] {
+  box-shadow:
+    0 10px 15px -3px rgb(0 0 0 / 0.2),
+    0 4px 6px -4px rgb(0 0 0 / 0.2);
+}

@@ -35,7 +35,7 @@ const nextConfig: NextConfig = {
     "/api/integrations/broker/import/run": [...RITHMIC_RUNTIME_ASSET_INCLUDES],
   },
   images: {
-    qualities: [75, 85, 100],
+    qualities: [70, 72, 75, 85, 100],
     deviceSizes: [640, 828, 1200, 1920],
     remotePatterns: [
       {

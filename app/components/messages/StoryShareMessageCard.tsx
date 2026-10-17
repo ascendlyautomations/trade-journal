@@ -26,7 +26,7 @@ export default function StoryShareMessageCard({
 
   return (
     <div
-      className={`overflow-hidden rounded-2xl border border-white/10 bg-[#1e293b] shadow-lg shadow-black/20 ${
+      className={`overflow-hidden rounded-2xl border border-white/10 bg-white/10 shadow-lg shadow-black/20 backdrop-blur-md ${
         isOutgoing ? "rounded-br-md" : "rounded-bl-md"
       } ${className}`.trim()}
     >

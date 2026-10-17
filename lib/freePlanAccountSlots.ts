@@ -42,6 +42,29 @@ export function needsFreePlanAccountSlotSelection(
   return countTradeEntryEnabledAccounts(accounts) > FREE_PLAN_TRADE_ENTRY_SLOT_LIMIT
 }
 
+/**
+ * Automatic picker. `null` means the entitlement is still loading or unknown
+ * and must not be treated as Free.
+ */
+export function freePlanSlotSelectionRequired(
+  traxProActive: boolean | null,
+  accounts: readonly AccountTradeEntryRow[]
+): boolean {
+  if (traxProActive !== false) return false
+  return countTradeEntryEnabledAccounts(accounts) > FREE_PLAN_TRADE_ENTRY_SLOT_LIMIT
+}
+
+/** Ids already saved with can_add_trades = true, when that set is a valid 1–3 pick. */
+export function persistedTradeEntrySelectionIds(
+  accounts: readonly AccountTradeEntryRow[]
+): string[] {
+  const ids = accounts
+    .filter((row) => row.can_add_trades === true && String(row.id ?? "").trim())
+    .map((row) => String(row.id))
+  if (ids.length < 1 || ids.length > FREE_PLAN_TRADE_ENTRY_SLOT_LIMIT) return []
+  return ids
+}
+
 /** Accounts allowed in Manual / Quick / CSV / sync pickers. */
 export function filterAccountsForTradeEntry<
   T extends AccountTradeEntryRow & { is_active?: boolean | null },

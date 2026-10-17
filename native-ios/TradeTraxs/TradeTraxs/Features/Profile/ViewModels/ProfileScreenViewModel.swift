@@ -204,6 +204,19 @@ final class ProfileScreenViewModel {
         bootstrapIfNeeded(force: true)
     }
 
+    /// Creates the profile shell when the signed-in profile changes, without reapplying section lists.
+    private func ensureOwnerShell() {
+        guard let profileID = state.profileID ?? contentStore.resolvedProfileID else { return }
+        if shellViewModel?.profileID != profileID {
+            shellViewModel = ProfileShellViewModel(
+                profileID: profileID,
+                data: data,
+                navigationCoordinator: navigationCoordinator,
+                isOwner: state.isOwner || contentStore.isOwner
+            )
+        }
+    }
+
     func syncShellIfNeeded() {
         guard let profileID = state.profileID ?? contentStore.resolvedProfileID else {
             shellViewModel = nil
@@ -565,8 +578,10 @@ final class ProfileScreenViewModel {
         guard isOwnerTarget else { return }
         guard matchesOwner(trade.ownerProfileID) else { return }
 
-        syncShellIfNeeded()
-        shellViewModel?.ensureTradesSection()
+        // The profile snapshot can be only the first page. Applying it here would
+        // replace trades already loaded by scrolling before this publish is inserted.
+        ensureOwnerShell()
+        shellViewModel?.ensureTradesSection(applyingSnapshot: false)
 
         if trade.visibility == .public {
             data.detailCache.seedPresentationSeed(
@@ -820,8 +835,8 @@ final class ProfileScreenViewModel {
         Task { await persistMutationPatch { viewerID in
             ProfilePersistedCacheCoordinator.removeTrade(id: id, owner: owner, viewerID: viewerID)
         } }
-        syncShellIfNeeded()
-        shellViewModel?.ensureTradesSection()
+        ensureOwnerShell()
+        shellViewModel?.ensureTradesSection(applyingSnapshot: false)
         shellViewModel?.trades?.handleJournalMutation()
         var next = state
         next.trades.removeAll { $0.id == id }

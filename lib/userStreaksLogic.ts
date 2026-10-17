@@ -160,42 +160,69 @@ function compareTradesChronological(
   return ta - tb
 }
 
-/** Consecutive winning trades; break-even does not reset or increment. */
-export function computeWinningTradeStreak(
-  trades: readonly {
-    pnl?: unknown
-    created_at?: string | null
-    entry_time?: string | null
-    exit_time?: string | null
-  }[]
-): { current: number; longest: number } {
-  if (!trades.length) return { current: 0, longest: 0 }
+type StreakTrade = {
+  pnl?: unknown
+  created_at?: string | null
+  entry_time?: string | null
+  exit_time?: string | null
+}
+
+/**
+ * Win and loss runs in the same order as the Streaks page.
+ * A break-even trade does not increment or reset either run.
+ */
+export function computeTradeOutcomeStreaks(trades: readonly StreakTrade[]): {
+  currentWin: number
+  longestWin: number
+  currentLoss: number
+  longestLoss: number
+} {
+  if (!trades.length) {
+    return { currentWin: 0, longestWin: 0, currentLoss: 0, longestLoss: 0 }
+  }
 
   const sorted = [...trades].sort(compareTradesChronological)
-  let longest = 0
-  let run = 0
+  let longestWin = 0
+  let winRun = 0
+  let longestLoss = 0
+  let lossRun = 0
 
   for (const trade of sorted) {
     const pnl = Number(trade.pnl) || 0
     if (pnl > 0) {
-      run += 1
-      if (run > longest) longest = run
+      winRun += 1
+      lossRun = 0
+      if (winRun > longestWin) longestWin = winRun
     } else if (pnl < 0) {
-      run = 0
+      lossRun += 1
+      winRun = 0
+      if (lossRun > longestLoss) longestLoss = lossRun
     }
   }
 
-  let current = 0
+  let currentWin = 0
   for (let i = sorted.length - 1; i >= 0; i -= 1) {
     const pnl = Number(sorted[i].pnl) || 0
-    if (pnl > 0) {
-      current += 1
-    } else if (pnl < 0) {
-      break
-    }
+    if (pnl > 0) currentWin += 1
+    else if (pnl < 0) break
   }
 
-  return { current, longest }
+  let currentLoss = 0
+  for (let i = sorted.length - 1; i >= 0; i -= 1) {
+    const pnl = Number(sorted[i].pnl) || 0
+    if (pnl < 0) currentLoss += 1
+    else if (pnl > 0) break
+  }
+
+  return { currentWin, longestWin, currentLoss, longestLoss }
+}
+
+/** Consecutive winning trades; break-even does not reset or increment. */
+export function computeWinningTradeStreak(
+  trades: readonly StreakTrade[]
+): { current: number; longest: number } {
+  const streaks = computeTradeOutcomeStreaks(trades)
+  return { current: streaks.currentWin, longest: streaks.longestWin }
 }
 
 export function collectJournalWeekdayKeys(

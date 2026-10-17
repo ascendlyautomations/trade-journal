@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react"
 import FreePlanAccountSlotModal, {
@@ -13,16 +14,19 @@ import FreePlanAccountSlotModal, {
 } from "@/app/components/FreePlanAccountSlotModal"
 import { supabase } from "@/lib/supabaseClient"
 import {
-  ensureAccountsLoaded,
+  ACCOUNTS_SELECT,
   ensureTradesLoaded,
-  invalidateAccountsCache,
+  setAccountsCache,
 } from "@/lib/appDataCache"
-import { needsFreePlanAccountSlotSelection } from "@/lib/freePlanAccountSlots"
+import {
+  freePlanSlotSelectionRequired,
+  persistedTradeEntrySelectionIds,
+} from "@/lib/freePlanAccountSlots"
+import { fetchServerTraxProActive } from "@/lib/fetchServerTraxProActive"
 import { isProActive } from "@/lib/subscription"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
-import { isBackendV2Enabled } from "@/lib/backendV2/flags.ts"
-import { readSessionBootstrapCache } from "@/lib/backendV2/sessionBootstrapCache.ts"
+import { invalidateSessionBootstrap } from "@/lib/backendV2/sessionBootstrapCache.ts"
 import { FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
 
 type TradeStatRow = {
@@ -36,6 +40,7 @@ type TradeStatRow = {
 type FreePlanAccountSlotContextValue = {
   openSelection: () => void
   canReconfigureActiveAccounts: boolean
+  viewerIsConfirmedFree: boolean
 }
 
 const FreePlanAccountSlotContext =
@@ -107,6 +112,7 @@ export default function FreePlanAccountSlotShell({
   children: React.ReactNode
 }) {
   const { user, profile, loading } = useUserProfile()
+  const profileIsPro = isProActive(profile)
   const [accounts, setAccounts] = useState<FreePlanSlotAccountOption[]>([])
   const [rawCanAddFlags, setRawCanAddFlags] = useState<
     { id: string; can_add_trades?: boolean | null }[]
@@ -115,49 +121,64 @@ export default function FreePlanAccountSlotShell({
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [manualOpen, setManualOpen] = useState(false)
+  const [traxProActive, setTraxProActive] = useState<boolean | null>(null)
+  const [entitlementReady, setEntitlementReady] = useState(false)
+  const savingRef = useRef(false)
+
+  useEffect(() => {
+    if (loading || !user?.id) {
+      setTraxProActive(null)
+      setEntitlementReady(false)
+      return
+    }
+    if (profileIsPro) {
+      setTraxProActive(true)
+      setEntitlementReady(true)
+      return
+    }
+
+    let cancelled = false
+    setEntitlementReady(false)
+    setTraxProActive(null)
+    void fetchServerTraxProActive().then((value) => {
+      if (cancelled) return
+      setTraxProActive(value)
+      setEntitlementReady(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [loading, user?.id, profileIsPro])
 
   const load = useCallback(async () => {
-    if (!user?.id) {
+    if (!user?.id || !entitlementReady) {
+      return
+    }
+    if (traxProActive !== false) {
       setAccounts([])
       setRawCanAddFlags([])
       return
     }
-    if (isProActive(profile)) {
-      setAccounts([])
-      setRawCanAddFlags([])
-      return
-    }
+    if (savingRef.current) return
 
-    if (isBackendV2Enabled("session")) {
-      const session = readSessionBootstrapCache(user.id)
-      const summary = session?.data.accounts_summary ?? []
-      if (summary.length <= FREE_PLAN_ACCOUNT_LIMIT) {
-        setRawCanAddFlags(
-          summary.map((row) => ({
-            id: String(row.id),
-            can_add_trades: row.can_add_trades !== false,
-          }))
-        )
-        setAccounts(buildSlotAccounts(summary as Record<string, unknown>[], []))
-        return
-      }
-    }
-
-    let accountRows: unknown[]
-    let tradeRows: unknown[]
+    let tradeRows: unknown[] = []
     try {
-      ;[accountRows, tradeRows] = await Promise.all([
-        ensureAccountsLoaded(supabase, user.id),
-        ensureTradesLoaded(supabase, user.id),
-      ])
+      tradeRows = await ensureTradesLoaded(supabase, user.id)
     } catch (loadErr) {
-      console.error("[FreePlanAccountSlotShell] app data", loadErr)
-      setAccounts([])
-      setRawCanAddFlags([])
+      console.error("[FreePlanAccountSlotShell] trades", loadErr)
+    }
+
+    const { data, error: accountsError } = await supabase
+      .from("accounts")
+      .select(ACCOUNTS_SELECT)
+      .eq("user_id", user.id)
+
+    if (accountsError || !data) {
+      console.error("[FreePlanAccountSlotShell] accounts", accountsError)
       return
     }
 
-    const rows = accountRows as Record<string, unknown>[]
+    const rows = data as Record<string, unknown>[]
     setRawCanAddFlags(
       rows.map((row) => ({
         id: String(row.id ?? ""),
@@ -170,65 +191,110 @@ export default function FreePlanAccountSlotShell({
       }))
     )
     setAccounts(buildSlotAccounts(rows, tradeRows as TradeStatRow[]))
-  }, [user?.id, profile])
+    setAccountsCache(user.id, rows)
+  }, [user?.id, entitlementReady, traxProActive])
 
   useEffect(() => {
-    if (loading) return
+    if (loading || !entitlementReady) return
     void load()
-  }, [loading, load, refreshKey])
+  }, [loading, entitlementReady, load, refreshKey])
+
+  const viewerIsConfirmedFree = entitlementReady && traxProActive === false
 
   const needsSelection = useMemo(
-    () => needsFreePlanAccountSlotSelection(profile, rawCanAddFlags),
-    [profile, rawCanAddFlags]
+    () => freePlanSlotSelectionRequired(traxProActive, rawCanAddFlags),
+    [traxProActive, rawCanAddFlags]
   )
 
   const canReconfigureActiveAccounts = useMemo(() => {
-    if (loading || !user || isProActive(profile)) return false
+    if (!viewerIsConfirmedFree) return false
     return rawCanAddFlags.length > FREE_PLAN_ACCOUNT_LIMIT
-  }, [loading, user, profile, rawCanAddFlags.length])
+  }, [viewerIsConfirmedFree, rawCanAddFlags.length])
+
+  const initialSelectedIds = useMemo(
+    () => persistedTradeEntrySelectionIds(rawCanAddFlags),
+    [rawCanAddFlags]
+  )
 
   const modalOpen =
-    !loading &&
+    viewerIsConfirmedFree &&
     Boolean(user) &&
     accounts.length > 0 &&
     (needsSelection || manualOpen)
 
   async function handleConfirm(accountIds: string[]) {
-    if (!user?.id || saving) return
+    if (!user?.id || savingRef.current || !viewerIsConfirmedFree) return
+    const ids = [
+      ...new Set(
+        accountIds.map((id) => String(id).trim()).filter((id) => id.length > 0)
+      ),
+    ]
+    if (ids.length < 1 || ids.length > FREE_PLAN_ACCOUNT_LIMIT) {
+      setError(
+        `Select 1 to ${FREE_PLAN_ACCOUNT_LIMIT} accounts to keep active.`
+      )
+      return
+    }
+
+    savingRef.current = true
     setSaving(true)
     setError(null)
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      const accessToken = session?.access_token
-      if (!accessToken) {
-        setError("Unauthorized")
-        return
-      }
-
-      const res = await fetch("/api/accounts/select-free-slots", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ accountIds }),
-      })
-      const body = (await res.json().catch(() => ({}))) as {
-        error?: string
-      }
-      if (!res.ok) {
+      const { error: rpcError } = await supabase.rpc(
+        "select_free_plan_trade_accounts",
+        { p_account_ids: ids }
+      )
+      if (rpcError) {
         setError(
-          body.error ||
-            toUserFacingErrorMessage(
-              null,
-              "Could not save account selection."
-            )
+          toUserFacingErrorMessage(rpcError, "Could not save account selection.")
         )
         return
       }
-      invalidateAccountsCache(user.id)
+
+      const { data, error: readError } = await supabase
+        .from("accounts")
+        .select(ACCOUNTS_SELECT)
+        .eq("user_id", user.id)
+
+      if (readError || !data) {
+        setError(
+          toUserFacingErrorMessage(
+            readError,
+            "Could not reload accounts to confirm the selection."
+          )
+        )
+        return
+      }
+
+      const rows = data as Record<string, unknown>[]
+      const enabled = new Set(
+        rows
+          .filter((row) => row.can_add_trades === true)
+          .map((row) => String(row.id ?? ""))
+      )
+      const matches =
+        enabled.size === ids.length && ids.every((id) => enabled.has(id))
+
+      if (!matches) {
+        setError(
+          "Your account selection was not saved. The accounts on file do not match what you chose."
+        )
+        return
+      }
+
+      setRawCanAddFlags(
+        rows.map((row) => ({
+          id: String(row.id ?? ""),
+          can_add_trades:
+            row.can_add_trades === false
+              ? false
+              : row.can_add_trades === true
+                ? true
+                : null,
+        }))
+      )
+      setAccountsCache(user.id, rows)
+      invalidateSessionBootstrap(user.id)
       setManualOpen(false)
       setRefreshKey((k) => k + 1)
     } catch (err) {
@@ -236,6 +302,7 @@ export default function FreePlanAccountSlotShell({
         toUserFacingErrorMessage(err, "Could not save account selection.")
       )
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }
@@ -244,8 +311,9 @@ export default function FreePlanAccountSlotShell({
     (): FreePlanAccountSlotContextValue => ({
       openSelection: () => setManualOpen(true),
       canReconfigureActiveAccounts,
+      viewerIsConfirmedFree,
     }),
-    [canReconfigureActiveAccounts]
+    [canReconfigureActiveAccounts, viewerIsConfirmedFree]
   )
 
   return (
@@ -254,6 +322,7 @@ export default function FreePlanAccountSlotShell({
       <FreePlanAccountSlotModal
         open={modalOpen}
         accounts={accounts}
+        initialSelectedIds={initialSelectedIds}
         saving={saving}
         error={error}
         onConfirm={handleConfirm}

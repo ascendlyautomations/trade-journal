@@ -7,7 +7,7 @@ import {
   DASHBOARD_MOBILE_STAT_PAD_CLASS,
 } from "@/app/components/dashboard/dashboardMobileUi"
 import { formatCurrency } from "@/lib/formatCurrency"
-import { formatDecimal, formatRR } from "@/lib/formatDisplay"
+import { formatProfitFactor, formatRR } from "@/lib/formatDisplay"
 
 function formatNumber(value: number) {
   if (value === null || value === undefined) return "-"
@@ -54,7 +54,7 @@ export type DashboardStatsGridProps = {
   winRate: number
   avgRR: number | null
   totalPnL: number
-  profitFactor?: number
+  profitFactor?: number | null
   avgWin: number
   bestTrade: number
   avgLoss: number
@@ -413,9 +413,15 @@ function FreeDashboardKpis({
         <StripStat title="Avg RR" value={formatRR(avgRR)} />
         <StripStat
           title="Profit Factor"
-          value={formatDecimal(profitFactor)}
+          value={formatProfitFactor(profitFactor)}
           positive={
-            profitFactor >= 1 ? true : profitFactor > 0 ? false : undefined
+            profitFactor == null
+              ? undefined
+              : profitFactor >= 1
+                ? true
+                : profitFactor > 0
+                  ? false
+                  : undefined
           }
         />
       </div>
@@ -501,9 +507,15 @@ export default function DashboardStatsGrid({
         <StripStat title="Avg RR" value={formatRR(avgRR)} />
         <StripStat
           title="Profit Factor"
-          value={formatDecimal(profitFactor)}
+          value={formatProfitFactor(profitFactor)}
           positive={
-            profitFactor >= 1 ? true : profitFactor > 0 ? false : undefined
+            profitFactor == null
+              ? undefined
+              : profitFactor >= 1
+                ? true
+                : profitFactor > 0
+                  ? false
+                  : undefined
           }
         />
       </div>

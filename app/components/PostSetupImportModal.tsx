@@ -12,7 +12,10 @@ import { supabase } from "@/lib/supabaseClient"
 import { isProActive } from "@/lib/subscription"
 import { FREE_PLAN_ACCOUNT_LIMIT, assertCanCreateTradingAccount } from "@/lib/tradingAccounts"
 import { assertRequiredAccountValue } from "@/lib/createAccountForm"
-import { countTradeEntryEnabledAccounts } from "@/lib/freePlanAccountSlots"
+import {
+  countTradeEntryEnabledAccounts,
+  filterAccountsForTradeEntry,
+} from "@/lib/freePlanAccountSlots"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { MODAL_PANEL_MAX_HEIGHT_CLASS, useModalScrollLock } from "@/app/components/ui/modalLayout"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
@@ -75,11 +78,15 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
         account_number: acc.account_number ?? null,
         mode: acc.mode,
         category: acc.category,
-        can_add_trades: acc.can_add_trades !== false,
+        can_add_trades: acc.can_add_trades,
+        is_active: acc.is_active,
       }))
 
       setAccounts(
-        formatted.map(({ can_add_trades: _canAdd, ...account }) => account)
+        filterAccountsForTradeEntry(formatted).map(
+          ({ can_add_trades: _canAdd, is_active: _active, ...account }) =>
+            account
+        )
       )
       const userIsPro = isProActive(profile)
       setCanCreateMoreAccounts(

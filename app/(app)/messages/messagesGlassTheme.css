@@ -1,0 +1,95 @@
+/**
+ * Messages surfaces.
+ * TradeTraxs OG keeps the blue glass treatment.
+ * Dark and Light use the authenticated appearance variables.
+ * Native iOS never receives data-tt-appearance, so these rules stay off there.
+ */
+
+html[data-tt-appearance="og"]:not(.tt-native-ios) .tt-messages {
+  color: #e5e7eb;
+  background-color: #0f172a;
+  background-image: linear-gradient(to bottom right, #0f172a, #1e3a8a, #065f46);
+}
+
+html[data-tt-appearance="og"]:not(.tt-native-ios) .tt-messages-pane {
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 1rem;
+  background-color: rgb(255 255 255 / 0.05);
+  box-shadow:
+    0 10px 15px -3px rgb(0 0 0 / 0.2),
+    0 4px 6px -4px rgb(0 0 0 / 0.2);
+  backdrop-filter: blur(12px);
+}
+
+html[data-tt-appearance="og"]:not(.tt-native-ios) .tt-messages :is(
+  .bg-\[\#0B1220\],
+  .md\:bg-\[\#020617\],
+  .bg-\[\#0f172a\]
+) {
+  background-color: rgb(255 255 255 / 0.06);
+}
+
+html[data-tt-appearance="og"]:not(.tt-native-ios) .tt-messages textarea.bg-\[\#111827\] {
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 0.75rem;
+  background-color: rgb(255 255 255 / 0.08);
+}
+
+html[data-tt-appearance="og"]:not(.tt-native-ios) .tt-messages .bg-\[\#1f2937\] {
+  border-radius: 0.5rem;
+  background-color: rgb(255 255 255 / 0.1);
+  color: #e5e7eb;
+}
+
+html[data-tt-appearance="og"]:not(.tt-native-ios) .tt-messages .md\:hover\:bg-\[\#334155\]:hover {
+  background-color: rgb(255 255 255 / 0.16);
+}
+
+html[data-tt-appearance="dark"] .tt-messages,
+html[data-tt-appearance="light"] .tt-messages {
+  color: inherit;
+  background-color: transparent;
+  background-image: none;
+}
+
+html[data-tt-appearance="dark"] .tt-messages-pane,
+html[data-tt-appearance="light"] .tt-messages-pane {
+  border: 1px solid var(--tt-border);
+  border-radius: 1rem;
+  background-color: var(--tt-surface);
+  background-image: none;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+html[data-tt-appearance="dark"] .tt-messages :is(
+  .bg-\[\#0B1220\],
+  .md\:bg-\[\#020617\],
+  .bg-\[\#0f172a\]
+),
+html[data-tt-appearance="light"] .tt-messages :is(
+  .bg-\[\#0B1220\],
+  .md\:bg-\[\#020617\],
+  .bg-\[\#0f172a\]
+) {
+  background-color: var(--tt-surface);
+  background-image: none;
+}
+
+html[data-tt-appearance="dark"] .tt-messages textarea.bg-\[\#111827\],
+html[data-tt-appearance="light"] .tt-messages textarea.bg-\[\#111827\] {
+  border: 1px solid var(--tt-border);
+  background-color: var(--tt-surface-raised);
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="dark"] .tt-messages .bg-\[\#1f2937\],
+html[data-tt-appearance="light"] .tt-messages .bg-\[\#1f2937\] {
+  background-color: var(--tt-surface-raised);
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="dark"] .tt-messages .md\:hover\:bg-\[\#334155\]:hover,
+html[data-tt-appearance="light"] .tt-messages .md\:hover\:bg-\[\#334155\]:hover {
+  background-color: var(--tt-surface-hover);
+}

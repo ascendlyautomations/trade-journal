@@ -93,7 +93,8 @@ final class AchievementsContainerViewModel {
             snapshotItems: snapshot.achievements,
             loadedItems: items,
             hasLoaded: hasLoaded,
-            didLoadAuthoritative: snapshot.didLoadAchievements
+            didLoadAuthoritative: snapshot.didLoadAchievements,
+            orderedBy: \.achievedAt
         )
         items = reconciled.items
         hasLoaded = reconciled.hasLoaded
@@ -253,8 +254,14 @@ final class AchievementsContainerViewModel {
             let overlay = OwnerProfileOptimisticStore.shared.achievements.filter {
                 $0.ownerProfileID == profileID
             }
-            items = OwnerProfileOptimisticStore.merging(overlay: overlay, into: pageItems)
+            let page = OwnerProfileOptimisticStore.merging(overlay: overlay, into: pageItems)
                 .filter { !OwnerProfileOptimisticStore.shared.deletedAchievementIDs.contains($0.id) }
+            items = ProfileSectionSupport.reconcileLoadedSnapshot(
+                snapshot: page,
+                loaded: items,
+                orderedBy: \.achievedAt,
+                snapshotIsPartial: cursor != nil
+            ).filter { !OwnerProfileOptimisticStore.shared.deletedAchievementIDs.contains($0.id) }
             nextCursor = cursor
             detailCache.seed(achievements: items)
             hasLoaded = true

@@ -29,7 +29,10 @@ import StoryShareMessageCard from "@/app/components/messages/StoryShareMessageCa
 import { supabase } from "../../lib/supabaseClient"
 import { stableIdKey } from "@/lib/realtimeFilters"
 import { prepareImageForUpload } from "@/lib/imagePreparation"
-import { optimizedStorageObjectPath } from "@/lib/storageOptimizedMedia"
+import {
+  optimizedStorageObjectPath,
+  resolveStoredRoomImageUrl,
+} from "@/lib/storageOptimizedMedia"
 import { validateImageUpload } from "@/lib/uploadValidation"
 import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
 import {
@@ -170,7 +173,7 @@ function pickInitialTradeRoomId(rooms: Room[], userId: string): string | null {
 
 /** Shared sizing for owner room header actions (desktop main header). */
 const ROOM_OWNER_HEADER_ACTION_CLASS =
-  "inline-flex h-8 shrink-0 items-center justify-center rounded-md bg-white/10 text-xs leading-none text-gray-200 transition hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400/50"
+  "inline-flex h-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-xs leading-none text-gray-200 backdrop-blur-sm transition hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400/50"
 
 /** Shared sizing for compact mobile sidebar header icon actions. */
 const ROOM_MOBILE_HEADER_ICON_CLASS =
@@ -913,7 +916,9 @@ function CommunityContent() {
   useEffect(() => {
     const url = selectedRoom?.image_url
     setRoomImage(
-      url != null && String(url).trim() !== "" ? String(url) : null
+      url != null && String(url).trim() !== ""
+        ? resolveStoredRoomImageUrl(String(url))
+        : null
     )
   }, [selectedRoom?.image_url, selectedRoom?.id])
 
@@ -3813,15 +3818,15 @@ function CommunityContent() {
       <div
         data-tt-native-surface="community"
         data-tt-trade-rooms
-        className="tt-phase2-dark flex h-[var(--app-viewport-height)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-2 text-white xl:px-8 2xl:px-12"
+        className="tt-community flex h-[var(--app-viewport-height)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-2 text-white xl:px-8 2xl:px-12"
       >
         <div
           data-tt-trade-rooms-shell
-          className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-white/10 bg-black/25 md:flex-row md:overflow-hidden xl:max-w-[1500px]"
+          className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-white/10 bg-white/5 shadow-xl backdrop-blur-md md:flex-row md:overflow-hidden xl:max-w-[1500px]"
         >
           <aside
             data-tt-trade-rooms-aside
-            className="shrink-0 border-b border-white/10 bg-[#0b1220]/80 md:w-72 md:border-b-0 md:border-r"
+            className="shrink-0 border-b border-white/10 bg-white/[0.04] backdrop-blur-md md:w-72 md:border-b-0 md:border-r"
           >
             <div
               data-tt-trade-rooms-controls
@@ -3947,7 +3952,7 @@ function CommunityContent() {
                       const isOwnRoom =
                         user?.id != null && room.owner_user_id === user.id
                       const itemClass =
-                        `mb-1 flex min-h-[44px] w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition ` +
+                        `mb-1 flex min-h-[44px] w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition ` +
                         (isOwnRoom
                           ? selected
                             ? `border border-blue-400/40 bg-blue-500/25 font-semibold text-blue-100`
@@ -3959,10 +3964,11 @@ function CommunityContent() {
                         [room.image_url, room.avatar_url]
                           .map((v) =>
                             v != null && String(v).trim() !== ""
-                              ? String(v).trim()
-                              : ""
+                              ? resolveStoredRoomImageUrl(String(v).trim())
+                              : null
                           )
-                          .find(Boolean) || "/default-avatar.png"
+                          .find((value): value is string => Boolean(value)) ||
+                        "/default-avatar.png"
                       return (
                         <button
                           key={room.id}
@@ -4048,10 +4054,11 @@ function CommunityContent() {
               <div className="flex items-center gap-3">
                 <StorageImage
                   src={
-                    (roomImage ??
-                      selectedRoom?.image_url ??
-                      inviteTargetRoom?.image_url) ||
-                    "/default-avatar.png"
+                    resolveStoredRoomImageUrl(
+                      roomImage ??
+                        selectedRoom?.image_url ??
+                        inviteTargetRoom?.image_url
+                    ) || "/default-avatar.png"
                   }
                   preset="room-thumb"
                   localTransformWidth={96}
@@ -4098,7 +4105,7 @@ function CommunityContent() {
                       <button
                         type="button"
                         onClick={() => void handleLeaveRoom()}
-                        className="rounded-md bg-red-500/10 px-3 py-1 text-xs text-red-400 hover:bg-red-500/20"
+                        className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-1 text-xs text-red-300 hover:bg-red-500/20"
                       >
                         Leave Room
                       </button>
@@ -4147,7 +4154,7 @@ function CommunityContent() {
             {setupMode && isOwner && selectedRoomId ? (
               <div className="border-b border-white/10 px-4 py-5 md:px-6">
                 <div className="mx-auto w-full max-w-2xl rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
-                  <h2 className="text-xl font-semibold text-white">
+                  <h2 className="text-xl font-semibold text-blue-300">
                     Set up your Trade Room
                   </h2>
 
@@ -4161,7 +4168,7 @@ function CommunityContent() {
                       <p className="mb-2 text-sm font-medium text-gray-300">
                         Trade Room Picture
                       </p>
-                      <label className="inline-flex cursor-pointer items-center rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/10">
+                      <label className="inline-flex cursor-pointer items-center rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/10">
                         Choose Trade Room Picture
                         <input
                           type="file"
@@ -4184,7 +4191,7 @@ function CommunityContent() {
                         type="text"
                         value={roomName}
                         onChange={(e) => setRoomName(e.target.value)}
-                        className="w-full rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white placeholder:text-gray-400"
+                        className="w-full rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
                         placeholder="Room name"
                       />
                       <button
@@ -4196,7 +4203,7 @@ function CommunityContent() {
                       </button>
                     </div>
 
-                    <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
                       <label className="flex items-start gap-3 text-sm text-gray-300">
                         <input
                           type="checkbox"
@@ -4223,7 +4230,7 @@ function CommunityContent() {
                         <input
                           readOnly
                           value={inviteLinkDisplay}
-                          className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-xs text-gray-200"
+                          className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-xs text-gray-200"
                         />
                         <button
                           type="button"
@@ -4284,10 +4291,10 @@ function CommunityContent() {
                     {sections.map((section) => (
                       <div
                         key={section.id}
-                        className={`flex min-w-0 items-stretch rounded-md ${
+                        className={`flex min-w-0 items-stretch rounded-lg border ${
                           selectedSectionId === section.id
-                            ? "bg-blue-500/20 text-blue-300"
-                            : "text-gray-400"
+                            ? "border-blue-400/30 bg-blue-500/20 text-blue-300"
+                            : "border-transparent text-gray-400 hover:bg-white/5"
                         }`}
                       >
                         <button
@@ -4383,10 +4390,10 @@ function CommunityContent() {
                                   )
                                 }
                               }}
-                              className={`mb-1 flex min-h-[40px] w-full items-center rounded-lg px-3 py-2 text-left text-sm transition ${
+                              className={`mb-1 flex min-h-[40px] w-full items-center rounded-lg border px-3 py-2 text-left text-sm transition ${
                                 selectedSectionId === section.id
-                                  ? "bg-blue-500/20 font-medium text-blue-300"
-                                  : "text-gray-300 hover:bg-white/10"
+                                  ? "border-blue-400/30 bg-blue-500/20 font-medium text-blue-300"
+                                  : "border-transparent text-gray-300 hover:bg-white/10"
                               }`}
                             >
                               <span className="truncate">{section.name}</span>
@@ -4483,7 +4490,7 @@ function CommunityContent() {
                             key={msg.id}
                             id={roomMessageElementId(msg.id)}
                             data-room-message-id={msg.id}
-                            className="group relative rounded-xl bg-white/5 p-3"
+                            className="group relative rounded-xl border border-white/10 bg-white/5 p-3"
                           >
                             <div className="mb-1 flex flex-wrap items-center gap-2">
                               <ProfileAvatarLink
@@ -4625,7 +4632,7 @@ function CommunityContent() {
                                       setEditingMessageContent(e.target.value)
                                     }
                                     rows={3}
-                                    className="w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white"
+                                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-400/40"
                                   />
                                   <div className="flex gap-2">
                                     <button
@@ -4634,7 +4641,7 @@ function CommunityContent() {
                                         void handleSaveEditMessage(msg.id)
                                       }
                                       disabled={!editingMessageContent.trim()}
-                                      className="rounded-md bg-blue-500 px-3 py-1 text-xs text-white hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
+                                      className="rounded-lg bg-blue-500 px-3 py-1 text-xs text-white hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
                                     >
                                       Save
                                     </button>
@@ -4681,7 +4688,7 @@ function CommunityContent() {
                       key={msg.id}
                       id={roomMessageElementId(msg.id)}
                       data-room-message-id={msg.id}
-                      className={`group relative rounded-xl bg-white/5 p-3 ${
+                      className={`group relative rounded-xl border border-white/10 bg-white/5 p-3 ${
                         msg.send_status === "sending" || msg.send_status === "failed"
                           ? MICRO.softEnter
                           : ""
@@ -4813,7 +4820,7 @@ function CommunityContent() {
                                 setEditingMessageContent(e.target.value)
                               }
                               rows={3}
-                              className="w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white"
+                              className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-400/40"
                             />
                             <div className="flex gap-2">
                               <button
@@ -4822,7 +4829,7 @@ function CommunityContent() {
                                   void handleSaveEditMessage(msg.id)
                                 }
                                 disabled={!editingMessageContent.trim()}
-                                className="rounded-md bg-blue-500 px-3 py-1 text-xs text-white hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
+                                className="rounded-lg bg-blue-500 px-3 py-1 text-xs text-white hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
                               >
                                 Save
                               </button>
@@ -4971,28 +4978,28 @@ function CommunityContent() {
 
       {showCreateSectionModal ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
           onClick={() => setShowCreateSectionModal(false)}
           role="presentation"
         >
           <div
-            className="w-[350px] rounded-lg bg-[#0b1f3a] p-6 text-white shadow-xl"
+            className="w-[350px] rounded-xl border border-white/10 bg-card/90 backdrop-blur-md p-6 text-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="mb-3 text-lg font-semibold">Create Channel</h2>
+            <h2 className="mb-3 text-lg font-semibold text-blue-300">Create Channel</h2>
 
             <input
               type="text"
               value={newSectionName}
               onChange={(e) => setNewSectionName(e.target.value)}
-              className="mb-3 w-full rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-400"
+              className="mb-3 w-full rounded-lg border border-white/10 bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-400/40 px-3 py-2 text-sm text-white placeholder:text-gray-400"
               placeholder="Channel name"
             />
 
             <label className="mb-4 flex cursor-pointer items-center gap-2 text-sm text-gray-300">
               <input
                 type="checkbox"
-                className="rounded border-white/20 bg-black/30"
+                className="rounded border-white/20 bg-white/5"
                 checked={newSectionAllowChat}
                 onChange={(e) => setNewSectionAllowChat(e.target.checked)}
               />
@@ -5011,7 +5018,7 @@ function CommunityContent() {
               <button
                 type="button"
                 onClick={() => void handleCreateSection()}
-                className="rounded bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600 disabled:hover:bg-blue-500"
+                className="rounded-lg bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600 disabled:hover:bg-blue-500"
               >
                 Create
               </button>
@@ -5022,7 +5029,7 @@ function CommunityContent() {
 
       {editingSection ? (
         <div
-          className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
           onClick={() => {
             if (deletingSectionId) return
             setEditingSection(null)
@@ -5030,10 +5037,10 @@ function CommunityContent() {
           role="presentation"
         >
           <div
-            className="w-full max-w-[400px] max-h-[min(90dvh,calc(100dvh-2rem))] flex flex-col overflow-hidden rounded-lg bg-[#0b1f3a] p-6 text-white shadow-xl"
+            className="w-full max-w-[400px] max-h-[min(90dvh,calc(100dvh-2rem))] flex flex-col overflow-hidden rounded-xl border border-white/10 bg-card/90 backdrop-blur-md p-6 text-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="mb-3 text-lg font-semibold">Channel Settings</h2>
+            <h2 className="mb-3 text-lg font-semibold text-blue-300">Channel Settings</h2>
 
             <div className="border-t border-white/10 pt-4">
               <p className="mb-1 text-sm font-medium text-gray-300">
@@ -5043,14 +5050,14 @@ function CommunityContent() {
                 type="text"
                 value={editSectionName}
                 onChange={(e) => setEditSectionName(e.target.value)}
-                className="mb-3 w-full rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-400"
+                className="mb-3 w-full rounded-lg border border-white/10 bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-400/40 px-3 py-2 text-sm text-white placeholder:text-gray-400"
                 placeholder="Channel name"
               />
 
               <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-300">
                 <input
                   type="checkbox"
-                  className="rounded border-white/20 bg-black/30"
+                  className="rounded border-white/20 bg-white/5"
                   checked={editAllowChat}
                   onChange={(e) => setEditAllowChat(e.target.checked)}
                 />
@@ -5062,7 +5069,7 @@ function CommunityContent() {
               <button
                 type="button"
                 onClick={() => void handleSaveSectionEdit()}
-                className="w-full rounded bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600 disabled:hover:bg-blue-500"
+                className="w-full rounded-lg bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600 disabled:hover:bg-blue-500"
               >
                 Save Changes
               </button>
@@ -5084,20 +5091,20 @@ function CommunityContent() {
 
       {showInviteModal ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
           onClick={() => setShowInviteModal(false)}
           role="presentation"
         >
           <div
-            className="w-[320px] rounded-lg bg-[#0b1f3a] p-5"
+            className="w-[320px] rounded-xl border border-white/10 bg-card/90 backdrop-blur-md p-5"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="mb-3 text-lg text-white">Invite Link</h2>
+            <h2 className="mb-3 text-lg font-semibold text-blue-300">Invite Link</h2>
 
             <input
               readOnly
               value={inviteLink}
-              className="mb-3 w-full rounded border border-white/10 bg-black/30 px-2 py-1 text-xs text-gray-200"
+              className="mb-3 w-full rounded-lg border border-white/10 bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-400/40 px-2 py-1 text-xs text-gray-200"
             />
 
             <div className="flex items-center justify-between">
@@ -5107,7 +5114,7 @@ function CommunityContent() {
                   if (!inviteLink) return
                   void navigator.clipboard.writeText(inviteLink)
                 }}
-                className="rounded bg-blue-500 px-3 py-1 text-xs text-blue-100 hover:bg-blue-600 disabled:hover:bg-blue-500"
+                className="rounded-lg bg-blue-500 px-3 py-1 text-xs text-blue-100 hover:bg-blue-600 disabled:hover:bg-blue-500"
               >
                 Copy
               </button>
@@ -5126,7 +5133,7 @@ function CommunityContent() {
 
       {showManageMembers && isOwner && selectedRoomId ? (
         <div
-          className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
           onClick={() => {
             if (memberActionBusy || memberActionConfirm) return
             setShowManageMembers(false)
@@ -5134,16 +5141,16 @@ function CommunityContent() {
           role="presentation"
         >
           <div
-            className="relative flex w-full max-w-[400px] max-h-[min(85svh,560px)] flex-col rounded-lg bg-[#0b1f3a] p-6 text-white shadow-xl"
+            className="relative flex w-full max-w-[400px] max-h-[min(85svh,560px)] flex-col rounded-xl border border-white/10 bg-card/90 backdrop-blur-md p-6 text-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="mb-3 shrink-0 text-lg font-semibold">Manage Members</h2>
+            <h2 className="mb-3 shrink-0 text-lg font-semibold text-blue-300">Manage Members</h2>
 
             <input
               type="text"
               value={memberSearchQuery}
               onChange={(e) => setMemberSearchQuery(e.target.value)}
-              className="mb-3 w-full shrink-0 rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-400"
+              className="mb-3 w-full shrink-0 rounded-lg border border-white/10 bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-400/40 px-3 py-2 text-sm text-white placeholder:text-gray-400"
               placeholder="Search members"
             />
 
@@ -5182,7 +5189,7 @@ function CommunityContent() {
                         return (
                           <div
                             key={member.user_id}
-                            className="flex items-center gap-3 rounded-lg bg-white/5 p-2"
+                            className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-2"
                           >
                             <ProfileAvatarLink
                               userId={member.user_id}
@@ -5277,7 +5284,7 @@ function CommunityContent() {
                           return (
                             <div
                               key={ban.id}
-                              className="flex items-center gap-3 rounded-lg bg-white/5 p-2"
+                              className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-2"
                             >
                               <ProfileAvatarLink
                                 userId={ban.user_id}
@@ -5306,7 +5313,7 @@ function CommunityContent() {
                                     banId: ban.id,
                                   })
                                 }
-                                className="inline-flex shrink-0 items-center gap-1 rounded bg-blue-500/10 px-2 py-1 text-xs text-blue-400 hover:bg-blue-500/20 disabled:opacity-50"
+                                className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-blue-500/10 px-2 py-1 text-xs text-blue-400 hover:bg-blue-500/20 disabled:opacity-50"
                               >
                                 {isUnbanning ? (
                                   <>
@@ -5340,10 +5347,10 @@ function CommunityContent() {
 
             {memberActionConfirm ? (
               <div
-                className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-black/60 p-4"
+                className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-black/60 p-4 backdrop-blur-sm"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="w-full max-w-[320px] rounded-lg border border-white/10 bg-[#0b1f3a] p-5 shadow-xl">
+                <div className="w-full max-w-[320px] rounded-xl border border-white/10 bg-card/90 backdrop-blur-md p-5 shadow-xl">
                   <p className="mb-4 text-sm text-gray-200">
                     {memberActionConfirmCopy(memberActionConfirm)}
                   </p>
@@ -5362,7 +5369,7 @@ function CommunityContent() {
                       onClick={() => void handleMemberActionConfirm()}
                       className={
                         memberActionConfirm.kind === "unban"
-                          ? "inline-flex items-center gap-1.5 rounded bg-blue-500/20 px-3 py-1.5 text-sm text-blue-100 hover:bg-blue-500/30 disabled:opacity-50"
+                          ? "inline-flex items-center gap-1.5 rounded-lg border border-blue-400/30 bg-blue-500/20 px-3 py-1.5 text-sm text-blue-100 hover:bg-blue-500/30 disabled:opacity-50"
                           : memberActionConfirm.kind === "ban"
                             ? "inline-flex items-center gap-1.5 rounded bg-orange-500/20 px-3 py-1.5 text-sm text-orange-100 hover:bg-orange-500/30 disabled:opacity-50"
                             : "inline-flex items-center gap-1.5 rounded bg-red-500/20 px-3 py-1.5 text-sm text-red-100 hover:bg-red-500/30 disabled:opacity-50"
@@ -5391,7 +5398,7 @@ function CommunityContent() {
 
       {showRoomSettings && isOwner && selectedRoomId ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
           onClick={() => {
             if (deletingSectionId || deleteSectionConfirm) return
             setShowRoomSettings(false)
@@ -5399,7 +5406,7 @@ function CommunityContent() {
           role="presentation"
         >
           <div
-            className="relative w-full max-w-[400px] rounded-lg bg-[#0b1f3a] p-6 text-white shadow-xl"
+            className="relative w-full max-w-[400px] rounded-xl border border-white/10 bg-card/90 backdrop-blur-md p-6 text-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <ModalCloseButton
@@ -5410,13 +5417,13 @@ function CommunityContent() {
               disabled={deletingSectionId != null || deleteSectionConfirm != null}
               className="absolute right-4 top-4 z-10"
             />
-            <h2 className="mb-3 pr-12 text-lg font-semibold">Room Settings</h2>
+            <h2 className="mb-3 pr-12 text-lg font-semibold text-blue-300">Room Settings</h2>
 
             <input
               type="text"
               value={roomName}
               onChange={(e) => setRoomName(e.target.value)}
-              className="mb-3 w-full rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-400"
+              className="mb-3 w-full rounded-lg border border-white/10 bg-white/5 focus:outline-none focus:ring-2 focus:ring-blue-400/40 px-3 py-2 text-sm text-white placeholder:text-gray-400"
               placeholder="Room name"
             />
 
@@ -5465,7 +5472,7 @@ function CommunityContent() {
                 {sections.map((section) => (
                   <div
                     key={section.id}
-                    className="flex items-center justify-between gap-2 rounded-lg bg-white/5 p-2"
+                    className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 p-2"
                   >
                     <span className="min-w-0 flex-1 truncate text-sm text-white">
                       {section.name}
@@ -5507,7 +5514,7 @@ function CommunityContent() {
               <button
                 type="button"
                 onClick={() => void handleRenameRoom({ closeSettings: true })}
-                className="rounded bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600 disabled:hover:bg-blue-500"
+                className="rounded-lg bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600 disabled:hover:bg-blue-500"
               >
                 Save Changes
               </button>
@@ -5527,7 +5534,7 @@ function CommunityContent() {
 
       {deleteSectionConfirm ? (
         <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
           onClick={() => {
             if (deletingSectionId) return
             setDeleteSectionConfirm(null)
@@ -5535,7 +5542,7 @@ function CommunityContent() {
           role="presentation"
         >
           <div
-            className="w-full max-w-[320px] rounded-lg border border-white/10 bg-[#0b1f3a] p-5 text-white shadow-xl"
+            className="w-full max-w-[320px] rounded-xl border border-white/10 bg-card/90 backdrop-blur-md p-5 text-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="mb-4 text-sm text-gray-200">
@@ -5577,14 +5584,14 @@ function CommunityContent() {
 
       {selectTrade ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
           onClick={() => setSelectTrade(false)}
         >
           <div
-            className="w-full max-w-md rounded-xl border border-white/10 bg-[#0f172a] p-4 text-white"
+            className="w-full max-w-md rounded-xl border border-white/10 bg-card/90 backdrop-blur-md p-4 text-white"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold mb-3">Send Trade</h3>
+            <h3 className="mb-3 text-lg font-semibold text-blue-300">Send Trade</h3>
             <div className="max-h-80 space-y-2 overflow-y-auto">
               {userTrades.length === 0 ? (
                 <p className="text-sm text-gray-400">
@@ -5663,7 +5670,7 @@ export default function CommunityPage() {
     <Suspense
       fallback={
         <>
-          <div className="tt-phase2-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-4 text-white md:p-6">
+          <div className="tt-community min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-4 text-white md:p-6">
             <SkeletonCommunityPage />
           </div>
         </>

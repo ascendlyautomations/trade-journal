@@ -356,6 +356,16 @@ export default function TradingAccountsSettingsSection({
                   {paginatedAccounts.map((account) => {
                     const modeLabel = formatTradingAccountMode(account.mode)
                     const isActive = account.is_active
+                    const confirmedFree =
+                      freePlanSlots?.viewerIsConfirmedFree === true
+                    const tradeEnabled = account.can_add_trades
+                    const statusLabel = confirmedFree
+                      ? tradeEnabled
+                        ? "Active"
+                        : "Read-Only"
+                      : isActive
+                        ? "Active"
+                        : "Inactive"
                     const busy = togglingId === account.id
                     const isEditingNote =
                       noteEditingAccount?.id === account.id
@@ -390,10 +400,14 @@ export default function TradingAccountsSettingsSection({
                             <dt className="shrink-0 text-gray-400">Status:</dt>
                             <dd
                               className={
-                                isActive ? "text-emerald-300" : "text-red-300/90"
+                                statusLabel === "Active"
+                                  ? "text-emerald-300"
+                                  : statusLabel === "Read-Only"
+                                    ? "text-gray-300"
+                                    : "text-red-300/90"
                               }
                             >
-                              {isActive ? "Active" : "Inactive"}
+                              {statusLabel}
                             </dd>
                           </div>
                         </dl>

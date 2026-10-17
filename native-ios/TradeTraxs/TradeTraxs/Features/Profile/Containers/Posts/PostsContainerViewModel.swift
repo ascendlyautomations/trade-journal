@@ -86,8 +86,7 @@ final class PostsContainerViewModel {
 
         if hasLoaded {
             if snapshot.posts.isEmpty {
-                if snapshot.didLoadPosts {
-                    items = []
+                if items.isEmpty, snapshot.didLoadPosts {
                     detailCache.seed(posts: [])
                     state = .empty
                     prefetchEngagement(for: [])
@@ -96,7 +95,8 @@ final class PostsContainerViewModel {
             }
             items = ProfileSectionSupport.reconcileLoadedSnapshot(
                 snapshot: snapshot.posts,
-                loaded: items
+                loaded: items,
+                orderedBy: \.createdAt
             )
             #if DEBUG
             ProfilePostsSync.logReconciled(
@@ -116,7 +116,8 @@ final class PostsContainerViewModel {
             snapshotItems: snapshot.posts,
             loadedItems: items,
             hasLoaded: hasLoaded,
-            didLoadAuthoritative: snapshot.didLoadPosts
+            didLoadAuthoritative: snapshot.didLoadPosts,
+            orderedBy: \.createdAt
         )
         items = reconciled.items
         hasLoaded = reconciled.hasLoaded
@@ -291,7 +292,12 @@ final class PostsContainerViewModel {
             }
             let beforeCount = items.count
             let serverMerged = OwnerProfileOptimisticStore.merging(overlay: overlay, into: pageItems)
-            items = OwnerProfileOptimisticStore.merging(overlay: serverMerged, into: [])
+            items = ProfileSectionSupport.reconcileLoadedSnapshot(
+                snapshot: serverMerged,
+                loaded: items,
+                orderedBy: \.createdAt,
+                snapshotIsPartial: cursor != nil
+            )
             nextCursor = cursor
             detailCache.seed(posts: items)
             hasLoaded = true

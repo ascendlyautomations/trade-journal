@@ -21,6 +21,7 @@ import {
   READABLE_LABEL_CLASS,
   READABLE_PRIMARY_CLASS,
 } from "@/lib/readableTextStyles"
+import ChartWhenSized from "@/app/components/dashboard/ChartWhenSized"
 
 function formatNumber(value: number) {
   if (value === null || value === undefined) return "-"
@@ -116,6 +117,7 @@ function DesktopSessionPie({
   outerRadius: number
 }) {
   return (
+    <ChartWhenSized height={height} className="w-full">
     <ResponsiveContainer width="100%" height={height}>
       <PieChart>
         <Pie
@@ -133,6 +135,7 @@ function DesktopSessionPie({
         <Tooltip {...chartTooltipStyles} />
       </PieChart>
     </ResponsiveContainer>
+    </ChartWhenSized>
   )
 }
 

@@ -6,7 +6,9 @@ import {
   countTradeEntryEnabledAccounts,
   filterAccountsForDropdown,
   filterAccountsForTradeEntry,
+  freePlanSlotSelectionRequired,
   needsFreePlanAccountSlotSelection,
+  persistedTradeEntrySelectionIds,
 } from "./freePlanAccountSlots.ts"
 
 describe("freePlanAccountSlots", () => {
@@ -46,6 +48,38 @@ describe("freePlanAccountSlots", () => {
       true
     )
     assert.equal(countTradeEntryEnabledAccounts(accounts), 4)
+  })
+
+  it("does not treat a missing entitlement as Free", () => {
+    const accounts = [
+      { id: "1", can_add_trades: true },
+      { id: "2", can_add_trades: true },
+      { id: "3", can_add_trades: true },
+      { id: "4", can_add_trades: true },
+    ]
+    assert.equal(freePlanSlotSelectionRequired(null, accounts), false)
+    assert.equal(freePlanSlotSelectionRequired(true, accounts), false)
+    assert.equal(freePlanSlotSelectionRequired(false, accounts), true)
+  })
+
+  it("restores a saved 1–3 selection and ignores an unchosen set", () => {
+    assert.deepEqual(
+      persistedTradeEntrySelectionIds([
+        { id: "a", can_add_trades: true },
+        { id: "b", can_add_trades: false },
+        { id: "c", can_add_trades: true },
+      ]),
+      ["a", "c"]
+    )
+    assert.deepEqual(
+      persistedTradeEntrySelectionIds([
+        { id: "1", can_add_trades: true },
+        { id: "2", can_add_trades: true },
+        { id: "3", can_add_trades: true },
+        { id: "4", can_add_trades: true },
+      ]),
+      []
+    )
   })
 
   it("filters inactive and read-only accounts from trade entry pickers", () => {

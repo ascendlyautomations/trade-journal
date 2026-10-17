@@ -63,6 +63,8 @@ export function storageDeliveryIdentity(url: string): string {
   return parts.slice(-3).join("/") || path
 }
 
+const loggedStorageDeliveries = new Set<string>()
+
 export function debugLogStorageImageDelivery(
   url: string,
   assetPolicy: StorageImageAssetPolicy,
@@ -71,8 +73,43 @@ export function debugLogStorageImageDelivery(
 ): void {
   if (process.env.NODE_ENV === "production") return
   const identity = storageDeliveryIdentity(url)
+  const key = `${assetPolicy}|${delivery}|${preset ?? ""}|${identity}`
+  if (loggedStorageDeliveries.has(key)) return
+  loggedStorageDeliveries.add(key)
   const presetSuffix = preset ? ` preset=${preset}` : ""
   console.debug(
     `[StorageImageDelivery] assetPolicy=${assetPolicy} delivery=${delivery}${presetSuffix} id=${identity}`
   )
+}
+
+/**
+ * Room avatars stored as object paths (not public URLs) belong in the avatars bucket.
+ * Leave absolute URLs and local public assets unchanged.
+ */
+export function resolveStoredRoomImageUrl(
+  src: string | null | undefined,
+  supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+): string | null {
+  const raw = src != null ? String(src).trim() : ""
+  if (!raw) return null
+  if (/^https?:\/\//i.test(raw) || raw.startsWith("//")) return raw
+  if (
+    raw.startsWith("/default-avatar") ||
+    raw.startsWith("/images/") ||
+    raw.startsWith("/_next/")
+  ) {
+    return raw
+  }
+
+  const path = raw.replace(/^\/+/, "")
+  const legacyAvatar = /^room-images\/\d+-avatar\.[a-z0-9]+$/i.test(path)
+  const userRoomAvatar =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/room-images\//i.test(
+      path
+    )
+  if (!legacyAvatar && !userRoomAvatar) return raw
+
+  const base = supabaseUrl?.replace(/\/$/, "")
+  if (!base) return raw
+  return `${base}/storage/v1/object/public/avatars/${path}`
 }

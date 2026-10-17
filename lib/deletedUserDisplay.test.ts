@@ -1,5 +1,5 @@
 import { describe, it } from "node:test"
-import { DELETED_USER_LABEL, isDirectConversationPeerDeleted, resolveDmSenderDisplay, } from "./deletedUserDisplay.ts"
+import { DELETED_USER_LABEL, isDirectConversationPeerDeleted, isOrphanedDirectConversation, resolveDmSenderDisplay, } from "./deletedUserDisplay.ts"
 import assert from "node:assert/strict"
 
 describe("resolveDmSenderDisplay", () => {
@@ -51,6 +51,38 @@ describe("isDirectConversationPeerDeleted", () => {
       isDirectConversationPeerDeleted(true, null, true),
       false
     )
+  })
+})
+
+describe("isOrphanedDirectConversation", () => {
+  it("hides a 1:1 after the other participant row is gone", () => {
+    assert.equal(
+      isOrphanedDirectConversation(false, [{ user_id: "viewer" }], "viewer"),
+      true
+    )
+  })
+
+  it("keeps a 1:1 when the other participant still exists without a profile", () => {
+    assert.equal(
+      isOrphanedDirectConversation(
+        false,
+        [{ user_id: "viewer" }, { user_id: "peer" }],
+        "viewer"
+      ),
+      false
+    )
+  })
+
+  it("keeps group chats when one member row is gone", () => {
+    assert.equal(
+      isOrphanedDirectConversation(true, [{ user_id: "viewer" }], "viewer"),
+      false
+    )
+  })
+
+  it("does not treat an empty participant list as deletion", () => {
+    assert.equal(isOrphanedDirectConversation(false, [], "viewer"), false)
+    assert.equal(isOrphanedDirectConversation(false, null, "viewer"), false)
   })
 })
 export {}

@@ -169,7 +169,7 @@ export default function ConversationSettingsModal({
 
       {isGroup ? (
         <section className="space-y-3 rounded-xl border border-white/10 bg-white/5 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+          <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">
             Group Details
           </p>
           <div className="flex items-center gap-3">
@@ -216,7 +216,7 @@ export default function ConversationSettingsModal({
       ) : null}
 
       <section className="space-y-2 rounded-xl border border-white/10 bg-white/5 p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+        <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">
           {isGroup ? "Members" : "More"}
         </p>
 

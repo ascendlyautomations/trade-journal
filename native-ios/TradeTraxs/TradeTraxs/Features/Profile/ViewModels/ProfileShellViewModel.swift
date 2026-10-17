@@ -44,7 +44,7 @@ final class ProfileShellViewModel {
     }
 
     /// Ensures the Trades section VM exists without changing the selected tab.
-    func ensureTradesSection() {
+    func ensureTradesSection(applyingSnapshot: Bool = true) {
         if trades == nil {
             trades = TradesContainerViewModel(
                 profileID: profileID,
@@ -58,7 +58,9 @@ final class ProfileShellViewModel {
                 isOwner: isOwner
             )
         }
-        trades?.applyBootstrap(latestState)
+        if applyingSnapshot {
+            trades?.applyBootstrap(latestState)
+        }
     }
 
     /// Ensures the Posts section VM exists without changing the selected tab.

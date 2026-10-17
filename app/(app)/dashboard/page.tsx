@@ -719,6 +719,7 @@ export default function Dashboard() {
     .reduce((sum, t) => sum + Math.abs(Number(t.pnl) || 0), 0)
 
   const profitFactor = grossLoss === 0 ? 0 : grossProfit / grossLoss
+  const displayedProfitFactor = grossLoss === 0 ? null : profitFactor
 
   const dailyMap: Record<string, number> = {}
 
@@ -895,7 +896,7 @@ export default function Dashboard() {
       winRate={winRate}
       winCount={winCount}
       lossCount={lossCount}
-      profitFactor={profitFactor}
+      profitFactor={displayedProfitFactor}
       avgRR={avgRR}
       expectancyData={expectancyData}
       bestDay={bestDay}
@@ -1101,7 +1102,7 @@ export default function Dashboard() {
     winRate={winRate}
     avgRR={avgRR}
     totalPnL={totalPnL}
-    profitFactor={profitFactor}
+    profitFactor={displayedProfitFactor}
     avgWin={avgWin}
     bestTrade={bestTrade}
     avgLoss={avgLoss}
@@ -1227,7 +1228,7 @@ export default function Dashboard() {
             winRate={winRate}
             avgRR={avgRR}
             totalPnL={totalPnL}
-            profitFactor={profitFactor}
+            profitFactor={displayedProfitFactor}
             avgWin={avgWin}
             bestTrade={bestTrade}
             avgLoss={avgLoss}
