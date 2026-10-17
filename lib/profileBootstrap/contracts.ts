@@ -12,6 +12,9 @@ export type ProfileBootstrapPublicStatsV1 = {
   total_trades: number
   wins: number
   total_pnl: number
+  profit_factor?: number | string | null
+  average_rr?: number | string | null
+  payout_total?: number | string | null
 }
 
 export type ProfileBootstrapTradeEngagementV1 = Record<

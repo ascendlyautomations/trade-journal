@@ -24,6 +24,7 @@ type SessionBreakdownRow = {
 type ProfileStatisticsTabProps = {
   canView: boolean
   loading: boolean
+  error?: string | null
   selectedMode: ProfileStatisticsMode
   onModeChange: (mode: ProfileStatisticsMode) => void
   filteredTradesCount: number
@@ -86,6 +87,7 @@ function Stat({
 function ProfileStatisticsTab({
   canView,
   loading,
+  error = null,
   selectedMode,
   onModeChange,
   filteredTradesCount,
@@ -125,6 +127,10 @@ function ProfileStatisticsTab({
             ))}
           </div>
           <div className="h-72 animate-pulse rounded-xl border border-white/10 bg-white/5" />
+        </div>
+      ) : error ? (
+        <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
+          <p className="text-sm text-gray-300">{error}</p>
         </div>
       ) : (
         <>

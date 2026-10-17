@@ -1,6 +1,6 @@
 "use client"
 
-import { formatDecimal, formatRR } from "@/lib/formatDisplay"
+import { formatDecimal, formatProfitFactor, formatRR } from "@/lib/formatDisplay"
 import { memo, type ReactNode } from "react"
 
 type ProfileOverviewStatsProps = {
@@ -11,6 +11,7 @@ type ProfileOverviewStatsProps = {
   totalPnl: number
   payoutTotal: number | null
   averageRr: number | null
+  profitFactor: number | null
   streakLabel: string
 }
 
@@ -34,8 +35,10 @@ function StatCard({
   children: ReactNode
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-center md:p-4">
-      <p className="text-xs text-gray-200 md:text-gray-400">{label}</p>
+    <div className="min-w-0 rounded-xl border border-white/10 bg-white/5 px-1.5 py-1.5 text-center sm:px-2 sm:py-2">
+      <p className="truncate text-[10px] text-gray-200 sm:text-[11px] md:text-gray-400">
+        {label}
+      </p>
       {children}
     </div>
   )
@@ -49,25 +52,25 @@ function ProfileOverviewStats({
   totalPnl,
   payoutTotal,
   averageRr,
+  profitFactor,
   streakLabel,
 }: ProfileOverviewStatsProps) {
   return (
     <>
-      {/* Mobile: 3×2 dense grid (Dashboard gap-2). md+: 3 cols, xl: 6. */}
-      <div className="grid grid-cols-3 gap-2 md:grid-cols-3 md:gap-4 xl:grid-cols-6">
+      <div className="grid w-full min-w-0 grid-cols-2 gap-1.5 sm:grid-cols-3 sm:gap-2 lg:grid-cols-4 xl:grid-cols-7">
         <StatCard label="Trades">
-          <p className="text-lg font-semibold tabular-nums text-white">
+          <p className="truncate text-sm font-semibold tabular-nums text-white sm:text-base">
             {visible ? totalTrades : "—"}
           </p>
         </StatCard>
         <StatCard label="Win %">
-          <p className="text-lg font-semibold tabular-nums text-white">
+          <p className="truncate text-sm font-semibold tabular-nums text-white sm:text-base">
             {visible ? `${formatDecimal(winRate)}%` : "—"}
           </p>
         </StatCard>
         <StatCard label="Net P&L">
           <p
-            className={`text-lg font-semibold tabular-nums ${
+            className={`truncate text-sm font-semibold tabular-nums sm:text-base ${
               !visible
                 ? "text-white"
                 : totalPnl >= 0
@@ -78,19 +81,24 @@ function ProfileOverviewStats({
             {visible ? formatMoney(totalPnl) : "—"}
           </p>
         </StatCard>
+        <StatCard label="Profit Factor">
+          <p className="truncate text-sm font-semibold tabular-nums text-white sm:text-base">
+            {visible ? formatProfitFactor(profitFactor) : "—"}
+          </p>
+        </StatCard>
         <StatCard label="Avg RR">
-          <p className="text-lg font-semibold tabular-nums text-white">
+          <p className="truncate text-sm font-semibold tabular-nums text-white sm:text-base">
             {visible ? formatRR(averageRr) : "—"}
           </p>
         </StatCard>
         <StatCard label="Payout Total">
-          <p className="text-lg font-semibold tabular-nums text-emerald-400">
+          <p className="truncate text-sm font-semibold tabular-nums text-emerald-400 sm:text-base">
             {payoutTotal != null ? formatMoney(payoutTotal) : "—"}
           </p>
         </StatCard>
         <StatCard label="Streak">
           <p
-            className={`text-lg font-semibold tabular-nums ${
+            className={`truncate text-sm font-semibold tabular-nums sm:text-base ${
               streakLabel.startsWith("W")
                 ? "text-emerald-400"
                 : streakLabel.startsWith("L")

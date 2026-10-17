@@ -199,9 +199,12 @@ import {
 } from "@/lib/supabaseProjectedQuery"
 import type { TableInsert } from "@/lib/supabaseTypes"
 import {
+  mapProfileStatisticsMode,
   overviewStatsFromBootstrapPublicStats,
+  profileTradeMatchesStatisticsMode,
   shouldFetchProfileSummaryTrades,
   type ProfileBootstrapPublicStatsV1,
+  type ProfileStatisticsModeView,
 } from "@/lib/profilePublicStatistics"
 import { useProfileStatistics } from "./useProfileStatistics"
 import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
@@ -442,8 +445,14 @@ function ProfilePageContent() {
   const [activeTab, setActiveTab] = useState<ProfileTab>("trades")
   const postsRequested = activeTab === "posts"
   const reelsRequested = activeTab === "reels"
-  const analyticsRequested =
-    activeTab === "calendar" || activeTab === "stats"
+  const analyticsRequested = activeTab === "calendar"
+  const [statisticsModes, setStatisticsModes] = useState<Record<
+    string,
+    unknown
+  > | null>(null)
+  const [statisticsReady, setStatisticsReady] = useState(false)
+  const [statisticsLoading, setStatisticsLoading] = useState(false)
+  const [statisticsError, setStatisticsError] = useState<string | null>(null)
   const achievementsRequested = activeTab === "achievements"
   const [showCreatePost, setShowCreatePost] = useState(false)
   const [showReelComposer, setShowReelComposer] = useState(false)
@@ -915,29 +924,38 @@ function ProfilePageContent() {
       if (isDemoModeActive() && isDemoProfileId(forProfileId)) {
         return getDemoProfileTrades(forProfileId, currentUserId)
       }
-      const { data, error } = isOwner
-        ? await supabase
-            .from(tradeListRelationForProfileViewer(true))
-            .select(tradeSelectForViewer(true))
-            .eq("user_id", forProfileId)
-            .eq("is_public", true)
-            .order("created_at", { ascending: false })
-            .overrideTypes<Record<string, unknown>[], { merge: false }>()
-        : await supabase
-            .from(tradeListRelationForProfileViewer(false))
-            .select(tradeSelectForViewer(false))
-            .eq("user_id", forProfileId)
-            .eq("is_public", true)
-            .order("created_at", { ascending: false })
-            .overrideTypes<Record<string, unknown>[], { merge: false }>()
-
-      if (error) {
-        console.error("profile analytics trades fetch:", error)
-        return []
+      const pageSize = 1000
+      const rows: Record<string, unknown>[] = []
+      let from = 0
+      for (;;) {
+        const end = from + pageSize - 1
+        const { data, error } = isOwner
+          ? await supabase
+              .from(tradeListRelationForProfileViewer(true))
+              .select(PUBLIC_TRADE_SELECT)
+              .eq("user_id", forProfileId)
+              .eq("is_public", true)
+              .order("created_at", { ascending: false })
+              .range(from, end)
+              .overrideTypes<Record<string, unknown>[], { merge: false }>()
+          : await supabase
+              .from(tradeListRelationForProfileViewer(false))
+              .select(PUBLIC_TRADE_SELECT)
+              .eq("user_id", forProfileId)
+              .eq("is_public", true)
+              .order("created_at", { ascending: false })
+              .range(from, end)
+              .overrideTypes<Record<string, unknown>[], { merge: false }>()
+        if (error) {
+          console.error("profile calendar trades fetch:", error)
+          break
+        }
+        const page = mapProjectedRows(data, (row) => row)
+        rows.push(...page)
+        if (page.length < pageSize) break
+        from += pageSize
       }
-      return sanitizeTradesForViewer(mapProjectedRows(data, (row) => row), {
-        isOwner,
-      })
+      return sanitizeTradesForViewer(rows, { isOwner })
     },
     [currentUserId]
   )
@@ -1059,6 +1077,10 @@ function ProfilePageContent() {
       setProfileStoriesLoadRequested(false)
       setAnalyticsTradeRows([])
       setAnalyticsTradesReady(false)
+      setStatisticsModes(null)
+      setStatisticsReady(false)
+      setStatisticsLoading(false)
+      setStatisticsError(null)
       setLoading(false)
       return
     }
@@ -1090,8 +1112,8 @@ function ProfilePageContent() {
       setProfileReelsReady(cached.profileReelsReady ?? false)
       setAchievements((cached.achievements ?? []) as Achievement[])
       setAchievementsReady(cached.achievementsReady ?? false)
-      setAnalyticsTradeRows((cached.analyticsTrades ?? []) as any[])
-      setAnalyticsTradesReady(cached.analyticsTradesReady ?? false)
+      setAnalyticsTradeRows([])
+      setAnalyticsTradesReady(false)
       setSummaryTrades((cached.summaryTrades ?? []) as any[])
       setSummaryReady(cached.summaryReady ?? false)
       setBootstrapPublicStats(
@@ -1144,6 +1166,10 @@ function ProfilePageContent() {
     setAchievementsReady(false)
     setAnalyticsTradeRows([])
     setAnalyticsTradesReady(false)
+    setStatisticsModes(null)
+    setStatisticsReady(false)
+    setStatisticsLoading(false)
+    setStatisticsError(null)
     setSummaryTrades([])
     setSummaryReady(false)
     setBootstrapPublicStats(null)
@@ -1325,6 +1351,36 @@ function ProfilePageContent() {
     profile?.id,
     profileId,
   ])
+
+  useEffect(() => {
+    if (!profile?.id || !canViewTrades || statisticsReady) {
+      return
+    }
+    let cancelled = false
+    setStatisticsLoading(true)
+    setStatisticsError(null)
+    void supabase
+      .rpc("rpc_v1_profile_statistics_bootstrap", {
+        p_profile_id: profile.id,
+      })
+      .then(({ data, error }) => {
+        if (cancelled) return
+        if (error) {
+          console.error("profile statistics bootstrap:", error)
+          setStatisticsModes(null)
+          setStatisticsError("Couldn't load stats. Please try again.")
+          setStatisticsLoading(false)
+          return
+        }
+        const envelope = data as { data?: { modes?: Record<string, unknown> } } | null
+        setStatisticsModes(envelope?.data?.modes ?? {})
+        setStatisticsReady(true)
+        setStatisticsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [canViewTrades, profile?.id, statisticsReady])
 
   useEffect(() => {
     // Guard on profile?.id: on remount the profile is briefly null before the
@@ -3815,6 +3871,14 @@ function ProfilePageContent() {
     [currentUserId, feedDeepLinkComments]
   )
 
+  const streakEquity = useMemo(
+    () =>
+      statisticsModes
+        ? mapProfileStatisticsMode(statisticsModes.all).equityData
+        : null,
+    [statisticsModes]
+  )
+
   const bootstrapOverviewStats = useMemo(
     () =>
       bootstrapPublicStats
@@ -3825,28 +3889,14 @@ function ProfilePageContent() {
 
   const {
     sortedTrades,
-    filteredTrades,
-    statsVisible,
     overviewStatsVisible,
-    biggestWin,
-    biggestLoss,
-    longTrades,
-    equityData,
-    currentEquity,
     overviewTotalTrades,
     overviewWinRate,
     overviewTotalPnL,
     overviewAvgRR,
     overviewPayoutTotal,
+    overviewProfitFactor,
     currentStreakLabel,
-    profitFactor,
-    avgWinner,
-    avgLoser,
-    profitPerTrade,
-    maxWinStreak,
-    maxLossStreak,
-    sessionTotal,
-    sessionBreakdown,
   } = useProfileStatistics({
     visibleTrades: trades,
     analyticsTradeRows,
@@ -3859,7 +3909,23 @@ function ProfilePageContent() {
     summaryReady,
     achievements,
     achievementsReady,
+    streakEquity,
   })
+
+  const calendarTrades = useMemo(
+    () =>
+      analyticsTradeRows.filter(
+        (trade) =>
+          trade.is_public !== false &&
+          profileTradeMatchesStatisticsMode(trade, selectedMode)
+      ),
+    [analyticsTradeRows, selectedMode]
+  )
+
+  const statisticsMode: ProfileStatisticsModeView = useMemo(
+    () => mapProfileStatisticsMode(statisticsModes?.[selectedMode]),
+    [selectedMode, statisticsModes]
+  )
 
   const isMobileViewport = useMaxMdViewport()
 
@@ -4191,6 +4257,7 @@ function ProfilePageContent() {
             }}
           />
 
+          <div className="min-w-0">
           <ProfileOverviewStats
             visible={overviewStatsVisible}
             isPrivate={profile.is_private === true}
@@ -4199,8 +4266,10 @@ function ProfilePageContent() {
             totalPnl={overviewTotalPnL}
             payoutTotal={overviewPayoutTotal}
             averageRr={overviewAvgRR}
+            profitFactor={overviewProfitFactor}
             streakLabel={currentStreakLabel}
           />
+          </div>
 
           <ProfileTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
@@ -4331,7 +4400,7 @@ function ProfilePageContent() {
                 loading={
                   analyticsTradesLoading || !analyticsTradesReady
                 }
-                trades={filteredTrades}
+                trades={calendarTrades}
                 isOwnProfile={isOwnProfile}
               />
             )}
@@ -4339,26 +4408,25 @@ function ProfilePageContent() {
             {activeTab === "stats" && (
               <ProfileStatisticsTab
                 canView={canViewTrades}
-                loading={
-                  analyticsTradesLoading || !analyticsTradesReady
-                }
+                loading={!statisticsError && (statisticsLoading || !statisticsReady)}
+                error={statisticsError}
                 selectedMode={selectedMode}
                 onModeChange={setSelectedMode}
-                filteredTradesCount={filteredTrades.length}
-                statsVisible={statsVisible}
-                profitFactor={profitFactor}
-                averageWinner={avgWinner}
-                averageLoser={avgLoser}
-                profitPerTrade={profitPerTrade}
-                biggestWin={biggestWin}
-                biggestLoss={biggestLoss}
-                longTrades={longTrades}
-                maxWinStreak={maxWinStreak}
-                maxLossStreak={maxLossStreak}
-                sessionTotal={sessionTotal}
-                sessionBreakdown={sessionBreakdown}
-                currentEquity={currentEquity}
-                equityData={equityData}
+                filteredTradesCount={statisticsMode.filteredTradeCount}
+                statsVisible={statisticsReady && !statisticsError}
+                profitFactor={statisticsMode.profitFactor}
+                averageWinner={statisticsMode.averageWinner}
+                averageLoser={statisticsMode.averageLoser}
+                profitPerTrade={statisticsMode.profitPerTrade}
+                biggestWin={statisticsMode.biggestWin}
+                biggestLoss={statisticsMode.biggestLoss}
+                longTrades={statisticsMode.longTrades}
+                maxWinStreak={statisticsMode.maxWinStreak}
+                maxLossStreak={statisticsMode.maxLossStreak}
+                sessionTotal={statisticsMode.sessionTotal}
+                sessionBreakdown={statisticsMode.sessionBreakdown}
+                currentEquity={statisticsMode.currentEquity}
+                equityData={statisticsMode.equityData}
                 equityChartNarrow={equityChartNarrow}
               />
             )}

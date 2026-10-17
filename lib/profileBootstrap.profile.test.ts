@@ -168,11 +168,16 @@ describe("profilePublicStatistics", () => {
       total_trades: 10,
       wins: 6,
       total_pnl: 420,
+      average_rr: 1.5,
+      payout_total: 250,
+      profit_factor: 2,
     })
     assert.equal(stats.totalTrades, 10)
     assert.equal(stats.wins, 6)
     assert.equal(stats.totalPnl, 420)
-    assert.equal(stats.avgRr, null)
+    assert.equal(stats.avgRr, 1.5)
+    assert.equal(stats.payoutTotal, 250)
+    assert.equal(stats.profitFactor, 2)
     assert.equal(computeProfileOverviewWinRate(stats), 60)
   })
 

@@ -39,6 +39,9 @@ export type ProfileSessionSnapshot = {
     total_trades: number
     wins: number
     total_pnl: number
+    profit_factor?: number | string | null
+    average_rr?: number | string | null
+    payout_total?: number | string | null
   } | null
   bootstrapSectionCounts?: {
     has_active_story?: boolean

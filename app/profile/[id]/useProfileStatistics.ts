@@ -10,9 +10,23 @@ import type { ProfileStatisticsMode } from "@/app/components/profile/ProfileStat
 import type { ProfileTradeRow } from "@/app/components/profile/profileTypes"
 import {
   computeProfileOverviewWinRate,
+  profileTradeMatchesStatisticsMode,
   type ProfilePublicStatsAggregate,
 } from "@/lib/profilePublicStatistics"
 import { computeTradeOutcomeStreaks } from "@/lib/userStreaksLogic"
+
+function profitFactorFromTrades(
+  trades: Array<{ pnl?: unknown }>
+): number | null {
+  let grossWins = 0
+  let grossLosses = 0
+  for (const trade of trades) {
+    const pnl = Number(trade.pnl) || 0
+    if (pnl > 0) grossWins += pnl
+    else if (pnl < 0) grossLosses += pnl
+  }
+  return grossLosses < 0 ? grossWins / Math.abs(grossLosses) : null
+}
 
 type UseProfileStatisticsOptions = {
   visibleTrades: ProfileTradeRow[]
@@ -26,6 +40,8 @@ type UseProfileStatisticsOptions = {
   summaryReady: boolean
   achievements: Achievement[]
   achievementsReady: boolean
+  /** Chronological equity from statistics mode `all`. Used when summary trades are not loaded. */
+  streakEquity?: Array<{ equity: number }> | null
 }
 
 export function useProfileStatistics({
@@ -40,6 +56,7 @@ export function useProfileStatistics({
   summaryReady,
   achievements,
   achievementsReady,
+  streakEquity = null,
 }: UseProfileStatisticsOptions) {
   return useMemo(() => {
     const sortedTrades = [...visibleTrades].sort((a, b) => {
@@ -54,15 +71,9 @@ export function useProfileStatistics({
     const profilePublicTrades = analyticsTradeRows.filter(
       (trade) => trade.is_public === true
     )
-    const filteredTrades = profilePublicTrades.filter((trade) => {
-      if (selectedMode === "all") return true
-      const mode = selectedMode.toLowerCase()
-      const modeValue = String(trade.mode ?? "").trim().toLowerCase()
-      const accountType = String(trade.account_type ?? "")
-        .trim()
-        .toLowerCase()
-      return modeValue === mode || accountType === mode
-    })
+    const filteredTrades = profilePublicTrades.filter((trade) =>
+      profileTradeMatchesStatisticsMode(trade, selectedMode)
+    )
 
     const analyticsTrades = filteredTrades.filter((trade) => {
       const modeValue = String(trade.mode ?? "").trim().toLowerCase()
@@ -157,20 +168,28 @@ export function useProfileStatistics({
         ? bootstrapOverviewStats.avgRr
         : averageRrFromTrades(profileOverviewTrades)
       : null
-    const overviewPayoutTotal = achievementsReady
+    const achievementPayout = achievementsReady
       ? sumPayoutAchievementTotals(achievements)
       : null
+    // Summary trades do not include payouts. Keep the bootstrap total once it
+    // arrives, including 0, so an achievements-tab sum cannot replace it.
+    const overviewPayoutTotal =
+      bootstrapOverviewStats?.payoutTotal != null
+        ? bootstrapOverviewStats.payoutTotal
+        : achievementPayout
+    const overviewProfitFactor = overviewStatsVisible
+      ? useBootstrapOverview
+        ? bootstrapOverviewStats.profitFactor
+        : profitFactorFromTrades(profileOverviewTrades)
+      : null
     const currentStreakLabel = (() => {
-      if (
-        !overviewStatsVisible ||
-        useBootstrapOverview ||
-        profileOverviewTrades.length === 0
-      ) {
-        return "—"
+      if (!overviewStatsVisible) return "—"
+      if (!useBootstrapOverview && profileOverviewTrades.length > 0) {
+        return formatOutcomeStreakLabel(profileOverviewTrades)
       }
-      const streaks = computeTradeOutcomeStreaks(profileOverviewTrades)
-      if (streaks.currentWin > 0) return `W${streaks.currentWin}`
-      if (streaks.currentLoss > 0) return `L${streaks.currentLoss}`
+      if (streakEquity && streakEquity.length > 0) {
+        return formatOutcomeStreakLabel(tradesFromEquity(streakEquity))
+      }
       return "—"
     })()
 
@@ -253,6 +272,7 @@ export function useProfileStatistics({
       overviewTotalPnL,
       overviewAvgRR,
       overviewPayoutTotal,
+      overviewProfitFactor,
       currentStreakLabel,
       profitFactor,
       avgWinner,
@@ -273,7 +293,27 @@ export function useProfileStatistics({
     canViewTrades,
     selectedMode,
     summaryReady,
+    streakEquity,
     summaryTrades,
     visibleTrades,
   ])
+}
+
+function formatOutcomeStreakLabel(
+  trades: Array<{ pnl?: unknown; created_at?: string | null }>
+): string {
+  const streaks = computeTradeOutcomeStreaks(trades)
+  if (streaks.currentWin > 0) return `W${streaks.currentWin}`
+  if (streaks.currentLoss > 0) return `L${streaks.currentLoss}`
+  return "—"
+}
+
+/** Equity points are already chronological. Index timestamps keep that order. */
+function tradesFromEquity(points: Array<{ equity: number }>) {
+  let previous = 0
+  return points.map((point, index) => {
+    const pnl = point.equity - previous
+    previous = point.equity
+    return { pnl, created_at: new Date(index).toISOString() }
+  })
 }
