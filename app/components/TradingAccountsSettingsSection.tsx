@@ -32,6 +32,7 @@ import {
 import { useFreePlanAccountSlotSelection } from "@/app/components/FreePlanAccountSlotShell"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { useProGate } from "@/lib/useProGate"
+import { knownTraxProActiveForPreflight } from "@/lib/billingEntitlement"
 
 const ACCOUNTS_PAGE_SIZE = 5
 
@@ -64,7 +65,7 @@ export default function TradingAccountsSettingsSection({
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const { profile } = useUserProfile()
   const freePlanSlots = useFreePlanAccountSlotSelection()
-  const { presentLimit, fromError, enforceFreeLimits } = useProGate(profile)
+  const { presentLimit, fromError, enforceFreeLimits, access } = useProGate(profile)
   const [accounts, setAccounts] = useState<TradingAccountListItem[]>([])
   const [loading, setLoading] = useState(Boolean(userId))
   const [togglingId, setTogglingId] = useState<string | null>(null)
@@ -206,7 +207,12 @@ export default function TradingAccountsSettingsSection({
       .eq("id", userId)
       .maybeSingle()
 
-    const gate = await assertCanCreateTradingAccount(supabase, userId, profile)
+    const gate = await assertCanCreateTradingAccount(
+      supabase,
+      userId,
+      profile,
+      knownTraxProActiveForPreflight(access)
+    )
     if (!gate.ok) {
       setCreating(false)
       if (!presentLimit("account_count")) {

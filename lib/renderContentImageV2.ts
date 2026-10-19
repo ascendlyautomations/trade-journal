@@ -56,7 +56,8 @@ export async function renderContentImageV2(
   }
 }
 
-async function decodeOrientedImage(file: File): Promise<ImageBitmap> {
+/** EXIF-aware decode — same pixels used for export and crop preview. */
+export async function decodeOrientedImageBitmap(file: File): Promise<ImageBitmap> {
   if (typeof createImageBitmap !== "function") {
     throw new Error(imageDecodeErrorMessage(file))
   }
@@ -65,6 +66,55 @@ async function decodeOrientedImage(file: File): Promise<ImageBitmap> {
   } catch {
     throw new Error(imageDecodeErrorMessage(file))
   }
+}
+
+export type OrientedCropPreview = {
+  previewUrl: string
+  width: number
+  height: number
+  dispose: () => void
+}
+
+/**
+ * Upright preview URL for the crop editor (PNG blob). Matches export orientation.
+ */
+export async function loadOrientedCropPreview(file: File): Promise<OrientedCropPreview> {
+  const bitmap = await decodeOrientedImageBitmap(file)
+  try {
+    const canvas = document.createElement("canvas")
+    canvas.width = bitmap.width
+    canvas.height = bitmap.height
+    const context = canvas.getContext("2d")
+    if (!context) {
+      throw new Error("Could not prepare image canvas.")
+    }
+    context.drawImage(bitmap, 0, 0)
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (value) => {
+          if (!value) {
+            reject(new Error("Could not prepare preview."))
+            return
+          }
+          resolve(value)
+        },
+        "image/png"
+      )
+    })
+    const previewUrl = URL.createObjectURL(blob)
+    return {
+      previewUrl,
+      width: bitmap.width,
+      height: bitmap.height,
+      dispose: () => URL.revokeObjectURL(previewUrl),
+    }
+  } finally {
+    bitmap.close()
+  }
+}
+
+async function decodeOrientedImage(file: File): Promise<ImageBitmap> {
+  return decodeOrientedImageBitmap(file)
 }
 
 function canvasToJpegBlob(canvas: HTMLCanvasElement): Promise<Blob> {

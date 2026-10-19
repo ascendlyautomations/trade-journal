@@ -1,6 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useRegisterCreatePagePrimary } from "@/app/components/create/registerCreatePagePrimary"
+import type { CreatePagePrimaryRegistration } from "@/app/components/create/useCreatePagePrimaryAction"
 import Modal from "@/app/components/ui/Modal"
 import ReelVideoFilePreview from "@/app/components/ReelVideoFilePreview"
 import ReelIdlePoster from "@/app/components/ReelIdlePoster"
@@ -25,6 +27,9 @@ type ReelComposerModalProps = {
   /** When set, edits caption only — video is read-only. */
   editReel?: ReelRow | null
   onSaved?: (reel: ReelRow) => void
+  /** Full-page create surface — create mode only (no edit). */
+  layout?: "modal" | "page"
+  registerPrimary?: (update: CreatePagePrimaryRegistration) => void
 }
 
 export default function ReelComposerModal({
@@ -34,6 +39,8 @@ export default function ReelComposerModal({
   onPublished,
   editReel = null,
   onSaved,
+  layout = "modal",
+  registerPrimary,
 }: ReelComposerModalProps) {
   const { profile } = useUserProfile()
   const { fromError } = useProGate(profile)
@@ -99,7 +106,7 @@ export default function ReelComposerModal({
     setValidating(false)
   }
 
-  const handlePublish = async () => {
+  const handlePublish = useCallback(async () => {
     if (!userId || !videoFile || publishing || isEditMode || uploadingRef.current) {
       return
     }
@@ -135,7 +142,18 @@ export default function ReelComposerModal({
     } finally {
       uploadingRef.current = false
     }
-  }
+  }, [
+    userId,
+    videoFile,
+    publishing,
+    isEditMode,
+    caption,
+    runUpload,
+    handleClose,
+    fromError,
+    onPublished,
+    resetForm,
+  ])
 
   const handleSaveEdit = async () => {
     if (!userId || !editReel || publishing) return
@@ -170,54 +188,19 @@ export default function ReelComposerModal({
     onClose()
   }
 
-  return (
-    <Modal
-      open={open}
-      onClose={handleClose}
-      title={isTradeReplayEdit ? "Trade Clip" : isEditMode ? "Edit Clip" : "Create Clip"}
-      size="md"
-      panelClassName="max-w-lg p-4 sm:p-6"
-      footer={
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            disabled={publishing}
-            onClick={handleClose}
-            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-gray-200 transition hover:bg-white/10 disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          {isEditMode && !isTradeReplayEdit ? (
-            <button
-              type="button"
-              disabled={publishing}
-              onClick={() => void handleSaveEdit()}
-              className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
-            >
-              {publishing ? "Saving…" : "Save"}
-            </button>
-          ) : isEditMode ? (
-            <button
-              type="button"
-              disabled={publishing}
-              onClick={handleClose}
-              className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
-            >
-              Done
-            </button>
-          ) : (
-            <button
-              type="button"
-              disabled={!videoFile || publishing || validating || uploadingRef.current}
-              onClick={() => void handlePublish()}
-              className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
-            >
-              Publish
-            </button>
-          )}
-        </div>
-      }
-    >
+  const canPublishCreate =
+    !!videoFile && !publishing && !validating && !uploadingRef.current
+
+  useRegisterCreatePagePrimary({
+    enabled: layout === "page" && open && !isEditMode,
+    registerPrimary,
+    action: handlePublish,
+    canAct: canPublishCreate,
+    busy: publishing || validating,
+  })
+
+  const body = (
+    <>
       {isEditMode ? (
         <div className="space-y-4">
           <div className="mx-auto w-full max-w-[220px] overflow-hidden rounded-xl border border-white/10 bg-black/40 shadow-lg shadow-black/40">
@@ -283,10 +266,12 @@ export default function ReelComposerModal({
               type="button"
               disabled={validating}
               onClick={() => fileInputRef.current?.click()}
-              className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-white/5 px-4 py-10 text-center transition hover:border-emerald-400/40 hover:bg-emerald-500/10 disabled:opacity-60"
+              className={`flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-white/5 text-center transition hover:border-emerald-400/40 hover:bg-emerald-500/10 disabled:opacity-60 ${
+                layout === "page" ? "min-h-[220px] px-6 py-14 sm:min-h-[280px]" : "px-4 py-10"
+              }`}
             >
               <span className="text-2xl" aria-hidden>
-                
+                🎥
               </span>
               <span className="text-sm font-medium text-white">
                 {validating ? "Checking video…" : "Upload Video"}
@@ -296,35 +281,43 @@ export default function ReelComposerModal({
               </span>
             </button>
           ) : (
-            <div className="space-y-4">
+            <div
+              className={
+                layout === "page"
+                  ? "grid gap-6 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)] lg:items-start"
+                  : "space-y-4"
+              }
+            >
               <ReelVideoFilePreview file={videoFile} />
 
-              <button
-                type="button"
-                disabled={publishing}
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-gray-200 transition hover:bg-white/10 disabled:opacity-50"
-              >
-                Change video
-              </button>
-
-              <div>
-                <label
-                  htmlFor="reel-caption"
-                  className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-gray-400"
-                >
-                  Caption
-                </label>
-                <textarea
-                  id="reel-caption"
-                  value={caption}
-                  onChange={(e) => setCaption(e.target.value)}
-                  rows={3}
-                  maxLength={2200}
-                  placeholder="Write a caption…"
+              <div className="space-y-4">
+                <button
+                  type="button"
                   disabled={publishing}
-                  className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-gray-400 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 disabled:opacity-60"
-                />
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-gray-200 transition hover:bg-white/10 disabled:opacity-50"
+                >
+                  Change video
+                </button>
+
+                <div>
+                  <label
+                    htmlFor="reel-caption"
+                    className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-gray-400"
+                  >
+                    Caption
+                  </label>
+                  <textarea
+                    id="reel-caption"
+                    value={caption}
+                    onChange={(e) => setCaption(e.target.value)}
+                    rows={layout === "page" ? 5 : 3}
+                    maxLength={2200}
+                    placeholder="Write a caption…"
+                    disabled={publishing}
+                    className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-gray-400 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 disabled:opacity-60"
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -336,6 +329,63 @@ export default function ReelComposerModal({
           {errorMessage}
         </p>
       ) : null}
+    </>
+  )
+
+  if (layout === "page") {
+    if (!open || isEditMode) return null
+    return body
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={handleClose}
+      title={isTradeReplayEdit ? "Trade Clip" : isEditMode ? "Edit Clip" : "Create Clip"}
+      size="md"
+      panelClassName="max-w-lg p-4 sm:p-6"
+      footer={
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            disabled={publishing}
+            onClick={handleClose}
+            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-gray-200 transition hover:bg-white/10 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          {isEditMode && !isTradeReplayEdit ? (
+            <button
+              type="button"
+              disabled={publishing}
+              onClick={() => void handleSaveEdit()}
+              className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
+            >
+              {publishing ? "Saving…" : "Save"}
+            </button>
+          ) : isEditMode ? (
+            <button
+              type="button"
+              disabled={publishing}
+              onClick={handleClose}
+              className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
+            >
+              Done
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={!videoFile || publishing || validating || uploadingRef.current}
+              onClick={() => void handlePublish()}
+              className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
+            >
+              Publish
+            </button>
+          )}
+        </div>
+      }
+    >
+      {body}
     </Modal>
   )
 }

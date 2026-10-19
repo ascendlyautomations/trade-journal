@@ -5,6 +5,8 @@ import Link from "next/link"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import FollowButton from "../components/FollowButton"
 import ExploreDiscoverBar from "../components/explore/ExploreDiscoverBar"
+import ExploreSuggestedRoomsSection from "../components/explore/ExploreSuggestedRoomsSection"
+import ExploreTopPerformersSection from "../components/explore/ExploreTopPerformersSection"
 import ExploreTraderCard from "../components/explore/ExploreTraderCard"
 import EmptyState from "../components/ui/EmptyState"
 import { SkeletonExplorePage, SkeletonTraderCard } from "../components/ui/skeletons"
@@ -20,6 +22,15 @@ import {
   type ExploreProfile,
   type ExploreTradeMetaPayload,
 } from "@/lib/exploreDiscover"
+import {
+  exploreGridColumnCount,
+  exploreSuggestedVisibleBatch,
+  orderExploreSuggestedTraders,
+} from "@/lib/exploreSuggestedTraders"
+import {
+  fetchExploreWeeklyTopPerformers,
+  type ExploreWeeklyTopPerformer,
+} from "@/lib/exploreWeeklyTopPerformers"
 import {
   discoverFilterAvailability,
   EXPLORE_DEFAULT_FILTERS,
@@ -94,15 +105,36 @@ export default function ExplorePage() {
   const [exploreSearchError, setExploreSearchError] = useState<string | null>(
     null
   )
+  const [gridColumns, setGridColumns] = useState(1)
+  const [weeklyTopPerformers, setWeeklyTopPerformers] = useState<
+    ExploreWeeklyTopPerformer[]
+  >([])
+  const [weeklyTopLoading, setWeeklyTopLoading] = useState(true)
+  const [weeklyTopError, setWeeklyTopError] = useState<string | null>(null)
+  const [memberRoomIds, setMemberRoomIds] = useState<Set<string>>(new Set())
+
+  const suggestedBatchSize = useMemo(
+    () => exploreSuggestedVisibleBatch(gridColumns),
+    [gridColumns]
+  )
 
   useEffect(() => {
-    setVisibleCount(EXPLORE_PAGE_SIZE)
+    const updateColumns = () =>
+      setGridColumns(exploreGridColumnCount(window.innerWidth))
+    updateColumns()
+    window.addEventListener("resize", updateColumns)
+    return () => window.removeEventListener("resize", updateColumns)
+  }, [])
+
+  useEffect(() => {
+    setVisibleCount(suggestedBatchSize)
   }, [
     discoverFilters.category,
     discoverFilters.session,
     discoverFilters.experience,
     discoverFilters.tradingStyle,
     discoverFilters.market,
+    suggestedBatchSize,
   ])
 
   function toggleFiltersPanel() {
@@ -122,6 +154,45 @@ export default function ExplorePage() {
   async function loadTradeMetaRows() {
     const payload = await fetchExploreTradeMetaAggregates()
     setTradeMetaPayload(payload)
+  }
+
+  const loadWeeklyTopPerformers = useCallback(async () => {
+    setWeeklyTopLoading(true)
+    setWeeklyTopError(null)
+    try {
+      const rows = await fetchExploreWeeklyTopPerformers({
+        viewerId: currentUserId,
+      })
+      setWeeklyTopPerformers(rows)
+    } catch (error) {
+      console.error("[explore] weekly top performers:", error)
+      setWeeklyTopPerformers([])
+      setWeeklyTopError("Couldn't load top performers. Please try again.")
+    } finally {
+      setWeeklyTopLoading(false)
+    }
+  }, [currentUserId])
+
+  async function loadMemberRoomIds(userId: string | null) {
+    if (!userId || isDemoModeActive()) {
+      setMemberRoomIds(new Set())
+      return
+    }
+    const { data, error } = await supabase
+      .from("room_members")
+      .select("room_id")
+      .eq("user_id", userId)
+      .is("left_at", null)
+
+    if (error) {
+      console.error("[explore] member rooms:", error)
+      setMemberRoomIds(new Set())
+      return
+    }
+
+    setMemberRoomIds(
+      new Set((data ?? []).map((row) => String(row.room_id)))
+    )
   }
 
   async function fetchProfileBatch(
@@ -184,7 +255,7 @@ export default function ExplorePage() {
     setFollowingIds(new Set(cached.followingIds))
     setRequestedIds(new Set(cached.requestedIds))
     setFollowsYouIds(new Set(cached.followsYouIds))
-    setVisibleCount(EXPLORE_PAGE_SIZE)
+    setVisibleCount(exploreSuggestedVisibleBatch(exploreGridColumnCount(window.innerWidth)))
     setHasMoreProfiles(
       cached.profiles.length >= EXPLORE_PAGE_SIZE && !isDemoModeActive()
     )
@@ -193,8 +264,10 @@ export default function ExplorePage() {
     if (cached.scrollY > 0) {
       requestAnimationFrame(() => window.scrollTo(0, cached.scrollY))
     }
+    void loadMemberRoomIds(cached.currentUserId)
     scheduleDeferredWork(() => {
       void loadTradeMetaRows()
+      void loadWeeklyTopPerformers()
     }, 1000)
   }
 
@@ -292,6 +365,10 @@ export default function ExplorePage() {
 
       initialLoadDone.current = true
       setLoading(false)
+      void loadMemberRoomIds(uid)
+      scheduleDeferredWork(() => {
+        void loadWeeklyTopPerformers()
+      }, 400)
       return
     }
 
@@ -365,8 +442,10 @@ export default function ExplorePage() {
 
     initialLoadDone.current = true
     setLoading(false)
+    void loadMemberRoomIds(user?.id ?? null)
     scheduleDeferredWork(() => {
       void loadTradeMetaRows()
+      void loadWeeklyTopPerformers()
     }, 1000)
   }
 
@@ -405,7 +484,12 @@ export default function ExplorePage() {
       postSummaries,
       { excludeUserIds: excludeSelf }
     )
-    return filterExploreProfiles(ranked, discoverFilters, tradeMetaByUserId)
+    const filtered = filterExploreProfiles(
+      ranked,
+      discoverFilters,
+      tradeMetaByUserId
+    )
+    return orderExploreSuggestedTraders(filtered)
   }, [
     profiles,
     tradeSummaries,
@@ -429,7 +513,7 @@ export default function ExplorePage() {
 
     try {
       if (visibleCount < displayedTraders.length) {
-        setVisibleCount((count) => count + EXPLORE_PAGE_SIZE)
+        setVisibleCount((count) => count + suggestedBatchSize)
         return
       }
 
@@ -449,7 +533,7 @@ export default function ExplorePage() {
         })
       }
       setHasMoreProfiles(hasMore)
-      setVisibleCount((count) => count + EXPLORE_PAGE_SIZE)
+      setVisibleCount((count) => count + suggestedBatchSize)
     } finally {
       setLoadingMore(false)
     }
@@ -491,7 +575,7 @@ export default function ExplorePage() {
               id="explore-search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by username or display name…"
+              placeholder="Search by username…"
               className={SEARCH_INPUT_CLASS}
             />
             <button
@@ -609,6 +693,15 @@ export default function ExplorePage() {
           ) : null}
         </section>
 
+        {!loading ? (
+          <ExploreTopPerformersSection
+            performers={weeklyTopPerformers}
+            loading={weeklyTopLoading}
+            error={weeklyTopError}
+            onRetry={() => void loadWeeklyTopPerformers()}
+          />
+        ) : null}
+
         {filtersOpen && !loading ? (
           <section
             id="explore-filters-panel"
@@ -650,49 +743,62 @@ export default function ExplorePage() {
               </button>
             }
           />
-        ) : displayedTraders.length === 0 ? (
-          <EmptyState
-            title="No traders match these filters"
-            description="Try a broader category or clear your filters."
-            className="py-12"
-          />
         ) : (
-          <section className={PANEL_CLASS}>
-            <p className="mb-3 text-xs text-gray-300">
-              Showing {visibleTraders.length.toLocaleString()} of{" "}
-              {displayedTraders.length.toLocaleString()} trader
-              {displayedTraders.length === 1 ? "" : "s"}
-              {hasMoreProfiles ? "+" : ""}
-            </p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {visibleTraders.map((profile, index) => (
-                <ExploreTraderCard
-                  key={profile.id}
-                  profile={profile}
-                  tradeMeta={tradeMetaByUserId[profile.id]}
-                  currentUserId={currentUserId}
-                  followingIds={followingIds}
-                  requestedIds={requestedIds}
-                  followsYouIds={followsYouIds}
-                  onFollowingChange={handleFollowingChange}
-                  onRequestedChange={handleRequestedChange}
-                  eagerAvatar={index < 6}
-                />
-              ))}
-            </div>
-            {showLoadMore ? (
-              <div className="mt-4 flex justify-center">
-                <button
-                  type="button"
-                  onClick={() => void handleLoadMore()}
-                  disabled={loadingMore}
-                  className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {loadingMore ? "Loading…" : "Load More"}
-                </button>
-              </div>
-            ) : null}
-          </section>
+          <>
+            {displayedTraders.length === 0 ? (
+              <EmptyState
+                title="No traders match these filters"
+                description="Try a broader category or clear your filters."
+                className="py-12"
+              />
+            ) : (
+              <section className={PANEL_CLASS}>
+                <div className="mb-3">
+                  <h2 className="text-sm font-semibold text-white md:text-base">
+                    Suggested Traders
+                  </h2>
+                  <p className="mt-0.5 text-xs text-gray-400">
+                    Active public profiles worth following
+                  </p>
+                </div>
+                <p className="mb-3 text-xs text-gray-300">
+                  Showing {visibleTraders.length.toLocaleString()} of{" "}
+                  {displayedTraders.length.toLocaleString()} trader
+                  {displayedTraders.length === 1 ? "" : "s"}
+                  {hasMoreProfiles ? "+" : ""}
+                </p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {visibleTraders.map((profile, index) => (
+                    <ExploreTraderCard
+                      key={profile.id}
+                      profile={profile}
+                      tradeMeta={tradeMetaByUserId[profile.id]}
+                      currentUserId={currentUserId}
+                      followingIds={followingIds}
+                      requestedIds={requestedIds}
+                      followsYouIds={followsYouIds}
+                      onFollowingChange={handleFollowingChange}
+                      onRequestedChange={handleRequestedChange}
+                      eagerAvatar={index < 6}
+                    />
+                  ))}
+                </div>
+                {showLoadMore ? (
+                  <div className="mt-4 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => void handleLoadMore()}
+                      disabled={loadingMore}
+                      className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {loadingMore ? "Loading…" : "Load More"}
+                    </button>
+                  </div>
+                ) : null}
+              </section>
+            )}
+            <ExploreSuggestedRoomsSection memberRoomIds={memberRoomIds} />
+          </>
         )}
       </div>
     </div>

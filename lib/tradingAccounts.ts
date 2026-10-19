@@ -176,10 +176,23 @@ export async function loadTradingAccounts(
 export async function assertCanCreateTradingAccount(
   client: SupabaseClient,
   userId: string,
-  profile: { is_pro?: boolean | null; subscription_status?: string | null; trial_end?: string | null } | null
+  profile: { is_pro?: boolean | null; subscription_status?: string | null; trial_end?: string | null } | null,
+  /**
+   * Authoritative snapshot result when the caller already loaded it.
+   * `true` skips the client cap. `false` applies it. `null` means the
+   * snapshot is indeterminate, so this preflight does not block.
+   * Omit it to keep the profile-only check.
+   */
+  knownTraxProActive?: boolean | null
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const enforced = await entitlementEnforcementEnabled(client)
-  if (!enforced || isProActive(profile)) {
+  if (!enforced || knownTraxProActive === true) {
+    return { ok: true }
+  }
+  if (knownTraxProActive == null && isProActive(profile)) {
+    return { ok: true }
+  }
+  if (knownTraxProActive === null) {
     return { ok: true }
   }
 

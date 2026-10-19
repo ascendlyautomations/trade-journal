@@ -42,7 +42,9 @@ export function profilePostPublicUrl(
 ): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
   if (!raw) return null
-  if (raw.startsWith("/") || raw.startsWith("http")) return raw
+  if (raw.startsWith("blob:") || raw.startsWith("/") || raw.startsWith("http")) {
+    return raw
+  }
   return supabaseStoragePublicUrl("profile_posts", imageUrl)
 }
 

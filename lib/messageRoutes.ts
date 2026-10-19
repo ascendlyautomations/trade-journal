@@ -5,6 +5,15 @@ export function isConversationUuidSegment(segment: string): boolean {
   return isProfileUuidSegment(segment)
 }
 
+/** True for inbox `/messages` with no thread selected. */
+export function isMessagesInboxOnly(
+  pathname: string | null | undefined
+): boolean {
+  if (!pathname) return false
+  const normalized = pathname.replace(/\/+$/, "") || "/"
+  return normalized === "/messages"
+}
+
 /** True for `/messages/:id` threads — not the inbox `/messages`. */
 export function isDmConversationPath(
   pathname: string | null | undefined

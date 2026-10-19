@@ -23,7 +23,9 @@ import {
   buildDmThreadPath,
   groupThreadPath,
   isDmConversationPath,
+  isMessagesInboxOnly,
 } from "@/lib/messageRoutes"
+import MessagesTradeRoomsLink from "../../components/messages/MessagesTradeRoomsLink"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
 import { markMessageNotificationsRead } from "@/lib/messageNotificationReadSync"
@@ -653,7 +655,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
   }, [user?.id, fetchConversations])
 
   const openConversation = useCallback(
-    (conversationId: string) => {
+    (conversationId: string, options?: { replace?: boolean }) => {
       void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
         hapticLight("open-messages")
       })
@@ -682,7 +684,8 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
       if (isNativeIos()) {
         saveMessagesInboxScrollY(inboxScrollRef.current?.scrollTop ?? 0)
       }
-      router.push(path)
+      if (options?.replace) router.replace(path)
+      else router.push(path)
 
       if (!user?.id) return
 
@@ -709,6 +712,8 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
     },
     [openConversation]
   )
+
+  const inboxDesktopAutoSelectRef = useRef(false)
 
   const handleToggleConvoMenu = useCallback((conversationId: string) => {
     setOpenConvoMenuId((prev) => (prev === conversationId ? null : conversationId))
@@ -1024,6 +1029,28 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
     visibleConversations.length > 0
 
   useEffect(() => {
+    if (!isMessagesInboxOnly(pathname)) {
+      inboxDesktopAutoSelectRef.current = false
+      return
+    }
+    if (inboxDesktopAutoSelectRef.current) return
+    if (profileLoading || loading) return
+    if (typeof window === "undefined") return
+    if (!window.matchMedia("(min-width: 1280px)").matches) return
+    const firstId = visibleConversations[0]?.id
+    if (!firstId) return
+
+    inboxDesktopAutoSelectRef.current = true
+    void openConversation(firstId, { replace: true })
+  }, [
+    pathname,
+    profileLoading,
+    loading,
+    visibleConversations,
+    openConversation,
+  ])
+
+  useEffect(() => {
     traceMessagesInbox("step:6-after-render", {
       authUserId: authUser?.id ?? null,
       profileLoading,
@@ -1121,29 +1148,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
               >
                 New Group
               </button>
-              <Link
-                href="/community"
-                prefetch={false}
-                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-blue-400/30 bg-blue-500/15 px-3 py-1.5 text-sm font-medium text-blue-200 transition hover:border-blue-400/45 hover:bg-blue-500/25 hover:text-blue-100 md:hidden"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.75"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-4 w-4 shrink-0"
-                  aria-hidden
-                >
-                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                  <circle cx="9" cy="7" r="4" />
-                  <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                </svg>
-                Trade Rooms
-              </Link>
+              <MessagesTradeRoomsLink />
             </div>
           </PlatformMessagesWebInboxActions>
 

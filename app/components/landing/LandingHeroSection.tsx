@@ -7,7 +7,8 @@ import {
   LANDING_SECONDARY_BUTTON,
   LANDING_SECTION_SHELL,
 } from "@/lib/landingPageUi"
-import { TRAXPRO_TRIAL_HEADLINE, TRAXPRO_PLAN_NAME } from "@/lib/traxProPricing"
+import { TRAXPRO_PLAN_NAME } from "@/lib/traxProPricing"
+import { useTraxProPurchaseCopy } from "@/lib/traxProPriceCatalogClient"
 
 type Props = {
   checkoutLoading: boolean
@@ -20,6 +21,7 @@ export default function LandingHeroSection({
   onStartTrial,
   onExplore,
 }: Props) {
+  const purchase = useTraxProPurchaseCopy(true)
   return (
     <section className="relative overflow-hidden pt-28 pb-24 md:pt-36 md:pb-32 lg:pb-40">
       <div className={`${LANDING_SECTION_SHELL} relative`}>
@@ -37,11 +39,11 @@ export default function LandingHeroSection({
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
             <button
               type="button"
-              disabled={checkoutLoading}
+              disabled={checkoutLoading || purchase.purchaseDisabled}
               onClick={onStartTrial}
               className={`${LANDING_PRIMARY_BUTTON} min-w-[220px] px-8`}
             >
-              {checkoutLoading ? "Starting trial…" : `Start ${TRAXPRO_TRIAL_HEADLINE}`}
+              {checkoutLoading ? "Starting checkout…" : purchase.buttonTitle}
             </button>
             <button
               type="button"
@@ -51,7 +53,11 @@ export default function LandingHeroSection({
               Explore TradeTraxs
             </button>
           </div>
-          <p className="mt-4 text-sm text-zinc-500">{TRAXPRO_TRIAL_HEADLINE} on {TRAXPRO_PLAN_NAME}</p>
+          {purchase.heroLine ? (
+            <p className="mt-4 text-sm text-zinc-500">
+              {purchase.heroLine} on {TRAXPRO_PLAN_NAME}
+            </p>
+          ) : null}
         </div>
       </div>
     </section>

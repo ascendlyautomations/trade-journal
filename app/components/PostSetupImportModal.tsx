@@ -9,7 +9,8 @@ import CreateAccountModal, {
   type Props as CreateAccountModalProps,
 } from "@/components/CreateAccountModal"
 import { supabase } from "@/lib/supabaseClient"
-import { isProActive } from "@/lib/subscription"
+import { useProGate } from "@/lib/useProGate"
+import { knownTraxProActiveForPreflight } from "@/lib/billingEntitlement"
 import { FREE_PLAN_ACCOUNT_LIMIT, assertCanCreateTradingAccount } from "@/lib/tradingAccounts"
 import { assertRequiredAccountValue } from "@/lib/createAccountForm"
 import {
@@ -37,6 +38,8 @@ type Props = {
 export default function PostSetupImportModal({ open, onComplete }: Props) {
   const { showPopup, closePopup, feedbackModalProps } = useFeedbackPopup()
   const { user, profile } = useUserProfile()
+  const { access } = useProGate(profile)
+  const clientHasProAccess = access !== "free"
   const importCompletePendingRef = useRef(false)
   const creatingAccountRef = useRef(false)
   const [entered, setEntered] = useState(false)
@@ -88,7 +91,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
             account
         )
       )
-      const userIsPro = isProActive(profile)
+      const userIsPro = clientHasProAccess
       setCanCreateMoreAccounts(
         userIsPro ||
           countTradeEntryEnabledAccounts(formatted) < FREE_PLAN_ACCOUNT_LIMIT
@@ -96,7 +99,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
     }
 
     void loadAccounts()
-  }, [open, user?.id, profile])
+  }, [open, user?.id, profile, clientHasProAccess])
 
   async function handleSkip() {
     await onComplete()
@@ -129,14 +132,16 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
     try {
     if (!user?.id) return
 
-    const userIsPro = isProActive(profile)
-    if (!userIsPro) {
-      const gate = await assertCanCreateTradingAccount(supabase, user.id, profile)
-      if (!gate.ok) {
-        setCanCreateMoreAccounts(false)
-        showPopup(feedbackPresets.accountLimit())
-        return
-      }
+    const gate = await assertCanCreateTradingAccount(
+      supabase,
+      user.id,
+      profile,
+      knownTraxProActiveForPreflight(access)
+    )
+    if (!gate.ok) {
+      setCanCreateMoreAccounts(false)
+      showPopup(feedbackPresets.accountLimit())
+      return
     }
 
     const sizeGate = assertRequiredAccountValue(newAccount.size)
@@ -190,7 +195,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
     setAccounts((prev) => {
       const next = [...prev, row]
       setCanCreateMoreAccounts(
-        isProActive(profile) ||
+        clientHasProAccess ||
           countTradeEntryEnabledAccounts(next) < FREE_PLAN_ACCOUNT_LIMIT
       )
       return next

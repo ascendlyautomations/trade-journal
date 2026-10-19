@@ -68,6 +68,26 @@
   background: rgb(255 255 255 / 0.05);
 }
 
+[data-tt-dashboard-canvas] .tt-dash-checkin {
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.05);
+}
+
+[data-tt-dashboard-canvas] .tt-dash-checkin-chip,
+[data-tt-dashboard-canvas] .tt-dash-psych-metric {
+  border-color: rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.05);
+}
+
+[data-tt-dashboard-canvas] .tt-dash-checkin h2,
+[data-tt-dashboard-canvas] .tt-dash-checkin h3 {
+  color: #ffffff;
+}
+
+[data-tt-dashboard-canvas] .tt-dash-checkin-chip .tt-dash-checkin-chip-value {
+  color: #ffffff;
+}
+
 [data-tt-dashboard-canvas] .tt-dash-section-title {
   color: #93c5fd;
   font-size: 1rem;
@@ -488,7 +508,10 @@
   }
 
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-strip,
-  html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-chip {
+  html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-chip,
+  html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-checkin,
+  html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-checkin-chip,
+  html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-psych-metric {
     border-color: #30363d;
     background: #161b22;
   }

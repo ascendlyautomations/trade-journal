@@ -1,7 +1,7 @@
 "use client"
 
 import { LANDING_BRAND_TAGLINE } from "@/lib/landingFlagships"
-import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
+import { useTraxProPurchaseCopy } from "@/lib/traxProPriceCatalogClient"
 
 type Props = {
   checkoutLoading: boolean
@@ -9,6 +9,7 @@ type Props = {
 }
 
 export default function LandingFinalCtaSection({ checkoutLoading, onStartTrial }: Props) {
+  const purchase = useTraxProPurchaseCopy(true)
   return (
     <section
       className="relative z-10 mx-auto max-w-4xl border-t border-white/10 px-4 py-14 text-center md:px-6 md:py-24"
@@ -24,11 +25,11 @@ export default function LandingFinalCtaSection({ checkoutLoading, onStartTrial }
         </p>
         <button
           type="button"
-          disabled={checkoutLoading}
+          disabled={checkoutLoading || purchase.purchaseDisabled}
           onClick={onStartTrial}
           className="min-w-[200px] rounded-xl bg-blue-500 px-6 py-3 text-base font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 md:min-w-[220px] md:px-8 md:py-3.5"
         >
-          {checkoutLoading ? "Starting trial…" : `Start ${TRAXPRO_TRIAL_HEADLINE}!`}
+          {checkoutLoading ? "Starting checkout…" : purchase.buttonTitle}
         </button>
       </div>
     </section>

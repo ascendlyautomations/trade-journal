@@ -1,14 +1,17 @@
-/** Returns the server entitlement, or null when the request cannot be trusted. */
+import { supabase } from "./supabaseClient"
+import { loadBillingEntitlement } from "./billingEntitlementClient"
+
+/** Returns the shared server snapshot, or null when the request cannot be trusted. */
 export async function fetchServerTraxProActive(): Promise<boolean | null> {
   try {
-    const response = await fetch("/api/billing/entitlement", {
-      credentials: "same-origin",
-      cache: "no-store",
-    })
-    if (!response.ok) return null
-    const body = (await response.json()) as { traxProActive?: unknown }
-    if (typeof body.traxProActive !== "boolean") return null
-    return body.traxProActive
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    const userId = session?.user?.id
+    if (!userId) return null
+    const state = await loadBillingEntitlement(userId)
+    if (state.status !== "ready" || !state.snapshot) return null
+    return state.snapshot.traxProActive
   } catch {
     return null
   }

@@ -3,7 +3,7 @@
 import "../analyticsDesktopTheme.css"
 import Link from "next/link"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { fetchLeaderboardPayload } from "../../lib/leaderboardFetch"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
@@ -51,7 +51,9 @@ import {
   leaderboardAggregateCacheKey,
   normalizeLeaderboardPayload,
   type LeaderboardPayload,
+  type LeaderboardQuery,
 } from "@/lib/leaderboardAggregate"
+import { resolveInitialLeaderboardPresetView } from "@/lib/leaderboardDefaultView"
 
 type LeaderboardProfile = {
   id: string
@@ -70,6 +72,8 @@ const LEADERBOARD_EMPTY_DESCRIPTION =
   "There isn't enough leaderboard data for the selected timeframe."
 
 const LEADERBOARD_EMPTY_HINT = "Try another timeframe or account filter."
+
+const EMPTY_RANKED_TRADERS: LeaderboardPayload["rankedTraders"] = []
 
 function leaderboardEmptyDescription(): string {
   return `${LEADERBOARD_EMPTY_DESCRIPTION} ${LEADERBOARD_EMPTY_HINT}`
@@ -218,6 +222,48 @@ export default function Leaderboard() {
     Record<string, LeaderboardProfile>
   >({})
   const userId = user?.id ?? null
+  const userLockedViewRef = useRef(false)
+  const bootstrapQueryRef = useRef<Omit<LeaderboardQuery, "view"> | null>(null)
+  if (bootstrapQueryRef.current === null) {
+    bootstrapQueryRef.current = {
+      accountType: accountTypeFilter,
+      nowIso: new Date().toISOString(),
+      customStartYmd: customRangeStart,
+      customEndYmd: customRangeEnd,
+      viewerId: userId,
+    }
+  }
+  const [presetViewReady, setPresetViewReady] = useState(() =>
+    isDemoModeActive()
+  )
+
+  useEffect(() => {
+    if (isDemoModeActive()) return
+    const bootstrapQuery = bootstrapQueryRef.current
+    if (!bootstrapQuery) {
+      setPresetViewReady(true)
+      return
+    }
+
+    let cancelled = false
+
+    void (async () => {
+      try {
+        const resolved = await resolveInitialLeaderboardPresetView(bootstrapQuery)
+        if (cancelled || userLockedViewRef.current) return
+        setView(resolved.view)
+        if (resolved.payload) setPayload(resolved.payload)
+      } catch (error) {
+        console.error("[leaderboard] default timeframe resolution error:", error)
+      } finally {
+        if (!cancelled) setPresetViewReady(true)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const loadPayload = useCallback(async () => {
     const queryKey = leaderboardAggregateCacheKey({
@@ -268,8 +314,9 @@ export default function Leaderboard() {
   }, [accountTypeFilter, customRangeEnd, customRangeStart, userId, view])
 
   useEffect(() => {
+    if (!presetViewReady) return
     void loadPayload()
-  }, [loadPayload])
+  }, [loadPayload, presetViewReady])
 
   const customRange = useMemo(
     () =>
@@ -313,7 +360,10 @@ export default function Leaderboard() {
     globalTradeCount: 0,
     percentileTopPct: userId ? "0.0" : "—",
   }
-  const rankedTraders = activePayload?.rankedTraders ?? []
+  const rankedTraders = useMemo(
+    () => activePayload?.rankedTraders ?? EMPTY_RANKED_TRADERS,
+    [activePayload?.rankedTraders]
+  )
   const yourRank = activePayload?.yourRank ?? null
   const hasData = activePayload?.hasData ?? false
   const effectiveView = activePayload?.effectiveView ?? view
@@ -329,18 +379,27 @@ export default function Leaderboard() {
     [rankedTraders]
   )
 
+  const rankedTraderIdsKey = useMemo(
+    () => rankedTraderIds.join("\0"),
+    [rankedTraderIds]
+  )
+
   useEffect(() => {
     if (
       !isDemoModeActive() &&
       payload?.profiles &&
       Object.keys(payload.profiles).length > 0
     ) {
-      setProfilesById(payload.profiles)
+      setProfilesById((prev) =>
+        prev === payload.profiles ? prev : payload.profiles
+      )
       return
     }
 
     if (rankedTraderIds.length === 0) {
-      setProfilesById({})
+      setProfilesById((prev) =>
+        Object.keys(prev).length === 0 ? prev : {}
+      )
       return
     }
 
@@ -373,7 +432,9 @@ export default function Leaderboard() {
 
       if (error) {
         console.error("[leaderboard] profile fetch error:", error)
-        setProfilesById({})
+        setProfilesById((prev) =>
+          Object.keys(prev).length === 0 ? prev : {}
+        )
         return
       }
 
@@ -389,7 +450,7 @@ export default function Leaderboard() {
     return () => {
       cancelled = true
     }
-  }, [payload, rankedTraderIds])
+  }, [payload, rankedTraderIdsKey])
 
   const yAxisTickFormatter = useCallback((v: number) => {
     return formatPnlCurrency(Number(v), {
@@ -431,7 +492,10 @@ export default function Leaderboard() {
             <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
               <CustomSelect
                 value={tradesLoading || leaderboardLoadError ? view : effectiveView}
-                onChange={(val) => setView(val as LeaderboardView)}
+                onChange={(val) => {
+                  userLockedViewRef.current = true
+                  setView(val as LeaderboardView)
+                }}
                 className="sm:w-auto"
                 triggerClassName={LEADERBOARD_SELECT_CLASS}
                 options={[

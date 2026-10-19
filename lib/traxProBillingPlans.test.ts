@@ -25,17 +25,17 @@ describe("traxProBillingPlans", () => {
 
   it("subscription display labels", () => {
     assert.deepEqual(getTraxProSubscriptionDisplay("monthly"), {
-      productName: "TradeTraxs Pro",
+      productName: "TraxPro",
       planLabel: "Monthly Plan",
       billedLabel: "Monthly",
     })
     assert.deepEqual(getTraxProSubscriptionDisplay("six_month"), {
-      productName: "TradeTraxs Pro",
+      productName: "TraxPro",
       planLabel: "6-Month Plan",
       billedLabel: "Every 6 Months",
     })
     assert.deepEqual(getTraxProSubscriptionDisplay("yearly"), {
-      productName: "TradeTraxs Pro",
+      productName: "TraxPro",
       planLabel: "Yearly Plan",
       billedLabel: "Annually",
     })
@@ -56,7 +56,7 @@ describe("traxProBillingPlans", () => {
     assert.equal(getTraxProPlanEffectiveMonthlyAmount(plan), 1)
     assert.equal(getTraxProPlanBilledAmount(plan), 1)
     assert.deepEqual(getTraxProSubscriptionDisplay("test"), {
-      productName: "TradeTraxs Pro",
+      productName: "TraxPro",
       planLabel: "Test Plan",
       billedLabel: "Monthly (Test)",
     })

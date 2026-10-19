@@ -13,16 +13,15 @@ import {
   TRADETRAXS_PRO_PLAN,
   TRADETRAXS_PRO_FEATURES_HEADING,
 } from "@/lib/tradeTraxsPlans"
-import {
-  TRAXPRO_CHECKOUT_FINE_PRINT,
-  TRAXPRO_PRICE_STARTING_AT,
-  TRAXPRO_TRIAL_HEADLINE,
-} from "@/lib/traxProPricing"
+import { profileHasUsedCheckoutTrial } from "@/lib/checkoutTrial"
+import { useTraxProPurchaseCopy } from "@/lib/traxProPriceCatalogClient"
 import {
   TRAXPRO_DEFAULT_BILLING_INTERVAL,
   type TraxProBillingIntervalId,
 } from "@/lib/traxProBillingPlans"
 import { startTraxProCheckout } from "@/lib/startTraxProCheckout"
+import { useBillingEntitlement } from "@/app/components/monetization/BillingEntitlementProvider"
+import { clientCheckoutBlockReason } from "@/lib/billingEntitlement"
 import TraxProBillingIntervalPicker from "@/app/components/TraxProBillingIntervalPicker"
 import TraxProSelectedPlanPrice from "@/app/components/TraxProSelectedPlanPrice"
 import TradeTraxsProFeatureGroupsList from "../../components/pricing/TradeTraxsProFeatureGroupsList"
@@ -60,7 +59,11 @@ function CheckIcon({ bright = false }: { bright?: boolean }) {
 
 export default function PricingPage() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
-  const { user } = useUserProfile()
+  const { user, profile } = useUserProfile()
+  const billing = useBillingEntitlement()
+  const purchase = useTraxProPurchaseCopy(
+    !user || !profileHasUsedCheckoutTrial(profile)
+  )
   const router = useRouter()
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [billingInterval, setBillingInterval] = useState<TraxProBillingIntervalId>(
@@ -80,6 +83,16 @@ export default function PricingPage() {
         enterSignupFlow()
         setCheckoutLoading(false)
         router.push("/login?tab=signup")
+        return
+      }
+
+      const block = clientCheckoutBlockReason({
+        signedIn: true,
+        status: billing.status,
+        traxProActive: billing.snapshot?.traxProActive ?? null,
+      })
+      if (block) {
+        showPopup(feedbackPresets.subscriptionCheckoutFailed(block))
         return
       }
 
@@ -146,7 +159,9 @@ export default function PricingPage() {
 
               <h2 className="mt-0 text-xl font-bold text-white">{TRADETRAXS_PRO_PLAN.name}</h2>
               <TraxProSelectedPlanPrice interval={billingInterval} variant="full" className="text-white" />
-              <p className="mt-1 text-xs text-gray-400">{TRAXPRO_PRICE_STARTING_AT}</p>
+              {purchase.offerSummary ? (
+                <p className="mt-1 text-xs text-gray-400">{purchase.offerSummary}</p>
+              ) : null}
               <p className={PRICING_CARD_PRO_PLAN_DESCRIPTION_LIGHT}>
                 {TRADETRAXS_PRO_PLAN.description}
               </p>
@@ -171,15 +186,20 @@ export default function PricingPage() {
 
               <button
                 type="button"
-                disabled={checkoutLoading}
+                disabled={checkoutLoading || purchase.purchaseDisabled}
                 onClick={handleTraxProCheckout}
                 className={PRICING_PAGE_PRIMARY_CTA}
               >
-                {checkoutLoading ? "Loading…" : `Start ${TRAXPRO_TRIAL_HEADLINE}`}
+                {checkoutLoading ? "Loading…" : purchase.buttonTitle}
               </button>
-              <div className={PRICING_PAGE_CTA_FINE_PRINT}>
-                <p>{TRAXPRO_CHECKOUT_FINE_PRINT}</p>
-              </div>
+              {purchase.finePrint ? (
+                <div className={PRICING_PAGE_CTA_FINE_PRINT}>
+                  <p>{purchase.finePrint}</p>
+                  {purchase.postTrialFootnote(billingInterval) ? (
+                    <p>{purchase.postTrialFootnote(billingInterval)}</p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
 

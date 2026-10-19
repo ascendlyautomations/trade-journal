@@ -1,3 +1,5 @@
+import { DAILY_CHECK_IN_DASHBOARD_HREF } from "./dailyCheckIn/constants.ts"
+
 export type GettingStartedChecklistItemId =
   | "profile"
   | "trade"
@@ -270,4 +272,32 @@ export function detectNewlyCompletedTasks(
     }
   }
   return newly
+}
+
+export function gettingStartedItemHref(
+  id: GettingStartedChecklistItemId,
+  options: { profileId?: string; firstPrivateTradeId?: string | null } = {}
+): string | undefined {
+  const { profileId, firstPrivateTradeId } = options
+  switch (id) {
+    case "profile":
+      return "/settings"
+    case "trade":
+      return "/app"
+    case "dailyCheckIn":
+      return DAILY_CHECK_IN_DASHBOARD_HREF
+    case "post":
+      return profileId
+        ? `/profile/${profileId}?tab=posts&createPost=1`
+        : undefined
+    case "follow":
+      return "/explore"
+    case "public":
+      if (firstPrivateTradeId) {
+        return `/trades?edit=${encodeURIComponent(firstPrivateTradeId)}`
+      }
+      return "/trades"
+    default:
+      return undefined
+  }
 }

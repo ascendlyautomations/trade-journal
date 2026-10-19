@@ -22,8 +22,7 @@ import {
   freePlanSlotSelectionRequired,
   persistedTradeEntrySelectionIds,
 } from "@/lib/freePlanAccountSlots"
-import { fetchServerTraxProActive } from "@/lib/fetchServerTraxProActive"
-import { isProActive } from "@/lib/subscription"
+import { useBillingEntitlement } from "@/app/components/monetization/BillingEntitlementProvider"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 import { invalidateSessionBootstrap } from "@/lib/backendV2/sessionBootstrapCache.ts"
@@ -111,8 +110,15 @@ export default function FreePlanAccountSlotShell({
 }: {
   children: React.ReactNode
 }) {
-  const { user, profile, loading } = useUserProfile()
-  const profileIsPro = isProActive(profile)
+  const { user, loading } = useUserProfile()
+  const billing = useBillingEntitlement()
+  const traxProActive =
+    billing.access === "pro"
+      ? true
+      : billing.status === "ready"
+        ? false
+        : null
+  const entitlementReady = billing.access === "pro" || billing.status === "ready"
   const [accounts, setAccounts] = useState<FreePlanSlotAccountOption[]>([])
   const [rawCanAddFlags, setRawCanAddFlags] = useState<
     { id: string; can_add_trades?: boolean | null }[]
@@ -121,34 +127,7 @@ export default function FreePlanAccountSlotShell({
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [manualOpen, setManualOpen] = useState(false)
-  const [traxProActive, setTraxProActive] = useState<boolean | null>(null)
-  const [entitlementReady, setEntitlementReady] = useState(false)
   const savingRef = useRef(false)
-
-  useEffect(() => {
-    if (loading || !user?.id) {
-      setTraxProActive(null)
-      setEntitlementReady(false)
-      return
-    }
-    if (profileIsPro) {
-      setTraxProActive(true)
-      setEntitlementReady(true)
-      return
-    }
-
-    let cancelled = false
-    setEntitlementReady(false)
-    setTraxProActive(null)
-    void fetchServerTraxProActive().then((value) => {
-      if (cancelled) return
-      setTraxProActive(value)
-      setEntitlementReady(true)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [loading, user?.id, profileIsPro])
 
   const load = useCallback(async () => {
     if (!user?.id || !entitlementReady) {

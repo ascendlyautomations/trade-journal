@@ -15,6 +15,8 @@ import DashboardInsights from "../../components/dashboard/DashboardInsights"
 import DashboardModals from "../../components/dashboard/DashboardModals"
 import DashboardRecentTrades from "../../components/dashboard/DashboardRecentTrades"
 import DashboardTradingReports from "../../components/dashboard/DashboardTradingReports"
+import { DailyCheckInDashboardSlot } from "../../components/dashboard/DailyCheckInSection"
+import DashboardPsychologyInsights from "../../components/dashboard/DashboardPsychologyInsights"
 import type {
   DashboardAccountRow,
   DashboardTradeRow,
@@ -52,8 +54,8 @@ import {
 } from "@/lib/profileSplitMirrorWrites"
 import { supabase } from "../../../lib/supabaseClient"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
-import { isProActive } from "../../../lib/subscription"
 import { useProGate } from "@/lib/useProGate"
+import EntitlementStatusNotice from "@/app/components/monetization/EntitlementStatusNotice"
 import { CREATOR_ACCESS_SUCCESS_MESSAGE } from "@/lib/creatorAccess"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { excludeBacktestTrades } from "@/lib/tradeModeFilters"
@@ -156,9 +158,14 @@ export default function Dashboard() {
   })
   const { accounts: accountRows, loading: accountsLoading } =
     useCachedAccounts(user?.id)
-  const isPro = isProActive(profile)
-  const { shouldGateFeature, presentFeature } = useProGate(profile)
-  const proFeatureUnlocked = isPro || !shouldGateFeature(true)
+  const {
+    access,
+    proFeatureUnlocked,
+    entitlementStatus,
+    refreshEntitlement,
+    presentFeature,
+  } = useProGate(profile)
+  const isPro = proFeatureUnlocked
   const [deferredSectionsReady, setDeferredSectionsReady] = useState(false)
   const [accountFilter, setAccountFilter] = useState("all")
   const [copyGroupsRequested, setCopyGroupsRequested] = useState(false)
@@ -596,7 +603,7 @@ export default function Dashboard() {
 
   // 🔥 LOADING STATE (FIXES GLITCH)
   const showFreePlanAccountBanner = useMemo(() => {
-    if (isPro || !tradesExcludingBacktest.length) return false
+    if (access !== "free" || !tradesExcludingBacktest.length) return false
     const keys = new Set(
       tradesExcludingBacktest.map((t) =>
         [
@@ -607,7 +614,7 @@ export default function Dashboard() {
       )
     )
     return keys.size >= 1
-  }, [tradesExcludingBacktest, isPro])
+  }, [tradesExcludingBacktest, access])
 
   const dashboardHasCachedData =
     user?.id != null && getCachedTrades(user.id) != null
@@ -989,6 +996,15 @@ export default function Dashboard() {
 
           <div className="tt-dash-workspace tt-dash-stack relative z-0 mx-auto flex w-full min-w-0 max-w-[1600px] flex-col gap-2 overflow-x-hidden px-0 max-md:gap-2 md:gap-3 md:px-6 xl:max-w-[1900px] xl:px-0">
 
+  {user?.id ? <DailyCheckInDashboardSlot userId={user.id} /> : null}
+  {user?.id ? (
+    <DashboardPsychologyInsights
+      userId={user.id}
+      trades={filteredTrades}
+      tradesReady={!statsStillLoading || dashboardHasCachedData}
+    />
+  ) : null}
+
   {/* Large Founding Challenge card only until the first trade; afterwards it
       stays reachable from the navbar Getting Started entry. */}
   {user?.id &&
@@ -1183,6 +1199,9 @@ export default function Dashboard() {
         userId={user.id}
         reportTrades={tradesExcludingBacktest}
         onOpenReportPeriod={(key) => tradingReportsRef.current?.openPeriod(key)}
+        onOpenPsychologyReport={(reportId) =>
+          tradingReportsRef.current?.openPsychology(reportId)
+        }
         symbolPerformanceRows={symbolPerformanceRows}
         hasAnyTrades={tradesExcludingBacktest.length > 0}
         longShortPerformance={longShortPerformance}
@@ -1244,7 +1263,12 @@ export default function Dashboard() {
           />
           <div className="tt-dash-hide-desktop-v1">{recentTradesSection}</div>
           {recentTradesJournal}
-          {deferredSectionsReady ? (
+          {access === "unknown" ? (
+            <EntitlementStatusNotice
+              status={entitlementStatus}
+              onRetry={() => void refreshEntitlement()}
+            />
+          ) : deferredSectionsReady ? (
             <DashboardPremiumPreviewSection />
           ) : (
             <DashboardDeferredSectionsSkeleton />

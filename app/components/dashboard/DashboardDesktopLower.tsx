@@ -14,6 +14,12 @@ import type {
   LongShortSideStats,
 } from "@/lib/dashboardLongShortStats"
 import { useTradingReports } from "@/lib/useTradingReports"
+import {
+  PSYCHOLOGY_REPORT_CATALOG,
+  psychologyReportID,
+} from "@/lib/psychology/reports/catalog"
+import { mondayOfEasternWeek } from "@/lib/psychology/reports/periods"
+import { checkInDateKey } from "@/lib/dailyCheckIn/dateKey"
 import type { TradingReportPeriodKey } from "@/lib/tradingReports/tradingReportTypes"
 
 const SYMBOL_PREVIEW = 6
@@ -51,6 +57,7 @@ export type DashboardDesktopLowerProps = {
   userId: string
   reportTrades: DashboardTradeRow[]
   onOpenReportPeriod: (key: TradingReportPeriodKey) => void
+  onOpenPsychologyReport?: (reportId?: string) => void
   symbolPerformanceRows: SymbolRow[]
   hasAnyTrades: boolean
   longShortPerformance: LongShortPerformance
@@ -375,17 +382,66 @@ function ReportsPanel({
   userId,
   trades,
   onOpenPeriod,
+  onOpenPsychology,
 }: {
   userId: string
   trades: DashboardTradeRow[]
   onOpenPeriod: (key: TradingReportPeriodKey) => void
+  onOpenPsychology?: (reportId?: string) => void
 }) {
   const { snapshot, loading } = useTradingReports(userId, trades)
+  const [tab, setTab] = useState<"performance" | "psychology">("performance")
 
   return (
     <section className="rounded-xl border border-white/10 bg-white/10 p-4">
-      <h3 className="mb-3 text-sm font-semibold text-white">Trading Reports</h3>
-      {loading && !snapshot ? (
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-white">Trading Reports</h3>
+        <div className="flex rounded-md border border-white/10 bg-white/5 p-0.5 text-[11px] font-semibold">
+          <button
+            type="button"
+            onClick={() => setTab("performance")}
+            className={`rounded px-2 py-1 ${tab === "performance" ? "bg-blue-500/20 text-white" : "text-gray-400"}`}
+          >
+            Performance
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("psychology")}
+            className={`rounded px-2 py-1 ${tab === "psychology" ? "bg-blue-500/20 text-white" : "text-gray-400"}`}
+          >
+            Psychology
+          </button>
+        </div>
+      </div>
+      {tab === "psychology" ? (
+        <div>
+          {PSYCHOLOGY_REPORT_CATALOG.map((card) => (
+            <button
+              key={card.template}
+              type="button"
+              onClick={() => {
+                const today = checkInDateKey()
+                const periodID = card.template === "weekly"
+                  ? `week:${mondayOfEasternWeek(today)}`
+                  : card.template === "monthly"
+                    ? `month:${today.slice(0, 7)}`
+                    : "rolling:90d"
+                onOpenPsychology?.(psychologyReportID(card.template, periodID))
+              }}
+              className="flex w-full items-center justify-between gap-3 border-b border-white/10 py-2 text-left last:border-b-0 hover:bg-white/5"
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium text-white">
+                  {card.title}
+                </span>
+                <span className="block truncate text-[11px] text-gray-400">
+                  {card.subtitle}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : loading && !snapshot ? (
         <p className="text-sm text-gray-400">Preparing reports…</p>
       ) : (
         <div>
@@ -513,6 +569,7 @@ export default function DashboardDesktopLower(props: DashboardDesktopLowerProps)
             userId={props.userId}
             trades={props.reportTrades}
             onOpenPeriod={props.onOpenReportPeriod}
+            onOpenPsychology={props.onOpenPsychologyReport}
           />
         </div>
       </section>

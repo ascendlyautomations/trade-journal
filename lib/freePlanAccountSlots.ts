@@ -99,7 +99,8 @@ export async function assertAccountAllowsNewTrades(
   client: SupabaseClient,
   userId: string,
   accountId: string | null | undefined,
-  profile: Parameters<typeof isProActive>[0]
+  profile: Parameters<typeof isProActive>[0],
+  knownTraxProActive?: boolean | null
 ): Promise<
   | { ok: true }
   | {
@@ -108,7 +109,9 @@ export async function assertAccountAllowsNewTrades(
       message: string
     }
 > {
-  if (isProActive(profile)) return { ok: true }
+  if (knownTraxProActive === true || (knownTraxProActive == null && isProActive(profile))) {
+    return { ok: true }
+  }
 
   const id = String(accountId ?? "").trim()
   if (!id) {

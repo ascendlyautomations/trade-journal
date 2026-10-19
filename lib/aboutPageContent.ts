@@ -91,6 +91,5 @@ export const ABOUT_FOUNDER_NOTE = {
 
 export const ABOUT_CTA = {
   heading: "Ready to Start Your Journey?",
-  trialLabel: "Start 14-Day Free Trial",
   demoLabel: "Explore Demo",
 } as const

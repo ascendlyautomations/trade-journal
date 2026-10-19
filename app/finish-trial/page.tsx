@@ -1,7 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { fetchServerTraxProActive } from "@/lib/fetchServerTraxProActive"
+import { useBillingEntitlement } from "@/app/components/monetization/BillingEntitlementProvider"
+import EntitlementStatusNotice from "@/app/components/monetization/EntitlementStatusNotice"
+import { clientCheckoutBlockReason } from "@/lib/billingEntitlement"
 import { useRouter } from "next/navigation"
 import { Button } from "@/app/components/ui"
 import { useUserProfile } from "@/lib/useUserProfile"
@@ -14,7 +16,8 @@ import {
   needsSubscriptionCheckout,
   resolvePostAuthAppPath,
 } from "@/lib/subscriptionAccess"
-import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
+import { profileHasUsedCheckoutTrial } from "@/lib/checkoutTrial"
+import { useTraxProPurchaseCopy } from "@/lib/traxProPriceCatalogClient"
 import { TRADETRAXS_PRO_PLAN } from "@/lib/tradeTraxsPlans"
 import TraxProBillingIntervalPicker from "@/app/components/TraxProBillingIntervalPicker"
 import {
@@ -34,20 +37,16 @@ export default function FinishTrialPage() {
   const router = useRouter()
   const { user, profile, loading, membershipReconciling, refreshProfile } =
     useUserProfile()
+  const billing = useBillingEntitlement()
+  const purchase = useTraxProPurchaseCopy(!profileHasUsedCheckoutTrial(profile))
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [continueLoading, setContinueLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
-    if (!user) return
-    let cancelled = false
-    void (async () => {
-      const active = await fetchServerTraxProActive()
-      if (!cancelled && active) router.replace("/dashboard")
-    })()
-    return () => {
-      cancelled = true
+    if (billing.status === "ready" && billing.snapshot?.traxProActive) {
+      router.replace("/dashboard")
     }
-  }, [user, router])
+  }, [billing.status, billing.snapshot?.traxProActive, router])
 
   const [billingInterval, setBillingInterval] = useState<TraxProBillingIntervalId>(
     TRAXPRO_DEFAULT_BILLING_INTERVAL
@@ -92,6 +91,15 @@ export default function FinishTrialPage() {
   }, [loading, user, profile, router, membershipReconciling])
 
   async function handleStartTrial() {
+    const block = clientCheckoutBlockReason({
+      signedIn: Boolean(user?.id),
+      status: billing.status,
+      traxProActive: billing.snapshot?.traxProActive ?? null,
+    })
+    if (block) {
+      setError(block)
+      return
+    }
     setCheckoutLoading(true)
     setError(null)
     setCheckoutBillingInterval(billingInterval)
@@ -137,6 +145,22 @@ export default function FinishTrialPage() {
     )
   }
 
+  if (billing.status !== "ready" || billing.snapshot?.traxProActive) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0b1f3a] px-4">
+        {billing.status === "error" ? (
+          <EntitlementStatusNotice
+            status="error"
+            onRetry={() => void billing.refresh()}
+            className="max-w-md"
+          />
+        ) : (
+          <p className="text-gray-300">{LOADING_COPY.finishTrial}</p>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="relative flex min-h-screen items-center justify-center px-4 py-16 text-white">
       <img
@@ -153,8 +177,8 @@ export default function FinishTrialPage() {
         </p>
         <h1 className="mt-2 text-3xl font-bold text-blue-300">Your profile is ready</h1>
         <p className="mt-4 text-sm leading-relaxed text-gray-300">
-          Continue on the Free plan anytime, or start your{" "}
-          {TRAXPRO_TRIAL_HEADLINE.toLowerCase()} to unlock {TRADETRAXS_PRO_PLAN.name}.{" "}
+          Continue on the Free plan anytime, or unlock {TRADETRAXS_PRO_PLAN.name}
+          {purchase.headline ? ` with a ${purchase.offerSummary}` : ""}.{" "}
           {TRADETRAXS_PRO_PLAN.description}
         </p>
 
@@ -188,10 +212,10 @@ export default function FinishTrialPage() {
           <Button
             type="button"
             variant="accent"
-            disabled={checkoutLoading || continueLoading}
+            disabled={checkoutLoading || continueLoading || purchase.purchaseDisabled}
             onClick={() => void handleStartTrial()}
           >
-            {checkoutLoading ? "Starting trial…" : "Upgrade to Pro"}
+            {checkoutLoading ? "Starting checkout…" : purchase.buttonTitle}
           </Button>
         </div>
 

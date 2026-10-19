@@ -728,7 +728,13 @@ html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-la
 html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-strip,
 html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-strip,
 html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-chip,
-html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-chip {
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-chip,
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-checkin,
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-checkin,
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-checkin-chip,
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-checkin-chip,
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-psych-metric,
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-psych-metric {
   border-color: var(--tt-border);
   background: var(--tt-surface);
 }
@@ -744,7 +750,15 @@ html[data-tt-appearance="light"] [data-tt-dashboard-canvas] :is(.tt-dash-label, 
 }
 
 html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-value,
-html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-value {
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-value,
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-checkin h2,
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-checkin h2,
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-checkin h3,
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-checkin h3,
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-checkin-chip .tabular-nums,
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-checkin-chip .tabular-nums,
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-psych-metric .tabular-nums,
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-psych-metric .tabular-nums {
   color: var(--tt-text);
 }
 
@@ -759,7 +773,9 @@ html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-value-neg {
 }
 
 html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-section-subtitle,
-html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-section-subtitle {
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-section-subtitle,
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-checkin p,
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-checkin p {
   color: var(--tt-text-tertiary);
 }
 

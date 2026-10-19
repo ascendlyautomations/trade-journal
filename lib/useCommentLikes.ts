@@ -12,8 +12,11 @@ import {
   type CommentLikeNotificationParent,
   type CommentLikeSource,
 } from "@/lib/commentLikes"
-import { buildRealtimeInFilter } from "@/lib/realtimeFilters"
+import { buildRealtimeInFilterChunks } from "@/lib/realtimeFilters"
 import { isUuidLike } from "@/lib/tradeAccountDisplay"
+
+/** One topic per effect run. `supabase.channel(name)` returns an already-subscribed channel. */
+let commentLikeChannelSeq = 0
 
 export function useCommentLikes(args: {
   source: CommentLikeSource | null
@@ -75,57 +78,62 @@ export function useCommentLikes(args: {
     if (!source || !hasPersistedComments || isDemoModeActive()) return
 
     const ids = persistedIdsKey.split(",").filter(Boolean)
-    const idFilter = buildRealtimeInFilter("comment_id", ids)
-    // Too many visible comments: keep source-scoped filter (client still gates).
-    const filter = idFilter
-      ? idFilter
-      : `comment_source=eq.${source}`
+    const filters = buildRealtimeInFilterChunks("comment_id", ids)
+    if (filters.length === 0) return
 
-    const topic = `comment-likes-${source}-${persistedIdsKey.slice(0, 48) || "empty"}`
+    const topic = `comment-likes-${source}-${++commentLikeChannelSeq}`
     const channel = supabase.channel(topic)
 
-    channel.on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "comment_likes",
-        filter,
-      },
-      (payload) => {
-        const row = (payload.new ?? payload.old) as {
-          comment_id?: string
-          user_id?: string
-          comment_source?: string
-        } | null
-        if (
-          row?.comment_source != null &&
-          String(row.comment_source) !== source
-        ) {
-          return
-        }
-        const commentId = row?.comment_id != null ? String(row.comment_id) : ""
-        const actorUserId = row?.user_id != null ? String(row.user_id) : ""
-        if (!commentId || !visibleIdsRef.current.has(commentId)) return
-        if (likeBusyRef.current.has(commentId)) return
-        if (payload.eventType !== "INSERT" && payload.eventType !== "DELETE") {
-          return
-        }
-
-        setLikesByCommentId((prev) => {
-          const current = prev[commentId] ?? { count: 0, liked: false }
-          return {
-            ...prev,
-            [commentId]: applyCommentLikeRealtimeEvent(
-              current,
-              payload.eventType as "INSERT" | "DELETE",
-              actorUserId,
-              currentUserIdRef.current
-            ),
-          }
-        })
+    const onLikeChange = (payload: {
+      new?: Record<string, unknown>
+      old?: Record<string, unknown>
+      eventType: string
+    }) => {
+      const row = (payload.new ?? payload.old) as {
+        comment_id?: string
+        user_id?: string
+        comment_source?: string
+      } | null
+      if (
+        row?.comment_source != null &&
+        String(row.comment_source) !== source
+      ) {
+        return
       }
-    )
+      const commentId = row?.comment_id != null ? String(row.comment_id) : ""
+      const actorUserId = row?.user_id != null ? String(row.user_id) : ""
+      if (!commentId || !visibleIdsRef.current.has(commentId)) return
+      if (likeBusyRef.current.has(commentId)) return
+      if (payload.eventType !== "INSERT" && payload.eventType !== "DELETE") {
+        return
+      }
+
+      setLikesByCommentId((prev) => {
+        const current = prev[commentId] ?? { count: 0, liked: false }
+        return {
+          ...prev,
+          [commentId]: applyCommentLikeRealtimeEvent(
+            current,
+            payload.eventType as "INSERT" | "DELETE",
+            actorUserId,
+            currentUserIdRef.current
+          ),
+        }
+      })
+    }
+
+    for (const filter of filters) {
+      channel.on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "comment_likes",
+          filter,
+        },
+        onLikeChange
+      )
+    }
 
     channel.subscribe()
 

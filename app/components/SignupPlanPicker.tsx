@@ -1,7 +1,7 @@
 "use client"
 
 import TraxProBillingIntervalPicker from "@/app/components/TraxProBillingIntervalPicker"
-import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
+import { useTraxProPurchaseCopy } from "@/lib/traxProPriceCatalogClient"
 import {
   TRADETRAXS_FREE_PLAN,
   TRADETRAXS_PRO_PLAN,
@@ -34,10 +34,12 @@ export default function SignupPlanPicker({
   onSelectIntent,
   disabled = false,
   loading = false,
-  trialButtonLabel = "Start Free Trial",
+  trialButtonLabel,
   freeButtonLabel = "Continue Free",
   billingPickerName = "signup-plan-billing",
 }: SignupPlanPickerProps) {
+  const purchase = useTraxProPurchaseCopy(true)
+  const trialLabel = trialButtonLabel ?? purchase.buttonTitle
   const controlsDisabled = disabled || loading
 
   return (
@@ -66,7 +68,7 @@ export default function SignupPlanPicker({
           Recommended
         </span>
         <p className="text-sm font-semibold text-white">
-          ⭐ Start {TRAXPRO_TRIAL_HEADLINE}
+          ⭐ {trialLabel}
         </p>
         <p className="mt-1 text-xs leading-relaxed text-gray-400 md:text-[11px]">
           {TRADETRAXS_PRO_PLAN.description}
@@ -81,7 +83,7 @@ export default function SignupPlanPicker({
         </div>
         <button
           type="button"
-          disabled={controlsDisabled}
+          disabled={controlsDisabled || (!trialButtonLabel && purchase.purchaseDisabled)}
           onClick={(event) => {
             event.stopPropagation()
             onSelectIntent?.("trial")
@@ -89,7 +91,7 @@ export default function SignupPlanPicker({
           }}
           className="mt-4 w-full rounded-xl bg-blue-500 py-3 text-sm font-semibold text-white transition hover:bg-blue-600 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 disabled:hover:scale-100 md:mt-3 md:py-2.5"
         >
-          {loading ? "Loading..." : trialButtonLabel}
+          {loading ? "Loading..." : trialLabel}
         </button>
       </div>
 

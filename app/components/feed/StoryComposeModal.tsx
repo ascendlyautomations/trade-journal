@@ -1,17 +1,21 @@
 "use client"
 
-import { useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import Modal from "@/app/components/ui/Modal"
-import StoryFrame from "./StoryFrame"
+import StoryEditorPanel from "@/app/components/create/StoryEditorPanel"
 import type { StoryBarProfile } from "./FeedStoriesBar"
+import { prepareStoryUploadFile } from "@/lib/storyEditor/prepareStoryUploadFile"
+import { useStoryEditorState } from "@/lib/storyEditor/useStoryEditorState"
 
 type StoryComposeModalProps = {
   open: boolean
   posting: boolean
   profile: StoryBarProfile | null
+  storyFile: File | null
   previewUrl: string | null
   onClose: () => void
-  onPost: () => void
+  /** Receives the baked upload file (with text composited when needed). */
+  onPost: (uploadFile: File) => void
   onReplaceImage: (file: File) => void
 }
 
@@ -19,14 +23,25 @@ export default function StoryComposeModal({
   open,
   posting,
   profile,
+  storyFile,
   previewUrl,
   onClose,
   onPost,
   onReplaceImage,
 }: StoryComposeModalProps) {
   const replaceInputRef = useRef<HTMLInputElement>(null)
+  const editor = useStoryEditorState()
+  const { resetCanvas } = editor
+  const [showEditorIntro, setShowEditorIntro] = useState(false)
 
-  if (!profile || !previewUrl) return null
+  useEffect(() => {
+    if (open && storyFile) {
+      resetCanvas()
+      setShowEditorIntro(true)
+    }
+  }, [open, storyFile, resetCanvas])
+
+  if (!profile || !previewUrl || !storyFile) return null
 
   return (
     <Modal
@@ -50,7 +65,16 @@ export default function StoryComposeModal({
           <button
             type="button"
             disabled={posting}
-            onClick={onPost}
+            onClick={() => {
+              void (async () => {
+                const uploadFile = await prepareStoryUploadFile(
+                  storyFile,
+                  editor.canvas,
+                  editor.canvasSize
+                )
+                onPost(uploadFile)
+              })()
+            }}
             className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
           >
             Post Story
@@ -58,18 +82,14 @@ export default function StoryComposeModal({
         </div>
       }
     >
-      <p className="mb-3 text-sm text-gray-400">
-        Preview how your story will appear before posting.
-      </p>
-
-      <div className="mx-auto flex w-full max-w-[240px] justify-center sm:max-w-[274px]">
-        <StoryFrame
-          profile={profile}
-          imageUrl={previewUrl}
-          imageKey={previewUrl}
-          className="aspect-[400/700] w-full rounded-2xl border border-white/10 shadow-lg shadow-black/40"
-        />
-      </div>
+      <StoryEditorPanel
+        storyFile={storyFile}
+        imageUrl={previewUrl}
+        editor={editor}
+        layout="compact"
+        showEditorIntro={showEditorIntro}
+        onDismissEditorIntro={() => setShowEditorIntro(false)}
+      />
 
       <input
         ref={replaceInputRef}

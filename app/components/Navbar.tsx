@@ -12,7 +12,7 @@ import { createPortal } from "react-dom"
 import { supabase } from "../../lib/supabaseClient"
 import { useRouter, usePathname } from "next/navigation"
 import { useUserProfile } from "../../lib/useUserProfile"
-import { isProActive } from "../../lib/subscription"
+import { useProGate } from "@/lib/useProGate"
 import { getAdminCheckResultForUser } from "../../lib/adminUsers"
 import { fetchTotalUnreadMessageCount } from "../../lib/messageUnread"
 import { fetchSocialNotificationUnreadCount } from "@/lib/socialNotificationUnreadCount"
@@ -50,6 +50,9 @@ import { useEarlyAccessPromotion } from "@/lib/useEarlyAccessPromotion"
 import { isNativeIos } from "@/lib/nativePlatform"
 import { NATIVE_IOS_OPEN_APP_MENU_EVENT } from "@/lib/nativeIosAppMenu"
 import { useMobileAutoHideNavbar } from "@/app/components/useMobileAutoHideNavbar"
+import CreateHubMenu, {
+  CreateHubMobileLinks,
+} from "@/app/components/create/CreateHubMenu"
 import {
   NAV_ACCOUNT_DROPDOWN_PANEL,
   NAV_CHROME_BAR,
@@ -580,7 +583,8 @@ export default function Navbar() {
   }
 
   type AnalyticsLinkItem = (typeof analyticsLinks)[number]
-  const isProUser = isProActive(profile)
+  const { access } = useProGate(profile)
+  const isProUser = access !== "free"
 
   function analyticsLinkClassName(
     item: AnalyticsLinkItem,
@@ -964,12 +968,10 @@ export default function Navbar() {
               </div>
 
               <span ref={setPinnedRef("add-trade")} className="shrink-0">
-                <IntentPrefetchLink
-                  href="/app"
-                  className={navTriggerClass(isActive("/app"))}
-                >
-                  Add Trade
-                </IntentPrefetchLink>
+                <CreateHubMenu
+                  variant="navbar"
+                  navTriggerClass={navTriggerClass}
+                />
               </span>
               <span ref={setPinnedRef("dashboard")} className="shrink-0">
                 <IntentPrefetchLink
@@ -1602,17 +1604,14 @@ export default function Navbar() {
             </button>
           ) : null}
           {user ? <GettingStartedMobileEntry placement="menu" /> : null}
-          <IntentPrefetchLink
-            href="/app"
-            className={`rounded-lg px-3 py-1.5 transition ${
-              isActive("/app")
-                ? NAV_ITEM_ACTIVE
-                : NAV_ITEM_INACTIVE
-            }`}
-            onClick={closeMobile}
-          >
-            Add Trade
-          </IntentPrefetchLink>
+          <CreateHubMobileLinks
+            onNavigate={closeMobile}
+            linkClass={(active) =>
+              `rounded-lg px-3 py-1.5 transition ${
+                active ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE
+              }`
+            }
+          />
 
           <IntentPrefetchLink
             href="/dashboard"

@@ -29,7 +29,7 @@ export const LEADERBOARD_PAGE_METADATA = publicPage(
 export const PRICING_PAGE_METADATA = buildSeoMetadata({
   path: "/pricing",
   title: "Pricing",
-  description: `TradeTraxs pricing for the social trading platform. ${TRADETRAXS_FREE_PLAN.description} ${TRADETRAXS_PRO_PLAN.name} from $23.99/month with a 14-day free trial.`,
+  description: `TradeTraxs pricing for the social trading platform. ${TRADETRAXS_FREE_PLAN.description} ${TRADETRAXS_PRO_PLAN.name} prices are the configured Stripe amounts shown before checkout.`,
 })
 
 export const FAQ_PAGE_METADATA = publicPage(

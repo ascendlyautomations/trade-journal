@@ -57,7 +57,7 @@ export async function fetchProfileBootstrapV1(
   const rpcParams = {
     p_identifier: params.identifier,
     p_initial_tab: params.initialTab ?? "trades",
-    p_limit: params.limit ?? 6,
+    p_limit: params.limit ?? 8,
     p_cursor: params.cursor ?? null,
   }
 
@@ -158,7 +158,7 @@ async function fetchAndCacheProfileBootstrap(
   const bootstrap = await fetchProfileBootstrapV1(client, {
     identifier,
     initialTab: "trades",
-    limit: 6,
+    limit: 8,
     signal,
   })
   if (!bootstrap.meta.found || !bootstrap.data.profile) {

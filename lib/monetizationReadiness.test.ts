@@ -273,7 +273,14 @@ describe("cross-platform checkout", () => {
     )
   })
 
-  it("falls back to the profile gate when the entitlement request fails", () => {
+  it("does not offer Stripe when the entitlement request fails", () => {
+    assert.equal(
+      shouldOfferStripeCheckout({
+        profileNeedsCheckout: true,
+        serverTraxProActive: null,
+      }),
+      false
+    )
     assert.equal(
       shouldOfferStripeCheckout({
         profileNeedsCheckout: false,

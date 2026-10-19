@@ -164,18 +164,20 @@ export function tradeRelationForViewer(
   return isOwner ? "trades" : TRADES_PUBLIC_READ_RELATION
 }
 
-/** Profile trade lists that filter `is_public = true` for visitors. */
-export function tradeListRelationForProfileViewer(isOwner: true): "trades"
+/**
+ * Profile trade lists only surface `is_public = true` rows (owner and visitors).
+ * Always read via {@link TRADES_PUBLIC_READ_RELATION} — direct `trades` SELECT no
+ * longer includes journal/import columns for authenticated clients.
+ */
 export function tradeListRelationForProfileViewer(
-  isOwner: false
-): typeof TRADES_PUBLIC_READ_RELATION
-export function tradeListRelationForProfileViewer(
-  isOwner: boolean
-): "trades" | typeof TRADES_PUBLIC_READ_RELATION
-export function tradeListRelationForProfileViewer(
-  isOwner: boolean
-): "trades" | typeof TRADES_PUBLIC_READ_RELATION {
-  return isOwner ? "trades" : TRADES_PUBLIC_READ_RELATION
+  _isOwner: boolean
+): typeof TRADES_PUBLIC_READ_RELATION {
+  return TRADES_PUBLIC_READ_RELATION
+}
+
+/** Column list for profile public-trade queries (safe on trades_public_read). */
+export function tradeListSelectForProfileViewer(_isOwner: boolean): string {
+  return PUBLIC_TRADE_SELECT
 }
 
 /** Human-readable badge label from account_type / mode only (never account_name). */

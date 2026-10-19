@@ -2,12 +2,13 @@
 
 import Link from "next/link"
 import { shouldShowCustomerHomeChrome } from "@/lib/marketingAccess"
-import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
+import { useTraxProPurchaseCopy } from "@/lib/traxProPriceCatalogClient"
 import { enterSignupFlow } from "@/lib/signupFlow"
 import { useUserProfile } from "@/lib/useUserProfile"
 
 export default function DemoBanner() {
   const { user, profile, loading } = useUserProfile()
+  const purchase = useTraxProPurchaseCopy(true)
   const showTrialCta = !shouldShowCustomerHomeChrome(user, profile, loading)
 
   return (
@@ -34,7 +35,7 @@ export default function DemoBanner() {
             onClick={() => enterSignupFlow()}
             className="hidden shrink-0 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:hover:bg-blue-500 sm:inline-flex"
           >
-            Start {TRAXPRO_TRIAL_HEADLINE}
+            {purchase.buttonTitle}
           </Link>
         ) : null}
       </div>

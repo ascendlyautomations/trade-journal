@@ -112,7 +112,7 @@ export async function saveManualTrade(
   userId: string,
   account: ManualTradeAccount,
   input: SaveManualTradeInput,
-  options?: UploadProgressOptions
+  options?: UploadProgressOptions & { traxProActive?: boolean | null }
 ): Promise<SaveManualTradeResult> {
   const report = createMonotonicReporter(options?.onProgress, {
     min: 0,
@@ -129,7 +129,9 @@ export async function saveManualTrade(
   const privateFields = await fetchProfileOwnerPrivateFields(client)
   const profileForTrade = { ...(profileRow ?? {}), ...(privateFields ?? {}) }
 
-  const userIsPro = isProActive(profileForTrade)
+  const userIsPro =
+    options?.traxProActive === true ||
+    (options?.traxProActive == null && isProActive(profileForTrade))
   const accountResolved = await resolveRowAccount(
     client,
     userId,
@@ -166,7 +168,8 @@ export async function saveManualTrade(
     client,
     userId,
     rowAcct.id,
-    profileRow
+    profileRow,
+    options?.traxProActive
   )
   if (!entryGate.ok) {
     const code =

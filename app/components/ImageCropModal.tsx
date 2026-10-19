@@ -1,5 +1,6 @@
 "use client"
 
+import "../imageCropModalTheme.css"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import {
@@ -7,10 +8,13 @@ import {
   contentCoverLayout,
   contentLogicalFrame,
   contentPresentationAspect,
+  contentZoomAroundAnchor,
+  contentZoomAroundAnchorMagnification,
   CONTENT_IMAGE_ASPECTS,
   CONTENT_IMAGE_V2_DEFAULT_ASPECT,
   CONTENT_IMAGE_V2_MAX_ZOOM,
   CONTENT_IMAGE_V2_PRESET,
+  DEFAULT_CONTENT_COVER_TRANSFORM,
   type ContentImageAspect,
 } from "@/lib/contentImageV2"
 import {
@@ -19,7 +23,10 @@ import {
   IMAGE_CROP_EDITOR_HELP,
   type ImageCropPresetId,
 } from "@/lib/imageCropPresets"
-import { renderContentImageV2 } from "@/lib/renderContentImageV2"
+import {
+  loadOrientedCropPreview,
+  renderContentImageV2,
+} from "@/lib/renderContentImageV2"
 import { prepareImageForUpload } from "@/lib/imagePreparation"
 import { STORY_ASPECT } from "@/lib/semanticImage"
 import {
@@ -30,7 +37,13 @@ import {
   renderZoomPanCrop,
   type ZoomPanTransform,
 } from "@/lib/renderImageCrop"
-import { useModalScrollLock, MODAL_OVERLAY_SAFE_PADDING_CLASS } from "@/app/components/ui/modalLayout"
+import {
+  useModalScrollLock,
+  MODAL_OVERLAY_SAFE_PADDING_CLASS,
+  MODAL_PANEL_MAX_HEIGHT_CLASS,
+  MODAL_PANEL_SHELL_CLASS,
+} from "@/app/components/ui/modalLayout"
+import { UI_MODAL_BACKDROP } from "@/lib/uiPrimitiveStyles"
 import ActionButton from "@/app/components/ui/ActionButton"
 
 export type ImageCropModalPreset = ImageCropPresetId | "contentV2"
@@ -55,6 +68,20 @@ type PinchState = {
   startDistance: number
   startZoom: number
   startOffset: ZoomPanTransform["offset"]
+}
+
+function clientPointInLogicalFrame(
+  clientX: number,
+  clientY: number,
+  frameEl: HTMLDivElement,
+  displayScale: number
+): { x: number; y: number } {
+  const rect = frameEl.getBoundingClientRect()
+  const scale = displayScale > 0 ? displayScale : 1
+  return {
+    x: (clientX - rect.left) / scale,
+    y: (clientY - rect.top) / scale,
+  }
 }
 
 export default function ImageCropModal({
@@ -88,6 +115,7 @@ export default function ImageCropModal({
   const [frameWidth, setFrameWidth] = useState(0)
   const [saving, setSaving] = useState(false)
   const [decodeError, setDecodeError] = useState<string | null>(null)
+  const [gestureActive, setGestureActive] = useState(false)
   const frameRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragState | null>(null)
   const pinchRef = useRef<PinchState | null>(null)
@@ -107,40 +135,46 @@ export default function ImageCropModal({
       setContentAspect(CONTENT_IMAGE_V2_DEFAULT_ASPECT)
       setDecodeError(null)
       setSaving(false)
+      setGestureActive(false)
       activePointersRef.current.clear()
       dragRef.current = null
       pinchRef.current = null
       return
     }
 
-    const url = URL.createObjectURL(file)
-    setPreviewUrl(url)
+    let cancelled = false
+    let disposePreview: (() => void) | null = null
+
     setTransform(DEFAULT_ZOOM_PAN_TRANSFORM)
     setContentAspect(CONTENT_IMAGE_V2_DEFAULT_ASPECT)
     setDecodeError(null)
+    setImageSize(null)
+    setPreviewUrl(null)
 
-    const image = new Image()
-    image.onload = () => {
-      setImageSize({
-        width: image.naturalWidth,
-        height: image.naturalHeight,
-      })
-    }
-    image.onerror = () => {
-      setImageSize(null)
-      setDecodeError(
-        file.type.toLowerCase().includes("heic") ||
-          file.type.toLowerCase().includes("heif") ||
-          file.name.toLowerCase().endsWith(".heic") ||
-          file.name.toLowerCase().endsWith(".heif")
-          ? "This browser can't read that HEIC photo. Export it as JPEG and try again."
-          : "Couldn't read that image. Try a JPEG or PNG."
-      )
-    }
-    image.src = url
+    void (async () => {
+      try {
+        const preview = await loadOrientedCropPreview(file)
+        if (cancelled) {
+          preview.dispose()
+          return
+        }
+        disposePreview = preview.dispose
+        setPreviewUrl(preview.previewUrl)
+        setImageSize({ width: preview.width, height: preview.height })
+      } catch (error) {
+        if (cancelled) return
+        setImageSize(null)
+        setDecodeError(
+          error instanceof Error
+            ? error.message
+            : "Couldn't read that image. Try a JPEG or PNG."
+        )
+      }
+    })()
 
     return () => {
-      URL.revokeObjectURL(url)
+      cancelled = true
+      disposePreview?.()
     }
   }, [open, file])
 
@@ -157,7 +191,18 @@ export default function ImageCropModal({
     const observer = new ResizeObserver(updateWidth)
     observer.observe(node)
     return () => observer.disconnect()
-  }, [open])
+  }, [open, previewUrl, contentAspect, presetId])
+
+  useEffect(() => {
+    if (!open || !gestureActive) return
+    const blockTouchScroll = (event: TouchEvent) => {
+      if (activePointersRef.current.size > 0) {
+        event.preventDefault()
+      }
+    }
+    document.addEventListener("touchmove", blockTouchScroll, { passive: false })
+    return () => document.removeEventListener("touchmove", blockTouchScroll)
+  }, [open, gestureActive])
 
   const presentationAspect =
     isContentV2 && imageSize
@@ -175,14 +220,18 @@ export default function ImageCropModal({
   const displayScale = frameWidth > 0 ? frameWidth / fillFrame.width : 1
   const zoomMax = usesCoverLayout ? CONTENT_IMAGE_V2_MAX_ZOOM : preset!.maxZoom
 
+  const coverFrame = useMemo(
+    () => contentLogicalFrame(presentationAspect),
+    [presentationAspect]
+  )
+
   const clampedTransform = useMemo(() => {
     if (!imageSize) return transform
     if (usesCoverLayout) {
-      const frame = contentLogicalFrame(presentationAspect)
       const layout = contentCoverLayout(
         imageSize.width,
         imageSize.height,
-        frame,
+        coverFrame,
         transform
       )
       return { zoom: layout.zoom, offset: layout.offset }
@@ -204,18 +253,16 @@ export default function ImageCropModal({
     fillFrame.height,
     preset,
     usesCoverLayout,
-    presentationAspect,
-    contentAspect,
+    coverFrame,
   ])
 
   const drawRect = useMemo(() => {
     if (!imageSize) return null
     if (usesCoverLayout) {
-      const frame = contentLogicalFrame(presentationAspect)
       const layout = contentCoverLayout(
         imageSize.width,
         imageSize.height,
-        frame,
+        coverFrame,
         clampedTransform
       )
       return {
@@ -239,7 +286,7 @@ export default function ImageCropModal({
     fillFrame.height,
     clampedTransform,
     usesCoverLayout,
-    presentationAspect,
+    coverFrame,
   ])
 
   const applyTransform = useCallback(
@@ -249,11 +296,10 @@ export default function ImageCropModal({
         return
       }
       if (usesCoverLayout) {
-        const frame = contentLogicalFrame(presentationAspect)
         const layout = contentCoverLayout(
           imageSize.width,
           imageSize.height,
-          frame,
+          coverFrame,
           next
         )
         setTransform({ zoom: layout.zoom, offset: layout.offset })
@@ -276,8 +322,34 @@ export default function ImageCropModal({
       fillFrame.height,
       preset,
       usesCoverLayout,
-      presentationAspect,
+      coverFrame,
     ]
+  )
+
+  const applyCoverZoomAtAnchor = useCallback(
+    (
+      start: ZoomPanTransform,
+      anchor: { x: number; y: number },
+      targetZoom: number
+    ) => {
+      if (!imageSize || !usesCoverLayout) return
+      const next = contentZoomAroundAnchor(
+        imageSize.width,
+        imageSize.height,
+        coverFrame,
+        start,
+        anchor,
+        targetZoom,
+        zoomMax
+      )
+      setTransform(next)
+    },
+    [imageSize, usesCoverLayout, coverFrame, zoomMax]
+  )
+
+  const frameCenterAnchor = useMemo(
+    () => ({ x: coverFrame.width / 2, y: coverFrame.height / 2 }),
+    [coverFrame.height, coverFrame.width]
   )
 
   const pointerDistance = useCallback(
@@ -285,6 +357,10 @@ export default function ImageCropModal({
       Math.hypot(a.x - b.x, a.y - b.y),
     []
   )
+
+  const syncGestureActive = useCallback(() => {
+    setGestureActive(activePointersRef.current.size > 0)
+  }, [])
 
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -294,6 +370,7 @@ export default function ImageCropModal({
         x: event.clientX,
         y: event.clientY,
       })
+      syncGestureActive()
 
       const pointers = [...activePointersRef.current.entries()]
       if (pointers.length >= 2) {
@@ -315,7 +392,13 @@ export default function ImageCropModal({
         startOffset: clampedTransform.offset,
       }
     },
-    [clampedTransform.offset, clampedTransform.zoom, pointerDistance, saving]
+    [
+      clampedTransform.offset,
+      clampedTransform.zoom,
+      pointerDistance,
+      saving,
+      syncGestureActive,
+    ]
   )
 
   const handlePointerMove = useCallback(
@@ -330,14 +413,38 @@ export default function ImageCropModal({
       if (pinch && pinch.pointerIds.includes(event.pointerId)) {
         const first = activePointersRef.current.get(pinch.pointerIds[0])
         const second = activePointersRef.current.get(pinch.pointerIds[1])
-        if (!first || !second || pinch.startDistance <= 0) return
+        if (!first || !second || pinch.startDistance <= 0 || !imageSize) return
 
         const distance = pointerDistance(first, second)
         const ratio = distance / pinch.startDistance
-        applyTransform({
-          zoom: pinch.startZoom * ratio,
+        const startTransform = {
+          zoom: pinch.startZoom,
           offset: pinch.startOffset,
-        })
+        }
+
+        if (usesCoverLayout && frameRef.current) {
+          const anchor = clientPointInLogicalFrame(
+            (first.x + second.x) / 2,
+            (first.y + second.y) / 2,
+            frameRef.current,
+            displayScale
+          )
+          const next = contentZoomAroundAnchorMagnification(
+            imageSize.width,
+            imageSize.height,
+            coverFrame,
+            startTransform,
+            anchor,
+            ratio,
+            zoomMax
+          )
+          setTransform(next)
+        } else {
+          applyTransform({
+            zoom: pinch.startZoom * ratio,
+            offset: pinch.startOffset,
+          })
+        }
         return
       }
 
@@ -354,39 +461,116 @@ export default function ImageCropModal({
         },
       })
     },
-    [applyTransform, clampedTransform.zoom, displayScale, pointerDistance]
+    [
+      applyTransform,
+      clampedTransform.zoom,
+      coverFrame,
+      displayScale,
+      imageSize,
+      pointerDistance,
+      usesCoverLayout,
+      zoomMax,
+    ]
   )
 
-  const handlePointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    activePointersRef.current.delete(event.pointerId)
-    if (pinchRef.current?.pointerIds.includes(event.pointerId)) {
-      pinchRef.current = null
-    }
-    const drag = dragRef.current
-    if (drag?.pointerId === event.pointerId) {
-      dragRef.current = null
-    }
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-  }, [])
+  const handlePointerUp = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      activePointersRef.current.delete(event.pointerId)
+      syncGestureActive()
+      if (pinchRef.current?.pointerIds.includes(event.pointerId)) {
+        pinchRef.current = null
+      }
+      const drag = dragRef.current
+      if (drag?.pointerId === event.pointerId) {
+        dragRef.current = null
+      }
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }
+    },
+    [syncGestureActive]
+  )
 
   const handleWheel = useCallback(
     (event: React.WheelEvent<HTMLDivElement>) => {
-      if (saving) return
+      if (saving || !imageSize) return
       event.preventDefault()
       const delta = event.deltaY > 0 ? -0.08 : 0.08
+      const targetZoom = clampedTransform.zoom + delta
+
+      if (usesCoverLayout && frameRef.current) {
+        const anchor = clientPointInLogicalFrame(
+          event.clientX,
+          event.clientY,
+          frameRef.current,
+          displayScale
+        )
+        applyCoverZoomAtAnchor(clampedTransform, anchor, targetZoom)
+        return
+      }
+
       applyTransform({
-        zoom: clampedTransform.zoom + delta,
+        zoom: targetZoom,
         offset: clampedTransform.offset,
       })
     },
-    [applyTransform, clampedTransform, saving]
+    [
+      applyCoverZoomAtAnchor,
+      applyTransform,
+      clampedTransform,
+      displayScale,
+      imageSize,
+      saving,
+      usesCoverLayout,
+    ]
+  )
+
+  const handleZoomSlider = useCallback(
+    (value: number) => {
+      if (usesCoverLayout) {
+        applyCoverZoomAtAnchor(clampedTransform, frameCenterAnchor, value)
+        return
+      }
+      applyTransform({
+        zoom: value,
+        offset: clampedTransform.offset,
+      })
+    },
+    [
+      applyCoverZoomAtAnchor,
+      applyTransform,
+      clampedTransform,
+      frameCenterAnchor,
+      usesCoverLayout,
+    ]
+  )
+
+  const nudgeZoom = useCallback(
+    (delta: number) => {
+      const targetZoom = clampedTransform.zoom + delta
+      if (usesCoverLayout) {
+        applyCoverZoomAtAnchor(clampedTransform, frameCenterAnchor, targetZoom)
+        return
+      }
+      applyTransform({
+        zoom: targetZoom,
+        offset: clampedTransform.offset,
+      })
+    },
+    [
+      applyCoverZoomAtAnchor,
+      applyTransform,
+      clampedTransform,
+      frameCenterAnchor,
+      usesCoverLayout,
+    ]
   )
 
   const handleResetFit = useCallback(() => {
-    applyTransform(DEFAULT_ZOOM_PAN_TRANSFORM)
-  }, [applyTransform])
+    applyTransform(
+      usesCoverLayout ? DEFAULT_CONTENT_COVER_TRANSFORM : DEFAULT_ZOOM_PAN_TRANSFORM
+    )
+  }, [applyTransform, usesCoverLayout])
 
   const handleSave = useCallback(async () => {
     if (!file || saving) return
@@ -416,7 +600,17 @@ export default function ImageCropModal({
       )
       setSaving(false)
     }
-  }, [file, onSave, preset, presetId, clampedTransform, saving, isContentV2, fixedCover, contentAspect])
+  }, [
+    file,
+    onSave,
+    preset,
+    presetId,
+    clampedTransform,
+    saving,
+    isContentV2,
+    fixedCover,
+    contentAspect,
+  ])
 
   const frameMaskClass = !preset
     ? "rounded-xl"
@@ -441,7 +635,7 @@ export default function ImageCropModal({
       onMouseDown={(e) => e.stopPropagation()}
     >
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-md"
+        className={UI_MODAL_BACKDROP}
         aria-hidden
         onClick={saving ? undefined : onCancel}
       />
@@ -449,14 +643,14 @@ export default function ImageCropModal({
         role="dialog"
         aria-modal="true"
         aria-label={editorTitle}
-        className="relative my-auto flex w-full max-w-xl max-h-[min(92dvh,calc(100dvh-2rem-var(--safe-area-top)-var(--safe-area-bottom)))] flex-col overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0f172a] via-[#132a4a] to-[#0f172a] shadow-2xl shadow-black/40"
+        className={`tt-image-crop-modal relative my-auto flex w-full max-w-xl flex-col overflow-hidden ${MODAL_PANEL_SHELL_CLASS} ${MODAL_PANEL_MAX_HEIGHT_CLASS}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="shrink-0 px-6 pb-4 pt-6">
-          <h2 className="text-lg font-semibold text-white">{editorTitle}</h2>
-          <p className="mt-1 text-sm text-gray-400">{editorSubtitle}</p>
+          <h2 className="text-lg font-semibold">{editorTitle}</h2>
+          <p className="tt-image-crop-muted mt-1 text-sm">{editorSubtitle}</p>
           {decodeError ? (
-            <p className="mt-2 text-sm text-red-300" role="alert">
+            <p className="mt-2 text-sm text-red-500" role="alert">
               {decodeError}
             </p>
           ) : null}
@@ -478,11 +672,15 @@ export default function ImageCropModal({
                     role="radio"
                     aria-checked={selected}
                     disabled={saving}
-                    onClick={() => setContentAspect(option)}
+                    onClick={() => {
+                      if (option === contentAspect) return
+                      setContentAspect(option)
+                      setTransform(DEFAULT_CONTENT_COVER_TRANSFORM)
+                    }}
                     className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
                       selected
-                        ? "border-blue-400 bg-blue-500/20 text-white"
-                        : "border-white/15 bg-white/5 text-gray-300 hover:bg-white/10"
+                        ? "tt-image-crop-aspect-selected"
+                        : "tt-image-crop-aspect-option"
                     }`}
                   >
                     {contentAspectLabel(option)}
@@ -492,47 +690,61 @@ export default function ImageCropModal({
             </div>
           ) : null}
           <div
-            ref={frameRef}
-            className={`relative w-full touch-none overflow-hidden border border-white/10 bg-[#0f172a] ${frameMaskClass}`}
-            style={{ aspectRatio: String(presentationAspect) }}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-            onWheel={handleWheel}
+            className={
+              isContentV2
+                ? "relative isolate flex justify-center overflow-hidden py-1"
+                : "relative"
+            }
           >
-            {previewUrl && drawRect ? (
-              <img
-                src={previewUrl}
-                alt=""
-                draggable={false}
-                className={`absolute max-w-none select-none cursor-grab active:cursor-grabbing ${
-                  saving ? "opacity-70" : "opacity-100"
-                }`}
-                style={{
-                  width: drawRect.width * displayScale,
-                  height: drawRect.height * displayScale,
-                  left: drawRect.x * displayScale,
-                  top: drawRect.y * displayScale,
-                }}
-              />
-            ) : (
-              <div className="absolute inset-0 animate-pulse bg-white/5" aria-hidden />
-            )}
+            <div
+              ref={frameRef}
+              className={`relative w-full touch-none overflow-hidden border tt-image-crop-frame ${frameMaskClass} ${
+                isContentV2 ? "tt-image-crop-feed-frame max-w-full" : ""
+              }`}
+              style={{ aspectRatio: String(presentationAspect) }}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              onWheel={handleWheel}
+            >
+              {previewUrl && drawRect ? (
+                <img
+                  src={previewUrl}
+                  alt=""
+                  draggable={false}
+                  className={`absolute max-w-none select-none cursor-grab active:cursor-grabbing ${
+                    saving ? "opacity-70" : "opacity-100"
+                  }`}
+                  style={{
+                    width: drawRect.width * displayScale,
+                    height: drawRect.height * displayScale,
+                    left: drawRect.x * displayScale,
+                    top: drawRect.y * displayScale,
+                  }}
+                />
+              ) : (
+                <div
+                  className="absolute inset-0 animate-pulse bg-black/5"
+                  aria-hidden
+                />
+              )}
+            </div>
           </div>
+
+          {isContentV2 ? (
+            <p className="tt-image-crop-muted mt-2 text-xs">
+              This is how your image will appear in the Feed.
+            </p>
+          ) : null}
 
           <div className="mt-4 space-y-3">
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 disabled={saving || clampedTransform.zoom <= 1}
-                onClick={() =>
-                  applyTransform({
-                    zoom: clampedTransform.zoom - 0.1,
-                    offset: clampedTransform.offset,
-                  })
-                }
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/5 text-lg text-white transition hover:bg-white/10 disabled:opacity-40"
+                onClick={() => nudgeZoom(-0.1)}
+                className="tt-image-crop-control flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-lg transition disabled:opacity-40"
                 aria-label="Zoom out"
               >
                 −
@@ -544,25 +756,15 @@ export default function ImageCropModal({
                 step={0.01}
                 value={clampedTransform.zoom}
                 disabled={saving}
-                onChange={(e) =>
-                  applyTransform({
-                    zoom: Number(e.target.value),
-                    offset: clampedTransform.offset,
-                  })
-                }
-                className="min-w-0 flex-1 accent-blue-500"
+                onChange={(e) => handleZoomSlider(Number(e.target.value))}
+                className="min-w-0 flex-1 accent-[var(--tt-accent,theme(colors.blue.500))]"
                 aria-label="Zoom"
               />
               <button
                 type="button"
                 disabled={saving || clampedTransform.zoom >= zoomMax}
-                onClick={() =>
-                  applyTransform({
-                    zoom: clampedTransform.zoom + 0.1,
-                    offset: clampedTransform.offset,
-                  })
-                }
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/5 text-lg text-white transition hover:bg-white/10 disabled:opacity-40"
+                onClick={() => nudgeZoom(0.1)}
+                className="tt-image-crop-control flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-lg transition disabled:opacity-40"
                 aria-label="Zoom in"
               >
                 +
@@ -570,7 +772,7 @@ export default function ImageCropModal({
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-gray-400">
+              <p className="tt-image-crop-muted text-xs">
                 {usesCoverLayout
                   ? "Drag to reposition. Pinch or use the slider to zoom (1×–4×). Reset returns to the covered frame."
                   : IMAGE_CROP_EDITOR_HELP}
@@ -584,7 +786,7 @@ export default function ImageCropModal({
                     clampedTransform.offset.y === 0)
                 }
                 onClick={handleResetFit}
-                className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-gray-200 transition hover:bg-white/10 disabled:opacity-40"
+                className="tt-image-crop-control rounded-lg border px-3 py-1.5 text-xs font-medium transition disabled:opacity-40"
               >
                 {usesCoverLayout ? "Reset" : "Reset to Fit"}
               </button>
@@ -592,13 +794,13 @@ export default function ImageCropModal({
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-white/10 px-6 py-4">
+        <div className="shrink-0 border-t border-divider px-6 py-4">
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <button
               type="button"
               disabled={saving}
               onClick={onCancel}
-              className="h-11 rounded-lg border border-white/20 bg-white/5 px-4 text-sm font-medium text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
+              className="tt-image-crop-control h-11 rounded-lg border px-4 text-sm font-medium transition disabled:opacity-50"
             >
               Cancel
             </button>
@@ -608,7 +810,7 @@ export default function ImageCropModal({
               syncing={saving}
               syncingLabel="Saving…"
               onClick={() => void handleSave()}
-              className="h-11 rounded-lg bg-blue-500 px-5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
+              className="h-11 rounded-lg bg-[var(--tt-accent,theme(colors.blue.500))] px-5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Save
             </ActionButton>

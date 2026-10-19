@@ -1,5 +1,6 @@
 import { describe, it, beforeEach } from "node:test"
-import { computeGettingStartedProgress, detectNewlyCompletedTasks, shouldAutoShowGettingStartedChecklist, shouldOfferGettingStartedChecklist, shouldShowGettingStartedIntroPopup, } from "./gettingStartedChecklist.ts"
+import { DAILY_CHECK_IN_DASHBOARD_HREF } from "./dailyCheckIn/constants.ts"
+import { computeGettingStartedProgress, detectNewlyCompletedTasks, gettingStartedItemHref, shouldAutoShowGettingStartedChecklist, shouldOfferGettingStartedChecklist, shouldShowGettingStartedIntroPopup, } from "./gettingStartedChecklist.ts"
 import { applyStickyGettingStartedProgress, writeStickyCompletedItemIds, } from "./gettingStartedSticky.ts"
 import assert from "node:assert/strict"
 
@@ -83,7 +84,7 @@ describe("computeGettingStartedProgress", () => {
     assert.equal(p.completedCount, 1)
   })
 
-  it("scenario F: all six tasks complete at 6/6", () => {
+  it("scenario F: all seven tasks complete at 7/7", () => {
     const p = computeGettingStartedProgress({
       onboardingCompleted: true,
       tradeCount: 3,
@@ -91,10 +92,18 @@ describe("computeGettingStartedProgress", () => {
       followCount: 2,
       hasEverJoinedOtherRoom: true,
       hasPublicTrade: true,
+      hasCompletedDailyCheckIn: true,
     })
-    assert.equal(p.completedCount, 6)
+    assert.equal(p.completedCount, 7)
     assert.equal(p.totalCount, 7)
     assert.equal(p.allComplete, true)
+  })
+
+  it("sends Daily Check-In to the Dashboard form", () => {
+    assert.equal(
+      gettingStartedItemHref("dailyCheckIn"),
+      DAILY_CHECK_IN_DASHBOARD_HREF
+    )
   })
 
   it("includes profile as the first checklist task", () => {

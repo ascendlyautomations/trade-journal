@@ -26,6 +26,7 @@ import {
 } from "@/lib/appDataCache"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { isProActive } from "@/lib/subscription"
+import { knownTraxProActiveForPreflight } from "@/lib/billingEntitlement"
 import { insertCsvTradesWithAccount } from "@/lib/insertCsvTradesWithAccount"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { assertRequiredAccountValue } from "@/lib/createAccountForm"
@@ -205,8 +206,9 @@ export default function InputTradeForm({
   const { isNativeIos } = usePlatformPresentation()
   const { user, profile: contextProfile } = useUserProfile()
   const userId = user?.id ?? null
-  const { fromError, presentLimit, enforceFreeLimits } =
+  const { fromError, presentLimit, enforceFreeLimits, access } =
     useProGate(contextProfile)
+  const clientHasProAccess = access !== "free"
 
   function showMutationLimitOrError(error: unknown, title: string) {
     if (fromError(error)) return
@@ -354,6 +356,24 @@ export default function InputTradeForm({
       return
     }
 
+    if (clientHasProAccess) {
+      const fromSession =
+        contextProfile?.id === uid
+          ? {
+              is_pro: contextProfile.is_pro,
+              subscription_status: contextProfile.subscription_status,
+              username: contextProfile.username,
+              avatar_url: contextProfile.avatar_url,
+              trial_end: contextProfile.trial_end,
+            }
+          : null
+      if (fromSession) setPlanProfile(fromSession)
+      setAccountFieldsLocked(false)
+      setCsvImportBlocked(false)
+      setCsvDaysUntilNextImport(null)
+      return
+    }
+
     const fromContext =
       contextProfile?.id === uid
         ? {
@@ -413,7 +433,7 @@ export default function InputTradeForm({
 
     setCsvImportBlocked(false)
     setCsvDaysUntilNextImport(null)
-  }, [contextProfile])
+  }, [clientHasProAccess, contextProfile])
 
   const fetchAccountsForUser = useCallback(async (userId: string) => {
     try {
@@ -568,8 +588,8 @@ export default function InputTradeForm({
   const accountInputsDisabled =
     accountFieldsLocked &&
     effectiveModeLower !== "backtest" &&
-    !isProActive(planProfile)
-  const isPro = isProActive(planProfile)
+    !clientHasProAccess
+  const isPro = clientHasProAccess
   const { copyGroups } = useCopyTradingGroups(
     userId,
     isPro && !isEditMode
@@ -915,7 +935,7 @@ export default function InputTradeForm({
     }
 
     const profileRow = planProfile ?? contextProfile
-    const userIsPro = isProActive(profileRow)
+    const userIsPro = clientHasProAccess
 
     let screenshotUrl: string | null = null
 
@@ -1816,7 +1836,12 @@ export default function InputTradeForm({
 
     const profile = planProfile ?? contextProfile
 
-    const gate = await assertCanCreateTradingAccount(supabase, userId, profile)
+    const gate = await assertCanCreateTradingAccount(
+      supabase,
+      userId,
+      profile,
+      knownTraxProActiveForPreflight(access)
+    )
     if (!gate.ok) {
       showPopup(feedbackPresets.accountLimit())
       return

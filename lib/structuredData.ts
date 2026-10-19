@@ -76,8 +76,6 @@ export function softwareApplicationJsonLd() {
       {
         "@type": "Offer",
         name: TRADETRAXS_PRO_PLAN.name,
-        price: "23.99",
-        priceCurrency: "USD",
         availability: "https://schema.org/OnlineOnly",
         url: `${SITE_URL}/pricing`,
         description: TRADETRAXS_PRO_PLAN.description,

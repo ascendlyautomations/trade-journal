@@ -13,6 +13,7 @@ import {
 import { useRouter } from "next/navigation"
 import Modal from "@/app/components/ui/Modal"
 import { buttonVariants, cn } from "@/app/components/ui"
+import TraxProSelectedPlanPrice from "@/app/components/TraxProSelectedPlanPrice"
 import TraxProBillingIntervalPicker, {
   TRAXPRO_DEFAULT_BILLING_INTERVAL,
 } from "@/app/components/TraxProBillingIntervalPicker"
@@ -47,11 +48,14 @@ import {
 import { supabase } from "@/lib/supabaseClient"
 import { syncMembershipAfterStripeCheckout } from "@/lib/syncMembershipAfterStripeCheckout"
 import { isProActive } from "@/lib/subscription"
+import { useBillingEntitlement } from "@/app/components/monetization/BillingEntitlementProvider"
+import { clientCheckoutBlockReason } from "@/lib/billingEntitlement"
+import { loadBillingEntitlement } from "@/lib/billingEntitlementClient"
 import { pickUserProfileFields } from "@/lib/UserProfileProvider"
 import { logMonetizationFunnel } from "@/lib/monetizationTelemetry"
 import { startTraxProCheckout } from "@/lib/startTraxProCheckout"
 import { profileHasUsedCheckoutTrial } from "@/lib/checkoutTrial"
-import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
+import { useTraxProPurchaseCopy } from "@/lib/traxProPriceCatalogClient"
 
 type PresentInput = {
   reason: ProGateReason
@@ -72,6 +76,7 @@ const ProUpgradeContext = createContext<ProUpgradeContextValue | null>(null)
 export function ProUpgradeProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
   const { user, profile, refreshProfile } = useUserProfile()
+  const billing = useBillingEntitlement()
   const reasonRef = useRef<ProGateReason | null>(null)
   const retryRef = useRef<ProUpgradeRetryAction | null>(null)
   const [flags, setFlags] = useState<EffectiveMonetizationFlags>(() => ({
@@ -132,6 +137,7 @@ export function ProUpgradeProvider({ children }: { children: ReactNode }) {
         )
         if (!synced.reconciled || !isProActive(synced.profile)) return
         await refreshProfile()
+        await loadBillingEntitlement(userId, { force: true })
         logMonetizationFunnel({
           event: "entitlement_confirmed",
           platform: "web",
@@ -194,12 +200,21 @@ export function ProUpgradeProvider({ children }: { children: ReactNode }) {
   )
 
   const trialEligible = !profileHasUsedCheckoutTrial(profile)
-  const primaryCta = trialEligible
-    ? TRAXPRO_TRIAL_HEADLINE
-    : `Subscribe to ${TRADETRAXS_PRO_DISPLAY_NAME}`
+  const purchase = useTraxProPurchaseCopy(trialEligible)
+  const primaryCta = purchase.buttonTitle
 
   const startCheckout = async () => {
     if (!canPresentPaywall) return
+    const block = clientCheckoutBlockReason({
+      signedIn: Boolean(user?.id),
+      status: billing.status,
+      traxProActive: billing.snapshot?.traxProActive ?? null,
+    })
+    if (block) {
+      setCheckoutError(block)
+      if (billing.snapshot?.traxProActive) setOpen(false)
+      return
+    }
     setCheckoutLoading(true)
     setCheckoutError(null)
     logMonetizationFunnel({
@@ -267,11 +282,15 @@ export function ProUpgradeProvider({ children }: { children: ReactNode }) {
         {reason ? (
           <p className="mt-2 text-sm text-gray-300">{proGateSubtitle(reason)}</p>
         ) : null}
-        <div className="mt-5">
+        <div className="mt-5 space-y-4">
+          <TraxProSelectedPlanPrice interval={billingInterval} />
           <TraxProBillingIntervalPicker
             value={billingInterval}
             onChange={setBillingInterval}
           />
+          {purchase.finePrint ? (
+            <p className="text-xs leading-relaxed text-gray-400">{purchase.finePrint}</p>
+          ) : null}
         </div>
         {checkoutError ? (
           <p className="mt-3 text-sm text-red-300">{checkoutError}</p>
@@ -279,7 +298,7 @@ export function ProUpgradeProvider({ children }: { children: ReactNode }) {
         <div className="mt-6 flex flex-col gap-2">
           <button
             type="button"
-            disabled={checkoutLoading || !canPresentPaywall}
+            disabled={checkoutLoading || !canPresentPaywall || purchase.purchaseDisabled}
             className={cn(
               buttonVariants({ variant: "primary", size: "md" }),
               "w-full justify-center"

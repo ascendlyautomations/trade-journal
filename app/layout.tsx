@@ -18,6 +18,8 @@ import ScrollLockRouteReset from "./components/ScrollLockRouteReset"
 import SubscriptionGateShell from "./components/SubscriptionGateShell"
 import FreePlanAccountSlotShell from "./components/FreePlanAccountSlotShell"
 import { UserProfileProvider } from "@/lib/UserProfileProvider"
+import { BillingEntitlementProvider } from "@/app/components/monetization/BillingEntitlementProvider"
+import { TraxProPriceCatalogProvider } from "@/app/components/monetization/TraxProPriceCatalogProvider"
 import { ProUpgradeProvider } from "@/app/components/monetization/ProUpgradeProvider"
 import { GettingStartedProgressProvider } from "@/lib/GettingStartedProgressProvider"
 import BrokerImportedTradesRealtimeBridge from "./components/BrokerImportedTradesRealtimeBridge"
@@ -162,6 +164,8 @@ export default async function RootLayout({
           <UploadProgressProvider>
           <ReferralPersistence />
           <UserProfileProvider>
+            <BillingEntitlementProvider>
+            <TraxProPriceCatalogProvider>
             <ProUpgradeProvider>
             <GettingStartedProgressProvider>
             <BrokerImportedTradesRealtimeBridge />
@@ -191,6 +195,8 @@ export default async function RootLayout({
             </BannedAccountShell>
             </GettingStartedProgressProvider>
             </ProUpgradeProvider>
+            </TraxProPriceCatalogProvider>
+            </BillingEntitlementProvider>
           </UserProfileProvider>
           </UploadProgressProvider>
         </ToastRoot>

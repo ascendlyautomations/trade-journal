@@ -19,6 +19,8 @@ import {
   contentLogicalFrame,
   contentOutputSize,
   contentPresentationAspect,
+  contentZoomAroundAnchor,
+  contentZoomAroundAnchorMagnification,
   imageDecodeErrorMessage,
   orientedPixelSize,
   planContentImageExport,
@@ -155,7 +157,7 @@ describe("content image v2 contract", () => {
     assert.equal(src.includes("compressImage"), false)
     assert.equal(src.includes("compressScreenshot"), false)
     assert.equal(src.includes("toBlob"), true)
-    assert.equal(src.split("toBlob").length - 1, 1)
+    assert.equal(src.split("toBlob").length - 1, 2)
     assert.match(src, /CONTENT_IMAGE_V2_JPEG_QUALITY/)
   })
 
@@ -177,6 +179,51 @@ describe("content image v2 contract", () => {
     assert.match(preparation, /chat: "ready"/)
     assert.match(preparation, /room: "ready"/)
     assert.match(preparation, /attachment: "ready"/)
+  })
+
+  it("zooms around an anchor without breaking cover constraints", () => {
+    const frame = contentLogicalFrame(contentPresentationAspect("portrait"))
+    const imageWidth = 4032
+    const imageHeight = 3024
+    const center = { x: frame.width / 2, y: frame.height / 2 }
+
+    const zoomed = contentZoomAroundAnchor(
+      imageWidth,
+      imageHeight,
+      frame,
+      { zoom: 1, offset: { x: 0, y: 0 } },
+      center,
+      2
+    )
+    assertCovered(imageWidth, imageHeight, "portrait", zoomed.zoom, zoomed.offset)
+
+    const startLayout = contentCoverLayout(imageWidth, imageHeight, frame, {
+      zoom: 1,
+      offset: { x: 0, y: 0 },
+    })
+    const anchor = { x: frame.width * 0.55, y: frame.height * 0.42 }
+    const srcBefore = {
+      x: (anchor.x - startLayout.originX) / startLayout.totalScale,
+      y: (anchor.y - startLayout.originY) / startLayout.totalScale,
+    }
+
+    const pinched = contentZoomAroundAnchorMagnification(
+      imageWidth,
+      imageHeight,
+      frame,
+      { zoom: 1, offset: { x: 0, y: 0 } },
+      anchor,
+      2.2
+    )
+    assertCovered(imageWidth, imageHeight, "portrait", pinched.zoom, pinched.offset)
+
+    const endLayout = contentCoverLayout(imageWidth, imageHeight, frame, pinched)
+    const srcAfter = {
+      x: (anchor.x - endLayout.originX) / endLayout.totalScale,
+      y: (anchor.y - endLayout.originY) / endLayout.totalScale,
+    }
+    assert.ok(Math.abs(srcBefore.x - srcAfter.x) < 0.05)
+    assert.ok(Math.abs(srcBefore.y - srcAfter.y) < 0.05)
   })
 
   it("explains HEIC when the browser cannot decode it", () => {

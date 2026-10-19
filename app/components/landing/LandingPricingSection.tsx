@@ -6,10 +6,7 @@ import {
   TRADETRAXS_PRO_PLAN,
   TRADETRAXS_PRO_FEATURES_HEADING,
 } from "@/lib/tradeTraxsPlans"
-import {
-  TRAXPRO_CHECKOUT_FINE_PRINT,
-  TRAXPRO_TRIAL_HEADLINE,
-} from "@/lib/traxProPricing"
+import { useTraxProPurchaseCopy } from "@/lib/traxProPriceCatalogClient"
 import {
   TRAXPRO_DEFAULT_BILLING_INTERVAL,
   type TraxProBillingIntervalId,
@@ -49,6 +46,7 @@ export default function LandingPricingSection({
   onStartFree,
   showMarketingCTAs = true,
 }: Props) {
+  const purchase = useTraxProPurchaseCopy(true)
   const [billingInterval, setBillingInterval] = useState<TraxProBillingIntervalId>(
     TRAXPRO_DEFAULT_BILLING_INTERVAL
   )
@@ -111,9 +109,11 @@ export default function LandingPricingSection({
             </div>
             <div className="flex h-full flex-col rounded-2xl border border-emerald-400/45 bg-gradient-to-b from-white/[0.1] to-emerald-950/30 p-5 pb-7 pt-10 shadow-[0_8px_48px_rgba(0,0,0,0.35),0_0_52px_rgba(52,211,153,0.2)] backdrop-blur-md transition-[transform,box-shadow] duration-300 ease-out hover:z-[1] hover:scale-[1.02] hover:border-emerald-400/60 hover:shadow-[0_12px_56px_rgba(0,0,0,0.4),0_0_64px_rgba(52,211,153,0.32)] motion-reduce:transition-none motion-reduce:hover:scale-100 md:p-10 md:pb-10 md:pt-14">
               <h3 className="text-lg font-semibold text-emerald-200 md:text-xl">{TRADETRAXS_PRO_PLAN.name}</h3>
-              <p className="mt-1.5 text-sm font-semibold uppercase tracking-wide text-emerald-300/90 md:mt-2">
-                {TRAXPRO_TRIAL_HEADLINE}
-              </p>
+              {purchase.headline ? (
+                <p className="mt-1.5 text-sm font-semibold uppercase tracking-wide text-emerald-300/90 md:mt-2">
+                  {purchase.headline}
+                </p>
+              ) : null}
               <TraxProSelectedPlanPrice
                 interval={billingInterval}
                 variant="full"
@@ -146,15 +146,17 @@ export default function LandingPricingSection({
                   </div>
                   <button
                     type="button"
-                    disabled={checkoutLoading}
+                    disabled={checkoutLoading || purchase.purchaseDisabled}
                     onClick={() => onStartTrial(billingInterval)}
                     className="mt-4 w-full rounded-xl bg-blue-500 px-6 py-3 font-semibold text-white shadow-lg shadow-blue-500/20 transition-[transform,box-shadow] duration-200 hover:bg-blue-600 hover:scale-[1.02] hover:shadow-[0_0_28px_rgba(59,130,246,0.35)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 disabled:hover:scale-100 motion-reduce:hover:scale-100 md:mt-6 md:py-3.5"
                   >
-                    {checkoutLoading ? "Starting trial…" : `Start ${TRAXPRO_TRIAL_HEADLINE}!`}
+                    {checkoutLoading ? "Starting checkout…" : purchase.buttonTitle}
                   </button>
-                  <p className="mt-3 text-center text-xs leading-relaxed text-gray-400 md:mt-4">
-                    {TRAXPRO_CHECKOUT_FINE_PRINT}
-                  </p>
+                  {purchase.finePrint ? (
+                    <p className="mt-3 text-center text-xs leading-relaxed text-gray-400 md:mt-4">
+                      {purchase.finePrint}
+                    </p>
+                  ) : null}
                 </>
               ) : null}
             </div>

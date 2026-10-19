@@ -23,7 +23,9 @@ import {
   shouldShowScheduledCancellation,
   shouldShowTrialInfo,
 } from "@/lib/getMembershipStatus"
-import { isProActive } from "../../lib/subscription"
+import { useProGate } from "@/lib/useProGate"
+import { clientCheckoutBlockReason, billingProviderLabel } from "@/lib/billingEntitlement"
+import EntitlementStatusNotice from "@/app/components/monetization/EntitlementStatusNotice"
 import { getTraxProSubscriptionDisplay } from "@/lib/traxProBillingPlans"
 import {
   TRADETRAXS_FREE_PLAN,
@@ -32,6 +34,9 @@ import {
   getPlanFeaturesSectionHeading,
 } from "@/lib/tradeTraxsPlans"
 import TraxProBillingIntervalPicker from "@/app/components/TraxProBillingIntervalPicker"
+import TraxProSelectedPlanPrice from "@/app/components/TraxProSelectedPlanPrice"
+import { profileHasUsedCheckoutTrial } from "@/lib/checkoutTrial"
+import { useTraxProPurchaseCopy } from "@/lib/traxProPriceCatalogClient"
 import {
   TRAXPRO_DEFAULT_BILLING_INTERVAL,
   type TraxProBillingIntervalId,
@@ -244,6 +249,8 @@ export default function SettingsPage() {
 
   const { user, profile: sharedProfile, loading: profileLoading, setProfile: setSharedProfile } =
     useUserProfile()
+  const planGate = useProGate(sharedProfile)
+  const purchase = useTraxProPurchaseCopy(!profileHasUsedCheckoutTrial(sharedProfile))
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null)
   const [savingProfile, setSavingProfile] = useState(false)
   const savingProfileRef = useRef(false)
@@ -792,6 +799,15 @@ export default function SettingsPage() {
 
   async function startTraxProCheckout() {
     if (!user) return
+    const block = clientCheckoutBlockReason({
+      signedIn: true,
+      status: planGate.entitlementStatus,
+      traxProActive: planGate.snapshot?.traxProActive ?? null,
+    })
+    if (block) {
+      showPopup({ type: "error", message: block })
+      return
+    }
 
     setCheckoutLoading(true)
     setCheckoutBillingInterval(upgradeBillingInterval)
@@ -939,15 +955,21 @@ export default function SettingsPage() {
   }
 
   const activeMeta = TABS.find((t) => t.id === activeTab)!
-  const rawStatus = String(profile?.subscription_status ?? "").toLowerCase().trim()
-  const displayStatus = rawStatus || "inactive"
-  const isSubscribed =
-    displayStatus === "active" ||
-    displayStatus === "trialing" ||
-    isProActive(profile)
-  const proPlanDisplay = isProActive(profile)
+  const recognizedPro = planGate.access === "pro"
+  const planHeadline =
+    planGate.access === "unknown" ? "Checking plan…" : recognizedPro ? "Pro" : "Free"
+  const billingProvider = recognizedPro ? planGate.billingProvider : "unknown"
+  const billingLabel = billingProviderLabel(billingProvider)
+  const showAppleBilling =
+    recognizedPro &&
+    (billingProvider === "apple" || planGate.appleSubscriptionLive)
+  const showStripePortal =
+    billingProvider === "stripe" ||
+    (planGate.access === "free" && Boolean(profile?.stripe_customer_id))
+  const proPlanDisplay = recognizedPro
     ? getTraxProSubscriptionDisplay(
-        profile?.billing_interval as string | null | undefined
+        (planGate.snapshot?.billingInterval ??
+          profile?.billing_interval) as string | null | undefined
       )
     : null
 
@@ -962,7 +984,7 @@ export default function SettingsPage() {
               Settings
             </h1>
             <p className="mb-4 text-sm text-gray-400">
-              Plan: {isProActive(profile as any) ? "Pro" : "Free"}
+              Plan: {planHeadline}
             </p>
             <nav className="flex flex-row gap-2 overflow-x-auto pb-2 md:flex-col md:gap-1 md:overflow-visible md:pb-0">
               {TABS.map((tab) => (
@@ -1573,11 +1595,11 @@ export default function SettingsPage() {
                 <RithmicIntegrationSettingsSection userId={user?.id} />
                 <TradingAccountsSettingsSection
                   userId={user?.id}
-                  isPro={isProActive(profile)}
+                  isPro={planGate.access !== "free"}
                 />
                 <CopyTradingGroupsSection
                   userId={user?.id}
-                  isPro={isProActive(profile)}
+                  isPro={planGate.access === "pro"}
                   variant="settings"
                 />
               </div>
@@ -1628,7 +1650,8 @@ export default function SettingsPage() {
                     <div>
                       <p className="text-xs text-gray-400">Status</p>
                       <p className="mt-1 text-sm text-gray-400">
-                        Billing: {isProActive(profile) ? "Pro" : "Free"}
+                        Billing: {planHeadline}
+                        {billingLabel ? ` · ${billingLabel}` : ""}
                       </p>
                       <p className="mt-1 text-sm text-gray-400">
                         Membership:{" "}
@@ -1666,7 +1689,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                  {isProActive(profile) ? (
+                  {recognizedPro ? (
                     <p className="text-sm font-medium text-gray-200">
                       {TRADETRAXS_PRO_FEATURES_HEADING}
                     </p>
@@ -1676,7 +1699,7 @@ export default function SettingsPage() {
                     </p>
                   )}
                   <ul className="mt-3 space-y-2">
-                    {(isProActive(profile)
+                    {(recognizedPro
                       ? TRADETRAXS_PRO_PLAN.features
                       : TRADETRAXS_FREE_PLAN.features
                     ).map((feature) => (
@@ -1693,7 +1716,14 @@ export default function SettingsPage() {
                   </ul>
                 </div>
 
-                {!isSubscribed ? (
+                {planGate.access === "unknown" ? (
+                  <EntitlementStatusNotice
+                    status={planGate.entitlementStatus}
+                    onRetry={() => void planGate.refreshEntitlement()}
+                  />
+                ) : null}
+
+                {planGate.access === "free" ? (
                   <>
                     <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
                       <p className="text-xs font-medium uppercase tracking-wide text-emerald-400/90">
@@ -1719,6 +1749,7 @@ export default function SettingsPage() {
                         ))}
                       </ul>
                     </div>
+                    <TraxProSelectedPlanPrice interval={upgradeBillingInterval} className="text-white" />
                     <TraxProBillingIntervalPicker
                       value={upgradeBillingInterval}
                       onChange={(interval) => {
@@ -1731,15 +1762,34 @@ export default function SettingsPage() {
                     <button
                       type="button"
                       onClick={() => void startTraxProCheckout()}
-                      disabled={checkoutLoading}
+                      disabled={checkoutLoading || purchase.purchaseDisabled}
                       className="mt-4 w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
                     >
-                      {checkoutLoading ? "Redirecting…" : `Upgrade to ${TRADETRAXS_PRO_PLAN.name}`}
+                      {checkoutLoading ? "Redirecting…" : purchase.buttonTitle}
                     </button>
                   </>
                 ) : null}
 
-                {isSubscribed || profile?.stripe_customer_id ? (
+                {showAppleBilling ? (
+                  <div className="border-t border-white/10 pt-6">
+                    <p className="text-sm font-medium text-white">Managed by the App Store</p>
+                    <p className="mt-2 text-sm leading-relaxed text-gray-300">
+                      This TraxPro subscription renews through Apple. On your iPhone,
+                      open Settings, tap your name, then Subscriptions.
+                    </p>
+                  </div>
+                ) : null}
+
+                {billingProvider === "granted" ? (
+                  <div className="border-t border-white/10 pt-6">
+                    <p className="text-sm leading-relaxed text-gray-300">
+                      TraxPro is included on this account. There is no separate
+                      subscription to manage here.
+                    </p>
+                  </div>
+                ) : null}
+
+                {showStripePortal ? (
                   <div className="border-t border-white/10 pt-6">
                     <button
                       type="button"
@@ -1750,8 +1800,8 @@ export default function SettingsPage() {
                       {manageLoading ? "Opening…" : "Manage / Cancel Subscription"}
                     </button>
                     <p className="mt-3 text-center text-xs text-gray-400">
-                      Subscription changes and cancellation are handled securely in
-                      Stripe Customer Portal.
+                      Stripe subscription changes and cancellation are handled in
+                      the Stripe Customer Portal.
                     </p>
                   </div>
                 ) : null}

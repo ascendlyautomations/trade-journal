@@ -1,0 +1,46 @@
+/* Crop modal — uses global appearance tokens (Dark / Light / OG). */
+
+.tt-image-crop-modal {
+  color: var(--tt-text);
+}
+
+.tt-image-crop-modal .tt-image-crop-muted {
+  color: var(--tt-text-muted);
+}
+
+.tt-image-crop-modal .tt-image-crop-frame {
+  background: var(--tt-surface-nested);
+  border-color: var(--tt-border, rgb(255 255 255 / 0.1));
+}
+
+.tt-image-crop-modal .tt-image-crop-control {
+  border-color: var(--tt-border, rgb(255 255 255 / 0.15));
+  background: color-mix(in srgb, var(--tt-surface-raised) 80%, transparent);
+  color: var(--tt-text);
+}
+
+.tt-image-crop-modal .tt-image-crop-control:hover:not(:disabled) {
+  background: var(--tt-surface-hover);
+}
+
+.tt-image-crop-modal .tt-image-crop-aspect-selected {
+  border-color: var(--tt-accent, rgb(96 165 250));
+  background: color-mix(in srgb, var(--tt-accent, rgb(59 130 246)) 18%, transparent);
+  color: var(--tt-text);
+}
+
+.tt-image-crop-modal .tt-image-crop-aspect-option {
+  border-color: var(--tt-border, rgb(255 255 255 / 0.15));
+  background: color-mix(in srgb, var(--tt-surface-raised) 60%, transparent);
+  color: var(--tt-text-muted);
+}
+
+.tt-image-crop-modal .tt-image-crop-aspect-option:hover:not(:disabled) {
+  background: var(--tt-surface-hover);
+}
+
+/* iOS-style feed context — dim outside the active crop window. */
+.tt-image-crop-modal .tt-image-crop-feed-frame {
+  z-index: 1;
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.48);
+}

@@ -18,7 +18,7 @@ import { DEMO_USER_ID } from "@/lib/demo/constants"
 import {
   registerDemoSignupHandler,
 } from "@/lib/demo/requestDemoSignup"
-import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
+import { useTraxProPurchaseCopy } from "@/lib/traxProPriceCatalogClient"
 import { enterSignupFlow } from "@/lib/signupFlow"
 
 export type DemoSignupReason =
@@ -91,6 +91,7 @@ const SIGNUP_MESSAGES: Record<DemoSignupReason, { title: string; message: string
 }
 
 export function DemoModeProvider({ children }: { children: ReactNode }) {
+  const purchase = useTraxProPurchaseCopy(true)
   const [demoActive, setDemoActive] = useState(false)
   const [signupOpen, setSignupOpen] = useState(false)
   const [signupReason, setSignupReason] = useState<DemoSignupReason>("default")
@@ -163,7 +164,7 @@ export function DemoModeProvider({ children }: { children: ReactNode }) {
                 onClick={() => enterSignupFlow()}
                 className="rounded-lg bg-blue-500 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-blue-600 disabled:hover:bg-blue-500"
               >
-                Start {TRAXPRO_TRIAL_HEADLINE}
+                {purchase.buttonTitle}
               </a>
             </div>
           </div>

@@ -79,7 +79,7 @@ function createProfileBootstrapSupabaseMock(
                   { id: "t1", user_id: otherProfileId, is_public: true, pnl: 10 },
                 ],
                 page_meta: {
-                  limit: 6,
+                  limit: 8,
                   returned: 1,
                   has_more: false,
                   next_cursor: null,

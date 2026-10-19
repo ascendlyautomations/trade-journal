@@ -115,7 +115,8 @@ test("replacing the source resets crop aspect and revokes the previous preview",
   const modal = source("app/components/ImageCropModal.tsx")
   assert.match(modal, /CONTENT_IMAGE_V2_DEFAULT_ASPECT/)
   assert.equal(modal.includes('setContentAspect("original")'), false)
-  assert.match(modal, /URL\.revokeObjectURL\(url\)/)
+  assert.match(modal, /loadOrientedCropPreview/)
+  assert.match(modal, /disposePreview\?\.\(\)/)
   assert.match(modal, /\}, \[open, file\]\)/)
 })
 

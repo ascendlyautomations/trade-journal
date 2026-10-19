@@ -49,8 +49,8 @@ import {
   dashboardInsightMetricPositiveClass,
 } from "@/app/components/dashboard/dashboardInsightStyles"
 import { propFirmModeAccountIdFromQuery } from "@/lib/dashboardPropFirmContext"
-import { isProActive } from "@/lib/subscription"
 import { useProGate } from "@/lib/useProGate"
+import EntitlementStatusNotice from "@/app/components/monetization/EntitlementStatusNotice"
 import { formatPnlCurrency } from "@/lib/formatMoney"
 import {
   MANAGE_ACCOUNTS_VALUE,
@@ -381,8 +381,14 @@ export default function PropFirmPage() {
   const searchParams = useSearchParams()
   const accountFromUrl = searchParams.get("account")
   const { user, profile } = useUserProfile()
-  const { shouldGateFeature, presentFeature } = useProGate(profile)
-  const canUsePropFirm = isProActive(profile) || !shouldGateFeature(true)
+  const {
+    access,
+    proFeatureUnlocked,
+    presentFeature,
+    entitlementStatus,
+    refreshEntitlement,
+  } = useProGate(profile)
+  const canUsePropFirm = proFeatureUnlocked
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [planChecked, setPlanChecked] = useState(false)
   const [hasProAccess, setHasProAccess] = useState(false)
@@ -576,31 +582,18 @@ export default function PropFirmPage() {
   }, [accountMetrics, showAccountDashboard, trades, payoutCycles])
 
   useEffect(() => {
-    if (profile) {
-      setHasProAccess(canUsePropFirm)
-      setPlanChecked(true)
-      return
-    }
-
     if (!user?.id) {
       setHasProAccess(false)
       setPlanChecked(true)
       return
     }
-
-    async function checkPlan() {
-      const { data: profileRow } = await supabase
-        .from("profiles")
-        .select("is_pro, subscription_status")
-        .eq("id", user!.id)
-        .maybeSingle()
-      setHasProAccess(
-        isProActive(profileRow) || !shouldGateFeature(true)
-      )
-      setPlanChecked(true)
+    if (access === "unknown") {
+      setPlanChecked(false)
+      return
     }
-    void checkPlan()
-  }, [profile, user?.id, canUsePropFirm, shouldGateFeature])
+    setHasProAccess(canUsePropFirm)
+    setPlanChecked(true)
+  }, [user?.id, access, canUsePropFirm])
 
   const loadAccounts = useCallback(async () => {
     if (propFirmV2Active) {
@@ -1177,7 +1170,15 @@ export default function PropFirmPage() {
   if (!planChecked) {
     return (
       <PropfirmPageShell>
-        <SkeletonAnalyticsPage />
+        {access === "unknown" && entitlementStatus === "error" ? (
+          <EntitlementStatusNotice
+            status="error"
+            onRetry={() => void refreshEntitlement()}
+            className="mx-auto max-w-lg"
+          />
+        ) : (
+          <SkeletonAnalyticsPage />
+        )}
       </PropfirmPageShell>
     )
   }

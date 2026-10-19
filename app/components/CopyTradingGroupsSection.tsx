@@ -49,10 +49,9 @@ export default function CopyTradingGroupsSection({
   variant = "settings",
 }: CopyTradingGroupsSectionProps) {
   const { profile } = useUserProfile()
-  const { isPro: isProFromGate, shouldGateFeature, presentFeature } =
-    useProGate(profile)
-  const isPro = isProProp || isProFromGate
-  const copyTradingEnabled = isPro || !shouldGateFeature(true)
+  const { proFeatureUnlocked } = useProGate(profile)
+  const isPro = isProProp || proFeatureUnlocked
+  const copyTradingEnabled = isPro
   const [groups, setGroups] = useState<CopyTradingGroup[]>([])
   const [accounts, setAccounts] = useState<TradingAccountListItem[]>([])
   const [loading, setLoading] = useState(Boolean(userId))

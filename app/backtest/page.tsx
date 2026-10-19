@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { deleteUserTrade } from "@/lib/deleteTrade"
-import { isProActive } from "@/lib/subscription"
+import EntitlementStatusNotice from "@/app/components/monetization/EntitlementStatusNotice"
 import LockedFeature from "../components/LockedFeature"
 import { useProGate } from "@/lib/useProGate"
 import TradesPageTradeCard from "../components/TradesPageTradeCard"
@@ -47,8 +47,14 @@ type BacktestTrade = Record<string, unknown> & {
 export default function BacktestPage() {
   const router = useRouter()
   const { user, profile: contextProfile } = useUserProfile()
-  const { shouldGateFeature, presentFeature, isPro: gateIsPro } =
-    useProGate(contextProfile)
+  const {
+    access,
+    proFeatureUnlocked,
+    shouldGateFeature,
+    presentFeature,
+    entitlementStatus,
+    refreshEntitlement,
+  } = useProGate(contextProfile)
   const [trades, setTrades] = useState<BacktestTrade[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedStrategy, setSelectedStrategy] = useState("all")
@@ -63,8 +69,9 @@ export default function BacktestPage() {
 
   useEffect(() => {
     if (isDemoModeActive() && !user?.id) return
+    if (access === "unknown") return
     void loadBacktests()
-  }, [user?.id])
+  }, [user?.id, access, proFeatureUnlocked])
 
   const loadBacktests = async () => {
     if (isDemoModeActive() && user?.id) {
@@ -81,29 +88,24 @@ export default function BacktestPage() {
       return
     }
 
-    if (
-      contextProfile &&
-      (isProActive(contextProfile) || !shouldGateFeature(true))
-    ) {
+    if (proFeatureUnlocked) {
+      setProLocked(false)
       setShareProfile(
-        contextProfile.referral_code != null
+        contextProfile?.referral_code != null
           ? { referral_code: contextProfile.referral_code }
           : null
       )
+    } else if (shouldGateFeature(true)) {
+      setProLocked(true)
+      setLoading(false)
+      return
     } else {
-      const { data: profileRow } = await supabase
-        .from("profiles")
-        .select("is_pro, subscription_status, referral_code")
-        .eq("id", user.id)
-        .maybeSingle()
-      const locked =
-        !isProActive(profileRow) && shouldGateFeature(true)
-      if (locked) {
-        setProLocked(true)
-        setLoading(false)
-        return
-      }
-      setShareProfile(profileRow ?? null)
+      setProLocked(false)
+      setShareProfile(
+        contextProfile?.referral_code != null
+          ? { referral_code: contextProfile.referral_code }
+          : null
+      )
     }
 
     const { rows } = await rpcTradesOwnerRows(supabase)
@@ -196,6 +198,19 @@ export default function BacktestPage() {
 
   const { requestDelete: deleteTrade, confirmModalProps } =
     useDeleteTradeConfirmation(performDeleteTrade)
+
+  if (access === "unknown") {
+    return (
+      <div className="tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
+        <div className="mx-auto max-w-lg px-6 py-10">
+          <EntitlementStatusNotice
+            status={entitlementStatus}
+            onRetry={() => void refreshEntitlement()}
+          />
+        </div>
+      </div>
+    )
+  }
 
   if (proLocked) {
     return (

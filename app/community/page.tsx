@@ -149,6 +149,7 @@ import {
   getRoomMessageReconciliation,
   resetRoomMessageReconciliation,
 } from "@/lib/roomMessageReconciliation"
+import { pickInitialTradeRoomId } from "@/lib/tradeRoomsEntry"
 
 type Room = {
   id: string
@@ -163,13 +164,6 @@ type Room = {
 }
 
 const memberRoomsRequestByUser = new Map<string, Promise<Room[]>>()
-
-/** Default room on load: user's owned room when present, otherwise first in list order. */
-function pickInitialTradeRoomId(rooms: Room[], userId: string): string | null {
-  if (rooms.length === 0) return null
-  const owned = rooms.find((r) => r.owner_user_id === userId)
-  return owned?.id ?? rooms[0].id
-}
 
 /** Shared sizing for owner room header actions (desktop main header). */
 const ROOM_OWNER_HEADER_ACTION_CLASS =

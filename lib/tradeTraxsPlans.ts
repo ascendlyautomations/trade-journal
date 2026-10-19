@@ -32,7 +32,7 @@ export type TradeTraxsPlan = {
 export const TRADETRAXS_FEATURE_LABELS = {
   basicAnalytics: "Basic Dashboard & core performance analytics",
   premiumAnalytics: "Advanced performance analytics",
-  unlimitedTradingAccounts: "Unlimited active trading accounts",
+  unlimitedTradingAccounts: "Unlimited trading accounts",
   unlimitedClips: "Unlimited Clips",
   aiTradeAnalyst: "AI Trade Analyst",
   aiPsychologyCoach: "AI Psychology Coach",

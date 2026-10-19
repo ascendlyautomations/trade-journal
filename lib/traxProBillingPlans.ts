@@ -34,7 +34,10 @@ export type TraxProBillingPlan = {
   displayMonthlyAmount?: number
 }
 
-/** Canonical monthly list price — all intervals derive from this. */
+/**
+ * Formula anchor only. Checkout charges the Stripe Price ID, and purchase
+ * screens read those Price objects. Do not present this number as the live price.
+ */
 export const TRAXPRO_MONTHLY_LIST_PRICE = 23.99
 
 export const TRAXPRO_PRODUCT_DISPLAY_NAME = TRADETRAXS_PRO_PLAN.name

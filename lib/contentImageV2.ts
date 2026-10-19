@@ -160,6 +160,89 @@ export function clampContentCoverTransform(
   return { zoom: layout.zoom, offset: layout.offset }
 }
 
+export type ContentFramePoint = { x: number; y: number }
+
+/**
+ * Pinch / wheel zoom anchored in logical frame coordinates (matches iOS
+ * `ImageCropViewportMath.zoomAroundAnchor`).
+ */
+export function contentZoomAroundAnchor(
+  imageWidth: number,
+  imageHeight: number,
+  frame: ContentFrame,
+  startTransform: ContentCoverTransform,
+  anchorInFrame: ContentFramePoint,
+  targetZoom: number,
+  maxZoom: number = CONTENT_IMAGE_V2_MAX_ZOOM
+): ContentCoverTransform {
+  const startLayout = contentCoverLayout(
+    imageWidth,
+    imageHeight,
+    frame,
+    startTransform
+  )
+
+  if (
+    !Number.isFinite(anchorInFrame.x) ||
+    !Number.isFinite(anchorInFrame.y) ||
+    startLayout.displayWidth <= 0 ||
+    startLayout.displayHeight <= 0
+  ) {
+    return { zoom: startLayout.zoom, offset: startLayout.offset }
+  }
+
+  const imageFractionX =
+    (anchorInFrame.x - startLayout.originX) / startLayout.displayWidth
+  const imageFractionY =
+    (anchorInFrame.y - startLayout.originY) / startLayout.displayHeight
+
+  const safeW = Math.max(imageWidth, 1)
+  const safeH = Math.max(imageHeight, 1)
+  const base = Math.max(frame.width / safeW, frame.height / safeH)
+  const newZoom = clampContentZoom(Math.min(maxZoom, targetZoom))
+  const newDisplayWidth = safeW * base * newZoom
+  const newDisplayHeight = safeH * base * newZoom
+
+  const originX = anchorInFrame.x - imageFractionX * newDisplayWidth
+  const originY = anchorInFrame.y - imageFractionY * newDisplayHeight
+
+  const centeredX = (frame.width - newDisplayWidth) / 2
+  const centeredY = (frame.height - newDisplayHeight) / 2
+
+  return contentCoverLayout(imageWidth, imageHeight, frame, {
+    zoom: newZoom,
+    offset: {
+      x: originX - centeredX,
+      y: originY - centeredY,
+    },
+  })
+}
+
+/** Zoom multiplier relative to `startTransform.zoom` (pinch gesture). */
+export function contentZoomAroundAnchorMagnification(
+  imageWidth: number,
+  imageHeight: number,
+  frame: ContentFrame,
+  startTransform: ContentCoverTransform,
+  anchorInFrame: ContentFramePoint,
+  magnification: number,
+  maxZoom: number = CONTENT_IMAGE_V2_MAX_ZOOM
+): ContentCoverTransform {
+  const startZoom = Number.isFinite(startTransform.zoom)
+    ? startTransform.zoom
+    : CONTENT_IMAGE_V2_MIN_ZOOM
+  const mag = Number.isFinite(magnification) ? magnification : 1
+  return contentZoomAroundAnchor(
+    imageWidth,
+    imageHeight,
+    frame,
+    startTransform,
+    anchorInFrame,
+    startZoom * mag,
+    maxZoom
+  )
+}
+
 /** Source pixels visible through the crop frame. */
 export function contentSourceCropRect(
   imageWidth: number,

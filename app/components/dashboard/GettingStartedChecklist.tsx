@@ -7,12 +7,12 @@ import type { GettingStartedProgress } from "@/lib/gettingStartedChecklist"
 import {
   GETTING_STARTED_COLLAPSED_STORAGE_KEY,
   GETTING_STARTED_ITEM_HELP,
+  gettingStartedItemHref,
   readGettingStartedCollapsedPreference,
   readGettingStartedSessionDismissed,
   writeGettingStartedCollapsedPreference,
   writeGettingStartedSessionDismissed,
 } from "@/lib/gettingStartedChecklist"
-import { profilePath } from "@/lib/profileRoutes"
 import PopularTradeRoomsModal from "./PopularTradeRoomsModal"
 
 export type GettingStartedChecklistProps = {
@@ -30,34 +30,6 @@ export type GettingStartedChecklistProps = {
   /** Dashboard empty-state: show Welcome headline above Getting Started. */
   showWelcomeHeading?: boolean
   className?: string
-}
-
-function itemHref(
-  id: GettingStartedProgress["items"][number]["id"],
-  options: { profileId?: string; firstPrivateTradeId?: string | null }
-): string | undefined {
-  const { profileId, firstPrivateTradeId } = options
-  switch (id) {
-    case "profile":
-      return "/settings"
-    case "trade":
-      return "/app"
-    case "dailyCheckIn":
-      return "/app"
-    case "post":
-      return profileId
-        ? `${profilePath({ id: profileId })}?tab=posts&createPost=1`
-        : undefined
-    case "follow":
-      return "/explore"
-    case "public":
-      if (firstPrivateTradeId) {
-        return `/trades?edit=${encodeURIComponent(firstPrivateTradeId)}`
-      }
-      return "/trades"
-    default:
-      return undefined
-  }
 }
 
 function ChecklistItemRow({
@@ -118,7 +90,7 @@ function ChecklistItemRow({
     )
   }
 
-  const href = itemHref(item.id, { profileId, firstPrivateTradeId })
+  const href = gettingStartedItemHref(item.id, { profileId, firstPrivateTradeId })
   return (
     <li className="flex items-center gap-2">
       {href ? (

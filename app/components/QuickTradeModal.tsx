@@ -70,7 +70,7 @@ import { buildCommunitySharePreviewPost } from "@/lib/buildCommunitySharePreview
 import { buildDateTime } from "@/lib/inputTradeDateTime"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { ensureAccountsLoaded } from "@/lib/appDataCache"
-import { isProActive } from "@/lib/subscription"
+import { knownTraxProActiveForPreflight } from "@/lib/billingEntitlement"
 import { useCopyTradingGroups } from "@/lib/useCopyTradingGroups"
 import {
   resolveCopyGroupAccounts,
@@ -201,7 +201,8 @@ export default function QuickTradeModal({
   initialCsvPatch = null,
 }: QuickTradeModalProps) {
   const { profile: contextProfile } = useUserProfile()
-  const { fromError, presentLimit } = useProGate(contextProfile)
+  const { fromError, presentLimit, access } = useProGate(contextProfile)
+  const isPro = access !== "free"
 
   function showMutationLimitOrError(error: unknown, title: string) {
     if (fromError(error)) return
@@ -486,7 +487,6 @@ export default function QuickTradeModal({
     void loadPlanProfile(userId)
   }, [open, userId, loadAccounts, loadPlanProfile])
 
-  const isPro = isProActive(planProfile)
   const { copyGroups } = useCopyTradingGroups(userId, isPro && open)
 
   useEffect(() => {
@@ -558,7 +558,7 @@ export default function QuickTradeModal({
       accountMode: selectedAccount?.mode,
       accountType: selectedAccount?.category ?? null,
       lockedAccountType: planProfile?.locked_account_type,
-      isPro: isProActive(planProfile),
+      isPro,
       publicDescription: description,
       imageUrl: previewUrl,
       entryTime: previewEntryTime,
@@ -700,7 +700,12 @@ export default function QuickTradeModal({
         .eq("id", userId)
         .maybeSingle()
 
-      const gate = await assertCanCreateTradingAccount(supabase, userId, profile)
+      const gate = await assertCanCreateTradingAccount(
+        supabase,
+        userId,
+        profile,
+        knownTraxProActiveForPreflight(access)
+      )
       if (!gate.ok) {
         showPopup(feedbackPresets.accountLimit())
         return
@@ -947,7 +952,7 @@ export default function QuickTradeModal({
               isPublic,
               imageFile: image,
             },
-            { onProgress: report }
+            { onProgress: report, traxProActive: knownTraxProActiveForPreflight(access) }
           )
 
           if (!result.ok) {

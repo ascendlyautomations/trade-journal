@@ -109,9 +109,8 @@ import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import {
   createStoryPreviewUrl,
   revokeStoryPreviewUrl,
+  validateStorySourceFile,
 } from "@/lib/storyComposeHelpers"
-import ImageCropModal from "@/app/components/ImageCropModal"
-import { validateImageUpload } from "@/lib/uploadValidation"
 import {
   REEL_COMMENT_INSERT_SELECT,
   FEED_REELS_SELECT,
@@ -283,7 +282,6 @@ function FeedPageContent() {
   const [activeStoryUser, setActiveStoryUser] = useState<string | null>(null)
   const [currentStoryIndex, setCurrentStoryIndex] = useState(0)
   const [storyComposeOpen, setStoryComposeOpen] = useState(false)
-  const [storyCropFile, setStoryCropFile] = useState<File | null>(null)
   const [pendingStoryFile, setPendingStoryFile] = useState<File | null>(null)
   const [pendingStoryPreviewUrl, setPendingStoryPreviewUrl] = useState<
     string | null
@@ -604,31 +602,19 @@ function FeedPageContent() {
     setStoryComposeOpen(false)
   }, [pendingStoryPreviewUrl])
 
-  const openStoryCrop = useCallback(
+  const openStoryEditor = useCallback(
     (file: File) => {
-      const validationError = validateImageUpload(file)
+      const validationError = validateStorySourceFile(file)
       if (validationError) {
         showPopup({ type: "error", message: validationError })
         return
       }
-      setStoryCropFile(file)
-    },
-    [showPopup]
-  )
-
-  const handleStoryCropCancel = useCallback(() => {
-    setStoryCropFile(null)
-  }, [])
-
-  const handleStoryCropSave = useCallback(
-    (prepared: File) => {
       revokeStoryPreviewUrl(pendingStoryPreviewUrl)
-      setPendingStoryFile(prepared)
-      setPendingStoryPreviewUrl(createStoryPreviewUrl(prepared))
-      setStoryCropFile(null)
+      setPendingStoryFile(file)
+      setPendingStoryPreviewUrl(createStoryPreviewUrl(file))
       setStoryComposeOpen(true)
     },
-    [pendingStoryPreviewUrl]
+    [pendingStoryPreviewUrl, showPopup]
   )
 
   const handleStoryFileSelect = useCallback(
@@ -637,9 +623,9 @@ function FeedPageContent() {
       const file = input.files?.[0]
       input.value = ""
       if (!file || !user?.id) return
-      openStoryCrop(file)
+      openStoryEditor(file)
     },
-    [openStoryCrop, user?.id]
+    [openStoryEditor, user?.id]
   )
 
   useEffect(() => {
@@ -652,10 +638,10 @@ function FeedPageContent() {
     }
   }, [user?.id, mode])
 
-  const handlePostStory = useCallback(async () => {
+  const handlePostStory = useCallback(async (uploadFile: File) => {
     if (guardDemoFeedWrite("upload")) return
     if (
-      !pendingStoryFile ||
+      !uploadFile ||
       !user?.id ||
       postingStoryRef.current ||
       postingStory ||
@@ -664,7 +650,7 @@ function FeedPageContent() {
       return
     }
 
-    const storyFile = pendingStoryFile
+    const storyFile = uploadFile
     uploadingStoryRef.current = true
 
     try {
@@ -695,7 +681,6 @@ function FeedPageContent() {
       uploadingStoryRef.current = false
     }
   }, [
-    pendingStoryFile,
     user?.id,
     postingStory,
     showPopup,
@@ -3282,19 +3267,13 @@ function FeedPageContent() {
           open
           posting={postingStory}
           profile={currentUserProfile}
+          storyFile={pendingStoryFile}
           previewUrl={pendingStoryPreviewUrl}
           onClose={closeStoryCompose}
-          onPost={() => void handlePostStory()}
-          onReplaceImage={openStoryCrop}
+          onPost={(file) => void handlePostStory(file)}
+          onReplaceImage={openStoryEditor}
         />
       ) : null}
-      <ImageCropModal
-        open={storyCropFile != null}
-        file={storyCropFile}
-        preset="story"
-        onCancel={handleStoryCropCancel}
-        onSave={handleStoryCropSave}
-      />
     </div>
     </NativeIosPullToRefresh>
   )

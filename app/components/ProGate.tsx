@@ -4,6 +4,7 @@ import React from "react"
 import { TRADETRAXS_PRO_PLAN } from "@/lib/tradeTraxsPlans"
 import { useProGate } from "@/lib/useProGate"
 import { useUserProfile } from "@/lib/useUserProfile"
+import EntitlementStatusNotice from "@/app/components/monetization/EntitlementStatusNotice"
 import type { ProFeatureKind } from "@/lib/proGateReason"
 
 type ProGateProps = {
@@ -18,9 +19,24 @@ export default function ProGate({
   children,
 }: ProGateProps) {
   const { profile } = useUserProfile()
-  const { shouldGateFeature, presentFeature, isPro: isProFromProfile } =
-    useProGate(profile)
-  const isPro = isProProp ?? isProFromProfile
+  const {
+    shouldGateFeature,
+    presentFeature,
+    isPro: isProFromProfile,
+    access,
+    entitlementStatus,
+    refreshEntitlement,
+  } = useProGate(profile)
+  const isPro = isProProp === true || isProFromProfile
+
+  if (access === "unknown" && isProProp !== true) {
+    return (
+      <EntitlementStatusNotice
+        status={entitlementStatus}
+        onRetry={() => void refreshEntitlement()}
+      />
+    )
+  }
 
   if (isPro || !shouldGateFeature(true)) {
     return <>{children}</>

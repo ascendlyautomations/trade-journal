@@ -59,7 +59,8 @@ import {
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import ImageCropModal from "@/app/components/ImageCropModal"
 import { useImageCropUpload } from "@/lib/useImageCropUpload"
-import { isProActive } from "@/lib/subscription"
+import { useProGate } from "@/lib/useProGate"
+import { knownTraxProActiveForPreflight } from "@/lib/billingEntitlement"
 import { assertCanCreateTradingAccount } from "@/lib/tradingAccounts"
 import { assertRequiredAccountValue } from "@/lib/createAccountForm"
 import { upsertAccountInCache } from "@/lib/appDataCache"
@@ -71,6 +72,8 @@ import {
   type PendingPropFirmPayoutRecord,
   type RecordAccountPayoutResult,
 } from "@/lib/propfirmPayoutCycles"
+import { useRegisterCreatePagePrimary } from "@/app/components/create/registerCreatePagePrimary"
+import type { CreatePagePrimaryRegistration } from "@/app/components/create/useCreatePagePrimaryAction"
 
 export type AchievementFormState = {
   achievement_type: string
@@ -139,6 +142,9 @@ export type AchievementUploadModalProps = {
    * (e.g. Prop Firm Mode) can open its own flow with the full account.
    */
   deferPassedEvalContinuance?: boolean
+  /** Full-page create/edit surface — renders form body without modal chrome. */
+  layout?: "modal" | "page"
+  registerPrimary?: (update: CreatePagePrimaryRegistration) => void
 }
 
 AchievementUploadModal.displayName = "AchievementUploadModal"
@@ -170,6 +176,8 @@ export default function AchievementUploadModal({
   onPropFirmPayoutRecorded,
   onComposeDismissed,
   deferPassedEvalContinuance = false,
+  layout = "modal",
+  registerPrimary,
 }: AchievementUploadModalProps) {
   const editingId = editingAchievement?.id ?? null
   const [busy, setBusy] = useState(false)
@@ -224,7 +232,8 @@ export default function AchievementUploadModal({
     userId,
   })
 
-  const isPro = isProActive(planProfile)
+  const { access } = useProGate(planProfile)
+  const isPro = access !== "free"
 
   const loadAccounts = useCallback(async (uid: string) => {
     const { data, error: fetchErr } = await supabase
@@ -416,7 +425,12 @@ export default function AchievementUploadModal({
     setCreatingAccount(true)
 
     try {
-      const gate = await assertCanCreateTradingAccount(supabase, userId, planProfile)
+      const gate = await assertCanCreateTradingAccount(
+        supabase,
+        userId,
+        planProfile,
+        knownTraxProActiveForPreflight(access)
+      )
       if (!gate.ok) {
         showPopup(persistentError("Account Limit Reached", gate.message))
         return
@@ -797,8 +811,6 @@ export default function AchievementUploadModal({
     await executeAchievementSave()
   }
 
-  if (!open) return null
-
   const heading = dialogTitle ?? (editingId ? "Edit Achievement" : "Add Achievement")
   const subheading =
     dialogSubtitle ??
@@ -806,47 +818,16 @@ export default function AchievementUploadModal({
   const submitLabel =
     saveLabel ?? (editingId ? "Update Achievement" : "Save Achievement")
 
-  return (
+  useRegisterCreatePagePrimary({
+    enabled: layout === "page" && open,
+    registerPrimary,
+    action: saveAchievement,
+    canAct: true,
+    busy,
+  })
+
+  const formBody = (
     <>
-    <ScrollableModalShell
-      open={open}
-      onClose={handleClose}
-      ariaLabel={heading}
-      belowNavbar
-      closeDisabled={busy}
-      overlayClassName="z-[150] bg-black/75 backdrop-blur-md"
-      backdropClassName="bg-transparent"
-      panelClassName="max-w-3xl rounded-2xl border-white/10 bg-gradient-to-br from-[#0f172a] via-[#0b1532] to-[#0a2230] shadow-2xl shadow-blue-900/20"
-      headerClassName="border-white/10 px-4 pb-3 pt-4 sm:px-6"
-      bodyClassName="px-4 sm:px-6"
-      footerClassName="border-white/10 px-4 py-4 sm:px-6"
-      header={
-        <>
-          <h2 className="text-xl font-semibold tracking-tight text-white">{heading}</h2>
-          <p className="mt-0.5 text-sm text-slate-300">{subheading}</p>
-        </>
-      }
-      footer={
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={handleClose}
-            className="h-10 rounded-lg border border-white/20 bg-white/5 px-4 text-sm font-medium text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void saveAchievement()}
-            className="h-10 rounded-lg bg-blue-500 px-4 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500"
-          >
-            {submitLabel}
-          </button>
-        </div>
-      }
-    >
         {error ? (
           <div className="mb-4 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
             {error}
@@ -1008,7 +989,11 @@ export default function AchievementUploadModal({
             </label>
           </div>
         </div>
-    </ScrollableModalShell>
+    </>
+  )
+
+  const auxiliaryModals = (
+    <>
       <ImageCropModal
         open={cropModalOpen}
         file={imageCrop.cropSourceFile}
@@ -1090,6 +1075,64 @@ export default function AchievementUploadModal({
         />
       ) : null}
       {evalContinuanceModals}
+    </>
+  )
+
+  if (!open && layout === "modal") return null
+
+  if (layout === "page") {
+    return (
+      <>
+        {formBody}
+        {auxiliaryModals}
+      </>
+    )
+  }
+
+  return (
+    <>
+    <ScrollableModalShell
+      open={open}
+      onClose={handleClose}
+      ariaLabel={heading}
+      belowNavbar
+      closeDisabled={busy}
+      overlayClassName="z-[150] bg-black/75 backdrop-blur-md"
+      backdropClassName="bg-transparent"
+      panelClassName="max-w-3xl rounded-2xl border-white/10 bg-gradient-to-br from-[#0f172a] via-[#0b1532] to-[#0a2230] shadow-2xl shadow-blue-900/20"
+      headerClassName="border-white/10 px-4 pb-3 pt-4 sm:px-6"
+      bodyClassName="px-4 sm:px-6"
+      footerClassName="border-white/10 px-4 py-4 sm:px-6"
+      header={
+        <>
+          <h2 className="text-xl font-semibold tracking-tight text-white">{heading}</h2>
+          <p className="mt-0.5 text-sm text-slate-300">{subheading}</p>
+        </>
+      }
+      footer={
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={handleClose}
+            className="h-10 rounded-lg border border-white/20 bg-white/5 px-4 text-sm font-medium text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void saveAchievement()}
+            className="h-10 rounded-lg bg-blue-500 px-4 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500"
+          >
+            {submitLabel}
+          </button>
+        </div>
+      }
+    >
+      {formBody}
+    </ScrollableModalShell>
+      {auxiliaryModals}
     </>
   )
 }

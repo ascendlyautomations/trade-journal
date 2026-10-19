@@ -1,6 +1,6 @@
 /**
  * Central source of truth for Stripe Checkout free-trial configuration.
- * Production path: 14-day trial for eligible first-time subscribers.
+ * Checkout trial length is `STRIPE_TRIAL_DAYS` (default 14). Purchase screens read that value from the price catalog.
  */
 
 export const CHECKOUT_TRIAL_ENABLED = true

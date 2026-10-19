@@ -102,14 +102,14 @@ export function appleAppAccountTokenMatchesUser(
 }
 
 /**
- * Whether the web app should still offer Stripe checkout.
- * An authoritative server entitlement of Pro suppresses checkout.
- * A failed entitlement fetch falls back to the existing profile gate.
+ * Offer Stripe checkout only when the authoritative snapshot says the user is not Pro.
+ * A failed or missing snapshot is indeterminate and must not start checkout or
+ * send the user to finish-trial.
  */
 export function shouldOfferStripeCheckout(input: {
   profileNeedsCheckout: boolean
   serverTraxProActive: boolean | null
 }): boolean {
-  if (input.serverTraxProActive === true) return false
+  if (input.serverTraxProActive !== false) return false
   return input.profileNeedsCheckout
 }

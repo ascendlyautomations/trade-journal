@@ -13,7 +13,8 @@ import LandingFaqSection from "./landing/LandingFaqSection"
 import LandingComingSoonSection from "./landing/LandingComingSoonSection"
 import { useFeedbackPopup } from "@/app/components/ui/useFeedbackPopup"
 import MarketingFooter from "./marketing/MarketingFooter"
-import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
+import { profileHasUsedCheckoutTrial } from "@/lib/checkoutTrial"
+import { useTraxProPurchaseCopy } from "@/lib/traxProPriceCatalogClient"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { isDemoUserId } from "@/lib/demo/constants"
 import { isBetaReferralRef } from "@/lib/betaReferralCode"
@@ -59,9 +60,10 @@ export default function LandingPageClient({
   const isAuthenticatedUser = !!user && !isDemoUserId(user.id)
   const hasActiveMembershipAccess =
     isAuthenticatedUser && !!profile && hasActiveMembership(profile)
+  const purchase = useTraxProPurchaseCopy(!profileHasUsedCheckoutTrial(profile))
   const trialCtaLabel = earlyAccessPromotionEnabled
     ? "Join Early Access"
-    : `Start ${TRAXPRO_TRIAL_HEADLINE}!`
+    : purchase.buttonTitle
 
   useEffect(() => {
     if (hasActiveMembershipAccess) clearSignupFlow()
@@ -199,7 +201,7 @@ export default function LandingPageClient({
         <ConfirmModal
           open
           title="You're Already Covered"
-          description="You already have an active 14-day free trial or subscription. Return to the app to continue trading."
+          description="You already have TraxPro access. Return to the app to continue trading."
           cancelLabel="Cancel"
           confirmLabel="Return to App"
           onCancel={() => setLoggedInTrialModalOpen(false)}
@@ -253,7 +255,11 @@ export default function LandingPageClient({
             <div className="z-10 flex flex-wrap justify-center gap-3 md:gap-4">
               <button
                 type="button"
-                disabled={checkoutLoading || loading}
+                disabled={
+                  checkoutLoading ||
+                  loading ||
+                  (!earlyAccessPromotionEnabled && purchase.purchaseDisabled)
+                }
                 onClick={() => void handleSubscribe()}
                 className="min-w-[168px] rounded-xl bg-blue-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 md:min-w-[220px] md:px-8 md:py-3.5 md:text-base"
               >

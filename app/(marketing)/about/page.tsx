@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import { profileHasUsedCheckoutTrial } from "@/lib/checkoutTrial"
+import { useTraxProPurchaseCopy } from "@/lib/traxProPriceCatalogClient"
 import { useRouter } from "next/navigation"
 import { ConfirmModal, FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { feedbackPresets } from "@/lib/feedbackPresets"
@@ -59,6 +61,7 @@ export default function AboutPage() {
   const router = useRouter()
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const { user, profile, loading } = useUserProfile()
+  const purchase = useTraxProPurchaseCopy(!profileHasUsedCheckoutTrial(profile))
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [loggedInDemoModalOpen, setLoggedInDemoModalOpen] = useState(false)
   const [loggedInTrialModalOpen, setLoggedInTrialModalOpen] = useState(false)
@@ -124,7 +127,7 @@ export default function AboutPage() {
       <ConfirmModal
         open={loggedInTrialModalOpen}
         title="You're Already Covered"
-        description="You already have an active 14-day free trial or subscription. Return to the app to continue trading."
+          description="You already have TraxPro access. Return to the app to continue trading."
         cancelLabel="Cancel"
         confirmLabel="Return to App"
         onCancel={() => setLoggedInTrialModalOpen(false)}
@@ -270,11 +273,11 @@ export default function AboutPage() {
                 <div className="mt-8 flex flex-wrap justify-center gap-4">
                   <button
                     type="button"
-                    disabled={checkoutLoading || loading}
+                    disabled={checkoutLoading || loading || purchase.purchaseDisabled}
                     onClick={() => void handleStartTrial()}
                     className="min-w-[220px] rounded-xl bg-blue-500 px-8 py-3.5 font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500"
                   >
-                    {checkoutLoading ? "Starting trial…" : ABOUT_CTA.trialLabel}
+                    {checkoutLoading ? "Starting checkout…" : purchase.buttonTitle}
                   </button>
                   <button
                     type="button"

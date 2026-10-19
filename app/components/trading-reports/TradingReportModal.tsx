@@ -8,6 +8,9 @@ import { formatRR } from "@/lib/formatDisplay"
 import { formatHoldDurationSeconds } from "@/lib/tradeTimingDisplay"
 import { TRADING_REPORT_PERIOD_OPTIONS } from "@/lib/tradingReports/tradingReportPeriods"
 import type { TradingReport, TradingReportPeriodKey } from "@/lib/tradingReports/tradingReportTypes"
+import type { ReactNode } from "react"
+
+export type ReportsModalTab = "performance" | "psychology"
 
 type TradingReportModalProps = {
   open: boolean
@@ -18,6 +21,9 @@ type TradingReportModalProps = {
   bestTrade: any | null
   viewerUserId?: string | null
   onViewTrade: (trade: { id?: string | null }) => void
+  tab?: ReportsModalTab
+  onTabChange?: (tab: ReportsModalTab) => void
+  psychologyContent?: ReactNode
 }
 
 function MetricCell({ label, value }: { label: string; value: string }) {
@@ -52,8 +58,12 @@ export default function TradingReportModal({
   bestTrade,
   viewerUserId,
   onViewTrade,
+  tab = "performance",
+  onTabChange,
+  psychologyContent,
 }: TradingReportModalProps) {
   const metrics = report?.metrics
+  const showPsychology = tab === "psychology"
 
   return (
     <Modal
@@ -65,7 +75,35 @@ export default function TradingReportModal({
       backdropClassName="bg-black/70 backdrop-blur-sm"
     >
       <div className="space-y-6">
-        <header className="space-y-2 border-b border-white/10 pb-4 pr-12">
+        {onTabChange ? (
+          <div
+            className="flex gap-1 rounded-lg border border-white/10 bg-white/5 p-1 pr-12"
+            role="tablist"
+            aria-label="Report type"
+          >
+            {(["performance", "psychology"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={tab === value}
+                onClick={() => onTabChange(value)}
+                className={`flex-1 rounded-md px-3 py-2 text-sm font-semibold transition ${
+                  tab === value
+                    ? "bg-blue-500/20 text-white"
+                    : "text-gray-300 hover:bg-white/5"
+                }`}
+              >
+                {value === "performance" ? "Performance" : "Psychology"}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {showPsychology ? (
+          psychologyContent
+        ) : (
+          <header className="space-y-2 border-b border-white/10 pb-4 pr-12">
           <p className="text-xs font-medium uppercase tracking-wider text-blue-300">
             Intelligence Report
           </p>
@@ -93,8 +131,9 @@ export default function TradingReportModal({
             ))}
           </div>
         </header>
+        )}
 
-        {!report ? (
+        {showPsychology ? null : !report ? (
           <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-gray-300">
             Loading report...
           </div>

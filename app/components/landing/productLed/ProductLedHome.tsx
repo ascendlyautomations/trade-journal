@@ -37,7 +37,8 @@ import {
   needsSubscriptionCheckout,
 } from "@/lib/subscriptionAccess"
 import type { TraxProBillingIntervalId } from "@/lib/traxProBillingPlans"
-import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
+import { profileHasUsedCheckoutTrial } from "@/lib/checkoutTrial"
+import { useTraxProPurchaseCopy } from "@/lib/traxProPriceCatalogClient"
 import { useEarlyAccessPromotion } from "@/lib/useEarlyAccessPromotion"
 import { useUserProfile } from "@/lib/useUserProfile"
 
@@ -67,9 +68,10 @@ export default function ProductLedHome({
   const isAuthenticatedUser = !!user && !isDemoUserId(user.id)
   const hasActiveMembershipAccess =
     isAuthenticatedUser && !!profile && hasActiveMembership(profile)
+  const purchase = useTraxProPurchaseCopy(!profileHasUsedCheckoutTrial(profile))
   const trialCtaLabel = earlyAccessPromotionEnabled
     ? "Join Early Access"
-    : `Start ${TRAXPRO_TRIAL_HEADLINE}!`
+    : purchase.buttonTitle
 
   useEffect(() => {
     if (hasActiveMembershipAccess) clearSignupFlow()
@@ -201,7 +203,7 @@ export default function ProductLedHome({
         <ConfirmModal
           open
           title="You're Already Covered"
-          description="You already have an active 14-day free trial or subscription. Return to the app to continue trading."
+          description="You already have TraxPro access. Return to the app to continue trading."
           cancelLabel="Cancel"
           confirmLabel="Return to App"
           onCancel={() => setLoggedInTrialModalOpen(false)}
@@ -229,7 +231,11 @@ export default function ProductLedHome({
                 <button
                   type="button"
                   className="tt-home-btn tt-home-btn-primary"
-                  disabled={checkoutLoading || loading}
+                  disabled={
+                    checkoutLoading ||
+                    loading ||
+                    (!earlyAccessPromotionEnabled && purchase.purchaseDisabled)
+                  }
                   onClick={() => void handleSubscribe()}
                 >
                   {checkoutLoading ? "Starting trial…" : trialCtaLabel}

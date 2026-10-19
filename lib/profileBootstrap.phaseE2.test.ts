@@ -85,7 +85,7 @@ describe("profileBootstrapCache", () => {
         trades_page: {
           items: [],
           page_meta: {
-            limit: 6,
+            limit: 8,
             returned: 0,
             has_more: false,
             next_cursor: null,

@@ -33,7 +33,7 @@ import type { QuickTradeCsvFormPatch } from "@/lib/parseQuickCsvPaste"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { useUserProfile } from "@/lib/useUserProfile"
-import { isProActive } from "@/lib/subscription"
+import { useProGate } from "@/lib/useProGate"
 import { ensureInitialImportReviewCountLoaded } from "@/lib/initialImportReviewCount"
 
 const INPUT_TRADE_CSV_INPUT_ID = "input-trade-csv-upload"
@@ -42,6 +42,7 @@ export default function Home() {
   const { isNativeIos } = usePlatformPresentation()
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const { user, profile } = useUserProfile()
+  const { access } = useProGate(profile)
   const userId = user?.id ?? null
   const [loading, setLoading] = useState(false)
   const [reviewCount, setReviewCount] = useState(0)
@@ -68,7 +69,9 @@ export default function Home() {
     }
 
     const count = await ensureInitialImportReviewCountLoaded(supabase, userId)
-    setReviewCount(count)
+    if (count != null) {
+      setReviewCount(count)
+    }
   }
 
   useEffect(() => {
@@ -346,7 +349,7 @@ export default function Home() {
           <div className="mt-6">
             <CopyTradingGroupsSection
               userId={userId ?? undefined}
-              isPro={isProActive(profile)}
+              isPro={access === "pro"}
               variant="app"
             />
           </div>

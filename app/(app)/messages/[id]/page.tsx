@@ -37,6 +37,7 @@ import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import ImageCropModal from "@/app/components/ImageCropModal"
 import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import EmptyState from "@/app/components/ui/EmptyState"
+import MessagesTradeRoomsLink from "@/app/components/messages/MessagesTradeRoomsLink"
 import { useParams, useRouter } from "next/navigation"
 import {
   formatMoneyUnknown,
@@ -3596,6 +3597,7 @@ export default function DMPage() {
               </div>
 
               <div className="ml-auto flex items-center gap-2">
+                <MessagesTradeRoomsLink className="hidden min-h-9 items-center gap-1.5 rounded-lg border border-blue-400/30 bg-blue-500/15 px-2.5 py-1.5 text-xs font-medium text-blue-200 transition hover:border-blue-400/45 hover:bg-blue-500/25 hover:text-blue-100 sm:inline-flex" />
                 <button
                   type="button"
                   aria-label="Conversation settings"

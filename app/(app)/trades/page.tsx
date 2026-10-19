@@ -24,7 +24,6 @@ import { useCachedAccounts, useCachedTrades } from "@/lib/useAppDataCache"
 import { getCachedAccounts, getCachedTrades } from "@/lib/appDataCache"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
-import { isProActive } from "@/lib/subscription"
 import { useCopyTradingGroups } from "@/lib/useCopyTradingGroups"
 import {
   isCopyGroupFilterValue,
@@ -70,10 +69,8 @@ export default function TradesPage() {
     (tradesLoading && cachedTrades.length === 0 && !tradesHasCachedData) ||
     (accountsLoading && accountRows.length === 0 && !accountsHasCachedData)
 
-  const isPro = isProActive(gateProfile)
-  const { shouldGateFeature, presentFeature, isPro: gateIsPro } =
-    useProGate(gateProfile)
-  const proFeatureUnlocked = gateIsPro || !shouldGateFeature(true)
+  const { presentFeature, access, proFeatureUnlocked } = useProGate(gateProfile)
+  const isPro = access !== "free"
 
   const [resultFilter, setResultFilter] = useState<"all" | "wins" | "losses">("all")
   const [selectedImage, setSelectedImage] = useState<string | null>(null)

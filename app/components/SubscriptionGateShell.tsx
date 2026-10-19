@@ -9,7 +9,8 @@ import {
   isSubscriptionGateSuspended,
   needsSubscriptionCheckout,
 } from "@/lib/subscriptionAccess"
-import { fetchServerTraxProActive } from "@/lib/fetchServerTraxProActive"
+import { useBillingEntitlement } from "@/app/components/monetization/BillingEntitlementProvider"
+import EntitlementStatusNotice from "@/app/components/monetization/EntitlementStatusNotice"
 import {
   buildCreatorRedeemPath,
   getPendingCreatorCode,
@@ -17,7 +18,7 @@ import {
 
 /**
  * Blocks app access until standard users complete Stripe checkout.
- * Beta, paid, and trialing users pass through unchanged.
+ * An indeterminate entitlement snapshot does not redirect to finish-trial.
  */
 export default function SubscriptionGateShell({
   children,
@@ -27,41 +28,55 @@ export default function SubscriptionGateShell({
   const pathname = usePathname()
   const router = useRouter()
   const { user, profile, loading, membershipReconciling } = useUserProfile()
+  const billing = useBillingEntitlement()
+  const suspended = user
+    ? isSubscriptionGateSuspended(user.id, { membershipReconciling })
+    : false
+  const consultEntitlement =
+    !loading &&
+    Boolean(user) &&
+    !profile?.is_banned &&
+    !suspended &&
+    needsSubscriptionCheckout(profile) &&
+    !isAllowedPathWithoutSubscription(pathname)
 
   useEffect(() => {
-    if (loading) return
-    if (!user) return
-    if (profile?.is_banned) return
-    if (isSubscriptionGateSuspended(user.id, { membershipReconciling })) return
-    if (!needsSubscriptionCheckout(profile)) return
-    if (isAllowedPathWithoutSubscription(pathname)) return
-
-    let cancelled = false
-    void (async () => {
-      const serverTraxProActive = await fetchServerTraxProActive()
-      if (cancelled) return
-      if (
-        !shouldOfferStripeCheckout({
-          profileNeedsCheckout: true,
-          serverTraxProActive,
-        })
-      ) {
-        return
-      }
-
-      const pendingCreatorCode = getPendingCreatorCode()
-      if (pendingCreatorCode) {
-        router.replace(buildCreatorRedeemPath(pendingCreatorCode))
-        return
-      }
-
-      router.replace("/finish-trial")
-    })()
-
-    return () => {
-      cancelled = true
+    if (!consultEntitlement) return
+    if (billing.status !== "ready") return
+    if (
+      !shouldOfferStripeCheckout({
+        profileNeedsCheckout: true,
+        serverTraxProActive: billing.snapshot?.traxProActive ?? null,
+      })
+    ) {
+      return
     }
-  }, [loading, user, profile, pathname, router, membershipReconciling])
+
+    const pendingCreatorCode = getPendingCreatorCode()
+    if (pendingCreatorCode) {
+      router.replace(buildCreatorRedeemPath(pendingCreatorCode))
+      return
+    }
+
+    router.replace("/finish-trial")
+  }, [
+    consultEntitlement,
+    billing.status,
+    billing.snapshot?.traxProActive,
+    router,
+  ])
+
+  if (consultEntitlement && billing.status === "error") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0b1f3a] px-4">
+        <EntitlementStatusNotice
+          status="error"
+          onRetry={() => void billing.refresh()}
+          className="max-w-md"
+        />
+      </div>
+    )
+  }
 
   return <>{children}</>
 }

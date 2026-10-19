@@ -144,6 +144,7 @@ import TradeCard from "../../components/profile/ProfileTradeCard"
 import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
 import PostCard from "../../components/profile/ProfilePostCard"
 import QuickTradeModal from "../../components/QuickTradeModal"
+import CreatePostComposer from "../../components/create/CreatePostComposer"
 import ReelComposerModal from "../../components/profile/ReelComposerModal"
 import { type ReelRow, deleteReel, fetchReelsByTradeIds, fetchUserProfileReels, replaceTradeReelVideo, isTradeAttachedReel } from "@/lib/reels"
 import {
@@ -159,7 +160,6 @@ import {
   withInsertedReelParentCommentId,
 } from "@/lib/reelEngagement"
 import StoryComposeModal from "../../components/feed/StoryComposeModal"
-import ImageCropModal from "../../components/ImageCropModal"
 import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import {
   deleteStoryById,
@@ -171,8 +171,8 @@ import { readStoriesSession, writeStoriesSession } from "@/lib/storiesSessionCac
 import {
   createStoryPreviewUrl,
   revokeStoryPreviewUrl,
+  validateStorySourceFile,
 } from "@/lib/storyComposeHelpers"
-import { validateImageUpload } from "@/lib/uploadValidation"
 import { isProfileUuidSegment, profilePath } from "@/lib/profileRoutes"
 import {
   aliasProfileSession,
@@ -190,8 +190,7 @@ import {
   sanitizeTradeForViewer,
   sanitizeTradesForViewer,
   tradeListRelationForProfileViewer,
-  tradeRelationForViewer,
-  tradeSelectForViewer,
+  tradeListSelectForProfileViewer,
 } from "@/lib/publicAccountPrivacy"
 import {
   asJsonObject,
@@ -298,12 +297,6 @@ const PUBLIC_PROFILE_SELECT =
 const PROFILE_SUMMARY_TRADE_SELECT =
   "id, created_at, pnl, rr, mode, account_type" as const
 
-function formatPostFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
 function scrollToProfileTarget(elementId: string) {
   requestAnimationFrame(() => {
     document.getElementById(elementId)?.scrollIntoView({
@@ -314,6 +307,16 @@ function scrollToProfileTarget(elementId: string) {
 }
 
 /** Append rows without duplicate ids (pagination races, deep links). */
+/** True when URL deep links / tab param expect the Trades list to load (not Posts/Reels). */
+function profileUrlPrefersTradesList(searchParams: URLSearchParams): boolean {
+  if (searchParams.get("post")?.trim()) return false
+  if (searchParams.get("reel")?.trim()) return false
+  if (searchParams.get("achievement")?.trim()) return false
+  const tab = searchParams.get("tab")?.trim()
+  if (tab === "posts" || tab === "reels" || tab === "achievements") return false
+  return true
+}
+
 function mergeUniqueById<T extends { id: string | number }>(
   existing: T[],
   incoming: T[]
@@ -460,25 +463,13 @@ function ProfilePageContent() {
   const [editingReel, setEditingReel] = useState<ReelRow | null>(null)
   const [selectedReelDetail, setSelectedReelDetail] = useState<any | null>(null)
   const [storyComposeOpen, setStoryComposeOpen] = useState(false)
-  const [storyCropFile, setStoryCropFile] = useState<File | null>(null)
   const [pendingStoryFile, setPendingStoryFile] = useState<File | null>(null)
   const [pendingStoryPreviewUrl, setPendingStoryPreviewUrl] = useState<
     string | null
   >(null)
   const [postingStory, setPostingStory] = useState(false)
-  const [postContent, setPostContent] = useState("")
-  const [postImage, setPostImage] = useState<File | null>(null)
-  const postImageCrop = useImageCropUpload({
-    preset: CONTENT_IMAGE_V2_PRESET,
-    onCropped: setPostImage,
-    onValidationError: (message) => showPopup({ type: "error", message }),
-  })
-  const [postImagePreviewUrl, setPostImagePreviewUrl] = useState<string | null>(
-    null
-  )
   const [pendingRoomShare, setPendingRoomShare] =
     useState<PendingRoomShareDraft | null>(null)
-  const [creatingPost, setCreatingPost] = useState(false)
   const [postDetailFocusComments, setPostDetailFocusComments] = useState(false)
   const [tradeDetailFocusComments, setTradeDetailFocusComments] = useState(false)
   const [likesByPost, setLikesByPost] = useState<
@@ -515,8 +506,6 @@ function ProfilePageContent() {
     useState(false)
   const feedDraftSyncRef = useRef<Record<string, string>>({})
   const feedOpenCommentsRef = useRef<Record<string, boolean>>({})
-  const creatingPostRef = useRef(false)
-  const uploadingPostRef = useRef(false)
   const uploadingStoryRef = useRef(false)
   const { runUpload } = useUploadProgress()
   const postingStoryRef = useRef(false)
@@ -734,20 +723,6 @@ function ProfilePageContent() {
     return () => window.clearTimeout(timer)
   }, [profileStoryOpen, profileStoryIndex, profileStorySlides.length])
 
-  useEffect(() => {
-    if (!postImage) {
-      setPostImagePreviewUrl(null)
-      return
-    }
-
-    const url = createStoryPreviewUrl(postImage)
-    setPostImagePreviewUrl(url)
-
-    return () => {
-      revokeStoryPreviewUrl(url)
-    }
-  }, [postImage])
-
   const closeStoryCompose = useCallback(() => {
     revokeStoryPreviewUrl(pendingStoryPreviewUrl)
     setPendingStoryPreviewUrl(null)
@@ -761,31 +736,19 @@ function ProfilePageContent() {
     }
   }, [pendingStoryPreviewUrl])
 
-  const openStoryCrop = useCallback(
+  const openStoryEditor = useCallback(
     (file: File) => {
-      const validationError = validateImageUpload(file)
+      const validationError = validateStorySourceFile(file)
       if (validationError) {
         showPopup({ type: "error", message: validationError })
         return
       }
-      setStoryCropFile(file)
-    },
-    [showPopup]
-  )
-
-  const handleStoryCropCancel = useCallback(() => {
-    setStoryCropFile(null)
-  }, [])
-
-  const handleStoryCropSave = useCallback(
-    (prepared: File) => {
       revokeStoryPreviewUrl(pendingStoryPreviewUrl)
-      setPendingStoryFile(prepared)
-      setPendingStoryPreviewUrl(createStoryPreviewUrl(prepared))
-      setStoryCropFile(null)
+      setPendingStoryFile(file)
+      setPendingStoryPreviewUrl(createStoryPreviewUrl(file))
       setStoryComposeOpen(true)
     },
-    [pendingStoryPreviewUrl]
+    [pendingStoryPreviewUrl, showPopup]
   )
 
   const handleStoryFileSelect = useCallback(
@@ -794,14 +757,14 @@ function ProfilePageContent() {
       const file = input.files?.[0]
       input.value = ""
       if (!file || !currentUserId) return
-      openStoryCrop(file)
+      openStoryEditor(file)
     },
-    [currentUserId, openStoryCrop]
+    [currentUserId, openStoryEditor]
   )
 
-  const handlePostStory = useCallback(async () => {
+  const handlePostStory = useCallback(async (uploadFile: File) => {
     if (
-      !pendingStoryFile ||
+      !uploadFile ||
       !currentUserId ||
       postingStoryRef.current ||
       postingStory ||
@@ -810,7 +773,7 @@ function ProfilePageContent() {
       return
     }
 
-    const storyFile = pendingStoryFile
+    const storyFile = uploadFile
     uploadingStoryRef.current = true
 
     try {
@@ -842,7 +805,6 @@ function ProfilePageContent() {
       uploadingStoryRef.current = false
     }
   }, [
-    pendingStoryFile,
     currentUserId,
     postingStory,
     showPopup,
@@ -881,28 +843,19 @@ function ProfilePageContent() {
         }
       }
 
-      // Inclusive range end fetches pageSize + 1 rows to detect hasMore.
-      // Branch so .from() receives one relation: tables and views are separate overloads.
-      const { data, error } = isOwner
-        ? await supabase
-            .from(tradeListRelationForProfileViewer(true))
-            .select(tradeSelectForViewer(true))
-            .eq("user_id", forProfileId)
-            .eq("is_public", true)
-            .order("created_at", { ascending: false })
-            .range(offset, offset + pageSize)
-            .overrideTypes<Record<string, unknown>[], { merge: false }>()
-        : await supabase
-            .from(tradeListRelationForProfileViewer(false))
-            .select(tradeSelectForViewer(false))
-            .eq("user_id", forProfileId)
-            .eq("is_public", true)
-            .order("created_at", { ascending: false })
-            .range(offset, offset + pageSize)
-            .overrideTypes<Record<string, unknown>[], { merge: false }>()
+      const relation = tradeListRelationForProfileViewer(isOwner)
+      const select = tradeListSelectForProfileViewer(isOwner)
+      const { data, error } = await supabase
+        .from(relation)
+        .select(select)
+        .eq("user_id", forProfileId)
+        .eq("is_public", true)
+        .order("created_at", { ascending: false })
+        .range(offset, offset + pageSize)
+        .overrideTypes<Record<string, unknown>[], { merge: false }>()
 
       if (error) {
-        console.error("profile trades page fetch:", error)
+        devWarn("profile trades page fetch:", error.code, error.message)
         return { rows: [], hasMore: false }
       }
 
@@ -929,25 +882,17 @@ function ProfilePageContent() {
       let from = 0
       for (;;) {
         const end = from + pageSize - 1
-        const { data, error } = isOwner
-          ? await supabase
-              .from(tradeListRelationForProfileViewer(true))
-              .select(PUBLIC_TRADE_SELECT)
-              .eq("user_id", forProfileId)
-              .eq("is_public", true)
-              .order("created_at", { ascending: false })
-              .range(from, end)
-              .overrideTypes<Record<string, unknown>[], { merge: false }>()
-          : await supabase
-              .from(tradeListRelationForProfileViewer(false))
-              .select(PUBLIC_TRADE_SELECT)
-              .eq("user_id", forProfileId)
-              .eq("is_public", true)
-              .order("created_at", { ascending: false })
-              .range(from, end)
-              .overrideTypes<Record<string, unknown>[], { merge: false }>()
+        const relation = tradeListRelationForProfileViewer(isOwner)
+        const { data, error } = await supabase
+          .from(relation)
+          .select(PUBLIC_TRADE_SELECT)
+          .eq("user_id", forProfileId)
+          .eq("is_public", true)
+          .order("created_at", { ascending: false })
+          .range(from, end)
+          .overrideTypes<Record<string, unknown>[], { merge: false }>()
         if (error) {
-          console.error("profile calendar trades fetch:", error)
+          devWarn("profile calendar trades fetch:", error.code, error.message)
           break
         }
         const page = mapProjectedRows(data, (row) => row)
@@ -966,21 +911,15 @@ function ProfilePageContent() {
     }
     const isOwner =
       currentUserId != null && String(currentUserId) === String(forProfileId)
-    const { data, error } = isOwner
-      ? await supabase
-          .from(tradeListRelationForProfileViewer(true))
-          .select(PROFILE_SUMMARY_TRADE_SELECT)
-          .eq("user_id", forProfileId)
-          .eq("is_public", true)
-          .order("created_at", { ascending: false })
-      : await supabase
-          .from(tradeListRelationForProfileViewer(false))
-          .select(PROFILE_SUMMARY_TRADE_SELECT)
-          .eq("user_id", forProfileId)
-          .eq("is_public", true)
-          .order("created_at", { ascending: false })
+    const relation = tradeListRelationForProfileViewer(isOwner)
+    const { data, error } = await supabase
+      .from(relation)
+      .select(PROFILE_SUMMARY_TRADE_SELECT)
+      .eq("user_id", forProfileId)
+      .eq("is_public", true)
+      .order("created_at", { ascending: false })
     if (error) {
-      console.error("profile summary fetch:", error)
+      devWarn("profile summary fetch:", error.code, error.message)
       return []
     }
     return data || []
@@ -990,25 +929,48 @@ function ProfilePageContent() {
     if (!profile?.id) return
 
     const userId = String(profile.id)
-    const [page, summary] = await Promise.all([
-      fetchTradesForProfile(userId, 0),
-      fetchSummaryTrades(userId),
-    ])
-    setAllTrades(page.rows)
-    setVisibleTradeCount(page.rows.length)
-    setTradeHasMore(page.hasMore)
-    setTradesReady(true)
-    setSummaryTrades(summary)
-    setSummaryReady(true)
-    patchProfileSession(profileId, {
-      allTrades: page.rows,
-      visibleTradeCount: page.rows.length,
-      tradeHasMore: page.hasMore,
-      tradesReady: true,
-      summaryTrades: summary,
-      summaryReady: true,
-    })
-  }, [fetchSummaryTrades, fetchTradesForProfile, profile?.id, profileId])
+    const tasks: Promise<void>[] = []
+
+    if (activeTab === "trades") {
+      tasks.push(
+        fetchTradesForProfile(userId, 0).then((page) => {
+          setAllTrades(page.rows)
+          setVisibleTradeCount(page.rows.length)
+          setTradeHasMore(page.hasMore)
+          setTradesReady(true)
+          patchProfileSession(profileId, {
+            allTrades: page.rows,
+            visibleTradeCount: page.rows.length,
+            tradeHasMore: page.hasMore,
+            tradesReady: true,
+          })
+        })
+      )
+    }
+
+    if (!bootstrapPublicStats) {
+      tasks.push(
+        fetchSummaryTrades(userId).then((summary) => {
+          setSummaryTrades(summary)
+          setSummaryReady(true)
+          patchProfileSession(profileId, {
+            summaryTrades: summary,
+            summaryReady: true,
+          })
+        })
+      )
+    }
+
+    await Promise.all(tasks)
+  }, [
+    activeTab,
+    bootstrapPublicStats,
+    canViewTrades,
+    fetchSummaryTrades,
+    fetchTradesForProfile,
+    profile?.id,
+    profileId,
+  ])
 
   const loadMoreTrades = useCallback(async () => {
     if (!profile?.id || tradesLoading || !tradeHasMore) return
@@ -1217,7 +1179,13 @@ function ProfilePageContent() {
   }, [profileId, applyBootstrapLoadResult, viewerUser?.id])
 
   useEffect(() => {
-    if (!profile?.id || !canViewTrades || activeTab !== "trades" || tradesReady) {
+    if (
+      !profile?.id ||
+      !canViewTrades ||
+      activeTab !== "trades" ||
+      tradesReady ||
+      !profileUrlPrefersTradesList(searchParams)
+    ) {
       // Only clear when a resolved profile is genuinely not viewable; while the
       // profile is still restoring (null), clearing here would wipe cached trades.
       if (profile?.id && !canViewTrades) {
@@ -1265,6 +1233,7 @@ function ProfilePageContent() {
     profileId,
     tradesReady,
     currentUserId,
+    searchParams,
   ])
 
   useEffect(() => {
@@ -2298,155 +2267,35 @@ function ProfilePageContent() {
     setShowFollowing(true)
   }
 
-  async function handleCreatePost() {
-    if (!currentUserId || !profile || currentUserId !== profile.id) return
-    if (isDemoModeActive()) {
-      requestDemoSignup("comment")
-      return
-    }
-    if (creatingPostRef.current || creatingPost || uploadingPostRef.current) {
-      return
-    }
-
-    const text = postContent.trim()
-    if (!text && !postImage && !pendingRoomShare) {
-      showPopup({ type: "warning", message: "Add some text, an image, or a room share." })
-      return
-    }
-
-    void import("@/lib/nativeHaptics").then(({ hapticMedium }) => {
-      hapticMedium("submit-post")
-    })
-
-    uploadingPostRef.current = true
-    const snapshotText = text
-    const snapshotImage = postImage
-    const snapshotRoomShare = pendingRoomShare
-
-    try {
-      await runUpload({
-        title: snapshotImage ? "Uploading Post" : "Creating Post",
-        onDismissCompose: () => {
-          setShowCreatePost(false)
-          setPostContent("")
-          setPostImage(null)
-          setPendingRoomShare(null)
-        },
-        execute: async (report) => {
-          creatingPostRef.current = true
-          setCreatingPost(true)
-
-          let imageUrl: string | null = null
-
-          if (snapshotImage) {
-            report({ percent: 10, stage: "Processing image…" })
-            const uploadFile: File = snapshotImage
-            const fileName = optimizedStorageObjectPath(currentUserId, "jpg")
-
-            report({ percent: 18, stage: "Uploading media…" })
-            const mediaReport = createMonotonicReporter(report, {
-              min: 18,
-              max: 72,
-            })
-            const { error: upErr } = await uploadToSupabaseStorageWithProgress(
-              supabase,
-              {
-                bucket: "profile_posts",
-                path: fileName,
-                file: uploadFile,
-                upsert: false,
-                cacheControl: IMMUTABLE_MEDIA_CACHE_CONTROL,
-                onProgress: (loaded, total) => {
-                  mediaReport({
-                    percent: mapUploadBytesToPercent(loaded, total, {
-                      start: 20,
-                      end: 72,
-                    }),
-                    stage: "Uploading media…",
-                  })
-                },
-              }
-            )
-
-            if (upErr) {
-              throw new Error(upErr)
-            }
-
-            const base = process.env.NEXT_PUBLIC_SUPABASE_URL
-            imageUrl = base
-              ? `${base}/storage/v1/object/public/profile_posts/${fileName}`
-              : null
-          } else {
-            report({ percent: 40, stage: "Creating post…" })
-          }
-
-          const insertPayload = snapshotRoomShare
-            ? buildRoomSharePostInsert(
-                currentUserId,
-                snapshotRoomShare,
-                snapshotText,
-                imageUrl
-              )
-            : {
-                user_id: currentUserId,
-                content: snapshotText || null,
-                image_url: imageUrl,
-              }
-
-          report({ percent: 82, stage: "Publishing…" })
-
-          const { data: createdPost, error } = await supabase
-            .from("profile_posts")
-            .insert(insertPayload)
-            .select(PROFILE_WALL_POST_SELECT)
-            .single()
-
-          if (error) {
-            const feedback = mutationProGateFeedback(
-              fromError,
-              error,
-              "Post Failed"
-            )
-            if (feedback) showPopup(feedback)
-            throw new Error(handleSupabaseError(error))
-          }
-          if (!createdPost) {
-            throw new Error("Post insert returned no row")
-          }
-
-          if (currentUserId) invalidateUserStreaksCache(currentUserId)
-
-          setWallPosts((prev) => {
-            const next = upsertProfileWallPost(prev, createdPost)
-            patchProfileSession(profileId, {
-              wallPosts: next,
-              wallPostsReady: true,
-              wallPostsHasMore: wallPostsHasMoreRef.current,
-              wallPostsCursor: wallPostsCursorRef.current,
-            })
-            return next
-          })
-          setLikesByPost((prev) => ({
-            ...prev,
-            [String(createdPost.id)]: { count: 0, liked: false },
-          }))
-          setCommentsByPost((prev) => ({
-            ...prev,
-            [String(createdPost.id)]: [],
-          }))
-          showPopup(feedbackPresets.postPublished())
-          notifyGettingStartedChecklistMaybeCompleted()
-          report({ percent: 95, stage: "Finishing…" })
-        },
+  const handlePostPublished = useCallback(
+    (createdPost: Record<string, unknown>) => {
+      if (!currentUserId) return
+      void import("@/lib/nativeHaptics").then(({ hapticMedium }) => {
+        hapticMedium("submit-post")
       })
-    } catch {
-      // Overlay handles retry/cancel.
-    } finally {
-      creatingPostRef.current = false
-      setCreatingPost(false)
-      uploadingPostRef.current = false
-    }
-  }
+      setWallPosts((prev) => {
+        const next = upsertProfileWallPost(prev, createdPost)
+        patchProfileSession(profileId, {
+          wallPosts: next,
+          wallPostsReady: true,
+          wallPostsHasMore: wallPostsHasMoreRef.current,
+          wallPostsCursor: wallPostsCursorRef.current,
+        })
+        return next
+      })
+      setLikesByPost((prev) => ({
+        ...prev,
+        [String(createdPost.id)]: { count: 0, liked: false },
+      }))
+      setCommentsByPost((prev) => ({
+        ...prev,
+        [String(createdPost.id)]: [],
+      }))
+      setPendingRoomShare(null)
+      notifyGettingStartedChecklistMaybeCompleted()
+    },
+    [currentUserId, profileId]
+  )
 
   const handleReelPublished = useCallback(
     async (reelId: string) => {
@@ -3490,23 +3339,14 @@ function ProfilePageContent() {
       if (!trade) {
         const isOwner =
           currentUserId != null && String(currentUserId) === String(profile.id)
-        const { data, error } = isOwner
-          ? await supabase
-              .from(tradeRelationForViewer(true))
-              .select("*")
-              .eq("id", tradeId)
-              .eq("user_id", profile.id)
-              .eq("is_public", true)
-              .maybeSingle()
-              .overrideTypes<Record<string, unknown> | null, { merge: false }>()
-          : await supabase
-              .from(tradeRelationForViewer(false))
-              .select(PUBLIC_TRADE_SELECT)
-              .eq("id", tradeId)
-              .eq("user_id", profile.id)
-              .eq("is_public", true)
-              .maybeSingle()
-              .overrideTypes<Record<string, unknown> | null, { merge: false }>()
+        const { data, error } = await supabase
+          .from(tradeListRelationForProfileViewer(isOwner))
+          .select(tradeListSelectForProfileViewer(isOwner))
+          .eq("id", tradeId)
+          .eq("user_id", profile.id)
+          .eq("is_public", true)
+          .maybeSingle()
+          .overrideTypes<Record<string, unknown> | null, { merge: false }>()
 
         const tradeRow = asJsonObject(data)
         if (error || !tradeRow) {
@@ -4094,19 +3934,11 @@ function ProfilePageContent() {
                 }
               : null
           }
+          storyFile={pendingStoryFile}
           previewUrl={pendingStoryPreviewUrl}
           onClose={closeStoryCompose}
-          onPost={() => void handlePostStory()}
-          onReplaceImage={openStoryCrop}
-        />
-      ) : null}
-      {currentUserId === profile?.id ? (
-        <ImageCropModal
-          open={storyCropFile != null}
-          file={storyCropFile}
-          preset="story"
-          onCancel={handleStoryCropCancel}
-          onSave={handleStoryCropSave}
+          onPost={(file) => void handlePostStory(file)}
+          onReplaceImage={openStoryEditor}
         />
       ) : null}
       {currentUserId === profile?.id ? (
@@ -4461,110 +4293,18 @@ function ProfilePageContent() {
 
       </div>
 
-      {showCreatePost &&
-        profile &&
-        currentUserId === profile.id && (
-          <div
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-md"
-            role="presentation"
-            onClick={() => {
-              setShowCreatePost(false)
-              setPostContent("")
-              setPostImage(null)
-              setPendingRoomShare(null)
-            }}
-          >
-            <div
-              className="w-full max-w-[400px] rounded-xl border border-white/10 bg-[#0f172a] p-6 shadow-2xl"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="create-post-title"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="mb-3 flex items-center justify-between">
-                <h2
-                  id="create-post-title"
-                  className="text-lg font-semibold text-white"
-                >
-                  Create Post
-                </h2>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCreatePost(false)
-                    setPostContent("")
-                    setPostImage(null)
-                    setPendingRoomShare(null)
-                  }}
-                  className="rounded p-1.5 text-gray-400 hover:bg-white/10 hover:text-white"
-                  aria-label="Close"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <textarea
-                value={postContent}
-                onChange={(e) => setPostContent(e.target.value)}
-                placeholder={
-                  pendingRoomShare
-                    ? "Add a caption for your room share (optional)"
-                    : "What's on your mind?"
-                }
-                rows={4}
-                className="mb-3 w-full resize-none rounded-lg border border-white/10 bg-[#020617] p-2 text-sm text-white placeholder:text-gray-400"
-              />
-
-              {pendingRoomShare ? (
-                <div className="mb-3">
-                  <FeedRoomShareCard
-                    post={{
-                      room_id: pendingRoomShare.roomId,
-                      room_name: pendingRoomShare.roomName,
-                      room_logo: pendingRoomShare.roomLogo,
-                      room_description: pendingRoomShare.roomDescription,
-                    }}
-                    viewerUserId={currentUserId}
-                  />
-                </div>
-              ) : null}
-
-              {postImagePreviewUrl ? (
-                <div className="mb-3 flex flex-col items-center">
-                  <img
-                    src={postImagePreviewUrl}
-                    alt="Selected image preview"
-                    className="max-h-48 w-full rounded-xl border border-white/10 object-contain"
-                  />
-                  {postImage ? (
-                    <p className="mt-1.5 text-xs text-gray-400">
-                      {formatPostFileSize(postImage.size)}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) =>
-                  postImageCrop.handleFileSelected(e.target.files?.[0])
-                }
-                className="mb-3 block w-full text-sm text-gray-300 file:mr-2 file:rounded file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-sm file:text-gray-100"
-              />
-
-              <button
-                type="button"
-                onClick={() => void handleCreatePost()}
-                disabled={creatingPost || uploadingPostRef.current}
-                className="w-full rounded-lg bg-blue-500 px-3 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:opacity-50"
-              >
-                Post
-              </button>
-            </div>
-          </div>
-        )}
+      {showCreatePost && profile && currentUserId === profile.id ? (
+        <CreatePostComposer
+          layout="modal"
+          open={showCreatePost}
+          initialRoomShare={pendingRoomShare}
+          onClose={() => {
+            setShowCreatePost(false)
+            setPendingRoomShare(null)
+          }}
+          onPublished={handlePostPublished}
+        />
+      ) : null}
 
       {selectedAchievementDetail ? (
         <LazyAchievementDetailModal
@@ -4890,13 +4630,6 @@ function ProfilePageContent() {
         isOwnProfile={isOwnProfile}
       />
 
-      <ImageCropModal
-        open={postImageCrop.cropSourceFile != null}
-        file={postImageCrop.cropSourceFile}
-        preset={CONTENT_IMAGE_V2_PRESET}
-        onCancel={postImageCrop.handleCropCancel}
-        onSave={postImageCrop.handleCropSave}
-      />
     </>
   )
 }

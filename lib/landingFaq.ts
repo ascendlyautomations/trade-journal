@@ -1,7 +1,4 @@
-import {
-  TRAXPRO_PLAN_NAME,
-  TRAXPRO_TRIAL_LABEL,
-} from "@/lib/traxProPricing"
+import { TRAXPRO_PLAN_NAME } from "@/lib/traxProPricing"
 import {
   formatPlanFeaturesList,
   TRADETRAXS_FREE_PLAN,
@@ -41,7 +38,7 @@ export const LANDING_FAQ_ITEMS: LandingFaqItem[] = [
   },
   {
     q: "Do I need to pay to use TradeTraxs?",
-    a: `No. ${TRADETRAXS_FREE_PLAN.name} lets you explore the platform at no cost. ${TRAXPRO_PLAN_NAME} starts at $23.99/month and includes a ${TRAXPRO_TRIAL_LABEL.toLowerCase()}.`,
+    a: `No. ${TRADETRAXS_FREE_PLAN.name} lets you explore the platform at no cost. ${TRAXPRO_PLAN_NAME} prices, billing periods, and any free trial are shown before Stripe checkout.`,
   },
   {
     q: "Is my data private?",

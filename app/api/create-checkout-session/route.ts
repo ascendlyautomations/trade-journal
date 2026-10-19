@@ -12,7 +12,11 @@ import {
 import {
   buildAffiliateAttributionMetadata,
 } from "@/lib/affiliateStripeDiscount"
-import { isProActive } from "@/lib/subscription"
+import {
+  ALREADY_PRO_CHECKOUT_MESSAGE,
+  decideStripeCheckout,
+  ENTITLEMENT_UNAVAILABLE_MESSAGE,
+} from "@/lib/billingEntitlement"
 import { loadTraxProEntitlementSnapshot } from "@/lib/traxProEntitlement"
 import {
   parseCheckoutBillingInterval,
@@ -132,22 +136,6 @@ export async function POST(req: Request) {
 
     let profile = initialProfile
 
-    if (profile) {
-      const entitlement = await loadTraxProEntitlementSnapshot(supabase, user.id)
-      const alreadyPro =
-        (entitlement.ok && entitlement.snapshot.traxProActive) ||
-        isProActive(profile)
-      if (alreadyPro) {
-        return Response.json(
-          {
-            error:
-              "You already have active Pro access. Stripe Checkout is not required.",
-          },
-          { status: 409 }
-        )
-      }
-    }
-
     if (!profile) {
       const ensureResult = await ensureProfileForUser(supabase, {
         userId: user.id,
@@ -195,6 +183,30 @@ export async function POST(req: Request) {
         return Response.json(
           { error: "Could not load profile" },
           { status: 500 }
+        )
+      }
+    }
+
+    if (profile) {
+      const entitlement = await loadTraxProEntitlementSnapshot(supabase, user.id)
+      const decision = decideStripeCheckout(
+        entitlement.ok
+          ? { ok: true, traxProActive: entitlement.snapshot.traxProActive }
+          : { ok: false }
+      )
+      if (decision.action === "unavailable") {
+        return Response.json(
+          {
+            error: ENTITLEMENT_UNAVAILABLE_MESSAGE,
+            code: "ENTITLEMENT_UNAVAILABLE",
+          },
+          { status: 503 }
+        )
+      }
+      if (decision.action === "block_pro") {
+        return Response.json(
+          { error: ALREADY_PRO_CHECKOUT_MESSAGE },
+          { status: 409 }
         )
       }
     }

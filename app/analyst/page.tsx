@@ -7,8 +7,8 @@ import { useCallback, useEffect, useRef, useState, Suspense, type Dispatch, type
 import { createPortal } from "react-dom"
 import { useSearchParams } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
-import { isProActive } from "../../lib/subscription"
 import { useProGate } from "@/lib/useProGate"
+import EntitlementStatusNotice from "@/app/components/monetization/EntitlementStatusNotice"
 import { formatEST } from "@/lib/formatEST"
 import { formatRR } from "@/lib/formatDisplay"
 import {
@@ -503,8 +503,15 @@ export default function AnalystPage() {
 
 function AnalystPageContent() {
   const { user, profile, loading: profileLoading } = useUserProfile()
-  const { shouldGateFeature, presentFeature } = useProGate(profile)
-  const canUseAnalyst = isProActive(profile) || !shouldGateFeature(true)
+  const {
+    access,
+    proFeatureUnlocked,
+    shouldGateFeature,
+    presentFeature,
+    entitlementStatus,
+    refreshEntitlement,
+  } = useProGate(profile)
+  const canUseAnalyst = proFeatureUnlocked
   const { trades, loading: tradesLoading } = useCachedTrades(user?.id, {
     fullHistory: true,
   })
@@ -676,7 +683,7 @@ function AnalystPageContent() {
 
   async function sendMessage() {
     if (!input.trim() || !selectedTrade) return
-    if (shouldGateFeature(true) && !isProActive(profile)) {
+    if (access === "free" && shouldGateFeature(true)) {
       presentFeature("ai_analyst")
       return
     }
@@ -774,6 +781,12 @@ function AnalystPageContent() {
 
           {!pageReady ? (
             <SkeletonAnalystPanel count={4} />
+          ) : access === "unknown" ? (
+            <EntitlementStatusNotice
+              status={entitlementStatus}
+              onRetry={() => void refreshEntitlement()}
+              className="mx-auto w-full max-w-lg"
+            />
           ) : !pro ? (
             <div className="mx-auto w-full max-w-lg">
               <LockedFeature
