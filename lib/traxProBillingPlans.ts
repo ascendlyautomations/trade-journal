@@ -70,7 +70,7 @@ export const TRAXPRO_BILLING_PLANS: readonly TraxProBillingPlan[] = [
     label: "Yearly",
     settingsPlanLabel: "Yearly Plan",
     settingsBilledLabel: "Annually",
-    checkoutOptionLabel: "Yearly ⭐ Save 15%",
+    checkoutOptionLabel: "Yearly, Save 15%",
     intervalMonths: 12,
     savePercent: 15,
     bestValue: true,

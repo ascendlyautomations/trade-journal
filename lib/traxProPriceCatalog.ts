@@ -201,8 +201,7 @@ function verifiedSavePercent(
 function checkoutLabel(plan: TraxProDisplayedPlan): string {
   if (!plan.aligned) return plan.periodLabel
   if (plan.savePercent == null) return plan.periodLabel
-  const star = plan.interval === "yearly" ? " ⭐" : ""
-  return `${plan.periodLabel}${star}, Save ${plan.savePercent}%`
+  return `${plan.periodLabel}, Save ${plan.savePercent}%`
 }
 
 export function formatStripeUnitAmount(cents: number, currency: string): string {
