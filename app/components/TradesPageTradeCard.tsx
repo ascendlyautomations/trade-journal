@@ -3,18 +3,12 @@
 import { memo, useMemo } from "react"
 import ShareTradeButton from "@/app/components/ShareTradeButton"
 import TradeCardTimingBlock from "@/app/components/TradeCardTimingBlock"
-import {
-  formatTradeClockTime,
-  formatTradePrice,
-  getTradeDurationDisplay,
-} from "@/lib/tradeDisplayFormat"
 import { formatEST } from "@/lib/formatEST"
 import { formatMoneyUnknown, formatNumberUnknown, formatTradePoints } from "@/lib/formatDisplay"
 import { safeAccountNumberLabel, formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 import TradeScreenshotPreview from "@/app/components/ui/TradeScreenshotPreview"
 import CopyTradedBadge from "@/app/components/trade/CopyTradedBadge"
-import TradeCopyTradingDetails from "@/app/components/trade/TradeCopyTradingDetails"
 import CopyTradeTradesPageAccounts from "@/app/components/trade/CopyTradeTradesPageAccounts"
 import type { CopyTradeWireRow } from "@/lib/copyTradePresentation"
 import ExpandableText from "@/app/components/ui/ExpandableText"
@@ -28,7 +22,6 @@ import { type ReelRow } from "@/lib/reels"
 export type TradesPageTradeCardProps = {
   trade: any
   copyGroupMembers?: readonly CopyTradeWireRow[]
-  showAdvanced: boolean
   accountRow?: any | null
   /** Optional account directory for Copy Trading source/destination labels. */
   accounts?: readonly any[]
@@ -47,7 +40,6 @@ export type TradesPageTradeCardProps = {
 function TradesPageTradeCard({
   trade,
   copyGroupMembers,
-  showAdvanced,
   accountRow = null,
   accounts = [],
   shareProfile = null,
@@ -62,16 +54,6 @@ function TradesPageTradeCard({
 }: TradesPageTradeCardProps) {
   const entryPrice = trade.entry_price ?? trade.entry ?? null
   const exitPrice = trade.exit_price ?? trade.exit ?? null
-  const entryRaw = trade.entry_time
-  const exitRaw = trade.exit_time
-
-  const durationDisplay = getTradeDurationDisplay(
-    trade.duration_text,
-    trade.duration_seconds,
-    entryRaw,
-    exitRaw
-  )
-  const showDuration = durationDisplay !== null
 
   const acctLower = String(trade.mode ?? trade.account_type ?? "")
     .toLowerCase()
@@ -99,16 +81,6 @@ function TradesPageTradeCard({
     () => tradeScreenshotPublicUrl(trade.image_url),
     [trade.image_url]
   )
-
-  if (process.env.NODE_ENV !== "production" && showAdvanced) {
-    console.debug("[trades-page-duration-ui]", {
-      tradeId: trade?.id ?? null,
-      imported: String(trade?.account_type ?? "").toLowerCase() === "imported",
-      durationText: trade?.duration_text ?? null,
-      durationSeconds: trade?.duration_seconds ?? null,
-      omittedFromUi: !showDuration,
-    })
-  }
 
   const hasPsychology =
     (trade.confidence != null && trade.confidence !== "") ||
@@ -351,48 +323,6 @@ function TradesPageTradeCard({
               <span className="text-gray-400">Notes:</span> -
             </p>
           )}
-
-          {showAdvanced ? (
-            <div className="mt-3 space-y-1 border-t border-white/10 pt-3 text-xs text-gray-300 md:text-sm">
-              <TradeCopyTradingDetails
-                trade={trade}
-                accounts={
-                  accounts.length > 0
-                    ? accounts
-                    : accountRow
-                      ? [accountRow]
-                      : []
-                }
-                className="mb-2"
-              />
-              <p>
-                <span className="text-gray-400">Entry:</span>{" "}
-                {formatTradePrice(entryPrice)}
-              </p>
-              <p>
-                <span className="text-gray-400">Exit:</span>{" "}
-                {formatTradePrice(exitPrice)}
-              </p>
-              <p>
-                <span className="text-gray-400">Entry Time:</span>{" "}
-                {formatTradeClockTime(trade.entry_time, {
-                  sameDayAs: trade.created_at,
-                })}
-              </p>
-              <p>
-                <span className="text-gray-400">Exit Time:</span>{" "}
-                {formatTradeClockTime(trade.exit_time, {
-                  sameDayAs: trade.created_at,
-                })}
-              </p>
-              {showDuration ? (
-                <p>
-                  <span className="text-gray-400">Duration:</span>{" "}
-                  {durationDisplay}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
         </div>
 
         <div

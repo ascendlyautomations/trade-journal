@@ -16,7 +16,10 @@ import DashboardModals from "../../components/dashboard/DashboardModals"
 import DashboardRecentTrades from "../../components/dashboard/DashboardRecentTrades"
 import DashboardTradingReports from "../../components/dashboard/DashboardTradingReports"
 import { DailyCheckInDashboardSlot } from "../../components/dashboard/DailyCheckInSection"
-import DashboardPsychologyInsights from "../../components/dashboard/DashboardPsychologyInsights"
+import DashboardPsychologyInsights, {
+  DashboardPsychologyInsightsPlacement,
+  DashboardPsychologyInsightsSlot,
+} from "../../components/dashboard/DashboardPsychologyInsights"
 import type {
   DashboardAccountRow,
   DashboardTradeRow,
@@ -997,13 +1000,6 @@ export default function Dashboard() {
           <div className="tt-dash-workspace tt-dash-stack relative z-0 mx-auto flex w-full min-w-0 max-w-[1600px] flex-col gap-2 overflow-x-hidden px-0 max-md:gap-2 md:gap-3 md:px-6 xl:max-w-[1900px] xl:px-0">
 
   {user?.id ? <DailyCheckInDashboardSlot userId={user.id} /> : null}
-  {user?.id ? (
-    <DashboardPsychologyInsights
-      userId={user.id}
-      trades={filteredTrades}
-      tradesReady={!statsStillLoading || dashboardHasCachedData}
-    />
-  ) : null}
 
   {/* Large Founding Challenge card only until the first trade; afterwards it
       stays reachable from the navbar Getting Started entry. */}
@@ -1096,7 +1092,6 @@ export default function Dashboard() {
           ref={tradingReportsRef}
           userId={user.id}
           trades={tradesExcludingBacktest}
-          onViewTrade={handleSelectRecentTrade}
         />
         </div>
       ) : null}
@@ -1192,6 +1187,7 @@ export default function Dashboard() {
         insightBestWeekdayAvg={insightBestWeekdayAvg}
         bestSetup={bestSetup}
       />
+      <DashboardPsychologyInsightsSlot slot="tablet" />
       </div>
     </div>
     {user?.id ? (
@@ -1277,6 +1273,24 @@ export default function Dashboard() {
       )}
     </>
   )}
+
+  {user?.id ? (
+    <DashboardPsychologyInsightsPlacement
+      placementKey={[
+        statsStillLoading ? "loading" : "ready",
+        hasNoTrades ? "empty" : "trades",
+        totalTrades > 0 ? "visible" : "filtered",
+        dashboardUserIsPro ? "pro" : "free",
+        deferredSectionsReady ? "deferred" : "pending",
+      ].join(":")}
+    >
+      <DashboardPsychologyInsights
+        userId={user.id}
+        trades={filteredTrades}
+        tradesReady={!statsStillLoading || dashboardHasCachedData}
+      />
+    </DashboardPsychologyInsightsPlacement>
+  ) : null}
 
           </div>
       </div>

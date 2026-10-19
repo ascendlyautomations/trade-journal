@@ -76,16 +76,25 @@ html[data-tt-appearance="light"] .tt-messages :is(
   background-image: none;
 }
 
-html[data-tt-appearance="dark"] .tt-messages textarea.bg-\[\#111827\],
-html[data-tt-appearance="light"] .tt-messages textarea.bg-\[\#111827\] {
+html[data-tt-appearance="dark"] .tt-messages textarea.bg-\[\#111827\] {
   border: 1px solid var(--tt-border);
   background-color: var(--tt-surface-raised);
   color: var(--tt-text);
 }
 
-html[data-tt-appearance="dark"] .tt-messages .bg-\[\#1f2937\],
-html[data-tt-appearance="light"] .tt-messages .bg-\[\#1f2937\] {
+html[data-tt-appearance="light"] .tt-messages textarea.bg-\[\#111827\] {
+  border: 1px solid var(--tt-border);
+  background-color: var(--tt-surface);
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="dark"] .tt-messages .bg-\[\#1f2937\] {
   background-color: var(--tt-surface-raised);
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] .tt-messages .bg-\[\#1f2937\] {
+  background-color: var(--tt-surface);
   color: var(--tt-text);
 }
 

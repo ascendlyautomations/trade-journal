@@ -3,7 +3,9 @@
 import FeedCommentItem from "@/app/components/feed/FeedCommentItem"
 import EngagementCountButton from "@/app/components/EngagementCountButton"
 import ActionButton from "@/app/components/ui/ActionButton"
+import { VaultEngagementTrailing } from "@/app/components/vault/VaultEngagementButton"
 import { useHydrationReady } from "@/lib/useHydrationReady"
+import type { VaultContentRef } from "@/lib/vault/types"
 
 type LikeMeta = {
   count: number
@@ -26,6 +28,7 @@ type PostInteractionsBaseProps = {
   onSubmitComment: (post: any) => void
   onSharePost?: (post: any) => void
   stopPropagation?: boolean
+  vaultContentRef?: VaultContentRef | null
 }
 
 const guard = (stop: boolean) =>
@@ -48,6 +51,7 @@ export function PostInteractionsEngagement({
   onOpenComments,
   onSharePost,
   stopPropagation = false,
+  vaultContentRef = null,
   className = "",
 }: Omit<
   PostInteractionsBaseProps,
@@ -64,7 +68,7 @@ export function PostInteractionsEngagement({
 
   return (
     <div className={`text-sm ${className}`.trim()} {...guard(stopPropagation)}>
-      <div className="flex items-center gap-3">
+      <div className="flex w-full items-center gap-3">
         <EngagementCountButton
           variant="boxed"
           icon={<span>{likeMeta.liked ? "❤️" : "🤍"}</span>}
@@ -119,6 +123,10 @@ export function PostInteractionsEngagement({
             </svg>
           </button>
         ) : null}
+        <VaultEngagementTrailing
+          contentRef={vaultContentRef}
+          variant="boxed"
+        />
       </div>
     </div>
   )

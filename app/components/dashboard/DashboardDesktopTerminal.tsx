@@ -370,7 +370,7 @@ export default function DashboardDesktopTerminal({
             <MetricLine label="Trades" value={totalTrades.toLocaleString()} />
           </div>
 
-          <div className="mt-3 border-t border-white/10 pt-1">
+          <div className="border-t border-white/10">
             {isPro ? (
               <>
                 <MetricLine

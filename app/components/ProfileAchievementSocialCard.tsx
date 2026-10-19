@@ -3,6 +3,7 @@
 import { memo, useCallback, useMemo } from "react"
 import AchievementCard from "@/app/components/AchievementCard"
 import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
+import { profileEngagementVaultRef } from "@/lib/vault/refs"
 import type { Achievement } from "@/lib/achievements"
 
 type ProfileAchievementSocialCardProps = {
@@ -94,6 +95,11 @@ function ProfileAchievementSocialCard({
           onToggleLike={() => onLike()}
           onOpenComments={() => onOpenComments()}
           onSharePost={onSharePost ? () => onSharePost() : undefined}
+          vaultContentRef={profileEngagementVaultRef(
+            { contentType: "achievement", contentID: String(achievement.id) },
+            profileUserId,
+            currentUser?.id
+          )}
           stopPropagation
         />
       </div>

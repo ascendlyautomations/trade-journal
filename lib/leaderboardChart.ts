@@ -32,7 +32,8 @@ export type LeaderboardChartRow = {
   average: number
   best: number
   worst: number
-  you: number
+  /** null when the viewer had no trades in this bucket (distinct from a legitimate $0 day). */
+  you: number | null
   /** Unique traders with trades in this bucket (tooltip display only). */
   contributorCount: number
 }
@@ -425,7 +426,7 @@ export function buildLeaderboardChartData(
     const worst = Math.min(...pnls)
 
     const youAgg = userId ? userMap[userId] : undefined
-    const you = youAgg && youAgg.count > 0 ? youAgg.pnl : 0
+    const you = youAgg && youAgg.count > 0 ? youAgg.pnl : null
 
     return {
       bucketId,

@@ -5,14 +5,14 @@ import { groupTradesForTradesPageDisplay } from "@/lib/copyTradePresentation"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { excludeBacktestTrades } from "@/lib/tradeModeFilters"
 import { averageRrFromTrades } from "@/lib/tradeRr"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
 import { deleteUserTrade } from "@/lib/deleteTrade"
 import {
   buildAccountFilterOptionsFromRows,
 } from "@/lib/tradeAccountDisplay"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import dynamic from "next/dynamic"
 import TradesPageMainContent from "../../components/TradesPageMainContent"
 import TradesPageOverlays from "../../components/TradesPageOverlays"
@@ -31,6 +31,10 @@ import {
   resolveCopyGroupAccountIdsForFilter,
 } from "@/lib/tradeAccountSelection"
 import { tradeAnalysisHref } from "@/lib/tradeAnalysisNavigation"
+import {
+  parseTradesSelectedTradeId,
+  tradesPageFiltersToRevealTrade,
+} from "@/lib/tradesSelectedTrade"
 import { useProGate } from "@/lib/useProGate"
 import PlatformTradesHeader from "@/app/components/platform/PlatformTradesHeader"
 import BrokerEnrichmentInboxBanner from "@/app/components/BrokerEnrichmentInboxBanner"
@@ -86,12 +90,13 @@ export default function TradesPage() {
   )
   const [accountTypeFilter, setAccountTypeFilter] = useState("all")
   const [showPublicOnly, setShowPublicOnly] = useState(false)
-  const [showAdvanced, setShowAdvanced] = useState(false)
   const [timeframe, setTimeframe] = useState("all")
   const [customRangeStart, setCustomRangeStart] = useState("")
   const [customRangeEnd, setCustomRangeEnd] = useState("")
   const [selectedDate, setSelectedDate] = useState("")
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
+  const [selectedTrade, setSelectedTrade] = useState<any | null>(null)
+  const selectedTradeParamHandledRef = useRef<string | null>(null)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
   const [showQuickTrade, setShowQuickTrade] = useState(false)
   const [sendTradeId, setSendTradeId] = useState<string | null>(null)
@@ -102,6 +107,7 @@ export default function TradesPage() {
   >({})
   const [selectedReplay, setSelectedReplay] = useState<ReelRow | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const accountById = useMemo(() => {
     const m: Record<string, any> = {}
@@ -121,26 +127,95 @@ export default function TradesPage() {
     setVisibleCount(10)
   }, [timeframe, accountFilter, accountTypeFilter, resultFilter, sortBy])
 
+  const replaceSearchParam = useCallback(
+    (key: string, value: string | null) => {
+      if (typeof window === "undefined") return
+      const url = new URL(window.location.href)
+      if (value) {
+        if (url.searchParams.get(key) === value) return
+        url.searchParams.set(key, value)
+      } else if (url.searchParams.has(key)) {
+        url.searchParams.delete(key)
+      } else {
+        return
+      }
+      const next = url.search ? `${url.pathname}${url.search}` : url.pathname
+      router.replace(next, { scroll: false })
+    },
+    [router]
+  )
+
   useEffect(() => {
-    if (typeof window === "undefined" || loading || trades.length === 0) return
+    if (loading || trades.length === 0) return
 
-    const editId = new URLSearchParams(window.location.search).get("edit")?.trim()
-    if (!editId) return
+    const editId = searchParams.get("edit")?.trim()
+    if (editId) {
+      if (isDemoModeActive()) {
+        requestDemoSignup("edit")
+        return
+      }
 
-    if (isDemoModeActive()) {
-      requestDemoSignup("edit")
+      const trade = trades.find((t) => String(t.id) === editId)
+      if (!trade) return
+
+      // Keep the same object while the modal is open so trade-cache refreshes
+      // do not wipe in-progress edits via InputTradeForm hydration.
+      setEditingTrade((prev: any | null) =>
+        prev && String(prev.id) === editId ? prev : { ...trade }
+      )
       return
     }
 
-    const trade = trades.find((t) => String(t.id) === editId)
+    const tradeId = parseTradesSelectedTradeId(searchParams)
+    if (!tradeId) {
+      selectedTradeParamHandledRef.current = null
+      return
+    }
+    if (selectedTradeParamHandledRef.current === tradeId) return
+
+    const trade = trades.find((t) => String(t.id) === tradeId)
     if (!trade) return
 
-    // Keep the same object while the modal is open so trade-cache refreshes
-    // do not wipe in-progress edits via InputTradeForm hydration.
-    setEditingTrade((prev: any | null) =>
-      prev && String(prev.id) === editId ? prev : { ...trade }
+    selectedTradeParamHandledRef.current = tradeId
+    setSelectedTrade((prev: any | null) =>
+      prev && String(prev.id) === tradeId ? prev : { ...trade }
     )
-  }, [loading, trades])
+    const next = tradesPageFiltersToRevealTrade(
+      trade,
+      {
+        accountFilter,
+        accountTypeFilter,
+        timeframe,
+        selectedDate,
+        resultFilter,
+        showPublicOnly,
+        customRangeStart,
+        customRangeEnd,
+      },
+      { accountById }
+    )
+    setAccountFilter(next.accountFilter)
+    setAccountTypeFilter(next.accountTypeFilter)
+    setTimeframe(next.timeframe)
+    setSelectedDate(next.selectedDate)
+    setResultFilter(next.resultFilter)
+    setShowPublicOnly(next.showPublicOnly)
+    setCustomRangeStart(next.customRangeStart)
+    setCustomRangeEnd(next.customRangeEnd)
+  }, [
+    accountById,
+    accountFilter,
+    accountTypeFilter,
+    customRangeEnd,
+    customRangeStart,
+    loading,
+    resultFilter,
+    searchParams,
+    selectedDate,
+    showPublicOnly,
+    timeframe,
+    trades,
+  ])
 
   const handleImportCsv = useCallback(() => {
     router.push("/import")
@@ -154,8 +229,11 @@ export default function TradesPage() {
     void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
       hapticLight("open-trade")
     })
+    setSelectedTrade(null)
+    selectedTradeParamHandledRef.current = String(trade?.id ?? "") || null
+    replaceSearchParam("trade", null)
     setEditingTrade({ ...trade })
-  }, [])
+  }, [replaceSearchParam])
 
   const performDeleteTrade = useCallback(
     async (id: string) => {
@@ -208,15 +286,14 @@ export default function TradesPage() {
 
   const handleCloseEditForm = useCallback(() => {
     setEditingTrade(null)
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href)
-      if (url.searchParams.has("edit")) {
-        url.searchParams.delete("edit")
-        const next = url.search ? `${url.pathname}${url.search}` : url.pathname
-        router.replace(next, { scroll: false })
-      }
-    }
-  }, [router])
+    replaceSearchParam("edit", null)
+  }, [replaceSearchParam])
+
+  const handleCloseSelectedTrade = useCallback(() => {
+    setSelectedTrade(null)
+    selectedTradeParamHandledRef.current = null
+    replaceSearchParam("trade", null)
+  }, [replaceSearchParam])
 
   const handleClosePerformanceShare = useCallback(() => {
     setShowPerformanceShare(false)
@@ -234,10 +311,6 @@ export default function TradesPage() {
     if (presentFeature("performance_exports")) return
     setShowPerformanceShare(true)
   }, [presentFeature])
-
-  const handleToggleAdvanced = useCallback(() => {
-    setShowAdvanced((prev) => !prev)
-  }, [])
 
   const handleTogglePublicOnly = useCallback(() => {
     setShowPublicOnly((prev) => !prev)
@@ -356,6 +429,21 @@ export default function TradesPage() {
     return sortTradesForDisplay(filtered, sortBy)
   }, [filteredTrades, showPublicOnly, sortBy, nativeIos])
 
+  useEffect(() => {
+    if (!selectedTrade?.id) return
+    const idx = visibleTrades.findIndex(
+      (row) => String(row.id) === String(selectedTrade.id)
+    )
+    if (idx < 0) return
+    setVisibleCount((prev) => (idx + 1 > prev ? idx + 1 : prev))
+  }, [selectedTrade, visibleTrades])
+
+  useEffect(() => {
+    if (!selectedTrade?.id) return
+    const el = document.getElementById(`trade-${selectedTrade.id}`)
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+  }, [selectedTrade, visibleCount])
+
   const displayedTrades = useMemo(
     () => visibleTrades.slice(0, visibleCount),
     [visibleTrades, visibleCount]
@@ -447,8 +535,6 @@ export default function TradesPage() {
           onResultFilterChange={setResultFilter}
           showPublicOnly={showPublicOnly}
           onTogglePublicOnly={handleTogglePublicOnly}
-          showAdvanced={showAdvanced}
-          onToggleAdvanced={handleToggleAdvanced}
           onOpenPerformanceShare={handleOpenPerformanceShare}
           sortBy={sortBy}
           onSortByChange={setSortBy}
@@ -477,8 +563,6 @@ export default function TradesPage() {
             resultFilter={resultFilter}
             onResultFilterChange={setResultFilter}
             onOpenQuickInput={handleOpenQuickInput}
-            showAdvanced={showAdvanced}
-            onToggleAdvanced={handleToggleAdvanced}
             showPublicOnly={showPublicOnly}
             onTogglePublicOnly={handleTogglePublicOnly}
             onOpenPerformanceShare={handleOpenPerformanceShare}
@@ -501,6 +585,9 @@ export default function TradesPage() {
             editingTradeId={
               editingTrade?.id != null ? String(editingTrade.id) : null
             }
+            selectedTradeId={
+              selectedTrade?.id != null ? String(selectedTrade.id) : null
+            }
           />
         </div>
       </div>
@@ -508,6 +595,7 @@ export default function TradesPage() {
 
       <TradesPageOverlays
         selectedImage={selectedImage}
+        selectedTrade={selectedTrade}
         editingTrade={editingTrade}
         showPerformanceShare={showPerformanceShare}
         sendTradeId={sendTradeId}
@@ -515,11 +603,24 @@ export default function TradesPage() {
         gateProfile={gateProfile}
         customRangeStart={customRangeStart}
         customRangeEnd={customRangeEnd}
+        accountById={accountById}
+        attachedReel={
+          selectedTrade?.id
+            ? tradeReelsByTradeId[String(selectedTrade.id)] ?? null
+            : null
+        }
         onCloseImageLightbox={handleCloseImageLightbox}
+        onCloseSelectedTrade={handleCloseSelectedTrade}
         onCloseEditForm={handleCloseEditForm}
         onTradeFormSaved={handleTradeFormSaved}
         onClosePerformanceShare={handleClosePerformanceShare}
         onCloseSendModal={handleCloseSendModal}
+        onEditTrade={handleEditTrade}
+        onDeleteTrade={handleDeleteTrade}
+        onSendTrade={handleSendTrade}
+        onAnalyzeTrade={handleAnalyzeTrade}
+        onImageClick={handleImageClick}
+        onOpenTradeReplay={handleOpenTradeReplay}
       />
 
       <ConfirmModal {...confirmModalProps} />

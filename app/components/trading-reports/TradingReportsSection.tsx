@@ -22,6 +22,7 @@ import { reportIDForRef } from "@/lib/psychology/reports/periods"
 import type { PsychologyReportPeriodRef } from "@/lib/psychology/reports/types"
 import { usePsychologyReports } from "@/lib/usePsychologyReports"
 import { useTradingReports } from "@/lib/useTradingReports"
+import { tradesSelectedTradeHref } from "@/lib/tradesSelectedTrade"
 import type { TradingReportPeriodKey } from "@/lib/tradingReports/tradingReportTypes"
 
 const VALID_PERIOD_KEYS = new Set<TradingReportPeriodKey>([
@@ -55,7 +56,6 @@ function parseReportSearch(value: string | null): {
 type TradingReportsSectionProps = {
   userId: string | null | undefined
   trades: any[]
-  onViewTrade: (trade: { id?: string | null }) => void
 }
 
 export type TradingReportsSectionHandle = {
@@ -67,7 +67,7 @@ export type TradingReportsSectionHandle = {
 const TradingReportsSection = forwardRef<
   TradingReportsSectionHandle,
   TradingReportsSectionProps
->(function TradingReportsSection({ userId, trades, onViewTrade }, ref) {
+>(function TradingReportsSection({ userId, trades }, ref) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
@@ -149,6 +149,15 @@ const TradingReportsSection = forwardRef<
     )
   }, [newBadge, openModal])
 
+  const handleViewTrade = useCallback(
+    (trade: { id?: string | null }) => {
+      const id = String(trade?.id ?? "").trim()
+      if (!id) return
+      router.push(tradesSelectedTradeHref(id))
+    },
+    [router]
+  )
+
   useImperativeHandle(
     ref,
     () => ({
@@ -213,7 +222,7 @@ const TradingReportsSection = forwardRef<
         }}
         bestTrade={bestTrade}
         viewerUserId={userId}
-        onViewTrade={onViewTrade}
+        onViewTrade={handleViewTrade}
         tab={tab}
         onTabChange={(next) => {
           setTab(next)

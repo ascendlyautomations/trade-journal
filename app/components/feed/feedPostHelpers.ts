@@ -24,17 +24,20 @@ export type FeedItem = {
   [key: string]: unknown
 }
 
+/** Nested trades(...) columns — must stay within authenticated column grants on public.trades (no account_id / source_account_id). */
 const FEED_TRADE_JOIN_SELECT = [
+  "id",
   "created_at",
   "public_description",
   "user_id",
-  "account_id",
-  "source_account_id",
   "ticker",
   "direction",
   "account_type",
   "mode",
   "trade_mode",
+  "is_public",
+  "image_url",
+  "image_crop",
   "copied_account_ids",
   "copy_trading_group_id",
   "points",

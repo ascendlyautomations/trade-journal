@@ -58,7 +58,6 @@ export default function BacktestPage() {
   const [trades, setTrades] = useState<BacktestTrade[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedStrategy, setSelectedStrategy] = useState("all")
-  const [showAdvanced, setShowAdvanced] = useState(false)
   const [editingTrade, setEditingTrade] = useState<BacktestTrade | null>(null)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
@@ -263,13 +262,6 @@ export default function BacktestPage() {
               >
                 📤 Share
               </button>
-              <button
-                type="button"
-                onClick={() => setShowAdvanced((v) => !v)}
-                className="rounded-lg bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
-              >
-                {showAdvanced ? "Hide Advanced" : "Show Advanced"}
-              </button>
             </div>
           </div>
 
@@ -373,7 +365,6 @@ export default function BacktestPage() {
               <TradesPageTradeCard
                 key={trade.id}
                 trade={trade}
-                showAdvanced={showAdvanced}
                 shareProfile={shareProfile}
                 onEdit={handleEditTrade}
                 onDelete={(id) => void deleteTrade(id)}

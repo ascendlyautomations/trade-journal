@@ -220,6 +220,7 @@ export default function DailyCheckInSection({
           onDraftChange={setDraft}
           saving={saving}
           errorMessage={saveError}
+          historyHref="/check-in-history"
           onClose={() => {
             if (saving) return
             setOpen(false)

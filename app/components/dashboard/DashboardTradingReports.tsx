@@ -16,20 +16,18 @@ const TradingReportsSection = dynamic(
 type DashboardTradingReportsProps = {
   userId: string
   trades: DashboardTradeRow[]
-  onViewTrade: (trade: DashboardTradeRow) => void
 }
 
 const DashboardTradingReports = forwardRef<
   TradingReportsSectionHandle,
   DashboardTradingReportsProps
->(function DashboardTradingReports({ userId, trades, onViewTrade }, ref) {
+>(function DashboardTradingReports({ userId, trades }, ref) {
   return (
     <Suspense fallback={null}>
       <TradingReportsSection
         ref={ref}
         userId={userId}
         trades={trades}
-        onViewTrade={onViewTrade}
       />
     </Suspense>
   )

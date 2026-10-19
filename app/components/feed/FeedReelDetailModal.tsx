@@ -8,6 +8,7 @@ import DetailModalShell, {
 import DetailModalVideo from "@/app/components/ui/DetailModalVideo"
 import type { ReelClipPlaybackHandle } from "@/app/components/ReelClipPlayback"
 import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
+import { vaultRefFromFeedItem } from "@/lib/vault/refs"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
 import FeedCommentsSection from "./FeedCommentsSection"
@@ -274,6 +275,7 @@ export default function FeedReelDetailModal({
           onToggleLike={onToggleLike}
           onOpenComments={() => focusComments()}
           onSharePost={onSharePost}
+          vaultContentRef={vaultRefFromFeedItem(post)}
         />
       }
       engagementClassName="shrink-0 border-b border-white/10 px-4 py-2"

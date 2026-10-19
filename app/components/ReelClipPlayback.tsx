@@ -11,6 +11,7 @@ import {
   type Ref,
 } from "react"
 import ReelClipPlayOverlay from "@/app/components/ReelClipPlayOverlay"
+import ReelIdlePoster from "@/app/components/ReelIdlePoster"
 import { getReelPosterImageUrl } from "@/lib/reelVideo"
 
 export type ReelClipPlaybackHandle = {
@@ -94,8 +95,7 @@ const ReelClipPlayback = forwardRef(function ReelClipPlayback(
     }
   }, [releaseVideo])
 
-  const showImagePoster = !hasStarted && !!imagePosterUrl
-  const showStaticPlaceholder = !hasStarted && !imagePosterUrl
+  const showPoster = !playing
   const showPlayOverlay = !playing
 
   return (
@@ -104,8 +104,9 @@ const ReelClipPlayback = forwardRef(function ReelClipPlayback(
         <video
           ref={videoRef}
           src={videoUrl}
-          className={`${videoClassName} relative z-0 block transition-opacity duration-200 ${
-            showImagePoster || showStaticPlaceholder ? "opacity-0" : "opacity-100"
+          poster={imagePosterUrl ?? undefined}
+          className={`${videoClassName} relative z-0 block ${
+            showPoster ? "opacity-0" : "opacity-100"
           }`}
           style={{ aspectRatio: "9/16" }}
           playsInline
@@ -120,22 +121,16 @@ const ReelClipPlayback = forwardRef(function ReelClipPlayback(
           onEnded={() => syncPlaying(false)}
         />
 
-        {showImagePoster ? (
-          <img
-            src={imagePosterUrl}
-            alt=""
-            draggable={false}
-            className={`absolute inset-0 z-[1] block ${videoClassName}`}
-            style={{ aspectRatio: "9/16" }}
-          />
-        ) : null}
-
-        {showStaticPlaceholder ? (
+        {showPoster ? (
           <div
-            aria-hidden
-            className={`absolute inset-0 z-[1] block bg-gradient-to-br from-slate-950 via-slate-900 to-black ${videoClassName}`}
+            className="absolute inset-0 z-[1] overflow-hidden"
             style={{ aspectRatio: "9/16" }}
-          />
+          >
+            <ReelIdlePoster
+              thumbnailUrl={thumbnailUrl}
+              className={`h-full w-full object-contain ${videoClassName}`}
+            />
+          </div>
         ) : null}
 
         {showPlayOverlay ? (
@@ -147,7 +142,7 @@ const ReelClipPlayback = forwardRef(function ReelClipPlayback(
           >
             <ReelClipPlayOverlay
               buttonClassName="h-14 w-14 text-xl"
-              dimClassName="bg-black/25"
+              dimClassName="bg-transparent"
             />
           </button>
         ) : null}

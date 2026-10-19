@@ -7,6 +7,32 @@
   display: none;
 }
 
+html:not(.tt-native-ios) .tt-propfirm-desktop h1 + div [role="combobox"] {
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+}
+
+html:not(.tt-native-ios) .tt-propfirm-desktop h1 + div [role="combobox"] > span:first-child {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+html:not(.tt-native-ios) .tt-propfirm-account-menu {
+  width: max-content !important;
+  max-width: calc(100vw - 1rem);
+}
+
+html:not(.tt-native-ios) .tt-propfirm-account-menu [role="option"] {
+  display: block;
+  white-space: nowrap;
+}
+
 @media (min-width: 1200px) {
   html:not(.tt-native-ios) .tt-propfirm-desktop {
     display: flex;

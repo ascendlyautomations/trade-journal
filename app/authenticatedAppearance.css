@@ -36,6 +36,9 @@ html[data-tt-appearance="dark"] {
   --tt-tooltip-bg: #21262d;
   --tt-tooltip-text: #f0f3f6;
   --tt-ring: rgb(78 196 224 / 0.28);
+  --tt-leaderboard-you-line: #ffffff;
+  background-color: var(--tt-page);
+  background-image: none;
 }
 
 html[data-tt-appearance="light"] {
@@ -63,9 +66,13 @@ html[data-tt-appearance="light"] {
   --tt-negative-soft: rgb(207 34 46 / 0.1);
   --tt-warning-soft: rgb(154 103 0 / 0.12);
   --tt-chart-grid: #d0d7de;
+  --tt-chart-tick: var(--tt-text-muted);
   --tt-tooltip-bg: #ffffff;
   --tt-tooltip-text: #1f2328;
   --tt-ring: rgb(14 116 144 / 0.28);
+  --tt-leaderboard-you-line: #1f2328;
+  background-color: var(--tt-page);
+  background-image: none;
 }
 
 html[data-tt-appearance="dark"] body,
@@ -302,7 +309,11 @@ html[data-tt-appearance="dark"] :is(
     [aria-label="Clip viewer"] *,
     [data-tt-share-export],
     [data-tt-share-export] *
-  )),
+  )) {
+  background-color: var(--tt-surface-nested);
+  background-image: none;
+}
+
 html[data-tt-appearance="light"] :is(
     [data-tt-app],
     [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
@@ -322,36 +333,11 @@ html[data-tt-appearance="light"] :is(
     [data-tt-share-export],
     [data-tt-share-export] *
   )) {
-  background-color: var(--tt-surface-nested);
+  background-color: var(--tt-surface);
   background-image: none;
 }
 
 html[data-tt-appearance="dark"] :is(
-    [data-tt-app],
-    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
-    [role="menu"],
-    [role="listbox"],
-    .z-\[10070\]
-  )
-  :is(
-    .bg-white\/10,
-    .bg-white\/15,
-    .bg-\[\#0f172a\],
-    .bg-\[\#0a1329\],
-    .bg-\[\#0b2345\],
-    .bg-\[\#111827\],
-    .bg-\[\#1e293b\],
-    .bg-slate-800,
-    .bg-slate-900,
-    .bg-gray-800,
-    .bg-gray-900
-  ):not(:where(
-    [aria-label="Stories"] *,
-    [aria-label="Clip viewer"] *,
-    [data-tt-share-export],
-    [data-tt-share-export] *
-  )),
-html[data-tt-appearance="light"] :is(
     [data-tt-app],
     [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
     [role="menu"],
@@ -380,19 +366,42 @@ html[data-tt-appearance="light"] :is(
   background-image: none;
 }
 
-html[data-tt-appearance="dark"] :is(
+html[data-tt-appearance="light"] :is(
     [data-tt-app],
     [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+    [role="menu"],
+    [role="listbox"],
     .z-\[10070\]
   )
-  :is(input, textarea, select):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
-    [type="color"]
+  :is(
+    .bg-white\/10,
+    .bg-white\/15,
+    .bg-\[\#0f172a\],
+    .bg-\[\#0a1329\],
+    .bg-\[\#0b2345\],
+    .bg-\[\#111827\],
+    .bg-\[\#1e293b\],
+    .bg-slate-800,
+    .bg-slate-900,
+    .bg-gray-800,
+    .bg-gray-900,
+    .bg-\[\#0B1220\],
+    .bg-\[\#020617\],
+    .md\:bg-\[\#020617\],
+    .bg-\[\#1f2937\],
+    .bg-\[\#020617\]\/80,
+    .bg-\[\#0f172a\]\/95
   ):not(:where(
     [aria-label="Stories"] *,
     [aria-label="Clip viewer"] *,
+    [data-tt-share-export],
     [data-tt-share-export] *
-  )),
-html[data-tt-appearance="light"] :is(
+  )) {
+  background-color: var(--tt-surface);
+  background-image: none;
+}
+
+html[data-tt-appearance="dark"] :is(
     [data-tt-app],
     [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
     .z-\[10070\]
@@ -405,6 +414,23 @@ html[data-tt-appearance="light"] :is(
     [data-tt-share-export] *
   )) {
   background-color: var(--tt-surface-raised);
+  color: var(--tt-text);
+  border-color: var(--tt-border);
+}
+
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+    .z-\[10070\]
+  )
+  :is(input, textarea, select):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
+    [type="color"]
+  ):not(:where(
+    [aria-label="Stories"] *,
+    [aria-label="Clip viewer"] *,
+    [data-tt-share-export] *
+  )) {
+  background-color: var(--tt-surface);
   color: var(--tt-text);
   border-color: var(--tt-border);
 }
@@ -569,12 +595,15 @@ html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-la
 html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
   :is(.text-gray-400, .text-gray-500, .text-slate-400, .text-slate-500):not(
     :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
-  ),
+  ) {
+  color: var(--tt-text-tertiary);
+}
+
 html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
   :is(.text-gray-400, .text-gray-500, .text-slate-400, .text-slate-500):not(
     :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
   ) {
-  color: var(--tt-text-tertiary);
+  color: var(--tt-text-muted);
 }
 
 html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
@@ -801,17 +830,50 @@ html[data-tt-appearance="light"] .z-\[10070\] {
 }
 
 html[data-tt-appearance="dark"] [data-tt-app] .recharts-cartesian-grid line,
-html[data-tt-appearance="light"] [data-tt-app] .recharts-cartesian-grid line,
 html[data-tt-appearance="dark"] [data-tt-app] .recharts-cartesian-axis-line,
-html[data-tt-appearance="light"] [data-tt-app] .recharts-cartesian-axis-line,
-html[data-tt-appearance="dark"] [data-tt-app] .recharts-cartesian-axis-tick-line,
-html[data-tt-appearance="light"] [data-tt-app] .recharts-cartesian-axis-tick-line {
+html[data-tt-appearance="dark"] [data-tt-app] .recharts-cartesian-axis-tick-line {
   stroke: var(--tt-chart-grid);
 }
 
-html[data-tt-appearance="dark"] [data-tt-app] .recharts-cartesian-axis-tick text,
-html[data-tt-appearance="light"] [data-tt-app] .recharts-cartesian-axis-tick text {
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  :is(
+    .recharts-cartesian-grid line,
+    .recharts-cartesian-axis-line,
+    .recharts-cartesian-axis-tick-line
+  ) {
+  stroke: var(--tt-chart-grid) !important;
+  opacity: 1;
+}
+
+html[data-tt-appearance="dark"] [data-tt-app] .recharts-cartesian-axis-tick text {
   fill: var(--tt-text-tertiary);
+}
+
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  :is(
+    .recharts-cartesian-axis-tick text,
+    .recharts-polar-angle-axis-tick text,
+    .recharts-polar-radius-axis-tick text
+  ),
+html[data-tt-appearance="light"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  :is(
+    .recharts-cartesian-axis-tick text tspan,
+    .recharts-polar-angle-axis-tick text tspan,
+    .recharts-polar-radius-axis-tick text tspan
+  ) {
+  fill: var(--tt-text-muted) !important;
+  stroke: none !important;
+  stroke-width: 0 !important;
+  opacity: 1 !important;
 }
 
 html[data-tt-appearance="dark"] [data-tt-app] .recharts-default-tooltip,
@@ -884,6 +946,357 @@ html[data-tt-appearance="light"] [data-tt-app] [stroke="#ffffff"] {
   stroke: var(--tt-text);
 }
 
+html[data-tt-appearance="light"] [data-tt-app] .bg-violet-500\/15.text-violet-200 {
+  background-color: var(--tt-surface);
+  color: var(--tt-text);
+  box-shadow: inset 0 0 0 1px var(--tt-border-strong);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .font-semibold.text-violet-200 {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .h-\[34px\].w-28.cursor-pointer.rounded-full {
+  border: 1px solid var(--tt-border-strong);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .h-\[34px\].w-28.cursor-pointer.rounded-full.bg-white\/10 {
+  background-color: var(--tt-surface-raised);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .h-\[34px\].w-28.cursor-pointer.rounded-full.bg-emerald-500 {
+  border-color: var(--tt-positive);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .h-\[34px\].w-28.cursor-pointer.rounded-full.bg-red-500 {
+  border-color: var(--tt-negative);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .h-\[34px\].w-28.cursor-pointer.rounded-full > .rounded-full {
+  background-color: var(--tt-surface);
+  border: 1px solid var(--tt-border-strong);
+  box-shadow: 0 1px 2px rgb(31 35 40 / 0.28);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .text-emerald-50 .text-emerald-100\/90 {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .bg-red-500\/15.text-red-200 {
+  background-color: var(--tt-negative-soft);
+  color: var(--tt-negative);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tt-negative) 45%, transparent);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .bg-red-500\/15.text-red-200:hover {
+  background-color: color-mix(in srgb, var(--tt-negative) 18%, var(--tt-surface));
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .border-amber-400\/40.text-amber-100 {
+  background-color: var(--tt-warning-soft);
+  color: var(--tt-warning);
+  border-color: color-mix(in srgb, var(--tt-warning) 55%, transparent);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] #settings-trader-type,
+html[data-tt-appearance="light"] [data-tt-app] #settings-email {
+  background-color: var(--tt-surface);
+  background-image: none;
+  border-color: var(--tt-border);
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] #settings-avatar::file-selector-button,
+html[data-tt-appearance="light"] [data-tt-app] #settings-avatar::-webkit-file-upload-button {
+  background-color: var(--tt-surface);
+  color: var(--tt-text);
+  border: 1px solid var(--tt-border-strong);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] #settings-avatar:hover::file-selector-button,
+html[data-tt-appearance="light"] [data-tt-app] #settings-avatar:hover::-webkit-file-upload-button {
+  background-color: var(--tt-surface-hover);
+}
+
+/* Dashboard and Trades toolbars: neutral buttons use the All Modes surface and border. */
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .relative.z-50.rounded-xl.border.bg-white\/5 :is(button, a).bg-white\/10:not(.bg-blue-500):not(.tt-dash-selected):not(.tt-trades-chip-selected),
+html[data-tt-appearance="light"] [data-tt-native-surface="trades"] .relative.z-50.rounded-xl.border.bg-white\/5 :is(button, a).bg-white\/10:not(.bg-blue-500):not(.tt-dash-selected):not(.tt-trades-chip-selected) {
+  background-color: var(--tt-surface);
+  color: var(--tt-text);
+  box-shadow: inset 0 0 0 1px var(--tt-border);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .relative.z-50.rounded-xl.border.bg-white\/5 :is(button, a).bg-white\/10:not(.bg-blue-500):not(.tt-dash-selected):not(.tt-trades-chip-selected):hover,
+html[data-tt-appearance="light"] [data-tt-native-surface="trades"] .relative.z-50.rounded-xl.border.bg-white\/5 :is(button, a).bg-white\/10:not(.bg-blue-500):not(.tt-dash-selected):not(.tt-trades-chip-selected):hover {
+  background-color: var(--tt-surface-hover);
+  color: var(--tt-text);
+  box-shadow: inset 0 0 0 1px var(--tt-border);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .relative.z-50.rounded-xl.border.bg-white\/5 :is(button, a).bg-white\/10:not(.bg-blue-500):not(.tt-dash-selected):not(.tt-trades-chip-selected) :is(svg, .text-blue-300),
+html[data-tt-appearance="light"] [data-tt-native-surface="trades"] .relative.z-50.rounded-xl.border.bg-white\/5 :is(button, a).bg-white\/10:not(.bg-blue-500):not(.tt-dash-selected):not(.tt-trades-chip-selected) :is(svg, .text-blue-300) {
+  color: var(--tt-text);
+}
+
 html[data-tt-appearance="light"] [data-tt-app] [fill="#ffffff"] {
   fill: var(--tt-text);
+}
+
+/* Affiliate dashboard (/affiliate/dashboard) — status and subscriber stat cards. */
+html[data-tt-appearance="light"] [data-tt-app] .tt-affiliate-dashboard :is(
+    .border-emerald-500\/40.bg-emerald-500\/10,
+    .border-emerald-500\/35.bg-emerald-500\/10
+  ) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .tt-affiliate-dashboard :is(
+    .border-emerald-500\/40.bg-emerald-500\/10,
+    .border-emerald-500\/35.bg-emerald-500\/10
+  )
+  :is(.text-white, .text-emerald-50, .text-emerald-100, .text-emerald-100\/90) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .tt-affiliate-dashboard .border-amber-500\/30.bg-amber-500\/10.p-5
+  :is(.text-amber-100\/80, .text-amber-100\/60) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .tt-affiliate-dashboard .border-amber-500\/30.bg-amber-500\/10.p-5
+  .text-2xl.text-amber-200 {
+  color: var(--tt-warning);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .tt-affiliate-dashboard .border-emerald-500\/30.bg-emerald-500\/10.p-5
+  :is(.text-emerald-100\/80, .text-emerald-100\/60) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .tt-affiliate-dashboard .border-emerald-500\/30.bg-emerald-500\/10.p-5
+  .text-2xl.text-emerald-200 {
+  color: var(--tt-positive);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .tt-affiliate-dashboard .border-red-500\/30.bg-red-500\/10.p-5
+  :is(.text-red-100\/80, .text-red-100\/60) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .tt-affiliate-dashboard .border-red-500\/30.bg-red-500\/10.p-5
+  .text-2xl.text-red-200 {
+  color: var(--tt-negative);
+}
+
+/* Affiliate dashboard — Referred users status pill badges. */
+html[data-tt-appearance="light"] [data-tt-app] .tt-affiliate-dashboard
+  span.rounded-full.border-emerald-500\/40.bg-emerald-500\/15 {
+  color: var(--tt-positive);
+  background-color: var(--tt-positive-soft);
+  border-color: color-mix(in srgb, var(--tt-positive) 45%, transparent);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .tt-affiliate-dashboard
+  span.rounded-full.border-amber-500\/40.bg-amber-500\/15 {
+  color: var(--tt-warning);
+  background-color: var(--tt-warning-soft);
+  border-color: color-mix(in srgb, var(--tt-warning) 45%, transparent);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .tt-affiliate-dashboard
+  span.rounded-full.border-red-500\/40.bg-red-500\/15 {
+  color: var(--tt-text-muted);
+  background-color: var(--tt-surface-nested);
+  border-color: var(--tt-border-strong);
+}
+
+/* Community Leaderboard — filter controls (Light / Dark). OG keeps phase shell classes. */
+html[data-tt-appearance="light"] [data-tt-app] [data-tt-native-surface="leaderboard"]
+  .tt-leaderboard-select-trigger {
+  border-color: var(--tt-border);
+  background-color: var(--tt-surface);
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] [data-tt-native-surface="leaderboard"]
+  .tt-leaderboard-audience-pill:not([data-selected="true"]) {
+  border-color: var(--tt-border);
+  background-color: var(--tt-surface-nested);
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] [data-tt-native-surface="leaderboard"]
+  .tt-leaderboard-audience-pill[data-selected="true"] {
+  border-color: color-mix(in srgb, var(--tt-accent) 45%, transparent);
+  background-color: var(--tt-selected);
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="dark"] [data-tt-app] [data-tt-native-surface="leaderboard"]
+  .tt-leaderboard-audience-pill:not([data-selected="true"]) {
+  color: var(--tt-text-muted);
+}
+
+/* Community Leaderboard chart — tooltip and legend (Light / Dark only). */
+html[data-tt-appearance="light"] [data-tt-app] .tt-leaderboard-chart-tooltip {
+  background-color: var(--tt-tooltip-bg);
+  border-color: var(--tt-border);
+  color: var(--tt-tooltip-text);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .tt-leaderboard-chart-tooltip-label {
+  color: var(--tt-text);
+  border-color: var(--tt-border);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .tt-leaderboard-chart-tooltip-meta {
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] .tt-leaderboard-chart-legend {
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="dark"] [data-tt-app] .tt-leaderboard-chart-legend {
+  color: var(--tt-text-muted);
+}
+
+/* Web Calendar — day cell P&L and trade counts on tinted backgrounds. */
+html[data-tt-appearance="light"] :is([data-tt-native-surface="calendar"], .tt-web-calendar)
+  :is(
+    .border-emerald-400\/50.bg-emerald-500\/20,
+    .border-green-400\/40.bg-green-500\/20,
+    button.bg-green-500\/20
+  ) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] :is([data-tt-native-surface="calendar"], .tt-web-calendar)
+  :is(
+    .border-red-400\/50.bg-red-500\/20,
+    .border-red-400\/40.bg-red-500\/20,
+    button.bg-red-500\/20
+  ) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] :is([data-tt-native-surface="calendar"], .tt-web-calendar)
+  :is(
+    .border-emerald-400\/50.bg-emerald-500\/20,
+    .border-green-400\/40.bg-green-500\/20,
+    button.bg-green-500\/20
+  )
+  :is(.text-emerald-100, .text-green-200, .text-white\/90),
+html[data-tt-appearance="light"] :is([data-tt-native-surface="calendar"], .tt-web-calendar)
+  button.bg-green-500\/20
+  > p.text-\[10px\] {
+  color: var(--tt-positive);
+}
+
+html[data-tt-appearance="light"] :is([data-tt-native-surface="calendar"], .tt-web-calendar)
+  :is(
+    .border-red-400\/50.bg-red-500\/20,
+    .border-red-400\/40.bg-red-500\/20,
+    button.bg-red-500\/20
+  )
+  :is(.text-red-100, .text-red-200, .text-white\/90),
+html[data-tt-appearance="light"] :is([data-tt-native-surface="calendar"], .tt-web-calendar)
+  button.bg-red-500\/20
+  > p.text-\[10px\] {
+  color: var(--tt-negative);
+}
+
+html[data-tt-appearance="light"] :is([data-tt-native-surface="calendar"], .tt-web-calendar)
+  [role="button"]
+  .font-semibold.text-white {
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="light"] :is([data-tt-native-surface="calendar"], .tt-web-calendar)
+  .text-white\/80 {
+  color: var(--tt-text-muted);
+}
+
+/* Vault (settings + /vault) — light contrast */
+html[data-tt-appearance="light"] .tt-vault-home :is(.text-white, .font-medium.text-white) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] .tt-vault-home :is(.text-gray-200, .text-gray-100) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] .tt-vault-home :is(.text-gray-400, .text-gray-500) {
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="light"] .tt-vault-home .bg-white\/10 {
+  background-color: var(--tt-surface-nested);
+}
+
+html[data-tt-appearance="light"] .tt-vault-home .bg-white\/5,
+html[data-tt-appearance="light"] .tt-vault-home .hover\:bg-white\/\[0\.07\]:hover {
+  background-color: var(--tt-surface);
+}
+
+html[data-tt-appearance="light"] .tt-vault-home .border-white\/10 {
+  border-color: var(--tt-border);
+}
+
+html[data-tt-appearance="light"] .tt-vault-home .bg-blue-500\/15 {
+  background-color: var(--tt-selected);
+}
+
+html[data-tt-appearance="light"] .tt-vault-home .text-blue-200 {
+  color: var(--tt-accent);
+}
+
+html[data-tt-appearance="light"] .tt-vault-home .text-blue-400 {
+  color: var(--tt-accent);
+}
+
+/* Psychology routes — light contrast */
+html[data-tt-appearance="light"] .tt-psych-experience :is(.text-white, .font-medium.text-white, .font-semibold.text-white) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] .tt-psych-experience :is(.text-gray-200, .text-gray-100, .text-gray-300) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] .tt-psych-experience :is(.text-gray-400, .text-gray-500) {
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="light"] .tt-psych-experience .bg-white\/10 {
+  background-color: var(--tt-surface-nested);
+}
+
+html[data-tt-appearance="light"] .tt-psych-experience .bg-white\/5,
+html[data-tt-appearance="light"] .tt-psych-experience .hover\:bg-white\/10:hover,
+html[data-tt-appearance="light"] .tt-psych-experience .hover\:bg-white\/\[0\.07\]:hover {
+  background-color: var(--tt-surface);
+}
+
+html[data-tt-appearance="light"] .tt-psych-experience .border-white\/10,
+html[data-tt-appearance="light"] .tt-psych-experience .border-white\/15 {
+  border-color: var(--tt-border);
+}
+
+html[data-tt-appearance="light"] .tt-psych-experience .text-blue-200,
+html[data-tt-appearance="light"] .tt-psych-experience .text-blue-400 {
+  color: var(--tt-accent);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-psych-upgrade :is(.text-white, .text-gray-400) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-psych-upgrade .text-gray-400 {
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-psych-upgrade .bg-white\/5 {
+  background-color: var(--tt-surface);
+  border-color: var(--tt-border);
 }

@@ -28,6 +28,7 @@ import type {
   ProfileCardIdentity,
   ProfileTradeRow,
 } from "./profileTypes"
+import { profileEngagementVaultRef } from "@/lib/vault/refs"
 
 function formatMoney(v: number) {
   return v < 0
@@ -63,6 +64,18 @@ export type ProfileTradeCardProps = {
   inDetailModal?: boolean
   disableOpen?: boolean
   onImageClick?: (url: string) => void
+}
+
+function profileTradeVaultRef(
+  tradeId: string,
+  profile: ProfileCardIdentity,
+  viewerUserId: string | null | undefined
+) {
+  return profileEngagementVaultRef(
+    { contentType: "trade", contentID: String(tradeId) },
+    String(profile.id),
+    viewerUserId
+  )
 }
 
 export default function ProfileTradeCard({
@@ -376,6 +389,11 @@ export default function ProfileTradeCard({
                 engagement={
                   <TradeSocialEngagementBar
                     onCommentsFocus={() => setCommentsFocused(true)}
+                    vaultContentRef={profileTradeVaultRef(
+                      trade.id,
+                      profile,
+                      currentUserId
+                    )}
                   />
                 }
                 engagementClassName="shrink-0 border-t border-white/10 px-3 py-1.5 md:border-t-0 md:px-4 md:py-2"
@@ -440,7 +458,13 @@ export default function ProfileTradeCard({
               deferCommentsUntilExpanded={!commentsExpanded}
             >
             <div className="border-t border-white/10 px-3 py-1.5 md:px-4 md:py-2">
-              <TradeSocialEngagementBar />
+              <TradeSocialEngagementBar
+                vaultContentRef={profileTradeVaultRef(
+                  trade.id,
+                  profile,
+                  currentUserId
+                )}
+              />
             </div>
             <div className="tt-profile-trade-body space-y-2 px-3 pb-2 md:space-y-3 md:px-4 md:pb-3">
               {tradeDetails}

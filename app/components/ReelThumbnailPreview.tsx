@@ -33,7 +33,7 @@ function ReelThumbnailPreview({
       disabled={!interactive}
       className={`relative mx-auto block w-full overflow-hidden rounded-xl border border-white/10 bg-black/40 ${maxWidthClass} ${
         interactive
-          ? "cursor-pointer transition hover:border-violet-400/30 hover:bg-black/50"
+          ? "cursor-pointer transition hover:border-violet-400/30"
           : "cursor-default"
       } ${className}`}
       aria-label={interactive ? "Watch linked clip" : undefined}

@@ -59,7 +59,7 @@ export type TradeFilterBarProps = {
   beforeAccountSelect?: ReactNode
   /** Rendered to the right of the account selector on mobile (dashboard "+" action). */
   accountSelectAccessory?: ReactNode
-  /** Appended controls (e.g. Show Advanced, Public Trades, settings) */
+  /** Appended controls (e.g. Public Trades, performance share) */
   trailing?: ReactNode
   /** PRO copy trading groups for unified account picker */
   isPro?: boolean

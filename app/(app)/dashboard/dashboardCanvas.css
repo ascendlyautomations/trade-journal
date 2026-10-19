@@ -612,6 +612,30 @@
   }
 }
 
+/* Only the slot for the current layout is shown. Empty slots must not add space. */
+[data-tt-dashboard-canvas] .tt-dash-psych-slot {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  [data-tt-dashboard-canvas] #tt-dash-psych-slot-mobile {
+    display: block;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  [data-tt-dashboard-canvas] #tt-dash-psych-slot-tablet {
+    display: block;
+    margin-top: 0.75rem;
+  }
+}
+
+@media (min-width: 1200px) {
+  [data-tt-dashboard-canvas] #tt-dash-psych-slot-desktop {
+    display: block;
+  }
+}
+
 /* Desktop terminal v1. Hidden below 1200px so mobile and tablet stay on the previous layout. */
 [data-tt-dashboard-canvas] .tt-dash-desktop-v1,
 [data-tt-dashboard-canvas] .tt-dash-desktop-only,
@@ -645,13 +669,13 @@
   }
 
   [data-tt-dashboard-canvas] .tt-dash-stack {
-    gap: 28px;
+    gap: 0.625rem;
   }
 
   [data-tt-dashboard-canvas] .tt-dash-desktop-v1 {
     display: flex;
     flex-direction: column;
-    gap: 28px;
+    gap: 0.625rem;
   }
 
   [data-tt-dashboard-canvas] .tt-dash-desktop-only {
@@ -671,7 +695,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
     gap: 18px;
-    align-items: start;
+    align-items: stretch;
   }
 
   [data-tt-dashboard-canvas] .tt-dash-deeper-hold {
@@ -689,7 +713,7 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 16px;
-    align-items: start;
+    align-items: stretch;
   }
 
   [data-tt-dashboard-canvas] .tt-dash-insight-lead {

@@ -44,8 +44,6 @@ export type NativeIosTradesFilterSheetProps = {
   onResultFilterChange: Dispatch<SetStateAction<"all" | "wins" | "losses">>
   showPublicOnly: boolean
   onTogglePublicOnly: () => void
-  showAdvanced: boolean
-  onToggleAdvanced: () => void
   onOpenPerformanceShare: () => void
   sortBy: TradesSortKey
   onSortByChange: (value: TradesSortKey) => void
@@ -77,8 +75,6 @@ export default function NativeIosTradesFilterSheet({
   onResultFilterChange,
   showPublicOnly,
   onTogglePublicOnly,
-  showAdvanced,
-  onToggleAdvanced,
   onOpenPerformanceShare,
   sortBy,
   onSortByChange,
@@ -268,21 +264,6 @@ export default function NativeIosTradesFilterSheet({
               <span>Public trades only</span>
               <span className="text-xs opacity-80">
                 {showPublicOnly ? "On" : "Off"}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                hapticLight("advanced")
-                onToggleAdvanced()
-              }}
-              className={`flex h-11 w-full items-center justify-between rounded-xl px-3 text-sm font-medium ${
-                showAdvanced ? "bg-white/15 text-white" : "bg-white/5 text-white/80"
-              }`}
-            >
-              <span>Show advanced fields</span>
-              <span className="text-xs opacity-80">
-                {showAdvanced ? "On" : "Off"}
               </span>
             </button>
             <button

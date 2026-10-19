@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useState } from "react"
 import Button from "@/app/components/ui/Button"
 import Modal from "@/app/components/ui/Modal"
@@ -20,6 +21,8 @@ type DailyCheckInModalProps = {
   errorMessage: string | null
   onClose: () => void
   onSave: () => void
+  /** iOS Daily Check-In toolbar — opens check-in history. */
+  historyHref?: string
 }
 
 export default function DailyCheckInModal({
@@ -31,6 +34,7 @@ export default function DailyCheckInModal({
   errorMessage,
   onClose,
   onSave,
+  historyHref = "/check-in-history",
 }: DailyCheckInModalProps) {
   const [sleepHoursText, setSleepHoursText] = useState(() =>
     formatSleepHoursInput(draft.sleepHours)
@@ -71,6 +75,18 @@ export default function DailyCheckInModal({
           onSave()
         }}
       >
+        {historyHref ? (
+          <div className="flex justify-end">
+            <Link
+              href={historyHref}
+              onClick={onClose}
+              className="text-sm font-semibold text-accent hover:underline"
+              data-testid="dailyCheckIn.history"
+            >
+              History
+            </Link>
+          </div>
+        ) : null}
         <p id="dailyCheckIn.date" className="sr-only">
           Check-in date {dateKey}
         </p>

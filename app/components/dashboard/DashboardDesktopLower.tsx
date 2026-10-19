@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react"
 import { Lightbulb, TriangleAlert, Trophy } from "lucide-react"
 import DashboardRecentTrades from "@/app/components/dashboard/DashboardRecentTrades"
+import { DashboardPsychologyInsightsSlot } from "@/app/components/dashboard/DashboardPsychologyInsights"
 import type { DashboardTradeRow } from "@/app/components/dashboard/dashboardTypes"
 import { formatCurrency } from "@/lib/formatCurrency"
 import { formatDecimal, formatRR } from "@/lib/formatDisplay"
@@ -22,7 +23,7 @@ import { mondayOfEasternWeek } from "@/lib/psychology/reports/periods"
 import { checkInDateKey } from "@/lib/dailyCheckIn/dateKey"
 import type { TradingReportPeriodKey } from "@/lib/tradingReports/tradingReportTypes"
 
-const SYMBOL_PREVIEW = 6
+const SYMBOL_PREVIEW = 5
 
 const REPORT_PERIODS: TradingReportPeriodKey[] = [
   "weekly_this",
@@ -243,7 +244,7 @@ function SymbolPanel({ rows }: { rows: SymbolRow[] }) {
           onClick={() => setExpanded((open) => !open)}
           className="mt-2 text-xs text-blue-300 hover:text-blue-200"
         >
-          {expanded ? "Show less" : `Show ${hiddenCount} more`}
+          {expanded ? "Show Less" : "Show More"}
         </button>
       ) : null}
     </div>
@@ -551,6 +552,8 @@ export default function DashboardDesktopLower(props: DashboardDesktopLowerProps)
           </div>
         )}
       </section>
+
+      <DashboardPsychologyInsightsSlot slot="desktop" />
 
       <section>
         <h2 className="tt-dash-section-title">Journal</h2>

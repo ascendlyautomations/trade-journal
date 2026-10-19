@@ -197,7 +197,7 @@ export function normalizeLeaderboardPayload(raw: unknown): LeaderboardPayload | 
       average: num(bucket.average),
       best: num(bucket.best),
       worst: num(bucket.worst),
-      you: num(bucket.you),
+      you: nullableNum(bucket.you),
       contributorCount: num(bucket.contributorCount),
     }
   })

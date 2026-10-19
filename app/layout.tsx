@@ -22,6 +22,7 @@ import { BillingEntitlementProvider } from "@/app/components/monetization/Billin
 import { TraxProPriceCatalogProvider } from "@/app/components/monetization/TraxProPriceCatalogProvider"
 import { ProUpgradeProvider } from "@/app/components/monetization/ProUpgradeProvider"
 import { GettingStartedProgressProvider } from "@/lib/GettingStartedProgressProvider"
+import { VaultProvider } from "@/lib/vault/VaultProvider"
 import BrokerImportedTradesRealtimeBridge from "./components/BrokerImportedTradesRealtimeBridge"
 import BrokerEnrichmentBridge from "./components/BrokerEnrichmentBridge"
 import BrokerTradovateLoginImportGate from "./components/BrokerTradovateLoginImportGate"
@@ -168,6 +169,7 @@ export default async function RootLayout({
             <TraxProPriceCatalogProvider>
             <ProUpgradeProvider>
             <GettingStartedProgressProvider>
+            <VaultProvider>
             <BrokerImportedTradesRealtimeBridge />
             <BrokerEnrichmentBridge />
             <BrokerTradovateLoginImportGate />
@@ -193,6 +195,7 @@ export default async function RootLayout({
                 </DemoAppShell>
               </OnboardingGateShell>
             </BannedAccountShell>
+            </VaultProvider>
             </GettingStartedProgressProvider>
             </ProUpgradeProvider>
             </TraxProPriceCatalogProvider>

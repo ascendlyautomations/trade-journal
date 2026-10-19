@@ -7,6 +7,7 @@ import DetailModalShell, {
 import DetailModalImage from "@/app/components/ui/DetailModalImage"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
+import { vaultRefFromFeedItem } from "@/lib/vault/refs"
 import TradeCardTimingBlock from "@/app/components/TradeCardTimingBlock"
 import ReelThumbnailPreview from "@/app/components/ReelThumbnailPreview"
 import CopyTradedBadge from "@/app/components/trade/CopyTradedBadge"
@@ -213,6 +214,7 @@ export default function FeedPostDetailModal({
           onToggleLike={onToggleLike}
           onOpenComments={() => focusComments()}
           onSharePost={onSharePost}
+          vaultContentRef={vaultRefFromFeedItem(post)}
         />
       }
       collapsibleContent={

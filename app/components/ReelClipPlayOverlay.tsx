@@ -9,7 +9,7 @@ type ReelClipPlayOverlayProps = {
 export default function ReelClipPlayOverlay({
   className = "",
   buttonClassName = "h-12 w-12 text-lg",
-  dimClassName = "bg-black/20",
+  dimClassName = "bg-transparent",
 }: ReelClipPlayOverlayProps) {
   return (
     <div

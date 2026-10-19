@@ -2,6 +2,7 @@
 
 import { memo, useCallback } from "react"
 import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
+import { vaultRefFromFeedItem } from "@/lib/vault/refs"
 import LinkedTradeBadge from "./LinkedTradeBadge"
 import type { FeedLikeMeta } from "./FeedPostCard"
 
@@ -49,6 +50,7 @@ function FeedReelCardActions({
             onToggleLike={onToggleLike}
             onOpenComments={handleOpenComments}
             onSharePost={onSharePost}
+            vaultContentRef={vaultRefFromFeedItem(post)}
             stopPropagation
           />
         </div>

@@ -43,8 +43,6 @@ type TradesPageMainContentProps = {
   onResultFilterChange: Dispatch<SetStateAction<"all" | "wins" | "losses">>
   /** Opens the existing Quick Trade flow. */
   onOpenQuickInput: () => void
-  showAdvanced: boolean
-  onToggleAdvanced: () => void
   showPublicOnly: boolean
   onTogglePublicOnly: () => void
   onOpenPerformanceShare: () => void
@@ -65,6 +63,7 @@ type TradesPageMainContentProps = {
   tradeReelsByTradeId?: Record<string, import("@/lib/reels").ReelRow>
   onOpenTradeReplay?: (trade: any) => void
   editingTradeId?: string | null
+  selectedTradeId?: string | null
 }
 
 function Stat({ title, value, positive }: any) {
@@ -100,8 +99,6 @@ function TradesPageMainContent({
   resultFilter,
   onResultFilterChange,
   onOpenQuickInput,
-  showAdvanced,
-  onToggleAdvanced,
   showPublicOnly,
   onTogglePublicOnly,
   onOpenPerformanceShare,
@@ -122,6 +119,7 @@ function TradesPageMainContent({
   tradeReelsByTradeId = {},
   onOpenTradeReplay,
   editingTradeId = null,
+  selectedTradeId = null,
 }: TradesPageMainContentProps) {
   const { isNativeIos } = usePlatformPresentation()
 
@@ -247,15 +245,8 @@ function TradesPageMainContent({
             <div className="flex items-center gap-2 w-full md:w-auto">
               <button
                 type="button"
-                onClick={onToggleAdvanced}
-                className="order-1 flex-1 h-10 px-3 rounded bg-white/10 hover:bg-white/20 text-sm text-white flex items-center justify-center md:order-3 md:h-[34px] md:flex-none md:rounded-md md:px-3 md:py-0"
-              >
-                {showAdvanced ? "Hide Advanced" : "Show Advanced"}
-              </button>
-              <button
-                type="button"
                 onClick={onTogglePublicOnly}
-                className={`order-2 flex-[0.8] h-10 px-2 rounded text-sm font-medium transition flex items-center justify-center md:order-1 md:h-[34px] md:flex-none md:rounded-xl md:px-4 md:py-0
+                className={`order-1 flex-[0.8] h-10 px-2 rounded text-sm font-medium transition flex items-center justify-center md:order-1 md:h-[34px] md:flex-none md:rounded-xl md:px-4 md:py-0
                   ${
                     showPublicOnly
                       ? "tt-trades-chip-selected bg-blue-500 text-white"
@@ -355,32 +346,43 @@ function TradesPageMainContent({
                 const trade =
                   item.kind === "copyGroup" ? item.representative : item.trade
                 const tradeId = String(trade.id ?? "")
+                const isSelected = selectedTradeId === tradeId
                 return (
-                  <TradesPageTradeCard
+                  <div
                     key={
                       item.kind === "copyGroup" ? item.batchKey : tradeId
                     }
-                    trade={trade}
-                    copyGroupMembers={
-                      item.kind === "copyGroup" ? item.members : undefined
-                    }
-                    showAdvanced={showAdvanced}
-                    accountRow={accountById[String(trade.account_id ?? "")]}
-                    accounts={Object.values(accountById)}
-                    shareProfile={gateProfile}
-                    attachedReel={tradeReelsByTradeId[tradeId] ?? null}
-                    onOpenReplay={
-                      onOpenTradeReplay
-                        ? () => onOpenTradeReplay(trade)
+                    id={tradeId ? `trade-${tradeId}` : undefined}
+                    className={
+                      isSelected
+                        ? "rounded-xl ring-2 ring-blue-400/80"
                         : undefined
                     }
-                    onEdit={onEditTrade}
-                    onDelete={onDeleteTrade}
-                    onSendClick={onSendTrade}
-                    onAnalyze={onAnalyzeTrade}
-                    onImageClick={onImageClick}
-                    suppressScreenshot={editingTradeId === tradeId}
-                  />
+                  >
+                    <TradesPageTradeCard
+                      trade={trade}
+                      copyGroupMembers={
+                        item.kind === "copyGroup" ? item.members : undefined
+                      }
+                      accountRow={accountById[String(trade.account_id ?? "")]}
+                      accounts={Object.values(accountById)}
+                      shareProfile={gateProfile}
+                      attachedReel={tradeReelsByTradeId[tradeId] ?? null}
+                      onOpenReplay={
+                        onOpenTradeReplay
+                          ? () => onOpenTradeReplay(trade)
+                          : undefined
+                      }
+                      onEdit={onEditTrade}
+                      onDelete={onDeleteTrade}
+                      onSendClick={onSendTrade}
+                      onAnalyze={onAnalyzeTrade}
+                      onImageClick={onImageClick}
+                      suppressScreenshot={
+                        editingTradeId === tradeId || isSelected
+                      }
+                    />
+                  </div>
                 )
               })
             )}

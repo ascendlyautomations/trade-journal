@@ -28,7 +28,7 @@ export default function ProfileReelCard({ reel, onOpen }: ProfileReelCardProps) 
         <div className="opacity-0 transition group-hover:opacity-100">
           <ReelClipPlayOverlay
             buttonClassName="h-11 w-11"
-            dimClassName="bg-black/20"
+            dimClassName="bg-transparent"
           />
         </div>
         {reel.duration_seconds != null ? (

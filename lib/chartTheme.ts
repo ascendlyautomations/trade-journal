@@ -25,8 +25,8 @@ export {
 /** Axis stroke + tick fill for XAxis / YAxis. */
 export function chartAxisTick(fontSize: number) {
   return {
-    stroke: READABLE_CHART_TICK,
-    tick: { fill: READABLE_CHART_TICK, fontSize },
+    stroke: "var(--tt-chart-grid, #334155)",
+    tick: { fill: "var(--tt-chart-tick, #cbd5e1)", fontSize },
   }
 }
 
@@ -42,5 +42,5 @@ export const chartTooltipStyles = {
 } as const
 
 export const chartCartesianGridProps = {
-  stroke: READABLE_CHART_GRID,
+  stroke: "var(--tt-chart-grid, #334155)",
 } as const

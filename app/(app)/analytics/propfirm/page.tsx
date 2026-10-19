@@ -99,7 +99,10 @@ import {
   type PendingPropFirmPayoutRecord,
   type RecordAccountPayoutResult,
 } from "@/lib/propfirmPayoutCycles"
-import { ACCOUNT_DROPDOWN_TRIGGER_COMPACT_CLASS } from "@/lib/accountDropdownStyles"
+import {
+  ACCOUNT_DROPDOWN_TRIGGER_COMPACT_CLASS,
+  SELECT_MENU_CLASS,
+} from "@/lib/accountDropdownStyles"
 import {
   buildConvertEvalToFundedFormInitial,
   buildCreateFundedAccountFormInitial,
@@ -1347,6 +1350,7 @@ export default function PropFirmPage() {
       placeholder="Select Account"
       options={accountSelectOptions}
       triggerClassName={ACCOUNT_DROPDOWN_TRIGGER_COMPACT_CLASS}
+      menuClassName={`${SELECT_MENU_CLASS} tt-propfirm-account-menu`}
     />
   )
 
@@ -1418,6 +1422,7 @@ export default function PropFirmPage() {
                   placeholder="Select Account"
                   options={accountSelectOptions}
                   triggerClassName={ACCOUNT_DROPDOWN_TRIGGER_COMPACT_CLASS}
+                  menuClassName={`${SELECT_MENU_CLASS} tt-propfirm-account-menu`}
                 />
               </div>
 

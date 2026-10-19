@@ -2,6 +2,7 @@
 
 import { useCallback, type ComponentProps, type ReactNode } from "react"
 import DashboardAnalytics from "./DashboardAnalytics"
+import { DashboardPsychologyInsightsSlot } from "./DashboardPsychologyInsights"
 import DashboardInsights from "./DashboardInsights"
 import DashboardMobileSegmentedControl from "./DashboardMobileSegmentedControl"
 import DashboardMobileTabPanels from "./DashboardMobileTabPanels"
@@ -122,6 +123,7 @@ export default function DashboardMobileProTabs({
         overview={
           <>
             <DashboardInsights {...insightsProps} sections="performance" />
+            <DashboardPsychologyInsightsSlot slot="mobile" />
             {maxDrawdownSlot}
             <DashboardStreaksCard
               streakData={streakData}

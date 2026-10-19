@@ -41,7 +41,7 @@ import {
   TRAXPRO_DEFAULT_BILLING_INTERVAL,
   type TraxProBillingIntervalId,
 } from "@/lib/traxProBillingPlans"
-import { setCheckoutBillingInterval } from "@/lib/signupFlow"
+import { clearSignupFlow, setCheckoutBillingInterval } from "@/lib/signupFlow"
 import { startTraxProCheckout as startTraxProCheckoutSession } from "@/lib/startTraxProCheckout"
 import {
   canChangeProfileUsername,
@@ -86,7 +86,9 @@ import CopyTradingGroupsSection from "@/app/components/CopyTradingGroupsSection"
 import NotificationPreferencesSettingsSection from "@/app/components/NotificationPreferencesSettingsSection"
 import CreatePasswordModal from "@/app/components/CreatePasswordModal"
 import { useUserProfile } from "@/lib/UserProfileProvider"
-import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { disableDemoMode, isDemoModeActive } from "@/lib/demo/demoMode"
+import { getAdminCheckResultForUser } from "@/lib/adminUsers"
+import UserReviewModal from "../components/beta/UserReviewModal"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import {
   buildSettingsFormSeed,
@@ -99,6 +101,7 @@ import {
 } from "@/lib/settingsProfileSync"
 import { recordedAffiliateEarnings } from "@/lib/affiliateEarnings"
 import AppearanceSettingsSection from "../components/AppearanceSettingsSection"
+import VaultHome from "../components/vault/VaultHome"
 import { readSettingsProfileCache } from "@/lib/settingsProfileCache"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 import { useAutoResizeTextarea } from "@/lib/useAutoResizeTextarea"
@@ -116,6 +119,7 @@ type TabId =
   | "trading-accounts"
   | "notifications"
   | "appearance"
+  | "vault"
 
 function resolveSettingsTabFromHash(hash: string): TabId | null {
   const requested = hash.replace("#", "").toLowerCase().trim()
@@ -125,10 +129,12 @@ function resolveSettingsTabFromHash(hash: string): TabId | null {
     requested === "account" ||
     requested === "subscription" ||
     requested === "notifications" ||
-    requested === "appearance"
+    requested === "appearance" ||
+    requested === "vault"
   ) {
     return requested
   }
+  if (requested === "referrals") return "affiliate"
   if (
     requested === "trading-accounts" ||
     requested === "rules" ||
@@ -200,52 +206,207 @@ function shouldShowRenewsOn(profile: Record<string, unknown> | null): boolean {
   return profileDateExists(profile.current_period_end)
 }
 
-const TABS: {
+type SettingsPanelItem = {
+  kind: "panel"
   id: TabId
   label: string
   description: string
-}[] = [
+}
+
+type SettingsLinkItem = {
+  kind: "link"
+  id: string
+  label: string
+  href: string
+  newTab?: boolean
+}
+
+type SettingsReviewItem = {
+  kind: "review"
+  id: "review"
+  label: string
+}
+
+type SettingsNavItem = SettingsPanelItem | SettingsLinkItem | SettingsReviewItem
+
+type SettingsSection = {
+  id: string
+  title: string
+  items: SettingsNavItem[]
+}
+
+const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     id: "account",
-    label: "Account",
-    description: "Login, security, and data",
+    title: "Account",
+    items: [
+      {
+        kind: "panel",
+        id: "account",
+        label: "Account",
+        description: "Login, security, and data",
+      },
+      {
+        kind: "panel",
+        id: "profile",
+        label: "Profile",
+        description: "Public profile and trading style",
+      },
+      {
+        kind: "panel",
+        id: "notifications",
+        label: "Notifications",
+        description: "Choose which alerts you receive",
+      },
+    ],
   },
   {
-    id: "appearance",
-    label: "Appearance",
-    description: "Dark, light, or TradeTraxs OG",
+    id: "tradetraxs",
+    title: "TradeTraxs",
+    items: [
+      {
+        kind: "panel",
+        id: "subscription",
+        label: "Subscription",
+        description: "Plan, billing, and Pro access",
+      },
+      {
+        kind: "panel",
+        id: "trading-accounts",
+        label: "Trading Accounts",
+        description: "Manage active accounts and account types",
+      },
+      {
+        kind: "panel",
+        id: "affiliate",
+        label: "Referrals",
+        description: "Referrals, links, and earnings",
+      },
+    ],
   },
   {
-    id: "subscription",
-    label: "Subscription",
-    description: "Plan, billing, and Pro access",
+    id: "personal",
+    title: "Personal",
+    items: [
+      {
+        kind: "panel",
+        id: "vault",
+        label: "Vault",
+        description: "Saved trades, posts, clips, and achievements",
+      },
+      {
+        kind: "panel",
+        id: "appearance",
+        label: "Appearance",
+        description: "Dark, light, or TradeTraxs OG",
+      },
+    ],
   },
   {
-    id: "profile",
-    label: "Profile",
-    description: "Public profile and trading style",
+    id: "support",
+    title: "Support",
+    items: [
+      { kind: "link", id: "help", label: "Help & Support", href: "/help" },
+      { kind: "link", id: "feedback", label: "Product Feedback", href: "/feedback" },
+      { kind: "link", id: "whats-new", label: "What's New", href: "/whats-new" },
+      { kind: "review", id: "review", label: "Leave a Review" },
+    ],
   },
   {
-    id: "trading-accounts",
-    label: "Trading Accounts",
-    description: "Manage active accounts and account types",
-  },
-  {
-    id: "notifications",
-    label: "Notifications",
-    description: "Choose which alerts you receive",
-  },
-  {
-    id: "affiliate",
-    label: "Affiliate",
-    description: "Referrals, links, and earnings",
+    id: "legal",
+    title: "Legal",
+    items: [
+      {
+        kind: "link",
+        id: "terms",
+        label: "Terms & Conditions",
+        href: "/terms",
+        newTab: true,
+      },
+      {
+        kind: "link",
+        id: "privacy-policy",
+        label: "Privacy Policy",
+        href: "/privacy",
+        newTab: true,
+      },
+      {
+        kind: "link",
+        id: "community-guidelines",
+        label: "Community Guidelines",
+        href: "/community-guidelines",
+        newTab: true,
+      },
+      {
+        kind: "link",
+        id: "refund-policy",
+        label: "Refund Policy",
+        href: "/refund-policy",
+        newTab: true,
+      },
+    ],
   },
 ]
+
+function settingsPanelItem(id: TabId): SettingsPanelItem {
+  for (const section of SETTINGS_SECTIONS) {
+    for (const item of section.items) {
+      if (item.kind === "panel" && item.id === id) return item
+    }
+  }
+  return SETTINGS_SECTIONS[0].items[0] as SettingsPanelItem
+}
+
+function settingsNavItemClass(selected: boolean): string {
+  return `w-full rounded-xl px-4 py-3 text-left transition ${
+    selected
+      ? "bg-white/15 ring-1 ring-blue-400/50"
+      : "bg-white/5 hover:bg-white/10"
+  }`
+}
+
+function SettingsPrivateProfileControl({
+  isPrivate,
+  onToggle,
+  labelId,
+}: {
+  isPrivate: boolean
+  onToggle: () => void
+  labelId: string
+}) {
+  return (
+    <div
+      className="flex flex-col gap-3 rounded-xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between"
+      aria-labelledby={labelId}
+    >
+      <div>
+        <p id={labelId} className="font-medium text-white">
+          Private profile
+        </p>
+        <p className="text-xs text-gray-400">
+          Only followers can view your full profile
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-pressed={isPrivate}
+        className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition ${
+          isPrivate ? "bg-blue-500 text-white" : "bg-white/10 text-white"
+        }`}
+      >
+        {isPrivate ? "On" : "Off"}
+      </button>
+    </div>
+  )
+}
 
 export default function SettingsPage() {
   const router = useRouter()
   useScrollPageTopOnMount()
   const [activeTab, setActiveTab] = useState<TabId>("account")
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [reviewModalOpen, setReviewModalOpen] = useState(false)
 
   const { user, profile: sharedProfile, loading: profileLoading, setProfile: setSharedProfile } =
     useUserProfile()
@@ -429,6 +590,52 @@ export default function SettingsPage() {
     window.addEventListener("hashchange", syncTabFromHash)
     return () => window.removeEventListener("hashchange", syncTabFromHash)
   }, [])
+
+  useEffect(() => {
+    if (!user?.id) {
+      setIsAdmin(false)
+      return
+    }
+    let cancelled = false
+    void getAdminCheckResultForUser(user.id, user.email).then((check) => {
+      if (!cancelled) setIsAdmin(check.isAdmin)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id, user?.email])
+
+  function selectSettingsPanel(id: TabId) {
+    setActiveTab(id)
+    if (typeof window === "undefined") return
+    const nextHash = `#${id}`
+    if (window.location.hash === nextHash) return
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}${nextHash}`
+    )
+  }
+
+  async function handleSignOut() {
+    disableDemoMode()
+    clearSignupFlow()
+    try {
+      const { unregisterNativeIosPush, setNativeIosBadgeCount } = await import(
+        "@/lib/nativeIosPush"
+      )
+      await unregisterNativeIosPush({ allDevices: false })
+      await setNativeIosBadgeCount(0)
+    } catch {
+      /* ignore — web / plugin unavailable */
+    }
+    try {
+      await supabase.auth.signOut()
+    } catch (err) {
+      console.error("Sign out failed:", err)
+    }
+    router.replace("/")
+  }
 
   async function fetchProfile(userId: string, options?: { force?: boolean }) {
     const data = await fetchSettingsProfileRow(supabase, userId, options)
@@ -954,7 +1161,7 @@ export default function SettingsPage() {
     )
   }
 
-  const activeMeta = TABS.find((t) => t.id === activeTab)!
+  const activeMeta = settingsPanelItem(activeTab)
   const recognizedPro = planGate.access === "pro"
   const planHeadline =
     planGate.access === "unknown" ? "Checking plan…" : recognizedPro ? "Pro" : "Free"
@@ -986,26 +1193,79 @@ export default function SettingsPage() {
             <p className="mb-4 text-sm text-gray-400">
               Plan: {planHeadline}
             </p>
-            <nav className="flex flex-row gap-2 overflow-x-auto pb-2 md:flex-col md:gap-1 md:overflow-visible md:pb-0">
-              {TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`rounded-xl px-4 py-3 text-left transition md:w-full ${
-                    activeTab === tab.id
-                      ? "bg-white/15 ring-1 ring-blue-400/50"
-                      : "bg-white/5 hover:bg-white/10"
-                  }`}
-                >
-                  <span className="block font-medium text-white">
-  {tab.id === "notifications" ? "Notifications" : tab.label}
-</span>
-<span className="mt-0.5 hidden text-xs text-gray-400 md:block">
-  {tab.description}
-</span>
-                </button>
+            <nav className="flex flex-col gap-4" aria-label="Settings">
+              {isAdmin ? (
+                <div className="flex flex-col gap-1">
+                  <p className="px-1 text-xs font-semibold uppercase tracking-wide text-blue-300">
+                    Internal
+                  </p>
+                  <a href="/admin" className={settingsNavItemClass(false)}>
+                    <span className="block font-medium text-white">Admin</span>
+                  </a>
+                </div>
+              ) : null}
+              {SETTINGS_SECTIONS.map((section) => (
+                <div key={section.id} className="flex flex-col gap-1">
+                  <p className="px-1 text-xs font-semibold uppercase tracking-wide text-blue-300">
+                    {section.title}
+                  </p>
+                  {section.items.map((item) => {
+                    if (item.kind === "panel") {
+                      const selected = activeTab === item.id
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => selectSettingsPanel(item.id)}
+                          aria-current={selected ? "page" : undefined}
+                          className={settingsNavItemClass(selected)}
+                        >
+                          <span className="block font-medium text-white">
+                            {item.label}
+                          </span>
+                          <span className="mt-0.5 hidden text-xs text-gray-400 md:block">
+                            {item.description}
+                          </span>
+                        </button>
+                      )
+                    }
+                    if (item.kind === "review") {
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setReviewModalOpen(true)}
+                          className={settingsNavItemClass(false)}
+                        >
+                          <span className="block font-medium text-white">
+                            {item.label}
+                          </span>
+                        </button>
+                      )
+                    }
+                    return (
+                      <a
+                        key={item.id}
+                        href={item.href}
+                        target={item.newTab ? "_blank" : undefined}
+                        rel={item.newTab ? "noopener noreferrer" : undefined}
+                        className={settingsNavItemClass(false)}
+                      >
+                        <span className="block font-medium text-white">
+                          {item.label}
+                        </span>
+                      </a>
+                    )
+                  })}
+                </div>
               ))}
+              <button
+                type="button"
+                onClick={() => void handleSignOut()}
+                className="w-full rounded-xl bg-red-500/10 px-4 py-3 text-left font-medium text-red-400 transition hover:bg-red-500/20"
+              >
+                Sign Out
+              </button>
             </nav>
           </aside>
 
@@ -1025,6 +1285,12 @@ export default function SettingsPage() {
             </div>
 
             {activeTab === "appearance" && <AppearanceSettingsSection />}
+
+            {activeTab === "vault" && (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
+                <VaultHome />
+              </div>
+            )}
 
             {activeTab === "profile" && (
               <div className="space-y-3.5 rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
@@ -1104,34 +1370,11 @@ export default function SettingsPage() {
                   )}
                 </div>
 
-                <div
-                  className="flex flex-col gap-3 rounded-xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between"
-                  aria-labelledby="settings-private-profile-label"
-                >
-                  <div>
-                    <p
-                      id="settings-private-profile-label"
-                      className="font-medium text-white"
-                    >
-                      Private profile
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      Only followers can view your full profile
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsPrivate(!isPrivate)}
-                    aria-pressed={isPrivate}
-                    className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition ${
-                      isPrivate
-                        ? "bg-blue-500 text-white"
-                        : "bg-white/10 text-white"
-                    }`}
-                  >
-                    {isPrivate ? "On" : "Off"}
-                  </button>
-                </div>
+                <SettingsPrivateProfileControl
+                  isPrivate={isPrivate}
+                  onToggle={() => setIsPrivate(!isPrivate)}
+                  labelId="settings-private-profile-label"
+                />
 
                 <div>
                   <label htmlFor="settings-bio" className="mb-0.5 block text-sm text-gray-400">
@@ -1531,61 +1774,6 @@ export default function SettingsPage() {
                   </div>
                 </section>
 
-                <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-300">
-                    Product
-                  </h3>
-                  <p className="mt-1 text-sm text-gray-400">
-                    Release notes and announcements
-                  </p>
-                  <a
-                    href="/whats-new"
-                    className="mt-4 inline-block text-sm font-medium text-emerald-300 underline hover:text-emerald-200"
-                  >
-                    What&apos;s New →
-                  </a>
-                </section>
-
-                <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-300">
-                    Legal
-                  </h3>
-                  <p className="mt-1 text-sm text-gray-400">
-                    Review our policies and terms of use
-                  </p>
-                  <ul className="mt-4 space-y-2 text-sm">
-                    <li>
-                      <a
-                        href="/privacy"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-300 underline hover:text-blue-200"
-                      >
-                        Privacy Policy
-                      </a>
-                    </li>
-                    <li>
-                      <a
-                        href="/terms"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-300 underline hover:text-blue-200"
-                      >
-                        Terms of Service
-                      </a>
-                    </li>
-                    <li>
-                      <a
-                        href="/refund-policy"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-300 underline hover:text-blue-200"
-                      >
-                        Refund Policy
-                      </a>
-                    </li>
-                  </ul>
-                </section>
               </div>
             )}
 
@@ -1811,6 +1999,11 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      <UserReviewModal
+        open={reviewModalOpen}
+        userId={user?.id ?? null}
+        onClose={() => setReviewModalOpen(false)}
+      />
       <AffiliateApplyModal
         open={showAffiliateModal}
         onClose={() => setShowAffiliateModal(false)}

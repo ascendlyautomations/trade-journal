@@ -7,6 +7,7 @@ import DetailModalShell, {
 import DetailModalImage from "@/app/components/ui/DetailModalImage"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
+import { vaultRefFromFeedItem } from "@/lib/vault/refs"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
 import {
@@ -199,6 +200,7 @@ export default function FeedProfilePostDetailModal({
           onToggleLike={onToggleLike}
           onOpenComments={() => focusComments()}
           onSharePost={onSharePost}
+          vaultContentRef={vaultRefFromFeedItem(post)}
         />
       }
       collapsibleContent={

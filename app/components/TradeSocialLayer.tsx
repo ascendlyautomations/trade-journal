@@ -14,6 +14,8 @@ import {
 import { supabase } from "../../lib/supabaseClient"
 import FeedCommentList from "@/app/components/feed/FeedCommentList"
 import EngagementCountButton from "@/app/components/EngagementCountButton"
+import { VaultEngagementTrailing } from "@/app/components/vault/VaultEngagementButton"
+import type { VaultContentRef } from "@/lib/vault/types"
 import ActionButton from "@/app/components/ui/ActionButton"
 import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
 import { feedbackPresets } from "@/lib/feedbackPresets"
@@ -676,9 +678,11 @@ export function TradeSocialProvider({
 export function TradeSocialEngagementBar({
   className = "",
   onCommentsFocus,
+  vaultContentRef,
 }: {
   className?: string
   onCommentsFocus?: () => void
+  vaultContentRef?: VaultContentRef | null
 }) {
   const {
     tradeId,
@@ -724,8 +728,14 @@ export function TradeSocialEngagementBar({
     tradeId,
   ])
 
+  const tradeVaultRef: VaultContentRef | null =
+    vaultContentRef ??
+    (tradeId
+      ? { contentType: "trade", contentID: String(tradeId) }
+      : null)
+
   return (
-    <div className={`flex items-center gap-4 text-sm ${className}`}>
+    <div className={`flex w-full items-center gap-4 text-sm ${className}`}>
       <EngagementCountButton
         icon={<span>{liked ? "❤️" : "🤍"}</span>}
         count={likes}
@@ -751,6 +761,7 @@ export function TradeSocialEngagementBar({
         }}
         countClassName="tabular-nums"
       />
+      <VaultEngagementTrailing contentRef={tradeVaultRef} />
     </div>
   )
 }

@@ -13,6 +13,8 @@ import {
   type CommentReplyTarget,
 } from "@/lib/commentReplyUx"
 import EngagementCountButton from "@/app/components/EngagementCountButton"
+import { VaultEngagementTrailing } from "@/app/components/vault/VaultEngagementButton"
+import { profileEngagementVaultRef } from "@/lib/vault/refs"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
 import FeedRoomShareCard from "@/app/components/feed/FeedRoomShareCard"
@@ -353,8 +355,14 @@ export default function ProfilePostCard({
       <DetailModalImage src={imgSrc} onClick={onImageClick} />
     ) : null
 
+  const postVaultRef = profileEngagementVaultRef(
+    { contentType: "profile_post", contentID: String(post.id) },
+    String(profile.id),
+    currentUserId
+  )
+
   const postEngagementRow = showInteractions ? (
-    <div className="flex items-center gap-4 px-1 text-sm">
+    <div className="flex w-full items-center gap-4 px-1 text-sm">
       <EngagementCountButton
         icon={<span>{likeMeta?.liked ? "❤️" : "🤍"}</span>}
         count={likeMeta?.count ?? 0}
@@ -413,6 +421,7 @@ export default function ProfilePostCard({
           </svg>
         </button>
       ) : null}
+      <VaultEngagementTrailing contentRef={postVaultRef} />
     </div>
   ) : null
 

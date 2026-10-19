@@ -686,7 +686,6 @@ export default function CalendarPage() {
                       <div key={trade.id} className="w-full min-w-0">
                         <TradesPageTradeCard
                           trade={trade}
-                          showAdvanced={false}
                           accountRow={accountById[String(trade.account_id ?? "")]}
                           accounts={Object.values(accountById)}
                           shareProfile={shareProfile}

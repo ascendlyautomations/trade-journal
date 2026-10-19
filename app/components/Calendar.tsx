@@ -177,7 +177,7 @@ export default function Calendar({
   )
 
   return (
-    <div className="space-y-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+    <div className="tt-web-calendar space-y-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
       <div className="flex items-center justify-between">
         <button
           type="button"

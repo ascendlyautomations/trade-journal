@@ -7,7 +7,10 @@ import {
   resolveLeaderboardEffectiveView,
   leaderboardTimeframeFallbackMessage,
 } from "./leaderboardTimeframeFallback.ts"
-import type { TradeForLeaderboard } from "./leaderboardChart.ts"
+import {
+  buildLeaderboardChartData,
+  type TradeForLeaderboard,
+} from "./leaderboardChart.ts"
 
 const NOW = new Date()
 
@@ -197,6 +200,25 @@ describe("leaderboardTimeframeFallback", () => {
     )
     assert.equal(second.requestedView, "7D")
     assert.equal(second.usedFallback, false)
+  })
+})
+
+describe("leaderboardChart you series", () => {
+  it("uses null when the viewer had no trades on a day and keeps legitimate zero P&L", () => {
+    const viewer = "u-viewer"
+    const trades: TradeForLeaderboard[] = [
+      trade("u-peer-a", 400, 0),
+      trade(viewer, 0, 0),
+      trade("u-peer-b", -100, 1),
+    ]
+    const { chartData } = buildLeaderboardChartData(trades, "7D", viewer)
+    assert.ok(chartData.length >= 2)
+    const withViewer = chartData.find((row) => row.you === 0)
+    const withoutViewer = chartData.find((row) => row.you === null)
+    assert.ok(withViewer)
+    assert.equal(withViewer.you, 0)
+    assert.ok(withoutViewer)
+    assert.equal(withoutViewer.you, null)
   })
 })
 export {}

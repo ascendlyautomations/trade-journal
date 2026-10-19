@@ -5,6 +5,7 @@ import DetailModalShell from "@/app/components/ui/DetailModalShell"
 import DetailModalImage from "@/app/components/ui/DetailModalImage"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import FeedAchievementDetailMeta from "@/app/components/feed/FeedAchievementDetailMeta"
+import VaultEngagementButton from "@/app/components/vault/VaultEngagementButton"
 import type { Achievement } from "@/lib/achievements"
 import { achievementImagePublicUrl } from "@/lib/storagePublicUrl"
 
@@ -37,7 +38,18 @@ export default function AchievementDetailModal({
           )
         }
         splitPanel={
-          <FeedAchievementDetailMeta achievement={achievement} showPrivacy />
+          <div className="flex min-h-0 flex-col">
+            <div className="flex justify-end border-b border-white/10 px-4 py-2">
+              <VaultEngagementButton
+                contentRef={{
+                  contentType: "achievement",
+                  contentID: String(achievement.id),
+                }}
+                variant="boxed"
+              />
+            </div>
+            <FeedAchievementDetailMeta achievement={achievement} showPrivacy />
+          </div>
         }
       />
       {lightboxUrl ? (

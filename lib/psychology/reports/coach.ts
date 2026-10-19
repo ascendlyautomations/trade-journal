@@ -1,5 +1,52 @@
 import type { PsychologyCoachFacts } from "./types.ts"
 
+export type PsychologyCoachSummary = {
+  title: string
+  overview: string
+  doingWell: string[]
+  watchItems: string[]
+  recommendations: string[]
+}
+
+function buildCoachOverview(facts: PsychologyCoachFacts): string {
+  if (!facts.hasMinimumData) {
+    return (
+      facts.dataGaps[0] ??
+      "Log more trades and daily check-ins to unlock personalized coaching."
+    )
+  }
+  const parts: string[] = []
+  const best =
+    facts.topInsights.find(
+      (row) => row.category === "sleep" || row.category === "mentalState"
+    ) ?? facts.topInsights[0]
+  if (best) {
+    parts.push(`Patterns in your check-in data suggest ${best.headline.toLowerCase()}.`)
+  } else {
+    parts.push("Keep logging trades with psychology tags to sharpen these insights.")
+  }
+  if (facts.guardrailFacts.consecutiveLossCheckpoint != null) {
+    parts.push(
+      "Your largest performance drop currently occurs after multiple consecutive losses."
+    )
+  }
+  return parts.join(" ")
+}
+
+/** iOS `PsychologyCoachDeterministicCoach.buildSummary`. */
+export function buildPsychologyCoachDeterministicSummary(
+  facts: PsychologyCoachFacts
+): PsychologyCoachSummary {
+  const bullets = buildPsychologyCoachSummary(facts)
+  return {
+    title: "Your Psychology",
+    overview: buildCoachOverview(facts),
+    doingWell: bullets.doingWell,
+    watchItems: bullets.watchItems,
+    recommendations: bullets.recommendations,
+  }
+}
+
 export function buildPsychologyCoachSummary(facts: PsychologyCoachFacts): {
   doingWell: string[]
   watchItems: string[]
