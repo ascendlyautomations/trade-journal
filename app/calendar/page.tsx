@@ -719,16 +719,23 @@ export default function CalendarPage() {
       </NativeIosPullToRefresh>
       <TradesPageOverlays
         selectedImage={selectedImage}
+        selectedTrade={null}
         editingTrade={editingTrade}
         showPerformanceShare={false}
         sendTradeId={sendTradeId}
         tradesForPerformanceSharePool={[]}
         gateProfile={null}
         onCloseImageLightbox={() => setSelectedImage(null)}
+        onCloseSelectedTrade={() => {}}
         onCloseEditForm={() => setEditingTrade(null)}
         onTradeFormSaved={() => void handleTradeFormSaved()}
         onClosePerformanceShare={() => {}}
         onCloseSendModal={() => setSendTradeId(null)}
+        onEditTrade={(t) => setEditingTrade({ ...t })}
+        onDeleteTrade={handleDeleteTrade}
+        onSendTrade={(t) => setSendTradeId(String(t.id))}
+        onAnalyzeTrade={handleAnalyzeTrade}
+        onImageClick={setSelectedImage}
       />
       <ReelViewer
         reel={selectedReplay}
