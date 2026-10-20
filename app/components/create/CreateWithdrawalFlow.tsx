@@ -364,8 +364,8 @@ export default function CreateWithdrawalFlow({
             <NativeDateInput
               value={draft.payoutDate}
               max={getLocalTodayDateInputValue()}
-              onChange={(value) =>
-                setDraft((prev) => ({ ...prev, payoutDate: value }))
+              onChange={(e) =>
+                setDraft((prev) => ({ ...prev, payoutDate: e.target.value }))
               }
               className="mt-1.5 h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-sm text-white"
             />

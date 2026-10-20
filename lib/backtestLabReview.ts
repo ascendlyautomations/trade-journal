@@ -13,16 +13,16 @@ export type BacktestDocumentationGap =
   | "notes"
   | "screenshot"
 
-export function isBacktestTradeReviewed(trade: { reviewed?: unknown }): boolean {
+export function isBacktestTradeReviewed(trade: Record<string, unknown>): boolean {
   return trade.reviewed === true
 }
 
 /** Explicit queue flag (`reviewed === false`) or not yet marked reviewed. */
-export function isBacktestTradeNeedsReview(trade: { reviewed?: unknown }): boolean {
+export function isBacktestTradeNeedsReview(trade: Record<string, unknown>): boolean {
   return trade.reviewed !== true
 }
 
-export function isExplicitlyUnreviewedTrade(trade: { reviewed?: unknown }): boolean {
+export function isExplicitlyUnreviewedTrade(trade: Record<string, unknown>): boolean {
   return trade.reviewed === false
 }
 
@@ -30,14 +30,9 @@ function hasText(value: unknown): boolean {
   return String(value ?? "").trim().length > 0
 }
 
-export function backtestTradeDocumentationGaps(trade: {
-  strategy?: unknown
-  notes?: unknown
-  top_confluences?: unknown
-  psychology_notes?: unknown
-  public_description?: unknown
-  image_url?: unknown
-}): BacktestDocumentationGap[] {
+export function backtestTradeDocumentationGaps(
+  trade: Record<string, unknown>
+): BacktestDocumentationGap[] {
   const gaps: BacktestDocumentationGap[] = []
   if (!hasText(trade.strategy)) gaps.push("strategy")
   const hasNotes =
@@ -50,14 +45,9 @@ export function backtestTradeDocumentationGaps(trade: {
   return gaps
 }
 
-export function backtestTradeHasIncompleteDocumentation(trade: {
-  strategy?: unknown
-  notes?: unknown
-  top_confluences?: unknown
-  psychology_notes?: unknown
-  public_description?: unknown
-  image_url?: unknown
-}): boolean {
+export function backtestTradeHasIncompleteDocumentation(
+  trade: Record<string, unknown>
+): boolean {
   return backtestTradeDocumentationGaps(trade).length > 0
 }
 

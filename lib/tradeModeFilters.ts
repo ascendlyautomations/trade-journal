@@ -15,8 +15,6 @@ export function isBacktestTrade(trade: BacktestClassifiableTrade): boolean {
 }
 
 /** Exclude backtest trades from dashboard / trades-page performance pipelines. */
-export function excludeBacktestTrades<T extends BacktestClassifiableTrade>(
-  trades: T[]
-): T[] {
-  return trades.filter((t) => !isBacktestTrade(t))
+export function excludeBacktestTrades<T>(trades: readonly T[]): T[] {
+  return trades.filter((t) => !isBacktestTrade(t as BacktestClassifiableTrade))
 }

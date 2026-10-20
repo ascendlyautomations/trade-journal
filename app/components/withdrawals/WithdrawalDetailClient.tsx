@@ -13,6 +13,7 @@ import { formatCurrency } from "@/lib/formatCurrency"
 import {
   isLiveWithdrawalHistoryItem,
   isPropPayoutHistoryItem,
+  type PayoutHistoryAccount,
   type PayoutHistoryItem,
 } from "@/lib/payoutHistory"
 import {
@@ -33,7 +34,7 @@ import { useWithdrawalsHistory } from "@/lib/useWithdrawalsHistory"
 
 function screenTitle(
   item: PayoutHistoryItem,
-  account: { mode?: unknown; category?: unknown } | undefined
+  account: PayoutHistoryAccount | undefined
 ): string {
   return isPropPayoutHistoryItem(item, account) ? "Payout" : "Withdrawal"
 }

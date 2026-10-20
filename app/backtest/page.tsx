@@ -314,27 +314,27 @@ export default function BacktestPage() {
     setAllBacktestTrades((prev) => prev.filter((t) => t.id !== id))
   }, [])
 
-  const handleEditTrade = useCallback((trade: BacktestTrade) => {
+  const handleEditTrade = useCallback((trade: Record<string, unknown>) => {
     if (isDemoSupabaseBlocked()) {
       requestDemoSignup("edit")
       return
     }
-    setEditingTrade(trade)
+    setEditingTrade(trade as BacktestTrade)
   }, [])
 
-  const handleSendTrade = useCallback((_trade: BacktestTrade) => {
+  const handleSendTrade = useCallback((_trade: Record<string, unknown>) => {
     if (isDemoSupabaseBlocked()) {
       requestDemoSignup("trade")
     }
   }, [])
 
   const handleAnalyzeTrade = useCallback(
-    (trade: BacktestTrade) => {
+    (trade: Record<string, unknown>) => {
       if (isDemoModeActive()) {
         requestDemoSignup("ai")
         return
       }
-      router.push(tradeAnalysisHref(trade.id))
+      router.push(tradeAnalysisHref(String(trade.id)))
     },
     [router]
   )

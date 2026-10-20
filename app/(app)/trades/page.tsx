@@ -298,7 +298,7 @@ export default function TradesPage() {
   const handleTradeUpdated = useCallback((updated: Record<string, unknown>) => {
     const id = updated.id != null ? String(updated.id) : ""
     if (!id) return
-    setSelectedTrade((prev) =>
+    setSelectedTrade((prev: Record<string, unknown> | null) =>
       prev && String(prev.id) === id ? { ...prev, ...updated } : prev
     )
   }, [])

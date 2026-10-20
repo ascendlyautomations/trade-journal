@@ -158,7 +158,7 @@ export function distinctBacktestStrategyGroups(
 
 /** @deprecated Use {@link distinctBacktestStrategyGroups} labels for UI only. */
 export function distinctBacktestStrategies(
-  trades: readonly { strategy?: unknown }[]
+  trades: readonly Record<string, unknown>[]
 ): string[] {
   return distinctBacktestStrategyGroups(trades)
     .filter((g) => g.key !== BACKTEST_LAB_NO_STRATEGY)
@@ -166,7 +166,7 @@ export function distinctBacktestStrategies(
 }
 
 export function distinctBacktestTickers(
-  trades: readonly { ticker?: unknown }[]
+  trades: readonly Record<string, unknown>[]
 ): string[] {
   const seen = new Set<string>()
   for (const trade of trades) {

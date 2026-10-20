@@ -184,7 +184,7 @@ export type TradingAccountSelectorLabelInput = {
   size?: string | null
   account_size?: string | null
   account_number?: string | null
-  mode?: string | null
+  mode?: unknown
 }
 
 /**

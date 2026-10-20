@@ -183,9 +183,13 @@ export function buildBacktestAccountFilterOptions(
     if (category !== "Backtest" && mode !== "backtest") continue
     const id = String(account.id ?? "").trim()
     if (!id) continue
+    const accountName =
+      account.name == null ? null : String(account.name)
+    const accountSize =
+      account.account_size == null ? null : String(account.account_size)
     const label = formatTradeAccountNameSizeLine(
-      { account_name: account.name, account_size: account.account_size },
-      account as { name?: string | null; account_size?: string | null }
+      { account_name: accountName, account_size: accountSize },
+      { name: accountName, account_size: accountSize }
     )
     byId.set(id, label || String(account.name ?? "Backtest account"))
   }
