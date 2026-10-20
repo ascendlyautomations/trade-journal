@@ -34,6 +34,7 @@ type MobileProTabsProps = Omit<
   | "biggestLoss"
   | "bestDay"
   | "worstDay"
+  | "periodTradingDayCount"
   | "totalTrades"
   | "deferredSectionsReady"
 >

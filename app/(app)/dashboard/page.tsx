@@ -1084,7 +1084,6 @@ export default function Dashboard() {
       holdTimeStats={holdTimeStats}
       liveAccountValue={dashboardLiveAccountValueHero}
       drawdownLimitLineY={drawdownLimitLineY}
-      showPersonalDrawdownFloor={showPersonalDrawdownFloor}
     />
   )
 
