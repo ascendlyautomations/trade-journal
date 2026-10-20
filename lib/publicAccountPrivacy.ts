@@ -98,6 +98,8 @@ export const TRADES_APP_SELECT = [
   "account_size",
   "account_category",
   "top_confluences",
+  "exit_emotion",
+  "execution_rating",
   "is_initial_import",
   "source_account_id",
   "import_source",

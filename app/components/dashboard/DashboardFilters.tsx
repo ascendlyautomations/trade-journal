@@ -5,10 +5,8 @@ import Link from "next/link"
 import TradeFilterBar, {
   type TradeFilterBarProps,
 } from "@/app/components/TradeFilterBar"
-import Button from "@/app/components/ui/Button"
 import PerformanceShareButton from "@/app/components/PerformanceShareButton"
 import DashboardGearSettings from "./DashboardGearSettings"
-import { DashboardPlanIndicator } from "./DashboardHeader"
 import {
   DASHBOARD_MOBILE_ACTION_BTN_CLASS,
   DASHBOARD_MOBILE_PUBLIC_BTN_BASE,
@@ -196,31 +194,7 @@ export default function DashboardFilters({
       <TradeFilterBar
         className={DASHBOARD_MOBILE_FILTER_MARGIN_CLASS}
         mobileThreeRowLayout
-        leading={<DashboardPlanIndicator isPro={isPro} />}
-        leadingOverlay
-        beforeAccountSelect={
-          <Button
-            type="button"
-            variant="primary"
-            size="md"
-            onClick={onOpenQuickInput}
-            className="tt-dash-hide-desktop-v1 h-[34px] shrink-0 whitespace-nowrap py-0"
-          >
-            Quick Trade
-          </Button>
-        }
-        accountSelectAccessory={
-          <Button
-            type="button"
-            variant="primary"
-            size="md"
-            onClick={onOpenQuickInput}
-            aria-label="Quick Trade"
-            className="h-9 w-9 shrink-0 p-0 text-base leading-none"
-          >
-            <span aria-hidden>+</span>
-          </Button>
-        }
+        accountPickerLayout="dashboard"
         accounts={accounts}
         accountFilter={accountFilter}
         onAccountChange={onAccountChange}
@@ -260,15 +234,12 @@ export default function DashboardFilters({
         beforeTimeframe={<PlatformDashboardTradesButton />}
         trailing={
           <>
-            <Button
-              type="button"
-              variant="primary"
-              size="md"
-              onClick={onOpenQuickInput}
-              className="tt-dash-desktop-only h-[34px] shrink-0 whitespace-nowrap py-0"
+            <Link
+              href="/withdrawals"
+              className="tt-dash-desktop-only h-[34px] shrink-0 rounded-md bg-white/10 px-3 text-sm text-white hover:bg-white/20"
             >
-              Quick Trade
-            </Button>
+              Withdrawals
+            </Link>
             <Link
               href="/calendar"
               className="tt-dash-desktop-only h-[34px] shrink-0 rounded-md bg-white/10 px-3 text-sm text-white hover:bg-white/20"
@@ -293,6 +264,12 @@ export default function DashboardFilters({
                 Report
               </button>
             ) : null}
+            <Link
+              href="/withdrawals"
+              className={`${DASHBOARD_MOBILE_ACTION_BTN_CLASS} min-w-0 flex-1 md:hidden`}
+            >
+              Withdrawals
+            </Link>
             {showShareControls ? (
               <PerformanceShareButton
                 onClick={onOpenPerformanceShare}

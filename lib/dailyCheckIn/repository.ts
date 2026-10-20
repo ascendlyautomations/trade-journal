@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/database.types"
+import { waitForDailyCheckInAuthSession } from "./authSession.ts"
 import {
   TRADER_DAILY_CHECK_IN_CONFLICT,
   TRADER_DAILY_CHECK_IN_SELECT,
@@ -7,6 +8,13 @@ import {
 } from "./constants.ts"
 import type { TraderDailyCheckIn, TraderDailyCheckInDraft } from "./types.ts"
 import { validateCheckInDraft } from "./validation.ts"
+import {
+  CHECK_IN_HISTORY_DAY_WINDOW,
+  checkInHistoryStartDateKey,
+  todayCheckInDateKey,
+} from "./dateKey.ts"
+import { fetchPsychologyCheckInWindowRpc } from "./fetchPsychologyCheckInWindowRpc.ts"
+import { mergeCheckInsByDatePreferNewer } from "./sessionCache.ts"
 
 type CheckInRow =
   Database["public"]["Tables"]["trader_daily_check_ins"]["Row"]
@@ -29,12 +37,20 @@ function asText(value: unknown): string | null {
   return trimmed ? trimmed : null
 }
 
+/** Postgres `date` may arrive as `YYYY-MM-DD` or a timestamp string. */
+function normalizeCheckInDateKey(value: unknown): string | null {
+  const text = asText(value)
+  if (!text) return null
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(text)
+  return match ? match[1] : text
+}
+
 export function mapCheckInRow(
   row: CheckInRow | Record<string, unknown>
 ): TraderDailyCheckIn | null {
   const id = asText(row.id)
   const userId = asText(row.user_id)
-  const checkInDate = asText(row.check_in_date)
+  const checkInDate = normalizeCheckInDateKey(row.check_in_date)
   if (!id || !userId || !checkInDate) return null
 
   return {
@@ -53,11 +69,21 @@ export function mapCheckInRow(
   }
 }
 
+async function assertCheckInAuthReady(
+  supabase: SupabaseClient<Database>
+): Promise<void> {
+  const ready = await waitForDailyCheckInAuthSession(supabase)
+  if (!ready) {
+    throw new Error("Sign in to load daily check-ins.")
+  }
+}
+
 export async function fetchTodayCheckIn(
   supabase: SupabaseClient<Database>,
   userId: string,
   dateKey: string
 ): Promise<TraderDailyCheckIn | null> {
+  await assertCheckInAuthReady(supabase)
   const { data, error } = await supabase
     .from(TRADER_DAILY_CHECK_INS_TABLE)
     .select(TRADER_DAILY_CHECK_IN_SELECT)
@@ -71,12 +97,32 @@ export async function fetchTodayCheckIn(
   return mapCheckInRow(data as unknown as CheckInRow)
 }
 
+/** Owner check-ins for dashboard psychology — 90-day range + RPC window (iOS parity). */
+export async function fetchPsychologyDashboardCheckIns(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  options?: { accountFilter?: string | null }
+): Promise<TraderDailyCheckIn[]> {
+  const start = checkInHistoryStartDateKey(CHECK_IN_HISTORY_DAY_WINDOW)
+  const end = todayCheckInDateKey()
+
+  const [rangeRows, rpcRows] = await Promise.all([
+    fetchCheckInsInRange(supabase, userId, start, end),
+    fetchPsychologyCheckInWindowRpc(supabase, options?.accountFilter).catch(
+      () => [] as TraderDailyCheckIn[]
+    ),
+  ])
+
+  return mergeCheckInsByDatePreferNewer(rangeRows, rpcRows)
+}
+
 export async function fetchCheckInsInRange(
   supabase: SupabaseClient<Database>,
   userId: string,
   startDate: string,
   endDate: string
 ): Promise<TraderDailyCheckIn[]> {
+  await assertCheckInAuthReady(supabase)
   const { data, error } = await supabase
     .from(TRADER_DAILY_CHECK_INS_TABLE)
     .select(TRADER_DAILY_CHECK_IN_SELECT)

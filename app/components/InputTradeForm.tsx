@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo, useId } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { fetchProfileOwnerPrivateFields } from "@/lib/profileOwnerPrivateFields"
@@ -44,6 +44,7 @@ import {
 } from "@/lib/inputTradeDateTime"
 import { tradeFormHasFutureDate, csvTradesHaveFutureDate, isDateAfterToday } from "@/lib/tradeDateValidation"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
+import PostTradeReflectionSheet from "@/app/components/trade/PostTradeReflectionSheet"
 import { rpcTradeOwnerRead } from "@/lib/tradeOwnerRead"
 import { profilePath } from "@/lib/profileRoutes"
 import { hasStoredTradePoints } from "@/lib/resolveTradePoints"
@@ -57,6 +58,10 @@ import CreateAccountModal, {
   type Props as CreateAccountModalProps,
 } from "@/components/CreateAccountModal"
 import TradeAccountPicker from "@/app/components/TradeAccountPicker"
+import {
+  filterAccountsForPickerScope,
+  isAuthoritativeBacktestAccount,
+} from "@/lib/tradeAccountPickerGroups"
 import { usePlatformPresentation } from "@/app/components/platform/usePlatformPresentation"
 import CustomSelect from "@/app/components/CustomSelect"
 import { SELECT_TRIGGER_COMPACT_CLASS } from "@/lib/accountDropdownStyles"
@@ -181,6 +186,19 @@ export type InputTradeFormProps = {
   csvDataRowCount?: number
   /** Source label for admin CSV import completed email */
   csvImportSource?: string
+  /** Pre-select account on new trade (e.g. Backtest Lab default account). */
+  initialAccountId?: string | null
+  /** When true with `onClose`, render the full form inside a modal shell. */
+  openAsModal?: boolean
+  modalTitle?: string
+  /** Datalist suggestions (e.g. Backtest Lab strategy presets). */
+  strategySuggestions?: string[]
+  /** Map typed strategy to canonical label before save (does not rewrite other trades). */
+  normalizeStrategyValue?: (raw: string) => string
+  /** New trades enter the review queue with `reviewed: false`. */
+  createAsUnreviewed?: boolean
+  /** Restrict account picker to Backtest accounts only (Backtest Lab). */
+  accountPickerScope?: import("@/lib/tradeAccountPickerGroups").TradeAccountPickerScope
 }
 
 export default function InputTradeForm({
@@ -201,7 +219,15 @@ export default function InputTradeForm({
   csvDataRowCount = 0,
   csvImportSource = "input_trade_page",
   onParsedTradesClear,
+  initialAccountId = null,
+  openAsModal = false,
+  modalTitle,
+  strategySuggestions,
+  normalizeStrategyValue,
+  createAsUnreviewed = false,
+  accountPickerScope = "default",
 }: InputTradeFormProps) {
+  const strategyDatalistId = useId()
   const router = useRouter()
   const { isNativeIos } = usePlatformPresentation()
   const { user, profile: contextProfile } = useUserProfile()
@@ -215,7 +241,7 @@ export default function InputTradeForm({
     showPopup(supabaseMutationFeedback(error, title))
   }
   const isEditMode = Boolean(existingTrade?.id)
-  const showAsModal = isEditMode && Boolean(onClose)
+  const showAsModal = Boolean(onClose) && (isEditMode || openAsModal)
 
   const [accounts, setAccounts] = useState<any[]>([])
   const [selectedAccount, setSelectedAccount] = useState<any | null>(null)
@@ -319,6 +345,13 @@ export default function InputTradeForm({
   const [reelDeleteBusy, setReelDeleteBusy] = useState(false)
 
   const [strategy, setStrategy] = useState("")
+
+  const resolveStrategyForSave = useCallback((): string | null => {
+    const raw = String(strategy).trim()
+    if (!raw) return null
+    if (normalizeStrategyValue) return normalizeStrategyValue(raw) || null
+    return raw
+  }, [strategy, normalizeStrategyValue])
 
   const [entryPrice, setEntryPrice] = useState("")
   const [exitPrice, setExitPrice] = useState("")
@@ -470,6 +503,14 @@ export default function InputTradeForm({
   }, [userId, applyPlanAndAccountLock, fetchAccountsForUser])
 
   useEffect(() => {
+    if (isEditMode || !initialAccountId || selectedAccount?.id) return
+    const id = String(initialAccountId).trim()
+    if (!id) return
+    const matched = accounts.find((account) => String(account.id) === id)
+    if (matched) setSelectedAccount(matched)
+  }, [isEditMode, initialAccountId, accounts, selectedAccount?.id])
+
+  useEffect(() => {
     if (!userId) return
     void applyPlanAndAccountLock(userId)
   }, [existingTrade?.id, userId, applyPlanAndAccountLock])
@@ -530,6 +571,11 @@ export default function InputTradeForm({
     [accounts]
   )
 
+  const entryEligibleAccounts = useMemo(
+    () => filterAccountsForPickerScope(activeAccounts, accountPickerScope),
+    [activeAccounts, accountPickerScope]
+  )
+
   const sortedAccountsForSettings = useMemo(
     () =>
       [...accounts].sort((a, b) => {
@@ -547,7 +593,7 @@ export default function InputTradeForm({
     if (accounts.length === 0) return
 
     const selectedId = String(selectedAccount.id)
-    const stillSelectable = activeAccounts.some(
+    const stillSelectable = entryEligibleAccounts.some(
       (a) => String(a.id) === selectedId
     )
     if (stillSelectable) return
@@ -559,26 +605,48 @@ export default function InputTradeForm({
       existingTrade?.account_id != null &&
       String(existingTrade.account_id) === selectedId
 
+    if (
+      accountPickerScope === "backtest_only" &&
+      selectedAccount &&
+      !isAuthoritativeBacktestAccount(selectedAccount)
+    ) {
+      setSelectedAccount(null)
+      return
+    }
+
     if (!inAllAccounts && !isCurrentEditAccount) {
       setSelectedAccount(null)
     }
   }, [
     selectedAccount,
-    activeAccounts,
+    entryEligibleAccounts,
     accounts,
     isEditMode,
     existingTrade?.account_id,
+    accountPickerScope,
   ])
 
+  useEffect(() => {
+    if (accountPickerScope !== "backtest_only") return
+    setSelectedCopyGroupId(null)
+  }, [accountPickerScope])
+
   const pickerAccounts = useMemo(() => {
-    const list = [...filterAccountsForDropdown(activeAccounts)]
+    const list = [...filterAccountsForDropdown(entryEligibleAccounts)]
     if (!selectedAccount?.id) return list
     const selectedId = String(selectedAccount.id)
     if (list.some((a) => String(a.id) === selectedId)) return list
     const fromAll = accounts.find((a) => String(a.id) === selectedId)
-    list.push(fromAll ?? selectedAccount)
+    const candidate = fromAll ?? selectedAccount
+    if (
+      accountPickerScope === "backtest_only" &&
+      !isAuthoritativeBacktestAccount(candidate)
+    ) {
+      return list
+    }
+    list.push(candidate)
     return list
-  }, [activeAccounts, accounts, selectedAccount])
+  }, [entryEligibleAccounts, accounts, selectedAccount, accountPickerScope])
 
   const effectiveModeLower = String(
     selectedAccount?.mode ??
@@ -592,7 +660,7 @@ export default function InputTradeForm({
   const isPro = clientHasProAccess
   const { copyGroups } = useCopyTradingGroups(
     userId,
-    isPro && !isEditMode
+    isPro && !isEditMode && accountPickerScope !== "backtest_only"
   )
   const isLocked = !isPro && Boolean(planProfile?.locked_account_type)
   const lockedMode = modeLabelFromDb(planProfile?.locked_account_type)
@@ -784,6 +852,38 @@ export default function InputTradeForm({
     setStrategy("")
   }
 
+  const [pendingReflectionTradeId, setPendingReflectionTradeId] = useState<
+    string | null
+  >(null)
+  const pendingReflectionIsPublicRef = useRef(false)
+
+  const completeCreateFlowAfterReflection = useCallback(() => {
+    void refreshPlanAndAccountLock()
+    setCommunityPreviewOpen(false)
+    resetCreateForm()
+    onSave?.()
+    if (pendingReflectionIsPublicRef.current) {
+      showPopup(feedbackPresets.postPublished())
+    } else {
+      showPopup(feedbackPresets.tradeSaveSuccess())
+    }
+    notifyGettingStartedChecklistMaybeCompleted()
+  }, [onSave, refreshPlanAndAccountLock, showPopup])
+
+  const dismissPostTradeReflection = useCallback(() => {
+    setPendingReflectionTradeId(null)
+    completeCreateFlowAfterReflection()
+  }, [completeCreateFlowAfterReflection])
+
+  function promptPostTradeReflectionAfterCreate(
+    tradeId: string,
+    isPublicPost: boolean
+  ) {
+    pendingReflectionIsPublicRef.current = isPublicPost
+    setPendingReflectionTradeId(tradeId)
+    releaseSubmit()
+  }
+
   const performDeleteAttachedReel = useCallback(
     async (post: ReelRow) => {
       if (!userId) return
@@ -877,6 +977,16 @@ export default function InputTradeForm({
 
   async function handleSubmit() {
     if (submittingRef.current || submitting) return
+
+    if (accountPickerScope === "backtest_only" && selectedCopyGroupId) {
+      showPopup(
+        persistentError(
+          "Backtest Account Required",
+          "Choose a Backtest account for Backtest Lab trades."
+        )
+      )
+      return
+    }
 
     if (!selectedCopyGroupId && !selectedAccount) {
       setShowAccountWarning(true)
@@ -1061,7 +1171,7 @@ export default function InputTradeForm({
         public_description: publicDescription,
         image_url: screenshotUrl,
         image_display_mode: screenshotDisplayMode,
-        strategy: strategy || null,
+        strategy: resolveStrategyForSave(),
         user_id: userId,
         created_at: now.toISOString(),
         date: now.toISOString(),
@@ -1121,6 +1231,12 @@ export default function InputTradeForm({
         }
       }
 
+      const copyPrimaryId = copyResult.trades[0]?.id
+      if (copyPrimaryId) {
+        promptPostTradeReflectionAfterCreate(String(copyPrimaryId), isPublic)
+        return
+      }
+
       void refreshPlanAndAccountLock()
       setCommunityPreviewOpen(false)
       resetCreateForm()
@@ -1166,7 +1282,7 @@ export default function InputTradeForm({
         public_description: publicDescription,
         image_url: screenshotUrl,
         image_display_mode: screenshotDisplayMode,
-        strategy: strategy || null,
+        strategy: resolveStrategyForSave(),
         user_id: userId,
         created_at: now.toISOString(),
         date: now.toISOString(),
@@ -1227,6 +1343,12 @@ export default function InputTradeForm({
         }
       }
 
+      const groupPrimaryId = copyResult.trades[0]?.id
+      if (groupPrimaryId) {
+        promptPostTradeReflectionAfterCreate(String(groupPrimaryId), isPublic)
+        return
+      }
+
       void refreshPlanAndAccountLock()
       setCommunityPreviewOpen(false)
       resetCreateForm()
@@ -1247,6 +1369,19 @@ export default function InputTradeForm({
         persistentError("Select an Account", "Choose a trading account before saving.")
       )
       throw new Error("No account selected")
+    }
+
+    if (
+      accountPickerScope === "backtest_only" &&
+      !isAuthoritativeBacktestAccount(acct)
+    ) {
+      showPopup(
+        persistentError(
+          "Backtest Account Required",
+          "Select a Backtest account to save this trade in Backtest Lab."
+        )
+      )
+      throw new Error("Non-backtest account blocked")
     }
 
     const modeLower = String(acct.mode ?? "live").trim().toLowerCase()
@@ -1331,8 +1466,7 @@ export default function InputTradeForm({
                 (id) => id && id !== (copySourceAccountId || rowAcct.id)
               )
             : [],
-        strategy:
-          String(strategy).trim() !== "" ? String(strategy).trim() : null,
+        strategy: resolveStrategyForSave(),
         account_size: rowAcct.size,
         account_id: rowAcct.id,
         created_at: existingTrade.created_at,
@@ -1499,7 +1633,7 @@ export default function InputTradeForm({
               (id) => id && id !== (copySourceAccountId || rowAcct.id)
             )
           : [],
-      strategy: strategy || null,
+      strategy: resolveStrategyForSave(),
       user_id: userId,
       created_at: now.toISOString(),
       date: now.toISOString(),
@@ -1518,6 +1652,7 @@ export default function InputTradeForm({
       news_event: newsEvent,
       timeframe: timeframeToSave,
       is_public: isPublic,
+      ...(createAsUnreviewed ? { reviewed: false } : {}),
     }
 
     const { data: newTradeData, error } = await supabase
@@ -1577,13 +1712,7 @@ export default function InputTradeForm({
         )
       }
 
-      void refreshPlanAndAccountLock()
-      setCommunityPreviewOpen(false)
-      resetCreateForm()
-      onSave?.()
-      showPopup(feedbackPresets.postPublished())
-      notifyGettingStartedChecklistMaybeCompleted()
-      releaseSubmit()
+      promptPostTradeReflectionAfterCreate(String(newTradeData.id), true)
       return
     }
 
@@ -1602,6 +1731,11 @@ export default function InputTradeForm({
           )
         )
       }
+    }
+
+    if (newTradeData?.id) {
+      promptPostTradeReflectionAfterCreate(String(newTradeData.id), false)
+      return
     }
 
     void refreshPlanAndAccountLock()
@@ -2088,6 +2222,7 @@ export default function InputTradeForm({
               onOpenCreate={() => setShowCreateModal(true)}
               disableCreate={accountFieldsLocked}
               showExternalCreateButton={false}
+              accountScope={accountPickerScope}
             />
             {!isEditMode && onQuickInputClick ? (
               <button
@@ -2172,6 +2307,7 @@ export default function InputTradeForm({
               onOpenCreate={() => setShowCreateModal(true)}
               disableCreate={accountFieldsLocked}
               showExternalCreateButton={false}
+              accountScope={accountPickerScope}
             />
 
             {!isEditMode && onQuickInputClick ? (
@@ -2381,8 +2517,18 @@ export default function InputTradeForm({
                 tabIndex={3}
                 value={strategy}
                 onChange={(e) => setStrategy(e.target.value)}
+                list={
+                  strategySuggestions?.length ? strategyDatalistId : undefined
+                }
                 className={TRADE_FIELD_CONTROL_CLASS}
               />
+              {strategySuggestions?.length ? (
+                <datalist id={strategyDatalistId}>
+                  {strategySuggestions.map((name) => (
+                    <option key={name} value={name} />
+                  ))}
+                </datalist>
+              ) : null}
             </div>
           </div>
 
@@ -3078,6 +3224,16 @@ export default function InputTradeForm({
   const deleteAttachedReelModal = (
     <ConfirmModal {...deleteAttachedReelConfirmProps} />
   )
+  const postTradeReflectionSheet =
+    pendingReflectionTradeId && !isEditMode ? (
+      <PostTradeReflectionSheet
+        open
+        tradeId={pendingReflectionTradeId}
+        onSkip={dismissPostTradeReflection}
+        onComplete={dismissPostTradeReflection}
+      />
+    ) : null
+
   const communitySharePreviewModal = (
     <CommunitySharePreviewModal
       open={communityPreviewOpen}
@@ -3106,7 +3262,7 @@ export default function InputTradeForm({
         <ScrollableModalShell
           open
           onClose={() => onClose?.()}
-          ariaLabel="Edit Trade"
+          ariaLabel={modalTitle ?? (isEditMode ? "Edit Trade" : "Log Trade")}
           showCloseButton={false}
           overlayClassName="z-[10050] bg-black/70 py-3 backdrop-blur-sm md:py-4"
           backdropClassName="bg-transparent"
@@ -3119,7 +3275,7 @@ export default function InputTradeForm({
                 id="input-trade-modal-title"
                 className="text-xl font-semibold text-blue-300"
               >
-                Edit Trade
+                {modalTitle ?? (isEditMode ? "Edit Trade" : "Log Trade")}
               </h2>
               <ModalCloseButton onClick={() => onClose?.()} />
             </div>
@@ -3131,6 +3287,7 @@ export default function InputTradeForm({
         {feedbackModal}
         {deleteAttachedReelModal}
         {communitySharePreviewModal}
+        {postTradeReflectionSheet}
         <ImageCropModal
           open={imageCrop.cropSourceFile != null}
           file={imageCrop.cropSourceFile}
@@ -3174,6 +3331,7 @@ export default function InputTradeForm({
       {feedbackModal}
       {deleteAttachedReelModal}
       {communitySharePreviewModal}
+      {postTradeReflectionSheet}
       <ImageCropModal
         open={imageCrop.cropSourceFile != null}
         file={imageCrop.cropSourceFile}

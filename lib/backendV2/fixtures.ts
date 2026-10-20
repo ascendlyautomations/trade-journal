@@ -123,6 +123,7 @@ export const dashboardBootstrapFixture: DashboardBootstrapV1 = {
         note: null,
         consistency: null,
         max_drawdown: null,
+        drawdown_type: null,
         daily_drawdown: null,
         profit_target: null,
         winning_days: null,

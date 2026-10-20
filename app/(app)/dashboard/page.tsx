@@ -101,6 +101,16 @@ import {
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { useDashboardModals } from "./useDashboardModals"
 import { useDashboardAnalytics } from "./useDashboardAnalytics"
+import DashboardLiveAccountValueMetric from "../../components/dashboard/DashboardLiveAccountValueMetric"
+import { useDashboardLiveAccountBundle } from "../../components/dashboard/useDashboardLiveAccountBundle"
+import { resolveDashboardLiveSingleAccountId } from "@/lib/dashboardLiveAccountValue"
+import {
+  readLivePersonalDrawdownGearFromAccount,
+  type LivePersonalDrawdownConfig,
+} from "@/lib/livePersonalDrawdown"
+import { saveLivePersonalDrawdownConfig } from "@/lib/livePersonalDrawdownSave"
+import { upsertAccountInCache } from "@/lib/appDataCache"
+import { invalidateDashboardBootstrap } from "@/lib/backendV2/dashboardBootstrapCache"
 import "./dashboardCanvas.css"
 
 const DashboardPremiumPreviewSection = dynamic(
@@ -265,6 +275,19 @@ export default function Dashboard() {
     () => resolveDashboardPropFirmAccount(accountFilter, accountById),
     [accountFilter, accountById]
   )
+
+  const liveGearPersistedDrawdownKey = useMemo(() => {
+    const liveId = resolveDashboardLiveSingleAccountId({
+      userId: user?.id,
+      accountFilter,
+      accountById,
+      propFirmAccountId: propFirmAccount?.id,
+    })
+    if (!liveId) return "none"
+    const row = accountById[liveId]
+    if (!row) return `${liveId}:pending`
+    return `${liveId}:${String(row.max_drawdown ?? "")}:${String(row.drawdown_type ?? "")}`
+  }, [user?.id, accountFilter, accountById, propFirmAccount?.id])
 
   const propFirmTrades = useMemo(() => {
     if (!propFirmAccount) return []
@@ -466,7 +489,16 @@ export default function Dashboard() {
       setDdInputFocused(false)
       return
     }
-    const raw = profile?.max_drawdown_limit
+    const liveGearAccountId = resolveDashboardLiveSingleAccountId({
+      userId: user?.id,
+      accountFilter,
+      accountById,
+      propFirmAccountId: propFirmAccount?.id,
+    })
+    const liveGearAccount = liveGearAccountId
+      ? accountById[liveGearAccountId]
+      : null
+    const liveGear = readLivePersonalDrawdownGearFromAccount(liveGearAccount)
     setGearDraft({
       timeFilter,
       accountFilter,
@@ -479,14 +511,41 @@ export default function Dashboard() {
       showBestSetup,
       showWorstSetup,
       showWarnings,
-      drawdownLimit:
-        raw != null && String(raw) !== ""
-          ? sanitizeDrawdownLimitInput(String(raw))
-          : "",
+      livePersonalDrawdown: liveGearAccountId != null,
+      liveDrawdownType: liveGear.limitType,
+      drawdownLimit: liveGear.limitAmountRaw
+        ? sanitizeDrawdownLimitInput(liveGear.limitAmountRaw)
+        : "",
     })
     // Snapshot when the panel opens only (avoid resetting drafts while editing).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showControls])
+
+  useEffect(() => {
+    if (!showControls) return
+    const liveGearAccountId = resolveDashboardLiveSingleAccountId({
+      userId: user?.id,
+      accountFilter,
+      accountById,
+      propFirmAccountId: propFirmAccount?.id,
+    })
+    const liveGearAccount = liveGearAccountId
+      ? accountById[liveGearAccountId]
+      : null
+    const liveGear = readLivePersonalDrawdownGearFromAccount(liveGearAccount)
+    setGearDraft((draft) =>
+      draft
+        ? {
+            ...draft,
+            livePersonalDrawdown: liveGearAccountId != null,
+            liveDrawdownType: liveGear.limitType,
+            drawdownLimit: liveGear.limitAmountRaw
+              ? sanitizeDrawdownLimitInput(liveGear.limitAmountRaw)
+              : "",
+          }
+        : draft
+    )
+  }, [showControls, accountFilter, liveGearPersistedDrawdownKey, user?.id, propFirmAccount?.id])
 
   useEffect(() => {
     if (pageDataLoading || didHydrateDashboardPrefs.current) return
@@ -563,6 +622,7 @@ export default function Dashboard() {
     lossCount,
     bestDay,
     worstDay,
+    periodTradingDayCount,
     symbolPerformanceRows,
     longShortPerformance,
     holdTimeStats,
@@ -597,12 +657,42 @@ export default function Dashboard() {
     copyGroupAccountIds,
   })
 
+  const { liveAccountValueState, liveEquityCurveState } =
+    useDashboardLiveAccountBundle({
+      userId: user?.id,
+      accountFilter,
+      accountById,
+      propFirmAccountId: propFirmAccount?.id,
+      timeFilter,
+      selectedDate,
+      customRangeStart,
+      customRangeEnd,
+    })
+
+  const showPersonalDrawdownFloor =
+    liveEquityCurveState.mode === "balance" &&
+    liveEquityCurveState.status === "ready" &&
+    liveEquityCurveState.hasPersonalDrawdownFloor
+
+  const drawdownLimitLineY = null
+
+  const equityChartData =
+    liveEquityCurveState.mode === "balance" &&
+    liveEquityCurveState.status === "ready"
+      ? liveEquityCurveState.data
+      : equityDrawdownChartData
+
+  const equityCurveUsesAccountBalance =
+    liveEquityCurveState.mode === "balance" &&
+    liveEquityCurveState.status === "ready"
+
   useEffect(() => {
     if (accountFilter === "all") return
+    if (accountsLoading && accounts.length === 0) return
     if (!isValidAccountFilterValue(accountFilter, accounts, copyGroups)) {
       setAccountFilter("all")
     }
-  }, [accounts, accountFilter, copyGroups])
+  }, [accounts, accountFilter, copyGroups, accountsLoading])
 
   // 🔥 LOADING STATE (FIXES GLITCH)
   const showFreePlanAccountBanner = useMemo(() => {
@@ -782,24 +872,73 @@ export default function Dashboard() {
     }
 
     setSavingGearSettings(true)
-    const { error } = await supabase
-      .from("profiles")
-      .update({ max_drawdown_limit: n })
-      .eq("id", user.id)
-    setSavingGearSettings(false)
 
-    if (error) {
-      alert(toUserFacingErrorMessage(error))
-      return
-    }
+    const gearLiveAccountId = resolveDashboardLiveSingleAccountId({
+      userId: user.id,
+      accountFilter: gearDraft.accountFilter,
+      accountById,
+      propFirmAccountId: propFirmAccount?.id,
+    })
 
-    const { error: mirrorErr } = await mirrorAccountSettingsMaxDrawdownLimit(
-      supabase,
-      user.id,
-      n
-    )
-    if (mirrorErr) {
-      console.error("mirror account_settings.max_drawdown_limit:", mirrorErr)
+    const perAccountDrawdownSave =
+      gearDraft.livePersonalDrawdown ||
+      (gearDraft.accountFilter !== "all" &&
+        !isCopyGroupFilterValue(gearDraft.accountFilter))
+
+    if (perAccountDrawdownSave) {
+      if (!gearLiveAccountId) {
+        setSavingGearSettings(false)
+        alert(
+          "Could not save drawdown settings: select a single Live account (not Prop Firm or All Accounts)."
+        )
+        return
+      }
+      const liveConfig: LivePersonalDrawdownConfig | null =
+        n != null && n > 0
+          ? {
+              limitAmount: n,
+              limitType: gearDraft.liveDrawdownType,
+            }
+          : null
+      const liveResult = await saveLivePersonalDrawdownConfig(
+        supabase,
+        user.id,
+        gearLiveAccountId,
+        liveConfig
+      )
+      setSavingGearSettings(false)
+      if (!liveResult.ok) {
+        alert(liveResult.message)
+        return
+      }
+      upsertAccountInCache(user.id, {
+        id: liveResult.row.id,
+        max_drawdown: liveResult.row.max_drawdown,
+        drawdown_type: liveResult.row.drawdown_type,
+      })
+      invalidateDashboardBootstrap(user.id)
+    } else {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ max_drawdown_limit: n })
+        .eq("id", user.id)
+      setSavingGearSettings(false)
+
+      if (error) {
+        alert(toUserFacingErrorMessage(error))
+        return
+      }
+
+      const { error: mirrorErr } = await mirrorAccountSettingsMaxDrawdownLimit(
+        supabase,
+        user.id,
+        n
+      )
+      if (mirrorErr) {
+        console.error("mirror account_settings.max_drawdown_limit:", mirrorErr)
+      }
+
+      setProfile((p) => (p ? { ...p, max_drawdown_limit: n } : p))
     }
 
     const nextAccount = sanitizeDashboardAccountFilter(
@@ -834,7 +973,6 @@ export default function Dashboard() {
       showWarnings: gearDraft.showWarnings,
     })
 
-    setProfile((p) => (p ? { ...p, max_drawdown_limit: n } : p))
     setShowControls(false)
   }
 
@@ -887,6 +1025,20 @@ export default function Dashboard() {
   const timeframeLabel = syncTimeframeDisplayLabel(timeFilter, selectedDate)
   const dashboardUserIsPro = proFeatureUnlocked
 
+  const dashboardLiveAccountValueHero = liveAccountValueState.visible ? (
+    <DashboardLiveAccountValueMetric
+      state={liveAccountValueState}
+      variant="hero"
+    />
+  ) : null
+
+  const dashboardLiveAccountValueMobile = liveAccountValueState.visible ? (
+    <DashboardLiveAccountValueMetric
+      state={liveAccountValueState}
+      variant="compact"
+    />
+  ) : null
+
   const desktopTerminal = (
     <DashboardDesktopTerminal
       isPro={dashboardUserIsPro}
@@ -915,20 +1067,30 @@ export default function Dashboard() {
       avgLoss={avgLoss}
       biggestLoss={biggestLoss}
       worstDay={worstDay}
+      periodTradingDayCount={periodTradingDayCount}
       maxDrawdown={maxDrawdown}
       showDrawdown={showDrawdown}
       bestWinStreak={bestWinStreak}
       streakData={streakData}
       showEquity={showEquity}
-      equityData={equityDrawdownChartData}
+      equityData={equityChartData}
+      equityCurveUsesAccountBalance={equityCurveUsesAccountBalance}
+      showPersonalDrawdownFloor={showPersonalDrawdownFloor}
       showSessions={showSessions}
       sessionBuckets={sessionBuckets}
       weekdayData={weekdayData}
       hourData={hourData}
       longShortPerformance={longShortPerformance}
       holdTimeStats={holdTimeStats}
+      liveAccountValue={dashboardLiveAccountValueHero}
+      drawdownLimitLineY={drawdownLimitLineY}
+      showPersonalDrawdownFloor={showPersonalDrawdownFloor}
     />
   )
+
+  const dashboardRiskMetricSlots = {
+    liveAccountValue: dashboardLiveAccountValueMobile,
+  }
 
   return (
     <>
@@ -1099,7 +1261,8 @@ export default function Dashboard() {
   <DashboardCharts
     isPro
     deferredSectionsReady={deferredSectionsReady}
-    equityData={equityDrawdownChartData}
+    equityData={equityChartData}
+    equityCurveUsesAccountBalance={equityCurveUsesAccountBalance}
     weekdayData={weekdayData}
     sessionPieData={sessionPieData}
     sessionBuckets={sessionBuckets}
@@ -1120,12 +1283,16 @@ export default function Dashboard() {
     biggestLoss={biggestLoss}
     bestDay={bestDay}
     worstDay={worstDay}
+    periodTradingDayCount={periodTradingDayCount}
     showEquity={showEquity}
     expectancyData={expectancyData}
     streakData={streakData}
     hourData={hourData}
     showSessions={showSessions}
     bestWinStreak={bestWinStreak}
+    liveAccountValue={dashboardRiskMetricSlots.liveAccountValue}
+    drawdownLimitLineY={drawdownLimitLineY}
+    showPersonalDrawdownFloor={showPersonalDrawdownFloor}
     mobileProTabs={{
       symbolPerformanceRows,
       hasAnyTrades: tradesExcludingBacktest.length > 0,
@@ -1229,7 +1396,8 @@ export default function Dashboard() {
           <DashboardCharts
             isPro={false}
             deferredSectionsReady={deferredSectionsReady}
-            equityData={equityDrawdownChartData}
+            equityData={equityChartData}
+            equityCurveUsesAccountBalance={equityCurveUsesAccountBalance}
             weekdayData={weekdayData}
             sessionPieData={sessionPieData}
             sessionBuckets={sessionBuckets}
@@ -1250,12 +1418,16 @@ export default function Dashboard() {
             biggestLoss={biggestLoss}
             bestDay={bestDay}
             worstDay={worstDay}
+            periodTradingDayCount={periodTradingDayCount}
             showEquity={showEquity}
             expectancyData={expectancyData}
             streakData={streakData}
             hourData={hourData}
             showSessions={showSessions}
             bestWinStreak={bestWinStreak}
+            liveAccountValue={dashboardRiskMetricSlots.liveAccountValue}
+            drawdownLimitLineY={drawdownLimitLineY}
+            showPersonalDrawdownFloor={showPersonalDrawdownFloor}
           />
           <div className="tt-dash-hide-desktop-v1">{recentTradesSection}</div>
           {recentTradesJournal}
@@ -1287,6 +1459,7 @@ export default function Dashboard() {
       <DashboardPsychologyInsights
         userId={user.id}
         trades={filteredTrades}
+        accountFilter={accountFilter}
         tradesReady={!statsStillLoading || dashboardHasCachedData}
       />
     </DashboardPsychologyInsightsPlacement>

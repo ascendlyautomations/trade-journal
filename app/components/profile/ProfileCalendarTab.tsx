@@ -34,6 +34,7 @@ function ProfileCalendarTab({
           showAccountFilter={false}
           showControls={false}
           showAccountIdentifiers={isOwnProfile}
+          dayTradePresentation="profile"
         />
       )}
     </div>

@@ -19,7 +19,7 @@ import FeedPostMetaRow from "@/app/components/feed/FeedPostMetaRow"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
 import { postImageSrc } from "@/app/components/feed/feedPostHelpers"
-import { ProfileAvatarImg, PROFILE_PAGE_AVATAR_PX } from "@/app/components/SafeProfileAvatar"
+import ProfileCardAuthorIdentity from "@/app/components/profile/ProfileCardAuthorIdentity"
 import { formatPublicAccountTypeLabel } from "@/lib/publicAccountPrivacy"
 import { isCopyTradedMode } from "@/lib/tradeMode"
 import CopyTradedBadge from "@/app/components/trade/CopyTradedBadge"
@@ -28,7 +28,9 @@ import type {
   ProfileCardIdentity,
   ProfileTradeRow,
 } from "./profileTypes"
+import { detailModalEngagementInPanel } from "@/app/components/ui/detailModalEngagement"
 import { profileEngagementVaultRef } from "@/lib/vault/refs"
+import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
 
 function formatMoney(v: number) {
   return v < 0
@@ -103,6 +105,7 @@ export default function ProfileTradeCard({
   const [commentsFocused, setCommentsFocused] = useState(
     Boolean(scrollToCommentsOnMount)
   )
+  const isMobile = useMaxMdViewport()
   const imageSrc = postImageSrc(trade.image_url)
   const pnlRaw = Number(trade.pnl)
   const pnl = Number.isFinite(pnlRaw) ? pnlRaw : NaN
@@ -250,38 +253,36 @@ export default function ProfileTradeCard({
   const tradeAuthorHeader = (
     <div className="tt-profile-trade-header flex shrink-0 items-center justify-between border-b border-white/5 px-3 py-2 md:px-4 md:py-3">
       <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
-        <ProfileAvatarImg
-          src={profile.avatar_url}
-          className="h-9 w-9 shrink-0 ring-2 ring-white/10 md:h-10 md:w-10"
-          displaySizePx={PROFILE_PAGE_AVATAR_PX}
+        <ProfileCardAuthorIdentity
+          username={profile.username}
+          avatarUrl={profile.avatar_url}
+          meta={
+            <FeedPostMetaRow
+              label={showCopyBadge ? "Copy Traded" : "Trade"}
+              labelClassName="font-medium text-amber-400/90"
+              createdAt={trade.created_at}
+              suffix={
+                trade.is_pinned ? (
+                  <span className="ml-1.5" aria-label="Pinned">
+                    📌
+                  </span>
+                ) : null
+              }
+            />
+          }
         />
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-white">
-            {profile.username || "User"}
-          </p>
-          <FeedPostMetaRow
-            label={showCopyBadge ? "Copy Traded" : "Trade"}
-            labelClassName="font-medium text-amber-400/90"
-            createdAt={trade.created_at}
-            suffix={
-              trade.is_pinned ? (
-                <span className="ml-1.5" aria-label="Pinned">
-                  📌
-                </span>
-              ) : null
-            }
-          />
-        </div>
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        <div onClick={(e) => e.stopPropagation()}>
-          <ShareTradeButton
-            variant="icon"
-            trade={trade}
-            profile={shareProfile ?? null}
-            mode="message-only"
-          />
-        </div>
+        {!(inDetailModal && showInteractions) ? (
+          <div onClick={(e) => e.stopPropagation()}>
+            <ShareTradeButton
+              variant="icon"
+              trade={trade}
+              profile={shareProfile ?? null}
+              mode="message-only"
+            />
+          </div>
+        ) : null}
         {canManageTrade ? (
           <div onClick={(e) => e.stopPropagation()}>
             <DropdownMenu
@@ -342,26 +343,33 @@ export default function ProfileTradeCard({
     </div>
   )
 
+  const tradeEngagementBar = showInteractions ? (
+    <TradeSocialEngagementBar
+      onCommentsFocus={() => setCommentsFocused(true)}
+      vaultContentRef={profileTradeVaultRef(trade.id, profile, currentUserId)}
+      shareTrade={trade}
+      shareProfile={shareProfile ?? null}
+    />
+  ) : null
+
   if (inDetailModal) {
-    return (
+    const modalArticle = (
       <article className={cardShellClass}>
         {imageSrc ? (
-          <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:p-3">
-            {tradeImageBlock}
+          <div className="hidden md:min-h-0 md:flex-1 md:flex-col md:overflow-y-auto md:border-r md:border-white/10 md:flex">
+            <div className="flex shrink-0 flex-col gap-2 p-3">
+              {tradeImageBlock}
+              {tradeEngagementBar ? (
+                <div className="shrink-0 border-t border-white/10 px-1 pt-2">
+                  {tradeEngagementBar}
+                </div>
+              ) : null}
+            </div>
           </div>
         ) : null}
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:w-[400px] md:shrink-0 lg:w-[420px]">
           {showInteractions ? (
-            <TradeSocialProvider
-              tradeId={trade.id}
-              currentUserId={currentUserId ?? undefined}
-              tradeOwnerUserId={trade.user_id}
-              commentsExpanded={commentsExpanded}
-              onRequestComments={commentsExpanded ? undefined : onOpenComments}
-              scrollToCommentsOnMount={scrollToCommentsOnMount}
-              enableRealtime
-            >
               <MobileCommentFocusLayout
                 commentsFocused={commentsFocused}
                 header={tradeAuthorHeader}
@@ -385,18 +393,33 @@ export default function ProfileTradeCard({
                     onExpand={() => setCommentsFocused(false)}
                   />
                 }
-                mobileMedia={imageSrc ? tradeImageBlock : undefined}
-                engagement={
-                  <TradeSocialEngagementBar
-                    onCommentsFocus={() => setCommentsFocused(true)}
-                    vaultContentRef={profileTradeVaultRef(
-                      trade.id,
-                      profile,
-                      currentUserId
-                    )}
-                  />
+                mobileMedia={
+                  imageSrc ? (
+                    <div className="flex flex-col">
+                      {tradeImageBlock}
+                      {tradeEngagementBar &&
+                      !detailModalEngagementInPanel(
+                        true,
+                        commentsFocused,
+                        isMobile
+                      ) ? (
+                        <div className="border-b border-white/10 px-4 py-2">
+                          {tradeEngagementBar}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : undefined
                 }
-                engagementClassName="shrink-0 border-t border-white/10 px-3 py-1.5 md:border-t-0 md:px-4 md:py-2"
+                engagement={
+                  detailModalEngagementInPanel(
+                    Boolean(imageSrc),
+                    commentsFocused,
+                    isMobile
+                  )
+                    ? tradeEngagementBar ?? undefined
+                    : undefined
+                }
+                engagementClassName="shrink-0 border-t border-white/10 px-3 py-1.5 md:px-4 md:py-2"
                 collapsibleContent={
                   <div className="space-y-2 px-3 pb-2 pt-3 md:space-y-3 md:px-4 md:pb-3 md:pt-4">
                     {tradeDetails}
@@ -411,7 +434,6 @@ export default function ProfileTradeCard({
                   ) : null
                 }
               />
-            </TradeSocialProvider>
           ) : (
             <>
               {tradeAuthorHeader}
@@ -424,6 +446,24 @@ export default function ProfileTradeCard({
         </div>
       </article>
     )
+
+    if (showInteractions) {
+      return (
+        <TradeSocialProvider
+          tradeId={trade.id}
+          currentUserId={currentUserId ?? undefined}
+          tradeOwnerUserId={trade.user_id}
+          commentsExpanded={commentsExpanded}
+          onRequestComments={commentsExpanded ? undefined : onOpenComments}
+          scrollToCommentsOnMount={scrollToCommentsOnMount}
+          enableRealtime
+        >
+          {modalArticle}
+        </TradeSocialProvider>
+      )
+    }
+
+    return modalArticle
   }
 
   return (
@@ -464,6 +504,8 @@ export default function ProfileTradeCard({
                   profile,
                   currentUserId
                 )}
+                shareTrade={trade}
+                shareProfile={shareProfile ?? null}
               />
             </div>
             <div className="tt-profile-trade-body space-y-2 px-3 pb-2 md:space-y-3 md:px-4 md:pb-3">

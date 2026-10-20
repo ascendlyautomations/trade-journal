@@ -14,3 +14,66 @@
     0 10px 15px -3px rgb(0 0 0 / 0.2),
     0 4px 6px -4px rgb(0 0 0 / 0.2);
 }
+
+/*
+ * Trade Room message composer — Dark Mode only (OG + Light keep DmStyleComposer defaults).
+ * Mirrors messagesGlassTheme.css so the footer matches charcoal room surfaces.
+ */
+html[data-tt-appearance="dark"]:not(.tt-native-ios) .tt-community :is(
+  .bg-\[\#0B1220\],
+  .md\:bg-\[\#020617\],
+  .bg-\[\#0f172a\]
+) {
+  background-color: var(--tt-surface);
+  background-image: none;
+}
+
+html[data-tt-appearance="dark"]:not(.tt-native-ios)
+  .tt-community
+  .mt-auto.shrink-0.border-t.border-white\/10 {
+  border-top-color: var(--tt-border);
+}
+
+html[data-tt-appearance="dark"]:not(.tt-native-ios)
+  .tt-community
+  [data-tt-trade-rooms-composer-preview] {
+  border-top-color: var(--tt-border);
+  background-color: var(--tt-surface);
+}
+
+html[data-tt-appearance="dark"]:not(.tt-native-ios)
+  .tt-community
+  textarea.bg-\[\#111827\] {
+  border: 1px solid var(--tt-border);
+  background-color: var(--tt-surface-raised);
+  color: var(--tt-text);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+html[data-tt-appearance="dark"]:not(.tt-native-ios)
+  .tt-community
+  textarea.bg-\[\#111827\]:focus-visible {
+  outline: none;
+  border-color: var(--tt-border-strong);
+  box-shadow: 0 0 0 1px var(--tt-border-strong);
+}
+
+html[data-tt-appearance="dark"]:not(.tt-native-ios)
+  .tt-community
+  textarea.bg-\[\#111827\]::placeholder {
+  color: var(--tt-text-placeholder);
+}
+
+html[data-tt-appearance="dark"]:not(.tt-native-ios) .tt-community .bg-\[\#1f2937\] {
+  border: 1px solid var(--tt-border);
+  background-color: var(--tt-surface-raised);
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="dark"]:not(.tt-native-ios)
+  .tt-community
+  .md\:hover\:bg-\[\#334155\]:hover {
+  background-color: var(--tt-surface-hover);
+}

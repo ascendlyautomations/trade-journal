@@ -24,6 +24,7 @@ import {
   tradeMatchesDashboardSelectedDate,
   tradeMatchesDashboardTimeFilter,
 } from "@/lib/dashboardTradeDate"
+import { formatDashboardEquityCurvePointDate } from "@/lib/dashboardLiveAccountValue"
 import {
   DASHBOARD_SESSION_DISPLAY_ORDER,
   normalizeSessionBucket,
@@ -477,6 +478,8 @@ export type DashboardAnalyticsResult = {
   lossCount: number
   bestDay: number
   worstDay: number
+  /** Distinct futures trading days in the filtered period (same keys as daily P&L). */
+  periodTradingDayCount: number
   symbolPerformanceRows: DashboardSymbolPerformanceRow[]
   longShortPerformance: LongShortPerformance
   holdTimeStats: HoldTimeStats
@@ -823,10 +826,7 @@ const biggestLoss = losses.length > 0
       }
 
       points.push({
-        date:
-          resolveDashboardTradeTimeSource(trade) ??
-          trade.created_at ??
-          "",
+        date: formatDashboardEquityCurvePointDate(trade),
         equity: runningEquity,
       })
       return points
@@ -855,6 +855,7 @@ const biggestLoss = losses.length > 0
     })
 
     const dailyPnLs = Object.values(dailyMap)
+    const periodTradingDayCount = Object.keys(dailyMap).length
 
     const bestDay = dailyPnLs.length > 0
   ? Math.max(...dailyPnLs)
@@ -902,6 +903,7 @@ const biggestLoss = losses.length > 0
       lossCount: lossesOnly.length,
       bestDay,
       worstDay,
+      periodTradingDayCount,
       symbolPerformanceRows,
       longShortPerformance,
       holdTimeStats,

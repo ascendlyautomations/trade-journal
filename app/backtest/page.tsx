@@ -1,6 +1,7 @@
 "use client"
 
 import "../analyticsDesktopTheme.css"
+import "./backtestLabTheme.css"
 import dynamic from "next/dynamic"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -9,11 +10,7 @@ import { deleteUserTrade } from "@/lib/deleteTrade"
 import EntitlementStatusNotice from "@/app/components/monetization/EntitlementStatusNotice"
 import LockedFeature from "../components/LockedFeature"
 import { useProGate } from "@/lib/useProGate"
-import TradesPageTradeCard from "../components/TradesPageTradeCard"
 import Calendar from "@/components/Calendar"
-import { formatPnlCurrency } from "@/lib/formatMoney"
-import { formatRR } from "@/lib/formatDisplay"
-import { averageRrFromTrades } from "@/lib/tradeRr"
 import { ConfirmModal, useDeleteTradeConfirmation } from "../components/ui"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
@@ -26,7 +23,48 @@ import { mapProjectedRows } from "@/lib/supabaseProjectedQuery"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { SkeletonBacktestPageContent } from "../components/ui/skeletons"
 import ImageLightbox from "../components/ui/ImageLightbox"
-import CustomSelect from "@/app/components/CustomSelect"
+import BacktestLabStatsGrid from "@/app/components/backtest/BacktestLabStatsGrid"
+import BacktestLabStrategyLeaderboard from "@/app/components/backtest/BacktestLabStrategyLeaderboard"
+import BacktestLabStrategyComparisonChart from "@/app/components/backtest/BacktestLabStrategyComparisonChart"
+import BacktestLabInstrumentTable from "@/app/components/backtest/BacktestLabInstrumentTable"
+import BacktestLabReportSection from "@/app/components/backtest/BacktestLabReportSection"
+import BacktestLabReviewSection from "@/app/components/backtest/BacktestLabReviewSection"
+import BacktestLabTabs, {
+  backtestLabTabPanelId,
+  type BacktestLabTab,
+} from "@/app/components/backtest/BacktestLabTabs"
+import BacktestLabToolbar, {
+  buildBacktestAccountFilterOptions,
+} from "@/app/components/backtest/BacktestLabToolbar"
+import BacktestLabEquityCurve from "@/app/components/backtest/BacktestLabEquityCurve"
+import {
+  applyBacktestLabFilters,
+  BACKTEST_LAB_FILTER_ALL,
+  computeTradeExpectancy,
+  distinctBacktestStrategyGroups,
+  distinctBacktestTickers,
+  formatBacktestLabFilterDateRangeLabel,
+  normalizeBacktestLabFilterDate,
+  pickDefaultBacktestAccountId,
+  selectBacktestTrades,
+  type BacktestLabFilterState,
+} from "@/lib/backtestLabFilters"
+import {
+  buildBacktestInstrumentLeaderboard,
+  buildBacktestStrategyLeaderboard,
+} from "@/lib/backtestLabAnalytics"
+import { buildBacktestLabEquityChartData } from "@/lib/backtestLabEquityCurve"
+import { compareDashboardTradesChronological } from "@/lib/dashboardTradeDate"
+import { computeMaxDrawdown } from "@/lib/dashboardMaxDrawdown"
+import { computePeriodTradeStats } from "@/lib/periodTradeStats"
+import { ensureAccountsLoaded, getCachedAccounts } from "@/lib/appDataCache"
+import {
+  backtestStrategyPresetLabels,
+  canonicalBacktestStrategyLabel,
+  isBacktestTradeNeedsReview,
+} from "@/lib/backtestLabReview"
+import { updateBacktestTradeReviewed } from "@/lib/backtestLabReviewActions"
+import { useToast } from "@/app/components/ui"
 
 const InputTradeForm = dynamic(() => import("../components/InputTradeForm"), {
   ssr: false,
@@ -44,8 +82,20 @@ type BacktestTrade = Record<string, unknown> & {
   created_at: string
 }
 
+const DEFAULT_FILTERS: BacktestLabFilterState = {
+  accountId: BACKTEST_LAB_FILTER_ALL,
+  strategy: BACKTEST_LAB_FILTER_ALL,
+  ticker: BACKTEST_LAB_FILTER_ALL,
+  dateStart: "",
+  dateEnd: "",
+  result: "all",
+  review: "all",
+  documentation: "all",
+}
+
 export default function BacktestPage() {
   const router = useRouter()
+  const toast = useToast()
   const { user, profile: contextProfile } = useUserProfile()
   const {
     access,
@@ -55,27 +105,31 @@ export default function BacktestPage() {
     entitlementStatus,
     refreshEntitlement,
   } = useProGate(contextProfile)
-  const [trades, setTrades] = useState<BacktestTrade[]>([])
+  const [allBacktestTrades, setAllBacktestTrades] = useState<BacktestTrade[]>(
+    []
+  )
+  const [accounts, setAccounts] = useState<Record<string, unknown>[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedStrategy, setSelectedStrategy] = useState("all")
+  const [filters, setFilters] = useState<BacktestLabFilterState>(DEFAULT_FILTERS)
   const [editingTrade, setEditingTrade] = useState<BacktestTrade | null>(null)
+  const [showLogTrade, setShowLogTrade] = useState(false)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
   const [proLocked, setProLocked] = useState(false)
   const [shareProfile, setShareProfile] = useState<{
     referral_code?: string | null
   } | null>(null)
+  const [activeTab, setActiveTab] = useState<BacktestLabTab>("overview")
+  const [tradesViewMode, setTradesViewMode] = useState<"list" | "groups">(
+    "list"
+  )
+  const [reviewBusyId, setReviewBusyId] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (isDemoModeActive() && !user?.id) return
-    if (access === "unknown") return
-    void loadBacktests()
-  }, [user?.id, access, proFeatureUnlocked])
-
-  const loadBacktests = async () => {
+  const loadBacktests = useCallback(async () => {
     if (isDemoModeActive() && user?.id) {
       setShareProfile({ referral_code: DEMO_PROFILE.referral_code })
-      setTrades(getDemoBacktestTrades() as BacktestTrade[])
+      setAllBacktestTrades(getDemoBacktestTrades() as BacktestTrade[])
+      setAccounts([])
       setProLocked(false)
       setLoading(false)
       return
@@ -107,59 +161,149 @@ export default function BacktestPage() {
       )
     }
 
-    const { rows } = await rpcTradesOwnerRows(supabase)
-    const data = rows
-      .filter((row) => String(row.mode ?? "").toLowerCase() === "backtest")
-      .sort(
-        (a, b) =>
-          String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""))
-      )
+    const [{ rows }, accountRows] = await Promise.all([
+      rpcTradesOwnerRows(supabase),
+      getCachedAccounts(user.id) ??
+        ensureAccountsLoaded(supabase, user.id).catch(() => []),
+    ])
 
-    setTrades(mapProjectedRows(data, (row) => row as BacktestTrade))
+    const backtestRows = selectBacktestTrades(rows).sort(
+      (a, b) => -compareDashboardTradesChronological(a, b)
+    )
+
+    setAllBacktestTrades(
+      mapProjectedRows(backtestRows, (row) => row as BacktestTrade)
+    )
+    setAccounts(Array.isArray(accountRows) ? accountRows : [])
     setLoading(false)
-  }
+  }, [
+    user?.id,
+    contextProfile?.referral_code,
+    proFeatureUnlocked,
+    router,
+    shouldGateFeature,
+  ])
 
-  const strategies = useMemo(
-    () => [
-      "all",
-      ...Array.from(
-        new Set(
-          trades
-            .map((t) => t.strategy)
-            .filter((s): s is string => Boolean(s && String(s).trim()))
+  useEffect(() => {
+    if (isDemoModeActive() && !user?.id) return
+    if (access === "unknown") return
+    void loadBacktests()
+  }, [user?.id, access, proFeatureUnlocked, loadBacktests])
+
+  const filteredTrades = useMemo(
+    () => applyBacktestLabFilters(allBacktestTrades, filters),
+    [allBacktestTrades, filters]
+  )
+
+  const strategyGroups = useMemo(
+    () => distinctBacktestStrategyGroups(allBacktestTrades),
+    [allBacktestTrades]
+  )
+
+  const analyticsTrades = useMemo(
+    () =>
+      applyBacktestLabFilters(allBacktestTrades, filters, {
+        omitStrategy: true,
+      }),
+    [allBacktestTrades, filters]
+  )
+
+  const strategyLeaderboardRows = useMemo(
+    () => buildBacktestStrategyLeaderboard(analyticsTrades, strategyGroups),
+    [analyticsTrades, strategyGroups]
+  )
+
+  const instrumentLeaderboardRows = useMemo(
+    () => buildBacktestInstrumentLeaderboard(analyticsTrades),
+    [analyticsTrades]
+  )
+
+  const reportDateRangeLabel = useMemo(
+    () => formatBacktestLabFilterDateRangeLabel(filters),
+    [filters]
+  )
+
+  const selectedStrategyKey =
+    filters.strategy === BACKTEST_LAB_FILTER_ALL ? null : filters.strategy
+
+  const tickerOptions = useMemo(
+    () => distinctBacktestTickers(allBacktestTrades),
+    [allBacktestTrades]
+  )
+
+  const accountFilterOptions = useMemo(
+    () => buildBacktestAccountFilterOptions(allBacktestTrades, accounts),
+    [allBacktestTrades, accounts]
+  )
+
+  const defaultBacktestAccountId = useMemo(
+    () => pickDefaultBacktestAccountId(accounts),
+    [accounts]
+  )
+
+  const periodStats = useMemo(
+    () => computePeriodTradeStats(filteredTrades),
+    [filteredTrades]
+  )
+
+  const expectancy = useMemo(
+    () => computeTradeExpectancy(filteredTrades),
+    [filteredTrades]
+  )
+
+  const maxDrawdown = useMemo(
+    () => computeMaxDrawdown(filteredTrades),
+    [filteredTrades]
+  )
+
+  const equityChartData = useMemo(
+    () => buildBacktestLabEquityChartData(filteredTrades),
+    [filteredTrades]
+  )
+
+  const strategyPresetLabels = useMemo(
+    () => backtestStrategyPresetLabels(strategyGroups),
+    [strategyGroups]
+  )
+
+  const normalizeStrategyValue = useCallback(
+    (raw: string) => canonicalBacktestStrategyLabel(raw, strategyGroups),
+    [strategyGroups]
+  )
+
+  const needsReviewCount = useMemo(
+    () =>
+      allBacktestTrades.filter((t) => isBacktestTradeNeedsReview(t)).length,
+    [allBacktestTrades]
+  )
+
+  const handleToggleReviewed = useCallback(
+    async (tradeId: string, reviewed: boolean) => {
+      if (isDemoSupabaseBlocked()) {
+        setAllBacktestTrades((prev) =>
+          prev.map((t) => (t.id === tradeId ? { ...t, reviewed } : t))
         )
-      ),
-    ],
-    [trades]
+        return
+      }
+      if (!user?.id) return
+      setReviewBusyId(tradeId)
+      const result = await updateBacktestTradeReviewed(
+        supabase,
+        tradeId,
+        user.id,
+        reviewed
+      )
+      setReviewBusyId(null)
+      if (!result.ok) {
+        toast.error("Could not update review status.")
+        return
+      }
+      setAllBacktestTrades((prev) =>
+        prev.map((t) => (t.id === tradeId ? { ...t, reviewed } : t))
+      )
+    },
+    [user?.id, toast]
   )
-
-  const filteredTrades = useMemo(() => {
-    if (selectedStrategy === "all") return trades
-    return trades.filter((t) => t.strategy === selectedStrategy)
-  }, [trades, selectedStrategy])
-
-  const totalTrades = filteredTrades.length
-  const wins = filteredTrades.filter((t) => (Number(t.pnl) || 0) > 0).length
-  const losses = filteredTrades.filter((t) => (Number(t.pnl) || 0) < 0).length
-
-  const winRate = totalTrades
-    ? ((wins / totalTrades) * 100).toFixed(1)
-    : "0"
-
-  const totalPnL = filteredTrades.reduce(
-    (acc, t) => acc + (Number(t.pnl) || 0),
-    0
-  )
-
-  const avgRR = averageRrFromTrades(filteredTrades)
-
-  const strategyMap: Record<string, BacktestTrade[]> = {}
-  trades.forEach((t) => {
-    if (!t.strategy) return
-    const name = String(t.strategy)
-    if (!strategyMap[name]) strategyMap[name] = []
-    strategyMap[name].push(t)
-  })
 
   const performDeleteTrade = useCallback(async (id: string) => {
     if (isDemoSupabaseBlocked()) {
@@ -167,7 +311,7 @@ export default function BacktestPage() {
       return
     }
     await deleteUserTrade(supabase, id)
-    setTrades((prev) => prev.filter((t) => t.id !== id))
+    setAllBacktestTrades((prev) => prev.filter((t) => t.id !== id))
   }, [])
 
   const handleEditTrade = useCallback((trade: BacktestTrade) => {
@@ -197,6 +341,14 @@ export default function BacktestPage() {
 
   const { requestDelete: deleteTrade, confirmModalProps } =
     useDeleteTradeConfirmation(performDeleteTrade)
+
+  const openLogBacktestTrade = useCallback(() => {
+    if (isDemoSupabaseBlocked()) {
+      requestDemoSignup("save")
+      return
+    }
+    setShowLogTrade(true)
+  }, [])
 
   if (access === "unknown") {
     return (
@@ -230,155 +382,121 @@ export default function BacktestPage() {
 
   return (
     <>
-      <div className="tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
-        <div className="mx-auto max-w-7xl px-6 pb-6 pt-3 xl:max-w-[1560px]">
-          <h1 className="text-xl md:text-2xl font-semibold text-blue-300 text-center mb-1 mt-0 md:mt-0">
-  Backtest Lab
-</h1>
-          <p className="mb-2 text-center text-sm text-gray-400">
-            Isolated backtests, does not affect dashboard or trade history.
+      <div className="tt-phase3-dark tt-backtest-lab min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
+        <div className="mx-auto max-w-7xl px-4 pb-6 pt-3 sm:px-6 xl:max-w-[1560px]">
+          <h1 className="mb-1 mt-0 text-center text-xl font-semibold text-blue-300 md:text-2xl">
+            Backtest Lab
+          </h1>
+          <p className="mb-4 text-center text-sm text-[var(--tt-bl-control-muted,#9ca3af)]">
+            Isolated backtests — does not affect dashboard or live trade history.
           </p>
 
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <CustomSelect
-                value={selectedStrategy}
-                onChange={setSelectedStrategy}
-                className="w-auto"
-                triggerClassName="flex min-w-0 cursor-pointer items-center justify-between rounded-lg border border-white/10 bg-black/40 px-4 py-2 text-left text-sm text-white"
-                options={strategies.map((s) => ({
-                  label: s === "all" ? "All Strategies" : s,
-                  value: s,
-                }))}
-              />
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowPerformanceShare(true)}
-                className="rounded-lg bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
-                title="Share performance"
-                aria-label="Share performance"
-              >
-                📤 Share
-              </button>
-            </div>
-          </div>
+          <BacktestLabToolbar
+            filters={filters}
+            onFiltersChange={setFilters}
+            accountOptions={accountFilterOptions}
+            strategyGroups={strategyGroups}
+            tickerOptions={tickerOptions}
+            onLogTrade={openLogBacktestTrade}
+            onShare={() => setShowPerformanceShare(true)}
+          />
 
           {loading ? (
             <SkeletonBacktestPageContent />
           ) : (
             <>
-          <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
-            <div className="rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-600/10 p-4">
-              <p className="text-sm text-gray-400">Trades</p>
-              <p className="text-xl font-bold text-white">{totalTrades}</p>
-            </div>
-
-            <div className="rounded-xl bg-gradient-to-br from-green-500/20 to-green-600/10 p-4">
-              <p className="text-sm text-gray-400">Win Rate</p>
-              <p className="text-xl font-bold text-white">{winRate}%</p>
-            </div>
-
-            <div className="rounded-xl bg-gradient-to-br from-purple-500/20 to-purple-600/10 p-4">
-              <p className="text-sm text-gray-400">Total PnL</p>
-              <p className="text-xl font-bold text-white">
-                {formatPnlCurrency(totalPnL, {
-                  minimumFractionDigits: 0,
-                  maximumFractionDigits: 2,
-                })}
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-gradient-to-br from-yellow-500/20 to-yellow-600/10 p-4">
-              <p className="text-sm text-gray-400">Avg RR</p>
-              <p className="text-xl font-bold text-white">{formatRR(avgRR)}</p>
-            </div>
-          </div>
-
-          <div className="mb-5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-gray-300">
-            Wins: <span className="font-semibold text-emerald-400">{wins}</span>{" "}
-            / Losses:{" "}
-            <span className="font-semibold text-red-400">{losses}</span>
-          </div>
-
-          <h2 className="mb-2 text-xl font-semibold text-white">
-            Backtest Calendar
-          </h2>
-          <div className="mb-4">
-            <Calendar trades={filteredTrades as any} />
-          </div>
-
-          <h2 className="mb-3 text-xl font-semibold text-white">
-            Strategy Breakdown
-          </h2>
-          <div className="mb-4 space-y-4">
-            {Object.entries(strategyMap)
-              .filter(([name]) =>
-                selectedStrategy === "all" ? true : name === selectedStrategy
-              )
-              .map(([name, stratTrades]) => {
-              const stratWins = stratTrades.filter(
-                (t) => (Number(t.pnl) || 0) > 0
-              ).length
-              const total = stratTrades.length
-              const pnl = stratTrades.reduce(
-                (acc, t) => acc + (Number(t.pnl) || 0),
-                0
-              )
-              const stratAvgRR = averageRrFromTrades(stratTrades)
-              return (
-                <div
-                  key={name}
-                  className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-md"
-                >
-                  <p className="font-bold text-white">{name}</p>
-                  <p className="text-sm text-gray-300">Trades: {total}</p>
-                  <p className="text-sm text-gray-300">
-                    Win Rate: {((stratWins / total) * 100).toFixed(1)}%
-                  </p>
-                  <p className="text-sm text-gray-300">
-                    PnL:{" "}
-                    {formatPnlCurrency(pnl, {
-                      minimumFractionDigits: 0,
-                      maximumFractionDigits: 2,
-                    })}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    Avg RR: {formatRR(stratAvgRR)}
-                  </p>
-                </div>
-              )
-            })}
-            {Object.keys(strategyMap).length === 0 ? (
-              <p className="text-sm text-gray-400">
-                No strategy labels yet. Add a strategy name on backtest trades.
-              </p>
-            ) : null}
-          </div>
-
-          <h2 className="mb-3 text-xl font-semibold text-white">
-            Backtest Trades
-          </h2>
-          <div className="grid grid-cols-1 gap-4 pb-12 md:grid-cols-2">
-            {filteredTrades.map((trade) => (
-              <TradesPageTradeCard
-                key={trade.id}
-                trade={trade}
-                shareProfile={shareProfile}
-                onEdit={handleEditTrade}
-                onDelete={(id) => void deleteTrade(id)}
-                onSendClick={handleSendTrade}
-                onAnalyze={handleAnalyzeTrade}
-                onImageClick={(url) => setSelectedImage(url)}
+              <BacktestLabTabs
+                value={activeTab}
+                onChange={setActiveTab}
+                needsReviewCount={needsReviewCount}
               />
-            ))}
-            {!loading && filteredTrades.length === 0 ? (
-              <p className="text-center text-gray-400 md:col-span-2">
-                No backtest trades match this filter.
-              </p>
-            ) : null}
-          </div>
+
+              {activeTab === "overview" ? (
+                <div
+                  id={backtestLabTabPanelId("overview")}
+                  role="tabpanel"
+                  className="space-y-5"
+                >
+                  <BacktestLabStatsGrid
+                    periodStats={periodStats}
+                    expectancy={expectancy}
+                    maxDrawdown={maxDrawdown}
+                  />
+
+                  <BacktestLabEquityCurve
+                    data={equityChartData}
+                    isPro={proFeatureUnlocked}
+                    totalTrades={periodStats.totalTrades}
+                    profitFactor={
+                      periodStats.profitFactorInfinite
+                        ? null
+                        : periodStats.profitFactor
+                    }
+                    onLogTrade={openLogBacktestTrade}
+                  />
+
+                  <BacktestLabReportSection
+                    trades={filteredTrades}
+                    dateRangeLabel={reportDateRangeLabel}
+                    viewerUserId={user?.id}
+                  />
+                </div>
+              ) : null}
+
+              {activeTab === "strategies" ? (
+                <div
+                  id={backtestLabTabPanelId("strategies")}
+                  role="tabpanel"
+                  className="space-y-2"
+                >
+                  <BacktestLabStrategyLeaderboard
+                    rows={strategyLeaderboardRows}
+                    selectedStrategyKey={selectedStrategyKey}
+                    onSelectStrategy={(key) => {
+                      setFilters((prev) => ({ ...prev, strategy: key }))
+                      setActiveTab("trades")
+                    }}
+                  />
+
+                  <BacktestLabStrategyComparisonChart
+                    strategyRows={strategyLeaderboardRows}
+                  />
+
+                  <BacktestLabInstrumentTable rows={instrumentLeaderboardRows} />
+                </div>
+              ) : null}
+
+              {activeTab === "calendar" ? (
+                <div id={backtestLabTabPanelId("calendar")} role="tabpanel">
+                  <h2 className="backtest-lab-section-title text-base md:text-lg">
+                    Backtest calendar
+                  </h2>
+                  <Calendar trades={filteredTrades as any} />
+                </div>
+              ) : null}
+
+              {activeTab === "trades" ? (
+                <div id={backtestLabTabPanelId("trades")} role="tabpanel">
+                  <BacktestLabReviewSection
+                    trades={filteredTrades}
+                    filters={filters}
+                    onFiltersChange={setFilters}
+                    strategyGroups={strategyGroups}
+                    shareProfile={shareProfile}
+                    onEdit={handleEditTrade}
+                    onDelete={(id) => void deleteTrade(id)}
+                    onSendClick={handleSendTrade}
+                    onAnalyze={handleAnalyzeTrade}
+                    onImageClick={(url) => setSelectedImage(url)}
+                    onToggleReviewed={(id, reviewed) =>
+                      void handleToggleReviewed(id, reviewed)
+                    }
+                    reviewBusyId={reviewBusyId}
+                    viewMode={tradesViewMode}
+                    onViewModeChange={setTradesViewMode}
+                  />
+                </div>
+              ) : null}
             </>
           )}
         </div>
@@ -389,10 +507,36 @@ export default function BacktestPage() {
         onClose={() => setSelectedImage(null)}
       />
 
+      {showLogTrade ? (
+        <InputTradeForm
+          key="backtest-log-new"
+          initialAccountId={defaultBacktestAccountId}
+          openAsModal
+          modalTitle="Log Backtest Trade"
+          strategySuggestions={strategyPresetLabels}
+          normalizeStrategyValue={normalizeStrategyValue}
+          createAsUnreviewed
+          accountPickerScope="backtest_only"
+          onClose={() => setShowLogTrade(false)}
+          onSave={() => {
+            if (isDemoSupabaseBlocked()) {
+              requestDemoSignup("save")
+              setShowLogTrade(false)
+              return
+            }
+            void loadBacktests()
+            setShowLogTrade(false)
+          }}
+        />
+      ) : null}
+
       {editingTrade ? (
         <InputTradeForm
           key={String(editingTrade.id)}
           existingTrade={editingTrade}
+          strategySuggestions={strategyPresetLabels}
+          normalizeStrategyValue={normalizeStrategyValue}
+          accountPickerScope="backtest_only"
           onClose={() => setEditingTrade(null)}
           onSave={() => {
             if (isDemoSupabaseBlocked()) {
@@ -410,8 +554,10 @@ export default function BacktestPage() {
         open={showPerformanceShare}
         onClose={() => setShowPerformanceShare(false)}
         tradePool={filteredTrades as any[]}
-        subtitle="Backtest Lab · current strategy filter"
+        subtitle="Backtest Lab · current filters"
         profile={shareProfile}
+        initialCustomRangeStart={normalizeBacktestLabFilterDate(filters.dateStart)}
+        initialCustomRangeEnd={normalizeBacktestLabFilterDate(filters.dateEnd)}
       />
       <ConfirmModal {...confirmModalProps} />
     </>

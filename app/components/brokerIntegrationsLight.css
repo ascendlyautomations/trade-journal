@@ -1,0 +1,132 @@
+/*
+ * Settings → Broker Integrations — Rithmic light mode only.
+ * Scoped to .tt-rithmic-broker; does not affect dark, OG, or Tradovate.
+ */
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker :is(
+    .text-white,
+    .font-medium.text-white,
+    .font-semibold.text-white
+  ) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker :is(
+    .text-gray-200,
+    .text-gray-300,
+    .text-white\/60,
+    .text-white\/70,
+    .text-white\/80
+  ) {
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker :is(.text-gray-400, .text-gray-500) {
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .text-emerald-300,
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .text-emerald-200 {
+  color: var(--tt-positive);
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .text-emerald-200\/90 {
+  color: var(--tt-positive);
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .text-red-300 {
+  color: var(--tt-negative);
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .text-blue-200 {
+  color: var(--tt-accent);
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .tt-rithmic-test-notice {
+  color: #92400e;
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .border-white\/10,
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .border-white\/15,
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .border-white\/20 {
+  border-color: var(--tt-border);
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker :is(
+    .bg-black\/20,
+    .bg-black\/25,
+    .bg-black\/30
+  ) {
+  background-color: var(--tt-surface);
+  background-image: none;
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .tt-broker-account-row {
+  background-color: var(--tt-surface-nested);
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .bg-black\/40,
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker input.bg-black\/40 {
+  background-color: var(--tt-surface-raised);
+  color: var(--tt-text);
+  border-color: var(--tt-border-strong);
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .bg-amber-950\/20 {
+  background-color: var(--tt-warning-soft);
+  border-color: color-mix(in srgb, var(--tt-warning) 45%, transparent);
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .tt-broker-btn-reconnect {
+  background-color: var(--tt-warning-soft);
+  border-color: color-mix(in srgb, var(--tt-warning) 50%, transparent);
+  color: #92400e;
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .tt-broker-btn-reconnect:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--tt-warning) 18%, var(--tt-surface));
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .tt-broker-btn-neutral {
+  background-color: var(--tt-surface);
+  border-color: var(--tt-border-strong);
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .tt-broker-btn-neutral:hover:not(:disabled) {
+  background-color: var(--tt-surface-hover);
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .tt-broker-btn-import {
+  background-color: var(--tt-positive-soft);
+  border-color: color-mix(in srgb, var(--tt-positive) 45%, transparent);
+  color: var(--tt-positive);
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .tt-broker-btn-import:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--tt-positive) 14%, var(--tt-surface));
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .tt-broker-btn-manage {
+  background-color: var(--tt-selected);
+  border-color: color-mix(in srgb, var(--tt-accent) 45%, transparent);
+  color: var(--tt-accent);
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .tt-broker-btn-manage:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--tt-accent) 12%, var(--tt-surface));
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .tt-broker-btn-primary {
+  background-color: var(--tt-accent-fill);
+  color: var(--tt-on-accent);
+}
+
+html[data-tt-appearance="light"] .tt-broker-integrations .tt-rithmic-broker .tt-broker-btn-primary:hover:not(:disabled) {
+  background-color: var(--tt-accent-hover);
+  color: var(--tt-on-accent);
+}

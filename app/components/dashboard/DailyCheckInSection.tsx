@@ -18,6 +18,7 @@ import {
   type TraderDailyCheckInDraft,
 } from "@/lib/dailyCheckIn/types"
 import { formatSleepHoursInput, validateCheckInDraft } from "@/lib/dailyCheckIn/validation"
+import { requestDailyCheckInNetworkRefresh } from "@/lib/dailyCheckIn/sessionCache"
 import { useTodayDailyCheckIn } from "@/lib/dailyCheckIn/useTodayDailyCheckIn"
 import DailyCheckInModal from "./DailyCheckInModal"
 
@@ -113,6 +114,7 @@ export default function DailyCheckInSection({
     try {
       const saved = await upsertDailyCheckIn(supabase, userId, nextDraft)
       applySaved(saved)
+      requestDailyCheckInNetworkRefresh()
       setOpen(false)
       notifyGettingStartedChecklistMaybeCompleted()
     } catch (error) {

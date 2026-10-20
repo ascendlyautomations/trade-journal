@@ -25,6 +25,8 @@ import FeedPostHeader from "./FeedPostHeader"
 import FeedPostMetaRow from "./FeedPostMetaRow"
 import FeedRoomShareCard from "./FeedRoomShareCard"
 import { feedCommentTarget } from "./feedPostHelpers"
+import { detailModalEngagementInPanel } from "@/app/components/ui/detailModalEngagement"
+import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
 import type { FeedLikeMeta } from "./FeedPostCard"
 
 type FeedProfilePostDetailModalProps = {
@@ -73,6 +75,7 @@ export default function FeedProfilePostDetailModal({
   const [commentsFocused, setCommentsFocused] = useState(
     () => Boolean(openCommentsRef.current[pid])
   )
+  const isMobile = useMaxMdViewport()
 
   const scrollCommentsIntoView = useCallback(() => {
     requestAnimationFrame(() => {
@@ -135,11 +138,7 @@ export default function FeedProfilePostDetailModal({
         src={achievementImageSrc}
         onClick={setLightboxUrl}
       />
-    ) : (
-      <div className="flex h-full w-full items-center justify-center p-6 text-sm text-gray-400">
-        No certificate image
-      </div>
-    )
+    ) : null
   ) : isRoomSharePost(post) ? (
     <div className="flex h-full w-full items-center justify-center p-4">
       <FeedRoomShareCard
@@ -154,6 +153,23 @@ export default function FeedProfilePostDetailModal({
       onClick={setLightboxUrl}
     />
   ) : null
+
+  const hasMedia = splitMedia != null
+
+  const engagementRow = (
+    <PostInteractionsEngagement
+      post={post}
+      user={user}
+      comments={comments}
+      commentCount={commentCount}
+      likeMeta={likeMeta}
+      likeBusy={likeBusy}
+      onToggleLike={onToggleLike}
+      onOpenComments={() => focusComments()}
+      onSharePost={onSharePost}
+      vaultContentRef={vaultRefFromFeedItem(post)}
+    />
+  )
 
   const splitPanel = (
     <MobileCommentFocusLayout
@@ -190,18 +206,9 @@ export default function FeedProfilePostDetailModal({
         />
       }
       engagement={
-        <PostInteractionsEngagement
-          post={post}
-          user={user}
-          comments={comments}
-          commentCount={commentCount}
-          likeMeta={likeMeta}
-          likeBusy={likeBusy}
-          onToggleLike={onToggleLike}
-          onOpenComments={() => focusComments()}
-          onSharePost={onSharePost}
-          vaultContentRef={vaultRefFromFeedItem(post)}
-        />
+        detailModalEngagementInPanel(hasMedia, commentsFocused, isMobile)
+          ? engagementRow
+          : undefined
       }
       collapsibleContent={
         isAchievement && achievement ? (
@@ -242,6 +249,7 @@ export default function FeedProfilePostDetailModal({
         layout="split"
         onClose={onClose}
         splitMedia={splitMedia}
+        splitMediaActions={hasMedia ? engagementRow : undefined}
         splitPanel={splitPanel}
         suppressMobileSplitMedia={commentsFocused}
       />

@@ -1,5 +1,6 @@
 import type { TraderDailyCheckIn } from "../dailyCheckIn/types.ts"
 import { buildCheckInSummary, type PsychologyCheckInSummary } from "./checkInSummary.ts"
+import { isCompleteCheckIn } from "../dailyCheckIn/validation.ts"
 import { checkInsMatchingTrades } from "./correlate.ts"
 import type { PsychologyTradeDateFields } from "./tradeDateKey.ts"
 import {
@@ -25,7 +26,10 @@ export function buildDashboardPsychologyStats<
   checkIns: readonly TraderDailyCheckIn[]
 ): DashboardPsychologyStats {
   const unlock = computePsychologyInsightsUnlockProgress(trades, checkIns)
-  const matched = checkInsMatchingTrades(trades, checkIns)
+  const matched = checkInsMatchingTrades(
+    trades,
+    checkIns.filter(isCompleteCheckIn)
+  )
   const showMetrics = !showsPsychologyInsightsRequirement(unlock)
   return {
     unlock,

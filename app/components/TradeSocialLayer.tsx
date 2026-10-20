@@ -14,6 +14,7 @@ import {
 import { supabase } from "../../lib/supabaseClient"
 import FeedCommentList from "@/app/components/feed/FeedCommentList"
 import EngagementCountButton from "@/app/components/EngagementCountButton"
+import ShareTradeButton from "@/app/components/ShareTradeButton"
 import { VaultEngagementTrailing } from "@/app/components/vault/VaultEngagementButton"
 import type { VaultContentRef } from "@/lib/vault/types"
 import ActionButton from "@/app/components/ui/ActionButton"
@@ -679,10 +680,16 @@ export function TradeSocialEngagementBar({
   className = "",
   onCommentsFocus,
   vaultContentRef,
+  shareTrade,
+  shareProfile = null,
+  shareMode = "full",
 }: {
   className?: string
   onCommentsFocus?: () => void
   vaultContentRef?: VaultContentRef | null
+  shareTrade?: any
+  shareProfile?: { referral_code?: string | null } | null
+  shareMode?: "full" | "message-only"
 }) {
   const {
     tradeId,
@@ -735,8 +742,9 @@ export function TradeSocialEngagementBar({
       : null)
 
   return (
-    <div className={`flex w-full items-center gap-4 text-sm ${className}`}>
+    <div className={`flex w-full items-center gap-3 text-sm ${className}`}>
       <EngagementCountButton
+        variant="boxed"
         icon={<span>{liked ? "❤️" : "🤍"}</span>}
         count={likes}
         ariaLabel={liked ? "Unlike" : "Like"}
@@ -748,10 +756,10 @@ export function TradeSocialEngagementBar({
           void handleLike()
         }}
         className={liked ? "text-red-400 hover:text-red-300" : undefined}
-        countClassName="tabular-nums"
       />
 
       <EngagementCountButton
+        variant="boxed"
         icon={<span>💬</span>}
         count={commentCount}
         ariaLabel="View comments"
@@ -759,8 +767,17 @@ export function TradeSocialEngagementBar({
           e.stopPropagation()
           handleCommentClick()
         }}
-        countClassName="tabular-nums"
       />
+      {shareTrade ? (
+        <div onClick={(e) => e.stopPropagation()}>
+          <ShareTradeButton
+            variant="engagement"
+            trade={shareTrade}
+            profile={shareProfile}
+            mode={shareMode}
+          />
+        </div>
+      ) : null}
       <VaultEngagementTrailing contentRef={tradeVaultRef} />
     </div>
   )

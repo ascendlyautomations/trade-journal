@@ -51,10 +51,10 @@ export const READABLE_BORDER_STRONG_CLASS = "border-white/15"
 /** Quiet icons / chevrons on navy (matches labels). */
 export const READABLE_ICON_CLASS = "text-gray-400"
 
-/* —— Recharts hex tokens (Profile equity readability baseline) —— */
-export const READABLE_CHART_TICK = "#cbd5e1"
-export const READABLE_CHART_GRID = "#334155"
-export const READABLE_CHART_TOOLTIP_BG = "#0f172a"
+/* —— Recharts tokens — CSS vars follow authenticated dark/light; fallbacks for OG / legacy. —— */
+export const READABLE_CHART_TICK = "var(--tt-chart-tick, #cbd5e1)"
+export const READABLE_CHART_GRID = "var(--tt-chart-grid, #334155)"
+export const READABLE_CHART_TOOLTIP_BG = "var(--tt-tooltip-bg, #0f172a)"
 export const READABLE_CHART_TOOLTIP_BORDER = "1px solid rgba(255,255,255,0.12)"
-export const READABLE_CHART_TOOLTIP_LABEL = "#cbd5e1"
-export const READABLE_CHART_TOOLTIP_ITEM = "#ffffff"
+export const READABLE_CHART_TOOLTIP_LABEL = "var(--tt-text-muted, #cbd5e1)"
+export const READABLE_CHART_TOOLTIP_ITEM = "var(--tt-tooltip-text, #ffffff)"

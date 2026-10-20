@@ -13,7 +13,12 @@ import {
   writeRecentCheckInsCache,
   writeTodayCheckInCache,
 } from "./sessionCache.ts"
-import { checkInDateKey, todayCheckInDateKey } from "./dateKey.ts"
+import {
+  CHECK_IN_HISTORY_DAY_WINDOW,
+  checkInDateKey,
+  checkInHistoryStartDateKey,
+  todayCheckInDateKey,
+} from "./dateKey.ts"
 import {
   draftFromCheckIn,
   emptyCheckInDraft,
@@ -142,10 +147,22 @@ describe("Daily Check-In contract", () => {
 })
 
 describe("check-in session cache", () => {
+  it("seeds the recent window when saving today before any bulk fetch", () => {
+    resetTodayCheckInCacheForTests()
+    const today = todayCheckInDateKey()
+    const start = checkInHistoryStartDateKey(CHECK_IN_HISTORY_DAY_WINDOW)
+    const saved = checkIn({ checkInDate: today, sleepHours: 8 })
+    writeTodayCheckInCache("user", today, saved)
+    const recent = readRecentCheckInsCache("user", start, today)
+    assert.equal(recent?.length, 1)
+    assert.equal(recent?.[0]?.checkInDate, today)
+    resetTodayCheckInCacheForTests()
+  })
+
   it("merges a saved today check-in into the recent window", () => {
     resetTodayCheckInCacheForTests()
     const today = todayCheckInDateKey()
-    const start = "2026-07-03"
+    const start = checkInHistoryStartDateKey(CHECK_IN_HISTORY_DAY_WINDOW)
     const saved = checkIn({ checkInDate: today, sleepHours: 8 })
     writeRecentCheckInsCache("user", start, today, [
       checkIn({ checkInDate: "2026-09-29", sleepHours: 6 }),
@@ -160,7 +177,7 @@ describe("check-in session cache", () => {
   it("does not let a stale range fetch replace a just-saved today row", () => {
     resetTodayCheckInCacheForTests()
     const today = todayCheckInDateKey()
-    const start = "2026-07-03"
+    const start = checkInHistoryStartDateKey(CHECK_IN_HISTORY_DAY_WINDOW)
     const saved = checkIn({ checkInDate: today, sleepHours: 9 })
     writeTodayCheckInCache("user", today, saved)
     writeRecentCheckInsCache("user", start, today, [

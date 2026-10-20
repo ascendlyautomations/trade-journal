@@ -295,6 +295,14 @@ export default function TradesPage() {
     replaceSearchParam("trade", null)
   }, [replaceSearchParam])
 
+  const handleTradeUpdated = useCallback((updated: Record<string, unknown>) => {
+    const id = updated.id != null ? String(updated.id) : ""
+    if (!id) return
+    setSelectedTrade((prev) =>
+      prev && String(prev.id) === id ? { ...prev, ...updated } : prev
+    )
+  }, [])
+
   const handleClosePerformanceShare = useCallback(() => {
     setShowPerformanceShare(false)
   }, [])
@@ -621,6 +629,7 @@ export default function TradesPage() {
         onAnalyzeTrade={handleAnalyzeTrade}
         onImageClick={handleImageClick}
         onOpenTradeReplay={handleOpenTradeReplay}
+        onTradeUpdated={handleTradeUpdated}
       />
 
       <ConfirmModal {...confirmModalProps} />

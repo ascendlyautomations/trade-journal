@@ -3,7 +3,6 @@
 import "../utilityDesktopTheme.css"
 import "../addTradeContrast.css"
 import InputTradeForm from "../components/InputTradeForm"
-import CopyTradingGroupsSection from "../components/CopyTradingGroupsSection"
 import QuickTradeModal from "../components/QuickTradeModal"
 import CsvImportFailureModal from "../components/CsvImportFailureModal"
 import { useState, useRef, useEffect } from "react"
@@ -33,7 +32,6 @@ import type { QuickTradeCsvFormPatch } from "@/lib/parseQuickCsvPaste"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { useUserProfile } from "@/lib/useUserProfile"
-import { useProGate } from "@/lib/useProGate"
 import { ensureInitialImportReviewCountLoaded } from "@/lib/initialImportReviewCount"
 
 const INPUT_TRADE_CSV_INPUT_ID = "input-trade-csv-upload"
@@ -41,8 +39,7 @@ const INPUT_TRADE_CSV_INPUT_ID = "input-trade-csv-upload"
 export default function Home() {
   const { isNativeIos } = usePlatformPresentation()
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
-  const { user, profile } = useUserProfile()
-  const { access } = useProGate(profile)
+  const { user } = useUserProfile()
   const userId = user?.id ?? null
   const [loading, setLoading] = useState(false)
   const [reviewCount, setReviewCount] = useState(0)
@@ -346,13 +343,6 @@ export default function Home() {
             }}
           />
 
-          <div className="mt-6">
-            <CopyTradingGroupsSection
-              userId={userId ?? undefined}
-              isPro={access === "pro"}
-              variant="app"
-            />
-          </div>
         </div>
       </div>
 

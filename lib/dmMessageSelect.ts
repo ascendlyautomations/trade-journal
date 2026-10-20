@@ -38,14 +38,26 @@ const PROFILE_EMBED = `
   )
 `
 
+const MESSAGE_REACTIONS_EMBED = `
+  message_reactions (
+    id,
+    message_id,
+    user_id,
+    reaction,
+    created_at
+  )
+`
+
 export const DM_MESSAGE_SELECT = `
   ${DM_MESSAGE_CORE_SELECT},
-  ${PROFILE_EMBED}
+  ${PROFILE_EMBED},
+  ${MESSAGE_REACTIONS_EMBED}
 `
 
 export const DM_MESSAGE_SELECT_FALLBACK = `
   ${DM_MESSAGE_CORE_SELECT_FALLBACK},
-  ${PROFILE_EMBED}
+  ${PROFILE_EMBED},
+  ${MESSAGE_REACTIONS_EMBED}
 `
 
 function isMissingSenderAnonymizedColumn(error: {

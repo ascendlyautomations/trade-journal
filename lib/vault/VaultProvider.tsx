@@ -4,11 +4,13 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react"
+import { useUserProfile } from "@/lib/UserProfileProvider"
 import { supabase } from "@/lib/supabaseClient"
 import { useToast } from "@/app/components/ui"
 import {
@@ -54,8 +56,17 @@ type VaultContextValue = {
 
 const VaultContext = createContext<VaultContextValue | null>(null)
 
+function isAuthLockAbortError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const name = "name" in error ? String(error.name) : ""
+  if (name === "AbortError") return true
+  const message = "message" in error ? String(error.message) : ""
+  return message.includes("Lock broken") || message.includes("steal")
+}
+
 export function VaultProvider({ children }: { children: ReactNode }) {
   const toast = useToast()
+  const { user } = useUserProfile()
   const [states, setStates] = useState<Record<string, VaultItemState>>({})
   const [folders, setFolders] = useState<VaultFolder[]>([])
   const foldersLoadedRef = useRef(false)
@@ -63,8 +74,46 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const pendingPrefetchRef = useRef<Set<string>>(new Set())
   const loadedRefsRef = useRef<Set<string>>(new Set())
   const inFlightRef = useRef<Set<string>>(new Set())
+  const prefetchPumpRef = useRef<Promise<void> | null>(null)
+  const sessionUserReadRef = useRef<Promise<string | null> | null>(null)
   const [homeInvalidated, setHomeInvalidated] = useState(0)
   const userIdRef = useRef<string | null>(null)
+
+  const readActorUserId = useCallback(async (): Promise<string | null> => {
+    if (user?.id) {
+      userIdRef.current = user.id
+      return user.id
+    }
+    if (userIdRef.current) return userIdRef.current
+    if (sessionUserReadRef.current) return sessionUserReadRef.current
+
+    sessionUserReadRef.current = (async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession()
+        if (error) throw error
+        const id = data.session?.user?.id ?? null
+        if (id) userIdRef.current = id
+        return id
+      } catch (error) {
+        if (isAuthLockAbortError(error)) {
+          await new Promise((resolve) => setTimeout(resolve, 32))
+          try {
+            const { data } = await supabase.auth.getSession()
+            const id = data.session?.user?.id ?? null
+            if (id) userIdRef.current = id
+            return id
+          } catch {
+            return null
+          }
+        }
+        return null
+      } finally {
+        sessionUserReadRef.current = null
+      }
+    })()
+
+    return sessionUserReadRef.current
+  }, [user?.id])
 
   const confirm = useCallback(
     (message: string) => {
@@ -80,7 +129,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     [states]
   )
 
-  const pumpPrefetch = useCallback(async () => {
+  const takePendingPrefetchBatch = useCallback((): VaultContentRef[] => {
     const batch: VaultContentRef[] = []
     for (const key of pendingPrefetchRef.current) {
       const [contentType, ...rest] = key.split(":")
@@ -91,24 +140,61 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       })
       pendingPrefetchRef.current.delete(key)
     }
-    if (batch.length === 0) return
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return
-    userIdRef.current = user.id
-
-    const map = await vaultStateBatch(supabase, batch)
-    setStates((prev) => {
-      const next = { ...prev }
-      map.forEach((value, key) => {
-        next[key] = value
-        loadedRefsRef.current.add(key)
-      })
-      return next
-    })
+    return batch
   }, [])
+
+  const pumpPrefetch = useCallback(async () => {
+    if (prefetchPumpRef.current) {
+      await prefetchPumpRef.current
+      return
+    }
+
+    const task = (async () => {
+      for (;;) {
+        const batch = takePendingPrefetchBatch()
+        if (batch.length === 0) break
+
+        const actorId = user?.id ?? userIdRef.current ?? (await readActorUserId())
+        if (!actorId) {
+          for (const ref of batch) {
+            pendingPrefetchRef.current.add(vaultRefKey(ref))
+          }
+          break
+        }
+        userIdRef.current = actorId
+
+        try {
+          const map = await vaultStateBatch(supabase, batch)
+          setStates((prev) => {
+            const next = { ...prev }
+            map.forEach((value, key) => {
+              next[key] = value
+              loadedRefsRef.current.add(key)
+            })
+            return next
+          })
+        } catch {
+          // soft-fail; refs stay unloaded until a later prefetch
+        }
+      }
+    })()
+
+    prefetchPumpRef.current = task.finally(() => {
+      prefetchPumpRef.current = null
+      if (pendingPrefetchRef.current.size > 0) {
+        void pumpPrefetch()
+      }
+    })
+    await prefetchPumpRef.current
+  }, [readActorUserId, takePendingPrefetchBatch, user?.id])
+
+  useEffect(() => {
+    if (!user?.id) return
+    userIdRef.current = user.id
+    if (pendingPrefetchRef.current.size > 0) {
+      void pumpPrefetch()
+    }
+  }, [pumpPrefetch, user?.id])
 
   const prefetch = useCallback(
     (refs: VaultContentRef[]) => {
@@ -158,11 +244,8 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       const key = vaultRefKey(ref)
       if (inFlightRef.current.has(key)) return false
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) return false
-      userIdRef.current = user.id
+      const userId = await readActorUserId()
+      if (!userId) return false
 
       const previous = stateFor(ref)
       inFlightRef.current.add(key)
@@ -177,7 +260,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       setStates((s) => ({ ...s, [key]: optimistic }))
 
       try {
-        const item = await vaultSaveToVault(supabase, user.id, ref, folderId)
+        const item = await vaultSaveToVault(supabase, userId, ref, folderId)
         setStates((s) => ({
           ...s,
           [key]: {
@@ -198,7 +281,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         inFlightRef.current.delete(key)
       }
     },
-    [confirm, stateFor, toast]
+    [confirm, readActorUserId, stateFor, toast]
   )
 
   const quickSave = useCallback(
@@ -302,12 +385,10 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const createFolder = useCallback(
     async (name: string): Promise<VaultFolder | null> => {
       if (!normalizedVaultFolderName(name)) return null
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) return null
+      const userId = await readActorUserId()
+      if (!userId) return null
       try {
-        const folder = await vaultCreateFolder(supabase, user.id, name)
+        const folder = await vaultCreateFolder(supabase, userId, name)
         setFolders((prev) =>
           [...prev, folder].sort((a, b) =>
             a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
@@ -320,7 +401,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         return null
       }
     },
-    [toast]
+    [readActorUserId, toast]
   )
 
   const renameFolder = useCallback(

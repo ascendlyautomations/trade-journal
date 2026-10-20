@@ -4,6 +4,7 @@ export type PsychologyTradeDateFields = {
   entry_time?: string | null
   created_at?: string | null
   date?: string | null
+  trade_date?: string | null
 }
 
 /**
@@ -27,8 +28,21 @@ export function psychologyTradeDateKey(
     if (fromCreated) return fromCreated
   }
 
+  const tradeDate = String(trade.trade_date ?? "").trim()
+  if (isCheckInDateKey(tradeDate)) return tradeDate
+  if (tradeDate) {
+    const fromTradeDate = dateKeyFromInstant(tradeDate)
+    if (fromTradeDate) return fromTradeDate
+  }
+
   const date = String(trade.date ?? "").trim()
-  return isCheckInDateKey(date) ? date : ""
+  if (isCheckInDateKey(date)) return date
+  if (date) {
+    const fromDate = dateKeyFromInstant(date)
+    if (fromDate) return fromDate
+  }
+
+  return ""
 }
 
 function dateKeyFromInstant(value: string): string {

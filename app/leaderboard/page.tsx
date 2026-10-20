@@ -1023,7 +1023,7 @@ export default function Leaderboard() {
                       <Line
                         type="monotone"
                         name="You"
-                        dataKey="you"
+                        dataKey="youPlot"
                         stroke={LEADERBOARD_CHART_STROKE.you}
                         strokeWidth={3}
                         dot={false}

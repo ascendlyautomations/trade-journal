@@ -24,8 +24,7 @@ import {
 import DmStyleComposer, {
   type VoiceSendPayload,
 } from "../components/DmStyleComposer"
-import VoiceMessageBubble from "@/app/components/messages/VoiceMessageBubble"
-import StoryShareMessageCard from "@/app/components/messages/StoryShareMessageCard"
+import RoomMessageContent from "@/app/components/messages/RoomMessageContent"
 import { supabase } from "../../lib/supabaseClient"
 import { stableIdKey } from "@/lib/realtimeFilters"
 import { prepareImageForUpload } from "@/lib/imagePreparation"
@@ -106,7 +105,9 @@ import { isProfileUuidSegment } from "@/lib/profileRoutes"
 import { isBetaAnnouncementsSection } from "@/lib/betaHub"
 import { subscribeCommunityRoomLiveChannel } from "@/lib/communityRoomLiveChannel"
 import { subscribeCommunityRoomUnreadRealtime } from "@/lib/communityRoomUnread"
+import { toggleMessageReaction } from "@/lib/messageReactionToggle"
 import {
+  aggregateRoomMessageReactions,
   patchRoomMessageReactions,
   type RoomMessageReactionEmoji,
   type RoomMessageReactionRow,
@@ -114,16 +115,14 @@ import {
 import { canEditRoomMessage } from "@/lib/roomModeration"
 import RoomMessageActionsMenu from "../components/RoomMessageActionsMenu"
 import RoomMessageFooter from "../components/RoomMessageFooter"
-import SyncStatusText from "@/app/components/ui/SyncStatusText"
 import { MICRO } from "@/lib/microInteractions"
 import ShareRoomMenu from "../components/ShareRoomMenu"
-import SharedTradeMessageCard from "../components/SharedTradeMessageCard"
 import { getSharedTradeViewHref } from "@/lib/sharedContentNavigation"
 import {
   ProfileAvatarLink,
   ProfileUsernameLink,
 } from "../components/ProfileLink"
-import StorageImage from "../components/ui/StorageImage"
+import StorageImage from "@/app/components/ui/StorageImage"
 import { isBackendV2Enabled } from "@/lib/backendV2/flags"
 import {
   loadRoomBootstrapForUser,
@@ -140,9 +139,8 @@ import {
   ROOM_MESSAGE_SELECT_SHAPE,
 } from "@/lib/roomMessageSelect"
 import { asJsonObject } from "@/lib/supabaseProjectedQuery"
-import { isVoiceMessage, uploadVoiceMessageBlob } from "@/lib/voiceMessage"
+import { uploadVoiceMessageBlob } from "@/lib/voiceMessage"
 import { stopVoicePlayback } from "@/lib/voiceMessagePlayback"
-import { resolveStorySharePayload } from "@/lib/storyShareMessage"
 import { logRoomMessagePostgrestError } from "@/lib/roomMessagePostgrest"
 import {
   buildPendingSendContentKey,
@@ -1856,9 +1854,8 @@ function CommunityContent() {
       const uid = userIdRef.current
       if (!uid || needsJoinRef.current) return
 
-      const busyKey = `${messageId}::${reaction}`
-      if (reactionBusyRef.current.has(busyKey)) return
-      reactionBusyRef.current.add(busyKey)
+      const roomId = selectedRoomIdRef.current
+      if (!roomId) return
 
       const findViewerReactions = () => {
         const msg =
@@ -1867,84 +1864,18 @@ function CommunityContent() {
         return (msg?.room_message_reactions ?? []).filter((row) => row.user_id === uid)
       }
 
-      const viewerRows = findViewerReactions()
-      const existingSame = viewerRows.find((row) => row.reaction === reaction)
-      const priorViewerRows = viewerRows
-
-      try {
-        if (existingSame) {
-          patchMessageReaction(messageId, existingSame, "delete")
-          const { error } = await supabase
-            .from("room_message_reactions")
-            .delete()
-            .eq("id", existingSame.id)
-          if (error) throw error
-          return
-        }
-
-        const roomId = selectedRoomIdRef.current
-        if (!roomId) return
-
-        for (const row of priorViewerRows) {
-          patchMessageReaction(messageId, row, "delete")
-        }
-
-        const optimistic: RoomMessageReactionRow = {
-          id: `optimistic-${messageId}-${reaction}`,
-          message_id: messageId,
-          user_id: uid,
-          reaction,
-        }
-        patchMessageReaction(messageId, optimistic, "insert")
-
-        for (const row of priorViewerRows) {
-          if (row.id.startsWith("optimistic-")) continue
-          const { error: deleteError } = await supabase
-            .from("room_message_reactions")
-            .delete()
-            .eq("id", row.id)
-          if (deleteError) throw deleteError
-        }
-
-        const { data, error } = await supabase
-          .from("room_message_reactions")
-          .insert({
-            message_id: messageId,
-            user_id: uid,
-            reaction,
-            room_id: roomId,
-          })
-          .select("id, message_id, user_id, reaction, created_at")
-          .single()
-
-        if (error) throw error
-
-        if (data) {
-          patchMessageReaction(messageId, optimistic, "delete")
-          patchMessageReaction(messageId, data as RoomMessageReactionRow, "insert")
-        }
-      } catch (error) {
-        console.error("toggleRoomMessageReaction:", error)
-        if (existingSame) {
-          patchMessageReaction(messageId, existingSame, "insert")
-        } else {
-          patchMessageReaction(messageId, {
-            id: `optimistic-${messageId}-${reaction}`,
-            message_id: messageId,
-            user_id: uid,
-            reaction,
-          }, "delete")
-          for (const row of priorViewerRows) {
-            patchMessageReaction(messageId, row, "insert")
-          }
-        }
-        showPopup({
-          type: "error",
-          message: "Could not update reaction. Please try again.",
-        })
-      } finally {
-        reactionBusyRef.current.delete(busyKey)
-      }
+      await toggleMessageReaction({
+        surface: "room",
+        supabase,
+        messageId,
+        reaction,
+        viewerUserId: uid,
+        roomId,
+        findViewerReactions,
+        patch: patchMessageReaction,
+        busyKeys: reactionBusyRef.current,
+        onError: (message) => showPopup({ type: "error", message }),
+      })
     },
     [messages, pinnedMessages, patchMessageReaction, showPopup]
   )
@@ -3635,7 +3566,20 @@ function CommunityContent() {
 
     const tempId = msg.id
     const content = String(msg.content ?? "").trim()
-    if (!content) return
+    const isVoiceRetry =
+      msg.type?.toLowerCase() === "voice" ||
+      String(tempId).startsWith("temp-voice-")
+    const audioUrl = msg.audio_url?.trim() || null
+    const durationMs =
+      msg.audio_duration_ms != null && Number.isFinite(msg.audio_duration_ms)
+        ? Math.round(msg.audio_duration_ms)
+        : null
+
+    if (isVoiceRetry) {
+      if (!audioUrl || durationMs == null) return
+    } else if (!content) {
+      return
+    }
 
     sendingMessageRef.current = true
     setSendingMessage(true)
@@ -3652,20 +3596,39 @@ function CommunityContent() {
         roomId: selectedRoomId,
         userId: user.id,
         sectionId: insertSectionId,
-        type: "text",
-        contentKey: buildPendingSendContentKey({ type: "text", content }),
+        type: isVoiceRetry ? "voice" : "text",
+        contentKey: buildPendingSendContentKey(
+          isVoiceRetry
+            ? { type: "voice", content: tempId }
+            : { type: "text", content }
+        ),
       })
       const { data: insertedRow, error } = await supabase
         .from("room_messages")
-        .insert({
-          room_id: selectedRoomId,
-          user_id: user.id,
-          content,
-          section_id: insertSectionId,
-          ...(msg.parent_message_id
-            ? { parent_message_id: msg.parent_message_id }
-            : {}),
-        })
+        .insert(
+          isVoiceRetry
+            ? {
+                room_id: selectedRoomId,
+                user_id: user.id,
+                type: "voice" as const,
+                content: "",
+                audio_url: audioUrl,
+                audio_duration_ms: durationMs,
+                section_id: insertSectionId,
+                ...(msg.parent_message_id
+                  ? { parent_message_id: msg.parent_message_id }
+                  : {}),
+              }
+            : {
+                room_id: selectedRoomId,
+                user_id: user.id,
+                content,
+                section_id: insertSectionId,
+                ...(msg.parent_message_id
+                  ? { parent_message_id: msg.parent_message_id }
+                  : {}),
+              }
+        )
         .select(ROOM_MESSAGE_REALTIME_SELECT)
         .single()
         .overrideTypes<Record<string, unknown> | null, { merge: false }>()
@@ -4557,109 +4520,36 @@ function CommunityContent() {
                                 }
                               />
                             ) : null}
-                            <div className="text-sm">
-                              {msg.type === "image" ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      if (msg.image_url) {
-                                        setLightboxImageUrl(msg.image_url)
-                                      }
-                                    }}
-                                    className="mt-1 block max-w-full cursor-zoom-in"
-                                    aria-label="View image full screen"
-                                  >
-                                    <StorageImage
-                                      src={msg.image_url}
-                                      originalSrc={msg.image_url}
-                                      preset="message-preview"
-                                      fallbackToOriginal={false}
-                                      intrinsicWidth={640}
-                                      className="max-w-xs rounded"
-                                      alt=""
-                                    />
-                                  </button>
-                                  {msg.content?.trim() ? (
-                                    <p className="mt-2 whitespace-pre-wrap break-words text-sm text-white">
-                                      {msg.content}
-                                    </p>
-                                  ) : null}
-                                </>
-                              ) : msg.type === "voice" || isVoiceMessage(msg) ? (
-                                msg.audio_url ? (
-                                  <VoiceMessageBubble
-                                    messageId={String(msg.id)}
-                                    audioUrl={msg.audio_url}
-                                    durationMs={msg.audio_duration_ms}
-                                    isOutgoing={msg.user_id === user?.id}
-                                  />
-                                ) : (
-                                  <p className="text-xs text-gray-400">
-                                    Sending voice message…
-                                  </p>
-                                )
-                              ) : msg.type === "trade" ? (
-                                <SharedTradeMessageCard
-                                  tradeId={msg.trade_id ?? msg.trades?.id}
-                                  viewerUserId={user?.id}
-                                  onViewTrade={viewSharedTrade}
-                                  deferUntilVisible
-                                  optimizeMessagePreview
-                                  className={
-                                    nativeIos ? "w-full max-w-full" : undefined
-                                  }
-                                />
-                              ) : resolveStorySharePayload(msg) ? (
-                                <StoryShareMessageCard
-                                  payload={resolveStorySharePayload(msg)!}
-                                  isOutgoing={msg.user_id === user?.id}
-                                  onViewStory={viewSharedStory}
-                                />
-                              ) : editingMessageId === msg.id &&
-                                canEditRoomMessage(user?.id, msg) ? (
-                                <div className="space-y-2">
-                                  <textarea
-                                    value={editingMessageContent}
-                                    onChange={(e) =>
-                                      setEditingMessageContent(e.target.value)
-                                    }
-                                    rows={3}
-                                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-400/40"
-                                  />
-                                  <div className="flex gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        void handleSaveEditMessage(msg.id)
-                                      }
-                                      disabled={!editingMessageContent.trim()}
-                                      className="rounded-lg bg-blue-500 px-3 py-1 text-xs text-white hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
-                                    >
-                                      Save
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={cancelEditMessage}
-                                      className="rounded-md px-3 py-1 text-xs text-gray-400 hover:text-white"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <p className="whitespace-pre-wrap break-words text-sm text-white">
-                                  {msg.content}
-                                </p>
-                              )}
-                            </div>
-                            {!needsJoin ? (
+                            <RoomMessageContent
+                              msg={msg}
+                              viewerUserId={user?.id}
+                              nativeIos={nativeIos}
+                              editingMessageId={editingMessageId}
+                              editingMessageContent={editingMessageContent}
+                              setEditingMessageContent={setEditingMessageContent}
+                              onSaveEdit={(id) => void handleSaveEditMessage(id)}
+                              onCancelEdit={cancelEditMessage}
+                              onViewTrade={viewSharedTrade}
+                              onViewStory={viewSharedStory}
+                              onNavigate={(href) => router.push(href)}
+                              setLightboxImageUrl={setLightboxImageUrl}
+                              onRetryFailed={() => void retryFailedRoomMessage(msg)}
+                            />
+                            {!needsJoin ||
+                            aggregateRoomMessageReactions(
+                              msg.room_message_reactions,
+                              user?.id
+                            ).length > 0 ? (
                               <RoomMessageFooter
                                 messageId={msg.id}
                                 reactions={msg.room_message_reactions}
                                 viewerUserId={user?.id}
-                                onReply={() => startReplyToMessage(msg)}
+                                readOnly={needsJoin}
+                                onReply={
+                                  needsJoin
+                                    ? undefined
+                                    : () => startReplyToMessage(msg)
+                                }
                                 onToggle={(id, reaction) =>
                                   void toggleRoomMessageReaction(id, reaction)
                                 }
@@ -4745,119 +4635,34 @@ function CommunityContent() {
                         />
                       ) : null}
 
-                      <div className="text-sm">
-                        {msg.type === "image" ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                if (msg.image_url) {
-                                  setLightboxImageUrl(msg.image_url)
-                                }
-                              }}
-                              className="mt-1 block max-w-full cursor-zoom-in"
-                              aria-label="View image full screen"
-                            >
-                              <StorageImage
-                                src={msg.image_url}
-                                originalSrc={msg.image_url}
-                                preset="message-preview"
-                                fallbackToOriginal={false}
-                                intrinsicWidth={640}
-                                className="max-w-xs rounded"
-                                alt=""
-                              />
-                            </button>
-                            {msg.content?.trim() ? (
-                              <p className="mt-2 whitespace-pre-wrap break-words text-sm text-white">
-                                {msg.content}
-                              </p>
-                            ) : null}
-                          </>
-                        ) : msg.type === "voice" || isVoiceMessage(msg) ? (
-                          msg.audio_url ? (
-                            <VoiceMessageBubble
-                              messageId={String(msg.id)}
-                              audioUrl={msg.audio_url}
-                              durationMs={msg.audio_duration_ms}
-                              isOutgoing={msg.user_id === user?.id}
-                            />
-                          ) : (
-                            <p className="text-xs text-gray-400">
-                              Sending voice message…
-                            </p>
-                          )
-                        ) : msg.type === "trade" ? (
-                          <SharedTradeMessageCard
-                            tradeId={msg.trade_id ?? msg.trades?.id}
-                            viewerUserId={user?.id}
-                            onViewTrade={viewSharedTrade}
-                            deferUntilVisible
-                            optimizeMessagePreview
-                            className={
-                              nativeIos ? "w-full max-w-full" : undefined
-                            }
-                          />
-                        ) : resolveStorySharePayload(msg) ? (
-                          <StoryShareMessageCard
-                            payload={resolveStorySharePayload(msg)!}
-                            isOutgoing={msg.user_id === user?.id}
-                            onViewStory={viewSharedStory}
-                          />
-                        ) : editingMessageId === msg.id &&
-                          canEditRoomMessage(user?.id, msg) ? (
-                          <div className="space-y-2">
-                            <textarea
-                              value={editingMessageContent}
-                              onChange={(e) =>
-                                setEditingMessageContent(e.target.value)
-                              }
-                              rows={3}
-                              className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-400/40"
-                            />
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  void handleSaveEditMessage(msg.id)
-                                }
-                                disabled={!editingMessageContent.trim()}
-                                className="rounded-lg bg-blue-500 px-3 py-1 text-xs text-white hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
-                              >
-                                Save
-                              </button>
-                              <button
-                                type="button"
-                                onClick={cancelEditMessage}
-                                className="rounded-md px-3 py-1 text-xs text-gray-400 hover:text-white"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="whitespace-pre-wrap break-words text-sm text-white">{msg.content}</p>
-                        )}
-                        {msg.send_status === "sending" ||
-                        msg.send_status === "failed" ? (
-                          <SyncStatusText
-                            status={msg.send_status}
-                            align="left"
-                            onRetry={
-                              msg.send_status === "failed"
-                                ? () => void retryFailedRoomMessage(msg)
-                                : undefined
-                            }
-                          />
-                        ) : null}
-                      </div>
-                      {!needsJoin ? (
+                      <RoomMessageContent
+                        msg={msg}
+                        viewerUserId={user?.id}
+                        nativeIos={nativeIos}
+                        editingMessageId={editingMessageId}
+                        editingMessageContent={editingMessageContent}
+                        setEditingMessageContent={setEditingMessageContent}
+                        onSaveEdit={(id) => void handleSaveEditMessage(id)}
+                        onCancelEdit={cancelEditMessage}
+                        onViewTrade={viewSharedTrade}
+                        onViewStory={viewSharedStory}
+                        onNavigate={(href) => router.push(href)}
+                        setLightboxImageUrl={setLightboxImageUrl}
+                        onRetryFailed={() => void retryFailedRoomMessage(msg)}
+                      />
+                      {!needsJoin ||
+                      aggregateRoomMessageReactions(
+                        msg.room_message_reactions,
+                        user?.id
+                      ).length > 0 ? (
                         <RoomMessageFooter
                           messageId={msg.id}
                           reactions={msg.room_message_reactions}
                           viewerUserId={user?.id}
-                          onReply={() => startReplyToMessage(msg)}
+                          readOnly={needsJoin}
+                          onReply={
+                            needsJoin ? undefined : () => startReplyToMessage(msg)
+                          }
                           onToggle={(id, reaction) =>
                             void toggleRoomMessageReaction(id, reaction)
                           }
@@ -4889,7 +4694,10 @@ function CommunityContent() {
                 ) : (
                   <>
                   {composerPreviewUrl ? (
-                    <div className="shrink-0 border-t border-white/10 px-2 pb-2 pt-2">
+                    <div
+                      data-tt-trade-rooms-composer-preview
+                      className="shrink-0 border-t border-white/10 px-2 pb-2 pt-2"
+                    >
                       <div className="relative w-fit">
                         <img
                           src={composerPreviewUrl}

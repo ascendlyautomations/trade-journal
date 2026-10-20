@@ -43,6 +43,8 @@ export type PlatformModalProps = {
    */
   layout?: "default" | "split"
   splitMedia?: ReactNode
+  /** Like / comment / share / vault — rendered under media when split layout has media. */
+  splitMediaActions?: ReactNode
   splitPanel?: ReactNode
   /** Hides the stacked mobile media slot when comments are focused. */
   suppressMobileSplitMedia?: boolean
@@ -53,6 +55,7 @@ export type PlatformModalProps = {
 function buildDetailBody({
   layout,
   splitMedia,
+  splitMediaActions,
   splitPanel,
   suppressMobileSplitMedia,
   children,
@@ -62,6 +65,7 @@ function buildDetailBody({
   PlatformModalProps,
   | "layout"
   | "splitMedia"
+  | "splitMediaActions"
   | "splitPanel"
   | "suppressMobileSplitMedia"
   | "children"
@@ -72,13 +76,27 @@ function buildDetailBody({
     return (
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
         {splitMedia ? (
-          <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:p-3">
-            {splitMedia}
+          <div className="hidden md:min-h-0 md:flex-1 md:flex-col md:overflow-y-auto md:border-r md:border-white/10 md:flex">
+            <div className="flex shrink-0 flex-col gap-2 p-3">
+              {splitMedia}
+              {splitMediaActions ? (
+                <div className="shrink-0 border-t border-white/10 px-1 pt-2">
+                  {splitMediaActions}
+                </div>
+              ) : null}
+            </div>
           </div>
         ) : null}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:w-[400px] md:shrink-0 lg:w-[420px]">
           {splitMedia && !suppressMobileSplitMedia ? (
-            <div className="shrink-0 md:hidden">{splitMedia}</div>
+            <div className="shrink-0 flex flex-col gap-2 md:hidden">
+              {splitMedia}
+              {splitMediaActions ? (
+                <div className="shrink-0 border-b border-white/10 px-4 pb-2 pt-1">
+                  {splitMediaActions}
+                </div>
+              ) : null}
+            </div>
           ) : null}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {splitPanel}
@@ -113,6 +131,7 @@ function WebDetailModalShell({
   children,
   layout = "default",
   splitMedia,
+  splitMediaActions,
   splitPanel,
   suppressMobileSplitMedia = false,
   zIndexClass = DETAIL_MODAL_Z_INDEX_CLASS,
@@ -130,6 +149,7 @@ function WebDetailModalShell({
   const body = buildDetailBody({
     layout,
     splitMedia,
+    splitMediaActions,
     splitPanel,
     suppressMobileSplitMedia,
     children,

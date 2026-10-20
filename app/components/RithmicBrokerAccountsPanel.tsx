@@ -11,6 +11,7 @@ import { ensureAccountsLoaded } from "@/lib/appDataCache"
 import { invalidateTradingAccountsSettingsCache } from "@/lib/tradingAccountsSettingsCache"
 import { loadTradingAccounts } from "@/lib/tradingAccounts"
 import { supabase } from "@/lib/supabaseClient"
+import { formatRithmicConnectionStatusLabel } from "@/lib/integrations/rithmic/rithmicConnectionStatusLabel"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 import { queueBrokerEnrichment } from "@/lib/brokerEnrichment/queueBrokerEnrichment"
 import { invalidateBrokerEnrichmentPendingCount } from "@/lib/brokerEnrichment/brokerEnrichmentPendingCount"
@@ -48,10 +49,13 @@ function formatLastSynced(iso: string | null | undefined): string {
 
 export default function RithmicBrokerAccountsPanel({
   userId,
-  onDiscoveryPersist,
+  embedded = false,
+  connectionsRevision = 0,
 }: {
   userId: string | undefined
-  onDiscoveryPersist?: () => void
+  embedded?: boolean
+  /** Bumps when connections change (connect / disconnect / reconnect). */
+  connectionsRevision?: number
 }) {
   const [connections, setConnections] = useState<RithmicConnection[]>([])
   const [accountsByConnection, setAccountsByConnection] = useState<
@@ -77,14 +81,21 @@ export default function RithmicBrokerAccountsPanel({
   const [creatingAndLinking, setCreatingAndLinking] = useState(false)
 
   const loadConnectionAccounts = useCallback(async (connectionId: string) => {
-    const headers = await supabaseBearerHeaders()
-    const res = await fetch(
-      `/api/integrations/rithmic/connections/${connectionId}/accounts`,
-      { headers }
-    )
-    if (!res.ok) throw new Error("Could not load Rithmic accounts.")
-    const body = (await res.json()) as { state: string; accounts: BrokerAccount[] }
-    setAccountsByConnection((prev) => ({ ...prev, [connectionId]: body }))
+    try {
+      const headers = await supabaseBearerHeaders()
+      const res = await fetch(
+        `/api/integrations/rithmic/connections/${connectionId}/accounts`,
+        { headers }
+      )
+      if (!res.ok) throw new Error("Could not load Rithmic accounts.")
+      const body = (await res.json()) as { state: string; accounts: BrokerAccount[] }
+      setAccountsByConnection((prev) => ({ ...prev, [connectionId]: body }))
+    } catch {
+      setAccountsByConnection((prev) => ({
+        ...prev,
+        [connectionId]: { state: "error", accounts: [] },
+      }))
+    }
   }, [])
 
   const loadConnections = useCallback(async () => {
@@ -106,9 +117,7 @@ export default function RithmicBrokerAccountsPanel({
       const body = (await res.json()) as { connections: RithmicConnection[] }
       const list = body.connections ?? []
       setConnections(list)
-      await Promise.all(
-        list.filter((c) => c.connected).map((c) => loadConnectionAccounts(c.id))
-      )
+      await Promise.all(list.map((c) => loadConnectionAccounts(c.id)))
     } catch (err) {
       setError(toUserFacingErrorMessage(err, "Could not load Rithmic connections."))
     } finally {
@@ -118,7 +127,7 @@ export default function RithmicBrokerAccountsPanel({
 
   useEffect(() => {
     void loadConnections()
-  }, [loadConnections])
+  }, [loadConnections, connectionsRevision])
 
   const brokerCreateInitial = useMemo(() => {
     if (!linkTarget) return null
@@ -329,31 +338,35 @@ export default function RithmicBrokerAccountsPanel({
 
   if (!userId) return null
   if (loading && connections.length === 0) {
-    return <p className="text-sm text-white/60">Loading saved Rithmic accounts…</p>
+    if (embedded) return null
+    return <p className="text-sm text-white/60">Loading Rithmic accounts…</p>
   }
   if (connections.length === 0) {
-    return (
-      <p className="text-sm text-white/60">
-        Run &amp; save accounts above to create a Rithmic Test connection, then link and import
-        trades here.
-      </p>
-    )
+    return null
   }
 
+  const wrapperClass = embedded
+    ? "space-y-4 border-t border-white/10 pt-6"
+    : "mt-6 space-y-4 border-t border-white/10 pt-6"
+
   return (
-    <div className="mt-6 space-y-4 border-t border-white/10 pt-6">
-      <div>
-        <h3 className="text-base font-semibold text-white">Phase 2 — Manual import</h3>
-        <p className="mt-1 text-sm text-white/60">
-          Link discovered accounts, then import fill history on demand. No background sync.
-        </p>
-      </div>
+    <div className={wrapperClass}>
+      {embedded ? (
+        <h3 className="text-sm font-semibold text-white">Linked accounts &amp; import</h3>
+      ) : (
+        <div>
+          <h3 className="text-base font-semibold text-white">Linked accounts &amp; import</h3>
+          <p className="mt-1 text-sm text-white/60">
+            Link Rithmic accounts to TradeTraxs, then import new trades when you need them.
+          </p>
+        </div>
+      )}
 
       {error ? <p className="text-sm text-red-300">{error}</p> : null}
       {syncFeedback ? <p className="text-sm text-emerald-200/90">{syncFeedback}</p> : null}
 
       {importPasswordPrompt ? (
-        <div className="rounded-xl border border-amber-400/30 bg-amber-950/20 p-4">
+        <div className="tt-broker-form-panel rounded-xl border border-amber-400/30 bg-amber-950/20 p-4">
           <h4 className="text-sm font-medium text-white">
             Enter Rithmic password to import
           </h4>
@@ -383,7 +396,7 @@ export default function RithmicBrokerAccountsPanel({
             </button>
             <ActionButton
               type="button"
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white"
+              className="tt-broker-btn-primary rounded-lg bg-blue-600 px-4 py-2 text-sm text-white"
               disabled={
                 !importPassword ||
                 syncingMappingId === importPasswordPrompt.account.id
@@ -411,29 +424,34 @@ export default function RithmicBrokerAccountsPanel({
         return (
           <div
             key={connection.id}
-            className="rounded-xl border border-white/10 bg-black/20 p-4"
+            className="tt-broker-linked-block rounded-xl border border-white/10 bg-black/20 p-4"
           >
-            <p className="font-medium text-white">{connection.label}</p>
-            <p className="mt-1 text-xs text-gray-500">
-              {connection.api_environment ?? "test"} · {connection.status}
-            </p>
+            {!embedded ? (
+              <>
+                <p className="font-medium text-white">{connection.label}</p>
+                <p className="mt-1 text-xs text-gray-400">
+                  {formatRithmicConnectionStatusLabel(connection.status)}
+                </p>
+              </>
+            ) : null}
             <ActionButton
               type="button"
-              className="mt-3 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs text-white"
+              className={`tt-broker-btn-neutral rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs text-white ${embedded ? "mt-3" : "mt-3"}`}
               disabled={busy}
               onClick={() => {
-                void onDiscoveryPersist?.()
                 void loadConnectionAccounts(connection.id)
               }}
             >
-              Refresh account list
+              Refresh accounts
             </ActionButton>
 
             {!payload ? (
               <p className="mt-3 text-sm text-gray-400">Loading accounts…</p>
             ) : brokerAccounts.length === 0 ? (
               <p className="mt-3 text-sm text-gray-400">
-                No saved accounts. Run &amp; save accounts in Phase 1.
+                {connection.status === "reconnect_required"
+                  ? "Reconnect Rithmic to refresh broker accounts, or use Refresh accounts after reconnecting."
+                  : "No broker accounts found yet. Connect Rithmic, then refresh."}
               </p>
             ) : (
               <ul className="mt-3 space-y-2">
@@ -444,7 +462,7 @@ export default function RithmicBrokerAccountsPanel({
                   return (
                     <li
                       key={row.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/30 px-3 py-2"
+                      className="tt-broker-account-row flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/30 px-3 py-2.5"
                     >
                       <div>
                         <p className="text-sm text-white">{label}</p>
@@ -465,7 +483,7 @@ export default function RithmicBrokerAccountsPanel({
                         {linked ? (
                           <ActionButton
                             type="button"
-                            className="rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-200"
+                            className="tt-broker-btn-import rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200"
                             disabled={busy || syncingMappingId === row.id}
                             onClick={() => void handleSyncTrades(connection.id, row)}
                           >
@@ -474,7 +492,7 @@ export default function RithmicBrokerAccountsPanel({
                         ) : null}
                         <ActionButton
                           type="button"
-                          className="rounded-lg border border-blue-400/40 bg-blue-500/10 px-3 py-1.5 text-xs text-blue-200"
+                          className="tt-broker-btn-manage rounded-lg border border-blue-400/40 bg-blue-500/10 px-3 py-2 text-xs text-blue-200"
                           disabled={busy}
                           onClick={() => void openLinkModal(connection.id, row)}
                         >

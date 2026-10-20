@@ -11,6 +11,7 @@ import {
 } from "@/lib/tradeShareExport"
 import { copyFeedDeepLinkToClipboard } from "@/lib/feedDeepLink"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import EngagementShareButton from "@/app/components/EngagementShareButton"
 import ShareCopyLinkButton from "@/app/components/ShareCopyLinkButton"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { useProGate } from "@/lib/useProGate"
@@ -18,8 +19,8 @@ import { useProGate } from "@/lib/useProGate"
 export type ShareTradeButtonProps = {
   trade: any
   className?: string
-  /** Compact 📤 icon for toolbar (between edit/delete) */
-  variant?: "full" | "icon"
+  /** Compact 📤 icon for toolbar (between edit/delete); `engagement` matches feed detail modals. */
+  variant?: "full" | "icon" | "engagement"
   /** Loaded by parent — used for affiliate code on export */
   profile?: { referral_code?: string | null } | null
   /**
@@ -133,43 +134,52 @@ export default function ShareTradeButton({
           )
         : null}
 
-      <button
-        type="button"
-        disabled={busy}
-        title={variant === "icon" ? "Share trade" : undefined}
-        aria-label={variant === "icon" ? "Share trade" : undefined}
-        onClick={handleClick}
-        className={
-          className.trim() ||
-          "p-1 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 transition"
-        }
-      >
-        {busy ? (
-          variant === "icon" ? (
-            <span className="text-xs tabular-nums">…</span>
+      {variant === "engagement" ? (
+        <EngagementShareButton
+          disabled={busy}
+          ariaLabel="Share trade"
+          className={className.trim()}
+          onClick={handleClick}
+        />
+      ) : (
+        <button
+          type="button"
+          disabled={busy}
+          title={variant === "icon" ? "Share trade" : undefined}
+          aria-label={variant === "icon" ? "Share trade" : undefined}
+          onClick={handleClick}
+          className={
+            className.trim() ||
+            "p-1 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 transition"
+          }
+        >
+          {busy ? (
+            variant === "icon" ? (
+              <span className="text-xs tabular-nums">…</span>
+            ) : (
+              "Saving…"
+            )
+          ) : variant === "icon" ? (
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-4 w-4 text-blue-300"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              aria-hidden
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16"
+              />
+            </svg>
           ) : (
-            "Saving…"
-          )
-        ) : variant === "icon" ? (
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-4 w-4 text-blue-300"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16"
-            />
-          </svg>
-        ) : (
-          "📤"
-        )}
-      </button>
+            "📤"
+          )}
+        </button>
+      )}
 
       {isOpen &&
         typeof window !== "undefined" &&

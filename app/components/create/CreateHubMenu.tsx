@@ -49,6 +49,9 @@ function AchievementIcon() {
 function StoryIcon() {
   return <span aria-hidden>📖</span>
 }
+function WithdrawalIcon() {
+  return <span aria-hidden>💸</span>
+}
 
 function MenuOptionsList({
   items,
@@ -126,6 +129,13 @@ export default function CreateHubMenu({
       subtitle: "Share a milestone",
       href: CREATE_ROUTE.achievement,
       icon: <AchievementIcon />,
+    },
+    {
+      id: "withdrawal",
+      label: "Withdrawal",
+      subtitle: "Record a Live or prop-firm payout",
+      href: CREATE_ROUTE.withdrawal,
+      icon: <WithdrawalIcon />,
     },
     {
       id: "story",
@@ -282,6 +292,7 @@ export function CreateHubMobileLinks({
     { href: CREATE_ROUTE.post, label: "Post" },
     { href: CREATE_ROUTE.clip, label: "Clip" },
     { href: CREATE_ROUTE.achievement, label: "Achievement" },
+    { href: CREATE_ROUTE.withdrawal, label: "Withdrawal" },
     { href: CREATE_ROUTE.story, label: "Story" },
   ]
 

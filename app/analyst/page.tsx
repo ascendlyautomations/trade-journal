@@ -126,6 +126,26 @@ type AnalystTradeDetailPanelProps = {
   embeddedInScrollContainer?: boolean
 }
 
+function AnalystPanelChevron({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`tt-analyst-chevron h-5 w-5 shrink-0 text-gray-400 transition-transform duration-200 ${
+        expanded ? "rotate-180" : ""
+      }`}
+      aria-hidden
+    >
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  )
+}
+
 function AnalystCompactTradeHeader({
   trade,
   formatCurrency,
@@ -199,83 +219,87 @@ function AnalystTradeDetailPanel({
       } ${className}`}
     >
       {showTradeDetailsPanel ? (
-        <div className="mb-4 shrink-0 rounded-xl border border-white/10 bg-[#0f172a]/60 p-4">
+        <div
+          data-tt-analyst-selected-trade
+          className="mb-4 shrink-0 rounded-xl border border-white/10 bg-[#0f172a]/60 p-4"
+        >
           <button
             type="button"
             onClick={() => setTradePanelExpanded((expanded) => !expanded)}
-            className="flex w-full items-start justify-between gap-3 text-left"
+            className="flex w-full items-center gap-3 text-left"
             aria-expanded={tradePanelExpanded}
           >
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Selected Trade{" "}
-                <span className="normal-case tracking-normal text-gray-400">
-                  {tradePanelExpanded
-                    ? "(Click to Collapse)"
-                    : "(Click to Expand)"}
-                </span>
+              <p className="tt-analyst-card-eyebrow text-xs font-semibold uppercase tracking-wide text-gray-400">
+                Selected trade
               </p>
               {!tradePanelExpanded ? (
-                <p className="mt-1 truncate text-sm font-semibold text-gray-100">
+                <p className="tt-analyst-card-summary mt-1 truncate text-sm font-semibold text-gray-100">
                   {selectedTradeSummaryLine(selectedTrade)}
                 </p>
               ) : null}
             </div>
-            <span className="shrink-0 text-sm text-gray-400" aria-hidden>
-              {tradePanelExpanded ? "▲" : "▼"}
-            </span>
+            <AnalystPanelChevron expanded={tradePanelExpanded} />
           </button>
 
           {tradePanelExpanded ? (
             <>
-              <p className="mt-3 text-lg font-semibold">
+              <p className="tt-analyst-detail-title mt-3 text-lg font-semibold text-gray-100">
                 {selectedTrade.ticker} {selectedTrade.direction || "—"}
               </p>
               <p
                 className={`mt-1 text-xl font-bold ${
                   Number(selectedTrade.pnl ?? 0) >= 0
-                    ? "text-green-400"
-                    : "text-red-400"
+                    ? "tt-analyst-pnl-positive text-green-400"
+                    : "tt-analyst-pnl-negative text-red-400"
                 }`}
               >
                 {formatCurrency(Number(selectedTrade.pnl ?? 0))}
               </p>
-              <p className="mt-1 text-sm text-gray-400">
+              <p className="tt-analyst-text-muted mt-1 text-sm text-gray-400">
                 {formatEST(String(selectedTrade.created_at ?? ""))}
                 {selectedTrade.session ? ` • ${selectedTrade.session}` : ""}
               </p>
 
-              <div className="mt-3 space-y-1 border-t border-white/10 pt-3 text-sm">
-                <p className="text-gray-400">
+              <div className="tt-analyst-detail-divider mt-3 space-y-1.5 border-t border-white/10 pt-3 text-sm">
+                <p className="tt-analyst-text-muted text-gray-400">
                   {formatTradeAccountDisplay(selectedTrade) || "—"}
                 </p>
 
                 {(selectedTrade.entry_price != null ||
                   selectedTrade.exit_price != null) && (
-                  <p>
-                    <span className="text-gray-400">Entry:</span>{" "}
+                  <p className="tt-analyst-detail-value text-gray-100">
+                    <span className="tt-analyst-text-muted text-gray-400">
+                      Entry:
+                    </span>{" "}
                     {String(selectedTrade.entry_price ?? "—")} →{" "}
-                    <span className="text-gray-400">Exit:</span>{" "}
+                    <span className="tt-analyst-text-muted text-gray-400">
+                      Exit:
+                    </span>{" "}
                     {String(selectedTrade.exit_price ?? "—")}
                   </p>
                 )}
 
                 {selectedTrade.contracts != null && (
-                  <p>
-                    <span className="text-gray-400">Contracts:</span>{" "}
+                  <p className="tt-analyst-detail-value text-gray-100">
+                    <span className="tt-analyst-text-muted text-gray-400">
+                      Contracts:
+                    </span>{" "}
                     {String(selectedTrade.contracts)}
                   </p>
                 )}
 
-                <p>
-                  <span className="text-gray-400">RR:</span>{" "}
+                <p className="tt-analyst-detail-value text-gray-100">
+                  <span className="tt-analyst-text-muted text-gray-400">RR:</span>{" "}
                   {formatRR(selectedTrade.rr, "—")}
                 </p>
 
                 {selectedTrade.notes ? (
-                  <p>
-                    <span className="text-gray-400">Notes:</span>{" "}
-                    <span className="italic text-gray-300">
+                  <p className="tt-analyst-detail-value text-gray-100">
+                    <span className="tt-analyst-text-muted text-gray-400">
+                      Notes:
+                    </span>{" "}
+                    <span className="tt-analyst-text-secondary italic text-gray-300">
                       {selectedTrade.notes}
                     </span>
                   </p>
@@ -283,8 +307,10 @@ function AnalystTradeDetailPanel({
 
                 {(selectedTrade.confluences ??
                   selectedTrade.top_confluences) ? (
-                  <p>
-                    <span className="text-gray-400">Confluences:</span>{" "}
+                  <p className="tt-analyst-detail-value text-gray-100">
+                    <span className="tt-analyst-text-muted text-gray-400">
+                      Confluences:
+                    </span>{" "}
                     {Array.isArray(
                       selectedTrade.confluences ??
                         selectedTrade.top_confluences
@@ -301,8 +327,10 @@ function AnalystTradeDetailPanel({
                 ) : null}
 
                 {selectedTrade.mistakes ? (
-                  <p>
-                    <span className="text-gray-400">Mistakes:</span>{" "}
+                  <p className="tt-analyst-detail-value text-gray-100">
+                    <span className="tt-analyst-text-muted text-gray-400">
+                      Mistakes:
+                    </span>{" "}
                     {Array.isArray(selectedTrade.mistakes)
                       ? selectedTrade.mistakes.join(", ")
                       : String(selectedTrade.mistakes)}
@@ -311,8 +339,10 @@ function AnalystTradeDetailPanel({
 
                 {(selectedTrade.psychology ??
                   selectedTrade.psychology_notes) ? (
-                  <p>
-                    <span className="text-gray-400">Psychology:</span>{" "}
+                  <p className="tt-analyst-detail-value text-gray-100">
+                    <span className="tt-analyst-text-muted text-gray-400">
+                      Psychology:
+                    </span>{" "}
                     {String(
                       selectedTrade.psychology ??
                         selectedTrade.psychology_notes ??
@@ -323,13 +353,18 @@ function AnalystTradeDetailPanel({
               </div>
 
               {tradeScreenshotUrl(selectedTrade) ? (
-                <img
-                  src={tradeScreenshotUrl(selectedTrade)!}
-                  className="mt-3 max-h-48 w-full rounded border border-white/10 object-cover"
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                />
+                <div
+                  data-tt-analyst-screenshot
+                  className="mt-3 overflow-hidden rounded-lg border border-white/10"
+                >
+                  <img
+                    src={tradeScreenshotUrl(selectedTrade)!}
+                    className="max-h-48 w-full object-cover object-center"
+                    alt="Trade screenshot"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </div>
               ) : null}
             </>
           ) : null}
@@ -337,8 +372,13 @@ function AnalystTradeDetailPanel({
       ) : null}
 
       {!selectedTrade.ai_feedback && messages.length === 0 && (
-        <div className="mb-4 shrink-0 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4 text-center">
-          <p className="mb-3 text-sm text-gray-300">Ready for Analysis</p>
+        <div
+          data-tt-analyst-ready-card
+          className="mb-4 shrink-0 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4 text-center"
+        >
+          <p className="tt-analyst-ready-label mb-3 text-sm font-medium text-gray-300">
+            Ready for Analysis
+          </p>
           <button
             type="button"
             onClick={onRunAnalysis}
@@ -486,7 +526,7 @@ export default function AnalystPage() {
   return (
     <Suspense
       fallback={
-        <div className="tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-6 pt-0 text-gray-100 md:px-6 md:pb-10">
+        <div className="tt-analyst tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-6 pt-0 text-gray-100 md:px-6 md:pb-10">
           <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-[1600px] flex-col gap-3 md:gap-3">
             <h1 className="shrink-0 text-lg font-semibold uppercase tracking-wide text-blue-300 md:text-xl">
               AI Analyst
@@ -773,7 +813,7 @@ function AnalystPageContent() {
         status={progressLabel}
       />
 
-      <div className="tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-6 pt-0 text-gray-100 md:px-6 md:pb-10">
+      <div className="tt-analyst tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-6 pt-0 text-gray-100 md:px-6 md:pb-10">
         <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-[1600px] flex-col gap-3 md:gap-3">
           <h1 className="shrink-0 text-lg font-semibold uppercase tracking-wide text-blue-300 md:text-xl">
             AI Analyst

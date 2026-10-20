@@ -1,6 +1,6 @@
 /**
  * Shared Recharts theme for dark navy surfaces.
- * Tick/label colors match Profile equity (`#cbd5e1` ≈ gray-300) — clearer than slate-400.
+ * Tick/label colors use `--tt-chart-tick` / `--tt-text-muted` on authenticated dark/light.
  * Aligns with Prop Firm / Explore text hierarchy without inventing new palette hues.
  */
 

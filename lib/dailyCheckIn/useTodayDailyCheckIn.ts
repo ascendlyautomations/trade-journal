@@ -10,6 +10,8 @@ import {
   readTodayCheckInCache,
   resolveTodayCheckInFromCaches,
   subscribeCheckInCaches,
+  subscribeDailyCheckInNetworkRefresh,
+  upsertSavedCheckInInSessionCaches,
   writeTodayCheckInCache,
 } from "./sessionCache.ts"
 import type { TraderDailyCheckIn } from "./types.ts"
@@ -133,10 +135,16 @@ export function useTodayDailyCheckIn(userId: string | null | undefined) {
   }, [userId])
 
   useEffect(() => {
+    if (!userId || isDemoUserId(userId)) return
+    return subscribeDailyCheckInNetworkRefresh(() => {
+      void load({ force: true })
+    })
+  }, [load, userId])
+
+  useEffect(() => {
     function onResume() {
-      const next = syncDateKey()
-      if (next !== dateKey) return
-      void load({ force: false })
+      syncDateKey()
+      void load({ force: true })
     }
 
     function onVisibility() {
@@ -161,11 +169,13 @@ export function useTodayDailyCheckIn(userId: string | null | undefined) {
 
   const applySaved = useCallback(
     (saved: TraderDailyCheckIn) => {
+      if (!userId) return
+      upsertSavedCheckInInSessionCaches(userId, saved)
       const today = todayCheckInDateKey()
-      if (!userId || saved.checkInDate !== today) return
-      writeTodayCheckInCache(userId, today, saved)
-      setDateKey(today)
-      setCheckIn(saved)
+      if (saved.checkInDate === today) {
+        setDateKey(today)
+        setCheckIn(saved)
+      }
       setLoadError(null)
       setIsReady(true)
     },

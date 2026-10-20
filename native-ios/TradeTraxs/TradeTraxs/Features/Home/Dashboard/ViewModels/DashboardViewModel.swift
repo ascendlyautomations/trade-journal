@@ -720,6 +720,12 @@ final class DashboardViewModel {
         recomputePsychology()
     }
 
+    /// Refetch session check-ins after a save on another device or surface.
+    func syncDailyCheckInsFromNetwork() async {
+        guard let profileID else { return }
+        await hydrateCheckIns(profileID: profileID, forceNetwork: true)
+    }
+
     func setAccountFilter(_ filter: DashboardAccountFilter) {
         let filter = DashboardAccountScopePolicy.sanitizedFilter(
             filter,
@@ -2782,11 +2788,15 @@ final class DashboardViewModel {
     private func checkInDateRange(
         from inputs: [DashboardChartMetrics.Input]
     ) -> (start: String, end: String)? {
-        guard !inputs.isEmpty else { return nil }
+        let todayKey = TraderPsychologyAnalyticsFoundation.todayCheckInDateKey()
+        guard !inputs.isEmpty else {
+            return (todayKey, todayKey)
+        }
         let keys = inputs.map {
             TraderPsychologyAnalyticsFoundation.tradeDateKey(for: $0.trade)
         }
-        guard let start = keys.min(), let end = keys.max() else { return nil }
+        guard let start = keys.min(), let tradeEnd = keys.max() else { return nil }
+        let end = max(tradeEnd, todayKey)
         return (start, end)
     }
 

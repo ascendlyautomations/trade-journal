@@ -13,6 +13,9 @@ import {
   type CommentReplyTarget,
 } from "@/lib/commentReplyUx"
 import EngagementCountButton from "@/app/components/EngagementCountButton"
+import EngagementShareButton from "@/app/components/EngagementShareButton"
+import { detailModalEngagementInPanel } from "@/app/components/ui/detailModalEngagement"
+import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
 import { VaultEngagementTrailing } from "@/app/components/vault/VaultEngagementButton"
 import { profileEngagementVaultRef } from "@/lib/vault/refs"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
@@ -20,7 +23,7 @@ import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFoc
 import FeedRoomShareCard from "@/app/components/feed/FeedRoomShareCard"
 import { isRoomSharePost } from "@/lib/roomSharePost"
 import FeedPostMetaRow from "@/app/components/feed/FeedPostMetaRow"
-import { ProfileAvatarImg, PROFILE_PAGE_AVATAR_PX } from "@/app/components/SafeProfileAvatar"
+import ProfileCardAuthorIdentity from "@/app/components/profile/ProfileCardAuthorIdentity"
 import { ConfirmModal } from "@/app/components/ui"
 import ExpandableText from "@/app/components/ui/ExpandableText"
 import { devLog } from "@/lib/devLog"
@@ -117,7 +120,9 @@ export default function ProfilePostCard({
   const [commentsFocused, setCommentsFocused] = useState(
     Boolean(scrollToCommentsOnMount && showCommentsPanel)
   )
+  const isMobile = useMaxMdViewport()
   const imgSrc = profileWallImageSrc(post.image_url)
+  const hasPostMedia = isRoomSharePost(post) || imgSrc != null
   const postCommentInputId = `profile-comment-input-${post.id}`
 
   useEffect(() => {
@@ -264,27 +269,24 @@ export default function ProfilePostCard({
   const postAuthorHeader = (
     <div className="tt-profile-post-header flex shrink-0 items-center justify-between gap-3 border-b border-white/5 px-3 py-2 md:p-4">
       <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
-        <ProfileAvatarImg
-          src={profile.avatar_url}
-          className="h-9 w-9 ring-2 ring-white/10 md:h-10 md:w-10"
-          displaySizePx={PROFILE_PAGE_AVATAR_PX}
+        <ProfileCardAuthorIdentity
+          username={profile.username}
+          avatarUrl={profile.avatar_url}
+          avatarClassName="h-9 w-9 ring-2 ring-white/10 md:h-10 md:w-10"
+          meta={
+            <FeedPostMetaRow
+              label="Post"
+              createdAt={post.created_at}
+              suffix={
+                post.is_pinned ? (
+                  <span className="ml-2 text-yellow-400" aria-label="Pinned">
+                    📌
+                  </span>
+                ) : null
+              }
+            />
+          }
         />
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-white">
-            {profile.username || "User"}
-          </p>
-          <FeedPostMetaRow
-            label="Post"
-            createdAt={post.created_at}
-            suffix={
-              post.is_pinned ? (
-                <span className="ml-2 text-yellow-400" aria-label="Pinned">
-                  📌
-                </span>
-              ) : null
-            }
-          />
-        </div>
       </div>
       {canManagePost ? (
         <div className="relative">
@@ -361,9 +363,24 @@ export default function ProfilePostCard({
     currentUserId
   )
 
+  const openPostComments = () => {
+    setCommentsFocused(true)
+    onOpenComments?.()
+    if (inDetailModal && showCommentsPanel) {
+      requestAnimationFrame(() => {
+        scrollModalCommentsPane(commentsScrollRef.current)
+      })
+    }
+  }
+
   const postEngagementRow = showInteractions ? (
-    <div className="flex w-full items-center gap-4 px-1 text-sm">
+    <div
+      className="flex w-full items-center gap-3 text-sm"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
       <EngagementCountButton
+        variant="boxed"
         icon={<span>{likeMeta?.liked ? "❤️" : "🤍"}</span>}
         count={likeMeta?.count ?? 0}
         ariaLabel={likeMeta?.liked ? "Unlike" : "Like"}
@@ -374,56 +391,39 @@ export default function ProfilePostCard({
           e.stopPropagation()
           onLike?.()
         }}
-        className="text-gray-300 hover:text-white"
-        countClassName="tabular-nums"
+        className={
+          likeMeta?.liked ? "text-red-400 hover:text-red-300" : undefined
+        }
       />
       <EngagementCountButton
+        variant="boxed"
         icon={<span>💬</span>}
         count={comments?.length ?? 0}
         ariaLabel="View comments"
         onClick={(e) => {
           e.stopPropagation()
-          setCommentsFocused(true)
-          onOpenComments?.()
-          if (inDetailModal && showCommentsPanel) {
-            requestAnimationFrame(() => {
-              scrollModalCommentsPane(commentsScrollRef.current)
-            })
-          }
+          openPostComments()
         }}
-        className="text-gray-300 hover:text-white"
-        countClassName="tabular-nums"
       />
       {onSharePost ? (
-        <button
-          type="button"
+        <EngagementShareButton
+          ariaLabel="Share post"
           onClick={(e) => {
             e.stopPropagation()
             onSharePost(post)
           }}
-          className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-gray-300 transition hover:bg-white/10 hover:text-white"
-          aria-label="Share post"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16"
-            />
-          </svg>
-        </button>
+        />
       ) : null}
       <VaultEngagementTrailing contentRef={postVaultRef} />
     </div>
   ) : null
+
+  const postEngagementUnderMedia =
+    postEngagementRow != null ? (
+      <div className="shrink-0 border-t border-white/10 px-3 py-2 md:px-4">
+        {postEngagementRow}
+      </div>
+    ) : null
 
   const postContentBlock = (
     <div className="tt-profile-post-body shrink-0 space-y-2 px-3 py-2.5 md:space-y-3 md:p-4">
@@ -444,10 +444,14 @@ export default function ProfilePostCard({
           </p>
         </div>
       ) : null}
-      {showInteractions ? (
+      {showInteractions && !hasPostMedia ? (
         <div className="border-t border-white/10 pt-2 md:pt-3">
           {postEngagementRow}
           {!inDetailModal ? commentsPanel : null}
+        </div>
+      ) : showInteractions && !inDetailModal ? (
+        <div className="border-t border-white/10 pt-2 md:pt-3">
+          {commentsPanel}
         </div>
       ) : null}
     </div>
@@ -519,20 +523,43 @@ export default function ProfilePostCard({
       </div>
     ) : null
 
+    const desktopMediaColumn =
+      isRoomSharePost(post) ? (
+        <FeedRoomShareCard
+          post={post}
+          viewerUserId={currentUserId ?? null}
+          className="w-full max-w-md"
+        />
+      ) : imgSrc ? (
+        postImageBlock
+      ) : null
+
+    const mobileMediaBlock =
+      isRoomSharePost(post) ? (
+        <FeedRoomShareCard
+          post={post}
+          viewerUserId={currentUserId ?? null}
+          className="mx-4 my-3"
+        />
+      ) : (
+        postImageBlock ?? undefined
+      )
+
+    const showEngagementInPanel = detailModalEngagementInPanel(
+      hasPostMedia,
+      commentsFocused,
+      isMobile
+    )
+
     return (
       <>
         <article className={cardShellClass}>
-          {isRoomSharePost(post) ? (
-            <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:p-3">
-              <FeedRoomShareCard
-                post={post}
-                viewerUserId={currentUserId ?? null}
-                className="w-full max-w-md"
-              />
-            </div>
-          ) : imgSrc ? (
-            <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:p-3">
-              {postImageBlock}
+          {desktopMediaColumn ? (
+            <div className="hidden md:min-h-0 md:flex-1 md:flex-col md:overflow-y-auto md:border-r md:border-white/10 md:flex">
+              <div className="flex shrink-0 flex-col gap-2 p-3">
+                {desktopMediaColumn}
+                {!showEngagementInPanel ? postEngagementUnderMedia : null}
+              </div>
             </div>
           ) : null}
 
@@ -552,17 +579,14 @@ export default function ProfilePostCard({
                 />
               }
               mobileMedia={
-                isRoomSharePost(post) ? (
-                  <FeedRoomShareCard
-                    post={post}
-                    viewerUserId={currentUserId ?? null}
-                    className="mx-4 my-3"
-                  />
-                ) : (
-                  postImageBlock ?? undefined
-                )
+                hasPostMedia ? (
+                  <div className="flex flex-col">
+                    {mobileMediaBlock}
+                    {!showEngagementInPanel ? postEngagementUnderMedia : null}
+                  </div>
+                ) : undefined
               }
-              engagement={postEngagementRow}
+              engagement={showEngagementInPanel ? postEngagementRow : undefined}
               engagementClassName="shrink-0 border-b border-white/10 px-3 py-1.5 md:px-4 md:py-2"
               collapsibleContent={postCollapsibleContent}
               comments={postCommentsPanel}
@@ -614,6 +638,8 @@ export default function ProfilePostCard({
           </p>
         </div>
       ) : null}
+
+      {hasPostMedia && showInteractions ? postEngagementUnderMedia : null}
 
       {postContentBlock}
     </article>

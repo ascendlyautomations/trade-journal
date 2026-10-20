@@ -20,7 +20,9 @@ import { feedCommentTarget } from "./feedPostHelpers"
 import { resolveReelCaption } from "@/lib/reels"
 import type { FeedLikeMeta } from "./FeedPostCard"
 import { DETAIL_MODAL_STACKED_Z_INDEX_CLASS } from "@/app/components/ui/modalLayout"
+import { detailModalEngagementInPanel } from "@/app/components/ui/detailModalEngagement"
 import { useIsNativeIos } from "@/lib/useIsNativeIos"
+import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
 
 const NativeIosMediaViewer = dynamic(
   () => import("@/app/components/ui/NativeIosMediaViewer"),
@@ -98,6 +100,7 @@ export default function FeedReelDetailModal({
   const [commentsFocused, setCommentsFocused] = useState(
     () => Boolean(openCommentsRef.current[pid])
   )
+  const isMobile = useMaxMdViewport()
   const [nativeFullscreen, setNativeFullscreen] = useState(false)
   const [nativeStartTime, setNativeStartTime] = useState(0)
 
@@ -220,6 +223,21 @@ export default function FeedReelDetailModal({
     </div>
   )
 
+  const engagementRow = (
+    <PostInteractionsEngagement
+      post={post}
+      user={user}
+      comments={comments}
+      commentCount={commentCount}
+      likeMeta={likeMeta}
+      likeBusy={likeBusy}
+      onToggleLike={onToggleLike}
+      onOpenComments={() => focusComments()}
+      onSharePost={onSharePost}
+      vaultContentRef={vaultRefFromFeedItem(post)}
+    />
+  )
+
   const splitPanel = (
     <MobileCommentFocusLayout
       commentsFocused={commentsFocused}
@@ -265,18 +283,9 @@ export default function FeedReelDetailModal({
         />
       }
       engagement={
-        <PostInteractionsEngagement
-          post={post}
-          user={user}
-          comments={comments}
-          commentCount={commentCount}
-          likeMeta={likeMeta}
-          likeBusy={likeBusy}
-          onToggleLike={onToggleLike}
-          onOpenComments={() => focusComments()}
-          onSharePost={onSharePost}
-          vaultContentRef={vaultRefFromFeedItem(post)}
-        />
+        detailModalEngagementInPanel(true, commentsFocused, isMobile)
+          ? engagementRow
+          : undefined
       }
       engagementClassName="shrink-0 border-b border-white/10 px-4 py-2"
       collapsibleContent={
@@ -320,6 +329,7 @@ export default function FeedReelDetailModal({
         layout="split"
         onClose={onClose}
         splitMedia={splitMedia}
+        splitMediaActions={engagementRow}
         splitPanel={splitPanel}
         suppressMobileSplitMedia={commentsFocused}
         zIndexClass={

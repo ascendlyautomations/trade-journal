@@ -83,6 +83,8 @@ export type TradeFilterBarProps = {
   mobileThreeRowLayout?: boolean
   /** Trades page: full-width row, no centered shrink-wrap */
   fullWidth?: boolean
+  /** Dashboard header uses a slightly wider account dropdown. */
+  accountPickerLayout?: "default" | "dashboard"
 }
 
 export default function TradeFilterBar({
@@ -110,6 +112,7 @@ export default function TradeFilterBar({
   variant: _variant,
   mobileThreeRowLayout = false,
   fullWidth = false,
+  accountPickerLayout = "default",
   isPro = false,
   copyGroups = [],
   onAccountPickerOpen,
@@ -143,6 +146,7 @@ export default function TradeFilterBar({
         showExternalCreateButton={false}
         hideManageAccounts={false}
         onPickerOpen={onAccountPickerOpen}
+        filterLayout={accountPickerLayout}
       />
     )
   }

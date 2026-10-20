@@ -11,16 +11,18 @@
     body:has(.tt-phase4-dark) .z-\[10070\]
   ) {
     --tt-page: #0d1117;
-    --tt-surface: #161b22;
-    --tt-surface-nested: #1c2128;
-    --tt-surface-raised: #21262d;
-    --tt-surface-hover: #292e36;
-    --tt-divider: #30363d;
-    --tt-border: #30363d;
-    --tt-border-strong: #3d444d;
+    --tt-surface: #222a34;
+    --tt-surface-nested: #1a222c;
+    --tt-surface-raised: #2a3440;
+    --tt-surface-hover: #303a48;
+    --tt-divider: #3a4654;
+    --tt-border: #3a4654;
+    --tt-border-strong: #4a5664;
     --tt-text: #f0f3f6;
-    --tt-text-muted: #b1bac4;
-    --tt-text-tertiary: #7d8590;
+    --tt-text-muted: #c0cad6;
+    --tt-text-tertiary: #a8b3c2;
+    --tt-text-label: #b8c4d2;
+    --tt-chart-tick: #b8c4d2;
     --tt-accent: #4ec4e0;
     --tt-on-accent: #041018;
     --tt-positive: #3ddc97;
@@ -43,7 +45,7 @@
     --color-foreground: var(--tt-text);
     --color-foreground-secondary: var(--tt-text-muted);
     --color-muted-foreground: var(--tt-text-tertiary);
-    --color-placeholder: var(--tt-text-tertiary);
+    --color-placeholder: var(--tt-text-placeholder);
     --color-input: var(--tt-surface-raised);
     --color-surface-elevated: var(--tt-surface-raised);
     --color-surface-secondary: var(--tt-surface-nested);
@@ -77,9 +79,9 @@
     [role="dialog"]:not([aria-label="Clip viewer"]):not([aria-label="Stories"]),
     .z-\[10070\]
   ) {
-    background-color: #161b22;
+    background-color: #222a34;
     background-image: none;
-    border-color: #30363d;
+    border-color: #3a4654;
   }
 
   html[data-tt-appearance="dark"] :is(
@@ -93,7 +95,7 @@
     .bg-\[\#0b1f3a\],
     .bg-\[\#0b1f3a\]\/90
   ) {
-    background-color: #161b22;
+    background-color: #222a34;
     background-image: none;
   }
 
@@ -108,7 +110,7 @@
     .bg-black\/25,
     .rounded-lg.border.bg-white\/5
   ) {
-    background-color: #1c2128;
+    background-color: #1a222c;
     background-image: none;
   }
 
@@ -129,27 +131,27 @@
     .bg-black\/30,
     input.bg-black\/40
   ) {
-    background-color: #21262d;
+    background-color: #2a3440;
     background-image: none;
   }
 
   html[data-tt-appearance="dark"] .tt-phase4-dark .rounded-xl.border.bg-white\/10,
   html[data-tt-appearance="dark"] .tt-phase4-dark .rounded-xl.border.bg-white\/5 {
-    background-color: #161b22;
+    background-color: #222a34;
   }
 
   html[data-tt-appearance="dark"] :is(
     .tt-phase4-dark,
     body:has(.tt-phase4-dark) [role="dialog"]:not([aria-label="Clip viewer"]):not([aria-label="Stories"])
   ) :is(button.bg-white\/5, button.rounded-xl.border.bg-white\/5) {
-    background-color: #21262d;
+    background-color: #2a3440;
   }
 
   html[data-tt-appearance="dark"] :is(
     .tt-phase4-dark,
     body:has(.tt-phase4-dark) [role="dialog"]:not([aria-label="Clip viewer"]):not([aria-label="Stories"])
   ) :is(button.bg-white\/5:hover, button.rounded-xl.border.bg-white\/5:hover) {
-    background-color: #292e36;
+    background-color: #303a48;
   }
 
   html[data-tt-appearance="dark"] :is(
@@ -166,7 +168,7 @@
     .hover\:bg-\[\#1e293b\]:hover,
     .hover\:bg-\[\#1f2937\]:hover
   ) {
-    background-color: #292e36;
+    background-color: #303a48;
   }
 
   html[data-tt-appearance="dark"] :is(
@@ -199,7 +201,7 @@
     .border-white\/5,
     .border-\[\#0f172a\]
   ) {
-    border-color: #30363d;
+    border-color: #3a4654;
   }
 
   html[data-tt-appearance="dark"] :is(
@@ -210,7 +212,7 @@
   }
 
   html[data-tt-appearance="dark"] .tt-phase4-dark .divide-white\/10 > :not([hidden]) ~ :not([hidden]) {
-    border-color: #30363d;
+    border-color: #3a4654;
   }
 
   html[data-tt-appearance="dark"] :is(
@@ -218,7 +220,7 @@
     body:has(.tt-phase4-dark) [role="dialog"]:not([aria-label="Clip viewer"]):not([aria-label="Stories"]),
     body:has(.tt-phase4-dark) .z-\[10070\]
   ) .hover\:border-white\/20:hover {
-    border-color: #3d444d;
+    border-color: #4a5664;
   }
 
   html[data-tt-appearance="dark"] :is(
@@ -247,7 +249,7 @@
     .tt-phase4-dark,
     body:has(.tt-phase4-dark) [role="dialog"]:not([aria-label="Clip viewer"]):not([aria-label="Stories"])
   ) :is(.text-white\/70, .text-white\/80) {
-    color: #b1bac4;
+    color: var(--tt-text-muted);
   }
 
   html[data-tt-appearance="dark"] .tt-phase4-dark h2:not(.text-blue-300),
@@ -260,7 +262,7 @@
     body:has(.tt-phase4-dark) [role="dialog"]:not([aria-label="Clip viewer"]):not([aria-label="Stories"]),
     body:has(.tt-phase4-dark) .z-\[10070\]
   ) :is(.text-gray-200, .text-gray-300) {
-    color: #b1bac4;
+    color: var(--tt-text-muted);
   }
 
   html[data-tt-appearance="dark"] :is(
@@ -268,7 +270,7 @@
     body:has(.tt-phase4-dark) [role="dialog"]:not([aria-label="Clip viewer"]):not([aria-label="Stories"]),
     body:has(.tt-phase4-dark) .z-\[10070\]
   ) .text-gray-400 {
-    color: #7d8590;
+    color: var(--tt-text-tertiary);
   }
 
   html[data-tt-appearance="dark"] :is(
@@ -276,7 +278,7 @@
     body:has(.tt-phase4-dark) [role="dialog"]:not([aria-label="Clip viewer"]):not([aria-label="Stories"]),
     body:has(.tt-phase4-dark) .z-\[10070\]
   ) .placeholder\:text-gray-400::placeholder {
-    color: #7d8590;
+    color: var(--tt-text-placeholder);
   }
 
   html[data-tt-appearance="dark"] :is(
@@ -437,30 +439,30 @@
     .bg-\[\#0b1f3a\]\/90,
     .bg-\[\#0b1f3a\]
   ) {
-    background-color: #161b22;
+    background-color: #222a34;
     background-image: none;
-    border-color: #30363d;
+    border-color: #3a4654;
     --tw-backdrop-blur: blur(0px);
   }
 
   html[data-tt-appearance="dark"] .tt-phase4-dark .bg-gradient-to-br:not([aria-label="Stories"] *) {
     background-image: none;
-    background-color: #161b22;
+    background-color: #222a34;
   }
 
   html[data-tt-appearance="dark"] .tt-phase4-dark .recharts-cartesian-grid line,
   html[data-tt-appearance="dark"] .tt-phase4-dark .recharts-cartesian-axis-line,
   html[data-tt-appearance="dark"] .tt-phase4-dark .recharts-cartesian-axis-tick-line {
-    stroke: #30363d;
+    stroke: #3a4654;
   }
 
   html[data-tt-appearance="dark"] .tt-phase4-dark .recharts-cartesian-axis-tick text {
-    fill: #7d8590;
+    fill: var(--tt-chart-tick);
   }
 
   html[data-tt-appearance="dark"] .tt-phase4-dark .recharts-default-tooltip {
-    background-color: #21262d !important;
-    border: 1px solid #30363d !important;
+    background-color: #2a3440 !important;
+    border: 1px solid #3a4654 !important;
   }
 
   html[data-tt-appearance="dark"] .tt-phase4-dark [stroke="#22c55e"] {
@@ -527,7 +529,7 @@
     .md\:bg-\[\#020617\],
     .bg-\[\#020617\]
   ) {
-    background-color: #161b22;
+    background-color: #222a34;
     background-image: none;
   }
 

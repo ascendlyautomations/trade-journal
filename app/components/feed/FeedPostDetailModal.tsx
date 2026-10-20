@@ -35,6 +35,8 @@ import {
 } from "./feedPostHelpers"
 import type { ReelRow } from "@/lib/reels"
 import { formatPublicAccountTypeLabel } from "@/lib/publicAccountPrivacy"
+import { detailModalEngagementInPanel } from "@/app/components/ui/detailModalEngagement"
+import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
 import type { FeedLikeMeta } from "./FeedPostCard"
 
 type FeedPostDetailModalProps = {
@@ -85,6 +87,7 @@ export default function FeedPostDetailModal({
   const [commentsFocused, setCommentsFocused] = useState(
     () => Boolean(openCommentsRef.current[pid])
   )
+  const isMobile = useMaxMdViewport()
 
   const scrollCommentsIntoView = useCallback(() => {
     requestAnimationFrame(() => {
@@ -170,6 +173,23 @@ export default function FeedPostDetailModal({
       />
     ) : null
 
+  const hasMedia = splitMedia != null
+
+  const engagementRow = (
+    <PostInteractionsEngagement
+      post={post}
+      user={user}
+      comments={comments}
+      commentCount={commentCount}
+      likeMeta={likeMeta}
+      likeBusy={likeBusy}
+      onToggleLike={onToggleLike}
+      onOpenComments={() => focusComments()}
+      onSharePost={onSharePost}
+      vaultContentRef={vaultRefFromFeedItem(post)}
+    />
+  )
+
   const splitPanel = (
     <MobileCommentFocusLayout
       commentsFocused={commentsFocused}
@@ -204,18 +224,9 @@ export default function FeedPostDetailModal({
         />
       }
       engagement={
-        <PostInteractionsEngagement
-          post={post}
-          user={user}
-          comments={comments}
-          commentCount={commentCount}
-          likeMeta={likeMeta}
-          likeBusy={likeBusy}
-          onToggleLike={onToggleLike}
-          onOpenComments={() => focusComments()}
-          onSharePost={onSharePost}
-          vaultContentRef={vaultRefFromFeedItem(post)}
-        />
+        detailModalEngagementInPanel(hasMedia, commentsFocused, isMobile)
+          ? engagementRow
+          : undefined
       }
       collapsibleContent={
         <div className="min-w-0 space-y-3 overflow-hidden border-b border-white/10 px-4 py-4 text-xs md:text-sm">
@@ -317,6 +328,7 @@ export default function FeedPostDetailModal({
         layout="split"
         onClose={onClose}
         splitMedia={splitMedia}
+        splitMediaActions={hasMedia ? engagementRow : undefined}
         splitPanel={splitPanel}
         suppressMobileSplitMedia={commentsFocused}
       />

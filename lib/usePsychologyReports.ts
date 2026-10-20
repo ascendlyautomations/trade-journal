@@ -7,7 +7,8 @@ import {
   checkInHistoryStartDateKey,
   todayCheckInDateKey,
 } from "@/lib/dailyCheckIn/dateKey"
-import { fetchCheckInsInRange } from "@/lib/dailyCheckIn/repository"
+import { fetchPsychologyDashboardCheckIns } from "@/lib/dailyCheckIn/repository"
+import { waitForDailyCheckInAuthSession } from "@/lib/dailyCheckIn/authSession"
 import {
   readRecentCheckInsCache,
   writeRecentCheckInsCache,
@@ -78,16 +79,22 @@ export function usePsychologyReports(
     }
     setLoading(true)
     try {
+      const authReady = await waitForDailyCheckInAuthSession(supabase)
+      if (!authReady) {
+        setLoadError("Sign in to load daily check-ins.")
+        setReady(true)
+        return
+      }
       const start = checkInHistoryStartDateKey(CHECK_IN_HISTORY_DAY_WINDOW)
       const end = todayCheckInDateKey()
       const cachedCheckIns = readRecentCheckInsCache(userId, start, end)
       const [trades, checkIns] = await Promise.all([
         ensurePsychologyJournalTrades(userId, dashboardTrades),
-        cachedCheckIns
+        cachedCheckIns !== undefined
           ? Promise.resolve(cachedCheckIns)
-          : fetchCheckInsInRange(supabase, userId, start, end),
+          : fetchPsychologyDashboardCheckIns(supabase, userId),
       ])
-      if (!cachedCheckIns) {
+      if (cachedCheckIns === undefined) {
         writeRecentCheckInsCache(userId, start, end, checkIns)
       }
       reportCache.clear()

@@ -12,6 +12,11 @@ export type DashboardGearPersistedPrefs = {
   showWarnings: boolean
 }
 
+export type LivePersonalDrawdownGearType = "fixed" | "trailing"
+
 export type GearDraftState = DashboardGearPersistedPrefs & {
   drawdownLimit: string
+  /** When a single Live account is selected, configure per-account drawdown. */
+  livePersonalDrawdown: boolean
+  liveDrawdownType: LivePersonalDrawdownGearType
 }

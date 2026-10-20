@@ -108,7 +108,7 @@ function ProfileStatisticsTab({
   equityChartNarrow,
 }: ProfileStatisticsTabProps) {
   return (
-    <div className="space-y-6">
+    <div className="tt-profile-stats space-y-6">
       {!canView ? (
         <div className="rounded-xl border border-white/10 bg-white/5 p-6 py-16 text-center">
           <p className="text-lg text-gray-100">Private Profile</p>
@@ -148,10 +148,10 @@ function ProfileStatisticsTab({
                   key={id}
                   type="button"
                   onClick={() => onModeChange(id)}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${
+                  className={`tt-profile-stats-mode-btn rounded-lg border px-4 py-1.5 text-sm font-medium transition ${
                     selectedMode === id
-                      ? "tt-phase1-selected bg-blue-500 text-white"
-                      : "bg-white/5 text-white/70 hover:bg-white/10"
+                      ? "tt-profile-stats-mode-btn-active bg-blue-500 text-white border-transparent"
+                      : "tt-profile-stats-mode-btn-inactive border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
                   }`}
                 >
                   {label}
@@ -286,7 +286,7 @@ function ProfileStatisticsTab({
             </div>
 
             <div
-              className={`w-full md:h-64 ${
+              className={`tt-profile-stats-equity-chart w-full md:h-64 ${
                 equityChartNarrow
                   ? "h-[min(52vw,340px)] min-h-[280px]"
                   : "h-72"

@@ -85,6 +85,7 @@ import { clearConversationThreadAliases } from "./backendV2/conversationThreadIn
 import { clearThreadReadLifecycle } from "./backendV2/conversationThreadReadLifecycle.ts"
 import { clearThreadScrollSessions } from "./conversationThreadScroll.ts"
 import { clearPropFirmBootstrapCache } from "./backendV2/propFirmBootstrapCache.ts"
+import { invalidateDailyCheckInSessionCache } from "./dailyCheckIn/sessionCache.ts"
 import { patchSessionProfileSlice } from "./backendV2/sessionBootstrapCache.ts"
 import { usePathname } from "next/navigation"
 import { shouldWarmAppDataCachesForPath } from "./appWarmPaths"
@@ -422,6 +423,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       clearThreadReadLifecycle()
       clearThreadScrollSessions()
       clearPropFirmBootstrapCache()
+      invalidateDailyCheckInSessionCache()
       if (signedOutUserId) {
         invalidateProfileBootstrapCache({ viewerKey: signedOutUserId })
       }

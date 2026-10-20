@@ -30,16 +30,24 @@ export default function ExploreTopPerformersSection({
 }: Props) {
   return (
     <section className={PANEL_CLASS} aria-labelledby="explore-weekly-top-heading">
-      <div className="mb-3">
-        <h2
-          id="explore-weekly-top-heading"
-          className="text-sm font-semibold text-white md:text-base"
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2
+            id="explore-weekly-top-heading"
+            className="text-sm font-semibold text-white md:text-base"
+          >
+            Top Performers This Week
+          </h2>
+          <p className="mt-0.5 text-xs text-gray-400">
+            Rolling 7-day public leaderboard metrics (all accounts)
+          </p>
+        </div>
+        <Link
+          href="/leaderboard"
+          className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-blue-300 transition hover:border-blue-400/30 hover:bg-white/10 hover:text-blue-200 md:text-sm"
         >
-          Top Performers This Week
-        </h2>
-        <p className="mt-0.5 text-xs text-gray-400">
-          Rolling 7-day public leaderboard metrics (all accounts)
-        </p>
+          View Leaderboard
+        </Link>
       </div>
 
       {loading ? (

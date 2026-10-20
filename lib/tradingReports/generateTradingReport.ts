@@ -506,6 +506,42 @@ function comparisonPeriodKey(
   }
 }
 
+/** Report for an arbitrary trade set (e.g. Backtest Lab filtered pool). */
+export function generateTradingReportForTrades(
+  trades: any[],
+  meta: {
+    title: string
+    dateRangeLabel: string
+    kind?: TradingReport["kind"]
+  }
+): TradingReport {
+  const metrics = buildMetrics(trades)
+  const strengths = buildStrengths(trades, metrics, null)
+  const opportunities = buildOpportunities(trades, metrics)
+  const recommendations = buildRecommendations(strengths, opportunities, metrics)
+  const bestTrade = findBestTrade(trades)
+  const kind = meta.kind ?? "monthly"
+  const now = new Date()
+
+  return {
+    periodKey: "monthly_this",
+    kind,
+    title: meta.title,
+    dateRangeLabel: meta.dateRangeLabel,
+    periodStartIso: now.toISOString(),
+    periodEndIso: now.toISOString(),
+    generatedAt: Date.now(),
+    executiveSummary: buildExecutiveSummary(metrics, kind),
+    metrics,
+    strengths,
+    opportunities,
+    recommendations,
+    bestTradeId: bestTrade?.id != null ? String(bestTrade.id) : null,
+    keyTakeaway: buildKeyTakeaway(metrics, strengths, opportunities),
+    summarySource: "deterministic",
+  }
+}
+
 export function generateTradingReport(
   trades: any[],
   periodKey: TradingReportPeriodKey,

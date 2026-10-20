@@ -21,15 +21,24 @@ import {
   ACCOUNT_DROPDOWN_ACTION_CLASS,
   ACCOUNT_DROPDOWN_DIVIDER_CLASS,
   ACCOUNT_DROPDOWN_FILTER_TRIGGER_CLASS,
+  ACCOUNT_DROPDOWN_DASHBOARD_FILTER_TRIGGER_CLASS,
+  ACCOUNT_DROPDOWN_DASHBOARD_FILTER_WRAPPER_CLASS,
   ACCOUNT_DROPDOWN_FILTER_WRAPPER_CLASS,
   ACCOUNT_DROPDOWN_ITEM_CLASS,
   ACCOUNT_DROPDOWN_MANAGE_CLASS,
   ACCOUNT_DROPDOWN_PORTAL_MENU_CLASS,
+  ACCOUNT_DROPDOWN_ROW_HEIGHT_CLASS,
   ACCOUNT_DROPDOWN_ROW_TEXT_CLASS,
   ACCOUNT_DROPDOWN_SUBMISSION_WRAPPER_CLASS,
   ACCOUNT_DROPDOWN_TRIGGER_CLASS,
 } from "@/lib/accountDropdownStyles"
 import { cn } from "@/app/components/ui/cn"
+import {
+  buildTradeAccountPickerMenuEntries,
+  sliceTradeAccountPickerMenuEntries,
+  tradeAccountPickerMenuAccountCount,
+  type TradeAccountPickerScope,
+} from "@/lib/tradeAccountPickerGroups"
 
 type MenuPosition = {
   top: number
@@ -105,6 +114,12 @@ type TradeAccountPickerProps = {
   filterPlaceholder?: string
   /** Lazy-load hook for copy trading groups when the menu opens. */
   onPickerOpen?: () => void
+  /** Dashboard filter bar — wider desktop trigger. */
+  filterLayout?: "default" | "dashboard"
+  /** Restrict visible accounts (Backtest Lab entry). */
+  accountScope?: TradeAccountPickerScope
+  /** Account rows shown before "View More Accounts" (headers excluded). */
+  collapsedAccountLimit?: number
 }
 
 function RowText({ children }: { children: React.ReactNode }) {
@@ -194,14 +209,25 @@ function ItemRow({
   )
 }
 
-/** Collapsed account list shows this many rows before "View More Accounts". */
-const ACCOUNT_LIST_COLLAPSED_LIMIT = 5
+/** Collapsed account list shows this many account rows before "View More Accounts". */
+const DEFAULT_COLLAPSED_ACCOUNT_LIMIT = 8
 
 function DropdownDivider() {
   return (
     <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
       <span className="md:hidden">────────</span>
       <span className="hidden md:inline">────────────────────</span>
+    </div>
+  )
+}
+
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <div
+      className={`${ACCOUNT_DROPDOWN_ROW_HEIGHT_CLASS} px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400`}
+      aria-hidden="true"
+    >
+      {label}
     </div>
   )
 }
@@ -226,14 +252,19 @@ export default function TradeAccountPicker({
   onFilterChange,
   filterPlaceholder = "All Accounts",
   onPickerOpen,
+  filterLayout = "default",
+  accountScope = "default",
+  collapsedAccountLimit = DEFAULT_COLLAPSED_ACCOUNT_LIMIT,
 }: TradeAccountPickerProps) {
   const router = useRouter()
   const isFilterMode = onFilterChange != null
-  const showCopyTrading = isPro
+  const showCopyTrading = isPro && accountScope !== "backtest_only"
   const resolvedTriggerClassName =
     triggerClassName ??
     (isFilterMode
-      ? ACCOUNT_DROPDOWN_FILTER_TRIGGER_CLASS
+      ? filterLayout === "dashboard"
+        ? ACCOUNT_DROPDOWN_DASHBOARD_FILTER_TRIGGER_CLASS
+        : ACCOUNT_DROPDOWN_FILTER_TRIGGER_CLASS
       : ACCOUNT_DROPDOWN_TRIGGER_CLASS)
 
   const [open, setOpen] = useState(false)
@@ -403,36 +434,55 @@ export default function TradeAccountPicker({
     closeMenu()
   }
 
-  const accountRows = isFilterMode
+  const groupedMenuEntries = useMemo(
+    () =>
+      isFilterMode
+        ? []
+        : buildTradeAccountPickerMenuEntries(accounts, accountScope),
+    [accounts, accountScope, isFilterMode]
+  )
+
+  const totalAccountRows = isFilterMode
+    ? filterOptions.length
+    : tradeAccountPickerMenuAccountCount(groupedMenuEntries)
+
+  const visibleGroupedEntries = useMemo(
+    () =>
+      sliceTradeAccountPickerMenuEntries(
+        groupedMenuEntries,
+        collapsedAccountLimit,
+        accountsExpanded
+      ),
+    [groupedMenuEntries, collapsedAccountLimit, accountsExpanded]
+  )
+
+  const showViewMoreAccounts =
+    !isFilterMode &&
+    !accountsExpanded &&
+    totalAccountRows > collapsedAccountLimit
+
+  const accountListNeedsScroll =
+    !isFilterMode &&
+    accountsExpanded &&
+    totalAccountRows > collapsedAccountLimit
+
+  const filterAccountRows = isFilterMode
     ? filterOptions.map((opt) => ({
         key: opt.value,
         labelName: opt.labelName ?? opt.label,
         labelSuffix: opt.labelSuffix ?? "",
         onClick: () => handleSelectFilterOption(opt.value),
       }))
-    : accounts.map((acc) => {
-        const parts = formatTradingAccountSelectorParts({
-          name: acc.name,
-          size: acc.size,
-          account_number: acc.account_number,
-          mode: acc.mode,
-        })
-        return {
-          key: String(acc.id),
-          labelName: parts.name,
-          labelSuffix: parts.suffix,
-          onClick: () => handleSelectAccount(acc),
-        }
-      })
+    : []
 
-  const showViewMoreAccounts =
-    !accountsExpanded && accountRows.length > ACCOUNT_LIST_COLLAPSED_LIMIT
-  const visibleAccountRows =
-    showViewMoreAccounts
-      ? accountRows.slice(0, ACCOUNT_LIST_COLLAPSED_LIMIT)
-      : accountRows
-  const accountListNeedsScroll =
-    accountsExpanded && accountRows.length > ACCOUNT_LIST_COLLAPSED_LIMIT
+  const showViewMoreFilterAccounts =
+    isFilterMode &&
+    !accountsExpanded &&
+    filterAccountRows.length > collapsedAccountLimit
+
+  const visibleFilterAccountRows = showViewMoreFilterAccounts
+    ? filterAccountRows.slice(0, collapsedAccountLimit)
+    : filterAccountRows
 
   const accountsPanel = (
     <>
@@ -448,7 +498,8 @@ export default function TradeAccountPicker({
         </ActionRow>
       ) : null}
 
-      {(isFilterMode || showCopyTrading) && accountRows.length > 0 ? (
+      {(isFilterMode || showCopyTrading) &&
+      (isFilterMode ? filterAccountRows.length > 0 : totalAccountRows > 0) ? (
         <DropdownDivider />
       ) : null}
 
@@ -458,19 +509,61 @@ export default function TradeAccountPicker({
             "max-h-60 overflow-y-auto overscroll-contain"
         )}
       >
-        {visibleAccountRows.map((row) => (
-          <ItemRow key={row.key} onClick={row.onClick}>
-            <AccountSelectorLabelText
-              name={row.labelName}
-              suffix={row.labelSuffix}
-            />
-          </ItemRow>
-        ))}
-        {showViewMoreAccounts ? (
-          <ActionRow onClick={() => setAccountsExpanded(true)}>
-            View More Accounts
-          </ActionRow>
-        ) : null}
+        {isFilterMode ? (
+          <>
+            {visibleFilterAccountRows.map((row) => (
+              <ItemRow key={row.key} onClick={row.onClick}>
+                <AccountSelectorLabelText
+                  name={row.labelName}
+                  suffix={row.labelSuffix}
+                />
+              </ItemRow>
+            ))}
+            {showViewMoreFilterAccounts ? (
+              <ActionRow onClick={() => setAccountsExpanded(true)}>
+                View More Accounts
+              </ActionRow>
+            ) : null}
+          </>
+        ) : totalAccountRows === 0 ? (
+          <div className="space-y-2 px-3 py-2">
+            <p className="text-sm text-gray-400">
+              {accountScope === "backtest_only"
+                ? "No Backtest accounts yet. Create a Backtest account to log simulated trades."
+                : "No accounts available. Add an account to continue."}
+            </p>
+          </div>
+        ) : (
+          <>
+            {visibleGroupedEntries.map((entry) => {
+              if (entry.type === "section") {
+                return <SectionHeader key={entry.id} label={entry.label} />
+              }
+              const parts = formatTradingAccountSelectorParts({
+                name: entry.account.name,
+                size: entry.account.size,
+                account_number: entry.account.account_number,
+                mode: entry.account.mode,
+              })
+              return (
+                <ItemRow
+                  key={String(entry.account.id)}
+                  onClick={() => handleSelectAccount(entry.account)}
+                >
+                  <AccountSelectorLabelText
+                    name={parts.name}
+                    suffix={parts.suffix}
+                  />
+                </ItemRow>
+              )
+            })}
+            {showViewMoreAccounts ? (
+              <ActionRow onClick={() => setAccountsExpanded(true)}>
+                View More Accounts
+              </ActionRow>
+            ) : null}
+          </>
+        )}
       </div>
 
       {!hideManageAccounts || (!isFilterMode && onOpenCreate) ? (
@@ -539,7 +632,9 @@ export default function TradeAccountPicker({
     <div
       className={cn(
         isFilterMode
-          ? ACCOUNT_DROPDOWN_FILTER_WRAPPER_CLASS
+          ? filterLayout === "dashboard"
+            ? ACCOUNT_DROPDOWN_DASHBOARD_FILTER_WRAPPER_CLASS
+            : ACCOUNT_DROPDOWN_FILTER_WRAPPER_CLASS
           : "flex min-w-0 flex-col gap-2 sm:flex-row sm:items-stretch",
         !isFilterMode && ACCOUNT_DROPDOWN_SUBMISSION_WRAPPER_CLASS,
         className

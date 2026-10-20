@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import type {
   PayoutDrawdownBehavior,
   PropfirmEquityPayoutEventInput,
@@ -355,6 +356,56 @@ export const PROPFIRM_ALL_ACCOUNTS_VALUE = "all"
 
 export type PayoutHistoryEntry = AccountPayoutCycle & {
   accountName: string
+}
+
+export function groupPayoutCyclesByAccountId(
+  cycles: AccountPayoutCycle[]
+): Record<string, AccountPayoutCycle[]> {
+  const grouped: Record<string, AccountPayoutCycle[]> = {}
+  for (const cycle of cycles) {
+    const accountId = String(cycle.account_id ?? "").trim()
+    if (!accountId) continue
+    if (!grouped[accountId]) grouped[accountId] = []
+    grouped[accountId].push(cycle)
+  }
+  return grouped
+}
+
+export type FetchPayoutCycleHistoryResult = {
+  cyclesByAccount: Record<string, AccountPayoutCycle[]>
+  error: string | null
+}
+
+/** Owner payout cycles — same rows iOS loads via `payoutCycleHistory(for:)`. */
+export async function fetchPayoutCycleHistoryForUser(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<FetchPayoutCycleHistoryResult> {
+  const ownerId = String(userId).trim()
+  if (!ownerId) {
+    return { cyclesByAccount: {}, error: "Sign in to load payout history." }
+  }
+
+  const { data, error } = await supabase
+    .from("account_payout_cycles")
+    .select(PAYOUT_CYCLE_FIELDS)
+    .eq("user_id", ownerId)
+    .order("started_at", { ascending: false })
+
+  if (error) {
+    return {
+      cyclesByAccount: {},
+      error: handleSupabaseError(error),
+    }
+  }
+
+  const cycles = (data ?? []).map((row) =>
+    mapPayoutCycleRow(row as Record<string, unknown>)
+  )
+  return {
+    cyclesByAccount: groupPayoutCyclesByAccountId(cycles),
+    error: null,
+  }
 }
 
 /** Load payout cycles for many accounts in one set-based query (funded accounts only). */

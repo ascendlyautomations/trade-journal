@@ -80,8 +80,7 @@ import {
   isStartedTradingDateInFuture,
 } from "@/lib/tradeDateValidation"
 import TradingAccountsSettingsSection from "@/app/components/TradingAccountsSettingsSection"
-import TradovateIntegrationSettingsSection from "@/app/components/TradovateIntegrationSettingsSection"
-import RithmicIntegrationSettingsSection from "@/app/components/RithmicIntegrationSettingsSection"
+import BrokerIntegrationsSettingsSection from "@/app/components/BrokerIntegrationsSettingsSection"
 import CopyTradingGroupsSection from "@/app/components/CopyTradingGroupsSection"
 import NotificationPreferencesSettingsSection from "@/app/components/NotificationPreferencesSettingsSection"
 import CreatePasswordModal from "@/app/components/CreatePasswordModal"
@@ -117,6 +116,7 @@ type TabId =
   | "account"
   | "subscription"
   | "trading-accounts"
+  | "broker-integrations"
   | "notifications"
   | "appearance"
   | "vault"
@@ -141,6 +141,13 @@ function resolveSettingsTabFromHash(hash: string): TabId | null {
     requested === "dashboard-risk"
   ) {
     return "trading-accounts"
+  }
+  if (
+    requested === "broker-integrations" ||
+    requested === "brokers" ||
+    requested === "integrations"
+  ) {
+    return "broker-integrations"
   }
   return null
 }
@@ -278,6 +285,18 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
       },
       {
         kind: "panel",
+        id: "broker-integrations",
+        label: "Broker Integrations",
+        description: "Connect Tradovate and Rithmic to import trades",
+      },
+      {
+        kind: "link",
+        id: "withdrawals",
+        label: "Withdrawal History",
+        href: "/withdrawals",
+      },
+      {
+        kind: "panel",
         id: "affiliate",
         label: "Referrals",
         description: "Referrals, links, and earnings",
@@ -405,6 +424,7 @@ export default function SettingsPage() {
   const router = useRouter()
   useScrollPageTopOnMount()
   const [activeTab, setActiveTab] = useState<TabId>("account")
+  const skipScrollOnInitialTab = useRef(true)
   const [isAdmin, setIsAdmin] = useState(false)
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
 
@@ -590,6 +610,16 @@ export default function SettingsPage() {
     window.addEventListener("hashchange", syncTabFromHash)
     return () => window.removeEventListener("hashchange", syncTabFromHash)
   }, [])
+
+  useEffect(() => {
+    if (skipScrollOnInitialTab.current) {
+      skipScrollOnInitialTab.current = false
+      return
+    }
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" })
+    document.documentElement.scrollTop = 0
+    document.body.scrollTop = 0
+  }, [activeTab])
 
   useEffect(() => {
     if (!user?.id) {
@@ -1748,6 +1778,22 @@ export default function SettingsPage() {
 
                 <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-300">
+                    Sign out
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-400">
+                    Sign out of TradeTraxs on this device
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void handleSignOut()}
+                    className="mt-4 w-full rounded-xl bg-red-500/10 px-4 py-3 font-medium text-red-400 transition hover:bg-red-500/20"
+                  >
+                    Sign Out
+                  </button>
+                </section>
+
+                <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-300">
                     Data & account
                   </h3>
                   <p className="mt-1 text-sm text-gray-400">
@@ -1779,8 +1825,6 @@ export default function SettingsPage() {
 
             {activeTab === "trading-accounts" && (
               <div className="space-y-6">
-                <TradovateIntegrationSettingsSection userId={user?.id} />
-                <RithmicIntegrationSettingsSection userId={user?.id} />
                 <TradingAccountsSettingsSection
                   userId={user?.id}
                   isPro={planGate.access !== "free"}
@@ -1791,6 +1835,10 @@ export default function SettingsPage() {
                   variant="settings"
                 />
               </div>
+            )}
+
+            {activeTab === "broker-integrations" && (
+              <BrokerIntegrationsSettingsSection userId={user?.id} />
             )}
 
             {activeTab === "notifications" && (

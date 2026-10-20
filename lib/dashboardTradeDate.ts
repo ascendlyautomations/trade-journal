@@ -7,6 +7,7 @@ import {
 export type DashboardTradeDateFields = {
   created_at?: string | null
   date?: string | null
+  trade_date?: string | null
   entry_time?: string | null
   exit_time?: string | null
 }
@@ -20,6 +21,16 @@ export function resolveDashboardTradeTimeSource(
 ): string | null {
   const fromEntryExit = resolveTradingTimeSourceForKey(trade)
   if (fromEntryExit) return fromEntryExit
+
+  const tradeDateRaw =
+    trade.trade_date != null ? String(trade.trade_date).trim() : ""
+  if (tradeDateRaw) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(tradeDateRaw)) {
+      return `${tradeDateRaw}T12:00:00`
+    }
+    const parsedTradeDate = new Date(tradeDateRaw)
+    if (!Number.isNaN(parsedTradeDate.getTime())) return tradeDateRaw
+  }
 
   const fallback = trade.created_at ?? trade.date
   if (fallback == null) return null

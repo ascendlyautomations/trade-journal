@@ -96,9 +96,17 @@
 }
 
 [data-tt-dashboard-canvas] .tt-dash-section-subtitle {
-  color: #9ca3af;
   font-size: 0.8rem;
   line-height: 1.3;
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-section-subtitle,
+html[data-tt-appearance="og"] [data-tt-dashboard-canvas] .tt-dash-section-subtitle {
+  color: #9ca3af;
+}
+
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-section-subtitle {
+  color: var(--tt-text-label);
 }
 
 @media (min-width: 1200px) {
@@ -107,16 +115,14 @@
     body:has([data-tt-dashboard-canvas]) .z-\[10070\]
   ) {
     --tt-page: #0d1117;
-    --tt-surface: #161b22;
-    --tt-surface-nested: #1c2128;
-    --tt-surface-raised: #21262d;
-    --tt-surface-hover: #292e36;
-    --tt-divider: #30363d;
-    --tt-border: #30363d;
-    --tt-border-strong: #3d444d;
+    --tt-surface: #222a34;
+    --tt-surface-nested: #1a222c;
+    --tt-surface-raised: #2a3440;
+    --tt-surface-hover: #303a48;
+    --tt-divider: #3a4654;
+    --tt-border: #3a4654;
+    --tt-border-strong: #4a5664;
     --tt-text: #f0f3f6;
-    --tt-text-muted: #b1bac4;
-    --tt-text-tertiary: #7d8590;
     --tt-accent: #4ec4e0;
     --tt-on-accent: #041018;
     --tt-positive: #3ddc97;
@@ -139,7 +145,7 @@
     --color-foreground: var(--tt-text);
     --color-foreground-secondary: var(--tt-text-muted);
     --color-muted-foreground: var(--tt-text-tertiary);
-    --color-placeholder: var(--tt-text-tertiary);
+    --color-placeholder: var(--tt-text-placeholder);
     --color-input: var(--tt-surface-raised);
     --color-surface-elevated: var(--tt-surface-raised);
     --color-surface-secondary: var(--tt-surface-nested);
@@ -171,9 +177,9 @@
   }
 
   html[data-tt-appearance="dark"] body:has([data-tt-dashboard-canvas]) .z-\[10070\] {
-    background-color: #161b22;
+    background-color: #222a34;
     background-image: none;
-    border-color: #30363d;
+    border-color: #3a4654;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
@@ -187,7 +193,7 @@
     .bg-surface-elevated\/50,
     .bg-\[\#0b1f3a\]
   ) {
-    background-color: #161b22;
+    background-color: #222a34;
     background-image: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
@@ -203,7 +209,7 @@
     .bg-black\/25,
     .rounded-lg.border.bg-white\/5
   ) {
-    background-color: #1c2128;
+    background-color: #1a222c;
     background-image: none;
   }
 
@@ -220,13 +226,13 @@
     .bg-\[\#020617\],
     .bg-black\/30
   ) {
-    background-color: #21262d;
+    background-color: #2a3440;
     background-image: none;
   }
 
   /* Widget shells use bg-white/10. Keep them on the card surface. */
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .rounded-xl.border.bg-white\/10 {
-    background-color: #161b22;
+    background-color: #222a34;
   }
 
   html[data-tt-appearance="dark"] :is(
@@ -241,7 +247,7 @@
     .hover\:bg-\[\#1e293b\]:hover,
     .hover\:bg-\[\#1f2937\]:hover
   ) {
-    background-color: #292e36;
+    background-color: #303a48;
   }
 
   html[data-tt-appearance="dark"] :is(
@@ -267,18 +273,18 @@
     .md\:border-l.md\:border-white\/10,
     .border-white\/5
   ) {
-    border-color: #30363d;
+    border-color: #3a4654;
   }
 
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .divide-white\/10 > :not([hidden]) ~ :not([hidden]) {
-    border-color: #30363d;
+    border-color: #3a4654;
   }
 
   html[data-tt-appearance="dark"] :is(
     [data-tt-dashboard-canvas],
     body:has([data-tt-dashboard-canvas]) .z-\[10070\]
   ) :is(.hover\:border-white\/20:hover, .hover\:border-blue-400\/30:hover) {
-    border-color: #3d444d;
+    border-color: #4a5664;
   }
 
   html[data-tt-appearance="dark"] :is(
@@ -303,21 +309,21 @@
     [data-tt-dashboard-canvas],
     body:has([data-tt-dashboard-canvas]) .z-\[10070\]
   ) :is(.text-gray-200, .text-gray-300) {
-    color: #b1bac4;
+    color: var(--tt-text-muted);
   }
 
   html[data-tt-appearance="dark"] :is(
     [data-tt-dashboard-canvas],
     body:has([data-tt-dashboard-canvas]) .z-\[10070\]
-  ) .text-gray-400 {
-    color: #7d8590;
+  ) :is(.text-gray-400, .text-gray-500) {
+    color: var(--tt-text-tertiary);
   }
 
   html[data-tt-appearance="dark"] :is(
     [data-tt-dashboard-canvas],
     body:has([data-tt-dashboard-canvas]) .z-\[10070\]
   ) .placeholder\:text-gray-400::placeholder {
-    color: #7d8590;
+    color: var(--tt-text-placeholder);
   }
 
   html[data-tt-appearance="dark"] :is(
@@ -403,7 +409,7 @@
   }
 
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .rounded-xl.border-amber-300\/25 {
-    background-color: #161b22;
+    background-color: #222a34;
   }
 
   html[data-tt-appearance="dark"] :is(
@@ -512,12 +518,12 @@
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-checkin,
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-checkin-chip,
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-psych-metric {
-    border-color: #30363d;
-    background: #161b22;
+    border-color: #3a4654;
+    background: #222a34;
   }
 
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-strip-cell + .tt-dash-strip-cell {
-    border-left-color: #30363d;
+    border-left-color: #3a4654;
   }
 
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-label,
@@ -538,30 +544,30 @@
   }
 
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-section-subtitle {
-    color: #7d8590;
+    color: var(--tt-text-label);
   }
 
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .recharts-cartesian-grid line {
-    stroke: #30363d;
+    stroke: #3a4654;
   }
 
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .recharts-cartesian-axis-line,
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .recharts-cartesian-axis-tick-line {
-    stroke: #30363d;
+    stroke: #3a4654;
   }
 
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .recharts-cartesian-axis-tick text {
-    fill: #7d8590;
+    fill: var(--tt-chart-tick);
   }
 
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .recharts-default-tooltip {
-    background-color: #21262d !important;
-    border: 1px solid #30363d !important;
+    background-color: #2a3440 !important;
+    border: 1px solid #3a4654 !important;
     color: #f0f3f6;
   }
 
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .recharts-tooltip-label {
-    color: #b1bac4 !important;
+    color: var(--tt-text-muted) !important;
   }
 
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .recharts-tooltip-item {
@@ -600,7 +606,7 @@
 
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] [stroke="#334155"],
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] [stroke="#1e293b"] {
-    stroke: #30363d;
+    stroke: #3a4654;
   }
 
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] [style*="conic-gradient"] {
@@ -814,4 +820,134 @@
   html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-ring-win {
     background-color: transparent;
   }
+}
+
+/*
+ * Dark mode — readable secondary text at all breakpoints (mobile/tablet + desktop).
+ * Desktop (1200px+) also sets these tokens on the canvas shell; keep values in sync.
+ */
+html[data-tt-appearance="dark"] :is(
+  [data-tt-dashboard-canvas],
+  body:has([data-tt-dashboard-canvas]) .z-\[10070\]
+) :is(.text-gray-200, .text-gray-300) {
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="dark"] :is(
+  [data-tt-dashboard-canvas],
+  body:has([data-tt-dashboard-canvas]) .z-\[10070\]
+) :is(.text-gray-400, .text-gray-500) {
+  color: var(--tt-text-tertiary);
+}
+
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-section-subtitle {
+  color: var(--tt-text-label);
+}
+
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .recharts-cartesian-axis-tick text {
+  fill: var(--tt-chart-tick);
+}
+
+@media (min-width: 768px) {
+  html[data-tt-appearance="dark"] [data-tt-dashboard-canvas]
+    :is(.md\:text-sm, .md\:text-xs).md\:text-gray-400 {
+    color: var(--tt-text-label);
+  }
+}
+
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .recharts-tooltip-label {
+  color: var(--tt-text-muted) !important;
+}
+
+/*
+ * Light mode — positive/negative visuals match .tt-dash-value-pos / .tt-dash-value-neg
+ * (var(--tt-positive) / var(--tt-negative) on html[data-tt-appearance="light"]).
+ * Scoped to the dashboard canvas only; dark and OG unchanged.
+ */
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-bar-pos {
+  background-color: var(--tt-positive);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-bar-neg {
+  background-color: var(--tt-negative);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-ring-win {
+  color: var(--tt-positive);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] :is(
+    .text-green-300,
+    .text-green-400,
+    .text-emerald-300,
+    .text-emerald-400
+  ) {
+  color: var(--tt-positive);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] :is(.text-red-300, .text-red-400) {
+  color: var(--tt-negative);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] :is(
+    .bg-green-400\/10,
+    .bg-green-500\/10,
+    .bg-green-500\/20,
+    .bg-emerald-500\/15,
+    .bg-emerald-500\/20
+  ) {
+  background-color: var(--tt-positive-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tt-positive) 35%, transparent);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] :is(
+    .bg-red-400\/10,
+    .bg-red-500\/10,
+    .bg-red-500\/20
+  ) {
+  background-color: var(--tt-negative-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tt-negative) 35%, transparent);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .border-green-500\/20 {
+  border-color: color-mix(in srgb, var(--tt-positive) 40%, transparent);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] :is(.border-red-500\/20, .border-red-400\/25) {
+  border-color: color-mix(in srgb, var(--tt-negative) 40%, transparent);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .bg-green-500,
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .bg-emerald-500 {
+  background-color: var(--tt-positive);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .bg-red-500 {
+  background-color: var(--tt-negative);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] [stroke="#22c55e"] {
+  stroke: var(--tt-positive);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] [fill="#22c55e"] {
+  fill: var(--tt-positive);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] [stroke="#ef4444"],
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] [stroke="#f87171"] {
+  stroke: var(--tt-negative);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] [fill="#ef4444"],
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] [fill="#f87171"] {
+  fill: var(--tt-negative);
+}
+
+html[data-tt-appearance="light"] [data-tt-dashboard-canvas] [style*="conic-gradient"] {
+  background-image: conic-gradient(
+    #3b82f6 0deg 130deg,
+    var(--tt-positive) 130deg 240deg,
+    #eab308 240deg 360deg
+  ) !important;
 }

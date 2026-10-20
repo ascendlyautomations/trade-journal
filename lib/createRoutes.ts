@@ -4,6 +4,7 @@ export const CREATE_ROUTE = {
   clip: "/create/clip",
   achievement: "/create/achievement",
   story: "/create/story",
+  withdrawal: "/create/withdrawal",
   addTrade: "/app",
 } as const
 
@@ -16,6 +17,8 @@ export function isCreateHubPath(pathname: string): boolean {
     pathname === CREATE_ROUTE.achievement ||
     pathname.startsWith(`${CREATE_ROUTE.achievement}/`) ||
     pathname === CREATE_ROUTE.story ||
-    pathname.startsWith(`${CREATE_ROUTE.story}/`)
+    pathname.startsWith(`${CREATE_ROUTE.story}/`) ||
+    pathname === CREATE_ROUTE.withdrawal ||
+    pathname.startsWith(`${CREATE_ROUTE.withdrawal}/`)
   )
 }

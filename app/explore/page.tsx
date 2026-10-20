@@ -1,10 +1,8 @@
 "use client"
 
 import "../socialDesktopTheme.css"
-import Link from "next/link"
-import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
-import FollowButton from "../components/FollowButton"
 import ExploreDiscoverBar from "../components/explore/ExploreDiscoverBar"
+import ExploreSearchResultsPanel from "../components/explore/ExploreSearchResultsPanel"
 import ExploreSuggestedRoomsSection from "../components/explore/ExploreSuggestedRoomsSection"
 import ExploreTopPerformersSection from "../components/explore/ExploreTopPerformersSection"
 import ExploreTraderCard from "../components/explore/ExploreTraderCard"
@@ -37,7 +35,6 @@ import {
   filterExploreProfiles,
   type ExploreDiscoverFilters,
 } from "@/lib/exploreFilters"
-import { profilePath } from "@/lib/profileRoutes"
 import { readExploreSession, writeExploreSession } from "@/lib/exploreSessionCache"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import {
@@ -46,6 +43,18 @@ import {
   getDemoExploreProfiles,
   searchDemoExploreProfiles,
 } from "@/lib/demo/demoExplore"
+import { searchDemoPopularTradeRooms } from "@/lib/demo/demoRooms"
+import {
+  sortExploreProfileSearchResults,
+  sortExploreRoomSearchResults,
+} from "@/lib/exploreSearchRanking"
+import { joinTradeRoom } from "@/lib/joinTradeRoom"
+import {
+  searchPublicTradeRooms,
+  type PopularTradeRoom,
+} from "@/lib/popularTradeRooms"
+import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { scheduleDeferredWork } from "@/lib/scheduleDeferredWork"
 
@@ -96,6 +105,7 @@ export default function ExplorePage() {
   const [results, setResults] = useState<
     Pick<ExploreProfile, "id" | "username" | "name" | "avatar_url" | "is_private">[]
   >([])
+  const [roomResults, setRoomResults] = useState<PopularTradeRoom[]>([])
   const [loadingSearch, setLoadingSearch] = useState(false)
   const [searchFinished, setSearchFinished] = useState(false)
   const [visibleCount, setVisibleCount] = useState(EXPLORE_PAGE_SIZE)
@@ -286,31 +296,46 @@ export default function ExplorePage() {
     setSearchFinished(false)
 
     if (isDemoModeActive()) {
-      setResults(searchDemoExploreProfiles(term))
+      setResults(
+        sortExploreProfileSearchResults(searchDemoExploreProfiles(term), term)
+      )
+      setRoomResults(
+        sortExploreRoomSearchResults(
+          searchDemoPopularTradeRooms(term).slice(0, 12),
+          term
+        )
+      )
       setLoadingSearch(false)
       setSearchFinished(true)
       setExploreSearchError(null)
       return
     }
 
-    const { data, error } = await supabase
-      .from("profiles")
-      .select(SEARCH_PROFILE_FIELDS)
-      .or(`username.ilike.%${term}%,name.ilike.%${term}%`)
-      .not("username", "is", null)
-      .neq("is_private", true)
-      .limit(8)
+    const [profilesRes, rooms] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select(SEARCH_PROFILE_FIELDS)
+        .or(`username.ilike.%${term}%,name.ilike.%${term}%`)
+        .not("username", "is", null)
+        .neq("is_private", true)
+        .limit(12),
+      searchPublicTradeRooms(supabase, term, 12),
+    ])
 
-    if (error) {
-      console.error("[explore] search error:", error)
+    if (profilesRes.error) {
+      console.error("[explore] search error:", profilesRes.error)
       setResults([])
-      setExploreSearchError("Couldn't search traders. Please try again.")
+      setRoomResults([])
+      setExploreSearchError("Couldn't run search. Please try again.")
       setLoadingSearch(false)
       setSearchFinished(true)
       return
     }
 
-    setResults(data || [])
+    setResults(
+      sortExploreProfileSearchResults(profilesRes.data || [], term)
+    )
+    setRoomResults(sortExploreRoomSearchResults(rooms, term))
     setExploreSearchError(null)
     setLoadingSearch(false)
     setSearchFinished(true)
@@ -320,6 +345,7 @@ export default function ExplorePage() {
     const term = search.trim()
     if (term.length < SEARCH_MIN_CHARS) {
       setResults([])
+      setRoomResults([])
       setLoadingSearch(false)
       setSearchFinished(false)
       setExploreSearchError(null)
@@ -557,6 +583,25 @@ export default function ExplorePage() {
     })
   }
 
+  const handleJoinSearchRoom = useCallback(
+    async (room: PopularTradeRoom) => {
+      if (isDemoSupabaseBlocked()) {
+        requestDemoSignup("room")
+        return
+      }
+      if (!currentUserId) return
+      const result = await joinTradeRoom(supabase, room.id, currentUserId)
+      if (!result.ok) {
+        setExploreSearchError(result.error)
+        return
+      }
+      setMemberRoomIds((prev) => new Set(prev).add(room.id))
+    },
+    [currentUserId]
+  )
+
+  const hasSearchResults = results.length > 0 || roomResults.length > 0
+
   return (
     <div className="tt-phase1-dark w-full px-2 pb-3 pt-0 text-white md:px-4 md:pb-10">
       <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-7xl flex-col gap-3 px-1 md:gap-4 md:px-6">
@@ -569,13 +614,13 @@ export default function ExplorePage() {
         <section className={`${PANEL_CLASS} relative z-20`}>
           <div className="flex items-stretch gap-2">
             <label htmlFor="explore-search" className="sr-only">
-              Search traders
+              Search people or Trade Rooms
             </label>
             <input
               id="explore-search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by username…"
+              placeholder="Search people or Trade Rooms…"
               className={SEARCH_INPUT_CLASS}
             />
             <button
@@ -620,17 +665,17 @@ export default function ExplorePage() {
 
           {searchFinished &&
           search.trim().length >= SEARCH_MIN_CHARS &&
-          results.length === 0 ? (
+          !hasSearchResults ? (
             <div className="mt-3">
               <EmptyState
                 title={
                   exploreSearchError
-                    ? "Couldn't Search Traders"
-                    : "No traders found"
+                    ? "Couldn't run search"
+                    : "No matches"
                 }
                 description={
                   exploreSearchError ??
-                  `No profiles match "${search.trim()}".`
+                  `Try another name, username, or Trade Room for "${search.trim()}".`
                 }
                 className="py-6"
                 action={
@@ -648,48 +693,19 @@ export default function ExplorePage() {
             </div>
           ) : null}
 
-          {results.length > 0 ? (
-            <div className="absolute left-0 right-0 z-[100] mt-2 overflow-hidden rounded-xl border border-white/10 bg-[#0f172a] shadow-xl">
-              {results.map((result) => (
-                <div
-                  key={result.id}
-                  className="flex items-center justify-between gap-3 border-b border-white/5 px-3 py-2.5 last:border-b-0 hover:bg-white/5"
-                >
-                  <Link
-                    href={profilePath({
-                      id: result.id,
-                      username: result.username,
-                    })}
-                    className="flex min-w-0 items-center gap-3"
-                  >
-                    <ProfileAvatarImg
-                      src={result.avatar_url}
-                      className="h-10 w-10 shrink-0 border border-white/10"
-                    />
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold text-white">
-                        {result.name?.trim() || result.username}
-                      </p>
-                      {result.username ? (
-                        <p className="truncate text-xs text-gray-300">
-                          @{result.username}
-                        </p>
-                      ) : null}
-                    </div>
-                  </Link>
-                  <FollowButton
-                    targetUserId={result.id}
-                    currentUserId={currentUserId}
-                    targetIsPrivate={result.is_private}
-                    followingIds={followingIds}
-                    requestedIds={requestedIds}
-                    followsYouIds={followsYouIds}
-                    onFollowingChange={handleFollowingChange}
-                    onRequestedChange={handleRequestedChange}
-                  />
-                </div>
-              ))}
-            </div>
+          {hasSearchResults ? (
+            <ExploreSearchResultsPanel
+              profiles={results}
+              rooms={roomResults}
+              currentUserId={currentUserId}
+              followingIds={followingIds}
+              requestedIds={requestedIds}
+              followsYouIds={followsYouIds}
+              memberRoomIds={memberRoomIds}
+              onFollowingChange={handleFollowingChange}
+              onRequestedChange={handleRequestedChange}
+              onJoinRoom={handleJoinSearchRoom}
+            />
           ) : null}
         </section>
 

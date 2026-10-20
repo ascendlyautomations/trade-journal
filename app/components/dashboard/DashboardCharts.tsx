@@ -60,6 +60,10 @@ type DashboardChartsProps = Omit<
   recentTrades: ReactNode
   /** When set, Pro mobile renders Overview / Analytics / Records tabs. */
   mobileProTabs?: MobileProTabsProps
+  liveAccountValue?: ReactNode
+  drawdownLimitLineY?: number | null
+  equityCurveUsesAccountBalance?: boolean
+  showPersonalDrawdownFloor?: boolean
 }
 
 function ChartSkeleton({ className }: { className: string }) {
@@ -94,6 +98,7 @@ function DashboardCharts({
   biggestLoss,
   bestDay,
   worstDay,
+  periodTradingDayCount,
   showEquity,
   expectancyData,
   streakData,
@@ -101,6 +106,10 @@ function DashboardCharts({
   showSessions,
   bestWinStreak,
   mobileProTabs,
+  liveAccountValue = null,
+  drawdownLimitLineY = null,
+  equityCurveUsesAccountBalance = false,
+  showPersonalDrawdownFloor = false,
 }: DashboardChartsProps) {
   const weekdayChart = deferredSectionsReady ? (
     <DashboardWeekdayChart data={weekdayData} totalTrades={totalTrades} />
@@ -135,6 +144,9 @@ function DashboardCharts({
       variant="mobile"
       data={equityData}
       totalTrades={totalTrades}
+      drawdownLimitLineY={drawdownLimitLineY}
+      equityCurveUsesAccountBalance={equityCurveUsesAccountBalance}
+      showPersonalDrawdownFloor={showPersonalDrawdownFloor}
     />
   ) : (
     <ChartSkeleton className="h-48" />
@@ -160,6 +172,9 @@ function DashboardCharts({
         avgDay={isPro ? avgDay : undefined}
         consistency={isPro ? consistency : undefined}
         totalTrades={totalTrades}
+        drawdownLimitLineY={drawdownLimitLineY}
+        equityCurveUsesAccountBalance={equityCurveUsesAccountBalance}
+        showPersonalDrawdownFloor={showPersonalDrawdownFloor}
       />
     ) : showEquity ? (
       <ChartSkeleton className="h-72" />
@@ -201,6 +216,7 @@ function DashboardCharts({
           biggestLoss={biggestLoss}
           bestDay={bestDay}
           worstDay={worstDay}
+          periodTradingDayCount={periodTradingDayCount}
           showEquity={showEquity}
           mobileEquitySlot={mobileEquity}
           expectancyData={expectancyData}
@@ -209,6 +225,7 @@ function DashboardCharts({
           showSessions={showSessions}
           bestWinStreak={bestWinStreak}
           maxDrawdownSlot={maxDrawdownSlot}
+          liveAccountValue={liveAccountValue}
         />
 
         {desktopSide ? (
@@ -236,6 +253,7 @@ function DashboardCharts({
           biggestLoss={biggestLoss}
           bestDay={bestDay}
           worstDay={worstDay}
+          periodTradingDayCount={periodTradingDayCount}
           totalTrades={totalTrades}
         />
       ) : null}

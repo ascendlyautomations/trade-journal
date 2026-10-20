@@ -57,6 +57,13 @@ function getExperience(startDate: string | null | undefined) {
   return `${years}y ${remainingMonths}m`
 }
 
+/** Display-only handle; stored username and URLs stay unprefixed. */
+function formatUsernameHandle(username: string) {
+  const trimmed = username.trim()
+  if (!trimmed) return ""
+  return trimmed.startsWith("@") ? trimmed : `@${trimmed}`
+}
+
 function formatProfileMetadataLine(profile: ProfileHeaderData) {
   const parts: string[] = [
     profile.trading_style?.trim() ||
@@ -155,7 +162,7 @@ export default function ProfileHeader({
                     <>
                       <span className="text-gray-400">|</span>
                       <span className="text-sm text-gray-400">
-                        {profile.username}
+                        {formatUsernameHandle(profile.username)}
                       </span>
                     </>
                   ) : null}

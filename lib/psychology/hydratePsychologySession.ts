@@ -4,7 +4,7 @@ import {
   checkInHistoryStartDateKey,
   todayCheckInDateKey,
 } from "@/lib/dailyCheckIn/dateKey"
-import { fetchCheckInsInRange } from "@/lib/dailyCheckIn/repository"
+import { fetchPsychologyDashboardCheckIns } from "@/lib/dailyCheckIn/repository"
 import { readRecentCheckInsCache, writeRecentCheckInsCache } from "@/lib/dailyCheckIn/sessionCache"
 import type { TraderDailyCheckIn } from "@/lib/dailyCheckIn/types"
 import { supabase } from "@/lib/supabaseClient"
@@ -34,11 +34,11 @@ export async function loadPsychologyJournalInputs(
   const cached = readRecentCheckInsCache(userId, start, end)
   const [journalTrades, checkIns] = await Promise.all([
     ensurePsychologyJournalTrades(userId, dashboardTrades),
-    cached
+    cached !== undefined
       ? Promise.resolve(cached)
-      : fetchCheckInsInRange(supabase, userId, start, end),
+      : fetchPsychologyDashboardCheckIns(supabase, userId),
   ])
-  if (!cached) {
+  if (cached === undefined) {
     writeRecentCheckInsCache(userId, start, end, checkIns)
   }
   return { checkIns, journalTrades }

@@ -40,6 +40,7 @@ type TradesPageOverlaysProps = {
   onAnalyzeTrade?: (trade: any) => void
   onImageClick: (imageUrl: string) => void
   onOpenTradeReplay?: (trade: any) => void
+  onTradeUpdated?: (trade: any) => void
 }
 
 function TradesPageOverlays({
@@ -66,6 +67,7 @@ function TradesPageOverlays({
   onAnalyzeTrade,
   onImageClick,
   onOpenTradeReplay,
+  onTradeUpdated,
 }: TradesPageOverlaysProps) {
   return (
     <>
@@ -94,6 +96,7 @@ function TradesPageOverlays({
               onSendClick={onSendTrade}
               onAnalyze={onAnalyzeTrade}
               onImageClick={onImageClick}
+              onTradeUpdated={onTradeUpdated}
             />
           </div>
         </DetailModalShell>

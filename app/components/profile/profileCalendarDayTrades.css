@@ -1,0 +1,43 @@
+/* Profile → Calendar day-detail trade rows and trade modal */
+
+.tt-profile-calendar-day-trade,
+.tt-profile-calendar-trade-modal {
+  overflow-x: hidden;
+}
+
+.tt-profile-calendar-day-trade-thumb,
+.tt-profile-calendar-trade-modal-thumb {
+  background: rgb(0 0 0 / 0.25);
+}
+
+.tt-profile-calendar-day-trade-thumb img,
+.tt-profile-calendar-trade-modal-thumb img {
+  object-fit: contain !important;
+  object-position: center;
+}
+
+html[data-tt-appearance="light"] .tt-profile-calendar-day-trade,
+html[data-tt-appearance="light"] .tt-profile-calendar-trade-modal-panel {
+  background-color: var(--tt-surface);
+  border-color: var(--tt-border);
+}
+
+html[data-tt-appearance="light"] .tt-profile-calendar-day-trade:hover {
+  background-color: var(--tt-surface-hover);
+}
+
+html[data-tt-appearance="light"] .tt-profile-calendar-day-trade :is(.text-white, .font-semibold.text-white) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] .tt-profile-calendar-day-trade :is(.text-gray-400, .text-gray-300) {
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="light"] .tt-profile-calendar-trade-modal-panel :is(.text-white, .font-semibold.text-white) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] .tt-profile-calendar-trade-modal-panel :is(.text-gray-400, .text-gray-300) {
+  color: var(--tt-text-muted);
+}

@@ -34,10 +34,10 @@ export const dashboardInsightMetricNegativeClass =
 export const dashboardInsightMetricNeutralClass = `text-[11px] md:text-sm font-semibold ${READABLE_PRIMARY_CLASS}`
 
 /** Compact widget subsection label (e.g. Trades by Session). */
-export const dashboardWidgetSubtitleClass = `mb-1.5 text-[11px] md:mb-2 md:text-sm text-gray-200 md:text-gray-400`
+export const dashboardWidgetSubtitleClass = `mb-1.5 text-[11px] md:mb-2 md:text-sm text-gray-200 md:text-gray-300`
 
 /** Stat card metric title — brighter on mobile for navy contrast. */
-export const dashboardStatLabelClass = `mb-0.5 text-[11px] md:mb-1 md:text-sm text-gray-200 md:text-gray-400`
+export const dashboardStatLabelClass = `mb-0.5 text-[11px] md:mb-1 md:text-sm text-gray-200 md:text-gray-300`
 
 /** Card section heading inside a widget (Streaks, Trading Hours, …). */
 export const dashboardWidgetSectionTitleClass = `mb-1.5 max-md:mb-1 text-[11px] font-semibold md:mb-2 md:text-sm ${READABLE_SECTION_TITLE_CLASS}`

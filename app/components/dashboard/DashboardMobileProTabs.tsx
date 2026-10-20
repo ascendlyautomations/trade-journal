@@ -30,6 +30,7 @@ type DashboardMobileProTabsProps = {
   biggestLoss: number
   bestDay: number
   worstDay: number
+  periodTradingDayCount: number
   symbolPerformanceRows: ComponentProps<
     typeof DashboardAnalytics
   >["symbolPerformanceRows"]
@@ -85,6 +86,7 @@ export default function DashboardMobileProTabs({
   biggestLoss,
   bestDay,
   worstDay,
+  periodTradingDayCount,
   symbolPerformanceRows,
   hasAnyTrades,
   weekdayData,
@@ -158,6 +160,7 @@ export default function DashboardMobileProTabs({
               biggestLoss={biggestLoss}
               bestDay={bestDay}
               worstDay={worstDay}
+              periodTradingDayCount={periodTradingDayCount}
             />
             <DashboardInsights {...insightsProps} sections="records" />
           </>

@@ -4,12 +4,36 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { isImageUrlLoaded, markImageUrlLoaded } from "@/lib/imageUrlCache"
 import {
   inferAvatarPixelSize,
+  isSupabaseStoragePublicUrl,
   normalizeImageSrc,
   optimizeAvatarUrl,
 } from "@/lib/optimizedStorageImage"
+import { supabaseStorageDeliveryUrl } from "@/lib/supabaseStorageTransformGuard"
 
+/** Resolve profile avatar URLs (full public URL, storage path, or legacy render URL). */
 export function normalizeAvatarSrc(src: string | null | undefined): string | null {
-  return normalizeImageSrc(src)
+  const raw = normalizeImageSrc(src)
+  if (!raw) return null
+
+  if (/^https?:\/\//i.test(raw) || raw.startsWith("//")) {
+    return isSupabaseStoragePublicUrl(raw)
+      ? supabaseStorageDeliveryUrl(raw)
+      : raw
+  }
+
+  if (raw.startsWith("/") && !raw.startsWith("//")) {
+    return raw
+  }
+
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "")
+  if (!base) return raw
+
+  const path = raw.replace(/^\/+/, "")
+  if (/^[0-9a-f-]{36}\//i.test(path)) {
+    return `${base}/storage/v1/object/public/avatars/${path}`
+  }
+
+  return raw
 }
 
 /**

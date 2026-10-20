@@ -9,6 +9,7 @@ import {
   Legend,
   CartesianGrid,
   ResponsiveContainer,
+  ReferenceLine,
 } from "recharts"
 import DashboardWidgetEmptyState from "@/app/components/dashboard/DashboardWidgetEmptyState"
 import {
@@ -17,7 +18,7 @@ import {
   chartTooltipStyles,
 } from "@/lib/chartTheme"
 import { READABLE_SECONDARY_CLASS } from "@/lib/readableTextStyles"
-import { formatEST } from "@/lib/formatEST"
+import { formatDashboardChartTooltipLabel } from "@/lib/formatEST"
 import { formatCurrency } from "@/lib/formatCurrency"
 import { formatProfitFactor } from "@/lib/formatDisplay"
 import ChartWhenSized from "@/app/components/dashboard/ChartWhenSized"
@@ -25,6 +26,7 @@ import ChartWhenSized from "@/app/components/dashboard/ChartWhenSized"
 export type EquityChartPoint = {
   date: string
   equity: number
+  drawdownFloor?: number | null
 }
 
 export type DashboardEquityCurveProps = {
@@ -38,6 +40,48 @@ export type DashboardEquityCurveProps = {
   totalTrades?: number
   /** Hero header context. Desktop terminal only. */
   timeframeLabel?: string
+  /** @deprecated Flat reference — prefer `drawdownFloor` series on chart points. */
+  drawdownLimitLineY?: number | null
+  /** Live single-account balance curve (not cumulative P&L). */
+  equityCurveUsesAccountBalance?: boolean
+  /** Render personal drawdown floor from `drawdownFloor` on each point. */
+  showPersonalDrawdownFloor?: boolean
+}
+
+const DRAWDOWN_LIMIT_LINE_LABEL = "Max Drawdown Limit"
+const DRAWDOWN_FLOOR_LINE_LABEL = "Drawdown Floor"
+
+function formatEquityTooltipValue(value: unknown): string {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return "—"
+  return n < 0
+    ? `-$${Math.abs(n).toLocaleString()}`
+    : `$${n.toLocaleString()}`
+}
+
+function equityTooltipFormatter(value: unknown, name: unknown): [string, string] {
+  const key = String(name ?? "")
+  const label =
+    key === "drawdownFloor" ? DRAWDOWN_FLOOR_LINE_LABEL : "Equity"
+  return [formatEquityTooltipValue(value), label]
+}
+
+function DrawdownLimitReferenceLine({ y }: { y: number }) {
+  return (
+    <ReferenceLine
+      y={y}
+      stroke="#ef4444"
+      strokeDasharray="6 4"
+      strokeWidth={1.5}
+      ifOverflow="extendDomain"
+      label={{
+        value: DRAWDOWN_LIMIT_LINE_LABEL,
+        position: "insideTopRight",
+        fill: "#f87171",
+        fontSize: 10,
+      }}
+    />
+  )
 }
 
 function ChartEmptyState() {
@@ -60,8 +104,23 @@ export default function DashboardEquityCurve({
   consistency = 0,
   totalTrades = 0,
   timeframeLabel,
+  drawdownLimitLineY = null,
+  equityCurveUsesAccountBalance = false,
+  showPersonalDrawdownFloor = false,
 }: DashboardEquityCurveProps) {
-  const showEmpty = totalTrades === 0 || data.length === 0
+  const showEmpty =
+    data.length === 0 ||
+    (!equityCurveUsesAccountBalance && totalTrades === 0)
+  const showDrawdownLimitLine =
+    !showPersonalDrawdownFloor &&
+    drawdownLimitLineY != null &&
+    Number.isFinite(drawdownLimitLineY)
+  const showFloorSeries =
+    showPersonalDrawdownFloor &&
+    data.some(
+      (point) =>
+        point.drawdownFloor != null && Number.isFinite(point.drawdownFloor)
+    )
 
   if (variant === "mobile") {
     // Chart-first: no title. Keep chart height; tighten card chrome only.
@@ -106,26 +165,33 @@ export default function DashboardEquityCurve({
                 }
               />
               <Tooltip
-                formatter={(value) => {
-                  const n = Number(value)
-                  const formatted =
-                    n < 0 ? `-$${Math.abs(n).toLocaleString()}` : `$${n.toLocaleString()}`
-                  return [formatted, "Equity"]
-                }}
-                labelFormatter={(label) => {
-                  const s = String(label)
-                  return formatEST(s) || s
-                }}
+                formatter={equityTooltipFormatter}
+                labelFormatter={(label) => formatDashboardChartTooltipLabel(label)}
                 {...chartTooltipStyles}
               />
               <Line
                 type="monotone"
                 dataKey="equity"
-                name="Equity"
+                name="equity"
                 stroke="#22c55e"
                 strokeWidth={2}
                 dot={false}
               />
+              {showFloorSeries ? (
+                <Line
+                  type="monotone"
+                  dataKey="drawdownFloor"
+                  name="drawdownFloor"
+                  stroke="#ef4444"
+                  strokeDasharray="6 4"
+                  strokeWidth={1.5}
+                  dot={false}
+                  connectNulls
+                />
+              ) : null}
+              {showDrawdownLimitLine ? (
+                <DrawdownLimitReferenceLine y={drawdownLimitLineY} />
+              ) : null}
             </LineChart>
           </ResponsiveContainer>
         </ChartWhenSized>
@@ -187,29 +253,36 @@ export default function DashboardEquityCurve({
                   }
                 />
                 <Tooltip
-                  formatter={(value) => {
-                    const n = Number(value)
-                    const formatted =
-                      n < 0
-                        ? `-$${Math.abs(n).toLocaleString()}`
-                        : `$${n.toLocaleString()}`
-                    return [formatted, "Equity"]
-                  }}
-                  labelFormatter={(label) => {
-                    const s = String(label)
-                    return formatEST(s) || s
-                  }}
+                  formatter={equityTooltipFormatter}
+                  labelFormatter={(label) =>
+                    formatDashboardChartTooltipLabel(label)
+                  }
                   {...chartTooltipStyles}
                 />
                 <Line
                   type="monotone"
                   dataKey="equity"
-                  name="Equity"
+                  name="equity"
                   stroke="#38bdf8"
                   strokeWidth={2.5}
                   dot={false}
                   activeDot={{ r: 3, strokeWidth: 0 }}
                 />
+                {showFloorSeries ? (
+                  <Line
+                    type="monotone"
+                    dataKey="drawdownFloor"
+                    name="drawdownFloor"
+                    stroke="#ef4444"
+                    strokeDasharray="6 4"
+                    strokeWidth={1.5}
+                    dot={false}
+                    connectNulls
+                  />
+                ) : null}
+                {showDrawdownLimitLine ? (
+                  <DrawdownLimitReferenceLine y={drawdownLimitLineY} />
+                ) : null}
               </LineChart>
             </ResponsiveContainer>
           </ChartWhenSized>
@@ -264,34 +337,45 @@ export default function DashboardEquityCurve({
               }
             />
             <Tooltip
-              formatter={(value) => {
-                const n = Number(value)
-                const formatted =
-                  n < 0
-                    ? `-$${Math.abs(n).toLocaleString()}`
-                    : `$${n.toLocaleString()}`
-                return [formatted, "Equity"]
-              }}
-              labelFormatter={(label) => {
-                const s = String(label)
-                return formatEST(s) || s
-              }}
+              formatter={equityTooltipFormatter}
+              labelFormatter={(label) =>
+                formatDashboardChartTooltipLabel(label)
+              }
               {...chartTooltipStyles}
             />
             <Legend
               wrapperStyle={{ paddingTop: 8 }}
               formatter={(value) => (
-                <span className={`text-xs ${READABLE_SECONDARY_CLASS}`}>{value}</span>
+                <span className={`text-xs ${READABLE_SECONDARY_CLASS}`}>
+                  {String(value) === "drawdownFloor"
+                    ? DRAWDOWN_FLOOR_LINE_LABEL
+                    : "Equity"}
+                </span>
               )}
             />
             <Line
               type="monotone"
               dataKey="equity"
-              name="Equity"
+              name="equity"
               stroke="#22c55e"
               strokeWidth={2}
               dot={false}
             />
+            {showFloorSeries ? (
+              <Line
+                type="monotone"
+                dataKey="drawdownFloor"
+                name="drawdownFloor"
+                stroke="#ef4444"
+                strokeDasharray="6 4"
+                strokeWidth={1.5}
+                dot={false}
+                connectNulls
+              />
+            ) : null}
+            {showDrawdownLimitLine ? (
+              <DrawdownLimitReferenceLine y={drawdownLimitLineY} />
+            ) : null}
           </LineChart>
         </ResponsiveContainer>
       </ChartWhenSized>

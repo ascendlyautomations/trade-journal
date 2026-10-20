@@ -7,6 +7,10 @@ import {
   DASHBOARD_MOBILE_STAT_PAD_CLASS,
 } from "@/app/components/dashboard/dashboardMobileUi"
 import { formatCurrency } from "@/lib/formatCurrency"
+import {
+  dashboardSignedPnlPositiveFlag,
+  formatDashboardWorstDayDisplay,
+} from "@/lib/dashboardDailyRecordsDisplay"
 import { formatProfitFactor, formatRR } from "@/lib/formatDisplay"
 
 function formatNumber(value: number) {
@@ -61,6 +65,7 @@ export type DashboardStatsGridProps = {
   biggestLoss: number
   bestDay: number
   worstDay: number
+  periodTradingDayCount: number
   showEquity: boolean
   mobileEquitySlot: ReactNode
   /** @deprecated Mobile weekday lives in Analytics tab; ignored on mobile. */
@@ -74,6 +79,7 @@ export type DashboardStatsGridProps = {
   maxDrawdownSlot?: ReactNode
   /** Longest consecutive winning streak (from streakData.maxWinStreak). */
   bestWinStreak: number
+  liveAccountValue?: ReactNode
 }
 
 function Stat({
@@ -82,12 +88,14 @@ function Stat({
   positive,
   subtitle,
   className = "",
+  valueTitle,
 }: {
   title: string
   value: string | number
   positive?: boolean
   subtitle?: ReactNode
   className?: string
+  valueTitle?: string
 }) {
   let color = "tt-dash-value"
   if (positive === true) color = "tt-dash-value tt-dash-value-pos"
@@ -110,6 +118,7 @@ function Stat({
       <div className="w-full text-center max-md:leading-none">
         <span
           className={`block text-center text-sm font-semibold leading-tight whitespace-nowrap md:text-base ${color}`}
+          title={valueTitle}
         >
           {displayValue}
         </span>
@@ -170,6 +179,42 @@ function streakTypeAccentClass(
   return "text-gray-400"
 }
 
+function DashboardBestDayStat({ bestDay }: { bestDay: number }) {
+  return (
+    <Stat
+      title="Best Day"
+      value={formatCurrency(bestDay)}
+      positive={dashboardSignedPnlPositiveFlag(bestDay)}
+    />
+  )
+}
+
+function DashboardWorstDayStat({
+  worstDay,
+  periodTradingDayCount,
+}: {
+  worstDay: number
+  periodTradingDayCount: number
+}) {
+  const worst = formatDashboardWorstDayDisplay(
+    periodTradingDayCount,
+    worstDay,
+    formatCurrency
+  )
+  return (
+    <Stat
+      title="Worst Day"
+      value={worst.displayValue}
+      positive={
+        worst.toneValue == null
+          ? undefined
+          : dashboardSignedPnlPositiveFlag(worst.toneValue)
+      }
+      valueTitle={worst.valueTitle}
+    />
+  )
+}
+
 function ExpectancyStat({
   expectancyData,
   className,
@@ -210,6 +255,7 @@ export function DashboardRecordsStatsGrid({
   biggestLoss,
   bestDay,
   worstDay,
+  periodTradingDayCount,
 }: Pick<
   DashboardStatsGridProps,
   | "avgWin"
@@ -218,6 +264,7 @@ export function DashboardRecordsStatsGrid({
   | "biggestLoss"
   | "bestDay"
   | "worstDay"
+  | "periodTradingDayCount"
 >) {
   return (
     <div className="grid grid-cols-2 gap-2">
@@ -237,11 +284,10 @@ export function DashboardRecordsStatsGrid({
         value={formatCurrency(biggestLoss)}
         positive={false}
       />
-      <Stat title="Best Day" value={formatCurrency(bestDay)} positive />
-      <Stat
-        title="Worst Day"
-        value={formatCurrency(worstDay)}
-        positive={false}
+      <DashboardBestDayStat bestDay={bestDay} />
+      <DashboardWorstDayStat
+        worstDay={worstDay}
+        periodTradingDayCount={periodTradingDayCount}
       />
     </div>
   )
@@ -449,6 +495,7 @@ export default function DashboardStatsGrid({
   biggestLoss,
   bestDay,
   worstDay,
+  periodTradingDayCount,
   showEquity,
   mobileEquitySlot,
   expectancyData,
@@ -456,19 +503,23 @@ export default function DashboardStatsGrid({
   hourData,
   maxDrawdownSlot,
   bestWinStreak,
+  liveAccountValue = null,
 }: DashboardStatsGridProps) {
   if (!isPro) {
     return (
-      <FreeDashboardKpis
-        totalTrades={totalTrades}
-        winRate={winRate}
-        avgRR={avgRR}
-        totalPnL={totalPnL}
-        profitFactor={profitFactor}
-        bestWinStreak={bestWinStreak}
-        showEquity={showEquity}
-        mobileEquitySlot={mobileEquitySlot}
-      />
+      <div className="flex flex-col gap-2 md:space-y-3">
+        <FreeDashboardKpis
+          totalTrades={totalTrades}
+          winRate={winRate}
+          avgRR={avgRR}
+          totalPnL={totalPnL}
+          profitFactor={profitFactor}
+          bestWinStreak={bestWinStreak}
+          showEquity={showEquity}
+          mobileEquitySlot={mobileEquitySlot}
+        />
+        <div className="md:hidden">{liveAccountValue}</div>
+      </div>
     )
   }
 
@@ -492,6 +543,8 @@ export default function DashboardStatsGrid({
           <Stat title="Best Win Streak" value={bestWinStreak} />
           <Stat title="Avg RR" value={formatRR(avgRR)} />
         </div>
+
+        {liveAccountValue}
 
         {showEquity ? mobileEquitySlot : null}
       </div>
@@ -544,8 +597,11 @@ export default function DashboardStatsGrid({
           value={formatCurrency(biggestLoss)}
           positive={false}
         />
-        <Stat title="Best Day" value={formatCurrency(bestDay)} positive />
-        <Stat title="Worst Day" value={formatCurrency(worstDay)} positive={false} />
+        <DashboardBestDayStat bestDay={bestDay} />
+        <DashboardWorstDayStat
+          worstDay={worstDay}
+          periodTradingDayCount={periodTradingDayCount}
+        />
       </div>
 
       {/* Desktop column: streaks / hours / drawdown stay in the left rail. */}

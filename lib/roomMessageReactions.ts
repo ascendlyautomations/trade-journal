@@ -1,8 +1,14 @@
-/** V1 Trade Room message reactions (Trade Rooms only). */
+/** V1 message reactions — DMs (`message_reactions`) + Trade Rooms (`room_message_reactions`). */
 
 export const ROOM_MESSAGE_REACTIONS = ["👍", "🔥", "😂", "‼️"] as const
 
+export const MESSAGE_REACTIONS = ROOM_MESSAGE_REACTIONS
+
+export const MESSAGE_REACTION_DOUBLE_TAP_EMOJI = "👍" as const
+
 export type RoomMessageReactionEmoji = (typeof ROOM_MESSAGE_REACTIONS)[number]
+
+export type MessageReactionEmoji = RoomMessageReactionEmoji
 
 export type RoomMessageReactionRow = {
   id: string
@@ -11,6 +17,9 @@ export type RoomMessageReactionRow = {
   reaction: string
   created_at?: string
 }
+
+/** Same row shape for DM and Trade Room reaction tables. */
+export type MessageReactionRow = RoomMessageReactionRow
 
 export type RoomMessageReactionSummary = {
   emoji: RoomMessageReactionEmoji

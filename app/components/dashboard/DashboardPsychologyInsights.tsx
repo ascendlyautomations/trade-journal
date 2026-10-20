@@ -35,6 +35,8 @@ const INSIGHT_PREVIEW_COUNT = 2
 type DashboardPsychologyInsightsProps = {
   userId: string
   trades: DashboardTradeRow[]
+  /** Dashboard account filter — scopes psychology check-in RPC (iOS parity). */
+  accountFilter?: string
   /** False while Dashboard trades have not been hydrated — avoids a 0/5 flash. */
   tradesReady?: boolean
 }
@@ -198,12 +200,14 @@ function PsychologyInsightCardRow({
 export default function DashboardPsychologyInsights({
   userId,
   trades,
+  accountFilter = "all",
   tradesReady = true,
 }: DashboardPsychologyInsightsProps) {
   const router = useRouter()
   const { profile } = useUserProfile()
   const { proFeatureUnlocked } = useProGate(profile)
-  const { checkIns, isReady, loadError, refresh } = useRecentDailyCheckIns(userId)
+  const { checkIns, isReady, checkInsAuthVerified, loadError, refresh } =
+    useRecentDailyCheckIns(userId, { accountFilter })
   const [reportReady, setReportReady] = useState(false)
   const [cards, setCards] = useState<PsychologyInsightCard[]>([])
 
@@ -242,7 +246,15 @@ export default function DashboardPsychologyInsights({
     }
   }, [checkIns, isReady, proFeatureUnlocked, tradeRecords, tradesReady, userId])
 
-  if (!isReady || !tradesReady || (proFeatureUnlocked && !reportReady)) {
+  const checkInsGateReady =
+    checkInsAuthVerified || checkIns.length > 0 || Boolean(loadError)
+
+  if (
+    !isReady ||
+    !tradesReady ||
+    !checkInsGateReady ||
+    (proFeatureUnlocked && !reportReady)
+  ) {
     return <DashboardPsychologyInsightsSkeleton />
   }
 

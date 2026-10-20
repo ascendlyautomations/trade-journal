@@ -15,6 +15,7 @@ import {
   useState,
   useRef,
   type ChangeEvent,
+  type MouseEvent,
 } from "react"
 import { ChevronLeft } from "lucide-react"
 import {
@@ -198,6 +199,15 @@ import {
 } from "@/lib/backendV2/conversationThreadBootstrapCache"
 import { readConversationThreadHeaderSeed } from "@/lib/backendV2/conversationThreadInboxSeed"
 import { mapThreadBootstrapMessagesToWire } from "@/lib/backendV2/conversationThreadContracts"
+import DmMessageReactions from "@/app/components/messages/DmMessageReactions"
+import { toggleMessageReaction } from "@/lib/messageReactionToggle"
+import {
+  MESSAGE_REACTION_DOUBLE_TAP_EMOJI,
+  MESSAGE_REACTIONS,
+  patchRoomMessageReactions,
+  type MessageReactionEmoji,
+  type MessageReactionRow,
+} from "@/lib/roomMessageReactions"
 import {
   beginThreadOpenLifecycle,
   markThreadReadInFlight,
@@ -206,6 +216,34 @@ import {
 } from "@/lib/backendV2/conversationThreadReadLifecycle"
 
 const DM_SHARE_CARD_CLASS = "w-full max-w-[min(100%,22rem)]"
+
+function canReactToDmMessage(
+  message: {
+    deleted_for_everyone?: boolean
+    is_system?: boolean
+    send_status?: string
+  },
+  opts: { userId?: string; dmMessagingBlocked: boolean }
+): boolean {
+  if (!opts.userId || opts.dmMessagingBlocked) return false
+  if (message.deleted_for_everyone || message.is_system) return false
+  if (message.send_status === "sending" || message.send_status === "failed") {
+    return false
+  }
+  return true
+}
+
+function handleDmMessageDoubleClick(
+  event: MouseEvent,
+  canReact: boolean,
+  onToggleLike: () => void
+) {
+  if (!canReact) return
+  const target = event.target as HTMLElement
+  if (target.closest("button, a, [role='button'], input, textarea")) return
+  event.preventDefault()
+  onToggleLike()
+}
 
 function legacyShareCardCaption(content: string | null | undefined): string | null {
   const trimmed = content?.trim() ?? ""
@@ -300,6 +338,8 @@ function DmMessageActionMenu({
   deleteForMe,
   deleteForEveryone,
   alignRight,
+  canReact,
+  onSelectReaction,
 }: {
   message: any
   isMe: boolean
@@ -310,6 +350,8 @@ function DmMessageActionMenu({
   deleteForMe: (m: any) => void
   deleteForEveryone: (m: any) => void
   alignRight: boolean
+  canReact?: boolean
+  onSelectReaction?: (emoji: MessageReactionEmoji) => void
 }) {
   return (
     <>
@@ -329,10 +371,33 @@ function DmMessageActionMenu({
 
       {menuOpen ? (
         <div
-          className={`absolute top-7 z-50 w-40 rounded-lg border border-white/10 bg-card/95 shadow-lg backdrop-blur-md ${
-            alignRight ? "right-1" : "left-1"
-          }`}
+          className={`absolute top-7 z-50 rounded-lg border border-white/10 bg-card/95 shadow-lg backdrop-blur-md ${
+            canReact ? "w-auto min-w-[9rem]" : "w-40"
+          } ${alignRight ? "right-1" : "left-1"}`}
         >
+          {canReact && onSelectReaction ? (
+            <div
+              className="flex justify-center gap-0.5 border-b border-white/10 px-2 py-2"
+              role="group"
+              aria-label="React to message"
+            >
+              {MESSAGE_REACTIONS.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onSelectReaction(emoji)
+                    setActiveMenuId(null)
+                  }}
+                  className="rounded-md px-1.5 py-1 text-base hover:bg-white/10"
+                  aria-label={`React with ${emoji}`}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <button
             type="button"
             onClick={(e) => {
@@ -371,6 +436,35 @@ function DmMessageActionMenu({
   )
 }
 
+type DmBubbleReactionProps = {
+  canReact: boolean
+  onToggleReaction: (emoji: MessageReactionEmoji) => void
+}
+
+function DmMessageReactionRow({
+  message,
+  isMe,
+  userId,
+  canReact,
+  onToggleReaction,
+}: {
+  message: any
+  isMe: boolean
+  userId: string | undefined
+} & DmBubbleReactionProps) {
+  if (message.deleted_for_everyone) return null
+  return (
+    <DmMessageReactions
+      reactions={message.message_reactions as MessageReactionRow[] | undefined}
+      viewerUserId={userId}
+      isOutgoing={isMe}
+      alignEnd={isMe}
+      canReact={canReact}
+      onToggle={onToggleReaction}
+    />
+  )
+}
+
 function TradeMessageBubble({
   message,
   isMe,
@@ -386,6 +480,8 @@ function TradeMessageBubble({
   parentMessage,
   initialTrade,
   onTradeLoaded,
+  canReact,
+  onToggleReaction,
 }: {
   message: any
   isMe: boolean
@@ -401,7 +497,7 @@ function TradeMessageBubble({
   parentMessage?: ReplyParentMessageLike | null
   initialTrade?: any | null
   onTradeLoaded?: (trade: any | null) => void
-}) {
+} & DmBubbleReactionProps) {
   if (message.deleted_for_everyone) {
     return (
       <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
@@ -417,38 +513,56 @@ function TradeMessageBubble({
     <div
       id={dmMessageElementId(message.id)}
       data-dm-message-id={message.id}
-      className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+      className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
     >
-      <div className={`relative group ${DM_SHARE_CARD_CLASS} overflow-visible`}>
-        <DmMessageActionMenu
-          message={message}
-          isMe={isMe}
-          userId={userId}
-          menuOpen={menuOpen}
-          setActiveMenuId={setActiveMenuId}
-          onReply={onReply}
-          deleteForMe={deleteForMe}
-          deleteForEveryone={deleteForEveryone}
-          alignRight={isMine}
-        />
+      <div
+        className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+        onDoubleClick={(e) =>
+          handleDmMessageDoubleClick(e, canReact, () =>
+            onToggleReaction(MESSAGE_REACTION_DOUBLE_TAP_EMOJI)
+          )
+        }
+      >
+        <div className={`relative group ${DM_SHARE_CARD_CLASS} overflow-visible`}>
+          <DmMessageActionMenu
+            message={message}
+            isMe={isMe}
+            userId={userId}
+            menuOpen={menuOpen}
+            setActiveMenuId={setActiveMenuId}
+            onReply={onReply}
+            deleteForMe={deleteForMe}
+            deleteForEveryone={deleteForEveryone}
+            alignRight={isMine}
+            canReact={canReact}
+            onSelectReaction={onToggleReaction}
+          />
 
-        <SharedTradeMessageCard
-          tradeId={message.trade_id}
-          viewerUserId={userId}
-          onViewTrade={onViewTrade}
-          layout="dm"
-          initialTrade={initialTrade}
-          onTradeLoaded={onTradeLoaded}
-          beforeCardContent={
-            <DmReplyReference
-              message={message}
-              parentMessage={parentMessage}
-              onJumpToParent={onJumpToParent}
-              onUnavailable={onReplyUnavailable}
-            />
-          }
-        />
+          <SharedTradeMessageCard
+            tradeId={message.trade_id}
+            viewerUserId={userId}
+            onViewTrade={onViewTrade}
+            layout="dm"
+            initialTrade={initialTrade}
+            onTradeLoaded={onTradeLoaded}
+            beforeCardContent={
+              <DmReplyReference
+                message={message}
+                parentMessage={parentMessage}
+                onJumpToParent={onJumpToParent}
+                onUnavailable={onReplyUnavailable}
+              />
+            }
+          />
+        </div>
       </div>
+      <DmMessageReactionRow
+        message={message}
+        isMe={isMe}
+        userId={userId}
+        canReact={canReact}
+        onToggleReaction={onToggleReaction}
+      />
     </div>
   )
 }
@@ -468,6 +582,8 @@ function PostMessageBubble({
   parentMessage,
   initialPost,
   onPostLoaded,
+  canReact,
+  onToggleReaction,
 }: {
   message: any
   isMe: boolean
@@ -483,7 +599,7 @@ function PostMessageBubble({
   parentMessage?: ReplyParentMessageLike | null
   initialPost?: any | null
   onPostLoaded?: (post: any | null) => void
-}) {
+} & DmBubbleReactionProps) {
   const [post, setPost] = useState<any>(initialPost ?? null)
   const [postLoading, setPostLoading] = useState(
     () => !initialPost && Boolean(dmPostPreviewCacheKey(message))
@@ -693,29 +809,39 @@ function PostMessageBubble({
     <div
       id={dmMessageElementId(message.id)}
       data-dm-message-id={message.id}
-      className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+      className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
     >
-      <div className={`relative group ${DM_SHARE_CARD_CLASS} overflow-visible`}>
-        <DmMessageActionMenu
-          message={message}
-          isMe={isMe}
-          userId={userId}
-          menuOpen={menuOpen}
-          setActiveMenuId={setActiveMenuId}
-          onReply={onReply}
-          deleteForMe={deleteForMe}
-          deleteForEveryone={deleteForEveryone}
-          alignRight={isMe}
-        />
-
-        <div className="w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20">
-          <DmReplyReference
+      <div
+        className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+        onDoubleClick={(e) =>
+          handleDmMessageDoubleClick(e, canReact, () =>
+            onToggleReaction(MESSAGE_REACTION_DOUBLE_TAP_EMOJI)
+          )
+        }
+      >
+        <div className={`relative group ${DM_SHARE_CARD_CLASS} overflow-visible`}>
+          <DmMessageActionMenu
             message={message}
-            parentMessage={parentMessage}
-            onJumpToParent={onJumpToParent}
-            onUnavailable={onReplyUnavailable}
+            isMe={isMe}
+            userId={userId}
+            menuOpen={menuOpen}
+            setActiveMenuId={setActiveMenuId}
+            onReply={onReply}
+            deleteForMe={deleteForMe}
+            deleteForEveryone={deleteForEveryone}
+            alignRight={isMe}
+            canReact={canReact}
+            onSelectReaction={onToggleReaction}
           />
-          {legacyCaption ? (
+
+          <div className="w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20">
+            <DmReplyReference
+              message={message}
+              parentMessage={parentMessage}
+              onJumpToParent={onJumpToParent}
+              onUnavailable={onReplyUnavailable}
+            />
+            {legacyCaption ? (
             <p className="whitespace-pre-wrap break-words border-b border-white/10 px-4 pb-3 pt-3 text-sm text-gray-300">
               {legacyCaption}
             </p>
@@ -791,12 +917,20 @@ function PostMessageBubble({
           </div>
         </div>
 
-        <ImageLightbox
-          open={lightboxImageUrl != null}
-          imageUrl={lightboxImageUrl}
-          onClose={() => setLightboxImageUrl(null)}
-        />
+          <ImageLightbox
+            open={lightboxImageUrl != null}
+            imageUrl={lightboxImageUrl}
+            onClose={() => setLightboxImageUrl(null)}
+          />
+        </div>
       </div>
+      <DmMessageReactionRow
+        message={message}
+        isMe={isMe}
+        userId={userId}
+        canReact={canReact}
+        onToggleReaction={onToggleReaction}
+      />
     </div>
   )
 }
@@ -815,6 +949,8 @@ function StoryShareMessageBubble({
   parentMessage,
   onViewStory,
   onMediaLoad,
+  canReact,
+  onToggleReaction,
 }: {
   message: any
   isMe: boolean
@@ -829,7 +965,7 @@ function StoryShareMessageBubble({
   parentMessage?: ReplyParentMessageLike | null
   onViewStory: (storyId: string) => void
   onMediaLoad?: () => void
-}) {
+} & DmBubbleReactionProps) {
   if (message.deleted_for_everyone) {
     return (
       <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
@@ -853,36 +989,54 @@ function StoryShareMessageBubble({
     <div
       id={dmMessageElementId(message.id)}
       data-dm-message-id={message.id}
-      className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+      className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
     >
-      <div className={`relative group ${DM_SHARE_CARD_CLASS} overflow-visible`}>
-        <DmMessageActionMenu
-          message={message}
-          isMe={isMe}
-          userId={userId}
-          menuOpen={menuOpen}
-          setActiveMenuId={setActiveMenuId}
-          onReply={onReply}
-          deleteForMe={deleteForMe}
-          deleteForEveryone={deleteForEveryone}
-          alignRight={isMe}
-        />
-
-        <div className="space-y-2">
-          <DmReplyReference
+      <div
+        className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+        onDoubleClick={(e) =>
+          handleDmMessageDoubleClick(e, canReact, () =>
+            onToggleReaction(MESSAGE_REACTION_DOUBLE_TAP_EMOJI)
+          )
+        }
+      >
+        <div className={`relative group ${DM_SHARE_CARD_CLASS} overflow-visible`}>
+          <DmMessageActionMenu
             message={message}
-            parentMessage={parentMessage}
-            onJumpToParent={onJumpToParent}
-            onUnavailable={onReplyUnavailable}
+            isMe={isMe}
+            userId={userId}
+            menuOpen={menuOpen}
+            setActiveMenuId={setActiveMenuId}
+            onReply={onReply}
+            deleteForMe={deleteForMe}
+            deleteForEveryone={deleteForEveryone}
+            alignRight={isMe}
+            canReact={canReact}
+            onSelectReaction={onToggleReaction}
           />
-          <StoryShareMessageCard
-            payload={payload}
-            isOutgoing={isMe}
-            onViewStory={onViewStory}
-            onMediaLoad={onMediaLoad}
-          />
+
+          <div className="space-y-2">
+            <DmReplyReference
+              message={message}
+              parentMessage={parentMessage}
+              onJumpToParent={onJumpToParent}
+              onUnavailable={onReplyUnavailable}
+            />
+            <StoryShareMessageCard
+              payload={payload}
+              isOutgoing={isMe}
+              onViewStory={onViewStory}
+              onMediaLoad={onMediaLoad}
+            />
+          </div>
         </div>
       </div>
+      <DmMessageReactionRow
+        message={message}
+        isMe={isMe}
+        userId={userId}
+        canReact={canReact}
+        onToggleReaction={onToggleReaction}
+      />
     </div>
   )
 }
@@ -900,6 +1054,8 @@ function StoryReplyMessageBubble({
   onReplyUnavailable,
   parentMessage,
   onMediaLoad,
+  canReact,
+  onToggleReaction,
 }: {
   message: any
   isMe: boolean
@@ -913,7 +1069,7 @@ function StoryReplyMessageBubble({
   onReplyUnavailable: () => void
   parentMessage?: ReplyParentMessageLike | null
   onMediaLoad?: () => void
-}) {
+} & DmBubbleReactionProps) {
   if (message.deleted_for_everyone) {
     return (
       <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
@@ -932,61 +1088,79 @@ function StoryReplyMessageBubble({
     <div
       id={dmMessageElementId(message.id)}
       data-dm-message-id={message.id}
-      className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+      className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
     >
-      <div className="relative group inline-block max-w-[min(100%,18rem)] overflow-visible">
-        <DmMessageActionMenu
-          message={message}
-          isMe={isMe}
-          userId={userId}
-          menuOpen={menuOpen}
-          setActiveMenuId={setActiveMenuId}
-          onReply={onReply}
-          deleteForMe={deleteForMe}
-          deleteForEveryone={deleteForEveryone}
-          alignRight={isMe}
-        />
-
-        <div
-          className={`overflow-hidden rounded-2xl border border-white/10 bg-white/10 shadow-lg shadow-black/20 ${
-            isMe ? "rounded-br-md" : "rounded-bl-md"
-          }`}
-        >
-          <DmReplyReference
+      <div
+        className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+        onDoubleClick={(e) =>
+          handleDmMessageDoubleClick(e, canReact, () =>
+            onToggleReaction(MESSAGE_REACTION_DOUBLE_TAP_EMOJI)
+          )
+        }
+      >
+        <div className="relative group inline-block max-w-[min(100%,18rem)] overflow-visible">
+          <DmMessageActionMenu
             message={message}
-            parentMessage={parentMessage}
-            onJumpToParent={onJumpToParent}
-            onUnavailable={onReplyUnavailable}
+            isMe={isMe}
+            userId={userId}
+            menuOpen={menuOpen}
+            setActiveMenuId={setActiveMenuId}
+            onReply={onReply}
+            deleteForMe={deleteForMe}
+            deleteForEveryone={deleteForEveryone}
+            alignRight={isMe}
+            canReact={canReact}
+            onSelectReaction={onToggleReaction}
           />
 
-          <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
-            {storyImageUrl ? (
-              <StorageImage
-                src={storyImageUrl}
-                originalSrc={storyImageUrl}
-                preset="message-story-thumb"
-                fallbackToOriginal={false}
-                alt=""
-                className="h-10 w-10 shrink-0 rounded-md object-cover ring-1 ring-white/15"
-                draggable={false}
-                onLoad={onMediaLoad}
-                onError={onMediaLoad}
-              />
-            ) : (
-              <div className="h-10 w-10 shrink-0 rounded-md bg-white/10" />
-            )}
-            <p className="min-w-0 text-xs font-medium text-gray-400">
-              {contextLabel}
-            </p>
-          </div>
+          <div
+            className={`overflow-hidden rounded-2xl border border-white/10 bg-white/10 shadow-lg shadow-black/20 ${
+              isMe ? "rounded-br-md" : "rounded-bl-md"
+            }`}
+          >
+            <DmReplyReference
+              message={message}
+              parentMessage={parentMessage}
+              onJumpToParent={onJumpToParent}
+              onUnavailable={onReplyUnavailable}
+            />
 
-          {replyText ? (
-            <p className="whitespace-pre-wrap break-words px-3 py-2.5 text-sm text-gray-100">
-              {replyText}
-            </p>
-          ) : null}
+            <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
+              {storyImageUrl ? (
+                <StorageImage
+                  src={storyImageUrl}
+                  originalSrc={storyImageUrl}
+                  preset="message-story-thumb"
+                  fallbackToOriginal={false}
+                  alt=""
+                  className="h-10 w-10 shrink-0 rounded-md object-cover ring-1 ring-white/15"
+                  draggable={false}
+                  onLoad={onMediaLoad}
+                  onError={onMediaLoad}
+                />
+              ) : (
+                <div className="h-10 w-10 shrink-0 rounded-md bg-white/10" />
+              )}
+              <p className="min-w-0 text-xs font-medium text-gray-400">
+                {contextLabel}
+              </p>
+            </div>
+
+            {replyText ? (
+              <p className="whitespace-pre-wrap break-words px-3 py-2.5 text-sm text-gray-100">
+                {replyText}
+              </p>
+            ) : null}
+          </div>
         </div>
       </div>
+      <DmMessageReactionRow
+        message={message}
+        isMe={isMe}
+        userId={userId}
+        canReact={canReact}
+        onToggleReaction={onToggleReaction}
+      />
     </div>
   )
 }
@@ -1221,6 +1395,11 @@ export default function DMPage() {
   const threadOpenIdRef = useRef(0)
   const threadBootstrapOwnedReadRef = useRef(false)
   const messagesRef = useRef<any[]>([])
+  const reactionBusyRef = useRef(new Set<string>())
+  const conversationRef = useRef<any>(null)
+  const dmBlockStatusRef = useRef<DmBlockStatus | null>(null)
+  conversationRef.current = conversation
+  dmBlockStatusRef.current = dmBlockStatus
   const loadOlderMessagesRef = useRef<() => void>(() => {})
   const loadingOlderMessagesRef = useRef(false)
 
@@ -1460,6 +1639,66 @@ export default function DMPage() {
     []
   )
 
+  const patchDmMessageReaction = useCallback(
+    (messageId: string, row: MessageReactionRow, mode: "insert" | "delete") => {
+      setMessagesWithCache((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? {
+                ...m,
+                message_reactions: patchRoomMessageReactions(
+                  m.message_reactions,
+                  row,
+                  mode
+                ),
+              }
+            : m
+        )
+      )
+    },
+    [setMessagesWithCache]
+  )
+
+  const toggleDmMessageReaction = useCallback(
+    async (messageId: string, reaction: MessageReactionEmoji) => {
+      const uid = userIdRef.current
+      const conversationId = conversationIdRef.current
+      if (!uid || !conversationId) return
+
+      const msg = messagesRef.current.find((m) => m.id === messageId)
+      const dmMessagingBlocked =
+        conversationRef.current?.is_group === false &&
+        (dmBlockStatusRef.current?.blockedByMe === true ||
+          dmBlockStatusRef.current?.blockedByOther === true)
+      if (
+        !canReactToDmMessage(msg ?? {}, {
+          userId: uid,
+          dmMessagingBlocked,
+        })
+      ) {
+        return
+      }
+
+      await toggleMessageReaction({
+        surface: "dm",
+        supabase,
+        messageId,
+        reaction,
+        viewerUserId: uid,
+        conversationId,
+        findViewerReactions: () =>
+          (
+            messagesRef.current.find((m) => m.id === messageId)
+              ?.message_reactions ?? []
+          ).filter((row: MessageReactionRow) => row.user_id === uid),
+        patch: patchDmMessageReaction,
+        busyKeys: reactionBusyRef.current,
+        onError: (message) => showPopup({ type: "error", message }),
+      })
+    },
+    [patchDmMessageReaction, showPopup]
+  )
+
   const handleMessagesScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
@@ -1648,6 +1887,38 @@ export default function DMPage() {
       }
     )
 
+    channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "message_reactions",
+        filter: `conversation_id=eq.${activeConversationId}`,
+      },
+      (payload) => {
+        const eventType = payload.eventType
+        const row = (payload.new ?? payload.old) as MessageReactionRow | undefined
+        if (!row?.message_id) return
+        if (!messagesRef.current.some((m) => m.id === row.message_id)) return
+
+        if (eventType === "INSERT" && payload.new) {
+          patchDmMessageReaction(
+            row.message_id,
+            payload.new as MessageReactionRow,
+            "insert"
+          )
+          return
+        }
+        if (eventType === "DELETE" && payload.old) {
+          patchDmMessageReaction(
+            row.message_id,
+            payload.old as MessageReactionRow,
+            "delete"
+          )
+        }
+      }
+    )
+
     channel.subscribe()
 
     return () => {
@@ -1656,7 +1927,7 @@ export default function DMPage() {
       stopVoicePlayback()
       supabase.removeChannel(channel)
     }
-  }, [activeConversationId, pageAccess, setMessagesWithCache])
+  }, [activeConversationId, pageAccess, patchDmMessageReaction, setMessagesWithCache])
 
   useEffect(() => {
     return () => {
@@ -3701,6 +3972,13 @@ export default function DMPage() {
                 ? formatConversationDateDividerLabel(message.created_at)
                 : ""
               const showTimestamp = shouldShowDmClusterTimestamp(messages, i)
+              const messageCanReact = canReactToDmMessage(message, {
+                userId: user?.id,
+                dmMessagingBlocked,
+              })
+              const onToggleReaction = (emoji: MessageReactionEmoji) => {
+                void toggleDmMessageReaction(String(message.id), emoji)
+              }
 
               if (message.type === "trade") {
                 return (
@@ -3733,6 +4011,8 @@ export default function DMPage() {
                         onTradeLoaded={(trade) =>
                           handleTradePreviewLoaded(String(message.trade_id), trade)
                         }
+                        canReact={messageCanReact}
+                        onToggleReaction={onToggleReaction}
                       />
                       {showTimestamp ? (
                         <DmClusterTimestamp
@@ -3768,6 +4048,8 @@ export default function DMPage() {
                         onReplyUnavailable={notifyReplyUnavailable}
                         parentMessage={parentMessage}
                         onMediaLoad={bumpMessageLayout}
+                        canReact={messageCanReact}
+                        onToggleReaction={onToggleReaction}
                       />
                       {showTimestamp ? (
                         <DmClusterTimestamp
@@ -3807,6 +4089,8 @@ export default function DMPage() {
                         parentMessage={parentMessage}
                         onViewStory={viewSharedStory}
                         onMediaLoad={bumpMessageLayout}
+                        canReact={messageCanReact}
+                        onToggleReaction={onToggleReaction}
                       />
                       {showTimestamp ? (
                         <DmClusterTimestamp
@@ -3854,6 +4138,8 @@ export default function DMPage() {
                           const key = dmPostPreviewCacheKey(message)
                           if (key) handlePostPreviewLoaded(key, post)
                         }}
+                        canReact={messageCanReact}
+                        onToggleReaction={onToggleReaction}
                       />
                       {showTimestamp ? (
                         <DmClusterTimestamp
@@ -3880,41 +4166,53 @@ export default function DMPage() {
                       <DmSenderNameLine message={message} />
                     ) : null}
                     <div
-                      id={dmMessageElementId(message.id)}
-                      data-dm-message-id={message.id}
-                      className={`flex overflow-visible ${
-                        isMe ? "justify-end" : "justify-start"
+                      className={`flex flex-col overflow-visible ${
+                        isMe ? "items-end" : "items-start"
                       }`}
                     >
-                      <div className="relative group inline-block max-w-[75%] overflow-visible xl:max-w-[32rem]">
-                        <DmMessageActionMenu
-                          message={message}
-                          isMe={isMe}
-                          userId={user?.id}
-                          menuOpen={menuOpen}
-                          setActiveMenuId={setActiveMenuId}
-                          onReply={startReplyToMessage}
-                          deleteForMe={deleteForMe}
-                          deleteForEveryone={deleteForEveryone}
-                          alignRight={isMe}
-                        />
+                      <div
+                        id={dmMessageElementId(message.id)}
+                        data-dm-message-id={message.id}
+                        className={`flex overflow-visible ${
+                          isMe ? "justify-end" : "justify-start"
+                        }`}
+                        onDoubleClick={(e) =>
+                          handleDmMessageDoubleClick(e, messageCanReact, () =>
+                            onToggleReaction(MESSAGE_REACTION_DOUBLE_TAP_EMOJI)
+                          )
+                        }
+                      >
+                        <div className="relative group inline-block max-w-[75%] overflow-visible xl:max-w-[32rem]">
+                          <DmMessageActionMenu
+                            message={message}
+                            isMe={isMe}
+                            userId={user?.id}
+                            menuOpen={menuOpen}
+                            setActiveMenuId={setActiveMenuId}
+                            onReply={startReplyToMessage}
+                            deleteForMe={deleteForMe}
+                            deleteForEveryone={deleteForEveryone}
+                            alignRight={isMe}
+                            canReact={messageCanReact}
+                            onSelectReaction={onToggleReaction}
+                          />
 
-                        <div
-                          className={`overflow-visible ${
-                            isVoice
-                              ? ""
-                              : `p-3 rounded-xl ${
-                                  isMe ? "bg-blue-500 text-white" : "border border-white/10 bg-white/10 text-white"
-                                }`
-                          } ${
-                            !isVoice &&
-                            isMe &&
-                            (message.send_status === "sending" ||
-                              message.send_status === "failed")
-                              ? MICRO.softEnter
-                              : ""
-                          }`.trim()}
-                        >
+                          <div
+                            className={`overflow-visible ${
+                              isVoice
+                                ? ""
+                                : `p-3 rounded-xl ${
+                                    isMe ? "bg-blue-500 text-white" : "border border-white/10 bg-white/10 text-white"
+                                  }`
+                            } ${
+                              !isVoice &&
+                              isMe &&
+                              (message.send_status === "sending" ||
+                                message.send_status === "failed")
+                                ? MICRO.softEnter
+                                : ""
+                            }`.trim()}
+                          >
                           {message.deleted_for_everyone ? (
                             <p className="text-gray-400 italic">
                               Message deleted
@@ -3977,8 +4275,16 @@ export default function DMPage() {
                               ) : null}
                             </>
                           )}
+                          </div>
                         </div>
                       </div>
+                      <DmMessageReactionRow
+                        message={message}
+                        isMe={isMe}
+                        userId={user?.id}
+                        canReact={messageCanReact}
+                        onToggleReaction={onToggleReaction}
+                      />
                     </div>
                     {isMe && message.send_status === "sending" ? (
                       <SyncStatusText status="sending" />

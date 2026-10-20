@@ -33,6 +33,15 @@ export type ConversationThreadMessageV1 = {
   audio_duration_ms: number | null
   is_system: boolean
   profiles: { username: string | null; avatar_url: string | null } | null
+  message_reactions: MessageReactionRowV1[]
+}
+
+export type MessageReactionRowV1 = {
+  id: string
+  message_id: string
+  user_id: string
+  reaction: string
+  created_at?: string | null
 }
 
 export type ConversationThreadBlockStatusV1 = {
@@ -121,6 +130,30 @@ function decodeParticipant(raw: unknown): ConversationThreadParticipantV1 {
   return { user_id: userId, profiles }
 }
 
+function decodeMessageReactionRow(raw: unknown): MessageReactionRowV1 | null {
+  const row = asRecord(raw)
+  if (!row) return null
+  const id = asString(row.id)
+  const messageId = asString(row.message_id)
+  const userId = asString(row.user_id)
+  const reaction = asString(row.reaction)
+  if (!id || !messageId || !userId || !reaction) return null
+  return {
+    id,
+    message_id: messageId,
+    user_id: userId,
+    reaction,
+    created_at: asString(row.created_at),
+  }
+}
+
+function decodeMessageReactions(raw: unknown): MessageReactionRowV1[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map(decodeMessageReactionRow)
+    .filter((row): row is MessageReactionRowV1 => row != null)
+}
+
 export function decodeConversationThreadMessageV1(
   raw: unknown
 ): ConversationThreadMessageV1 {
@@ -156,6 +189,7 @@ export function decodeConversationThreadMessageV1(
           avatar_url: asString(profileRaw.avatar_url),
         }
       : null,
+    message_reactions: decodeMessageReactions(row.message_reactions),
   }
 }
 
@@ -264,5 +298,6 @@ export function mapThreadBootstrapMessagesToWire(
     audio_duration_ms: m.audio_duration_ms,
     is_system: m.is_system,
     profiles: m.profiles,
+    message_reactions: m.message_reactions,
   }))
 }

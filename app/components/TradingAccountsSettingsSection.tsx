@@ -193,7 +193,7 @@ export default function TradingAccountsSettingsSection({
     void refreshAccounts({ force: true })
     showPopup({
       type: "success",
-      message: nextActive ? "Account activated" : "Account deactivated",
+      message: nextActive ? "Account is visible again" : "Account hidden",
     })
   }
 
@@ -321,7 +321,7 @@ export default function TradingAccountsSettingsSection({
           Trading Accounts
         </h3>
         <p className="mt-1 text-sm text-gray-400">
-          Manage which accounts appear in trade logging. Inactive accounts stay
+          Manage which accounts appear in trade logging. Hidden accounts stay
           linked to existing trades but are hidden from the account picker.
         </p>
 
@@ -371,7 +371,7 @@ export default function TradingAccountsSettingsSection({
                         : "Read-Only"
                       : isActive
                         ? "Active"
-                        : "Inactive"
+                        : "Hidden"
                     const busy = togglingId === account.id
                     const isEditingNote =
                       noteEditingAccount?.id === account.id
@@ -488,8 +488,8 @@ export default function TradingAccountsSettingsSection({
                                 {busy
                                   ? "Updating…"
                                   : isActive
-                                    ? "Deactivate Account"
-                                    : "Activate Account"}
+                                    ? "Hide Account"
+                                    : "Show Account"}
                               </button>
                             </div>
                           </>

@@ -1,6 +1,5 @@
 /*
- * Add Trade text contrast only. Matches the page wrapper `.tt-add-trade`.
- * Does not change layout, surfaces, borders, or shared readable-text tokens.
+ * Add Trade readability (Dark / Light). Scoped to `.tt-add-trade`.
  * TradeTraxs OG never sets data-tt-appearance to dark or light, so these
  * rules do not apply there.
  *
@@ -12,8 +11,74 @@ html[data-tt-appearance="dark"] :is(
     [data-tt-app],
     [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
   )
-  .tt-add-trade
-  :is(.text-gray-300, .text-gray-400, .text-gray-500, .text-slate-300, .text-slate-400),
+  [data-tt-native-surface="add-trade"] {
+  --tt-add-trade-panel-bg: var(--tt-surface, #222a34);
+  --tt-add-trade-panel-border: var(--tt-border, #3a4654);
+  --tt-add-trade-input-bg: var(--tt-surface-raised, #2a3440);
+  --tt-add-trade-input-border: var(--tt-border-strong, #4a5664);
+  --tt-add-trade-placeholder: var(--tt-text-placeholder);
+}
+
+/* Flat charcoal page so Trade / Execution / Psychology panels read as cards. */
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  [data-tt-native-surface="add-trade"].tt-phase4-dark {
+  background-color: var(--tt-page, #0d1117);
+  background-image: none;
+}
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  [data-tt-native-surface="add-trade"]
+  .grid
+  > div.rounded-xl.border {
+  background-color: var(--tt-add-trade-panel-bg);
+  border-color: var(--tt-add-trade-panel-border);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.04);
+}
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  [data-tt-native-surface="add-trade"]
+  :is(
+    input,
+    textarea,
+    select,
+    [role="combobox"]
+  ):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not(
+    [type="color"]
+  ):not(:disabled) {
+  background-color: var(--tt-add-trade-input-bg);
+  border-color: var(--tt-add-trade-input-border);
+}
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  [data-tt-native-surface="add-trade"]
+  :is(input, textarea, select):disabled {
+  background-color: var(--tt-surface-nested, #1a222c);
+  border-color: var(--tt-border, #3a4654);
+  color: var(--tt-text-disabled, #7d8590);
+  opacity: 0.65;
+}
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
+  )
+  [data-tt-native-surface="add-trade"]
+  [role="combobox"]:hover:not(:disabled) {
+  background-color: var(--tt-surface-hover, #303a48);
+}
+
 html[data-tt-appearance="light"] :is(
     [data-tt-app],
     [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
@@ -72,7 +137,7 @@ html[data-tt-appearance="light"] :is(
   )
   .tt-add-trade
   .cursor-not-allowed.text-gray-400 {
-  color: var(--tt-text-tertiary);
+  color: var(--tt-text-disabled, #7d8590);
 }
 
 html[data-tt-appearance="dark"] :is(
@@ -94,21 +159,21 @@ html[data-tt-appearance="dark"] :is(
     [data-tt-app],
     [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
   )
-  .tt-add-trade
+  [data-tt-native-surface="add-trade"]
   :is(input, textarea)::placeholder,
 html[data-tt-appearance="dark"] :is(
     [data-tt-app],
     [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
   )
-  .tt-add-trade
+  [data-tt-native-surface="add-trade"]
   .placeholder\:text-gray-400::placeholder,
 html[data-tt-appearance="dark"] :is(
     [data-tt-app],
     [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
   )
-  .tt-add-trade
+  [data-tt-native-surface="add-trade"]
   .placeholder\:text-gray-500::placeholder {
-  color: #8b949e;
+  color: var(--tt-add-trade-placeholder, var(--tt-text-placeholder));
   opacity: 1;
 }
 
@@ -138,10 +203,10 @@ html[data-tt-appearance="dark"] :is(
     [data-tt-app],
     [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"])
   )
-  .tt-add-trade
+  [data-tt-native-surface="add-trade"]
   [role="combobox"]
   > span.flex-1.text-gray-400 {
-  color: #8b949e;
+  color: var(--tt-add-trade-placeholder, var(--tt-text-placeholder));
 }
 
 html[data-tt-appearance="light"] :is(

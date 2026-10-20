@@ -16,7 +16,15 @@
   }
 
   html:not(.tt-native-ios) .tt-profile-post-grid .tt-profile-post-header img,
-  html:not(.tt-native-ios) .tt-profile-trade-grid .tt-profile-trade-header img {
+  html:not(.tt-native-ios) .tt-profile-trade-grid .tt-profile-trade-header img,
+  html:not(.tt-native-ios)
+    .tt-profile-post-grid
+    .tt-profile-post-header
+    .relative.overflow-hidden.rounded-full,
+  html:not(.tt-native-ios)
+    .tt-profile-trade-grid
+    .tt-profile-trade-header
+    .relative.overflow-hidden.rounded-full {
     width: 1.75rem;
     height: 1.75rem;
   }

@@ -7,17 +7,21 @@ import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
 import { formatEST } from "@/lib/formatEST"
 import { formatRR, formatTradePoints } from "@/lib/formatDisplay"
 import { resolveTradePoints } from "@/lib/resolveTradePoints"
+import { toDateKey } from "@/lib/formatDate"
 import {
-  getTradingDayKey,
-  resolveTradingTimeSourceForKey,
-  toDateKey,
-} from "@/lib/formatDate"
+  getDashboardTradingDayKey,
+  resolveDashboardTradeTimeSource,
+} from "@/lib/dashboardTradeDate"
 import { publicAccountBadgeFromTrade } from "@/lib/publicAccountPrivacy"
 import {
   accountRowForTrade,
   formatTradeAccountNameSizeLine,
   type TradeAccountDisplayInput,
 } from "@/lib/tradeAccountDisplay"
+import {
+  ProfileCalendarDayTradeRow,
+  ProfileCalendarTradeDetailModal,
+} from "@/app/components/profile/ProfileCalendarDayTrades"
 type TradeLike = {
   id: string | number
   created_at: string
@@ -42,6 +46,7 @@ type TradeLike = {
     account_number?: string | null
   } | null
   strategy?: string | null
+  trade_date?: string | null
 }
 
 type NormalizedTrade = TradeLike & { estKey: string }
@@ -56,6 +61,8 @@ type CalendarProps = {
   showControls?: boolean
   /** When false, only account-type badges are shown (no names, sizes, or numbers). */
   showAccountIdentifiers?: boolean
+  /** Profile calendar uses constrained day-trade cards and detail modal layout. */
+  dayTradePresentation?: "legacy" | "profile"
 }
 
 function accountContextLine(
@@ -90,7 +97,9 @@ export default function Calendar({
   showAccountFilter = false,
   showControls = false,
   showAccountIdentifiers = true,
+  dayTradePresentation = "legacy",
 }: CalendarProps) {
+  const profileDayTrades = dayTradePresentation === "profile"
   void showAccountFilter
   void showControls
 
@@ -106,11 +115,7 @@ export default function Calendar({
   const normalizedTrades = useMemo((): NormalizedTrade[] => {
     return (trades || []).map((trade) => ({
       ...trade,
-      estKey: (() => {
-        const resolved = resolveTradingTimeSourceForKey(trade)
-        if (!resolved) return ""
-        return getTradingDayKey(resolved) ?? ""
-      })(),
+      estKey: getDashboardTradingDayKey(trade) ?? "",
     }))
   }, [trades])
 
@@ -337,7 +342,11 @@ export default function Calendar({
         })}
       </div>
 
-      <div className="mx-auto mt-6 w-full max-w-2xl rounded-xl border border-white/10 bg-[#020617]/80 p-5 backdrop-blur-md">
+      <div
+        className={`mx-auto mt-6 w-full rounded-xl border border-white/10 bg-[#020617]/80 p-5 backdrop-blur-md ${
+          profileDayTrades ? "max-w-3xl" : "max-w-2xl"
+        }`}
+      >
         {!selectedDay ? (
           <p className="text-sm text-gray-400">Select a day to view trades.</p>
         ) : tradesForDay.length === 0 ? (
@@ -369,6 +378,19 @@ export default function Calendar({
                   showAccountIdentifiers,
                   accountById
                 )
+
+                if (profileDayTrades) {
+                  return (
+                    <ProfileCalendarDayTradeRow
+                      key={String(trade.id)}
+                      trade={trade}
+                      imageSrc={img}
+                      modeLower={modeLower}
+                      accountLineWithType={accountLineWithType}
+                      onOpen={() => setSelectedTrade(trade)}
+                    />
+                  )
+                }
 
                 return (
                   <div
@@ -441,38 +463,50 @@ export default function Calendar({
         )}
       </div>
 
-      {selectedTrade ? (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setSelectedTrade(null)}
-        >
-          <div
-            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-white/10 bg-[#0f172a] p-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-semibold text-white">Trade</p>
-              <button
-                type="button"
-                onClick={() => setSelectedTrade(null)}
-                className="text-gray-400 hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-            {(() => {
-              const img = tradeScreenshotPublicUrl(selectedTrade.image_url)
-              const pnl = Number(selectedTrade.pnl) || 0
-              const modeLower = String(selectedTrade.mode ?? "")
-                .toLowerCase()
-                .trim()
-              const accountLineWithType = accountContextLine(
-                selectedTrade,
-                showAccountIdentifiers,
-                accountById
-              )
+      {selectedTrade
+        ? (() => {
+            const img = tradeScreenshotPublicUrl(selectedTrade.image_url)
+            const modeLower = String(selectedTrade.mode ?? "")
+              .toLowerCase()
+              .trim()
+            const accountLineWithType = accountContextLine(
+              selectedTrade,
+              showAccountIdentifiers,
+              accountById
+            )
+
+            if (profileDayTrades) {
               return (
-                <>
+                <ProfileCalendarTradeDetailModal
+                  trade={selectedTrade}
+                  imageSrc={img}
+                  modeLower={modeLower}
+                  accountLineWithType={accountLineWithType}
+                  onClose={() => setSelectedTrade(null)}
+                />
+              )
+            }
+
+            const pnl = Number(selectedTrade.pnl) || 0
+            return (
+              <div
+                className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4"
+                onClick={() => setSelectedTrade(null)}
+              >
+                <div
+                  className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-white/10 bg-[#0f172a] p-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-sm font-semibold text-white">Trade</p>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTrade(null)}
+                      className="text-gray-400 hover:text-white"
+                    >
+                      ✕
+                    </button>
+                  </div>
                   {img ? (
                     <TradeScreenshotImage
                       src={img}
@@ -520,12 +554,11 @@ export default function Calendar({
                   >
                     {formatPnlCurrency(pnl)}
                   </p>
-                </>
-              )
-            })()}
-          </div>
-        </div>
-      ) : null}
+                </div>
+              </div>
+            )
+          })()
+        : null}
     </div>
   )
 }

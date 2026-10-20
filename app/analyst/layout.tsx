@@ -1,3 +1,4 @@
+import "./analystTheme.css"
 import type { Metadata } from "next"
 import type { ReactNode } from "react"
 import { ANALYST_PAGE_METADATA } from "@/lib/seoAppPages"

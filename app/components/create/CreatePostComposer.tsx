@@ -251,7 +251,7 @@ export default function CreatePostComposer({
         onChange={(e) =>
           postImageCrop.handleFileSelected(e.target.files?.[0])
         }
-        className="block w-full text-sm text-gray-300 file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:text-gray-100"
+        className="tt-create-post-file block w-full text-sm text-gray-300 file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:text-gray-100"
       />
 
       <ImageCropModal

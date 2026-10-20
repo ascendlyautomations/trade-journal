@@ -185,6 +185,12 @@ struct DashboardHomeView: View {
         }
         .onChange(of: tabIsActive, initial: true) { _, isActive in
             viewModel.setHomeTabActive(isActive)
+            if isActive {
+                dailyCheckInStore.refresh(fromUserAction: false)
+                Task {
+                    await viewModel.syncDailyCheckInsFromNetwork()
+                }
+            }
             guard isActive, brokerImportEligibilityStore.isReady else { return }
             brokerImportEligibilityStore.refreshIfStale(fromUserAction: false)
         }

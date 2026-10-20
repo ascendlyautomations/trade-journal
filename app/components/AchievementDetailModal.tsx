@@ -31,15 +31,11 @@ export default function AchievementDetailModal({
         splitMedia={
           imageSrc ? (
             <DetailModalImage src={imageSrc} onClick={setLightboxUrl} />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center p-6 text-sm text-gray-400">
-              No certificate image
-            </div>
-          )
+          ) : undefined
         }
-        splitPanel={
-          <div className="flex min-h-0 flex-col">
-            <div className="flex justify-end border-b border-white/10 px-4 py-2">
+        splitMediaActions={
+          imageSrc ? (
+            <div className="flex w-full items-center gap-3">
               <VaultEngagementButton
                 contentRef={{
                   contentType: "achievement",
@@ -48,6 +44,21 @@ export default function AchievementDetailModal({
                 variant="boxed"
               />
             </div>
+          ) : undefined
+        }
+        splitPanel={
+          <div className="flex min-h-0 flex-col">
+            {!imageSrc ? (
+              <div className="flex justify-end border-b border-white/10 px-4 py-2">
+                <VaultEngagementButton
+                  contentRef={{
+                    contentType: "achievement",
+                    contentID: String(achievement.id),
+                  }}
+                  variant="boxed"
+                />
+              </div>
+            ) : null}
             <FeedAchievementDetailMeta achievement={achievement} showPrivacy />
           </div>
         }

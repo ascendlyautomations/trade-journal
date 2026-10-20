@@ -1,0 +1,66 @@
+/**
+ * Web AI Analyst — selected trade + ready-for-analysis cards.
+ * Light and Dark only; OG keeps page utility classes unchanged.
+ */
+
+html[data-tt-appearance="light"] .tt-analyst [data-tt-analyst-selected-trade],
+html[data-tt-appearance="dark"] .tt-analyst [data-tt-analyst-selected-trade],
+html[data-tt-appearance="light"] .tt-analyst [data-tt-analyst-ready-card],
+html[data-tt-appearance="dark"] .tt-analyst [data-tt-analyst-ready-card] {
+  background-color: var(--tt-surface);
+  background-image: none;
+  border-color: var(--tt-border);
+  color: var(--tt-text);
+  box-shadow: none;
+}
+
+html[data-tt-appearance="light"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-card-eyebrow,
+html[data-tt-appearance="dark"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-card-eyebrow {
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="light"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-card-summary,
+html[data-tt-appearance="dark"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-card-summary,
+html[data-tt-appearance="light"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-detail-title,
+html[data-tt-appearance="dark"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-detail-title,
+html[data-tt-appearance="light"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-detail-value,
+html[data-tt-appearance="dark"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-detail-value {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-text-muted,
+html[data-tt-appearance="dark"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-text-muted,
+html[data-tt-appearance="light"] .tt-analyst [data-tt-analyst-ready-card] .tt-analyst-ready-label,
+html[data-tt-appearance="dark"] .tt-analyst [data-tt-analyst-ready-card] .tt-analyst-ready-label {
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="light"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-text-secondary,
+html[data-tt-appearance="dark"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-text-secondary {
+  color: var(--tt-text-tertiary);
+}
+
+html[data-tt-appearance="light"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-detail-divider,
+html[data-tt-appearance="dark"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-detail-divider {
+  border-color: var(--tt-border);
+}
+
+html[data-tt-appearance="light"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-chevron,
+html[data-tt-appearance="dark"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-chevron {
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="light"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-pnl-positive,
+html[data-tt-appearance="dark"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-pnl-positive {
+  color: var(--tt-positive);
+}
+
+html[data-tt-appearance="light"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-pnl-negative,
+html[data-tt-appearance="dark"] .tt-analyst [data-tt-analyst-selected-trade] .tt-analyst-pnl-negative {
+  color: var(--tt-negative);
+}
+
+html[data-tt-appearance="light"] .tt-analyst [data-tt-analyst-screenshot],
+html[data-tt-appearance="dark"] .tt-analyst [data-tt-analyst-screenshot] {
+  border-color: var(--tt-border);
+}

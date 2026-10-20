@@ -38,7 +38,7 @@ export default function NativeIosDashboardActionBar({
   return (
     <PlatformPageHeader
       leftContent={
-        <div className="min-w-0 w-full max-w-[min(100%,16.5rem)]">
+        <div className="min-w-0 w-full max-w-[min(100%,19rem)]">
           <TradeAccountPicker
             accounts={[]}
             isPro={isPro}

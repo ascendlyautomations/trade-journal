@@ -30,7 +30,11 @@ import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { tradeAnalysisHref } from "@/lib/tradeAnalysisNavigation"
 import CustomSelect from "@/app/components/CustomSelect"
 import CalendarMonthlyStats from "@/app/components/CalendarMonthlyStats"
-import { SELECT_TRIGGER_CLASS } from "@/lib/accountDropdownStyles"
+import { SELECT_FILTER_TRIGGER_CLASS } from "@/lib/accountDropdownStyles"
+
+/** Calendar filters — same closed trigger as All Modes (`bg-[#0b1f3a]`) with fixed toolbar height. */
+const CALENDAR_ACCOUNT_FILTER_TRIGGER_CLASS =
+  SELECT_FILTER_TRIGGER_CLASS.replace("bg-[#0f172a]", "bg-[#0b1f3a]")
 import { computePeriodTradeStats } from "@/lib/periodTradeStats"
 import PlatformCalendarHeader, {
   PlatformCalendarFilters,
@@ -507,7 +511,10 @@ export default function CalendarPage() {
             </div>
 
             <PlatformCalendarFilters>
-              <div className="flex items-center gap-3 flex-wrap w-full max-w-xl mx-auto mb-3 md:mb-4">
+              <div
+                data-tt-calendar-filters
+                className="flex items-center gap-3 flex-wrap w-full max-w-xl mx-auto mb-3 md:mb-4"
+              >
                 <CustomSelect
                   value={accountFilter}
                   onChange={(val) => {
@@ -516,7 +523,7 @@ export default function CalendarPage() {
                     setSelectedTrades([])
                   }}
                   className="flex-1 min-w-[140px]"
-                  triggerClassName={SELECT_TRIGGER_CLASS}
+                  triggerClassName={CALENDAR_ACCOUNT_FILTER_TRIGGER_CLASS}
                   options={[
                     { label: "All Accounts", value: "all" },
                     ...accountFilterOptions.map(({ value, label }) => ({
@@ -699,6 +706,15 @@ export default function CalendarPage() {
                           onSendClick={(t) => setSendTradeId(String(t.id))}
                           onAnalyze={handleAnalyzeTrade}
                           onImageClick={setSelectedImage}
+                          onTradeUpdated={(updated) => {
+                            setSelectedTrades((prev) =>
+                              prev.map((row) =>
+                                String(row.id) === String(updated.id)
+                                  ? { ...row, ...updated }
+                                  : row
+                              )
+                            )
+                          }}
                         />
                       </div>
                     ))}

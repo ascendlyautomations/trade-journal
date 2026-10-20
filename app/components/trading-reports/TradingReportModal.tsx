@@ -24,6 +24,8 @@ type TradingReportModalProps = {
   tab?: ReportsModalTab
   onTabChange?: (tab: ReportsModalTab) => void
   psychologyContent?: ReactNode
+  hidePeriodSelector?: boolean
+  bestTradeHeading?: string
 }
 
 function MetricCell({ label, value }: { label: string; value: string }) {
@@ -61,6 +63,8 @@ export default function TradingReportModal({
   tab = "performance",
   onTabChange,
   psychologyContent,
+  hidePeriodSelector = false,
+  bestTradeHeading,
 }: TradingReportModalProps) {
   const metrics = report?.metrics
   const showPsychology = tab === "psychology"
@@ -114,22 +118,24 @@ export default function TradingReportModal({
             <p className="text-sm text-gray-400">{report.dateRangeLabel}</p>
           ) : null}
 
-          <div className="flex flex-wrap gap-2 pt-2">
-            {TRADING_REPORT_PERIOD_OPTIONS.map((option) => (
-              <button
-                key={option.key}
-                type="button"
-                onClick={() => onPeriodChange(option.key)}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition md:text-sm ${
-                  periodKey === option.key
-                    ? "border-blue-400/60 bg-blue-500/20 text-white"
-                    : "border-white/10 bg-white/5 text-gray-200 hover:bg-white/10"
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          {hidePeriodSelector ? null : (
+            <div className="flex flex-wrap gap-2 pt-2">
+              {TRADING_REPORT_PERIOD_OPTIONS.map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => onPeriodChange(option.key)}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition md:text-sm ${
+                    periodKey === option.key
+                      ? "border-blue-400/60 bg-blue-500/20 text-white"
+                      : "border-white/10 bg-white/5 text-gray-200 hover:bg-white/10"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
         </header>
         )}
 
@@ -265,7 +271,9 @@ export default function TradingReportModal({
             {bestTrade ? (
               <section className="space-y-3">
                 <h3 className="text-sm font-semibold text-white">
-                  🏆 Best Trade This {report.kind === "weekly" ? "Week" : "Month"}
+                  🏆{" "}
+                  {bestTradeHeading ??
+                    `Best Trade This ${report.kind === "weekly" ? "Week" : "Month"}`}
                 </h3>
                 <SharedTradeMessageCard
                   tradeId={bestTrade.id}

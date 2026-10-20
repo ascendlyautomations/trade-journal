@@ -35,6 +35,8 @@ interface Props {
   menuClassName?: string
   /** Root wrapper classes (width / shrink). */
   className?: string
+  /** Override selected-label layout (e.g. force single-line truncation). */
+  triggerLabelClassName?: string
   /** Portal target; defaults to document.body. Use modal overlay for correct stacking. */
   portalContainerRef?: RefObject<HTMLElement | null>
   id?: string
@@ -72,6 +74,7 @@ export default function CustomSelect({
   triggerClassName = SELECT_TRIGGER_CLASS,
   menuClassName = SELECT_MENU_CLASS,
   className = "",
+  triggerLabelClassName,
   portalContainerRef,
   id,
   disabled = false,
@@ -260,7 +263,10 @@ export default function CustomSelect({
         }`}
       >
         <span
-          className={`min-w-0 flex-1 truncate text-left md:whitespace-normal md:overflow-visible ${
+          className={`${
+            triggerLabelClassName ??
+            "min-w-0 flex-1 truncate text-left md:whitespace-normal md:overflow-visible"
+          } ${
             selected ? READABLE_PRIMARY_CLASS : READABLE_PLACEHOLDER_TEXT_CLASS
           }`}
         >

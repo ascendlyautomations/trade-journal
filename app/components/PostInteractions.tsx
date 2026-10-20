@@ -1,5 +1,6 @@
 "use client"
 
+import EngagementShareButton from "@/app/components/EngagementShareButton"
 import FeedCommentItem from "@/app/components/feed/FeedCommentItem"
 import EngagementCountButton from "@/app/components/EngagementCountButton"
 import ActionButton from "@/app/components/ui/ActionButton"
@@ -97,31 +98,13 @@ export function PostInteractionsEngagement({
           }}
         />
         {onSharePost ? (
-          <button
-            type="button"
+          <EngagementShareButton
+            ariaLabel="Share post"
             onClick={(e) => {
               if (stopPropagation) e.stopPropagation()
               onSharePost(post)
             }}
-            className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 transition text-gray-300 hover:text-white"
-            aria-label="Share post"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              aria-hidden
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16"
-              />
-            </svg>
-          </button>
+          />
         ) : null}
         <VaultEngagementTrailing
           contentRef={vaultContentRef}

@@ -1,5 +1,6 @@
 "use client"
 
+import { useSyncExternalStore } from "react"
 import {
   CartesianGrid,
   Line,
@@ -9,6 +10,32 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
+import { chartTooltipStyles } from "@/lib/chartTheme"
+import {
+  DEFAULT_WEB_APPEARANCE,
+  parseWebAppearance,
+  WEB_APPEARANCE_CHANGE_EVENT,
+  type WebAppearance,
+} from "@/lib/webAppearance"
+
+/** Y-axis dollar labels — light chart surface vs dark / OG navy surfaces. */
+const PROFILE_EQUITY_Y_AXIS_TICK_FILL: Record<WebAppearance, string> = {
+  light: "#64748b",
+  dark: "var(--tt-chart-tick, #b8c4d2)",
+  og: "#cbd5e1",
+}
+
+function readProfileEquityAppearance(): WebAppearance {
+  if (typeof document === "undefined") return DEFAULT_WEB_APPEARANCE
+  const attr = document.documentElement.getAttribute("data-tt-appearance")
+  if (attr) return parseWebAppearance(attr)
+  return DEFAULT_WEB_APPEARANCE
+}
+
+function subscribeProfileEquityAppearance(onStoreChange: () => void) {
+  window.addEventListener(WEB_APPEARANCE_CHANGE_EVENT, onStoreChange)
+  return () => window.removeEventListener(WEB_APPEARANCE_CHANGE_EVENT, onStoreChange)
+}
 
 export type ProfileEquityPoint = {
   index: number
@@ -24,6 +51,13 @@ export default function ProfileEquityLineChart({
   data,
   narrow,
 }: ProfileEquityLineChartProps) {
+  const appearance = useSyncExternalStore(
+    subscribeProfileEquityAppearance,
+    readProfileEquityAppearance,
+    () => DEFAULT_WEB_APPEARANCE,
+  )
+  const yAxisTickFill = PROFILE_EQUITY_Y_AXIS_TICK_FILL[appearance]
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart
@@ -46,7 +80,7 @@ export default function ProfileEquityLineChart({
             stroke: "rgba(148, 163, 184, 0.08)",
           }}
           tick={{
-            fill: "#cbd5e1",
+            fill: yAxisTickFill,
             fontSize: narrow ? 10 : 12,
           }}
           tickFormatter={(value) => {
@@ -63,12 +97,11 @@ export default function ProfileEquityLineChart({
           }}
         />
         <Tooltip
+          {...chartTooltipStyles}
           contentStyle={{
-            backgroundColor: "#0f172a",
-            border: "1px solid rgba(255,255,255,0.12)",
+            ...chartTooltipStyles.contentStyle,
             borderRadius: "0.5rem",
           }}
-          labelStyle={{ color: "#cbd5e1" }}
           formatter={(value) => {
             const n = Number(value)
             if (!Number.isFinite(n)) return ["$0", "Equity"]

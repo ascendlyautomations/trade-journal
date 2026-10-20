@@ -1,3 +1,4 @@
+import { compareDashboardTradesChronological } from "./dashboardTradeDate"
 import { averageRrFromTrades } from "./tradeRr"
 import {
   accountRowForTrade,
@@ -241,10 +242,7 @@ export function buildEquityCurveFromTrades(trades: any[]): EquityCurvePoint[] {
     ]
   }
 
-  const sorted = [...trades].sort(
-    (a, b) =>
-      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-  )
+  const sorted = [...trades].sort(compareDashboardTradesChronological)
 
   const points: EquityCurvePoint[] = [{ step: 0, equity: 0 }]
   let cum = 0

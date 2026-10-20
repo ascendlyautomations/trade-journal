@@ -14,6 +14,11 @@ import type { HoldTimeStats } from "@/lib/dashboardHoldTimeStats"
 import type { LongShortPerformance } from "@/lib/dashboardLongShortStats"
 import { formatCurrency } from "@/lib/formatCurrency"
 import { formatProfitFactor, formatRR } from "@/lib/formatDisplay"
+import {
+  dashboardSignedPnlTailwindClass,
+  dashboardSignedPnlKpiClass,
+  formatDashboardWorstDayDisplay,
+} from "@/lib/dashboardDailyRecordsDisplay"
 import { formatHoldDurationSeconds } from "@/lib/tradeTimingDisplay"
 
 type ExpectancySummary = { expectancy: number } | null
@@ -47,6 +52,7 @@ export type DashboardDesktopTerminalProps = {
   avgLoss: number
   biggestLoss: number
   worstDay: number
+  periodTradingDayCount: number
   maxDrawdown: number
   showDrawdown: boolean
   bestWinStreak: number
@@ -59,6 +65,10 @@ export type DashboardDesktopTerminalProps = {
   hourData: TradingHoursSummary
   longShortPerformance: LongShortPerformance
   holdTimeStats: HoldTimeStats
+  liveAccountValue?: ReactNode
+  drawdownLimitLineY?: number | null
+  equityCurveUsesAccountBalance?: boolean
+  showPersonalDrawdownFloor?: boolean
 }
 
 function pnlClass(value: number) {
@@ -97,15 +107,20 @@ function MetricLine({
   label,
   value,
   valueClassName = "text-white",
+  valueTitle,
 }: {
   label: string
   value: ReactNode
   valueClassName?: string
+  valueTitle?: string
 }) {
   return (
     <div className="flex items-baseline justify-between gap-3 border-b border-white/10 py-2 last:border-b-0">
       <span className="tt-dash-label">{label}</span>
-      <span className={`text-sm font-semibold tabular-nums ${valueClassName}`}>
+      <span
+        className={`text-sm font-semibold tabular-nums ${valueClassName}`}
+        title={valueTitle}
+      >
         {value}
       </span>
     </div>
@@ -116,15 +131,19 @@ function KpiCell({
   label,
   value,
   valueClassName = "tt-dash-value",
+  valueTitle,
 }: {
   label: string
   value: ReactNode
   valueClassName?: string
+  valueTitle?: string
 }) {
   return (
     <div className="tt-dash-strip-cell">
       <p className="tt-dash-label">{label}</p>
-      <p className={valueClassName}>{value}</p>
+      <p className={valueClassName} title={valueTitle}>
+        {value}
+      </p>
     </div>
   )
 }
@@ -298,6 +317,7 @@ export default function DashboardDesktopTerminal({
   avgLoss,
   biggestLoss,
   worstDay,
+  periodTradingDayCount,
   maxDrawdown,
   showDrawdown,
   bestWinStreak,
@@ -310,7 +330,17 @@ export default function DashboardDesktopTerminal({
   hourData,
   longShortPerformance,
   holdTimeStats,
+  liveAccountValue = null,
+  drawdownLimitLineY = null,
+  equityCurveUsesAccountBalance = false,
+  showPersonalDrawdownFloor = false,
 }: DashboardDesktopTerminalProps) {
+  const worstDayDisplay = formatDashboardWorstDayDisplay(
+    periodTradingDayCount,
+    worstDay,
+    formatCurrency
+  )
+
   const sessionMax = Math.max(
     1,
     ...DASHBOARD_SESSION_DISPLAY_ORDER.map((name) =>
@@ -351,6 +381,8 @@ export default function DashboardDesktopTerminal({
           </p>
           <p className="mt-1 text-xs text-gray-400">Net P&amp;L · {timeframeLabel}</p>
 
+          {liveAccountValue}
+
           <div className="mt-4">
             <MetricLine label="Win Rate" value={`${winRate.toFixed(1)}%`} />
             <MetricLine
@@ -376,7 +408,7 @@ export default function DashboardDesktopTerminal({
                 <MetricLine
                   label="Best Day"
                   value={formatCurrency(bestDay)}
-                  valueClassName={pnlClass(bestDay)}
+                  valueClassName={dashboardSignedPnlTailwindClass(bestDay)}
                 />
                 {showDrawdown ? (
                   <MetricLine
@@ -395,6 +427,7 @@ export default function DashboardDesktopTerminal({
               <MetricLine label="Best Win Streak" value={bestWinStreak} />
             )}
           </div>
+
         </Panel>
 
         <Panel className="min-w-0">
@@ -404,6 +437,9 @@ export default function DashboardDesktopTerminal({
               data={equityData}
               totalTrades={totalTrades}
               timeframeLabel={timeframeLabel}
+              drawdownLimitLineY={drawdownLimitLineY}
+              equityCurveUsesAccountBalance={equityCurveUsesAccountBalance}
+              showPersonalDrawdownFloor={showPersonalDrawdownFloor}
             />
           ) : showEquity ? (
             <div className="tt-dash-equity-plot animate-pulse rounded-lg bg-black/20" />
@@ -447,8 +483,13 @@ export default function DashboardDesktopTerminal({
           />
           <KpiCell
             label="Worst Day"
-            value={formatCurrency(worstDay)}
-            valueClassName="text-lg font-semibold tabular-nums text-red-400"
+            value={worstDayDisplay.displayValue}
+            valueClassName={
+              worstDayDisplay.toneValue == null
+                ? "text-lg font-semibold tabular-nums tt-dash-value"
+                : dashboardSignedPnlKpiClass(worstDayDisplay.toneValue)
+            }
+            valueTitle={worstDayDisplay.valueTitle}
           />
           {streakData ? (
             <KpiCell

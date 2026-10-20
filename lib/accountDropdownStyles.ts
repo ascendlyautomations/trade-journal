@@ -27,6 +27,10 @@ export const ACCOUNT_DROPDOWN_ACTION_CLASS =
 export const ACCOUNT_DROPDOWN_DESKTOP_WIDTH_CLASS =
   "md:min-w-[20rem] md:w-[20rem] md:shrink-0"
 
+/** Dashboard filter bar only — ~15% wider than default, same 34px trigger height. */
+export const ACCOUNT_DROPDOWN_DASHBOARD_DESKTOP_WIDTH_CLASS =
+  "md:min-w-[23rem] md:w-[23rem] md:shrink-0"
+
 export const ACCOUNT_DROPDOWN_PANEL_CLASS =
   "absolute z-[110] mt-1 max-h-60 w-full max-md:w-max max-md:min-w-full max-md:max-w-[calc(100vw-1.5rem)] overflow-x-hidden overflow-y-auto rounded-lg border border-white/10 bg-[#0f172a] shadow-lg"
 
@@ -41,6 +45,12 @@ export const ACCOUNT_DROPDOWN_FILTER_TRIGGER_CLASS =
 /** Outer wrapper for filter-mode picker in TradeFilterBar. */
 export const ACCOUNT_DROPDOWN_FILTER_WRAPPER_CLASS =
   `w-full md:w-auto ${ACCOUNT_DROPDOWN_DESKTOP_WIDTH_CLASS}`
+
+export const ACCOUNT_DROPDOWN_DASHBOARD_FILTER_TRIGGER_CLASS =
+  `flex w-full min-w-0 cursor-pointer items-center justify-between h-[34px] rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-left text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 ${ACCOUNT_DROPDOWN_DASHBOARD_DESKTOP_WIDTH_CLASS}`
+
+export const ACCOUNT_DROPDOWN_DASHBOARD_FILTER_WRAPPER_CLASS =
+  `w-full md:w-auto ${ACCOUNT_DROPDOWN_DASHBOARD_DESKTOP_WIDTH_CLASS}`
 
 /** Outer wrapper for submission-mode picker (Input Trade, Quick Trade, /app). */
 export const ACCOUNT_DROPDOWN_SUBMISSION_WRAPPER_CLASS =

@@ -35,6 +35,7 @@ export type TradesPageTradeCardProps = {
   onImageClick: (imageUrl: string) => void
   /** When set, suppress list screenshot to avoid duplicate loads with the edit modal. */
   suppressScreenshot?: boolean
+  onTradeUpdated?: (patch: Record<string, unknown>) => void
 }
 
 function TradesPageTradeCard({
@@ -51,6 +52,7 @@ function TradesPageTradeCard({
   attachedReel = null,
   onOpenReplay,
   suppressScreenshot = false,
+  onTradeUpdated,
 }: TradesPageTradeCardProps) {
   const entryPrice = trade.entry_price ?? trade.entry ?? null
   const exitPrice = trade.exit_price ?? trade.exit ?? null
@@ -323,6 +325,7 @@ function TradesPageTradeCard({
               <span className="text-gray-400">Notes:</span> -
             </p>
           )}
+
         </div>
 
         <div

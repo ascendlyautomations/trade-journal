@@ -140,6 +140,7 @@ export type DashboardAccountV1 = {
   note?: string | null
   consistency?: number | null
   max_drawdown?: number | null
+  drawdown_type?: string | null
   daily_drawdown?: number | null
   profit_target?: number | null
   winning_days?: number | null

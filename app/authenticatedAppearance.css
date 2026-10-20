@@ -11,15 +11,18 @@
 html[data-tt-appearance="dark"] {
   color-scheme: dark;
   --tt-page: #0d1117;
-  --tt-surface: #161b22;
-  --tt-surface-nested: #1c2128;
-  --tt-surface-raised: #21262d;
-  --tt-surface-hover: #292e36;
-  --tt-border: #30363d;
-  --tt-border-strong: #3d444d;
+  --tt-surface: #222a34;
+  --tt-surface-nested: #1a222c;
+  --tt-surface-raised: #2a3440;
+  --tt-surface-hover: #303a48;
+  --tt-border: #3a4654;
+  --tt-border-strong: #4a5664;
   --tt-text: #f0f3f6;
-  --tt-text-muted: #b1bac4;
-  --tt-text-tertiary: #7d8590;
+  --tt-text-muted: #c0cad6;
+  --tt-text-tertiary: #a8b3c2;
+  --tt-text-label: #b8c4d2;
+  --tt-text-placeholder: #939dab;
+  --tt-text-disabled: #7d8590;
   --tt-accent: #4ec4e0;
   --tt-accent-fill: #4ec4e0;
   --tt-on-accent: #041018;
@@ -32,8 +35,9 @@ html[data-tt-appearance="dark"] {
   --tt-positive-soft: rgb(61 220 151 / 0.14);
   --tt-negative-soft: rgb(255 123 114 / 0.14);
   --tt-warning-soft: rgb(227 179 65 / 0.14);
-  --tt-chart-grid: #30363d;
-  --tt-tooltip-bg: #21262d;
+  --tt-chart-grid: #3a4654;
+  --tt-chart-tick: #b8c4d2;
+  --tt-tooltip-bg: #2a3440;
   --tt-tooltip-text: #f0f3f6;
   --tt-ring: rgb(78 196 224 / 0.28);
   --tt-leaderboard-you-line: #ffffff;
@@ -166,6 +170,17 @@ html[data-tt-appearance="dark"] [data-tt-app],
 html[data-tt-appearance="light"] [data-tt-app] {
   background-color: var(--tt-page);
   background-image: none;
+}
+
+html[data-tt-appearance="dark"] :is(
+    [data-tt-app],
+    [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
+    [role="menu"],
+    [role="listbox"],
+    .z-\[10070\]
+  ) {
+  --placeholder: var(--tt-text-placeholder);
+  --color-placeholder: var(--tt-text-placeholder);
 }
 
 html[data-tt-appearance="dark"] .tt-app-navbar,
@@ -599,6 +614,35 @@ html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-lab
   color: var(--tt-text-tertiary);
 }
 
+/* Labels, trade field prefixes, and similar — above generic gray-400 tertiary. */
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(
+    label,
+    span.text-gray-400,
+    h3.text-sm.text-gray-400,
+    .text-xs.font-semibold.text-gray-400,
+    .text-xs.font-medium.text-gray-400,
+    .text-\[10px\].text-gray-400,
+    .text-\[11px\].text-gray-400
+  ):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ) {
+  color: var(--tt-text-label);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.text-white\/50, .text-white\/60, .text-white\/70):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ):not(:disabled):not([aria-disabled="true"]) {
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(button, [role="button"]):is(:disabled, [aria-disabled="true"]).text-white\/60 {
+  color: var(--tt-text-disabled);
+  opacity: 1;
+}
+
 html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
   :is(.text-gray-400, .text-gray-500, .text-slate-400, .text-slate-500):not(
     :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
@@ -607,7 +651,16 @@ html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-la
 }
 
 html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
-  .placeholder\:text-gray-400::placeholder,
+  :is(
+    .placeholder\:text-gray-400::placeholder,
+    .placeholder\:text-gray-500::placeholder,
+    input::placeholder,
+    textarea::placeholder
+  ):not(:where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)) {
+  color: var(--tt-text-placeholder);
+  opacity: 1;
+}
+
 html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
   .placeholder\:text-gray-400::placeholder {
   color: var(--tt-text-tertiary);
@@ -801,7 +854,10 @@ html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-value-neg {
   color: var(--tt-negative);
 }
 
-html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-section-subtitle,
+html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-section-subtitle {
+  color: var(--tt-text-label);
+}
+
 html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-section-subtitle,
 html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-checkin p,
 html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-checkin p {
@@ -849,7 +905,7 @@ html[data-tt-appearance="light"] :is(
 }
 
 html[data-tt-appearance="dark"] [data-tt-app] .recharts-cartesian-axis-tick text {
-  fill: var(--tt-text-tertiary);
+  fill: var(--tt-chart-tick);
 }
 
 html[data-tt-appearance="light"] :is(
@@ -1018,6 +1074,24 @@ html[data-tt-appearance="light"] [data-tt-app] #settings-avatar:hover::-webkit-f
   background-color: var(--tt-surface-hover);
 }
 
+html[data-tt-appearance="light"] [data-tt-create-page] .tt-create-post-file {
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="light"] [data-tt-create-page] .tt-create-post-file::file-selector-button,
+html[data-tt-appearance="light"] [data-tt-create-page] .tt-create-post-file::-webkit-file-upload-button {
+  background-color: var(--tt-surface);
+  color: var(--tt-text);
+  border: 1px solid var(--tt-border-strong);
+}
+
+html[data-tt-appearance="light"] [data-tt-create-page] .tt-create-post-file:hover::file-selector-button,
+html[data-tt-appearance="light"] [data-tt-create-page] .tt-create-post-file:hover::-webkit-file-upload-button {
+  background-color: var(--tt-surface-hover);
+  color: var(--tt-text);
+  border-color: var(--tt-border-strong);
+}
+
 /* Dashboard and Trades toolbars: neutral buttons use the All Modes surface and border. */
 html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .relative.z-50.rounded-xl.border.bg-white\/5 :is(button, a).bg-white\/10:not(.bg-blue-500):not(.tt-dash-selected):not(.tt-trades-chip-selected),
 html[data-tt-appearance="light"] [data-tt-native-surface="trades"] .relative.z-50.rounded-xl.border.bg-white\/5 :is(button, a).bg-white\/10:not(.bg-blue-500):not(.tt-dash-selected):not(.tt-trades-chip-selected) {
@@ -1161,6 +1235,18 @@ html[data-tt-appearance="dark"] [data-tt-app] .tt-leaderboard-chart-legend {
   color: var(--tt-text-muted);
 }
 
+/* Web Calendar — All Accounts / All Modes filter triggers (dark only). */
+html[data-tt-appearance="dark"]
+  [data-tt-native-surface="calendar"]
+  [data-tt-calendar-filters]
+  [role="combobox"] {
+  height: 34px;
+  min-height: 34px;
+  box-sizing: border-box;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
 /* Web Calendar — day cell P&L and trade counts on tinted backgrounds. */
 html[data-tt-appearance="light"] :is([data-tt-native-surface="calendar"], .tt-web-calendar)
   :is(
@@ -1253,6 +1339,25 @@ html[data-tt-appearance="light"] .tt-vault-home .text-blue-200 {
 
 html[data-tt-appearance="light"] .tt-vault-home .text-blue-400 {
   color: var(--tt-accent);
+}
+
+/* Profile → Stats tab — light contrast */
+html[data-tt-appearance="light"] .tt-profile-stats .tt-profile-stats-mode-btn-inactive {
+  background-color: var(--tt-surface);
+  border-color: var(--tt-border);
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"] .tt-profile-stats .tt-profile-stats-mode-btn-inactive:hover {
+  background-color: var(--tt-surface-hover);
+  border-color: var(--tt-border-strong);
+}
+
+html[data-tt-appearance="light"] .tt-profile-stats .tt-profile-stats-mode-btn-active {
+  background-color: var(--tt-accent-fill) !important;
+  border-color: transparent !important;
+  color: var(--tt-on-accent) !important;
+  box-shadow: none;
 }
 
 /* Psychology routes — light contrast */
