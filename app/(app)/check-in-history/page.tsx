@@ -2,7 +2,10 @@
 
 import Link from "next/link"
 import CheckInHistoryHome from "@/app/components/psychology/CheckInHistoryHome"
-import { usePsychologyJournalInputs } from "@/lib/psychology/usePsychologyJournalInputs"
+import {
+  PSYCHOLOGY_JOURNAL_EMPTY_DASHBOARD_TRADES,
+  usePsychologyJournalInputs,
+} from "@/lib/psychology/usePsychologyJournalInputs"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 
@@ -11,7 +14,7 @@ export default function CheckInHistoryPage() {
   const { user } = useUserProfile()
   const { checkIns, trades, ready, loadError, refresh } = usePsychologyJournalInputs(
     user?.id,
-    []
+    PSYCHOLOGY_JOURNAL_EMPTY_DASHBOARD_TRADES
   )
 
   return (

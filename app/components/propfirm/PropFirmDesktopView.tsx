@@ -413,7 +413,9 @@ export default function PropFirmDesktopView({
                   <span
                     key={index}
                     className={`h-2 w-2 rounded-full ${
-                      index < model.winningDays ? "bg-emerald-400" : "bg-white/15"
+                      index < model.winningDays
+                        ? "tt-propfirm-winning-day-dot-met bg-emerald-400"
+                        : "tt-propfirm-winning-day-dot-pending bg-white/15"
                     }`}
                   />
                 ))}

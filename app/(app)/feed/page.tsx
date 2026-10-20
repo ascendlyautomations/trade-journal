@@ -74,6 +74,12 @@ import {
   type FeedItem,
 } from "../../components/feed/feedPostHelpers"
 import {
+  isAuthorBlocked,
+  loadBlockedPeerIdsForViewer,
+  replaceBlockedPeerIds,
+  subscribeBlockedPeerList,
+} from "@/lib/blockedPeersClient"
+import {
   type ActiveStoryRow,
   type StoryBarProfile,
   deleteStoryById,
@@ -209,6 +215,7 @@ function FeedPageContent() {
   const { isNativeIos } = usePlatformPresentation()
   const authChecked = !!user?.id
   const [posts, setPosts] = useState<any[]>([])
+  const [blockedListRevision, setBlockedListRevision] = useState(0)
   const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(false)
   const [hasMore, setHasMore] = useState(true)
@@ -234,6 +241,23 @@ function FeedPageContent() {
   const feedV2CursorRef = useRef<string | null>(null)
   const userIdRef = useRef<string | null>(null)
   userIdRef.current = user?.id ?? null
+
+  useEffect(() => {
+    if (!user?.id) return
+    void loadBlockedPeerIdsForViewer(user.id).then((ids) => {
+      replaceBlockedPeerIds(ids)
+      setBlockedListRevision((n) => n + 1)
+    })
+  }, [user?.id])
+
+  useEffect(() => {
+    return subscribeBlockedPeerList(() => {
+      setPosts((prev) =>
+        prev.filter((post) => !isAuthorBlocked(feedContentOwnerUserId(post)))
+      )
+      setBlockedListRevision((n) => n + 1)
+    })
+  }, [])
   const profileRef = useRef(profile)
   profileRef.current = profile
   const feedInitKeyRef = useRef<string | null>(null)
@@ -2850,9 +2874,16 @@ function FeedPageContent() {
     [user, showPopup, removeLoadedComment, persistFeedSnapshot]
   )
 
+  const postsVisibleToViewer = useMemo(() => {
+    void blockedListRevision
+    return posts.filter(
+      (post) => !isAuthorBlocked(feedContentOwnerUserId(post))
+    )
+  }, [blockedListRevision, posts])
+
   const { uniquePosts, postsById } = useMemo(
-    () => buildFeedPostsIndex(posts),
-    [posts]
+    () => buildFeedPostsIndex(postsVisibleToViewer),
+    [postsVisibleToViewer]
   )
 
   const togglePinComment = useCallback(

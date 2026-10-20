@@ -20,6 +20,10 @@ html.tt-native-ios [data-tt-feed-rail] {
   display: none !important;
 }
 
+html.tt-native-ios .tt-notifications-prefs-panel {
+  display: none !important;
+}
+
 /*
  * Large desktop: keep the 720px Feed on the same track as the previous
  * centered 1024px workspace (720 + 24 + 280). The rail sits in the open

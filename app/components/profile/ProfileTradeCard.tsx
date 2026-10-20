@@ -10,7 +10,6 @@ import {
   TradeSocialEngagementBar,
   TradeSocialCommentsSection,
 } from "@/app/components/TradeSocialLayer"
-import ShareTradeButton from "@/app/components/ShareTradeButton"
 import { formatRR, formatTradePoints } from "@/lib/formatDisplay"
 import { resolveTradePoints } from "@/lib/resolveTradePoints"
 import TradeCardTimingBlock from "@/app/components/TradeCardTimingBlock"
@@ -273,16 +272,6 @@ export default function ProfileTradeCard({
         />
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        {!(inDetailModal && showInteractions) ? (
-          <div onClick={(e) => e.stopPropagation()}>
-            <ShareTradeButton
-              variant="icon"
-              trade={trade}
-              profile={shareProfile ?? null}
-              mode="message-only"
-            />
-          </div>
-        ) : null}
         {canManageTrade ? (
           <div onClick={(e) => e.stopPropagation()}>
             <DropdownMenu

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { isDemoUserId } from "@/lib/demo/constants"
 import {
   CHECK_IN_HISTORY_DAY_WINDOW,
@@ -20,16 +20,31 @@ import type { PsychologyReportTrade } from "@/lib/psychology/reports/types"
 import { supabase } from "@/lib/supabaseClient"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
+/** Stable empty dashboard trade list — do not pass inline `[]` (breaks hook deps). */
+export const PSYCHOLOGY_JOURNAL_EMPTY_DASHBOARD_TRADES: ReadonlyArray<
+  Record<string, unknown>
+> = []
+
 export function usePsychologyJournalInputs(
   userId: string | null | undefined,
   dashboardTrades: ReadonlyArray<Record<string, unknown>>
 ) {
-  const [checkIns, setCheckIns] = useState<TraderDailyCheckIn[]>([])
+  const start = checkInHistoryStartDateKey(CHECK_IN_HISTORY_DAY_WINDOW)
+  const end = todayCheckInDateKey()
+  const [checkIns, setCheckIns] = useState<TraderDailyCheckIn[]>(() => {
+    if (!userId || isDemoUserId(userId)) return []
+    return readRecentCheckInsCache(userId, start, end) ?? []
+  })
   const [trades, setTrades] = useState<PsychologyReportTrade[]>([])
-  const [ready, setReady] = useState(false)
+  const [ready, setReady] = useState(() => {
+    if (!userId || isDemoUserId(userId)) return true
+    return readRecentCheckInsCache(userId, start, end) !== undefined
+  })
   const [loadError, setLoadError] = useState<string | null>(null)
+  const dashboardTradesRef = useRef(dashboardTrades)
+  dashboardTradesRef.current = dashboardTrades
 
-  const load = useCallback(async (options?: { force?: boolean }) => {
+  const load = useCallback(async (_options?: { force?: boolean }) => {
     if (!userId) {
       setReady(true)
       return
@@ -47,22 +62,20 @@ export function usePsychologyJournalInputs(
         setReady(true)
         return
       }
-      const start = checkInHistoryStartDateKey(CHECK_IN_HISTORY_DAY_WINDOW)
-      const end = todayCheckInDateKey()
-      const cached = !options?.force
-        ? readRecentCheckInsCache(userId, start, end)
-        : undefined
-      const [journalTrades, loadedCheckIns] = await Promise.all([
-        ensurePsychologyJournalTrades(userId, dashboardTrades),
-        cached !== undefined
-          ? Promise.resolve(cached)
-          : fetchPsychologyDashboardCheckIns(supabase, userId),
-      ])
-      if (cached === undefined) {
-        writeRecentCheckInsCache(userId, start, end, loadedCheckIns, {
-          authVerified: true,
-        })
+      const windowStart = checkInHistoryStartDateKey(CHECK_IN_HISTORY_DAY_WINDOW)
+      const windowEnd = todayCheckInDateKey()
+      const cached = readRecentCheckInsCache(userId, windowStart, windowEnd)
+      if (cached !== undefined) {
+        setCheckIns(cached)
+        setReady(true)
       }
+      const [journalTrades, loadedCheckIns] = await Promise.all([
+        ensurePsychologyJournalTrades(userId, dashboardTradesRef.current),
+        fetchPsychologyDashboardCheckIns(supabase, userId),
+      ])
+      writeRecentCheckInsCache(userId, windowStart, windowEnd, loadedCheckIns, {
+        authVerified: true,
+      })
       setTrades(journalTrades)
       setCheckIns(loadedCheckIns)
       setLoadError(null)
@@ -71,12 +84,23 @@ export function usePsychologyJournalInputs(
     } finally {
       setReady(true)
     }
-  }, [dashboardTrades, userId])
+  }, [userId])
 
   useEffect(() => {
-    setReady(false)
+    if (!userId) {
+      setReady(true)
+      return
+    }
+    if (isDemoUserId(userId)) {
+      setReady(true)
+      return
+    }
+    const cached = readRecentCheckInsCache(userId, start, end)
+    if (cached === undefined) {
+      setReady(false)
+    }
     void load()
-  }, [load])
+  }, [end, load, start, userId])
 
   useEffect(() => {
     return subscribeCheckInCaches(() => {

@@ -100,6 +100,7 @@ import {
 } from "@/lib/settingsProfileSync"
 import { recordedAffiliateEarnings } from "@/lib/affiliateEarnings"
 import AppearanceSettingsSection from "../components/AppearanceSettingsSection"
+import SettingsPrivacySection from "@/app/components/settings/SettingsPrivacySection"
 import VaultHome from "../components/vault/VaultHome"
 import { readSettingsProfileCache } from "@/lib/settingsProfileCache"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
@@ -114,6 +115,7 @@ type TabId =
   | "profile"
   | "affiliate"
   | "account"
+  | "privacy"
   | "subscription"
   | "trading-accounts"
   | "broker-integrations"
@@ -127,6 +129,7 @@ function resolveSettingsTabFromHash(hash: string): TabId | null {
     requested === "profile" ||
     requested === "affiliate" ||
     requested === "account" ||
+    requested === "privacy" ||
     requested === "subscription" ||
     requested === "notifications" ||
     requested === "appearance" ||
@@ -265,6 +268,12 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
         label: "Notifications",
         description: "Choose which alerts you receive",
       },
+      {
+        kind: "panel",
+        id: "privacy",
+        label: "Privacy",
+        description: "Profile visibility, blocks, and your reports",
+      },
     ],
   },
   {
@@ -382,42 +391,6 @@ function settingsNavItemClass(selected: boolean): string {
       ? "bg-white/15 ring-1 ring-blue-400/50"
       : "bg-white/5 hover:bg-white/10"
   }`
-}
-
-function SettingsPrivateProfileControl({
-  isPrivate,
-  onToggle,
-  labelId,
-}: {
-  isPrivate: boolean
-  onToggle: () => void
-  labelId: string
-}) {
-  return (
-    <div
-      className="flex flex-col gap-3 rounded-xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between"
-      aria-labelledby={labelId}
-    >
-      <div>
-        <p id={labelId} className="font-medium text-white">
-          Private profile
-        </p>
-        <p className="text-xs text-gray-400">
-          Only followers can view your full profile
-        </p>
-      </div>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-pressed={isPrivate}
-        className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition ${
-          isPrivate ? "bg-blue-500 text-white" : "bg-white/10 text-white"
-        }`}
-      >
-        {isPrivate ? "On" : "Off"}
-      </button>
-    </div>
-  )
 }
 
 export default function SettingsPage() {
@@ -1316,6 +1289,25 @@ export default function SettingsPage() {
 
             {activeTab === "appearance" && <AppearanceSettingsSection />}
 
+            {activeTab === "privacy" && user?.id ? (
+              <SettingsPrivacySection
+                userId={user.id}
+                isPrivate={isPrivate}
+                onIsPrivateChange={setIsPrivate}
+                onProfilePatch={(patch) => {
+                  const nextProfile = { ...(profile ?? {}), ...patch }
+                  setProfile(nextProfile)
+                  persistSettingsProfileEverywhere(user.id, nextProfile)
+                  setSharedProfile((prev) =>
+                    settingsSaveToSharedSlice(nextProfile, prev)
+                  )
+                }}
+                showError={(message) =>
+                  showPopup({ type: "error", message })
+                }
+              />
+            ) : null}
+
             {activeTab === "vault" && (
               <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
                 <VaultHome />
@@ -1399,12 +1391,6 @@ export default function SettingsPage() {
                     </p>
                   )}
                 </div>
-
-                <SettingsPrivateProfileControl
-                  isPrivate={isPrivate}
-                  onToggle={() => setIsPrivate(!isPrivate)}
-                  labelId="settings-private-profile-label"
-                />
 
                 <div>
                   <label htmlFor="settings-bio" className="mb-0.5 block text-sm text-gray-400">

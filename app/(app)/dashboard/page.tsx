@@ -1458,7 +1458,6 @@ export default function Dashboard() {
       <DashboardPsychologyInsights
         userId={user.id}
         trades={filteredTrades}
-        accountFilter={accountFilter}
         tradesReady={!statsStillLoading || dashboardHasCachedData}
       />
     </DashboardPsychologyInsightsPlacement>

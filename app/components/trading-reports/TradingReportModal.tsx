@@ -1,5 +1,6 @@
 "use client"
 
+import "./tradingReportLight.css"
 import SharedTradeMessageCard from "@/app/components/SharedTradeMessageCard"
 import Modal from "@/app/components/ui/Modal"
 import { dashboardInsightCardClass } from "@/app/components/dashboard/dashboardInsightStyles"
@@ -26,6 +27,7 @@ type TradingReportModalProps = {
   psychologyContent?: ReactNode
   hidePeriodSelector?: boolean
   bestTradeHeading?: string
+  onOpenYearlyReports?: () => void
 }
 
 function MetricCell({ label, value }: { label: string; value: string }) {
@@ -65,6 +67,7 @@ export default function TradingReportModal({
   psychologyContent,
   hidePeriodSelector = false,
   bestTradeHeading,
+  onOpenYearlyReports,
 }: TradingReportModalProps) {
   const metrics = report?.metrics
   const showPsychology = tab === "psychology"
@@ -119,7 +122,7 @@ export default function TradingReportModal({
           ) : null}
 
           {hidePeriodSelector ? null : (
-            <div className="flex flex-wrap gap-2 pt-2">
+            <div className="flex flex-wrap items-center gap-2 pt-2">
               {TRADING_REPORT_PERIOD_OPTIONS.map((option) => (
                 <button
                   key={option.key}
@@ -134,6 +137,15 @@ export default function TradingReportModal({
                   {option.label}
                 </button>
               ))}
+              {onOpenYearlyReports ? (
+                <button
+                  type="button"
+                  onClick={onOpenYearlyReports}
+                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-gray-200 transition hover:bg-white/10 md:text-sm"
+                >
+                  Yearly reports
+                </button>
+              ) : null}
             </div>
           )}
         </header>
@@ -269,7 +281,10 @@ export default function TradingReportModal({
             ) : null}
 
             {bestTrade ? (
-              <section className="space-y-3">
+              <section
+                className="space-y-3"
+                data-tt-trading-report-best-trade=""
+              >
                 <h3 className="text-sm font-semibold text-white">
                   🏆{" "}
                   {bestTradeHeading ??
@@ -281,6 +296,7 @@ export default function TradingReportModal({
                   initialTrade={bestTrade}
                   onViewTrade={onViewTrade}
                   showSocialLayer={false}
+                  surface="report"
                 />
               </section>
             ) : null}

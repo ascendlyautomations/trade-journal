@@ -511,7 +511,7 @@ export function SkeletonLeaderboardPage() {
 
 export function SkeletonNotificationsPage() {
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
+    <div className="flex w-full min-w-0 flex-col gap-4">
       <div>
         <Skeleton className="h-3 w-16" />
         <Skeleton className="mt-2 h-8 w-48" />

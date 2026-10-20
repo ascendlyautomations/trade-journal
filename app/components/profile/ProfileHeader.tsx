@@ -7,6 +7,7 @@ import { PROFILE_PAGE_AVATAR_PX } from "@/app/components/SafeProfileAvatar"
 import { normalizeTraderType } from "@/lib/traderType"
 import ProfileCreateMenu from "./ProfileCreateMenu"
 import ProfileTradeRoomSection from "./ProfileTradeRoomSection"
+import ProfileVisitorModerationMenu from "./ProfileVisitorModerationMenu"
 import type { ProfileHeaderData } from "./profileTypes"
 
 export type { ProfileHeaderData } from "./profileTypes"
@@ -263,6 +264,16 @@ export default function ProfileHeader({
               />
             </div>
           </div>
+
+          {!isOwnProfile && currentUserId ? (
+            <div className="absolute right-4 top-4 z-10 sm:relative sm:right-auto sm:top-auto sm:mt-0 sm:flex sm:shrink-0 sm:justify-end sm:pt-2">
+              <ProfileVisitorModerationMenu
+                profileId={profile.id}
+                displayName={profile.name || profile.username}
+                viewerUserId={currentUserId}
+              />
+            </div>
+          ) : null}
 
           {isOwnProfile ? (
             <div className="absolute right-4 top-4 z-10 flex items-center gap-2 sm:relative sm:right-auto sm:top-auto sm:mt-0 sm:flex sm:shrink-0 sm:justify-end sm:pt-2">

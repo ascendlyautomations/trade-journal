@@ -5,6 +5,7 @@ import { profilePostPublicUrl } from "@/lib/storagePublicUrl"
 import { isRoomSharePost } from "@/lib/roomSharePost"
 import FeedPostActions from "./FeedPostActions"
 import FeedPostHeader from "./FeedPostHeader"
+import FeedPostModerationMenu from "./FeedPostModerationMenu"
 import FeedPostScreenshot from "./FeedPostScreenshot"
 import FeedRoomShareCard from "./FeedRoomShareCard"
 import type { FeedLikeMeta } from "./FeedPostCard"
@@ -94,6 +95,11 @@ function FeedProfilePostCard({
         metaLabel="Post"
         postedAt={post.created_at}
         preview={preview}
+        trailing={
+          preview ? null : (
+            <FeedPostModerationMenu post={post} viewerUserId={user?.id} />
+          )
+        }
       />
 
       {isRoomSharePost(post) ? (

@@ -60,6 +60,19 @@ export function checkInHistoryDayHasPsychology(
   return psychologyPreviewParts(summary.checkIn).length > 0
 }
 
+/** Distinct days that appear under Check-In History → Psychology. */
+export function countPsychologyCheckInHistoryDays(
+  checkIns: readonly TraderDailyCheckIn[]
+): number {
+  const dates = new Set<string>()
+  for (const row of checkIns) {
+    if (psychologyPreviewParts(row).length > 0) {
+      dates.add(row.checkInDate)
+    }
+  }
+  return dates.size
+}
+
 export function checkInHistoryDayMatchesFilter(
   summary: CheckInHistoryDaySummary,
   filter: CheckInHistoryContentFilter

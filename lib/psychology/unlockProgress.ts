@@ -1,9 +1,6 @@
 import type { TraderDailyCheckIn } from "../dailyCheckIn/types.ts"
-import { checkInsByDate } from "./correlate.ts"
-import {
-  psychologyTradeDateKey,
-  type PsychologyTradeDateFields,
-} from "./tradeDateKey.ts"
+import { countPsychologyCheckInHistoryDays } from "./checkInHistory.ts"
+import type { PsychologyTradeDateFields } from "./tradeDateKey.ts"
 
 /** Port of iOS `PsychologyInsightsUnlockProgress`. */
 export const PSYCHOLOGY_INSIGHTS_REQUIRED_COUNT = 5
@@ -43,8 +40,8 @@ export function displayCheckInDayCountForGate(
 }
 
 /**
- * Check-ins on Eastern trade dates present in the same filtered trade set.
- * Matches iOS `PsychologyInsightsUnlockProgress.compute`.
+ * Check-in days: same count as Check-In History → Psychology filter.
+ * Trades: current filtered dashboard trade count.
  */
 export function computePsychologyInsightsUnlockProgress<
   T extends PsychologyTradeDateFields,
@@ -52,16 +49,8 @@ export function computePsychologyInsightsUnlockProgress<
   trades: readonly T[],
   checkIns: readonly TraderDailyCheckIn[]
 ): PsychologyInsightsUnlockProgress {
-  const byDate = checkInsByDate(checkIns)
-  const tradingDaysWithCheckIn = new Set<string>()
-  for (const trade of trades) {
-    const key = psychologyTradeDateKey(trade)
-    if (key && byDate.has(key)) {
-      tradingDaysWithCheckIn.add(key)
-    }
-  }
   return {
-    tradingDayCheckInCount: tradingDaysWithCheckIn.size,
+    tradingDayCheckInCount: countPsychologyCheckInHistoryDays(checkIns),
     tradeCount: trades.length,
   }
 }

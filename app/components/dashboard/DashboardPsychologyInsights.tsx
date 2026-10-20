@@ -12,7 +12,10 @@ import {
 } from "react"
 import { createPortal } from "react-dom"
 import { useProUpgradeOptional } from "@/app/components/monetization/ProUpgradeProvider"
-import { useRecentDailyCheckIns } from "@/lib/dailyCheckIn/useRecentDailyCheckIns"
+import {
+  PSYCHOLOGY_JOURNAL_EMPTY_DASHBOARD_TRADES,
+  usePsychologyJournalInputs,
+} from "@/lib/psychology/usePsychologyJournalInputs"
 import { buildDashboardPsychologyStats } from "@/lib/psychology/dashboardStats"
 import { focusPsychologySection } from "@/lib/psychology/psychologySessionStore"
 import { psychologySectionIdForCategory } from "@/lib/psychology/sectionId"
@@ -35,8 +38,6 @@ const INSIGHT_PREVIEW_COUNT = 2
 type DashboardPsychologyInsightsProps = {
   userId: string
   trades: DashboardTradeRow[]
-  /** Dashboard account filter — scopes psychology check-in RPC (iOS parity). */
-  accountFilter?: string
   /** False while Dashboard trades have not been hydrated — avoids a 0/5 flash. */
   tradesReady?: boolean
 }
@@ -200,15 +201,16 @@ function PsychologyInsightCardRow({
 export default function DashboardPsychologyInsights({
   userId,
   trades,
-  accountFilter = "all",
   tradesReady = true,
 }: DashboardPsychologyInsightsProps) {
   const router = useRouter()
   const { profile } = useUserProfile()
   const { proFeatureUnlocked } = useProGate(profile)
-  const { checkIns, isReady, checkInsAuthVerified, loadError, refresh } =
-    useRecentDailyCheckIns(userId, { accountFilter })
-  const [reportReady, setReportReady] = useState(false)
+  const { checkIns, ready, loadError, refresh } = usePsychologyJournalInputs(
+    userId,
+    PSYCHOLOGY_JOURNAL_EMPTY_DASHBOARD_TRADES
+  )
+  const [reportReady, setReportReady] = useState(true)
   const [cards, setCards] = useState<PsychologyInsightCard[]>([])
 
   const stats = useMemo(
@@ -222,12 +224,10 @@ export default function DashboardPsychologyInsights({
   )
 
   useEffect(() => {
-    if (!isReady || !tradesReady || !proFeatureUnlocked) {
-      setReportReady(true)
+    if (!ready || !tradesReady || !proFeatureUnlocked) {
       return
     }
     let cancelled = false
-    setReportReady(false)
     void (async () => {
       try {
         const snapshot = await hydratePsychologySession(userId, tradeRecords)
@@ -244,17 +244,9 @@ export default function DashboardPsychologyInsights({
     return () => {
       cancelled = true
     }
-  }, [checkIns, isReady, proFeatureUnlocked, tradeRecords, tradesReady, userId])
+  }, [checkIns, ready, proFeatureUnlocked, tradeRecords, tradesReady, userId])
 
-  const checkInsGateReady =
-    checkInsAuthVerified || checkIns.length > 0 || Boolean(loadError)
-
-  if (
-    !isReady ||
-    !tradesReady ||
-    !checkInsGateReady ||
-    (proFeatureUnlocked && !reportReady)
-  ) {
+  if (!ready || !tradesReady) {
     return <DashboardPsychologyInsightsSkeleton />
   }
 
@@ -317,6 +309,8 @@ export default function DashboardPsychologyInsights({
             {PSYCHOLOGY_INSIGHTS_REQUIRED_COUNT}
           </p>
         </div>
+      ) : !reportReady ? (
+        <DashboardPsychologyInsightsSkeleton />
       ) : cards.length === 0 ? (
         <div className="rounded-xl border border-white/10 bg-white/10 p-4">
           <h3 className="text-sm font-semibold text-white">Not enough data yet</h3>

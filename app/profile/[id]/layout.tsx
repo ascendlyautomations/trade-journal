@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import type { ReactNode } from "react"
+import ContentModerationRoot from "@/app/components/moderation/ContentModerationRoot"
 import {
   buildProfileMetadata,
   fetchProfileForSeo,
@@ -21,5 +22,5 @@ export async function generateMetadata({
 }
 
 export default function ProfileLayout({ children }: ProfileLayoutProps) {
-  return children
+  return <ContentModerationRoot>{children}</ContentModerationRoot>
 }

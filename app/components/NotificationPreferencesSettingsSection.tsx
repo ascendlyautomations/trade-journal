@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import type { NotificationPreferenceKey } from "@/lib/notificationPreferences"
@@ -139,10 +140,13 @@ function SettingsToggle({
 
 type Props = {
   userId: string | undefined
+  /** Full Settings page sections vs compact Activity sidebar panel (web desktop). */
+  layout?: "settings" | "sidebar"
 }
 
 export default function NotificationPreferencesSettingsSection({
   userId,
+  layout = "settings",
 }: Props) {
   const initialCached = useMemo(
     () => (userId ? getCachedNotificationPreferences(userId) : null),
@@ -218,9 +222,18 @@ export default function NotificationPreferencesSettingsSection({
 
   if (!userId) return null
 
+  const panelShellClass =
+    layout === "sidebar"
+      ? "rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-md md:p-5"
+      : "rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm"
+
   if (loading && !preferences) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-gray-400 backdrop-blur-sm">
+      <div
+        className={`${panelShellClass} text-sm text-gray-400 ${
+          layout === "sidebar" ? "tt-notifications-prefs-panel" : ""
+        }`}
+      >
         Loading notification preferences…
       </div>
     )
@@ -228,22 +241,79 @@ export default function NotificationPreferencesSettingsSection({
 
   if (!preferences) return null
 
+  const masterToggle = (
+    <SettingsToggle
+      label="Enable Notifications"
+      checked={masterEnabled}
+      disabled={savingKey === "notifications_enabled"}
+      onChange={(next) => void handleToggle("notifications_enabled", next)}
+    />
+  )
+
+  const categorySections = PREFERENCE_SECTIONS.map((section) => (
+    <section key={section.title}>
+      <h3
+        className={
+          layout === "sidebar"
+            ? "mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-blue-300"
+            : "mb-1 text-sm font-semibold uppercase tracking-wide text-blue-300"
+        }
+      >
+        {section.title}
+      </h3>
+      <div className={layout === "sidebar" ? "mt-1" : "mt-2"}>
+        {section.items.map((item) => (
+          <SettingsToggle
+            key={item.key}
+            label={item.label}
+            description={item.description}
+            checked={Boolean(preferences[item.key])}
+            disabled={controlsDisabled || savingKey === item.key}
+            onChange={(next) => void handleToggle(item.key, next)}
+          />
+        ))}
+      </div>
+    </section>
+  ))
+
+  if (layout === "sidebar") {
+    return (
+      <aside
+        aria-label="Notification preferences"
+        className="tt-notifications-prefs-panel min-w-0 lg:sticky lg:top-[calc(var(--app-header-offset,4rem)+1rem)] lg:self-start"
+      >
+        <div className={panelShellClass}>
+          <div className="mb-4 border-b border-white/10 pb-3">
+            <h2 className="text-sm font-semibold text-white">
+              Notification preferences
+            </h2>
+            <p className="mt-1 text-xs leading-relaxed text-gray-400">
+              Control which alerts you receive. Changes sync with Settings.
+            </p>
+            <Link
+              href="/settings#notifications"
+              className="mt-2 inline-block text-xs font-medium text-blue-300 transition hover:text-blue-200"
+            >
+              Full notification settings →
+            </Link>
+          </div>
+
+          <div className="border-b border-white/10 pb-1">{masterToggle}</div>
+
+          <div className="mt-4 max-h-[min(70vh,720px)] space-y-4 overflow-y-auto pr-0.5 scrollbar-thin">
+            {categorySections}
+          </div>
+        </div>
+      </aside>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
-        <SettingsToggle
-          label="Enable Notifications"
-          checked={masterEnabled}
-          disabled={savingKey === "notifications_enabled"}
-          onChange={(next) => void handleToggle("notifications_enabled", next)}
-        />
-      </section>
+      <section className={panelShellClass}>{masterToggle}</section>
 
       {PREFERENCE_SECTIONS.map((section) => (
-        <section
-          key={section.title}
-          className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm"
-        >
+        <section key={section.title} className={panelShellClass}>
           <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-blue-300">
             {section.title}
           </h3>

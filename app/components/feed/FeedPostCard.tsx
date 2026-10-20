@@ -12,6 +12,7 @@ import { formatPublicAccountTypeLabel } from "@/lib/publicAccountPrivacy"
 import FeedPostActions from "./FeedPostActions"
 import FeedPostBody from "./FeedPostBody"
 import FeedPostHeader from "./FeedPostHeader"
+import FeedPostModerationMenu from "./FeedPostModerationMenu"
 import FeedPostScreenshot from "./FeedPostScreenshot"
 import { postAttachedReel } from "./feedPostHelpers"
 import type { ReelRow } from "@/lib/reels"
@@ -134,6 +135,11 @@ function FeedPostCard({
         }
         postedAt={post.created_at}
         preview={preview}
+        trailing={
+          preview ? null : (
+            <FeedPostModerationMenu post={post} viewerUserId={user?.id} />
+          )
+        }
       />
 
       <FeedPostScreenshot

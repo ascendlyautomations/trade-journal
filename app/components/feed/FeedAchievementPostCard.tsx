@@ -5,6 +5,7 @@ import AchievementCard from "@/app/components/AchievementCard"
 import { achievementFromPost } from "@/lib/achievementPostEngagement"
 import FeedPostActions from "./FeedPostActions"
 import FeedPostHeader from "./FeedPostHeader"
+import FeedPostModerationMenu from "./FeedPostModerationMenu"
 import type { FeedLikeMeta } from "./FeedPostCard"
 
 type FeedAchievementPostCardProps = {
@@ -79,6 +80,9 @@ function FeedAchievementPostCard({
         metaLabel="Achievement"
         metaLabelClassName="font-medium text-amber-400/90"
         postedAt={post.created_at}
+        trailing={
+          <FeedPostModerationMenu post={post} viewerUserId={user?.id} />
+        }
       />
 
       <div className="px-4 pt-3">

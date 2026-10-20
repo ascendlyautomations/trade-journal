@@ -85,3 +85,24 @@ html:not(.tt-native-ios) .tt-propfirm-account-menu [role="option"] {
     grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
   }
 }
+
+/* Eval / in-progress highlights — light appearance (ACTIVE badge, pending rule chips). */
+html[data-tt-appearance="light"] .tt-propfirm-mode
+  :is(
+    .border-amber-500\/35.bg-amber-500\/10,
+    .border-amber-500\/30.bg-amber-500\/10
+  ) {
+  color: var(--tt-warning);
+  background-color: var(--tt-warning-soft);
+  border-color: color-mix(in srgb, var(--tt-warning) 55%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tt-warning) 40%, transparent);
+}
+
+html[data-tt-appearance="light"] .tt-propfirm-mode .tt-propfirm-winning-day-dot-met {
+  background-color: var(--tt-positive);
+}
+
+html[data-tt-appearance="light"] .tt-propfirm-mode .tt-propfirm-winning-day-dot-pending {
+  background-color: color-mix(in srgb, var(--tt-warning) 18%, var(--tt-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tt-warning) 55%, transparent);
+}

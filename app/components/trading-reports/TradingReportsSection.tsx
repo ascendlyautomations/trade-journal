@@ -12,6 +12,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import TradingReportModal, {
   type ReportsModalTab,
 } from "@/app/components/trading-reports/TradingReportModal"
+import YearlyTradingReportModal from "@/app/components/trading-reports/YearlyTradingReportModal"
 import TradingReportsDashboardCard from "@/app/components/trading-reports/TradingReportsDashboardCard"
 import {
   PsychologyReportDetail,
@@ -23,6 +24,10 @@ import type { PsychologyReportPeriodRef } from "@/lib/psychology/reports/types"
 import { usePsychologyReports } from "@/lib/usePsychologyReports"
 import { useTradingReports } from "@/lib/useTradingReports"
 import { tradesSelectedTradeHref } from "@/lib/tradesSelectedTrade"
+import {
+  parseYearlyReportParam,
+  yearlyReportParam,
+} from "@/lib/tradingReports/tradingYearlyReportPeriods"
 import type { TradingReportPeriodKey } from "@/lib/tradingReports/tradingReportTypes"
 
 const VALID_PERIOD_KEYS = new Set<TradingReportPeriodKey>([
@@ -43,9 +48,14 @@ function parseReportSearch(value: string | null): {
   tab: ReportsModalTab
   periodKey?: TradingReportPeriodKey
   psychologyRef?: PsychologyReportPeriodRef
+  yearlyYear?: number
+  yearlyCatalog?: boolean
 } | null {
   if (!value) return null
   if (value === "psychology") return { tab: "psychology" }
+  if (value === "yearly") return { tab: "performance", yearlyCatalog: true }
+  const yearlyYear = parseYearlyReportParam(value)
+  if (yearlyYear != null) return { tab: "performance", yearlyYear }
   const periodKey = parsePeriodKey(value)
   if (periodKey) return { tab: "performance", periodKey }
   const parsed = parsePsychologyReportID(value)
@@ -82,6 +92,8 @@ const TradingReportsSection = forwardRef<
   const [psychologyRef, setPsychologyRef] = useState<PsychologyReportPeriodRef | null>(
     null
   )
+  const [yearlyOpen, setYearlyOpen] = useState(false)
+  const [yearlyYear, setYearlyYear] = useState<number | null>(null)
 
   const psychology = usePsychologyReports(userId, trades, open && tab === "psychology")
 
@@ -171,6 +183,11 @@ const TradingReportsSection = forwardRef<
   useEffect(() => {
     const parsed = parseReportSearch(searchParams.get("report"))
     if (!parsed) return
+    if (parsed.yearlyCatalog || parsed.yearlyYear != null) {
+      setYearlyYear(parsed.yearlyYear ?? null)
+      setYearlyOpen(true)
+      return
+    }
     setOpen(true)
     setTab(parsed.tab)
     if (parsed.periodKey) setPeriodKey(parsed.periodKey)
@@ -207,12 +224,36 @@ const TradingReportsSection = forwardRef<
         />
       </div>
 
+      <YearlyTradingReportModal
+        open={yearlyOpen}
+        onClose={() => {
+          setYearlyOpen(false)
+          setYearlyYear(null)
+          writeReportParam(null)
+        }}
+        trades={trades}
+        initialYear={yearlyYear}
+        onYearChange={(year) => {
+          setYearlyYear(year)
+          if (year != null) writeReportParam(yearlyReportParam(year))
+          else writeReportParam("yearly")
+        }}
+        viewerUserId={userId}
+        onViewTrade={handleViewTrade}
+      />
+
       <TradingReportModal
         open={open}
         onClose={() => {
           setOpen(false)
           setPsychologyRef(null)
           writeReportParam(null)
+        }}
+        onOpenYearlyReports={() => {
+          setOpen(false)
+          setYearlyOpen(true)
+          setYearlyYear(null)
+          writeReportParam("yearly")
         }}
         report={report}
         periodKey={periodKey}

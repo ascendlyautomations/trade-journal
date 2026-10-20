@@ -4,6 +4,7 @@ import { memo, useCallback, useMemo } from "react"
 import FeedReelCardActions from "./FeedReelCardActions"
 import ReelThumbnailPreview from "@/app/components/ReelThumbnailPreview"
 import FeedPostHeader from "./FeedPostHeader"
+import FeedPostModerationMenu from "./FeedPostModerationMenu"
 import FeedReelOwnerMenu from "./FeedReelOwnerMenu"
 import type { FeedLikeMeta } from "./FeedPostCard"
 import { resolveReelCaption, isTradeAttachedReel } from "@/lib/reels"
@@ -107,7 +108,7 @@ function FeedReelCard({
       onKeyDown={handleArticleKeyDown}
       className="cursor-pointer overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-xl"
     >
-      <div className="flex items-center border-b border-white/5">
+      <div className="flex items-center">
         <div className="min-w-0 flex-1">
           <FeedPostHeader
             userId={post.user_id}
@@ -116,20 +117,22 @@ function FeedReelCard({
             metaLabel="Clip"
             metaLabelClassName="font-medium text-violet-400/90"
             postedAt={post.created_at}
+            trailing={
+              canManageReel ? (
+                <FeedReelOwnerMenu
+                  menuOpen={menuOpen}
+                  onMenuToggle={handleMenuToggle}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  onReplaceVideo={handleReplaceVideo}
+                  isTradeAttached={tradeAttached}
+                />
+              ) : (
+                <FeedPostModerationMenu post={post} viewerUserId={user?.id} />
+              )
+            }
           />
         </div>
-        {canManageReel ? (
-          <div className="pr-3">
-            <FeedReelOwnerMenu
-              menuOpen={menuOpen}
-              onMenuToggle={handleMenuToggle}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              onReplaceVideo={handleReplaceVideo}
-              isTradeAttached={tradeAttached}
-            />
-          </div>
-        ) : null}
       </div>
 
       <div className="px-4 pt-3">

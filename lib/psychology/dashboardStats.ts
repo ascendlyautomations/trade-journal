@@ -16,8 +16,8 @@ export type DashboardPsychologyStats = {
 }
 
 /**
- * Filter-aware dashboard stats: unlock and averages both use check-ins
- * whose Eastern date appears on the current filtered trade set.
+ * Unlock check-in days match Check-In History → Psychology; trade count uses
+ * the filtered set. Averages after unlock still use check-ins matched to trades.
  */
 export function buildDashboardPsychologyStats<
   T extends PsychologyTradeDateFields,

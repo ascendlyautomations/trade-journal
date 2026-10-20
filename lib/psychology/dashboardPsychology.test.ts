@@ -90,7 +90,7 @@ describe("PsychologyInsightsUnlockProgress", () => {
     ]
     const progress = computePsychologyInsightsUnlockProgress(trades, checkIns)
     assert.equal(progress.tradeCount, 4)
-    assert.equal(progress.tradingDayCheckInCount, 2)
+    assert.equal(progress.tradingDayCheckInCount, 3)
     assert.equal(showsPsychologyInsightsRequirement(progress), true)
   })
 
@@ -121,17 +121,17 @@ describe("PsychologyInsightsUnlockProgress", () => {
     )
   })
 
-  it("ignores check-ins on days outside the filtered trade set", () => {
+  it("counts all psychology check-in days regardless of filtered trades", () => {
     const filtered = [trade("a", "2026-09-02T14:00:00.000Z", "acct-a")]
     const checkIns = [checkIn("2026-09-02"), checkIn("2026-09-03")]
     const progress = computePsychologyInsightsUnlockProgress(filtered, checkIns)
     assert.equal(progress.tradeCount, 1)
-    assert.equal(progress.tradingDayCheckInCount, 1)
+    assert.equal(progress.tradingDayCheckInCount, 2)
   })
 })
 
 describe("dashboard filter behavior", () => {
-  it("timeframe subsets change unlock counts from the same cached check-ins", () => {
+  it("timeframe subsets change trade unlock count but not check-in days", () => {
     const trades = [
       trade("early", "2026-09-02T14:00:00.000Z"),
       trade("late", "2026-09-10T14:00:00.000Z"),
@@ -144,11 +144,11 @@ describe("dashboard filter behavior", () => {
     const filtered = computePsychologyInsightsUnlockProgress(thisWeek, checkIns)
     assert.equal(all.tradingDayCheckInCount, 2)
     assert.equal(all.tradeCount, 2)
-    assert.equal(filtered.tradingDayCheckInCount, 1)
+    assert.equal(filtered.tradingDayCheckInCount, 2)
     assert.equal(filtered.tradeCount, 1)
   })
 
-  it("account filters change unlock counts without changing stored check-ins", () => {
+  it("account filters change trade unlock count but not check-in days", () => {
     const trades = [
       trade("a1", "2026-09-02T14:00:00.000Z", "acct-a"),
       trade("a2", "2026-09-03T14:00:00.000Z", "acct-a"),
@@ -164,7 +164,7 @@ describe("dashboard filter behavior", () => {
     const filtered = computePsychologyInsightsUnlockProgress(accountA, checkIns)
     assert.equal(all.tradingDayCheckInCount, 3)
     assert.equal(all.tradeCount, 3)
-    assert.equal(filtered.tradingDayCheckInCount, 2)
+    assert.equal(filtered.tradingDayCheckInCount, 3)
     assert.equal(filtered.tradeCount, 2)
     assert.equal(checkIns.length, 3)
   })

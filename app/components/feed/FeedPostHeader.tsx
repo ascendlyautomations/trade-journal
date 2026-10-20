@@ -19,6 +19,8 @@ type FeedPostHeaderProps = {
   /** Custom metadata row (overrides metaLabel/postedAt). */
   meta?: ReactNode
   preview?: boolean
+  /** Report / block overflow (non-owner). */
+  trailing?: ReactNode
 }
 
 function FeedPostHeader({
@@ -31,6 +33,7 @@ function FeedPostHeader({
   metaSuffix,
   meta,
   preview = false,
+  trailing,
 }: FeedPostHeaderProps) {
   const metaRow =
     meta ??
@@ -43,8 +46,8 @@ function FeedPostHeader({
       />
     ) : null)
 
-  const className =
-    "flex cursor-pointer items-center gap-3 border-b border-white/5 px-4 py-2.5 transition-colors" +
+  const linkClassName =
+    "flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors" +
     (preview ? "" : " hover:bg-white/5")
 
   const inner = (
@@ -53,7 +56,7 @@ function FeedPostHeader({
         src={avatarUrl}
         className="h-10 w-10 shrink-0 ring-2 ring-white/10"
       />
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-white md:text-base">
           {username}
         </p>
@@ -62,19 +65,26 @@ function FeedPostHeader({
     </>
   )
 
-  if (preview) {
-    return <div className={className}>{inner}</div>
-  }
-
   return (
-    <Link
-      href={profilePath({ username, id: userId })}
-      prefetch={false}
-      onClick={(e) => e.stopPropagation()}
-      className={className}
-    >
-      {inner}
-    </Link>
+    <div className="flex items-center border-b border-white/5">
+      {preview ? (
+        <div className={linkClassName}>{inner}</div>
+      ) : (
+        <Link
+          href={profilePath({ username, id: userId })}
+          prefetch={false}
+          onClick={(e) => e.stopPropagation()}
+          className={linkClassName}
+        >
+          {inner}
+        </Link>
+      )}
+      {trailing ? (
+        <div className="shrink-0 pr-2" onClick={(e) => e.stopPropagation()}>
+          {trailing}
+        </div>
+      ) : null}
+    </div>
   )
 }
 

@@ -233,7 +233,7 @@ const PROPFIRM_EQUITY_CURVE_SCOPE: PropfirmEquityCurveScope = "lifetime"
 
 function PropfirmPageShell({ children }: { children: ReactNode }) {
   return (
-    <div className="tt-phase3-dark w-full px-3 pb-3 pt-0 text-white md:px-4 md:pb-10">
+    <div className="tt-propfirm-mode tt-phase3-dark w-full px-3 pb-3 pt-0 text-white md:px-4 md:pb-10">
       <div className="relative z-0 mx-auto mt-4 flex w-full max-w-[1600px] flex-col gap-4 px-1 md:px-6">
         {children}
       </div>

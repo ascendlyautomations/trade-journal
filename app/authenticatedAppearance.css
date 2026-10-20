@@ -710,11 +710,27 @@ html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-la
 }
 
 html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
-  :is(.text-yellow-300, .text-yellow-400, .text-amber-300, .text-amber-400, .text-purple-300):not(
+  :is(
+    .text-yellow-300,
+    .text-yellow-400,
+    .text-amber-100,
+    .text-amber-200,
+    .text-amber-300,
+    .text-amber-400,
+    .text-purple-300
+  ):not(
     :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
   ),
 html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
-  :is(.text-yellow-300, .text-yellow-400, .text-amber-300, .text-amber-400, .text-purple-300):not(
+  :is(
+    .text-yellow-300,
+    .text-yellow-400,
+    .text-amber-100,
+    .text-amber-200,
+    .text-amber-300,
+    .text-amber-400,
+    .text-purple-300
+  ):not(
     :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
   ) {
   color: var(--tt-warning);
@@ -741,10 +757,22 @@ html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-la
 }
 
 html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
-  .bg-yellow-500\/20:not(:where([data-tt-share-export] *)),
+  :is(.bg-yellow-500\/20, .bg-amber-500\/10, .bg-amber-500\/15):not(:where([data-tt-share-export] *)),
 html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
-  .bg-yellow-500\/20:not(:where([data-tt-share-export] *)) {
+  :is(.bg-yellow-500\/20, .bg-amber-500\/10, .bg-amber-500\/15):not(:where([data-tt-share-export] *)) {
   background-color: var(--tt-warning-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tt-warning) 35%, transparent);
+}
+
+html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.border-amber-500\/30, .border-amber-500\/35, .border-amber-500\/40):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ),
+html[data-tt-appearance="light"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))
+  :is(.border-amber-500\/30, .border-amber-500\/35, .border-amber-500\/40):not(
+    :where([aria-label="Stories"] *, [aria-label="Clip viewer"] *, [data-tt-share-export] *)
+  ) {
+  border-color: color-mix(in srgb, var(--tt-warning) 45%, transparent);
 }
 
 html[data-tt-appearance="dark"] :is([data-tt-app], [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]))

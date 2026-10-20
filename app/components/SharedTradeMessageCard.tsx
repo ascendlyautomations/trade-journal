@@ -49,6 +49,8 @@ export type SharedTradeMessageCardProps = {
   deferUntilVisible?: boolean
   /** Use a bandwidth-capped message preview while retaining the original lightbox. */
   optimizeMessagePreview?: boolean
+  /** Trading report best-trade: light-mode styling via `tradingReportLight.css`. */
+  surface?: "message" | "report"
 }
 
 /**
@@ -68,7 +70,10 @@ export default function SharedTradeMessageCard({
   hideViewTradeAction = false,
   deferUntilVisible = false,
   optimizeMessagePreview = false,
+  surface = "message",
 }: SharedTradeMessageCardProps) {
+  const reportShellClass =
+    surface === "report" ? " tt-shared-trade-card-shell" : ""
   const resolvedClassName =
     className ??
     (layout === "dm"
@@ -167,7 +172,7 @@ export default function SharedTradeMessageCard({
     return (
       <div
         ref={deferredCardRef}
-        className={`${resolvedClassName} rounded-lg bg-[#1e293b] p-3 text-sm text-gray-400`}
+        className={`${resolvedClassName}${reportShellClass} rounded-lg bg-[#1e293b] p-3 text-sm text-gray-400`}
       >
         Loading trade…
       </div>
@@ -177,7 +182,7 @@ export default function SharedTradeMessageCard({
   if (!resolvedTradeId) {
     return (
       <div
-        className={`${resolvedClassName} rounded-lg bg-[#1e293b] p-3 text-sm italic text-gray-400`}
+        className={`${resolvedClassName}${reportShellClass} rounded-lg bg-[#1e293b] p-3 text-sm italic text-gray-400`}
       >
         {SHARED_TRADE_UNAVAILABLE}
       </div>
@@ -186,7 +191,9 @@ export default function SharedTradeMessageCard({
 
   if (tradeLoading) {
     return (
-      <div className={`${resolvedClassName} rounded-lg bg-[#1e293b] p-3 text-sm text-gray-400`}>
+      <div
+        className={`${resolvedClassName}${reportShellClass} rounded-lg bg-[#1e293b] p-3 text-sm text-gray-400`}
+      >
         Loading trade…
       </div>
     )
@@ -195,7 +202,7 @@ export default function SharedTradeMessageCard({
   if (!trade) {
     return (
       <div
-        className={`${resolvedClassName} rounded-lg bg-[#1e293b] p-3 text-sm italic text-gray-400`}
+        className={`${resolvedClassName}${reportShellClass} rounded-lg bg-[#1e293b] p-3 text-sm italic text-gray-400`}
       >
         {SHARED_TRADE_UNAVAILABLE}
       </div>
@@ -213,7 +220,9 @@ export default function SharedTradeMessageCard({
 
   return (
     <div className={resolvedClassName}>
-      <div className="w-full rounded-xl border border-gray-700/80 bg-gradient-to-br from-[#0f172a] to-[#1e293b] p-3.5 shadow-md">
+      <div
+        className={`w-full rounded-xl border border-gray-700/80 bg-gradient-to-br from-[#0f172a] to-[#1e293b] p-3.5 shadow-md${reportShellClass}`}
+      >
         {beforeCardContent}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">

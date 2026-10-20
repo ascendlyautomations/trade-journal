@@ -11,8 +11,10 @@ import {
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { supabase } from "../../lib/supabaseClient"
 import FollowRequestsPanel from "../components/FollowRequestsPanel"
+import NotificationPreferencesSettingsSection from "../components/NotificationPreferencesSettingsSection"
 import EmptyState from "../components/ui/EmptyState"
 import { SkeletonNotificationsPage } from "../components/ui/skeletons"
+import { usePlatformPresentation } from "@/app/components/platform/usePlatformPresentation"
 import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
 import Modal from "../components/ui/Modal"
 import { clearAllNotifications, dismissNotifications } from "@/lib/followNotifications"
@@ -84,6 +86,17 @@ function sortNotificationsDesc(rows: NotificationRecord[]): NotificationRecord[]
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   )
 }
+
+const PAGE_SHELL_CLASS =
+  "tt-phase1-dark w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10"
+
+const PAGE_CONTAINER_CLASS =
+  "relative z-0 mx-auto mt-2.5 w-full max-w-7xl px-1 md:px-6"
+
+const PAGE_WORKSPACE_CLASS =
+  "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] lg:items-start xl:gap-8"
+
+const PAGE_MAIN_CLASS = "flex min-w-0 flex-col gap-3 md:gap-4"
 
 const TABS: { id: NotificationCenterTab; label: string }[] = [
   { id: "all", label: "All" },
@@ -505,6 +518,7 @@ function GroupedNotificationCardView({
 
 export default function NotificationsPage() {
   const router = useRouter()
+  const { isNativeIos } = usePlatformPresentation()
   const { user, profile, loading: profileLoading } = useUserProfile()
   const userId = user?.id ?? null
   const ownerUsername = profile?.username ?? null
@@ -1036,12 +1050,44 @@ export default function NotificationsPage() {
     void markIdsRead([openJoinRequest.notification.id])
   }, [joinRequestId, openJoinRequest])
 
+  const showPreferencesPanel = Boolean(userId) && !isNativeIos
+
+  function renderPreferencesPanel() {
+    if (!showPreferencesPanel) return null
+    return (
+      <NotificationPreferencesSettingsSection
+        userId={userId ?? undefined}
+        layout="sidebar"
+      />
+    )
+  }
+
   if ((profileLoading && !profile) || (loading && notifications.length === 0)) {
     return (
       <>
-        <div className="tt-phase1-dark w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10">
-          <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-xl flex-col gap-3 px-1 md:gap-4 md:px-2">
-            <SkeletonNotificationsPage />
+        <div className={PAGE_SHELL_CLASS}>
+          <div className={PAGE_CONTAINER_CLASS}>
+            <div className={PAGE_WORKSPACE_CLASS}>
+              <div className={PAGE_MAIN_CLASS}>
+                <SkeletonNotificationsPage />
+              </div>
+              {showPreferencesPanel ? (
+                <div
+                  className="hidden rounded-xl border border-white/10 bg-white/5 p-5 lg:block"
+                  aria-hidden
+                >
+                  <div className="h-6 w-40 animate-pulse rounded bg-white/10" />
+                  <div className="mt-4 space-y-3">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="h-10 animate-pulse rounded-lg bg-white/10"
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </>
@@ -1056,8 +1102,10 @@ export default function NotificationsPage() {
           await fetchNotifications()
         }}
       >
-      <div className="tt-phase1-dark w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10">
-        <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-xl flex-col gap-3 px-1 md:gap-4 md:px-2">
+      <div className={PAGE_SHELL_CLASS}>
+        <div className={PAGE_CONTAINER_CLASS}>
+          <div className={PAGE_WORKSPACE_CLASS}>
+            <div className={PAGE_MAIN_CLASS}>
           <div>
             <p className="text-md font-semibold uppercase tracking-wide text-blue-300">
               Activity
@@ -1172,6 +1220,9 @@ export default function NotificationsPage() {
               )}
             </>
           )}
+            </div>
+            {renderPreferencesPanel()}
+          </div>
         </div>
       </div>
       </NativeIosPullToRefresh>

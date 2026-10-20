@@ -1,0 +1,52 @@
+/*
+ * Trading Reports — Best Trade card (SharedTradeMessageCard surface="report").
+ * Light appearance only; Dark and OG keep the embedded message card styling.
+ */
+
+html[data-tt-appearance="light"]
+  [data-tt-trading-report-best-trade]
+  .tt-shared-trade-card-shell {
+  background-color: var(--tt-surface);
+  background-image: none;
+  border-color: var(--tt-border);
+  box-shadow: 0 1px 2px rgb(31 35 40 / 0.06);
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="light"]
+  [data-tt-trading-report-best-trade]
+  .tt-shared-trade-card-shell
+  :is(.text-white, .font-bold.text-white) {
+  color: var(--tt-text);
+}
+
+html[data-tt-appearance="light"]
+  [data-tt-trading-report-best-trade]
+  .tt-shared-trade-card-shell
+  :is(.text-gray-300, .text-gray-400) {
+  color: var(--tt-text-muted);
+}
+
+html[data-tt-appearance="light"]
+  [data-tt-trading-report-best-trade]
+  .tt-shared-trade-card-shell
+  :is(.border-gray-700, .border-gray-700\/80, .border-gray-700\/40) {
+  border-color: var(--tt-border);
+}
+
+html[data-tt-appearance="light"]
+  [data-tt-trading-report-best-trade]
+  .tt-shared-trade-card-shell
+  button.rounded-lg.border.border-blue-500\/30 {
+  border-color: color-mix(in srgb, var(--tt-accent) 40%, transparent);
+  background-color: var(--tt-selected);
+  color: var(--tt-accent);
+}
+
+html[data-tt-appearance="light"]
+  [data-tt-trading-report-best-trade]
+  .tt-shared-trade-card-shell
+  button.rounded-lg.border.border-blue-500\/30:hover {
+  background-color: color-mix(in srgb, var(--tt-accent) 16%, var(--tt-surface));
+  color: var(--tt-accent);
+}

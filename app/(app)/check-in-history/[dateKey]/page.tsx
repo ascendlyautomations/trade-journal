@@ -3,7 +3,10 @@
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import CheckInDayDetail from "@/app/components/psychology/CheckInDayDetail"
-import { usePsychologyJournalInputs } from "@/lib/psychology/usePsychologyJournalInputs"
+import {
+  PSYCHOLOGY_JOURNAL_EMPTY_DASHBOARD_TRADES,
+  usePsychologyJournalInputs,
+} from "@/lib/psychology/usePsychologyJournalInputs"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 
@@ -14,7 +17,7 @@ export default function CheckInDayPage() {
   const { user } = useUserProfile()
   const { checkIns, trades, ready, setCheckIns, refresh } = usePsychologyJournalInputs(
     user?.id,
-    []
+    PSYCHOLOGY_JOURNAL_EMPTY_DASHBOARD_TRADES
   )
 
   return (
