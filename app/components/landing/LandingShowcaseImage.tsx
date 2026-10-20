@@ -36,7 +36,6 @@ function MagnifyIcon({ className }: { className?: string }) {
 export default function LandingShowcaseImage({
   src,
   alt,
-  objectPositionClass = "object-center",
   size = "standard",
   loadImage = true,
 }: LandingShowcaseImageProps) {
@@ -47,26 +46,25 @@ export default function LandingShowcaseImage({
       <button
         type="button"
         onClick={() => setLightboxOpen(true)}
-        className="group relative w-full cursor-pointer overflow-hidden rounded-2xl border border-emerald-400/20 bg-[#0a0f1c]/50 text-left shadow-lg shadow-black/25 backdrop-blur-md transition-transform duration-300 ease-out hover:scale-[1.02] motion-reduce:transition-none motion-reduce:hover:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50"
+        className="group relative block w-full cursor-pointer overflow-hidden rounded-2xl border border-emerald-400/20 bg-[#0a0f1c]/50 text-left shadow-lg shadow-black/25 backdrop-blur-md transition-transform duration-300 ease-out hover:scale-[1.02] motion-reduce:transition-none motion-reduce:hover:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50"
         aria-label={`View larger: ${alt}`}
       >
-        <div className="relative aspect-[3/2] w-full">
-          {loadImage ? (
-            <Image
-              src={src}
-              alt={alt}
-              fill
-              quality={85}
-              className={`object-contain ${objectPositionClass}`}
-              sizes={
-                size === "large"
-                  ? "(max-width: 1280px) 100vw, 1152px"
-                  : "(max-width: 1024px) 100vw, 720px"
-              }
-              loading="lazy"
-            />
-          ) : null}
-        </div>
+        {loadImage ? (
+          <Image
+            src={src}
+            alt={alt}
+            width={0}
+            height={0}
+            quality={85}
+            className="h-auto w-full"
+            sizes={
+              size === "large"
+                ? "(max-width: 1280px) 100vw, 1152px"
+                : "(max-width: 1024px) 100vw, 720px"
+            }
+            loading="lazy"
+          />
+        ) : null}
 
         <div className="pointer-events-none absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/35 via-transparent to-transparent pb-4 opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-visible:opacity-100 motion-reduce:transition-none">
           <span className="flex items-center gap-1.5 rounded-full bg-black/55 px-3 py-1.5 text-xs font-medium text-white/90 backdrop-blur-sm">

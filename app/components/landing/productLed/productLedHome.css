@@ -300,7 +300,7 @@
 }
 
 .tt-home-product .tt-home-pricing {
-  border-top: 1px solid #30363d;
+  border-top-width: 0;
   background: #0d1117;
 }
 
@@ -511,16 +511,20 @@
   color: #041018;
 }
 
-.tt-home-story #analytics,
-.tt-home-story #compare,
-.tt-home-story #testimonials,
-.tt-home-story #coming-soon {
-  background: #0b1016;
-}
-
+/* One continuous page background (matches flagship / grow sections). */
 .tt-home-story #problem,
 .tt-home-story #grow,
+.tt-home-story #analytics,
+.tt-home-story #compare,
 .tt-home-story #featured-trades,
-.tt-home-story #faq {
+.tt-home-story #testimonials,
+.tt-home-story #faq,
+.tt-home-story #coming-soon {
   background: #0d1117;
 }
+
+/* Cleaner flow — no horizontal rules between major homepage sections. */
+.tt-home-story section.border-t {
+  border-top-width: 0;
+}
+
