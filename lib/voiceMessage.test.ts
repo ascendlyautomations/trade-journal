@@ -24,7 +24,7 @@ describe("isVoiceMessage", () => {
       isVoiceMessage({ audio_url: "https://example.com/a.m4a" }),
       true
     )
-    assert.equal(isVoiceMessage({ type: "text", content: "hi" }), false)
+    assert.equal(isVoiceMessage({ type: "text" }), false)
   })
 })
 

@@ -143,7 +143,7 @@ describe("tradovateFillAcquisition v2", () => {
 
   it("merges ldeps-only MGC fills with fill/list supplemental without duplicates", () => {
     const fixture = tradovatePerformanceSep2026ReconstructionFills()
-    const traced = new Set(TRACED_MGC_FILL_IDS)
+    const traced = new Set<string>(TRACED_MGC_FILL_IDS)
     let orderSeq = 900000
     const allRaw = fixture.map((f) => toRaw(f, String(orderSeq++)))
 
@@ -201,7 +201,7 @@ describe("tradovateFillAcquisition v2", () => {
 
   it("v2 merged fixture reaches MNQ -45, MGC +5, overall -40, 12 lifecycles", () => {
     const fixture = tradovatePerformanceSep2026ReconstructionFills()
-    const traced = new Set(TRACED_MGC_FILL_IDS)
+    const traced = new Set<string>(TRACED_MGC_FILL_IDS)
     let orderSeq = 900000
     const allRaw = fixture.map((f) => toRaw(f, String(orderSeq++)))
     const primary = allRaw.filter((f) => traced.has(String(f.id)))

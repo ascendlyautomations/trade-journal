@@ -344,13 +344,6 @@ function PropfirmEquityCurve({ data }: { data: PropfirmEquityCurvePoint[] }) {
   )
 }
 
-export type { ConsistencyRuleResult, TrailingDrawdownResult }
-
-export {
-  computeConsistencyRule,
-  computeTrailingDrawdown,
-} from "@/lib/propfirmMetrics"
-
 function formatPropfirmAccountNameOnly(acc: PropfirmAccount) {
   const nameSize = formatAccountNameWithSizeDisplay(
     acc.name ?? "",

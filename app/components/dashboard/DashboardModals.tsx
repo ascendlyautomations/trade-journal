@@ -86,16 +86,22 @@ export default function DashboardModals({
       {selectedImage || editingTrade || sendTradeId ? (
         <TradesPageOverlays
           selectedImage={selectedImage}
+          selectedTrade={null}
           editingTrade={editingTrade}
           showPerformanceShare={false}
           sendTradeId={sendTradeId}
           tradesForPerformanceSharePool={EMPTY_TRADES}
           gateProfile={null}
           onCloseImageLightbox={onCloseImage}
+          onCloseSelectedTrade={NOOP}
           onCloseEditForm={onCloseTrade}
           onTradeFormSaved={onCloseTrade}
           onClosePerformanceShare={NOOP}
           onCloseSendModal={onCloseSend}
+          onEditTrade={NOOP}
+          onDeleteTrade={NOOP}
+          onSendTrade={NOOP}
+          onImageClick={NOOP}
         />
       ) : null}
     </>

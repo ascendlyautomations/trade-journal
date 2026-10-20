@@ -17,7 +17,6 @@ function chartRow(
     best: 200,
     worst: 50,
     you: null,
-    contributorCount: overrides.contributorCount,
     ...overrides,
   }
 }

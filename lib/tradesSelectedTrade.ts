@@ -2,6 +2,7 @@ import {
   accountRowForTrade,
   tradeMatchesAccountFilter,
   type AccountRowForDisplay,
+  type TradeAccountDisplayInput,
 } from "./tradeAccountDisplay.ts"
 import {
   filterTradesByPerformanceWindow,
@@ -77,6 +78,19 @@ function tradeMatchesResultFilter(
   return true
 }
 
+function asTradeAccountDisplayInput(trade: {
+  account_id?: unknown
+  mode?: unknown
+  account_type?: unknown
+}): TradeAccountDisplayInput {
+  return {
+    account_id:
+      trade.account_id == null ? (trade.account_id as null | undefined) : String(trade.account_id),
+    mode: typeof trade.mode === "string" ? trade.mode : null,
+    account_type: typeof trade.account_type === "string" ? trade.account_type : null,
+  }
+}
+
 function tradeMatchesModeFilter(
   trade: { mode?: unknown; account_type?: unknown },
   accountTypeFilter: string
@@ -130,12 +144,13 @@ export function tradesPageFiltersToRevealTrade(
   }
 ): TradesPageViewFilters {
   const next: TradesPageViewFilters = { ...current }
+  const tradeForAccountFilter = asTradeAccountDisplayInput(trade)
 
   if (
     !tradeMatchesAccountFilter(
-      trade,
+      tradeForAccountFilter,
       next.accountFilter,
-      accountRowForTrade(trade, opts?.accountById ?? null),
+      accountRowForTrade(tradeForAccountFilter, opts?.accountById ?? null),
       { copyGroupAccountIds: opts?.copyGroupAccountIds ?? undefined }
     )
   ) {
