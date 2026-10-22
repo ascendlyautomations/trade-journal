@@ -58,9 +58,9 @@ function FlagshipBlock({
       }`}
       aria-labelledby={`${flagship.id}-heading`}
     >
-      <div className="mx-auto max-w-6xl">
-        <div className={`flex gap-6 lg:items-center md:gap-10 lg:gap-14 ${layoutClassForIndex(index)}`}>
-          <div className="min-w-0 flex-1 space-y-3 text-left md:space-y-4">
+      <div className="mx-auto max-w-6xl lg:max-w-7xl">
+        <div className={`flex gap-6 lg:items-center md:gap-10 lg:gap-12 ${layoutClassForIndex(index)}`}>
+          <div className="min-w-0 flex-1 space-y-3 text-left md:space-y-4 lg:max-w-[36%] lg:shrink-0">
             <h3
               id={`${flagship.id}-heading`}
               className="text-2xl font-extrabold tracking-tight text-white drop-shadow-lg md:text-4xl"
@@ -72,7 +72,7 @@ function FlagshipBlock({
               <p className="text-sm text-gray-400">{flagship.bonuses}</p>
             ) : null}
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 lg:min-w-0 lg:flex-[1.45]">
             <LandingShowcaseImage
               src={flagship.imageSrc}
               alt={flagship.imageAlt}

@@ -62,7 +62,7 @@ export default function LandingPageClient({
     isAuthenticatedUser && !!profile && hasActiveMembership(profile)
   const purchase = useTraxProPurchaseCopy(!profileHasUsedCheckoutTrial(profile))
   const trialCtaLabel = earlyAccessPromotionEnabled
-    ? "Join Early Access"
+    ? "Create free account"
     : purchase.buttonTitle
 
   useEffect(() => {
@@ -260,10 +260,16 @@ export default function LandingPageClient({
                   loading ||
                   (!earlyAccessPromotionEnabled && purchase.purchaseDisabled)
                 }
-                onClick={() => void handleSubscribe()}
+                onClick={() =>
+                  earlyAccessPromotionEnabled
+                    ? handleStartTrial()
+                    : void handleSubscribe()
+                }
                 className="min-w-[168px] rounded-xl bg-blue-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 md:min-w-[220px] md:px-8 md:py-3.5 md:text-base"
               >
-                {checkoutLoading ? "Starting trial…" : trialCtaLabel}
+                {checkoutLoading && !earlyAccessPromotionEnabled
+                  ? "Starting trial…"
+                  : trialCtaLabel}
               </button>
 
               <button
@@ -296,7 +302,11 @@ export default function LandingPageClient({
           <LandingComingSoonSection />
           <LandingFinalCtaSection
             checkoutLoading={checkoutLoading}
-            onStartTrial={() => void handleSubscribe()}
+            onStartTrial={() =>
+              earlyAccessPromotionEnabled
+                ? handleStartTrial()
+                : void handleSubscribe()
+            }
           />
 
           <MarketingFooter />

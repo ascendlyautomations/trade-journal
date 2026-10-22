@@ -784,20 +784,28 @@ input[type="time"]:hover::-webkit-calendar-picker-indicator {
   backdrop-filter: blur(var(--surface-blur));
 }
 
+/* Password fields: no theme fill here — glass login uses [data-tt-auth-glass]; other screens use Tailwind on the input. */
 .tt-auth-password {
-  border: 1px solid var(--input-border);
-  background-color: var(--input);
-  color: var(--input-foreground);
+  appearance: none;
+  -webkit-appearance: none;
   color-scheme: inherit;
 }
 
-.tt-auth-password::placeholder {
-  color: var(--placeholder);
+/* Login / creator signup glass card — must beat legacy .tt-auth-password { --input } and WebKit password chrome. */
+[data-tt-auth-glass] .tt-auth-password {
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background-color: rgb(255 255 255 / 0.1);
+  color: #fff;
 }
 
-.tt-auth-password:focus {
+[data-tt-auth-glass] .tt-auth-password::placeholder {
+  color: #9ca3af;
+  opacity: 1;
+}
+
+[data-tt-auth-glass] .tt-auth-password:focus {
   outline: none;
-  box-shadow: 0 0 0 2px var(--focus-ring);
+  box-shadow: 0 0 0 2px rgb(96 165 250);
 }
 
 .tt-auth-password::-ms-reveal,

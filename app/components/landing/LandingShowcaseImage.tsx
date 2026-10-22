@@ -59,8 +59,8 @@ export default function LandingShowcaseImage({
             className="h-auto w-full"
             sizes={
               size === "large"
-                ? "(max-width: 1280px) 100vw, 1152px"
-                : "(max-width: 1024px) 100vw, 720px"
+                ? "(max-width: 1280px) 100vw, 1280px"
+                : "(max-width: 1024px) 100vw, 800px"
             }
             loading="lazy"
           />

@@ -346,8 +346,8 @@
 
   .tt-home-stage {
     margin-top: 0;
-    min-height: 31rem;
-    padding: 0.5rem 0 4.5rem 7%;
+    min-height: 34rem;
+    padding: 0.5rem 0 4.5rem 5%;
   }
 
   .tt-home-shot-dash {
@@ -363,7 +363,7 @@
   .tt-home-shot-feed {
     left: 0;
     bottom: 0;
-    width: 34%;
+    width: 38%;
     aspect-ratio: 4 / 5;
   }
 
@@ -374,7 +374,7 @@
   .tt-home-shot-prop {
     right: 0;
     bottom: 2.4rem;
-    width: 48%;
+    width: 54%;
     aspect-ratio: 16 / 10;
   }
 

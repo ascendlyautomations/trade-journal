@@ -8,7 +8,7 @@ import {
 } from "./webSocialOAuthPolicy.ts"
 
 describe("validateWebSocialOAuthSignup", () => {
-  it("allows login without terms", () => {
+  it("allows Google login without terms", () => {
     assert.equal(
       validateWebSocialOAuthSignup({
         isLogin: true,
@@ -16,9 +16,22 @@ describe("validateWebSocialOAuthSignup", () => {
         earlyAccessPromotionEnabled: false,
         signupPlanIntent: null,
         requireSignupPlanIntent: true,
+        provider: "google",
       }),
       null
     )
+  })
+
+  it("requires terms for Apple on login tab", () => {
+    const msg = validateWebSocialOAuthSignup({
+      isLogin: true,
+      agreedToTerms: false,
+      earlyAccessPromotionEnabled: false,
+      signupPlanIntent: null,
+      requireSignupPlanIntent: true,
+      provider: "apple",
+    })
+    assert.match(msg ?? "", /Terms of Service/)
   })
 
   it("requires terms on signup", () => {

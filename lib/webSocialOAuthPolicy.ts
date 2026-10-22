@@ -23,14 +23,21 @@ export type WebSocialOAuthRedirectContext = WebSocialOAuthSignupContext & {
  * Validates signup prerequisites before OAuth (terms, plan intent).
  * Returns a user-facing error message, or null when OK.
  */
-export function validateWebSocialOAuthSignup(
-  ctx: WebSocialOAuthSignupContext
-): string | null {
-  if (ctx.isLogin) return null
+export type WebSocialOAuthSignupValidationContext = WebSocialOAuthSignupContext & {
+  provider?: WebSocialOAuthProvider
+}
 
-  if (!ctx.agreedToTerms) {
+export function validateWebSocialOAuthSignup(
+  ctx: WebSocialOAuthSignupValidationContext
+): string | null {
+  const requiresTermsForOAuth =
+    !ctx.isLogin || ctx.provider === "apple"
+
+  if (requiresTermsForOAuth && !ctx.agreedToTerms) {
     return "You must agree to the Terms of Service and Privacy Policy before creating an account."
   }
+
+  if (ctx.isLogin) return null
 
   if (ctx.earlyAccessPromotionEnabled) return null
 
@@ -48,9 +55,7 @@ export function resolveWebSocialOAuthRedirectPath(
   if (ctx.signupRedirectPath) return ctx.signupRedirectPath
 
   if (!ctx.isLogin) {
-    return ctx.earlyAccessPromotionEnabled
-      ? "/early-access/welcome"
-      : "/onboarding"
+    return "/onboarding"
   }
 
   if (ctx.shouldStartCheckout) {

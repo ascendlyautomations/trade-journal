@@ -1,6 +1,7 @@
 "use client"
 
 import { LANDING_BRAND_TAGLINE } from "@/lib/landingFlagships"
+import { useEarlyAccessPromotion } from "@/lib/useEarlyAccessPromotion"
 import { useTraxProPurchaseCopy } from "@/lib/traxProPriceCatalogClient"
 
 type Props = {
@@ -9,7 +10,14 @@ type Props = {
 }
 
 export default function LandingFinalCtaSection({ checkoutLoading, onStartTrial }: Props) {
+  const { enabled: earlyAccessPromotionEnabled } = useEarlyAccessPromotion()
   const purchase = useTraxProPurchaseCopy(true)
+  const ctaLabel = earlyAccessPromotionEnabled
+    ? "Create free account"
+    : purchase.buttonTitle
+  const ctaDisabled =
+    checkoutLoading ||
+    (!earlyAccessPromotionEnabled && purchase.purchaseDisabled)
   return (
     <section
       className="relative z-10 mx-auto max-w-4xl border-t border-white/10 px-4 py-14 text-center md:px-6 md:py-24"
@@ -25,11 +33,13 @@ export default function LandingFinalCtaSection({ checkoutLoading, onStartTrial }
         </p>
         <button
           type="button"
-          disabled={checkoutLoading || purchase.purchaseDisabled}
+          disabled={ctaDisabled}
           onClick={onStartTrial}
           className="min-w-[200px] rounded-xl bg-blue-500 px-6 py-3 text-base font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 md:min-w-[220px] md:px-8 md:py-3.5"
         >
-          {checkoutLoading ? "Starting checkout…" : purchase.buttonTitle}
+          {checkoutLoading && !earlyAccessPromotionEnabled
+            ? "Starting checkout…"
+            : ctaLabel}
         </button>
       </div>
     </section>

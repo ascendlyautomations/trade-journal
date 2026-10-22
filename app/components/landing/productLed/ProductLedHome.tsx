@@ -70,7 +70,7 @@ export default function ProductLedHome({
     isAuthenticatedUser && !!profile && hasActiveMembership(profile)
   const purchase = useTraxProPurchaseCopy(!profileHasUsedCheckoutTrial(profile))
   const trialCtaLabel = earlyAccessPromotionEnabled
-    ? "Join Early Access"
+    ? "Create free account"
     : purchase.buttonTitle
 
   useEffect(() => {
@@ -236,9 +236,15 @@ export default function ProductLedHome({
                     loading ||
                     (!earlyAccessPromotionEnabled && purchase.purchaseDisabled)
                   }
-                  onClick={() => void handleSubscribe()}
+                  onClick={() =>
+                    earlyAccessPromotionEnabled
+                      ? handleStartTrial()
+                      : void handleSubscribe()
+                  }
                 >
-                  {checkoutLoading ? "Starting trial…" : trialCtaLabel}
+                  {checkoutLoading && !earlyAccessPromotionEnabled
+                    ? "Starting trial…"
+                    : trialCtaLabel}
                 </button>
                 <button
                   type="button"
@@ -258,7 +264,7 @@ export default function ProductLedHome({
                   fill
                   priority
                   quality={72}
-                  sizes="(max-width: 1199px) 100vw, 720px"
+                  sizes="(max-width: 1199px) 100vw, 820px"
                 />
               </figure>
               <figure className="tt-home-shot tt-home-shot-feed">
@@ -308,7 +314,11 @@ export default function ProductLedHome({
           <LandingComingSoonSection />
           <LandingFinalCtaSection
             checkoutLoading={checkoutLoading}
-            onStartTrial={() => void handleSubscribe()}
+            onStartTrial={() =>
+              earlyAccessPromotionEnabled
+                ? handleStartTrial()
+                : void handleSubscribe()
+            }
           />
           <MarketingFooter />
         </div>

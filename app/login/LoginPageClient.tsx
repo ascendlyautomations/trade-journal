@@ -30,9 +30,7 @@ import {
   getPendingCreatorCode,
   normalizeCreatorAccessCode,
 } from "@/lib/creatorAccess"
-import { enrollCurrentUserEarlyAccess } from "@/lib/earlyAccessClient"
 import { useEarlyAccessPromotion } from "@/lib/useEarlyAccessPromotion"
-import { markEarlyAccessOAuthSignupPending } from "@/lib/earlyAccess"
 import NativeIosLoginShell from "@/app/components/NativeIosLoginShell"
 import {
   clearWebSocialOAuthCallbackParams,
@@ -308,54 +306,14 @@ export default function LoginPageClient({
         clearStoredReferralCode()
       }
 
-      let earlyAccessEnrolled = false
-      if (earlyAccessPromotionEnabled) {
-        // Always enroll after a brand-new standard signup attempt. Auth triggers
-        // often create the profile shell first, so ensureResult.created may be
-        // false even for eligible accounts.
-        try {
-          let enrollment =
-            await enrollCurrentUserEarlyAccess("standard_email")
-          if (enrollment === "ineligible") {
-            enrollment = await enrollCurrentUserEarlyAccess("standard_email")
-          }
-          earlyAccessEnrolled =
-            enrollment === "enrolled" || enrollment === "already_enrolled"
-          if (enrollment === "disabled") {
-            clearSignupIntent()
-            setSignupPlanIntent(null)
-            router.push("/choose-plan")
-            return
-          }
-          if (!earlyAccessEnrolled) {
-            console.error("Early Access enrollment rejected:", enrollment)
-            showPopup({
-              type: "error",
-              message:
-                "This account could not be enrolled in Early Access. Please try again before continuing.",
-            })
-            return
-          }
-        } catch (error) {
-          console.error("Early Access enrollment failed:", error)
-          showPopup({
-            type: "error",
-            message:
-              "Early Access enrollment is temporarily unavailable. Please try again.",
-          })
-          return
-        }
-      }
-
-      if (!earlyAccessEnrolled && intent === "free") {
+      if (!earlyAccessPromotionEnabled && intent === "free") {
         const freeResult = await markProfileUseFreeTier(supabase, user.id)
         if (!freeResult.ok) {
           console.error("Failed to mark free tier at signup:", freeResult.error)
         }
       }
 
-      // Never open Stripe Checkout for an Early Access signup.
-      if (!earlyAccessEnrolled && shouldStartCheckout()) {
+      if (!earlyAccessPromotionEnabled && shouldStartCheckout()) {
         try {
           await startCheckoutAfterAuth(user.id)
           return
@@ -368,11 +326,7 @@ export default function LoginPageClient({
         }
       }
 
-      router.push(
-        earlyAccessEnrolled
-          ? "/early-access/welcome"
-          : getSafeNextPath() ?? "/onboarding"
-      )
+      router.push(getSafeNextPath() ?? "/onboarding")
     } catch (err) {
       console.error(
         "ERROR:",
@@ -449,6 +403,7 @@ export default function LoginPageClient({
       earlyAccessPromotionEnabled,
       signupPlanIntent,
       requireSignupPlanIntent: true,
+      provider,
     })
     if (signupError) {
       showPopup({ type: "error", message: signupError })
@@ -477,9 +432,6 @@ export default function LoginPageClient({
     try {
       if (!isLogin) {
         enterSignupFlow()
-        if (earlyAccessPromotionEnabled) {
-          markEarlyAccessOAuthSignupPending()
-        }
       }
 
       const redirectPath = resolveWebSocialOAuthRedirectPath({
@@ -637,6 +589,7 @@ export default function LoginPageClient({
 
       {/* RIGHT LOGIN CARD */}
       <div
+        data-tt-auth-glass=""
         className={
           nativeIos
             ? "w-full max-w-md rounded-2xl border border-white/10 bg-white/10 p-5 shadow-2xl backdrop-blur-xl"
@@ -679,7 +632,7 @@ export default function LoginPageClient({
           {isLogin ? "Sign in to continue" : "Create your account"}
         </h2>
 
-        {!isLogin && (
+        {(!isLogin || !nativeIos) && (
           <label className="mb-5 flex cursor-pointer items-start gap-3 text-left text-sm leading-snug text-gray-300 md:mb-3">
             <input
               type="checkbox"
@@ -725,7 +678,7 @@ export default function LoginPageClient({
           <AppleSignInButton
             label="continue"
             onClick={handleAppleLogin}
-            disabled={loading || googleLoading || (!isLogin && !agreedToTerms)}
+            disabled={loading || googleLoading || !agreedToTerms}
             loading={appleLoading}
             className="mb-4 md:mb-3"
           />
@@ -762,7 +715,7 @@ export default function LoginPageClient({
           <AuthPasswordInput
             placeholder="Password"
             autoComplete={isLogin ? "current-password" : "new-password"}
-            className="w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400 md:py-2.5"
+            className="w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400 md:py-2.5"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
@@ -791,26 +744,14 @@ export default function LoginPageClient({
         {!isLogin ? (
           <div className="mt-6 md:mt-4">
             {earlyAccessPromotionEnabled ? (
-              <div className="space-y-3">
-                <div className="rounded-xl border border-blue-400/20 bg-blue-400/10 p-3 text-left">
-                  <p className="text-sm font-semibold text-blue-200">
-                    TradeTraxs Early Access
-                  </p>
-                  <p className="mt-1 text-xs leading-relaxed text-gray-200">
-                    New accounts include 21 days of complimentary Pro access.
-                    No card required. Complete the Traxs Pro For Life checklist
-                    for a chance at permanent Pro.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  disabled={!agreedToTerms || loading}
-                  onClick={() => void handleSignUp("trial")}
-                  className="w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 md:py-2.5"
-                >
-                  {loading ? "Creating Account…" : "Join Early Access"}
-                </button>
-              </div>
+              <button
+                type="button"
+                disabled={!agreedToTerms || loading}
+                onClick={() => void handleSignUp("trial")}
+                className="w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 md:py-2.5"
+              >
+                {loading ? "Creating account…" : "Create free account"}
+              </button>
             ) : (
               <>
                 <div className="relative mb-6 md:mb-4">

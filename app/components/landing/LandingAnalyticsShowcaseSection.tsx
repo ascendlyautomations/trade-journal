@@ -22,7 +22,7 @@ export default function LandingAnalyticsShowcaseSection() {
       className={`relative z-10 border-t border-white/10 px-4 py-12 md:px-6 md:py-28 ${LANDING_REVEAL_TRANSITION} ${visible ? LANDING_REVEAL_TO : LANDING_REVEAL_FROM}`}
       aria-labelledby="analytics-heading"
     >
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-6xl lg:max-w-7xl">
         <div className="mx-auto max-w-3xl text-center">
           <h2 id="analytics-heading" className={LANDING_HEADLINE_SM}>
             Know Your{" "}
@@ -33,8 +33,7 @@ export default function LandingAnalyticsShowcaseSection() {
           </p>
         </div>
 
-        <div className="mt-8 flex justify-center md:mt-16">
-          <div className="w-[94%] max-w-full sm:w-[92%] md:w-[90%] lg:w-[87%]">
+        <div className="mt-8 md:mt-16">
             <LandingShowcaseImage
               src="/images/Know_Your_Edge.webp"
               alt="TradeTraxs analytics, know your edge with performance insights"
@@ -42,7 +41,6 @@ export default function LandingAnalyticsShowcaseSection() {
               size="large"
               loadImage={visible}
             />
-          </div>
         </div>
       </div>
     </section>

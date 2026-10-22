@@ -287,7 +287,10 @@ function CreatorSignupInner() {
           </div>
         </div>
 
-        <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur-xl md:px-8 md:py-6">
+        <div
+          data-tt-auth-glass=""
+          className="w-full max-w-md rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur-xl md:px-8 md:py-6"
+        >
           <div
             className="mb-6 flex rounded-xl bg-white/10 p-1 md:mb-4"
             role="tablist"
@@ -404,7 +407,7 @@ function CreatorSignupInner() {
             <AuthPasswordInput
               placeholder="Password"
               autoComplete={isLogin ? "current-password" : "new-password"}
-              className="w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 md:py-2.5"
+              className="w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 md:py-2.5"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />

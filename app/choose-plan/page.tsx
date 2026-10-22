@@ -6,7 +6,10 @@ import SignupPlanPicker from "@/app/components/SignupPlanPicker"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { profileNeedsOnboarding } from "@/lib/profileOnboardingGate"
 import { isEarlyAccessActive } from "@/lib/earlyAccess"
-import { resolvePostAuthAppPath } from "@/lib/subscriptionAccess"
+import {
+  isSubscriptionExempt,
+  resolvePostAuthAppPath,
+} from "@/lib/subscriptionAccess"
 import {
   enterSignupFlow,
   getSignupIntent,
@@ -40,7 +43,10 @@ export default function ChoosePlanPage() {
     }
     if (!profile) return
 
-    if (isEarlyAccessActive(profile)) {
+    if (
+      isEarlyAccessActive(profile) ||
+      isSubscriptionExempt(profile)
+    ) {
       router.replace(
         profileNeedsOnboarding(profile) ? "/onboarding" : "/dashboard"
       )
