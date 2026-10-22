@@ -80,14 +80,7 @@ export default function FinishTrialPage() {
       return
     }
 
-    const destination = resolvePostAuthAppPath(profile)
-    if (destination === "/choose-plan" || destination === "/onboarding") {
-      router.replace(destination)
-      return
-    }
-    if (destination === "/dashboard") {
-      router.replace("/dashboard")
-    }
+    router.replace(resolvePostAuthAppPath(profile))
   }, [loading, user, profile, router, membershipReconciling])
 
   async function handleStartTrial() {
