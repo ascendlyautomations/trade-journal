@@ -6,6 +6,7 @@ import {
   SkeletonTestimonialsSection,
 } from "@/app/components/ui/skeletons"
 import LandingFeaturedTradesSectionLoader from "@/app/components/landing/LandingFeaturedTradesSectionLoader"
+import LandingWeeklyTopTradersSectionLoader from "@/app/components/landing/LandingWeeklyTopTradersSectionLoader"
 import LandingTestimonialsSectionLoader from "@/app/components/landing/LandingTestimonialsSectionLoader"
 import {
   DEFAULT_OG_IMAGE_ALT,
@@ -65,6 +66,11 @@ export default function HomePage() {
         featuredTradesSection={
           <Suspense fallback={<SkeletonFeaturedTradesSection />}>
             <LandingFeaturedTradesSectionLoader />
+          </Suspense>
+        }
+        weeklyTopTradersSection={
+          <Suspense fallback={null}>
+            <LandingWeeklyTopTradersSectionLoader />
           </Suspense>
         }
         testimonialsSection={

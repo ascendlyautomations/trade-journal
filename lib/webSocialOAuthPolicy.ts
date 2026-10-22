@@ -30,19 +30,8 @@ export type WebSocialOAuthSignupValidationContext = WebSocialOAuthSignupContext 
 export function validateWebSocialOAuthSignup(
   ctx: WebSocialOAuthSignupValidationContext
 ): string | null {
-  const requiresTermsForOAuth =
-    !ctx.isLogin || ctx.provider === "apple"
-
-  if (requiresTermsForOAuth && !ctx.agreedToTerms) {
+  if (!ctx.isLogin && !ctx.agreedToTerms) {
     return "You must agree to the Terms of Service and Privacy Policy before creating an account."
-  }
-
-  if (ctx.isLogin) return null
-
-  if (ctx.earlyAccessPromotionEnabled) return null
-
-  if (ctx.requireSignupPlanIntent && !ctx.signupPlanIntent) {
-    return "Choose Start Free Trial or Continue Free below before signing up."
   }
 
   return null

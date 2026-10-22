@@ -4,6 +4,7 @@ import "../utilityDesktopTheme.css"
 import { useState } from "react"
 import Link from "next/link"
 import BugReportModal from "@/app/components/BugReportModal"
+import ContextualTourReplayButton from "@/app/components/contextualTour/ContextualTourReplayButton"
 import {
   submissionPageShell,
   submissionSubtitle,
@@ -152,6 +153,19 @@ export default function HelpCenterPage() {
             {HELP_LINK_OPTIONS.map((option) => (
               <HelpOptionCard key={option.href} {...option} />
             ))}
+            <div className={`${HELP_CARD_CLASS} text-left`}>
+              <div className={HELP_CARD_ICON_WRAPPER}>
+                <FeatureRequestIcon className="h-6 w-6" />
+              </div>
+              <h2 className="text-lg font-semibold text-white">
+                App walkthrough
+              </h2>
+              <p className="mt-2 mb-5 flex-1 text-sm leading-relaxed text-gray-300">
+                Replay the guided tour of Dashboard, Feed, Profile, broker
+                connections, and appearance settings.
+              </p>
+              <ContextualTourReplayButton className={HELP_CARD_BUTTON} />
+            </div>
             <button
               type="button"
               onClick={() => setBugReportOpen(true)}

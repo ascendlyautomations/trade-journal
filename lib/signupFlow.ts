@@ -70,13 +70,9 @@ export function clearSignupIntent(): void {
   }
 }
 
-/**
- * Where new users go for profile setup.
- * Creator invite flow and explicit plan intent skip Choose Plan.
- */
-export function resolveSignupProfileSetupPath(): "/choose-plan" | "/onboarding" {
-  if (isCreatorFlowActive()) return "/onboarding"
-  return getSignupIntent() ? "/onboarding" : "/choose-plan"
+/** Where new users go for profile setup (standard signups always onboarding). */
+export function resolveSignupProfileSetupPath(): "/onboarding" {
+  return "/onboarding"
 }
 
 export function setCheckoutBillingInterval(interval: TraxProBillingIntervalId): void {

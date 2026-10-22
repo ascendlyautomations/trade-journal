@@ -4,6 +4,7 @@ import DashboardFilters from "../../components/dashboard/DashboardFilters"
 import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
 import DashboardHeader from "../../components/dashboard/DashboardHeader"
 import GettingStartedChecklist from "../../components/dashboard/GettingStartedChecklist"
+import DashboardJournalEmptyState from "../../components/dashboard/DashboardJournalEmptyState"
 import TraxsProForLifeCard from "../../components/dashboard/TraxsProForLifeCard"
 import DashboardAnalytics from "../../components/dashboard/DashboardAnalytics"
 import DashboardCharts from "../../components/dashboard/DashboardCharts"
@@ -51,7 +52,6 @@ import {
 } from "@/lib/tradeAccountDisplay"
 import EmptyState from "../../components/ui/EmptyState"
 import { SkeletonDashboardShell } from "../../components/ui/skeletons"
-import Link from "next/link"
 import {
   mirrorAccountSettingsMaxDrawdownLimit,
 } from "@/lib/profileSplitMirrorWrites"
@@ -772,6 +772,8 @@ export default function Dashboard() {
 
   const renderGettingStartedChecklist = (options?: {
     showWelcomeHeading?: boolean
+    variant?: "default" | "compact"
+    defaultExpanded?: boolean
   }) =>
     showOnboardingSection && user?.id ? (
       <GettingStartedChecklist
@@ -780,10 +782,27 @@ export default function Dashboard() {
         profileId={user.id ?? profile?.id}
         firstPrivateTradeId={checklistSignals.firstPrivateTradeId}
         onChecklistRefresh={() => void refreshChecklistSignals()}
-        defaultExpanded
+        defaultExpanded={options?.defaultExpanded ?? true}
         showWelcomeHeading={options?.showWelcomeHeading === true}
+        variant={options?.variant ?? "default"}
       />
     ) : null
+
+  const handleEmptyJournalAddTrade = useCallback(() => {
+    if (isDemoModeActive()) {
+      requestDemoSignup("trade")
+      return
+    }
+    openQuickTrade()
+  }, [openQuickTrade])
+
+  const handleEmptyJournalImport = useCallback(() => {
+    if (isDemoModeActive()) {
+      requestDemoSignup("save")
+      return
+    }
+    openImport()
+  }, [openImport])
 
   /** Desktop: dashboard card until first trade only. */
   const gettingStartedSection = (() => {
@@ -1103,7 +1122,7 @@ export default function Dashboard() {
       >
 
         <div className="tt-dash-workspace relative z-50 mx-auto w-full max-w-[1600px] px-0 md:px-6 xl:max-w-[1900px] xl:px-0">
-          {!hasNoTrades && !statsStillLoading ? (
+          {!statsStillLoading ? (
             <DashboardFilters
               isPro={isPro}
               accounts={accounts}
@@ -1177,63 +1196,26 @@ export default function Dashboard() {
     </div>
   ) : null}
 
-  {gettingStartedSectionMobile}
+  {!hasNoTrades ? gettingStartedSectionMobile : null}
 
   {statsStillLoading ? (
     <SkeletonDashboardShell />
-  ) : hasNoTrades ? (
+  ) : (
     <>
-      {/* Desktop: match section gap (gap-2 / md:gap-3). Mobile: contents dissolves so layout stays unchanged. */}
-      <div className="mt-2 flex flex-col gap-2 max-md:mt-0 max-md:contents md:gap-3">
-        {(() => {
-          const checklist = renderGettingStartedChecklist({
-            showWelcomeHeading: true,
-          })
-          return checklist ? (
-            <div className="hidden md:block">{checklist}</div>
-          ) : null
-        })()}
-        <div className="rounded-xl border border-white/10 bg-white/5 px-5 pb-4 pt-3.5 backdrop-blur-md md:px-6 md:pb-5 md:pt-4">
-          <p className="max-w-2xl text-sm font-medium text-gray-200 md:text-base">
-            Get started by logging your first trade or importing your trading history.
-          </p>
-          <div className="mt-3 flex flex-wrap items-center gap-2 md:mt-3.5 md:gap-3">
-            <Link
-              href="/app"
-              className="inline-flex min-h-[44px] items-center rounded-lg bg-blue-500 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-blue-600 md:px-4 md:text-sm disabled:hover:bg-blue-500"
-            >
-              Add Trade
-            </Link>
-            <button
-              type="button"
-              onClick={() => {
-                if (isDemoModeActive()) {
-                  requestDemoSignup("save")
-                  return
-                }
-                openImport()
-              }}
-              className="inline-flex min-h-[44px] items-center rounded-lg border border-white/20 bg-white/10 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-white/15 md:px-4 md:text-sm"
-            >
-              Import CSV
-            </button>
-          </div>
-          <div className="mt-2 md:mt-2.5">
-            <div className="mb-2.5 h-px w-16 bg-white/10 md:mb-3" aria-hidden />
-            <p className="text-xs font-medium text-gray-200">
-              After your first trade you&apos;ll unlock:
-            </p>
-            <ul className="mt-1.5 space-y-1 text-xs text-gray-400">
-              <li>• Performance statistics</li>
-              <li>• Equity curve tracking</li>
-              <li>• Session &amp; weekday analysis</li>
-              <li>• Symbol performance insights</li>
-            </ul>
-          </div>
+      {hasNoTrades ? (
+        <div className="mt-2 flex flex-col gap-2 md:gap-3 max-md:mt-0">
+          {renderGettingStartedChecklist({
+            variant: "compact",
+            defaultExpanded: false,
+          })}
+          <DashboardJournalEmptyState
+            onAddTrade={handleEmptyJournalAddTrade}
+            onImportCsv={handleEmptyJournalImport}
+          />
         </div>
-      </div>
-    </>
-  ) : totalTrades === 0 ? (
+      ) : null}
+
+      {totalTrades === 0 && !hasNoTrades ? (
     <>
       {gettingStartedSection}
       <EmptyState
@@ -1242,9 +1224,9 @@ export default function Dashboard() {
         className="rounded-xl border border-white/10 bg-white/5 py-12 backdrop-blur-md"
       />
     </>
-  ) : (
+      ) : (
     <>
-      {gettingStartedSection}
+      {!hasNoTrades ? gettingStartedSection : null}
       {dashboardUserIsPro ? (
         <>
       {user?.id && deferredSectionsReady ? (
@@ -1441,6 +1423,8 @@ export default function Dashboard() {
             <DashboardDeferredSectionsSkeleton />
           )}
         </>
+      )}
+    </>
       )}
     </>
   )}

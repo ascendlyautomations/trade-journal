@@ -51,6 +51,7 @@ import { organizationJsonLd, websiteJsonLd } from "@/lib/structuredData"
 import { DEFAULT_WEB_THEME } from "@/lib/webTheme"
 import { webAppearanceBootScript } from "@/lib/webAppearance"
 import WebAppearanceController from "./components/WebAppearanceController"
+import ContextualTourRoot from "./components/contextualTour/ContextualTourRoot"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -183,6 +184,7 @@ export default async function RootLayout({
             <SentryIdentifyUser />
             <BannedAccountShell>
               <OnboardingGateShell>
+                <ContextualTourRoot>
                 <DemoAppShell>
                   <SubscriptionGateShell>
                     <FreePlanAccountSlotShell>
@@ -193,6 +195,7 @@ export default async function RootLayout({
                     </FreePlanAccountSlotShell>
                   </SubscriptionGateShell>
                 </DemoAppShell>
+                </ContextualTourRoot>
               </OnboardingGateShell>
             </BannedAccountShell>
             </VaultProvider>

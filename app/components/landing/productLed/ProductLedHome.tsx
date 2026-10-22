@@ -50,11 +50,13 @@ const LandingPricingSection = dynamic(
 
 type ProductLedHomeProps = {
   featuredTradesSection: ReactNode
+  weeklyTopTradersSection: ReactNode
   testimonialsSection: ReactNode
 }
 
 export default function ProductLedHome({
   featuredTradesSection,
+  weeklyTopTradersSection,
   testimonialsSection,
 }: ProductLedHomeProps) {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
@@ -69,9 +71,7 @@ export default function ProductLedHome({
   const hasActiveMembershipAccess =
     isAuthenticatedUser && !!profile && hasActiveMembership(profile)
   const purchase = useTraxProPurchaseCopy(!profileHasUsedCheckoutTrial(profile))
-  const trialCtaLabel = earlyAccessPromotionEnabled
-    ? "Create free account"
-    : purchase.buttonTitle
+  const trialCtaLabel = "Continue for Free"
 
   useEffect(() => {
     if (hasActiveMembershipAccess) clearSignupFlow()
@@ -85,7 +85,7 @@ export default function ProductLedHome({
       return
     }
     if (profile && needsSubscriptionCheckout(profile)) {
-      router.replace("/finish-trial")
+      router.replace("/dashboard")
     }
   }, [loading, isAuthenticatedUser, user?.id, profile, router, membershipReconciling])
 
@@ -132,10 +132,6 @@ export default function ProductLedHome({
         router.push(resolveSignupProfileSetupPath())
         return
       }
-      if (profile && needsSubscriptionCheckout(profile)) {
-        router.push("/finish-trial")
-        return
-      }
       router.push("/dashboard")
       return
     }
@@ -163,10 +159,6 @@ export default function ProductLedHome({
       }
       if (profile && profileNeedsOnboarding(profile)) {
         router.push(resolveSignupProfileSetupPath())
-        return
-      }
-      if (profile && needsSubscriptionCheckout(profile)) {
-        router.push("/finish-trial")
         return
       }
       const url = await startTraxProCheckout({ billingInterval: interval })
@@ -231,20 +223,10 @@ export default function ProductLedHome({
                 <button
                   type="button"
                   className="tt-home-btn tt-home-btn-primary"
-                  disabled={
-                    checkoutLoading ||
-                    loading ||
-                    (!earlyAccessPromotionEnabled && purchase.purchaseDisabled)
-                  }
-                  onClick={() =>
-                    earlyAccessPromotionEnabled
-                      ? handleStartTrial()
-                      : void handleSubscribe()
-                  }
+                  disabled={checkoutLoading || loading}
+                  onClick={() => handleStartTrial()}
                 >
-                  {checkoutLoading && !earlyAccessPromotionEnabled
-                    ? "Starting trial…"
-                    : trialCtaLabel}
+                  {trialCtaLabel}
                 </button>
                 <button
                   type="button"
@@ -297,6 +279,7 @@ export default function ProductLedHome({
           <LandingAnalyticsShowcaseSection />
           <LandingComparisonSection />
           {featuredTradesSection}
+          {weeklyTopTradersSection}
           {!earlyAccessPromotionEnabled ? (
             <div className="tt-home-pricing">
               <LandingPricingSection
@@ -314,11 +297,7 @@ export default function ProductLedHome({
           <LandingComingSoonSection />
           <LandingFinalCtaSection
             checkoutLoading={checkoutLoading}
-            onStartTrial={() =>
-              earlyAccessPromotionEnabled
-                ? handleStartTrial()
-                : void handleSubscribe()
-            }
+            onStartTrial={() => handleStartTrial()}
           />
           <MarketingFooter />
         </div>

@@ -191,6 +191,7 @@ export default function DashboardFilters({
 
   return (
     <div>
+      <div data-tt-tour-target="dashboardAccountAndDates">
       <TradeFilterBar
         className={DASHBOARD_MOBILE_FILTER_MARGIN_CLASS}
         mobileThreeRowLayout
@@ -236,12 +237,14 @@ export default function DashboardFilters({
           <>
             <Link
               href="/withdrawals"
+              data-tt-tour-target="dashboardWithdrawals"
               className="tt-dash-desktop-only h-[34px] shrink-0 rounded-md bg-white/10 px-3 text-sm text-white hover:bg-white/20"
             >
               Withdrawals
             </Link>
             <Link
               href="/calendar"
+              data-tt-tour-target="dashboardCalendar"
               className="tt-dash-desktop-only h-[34px] shrink-0 rounded-md bg-white/10 px-3 text-sm text-white hover:bg-white/20"
             >
               Calendar
@@ -250,6 +253,7 @@ export default function DashboardFilters({
               <button
                 type="button"
                 onClick={onOpenTradingReport}
+                data-tt-tour-target="dashboardReports"
                 className="tt-dash-desktop-only h-[34px] shrink-0 rounded-md bg-white/10 px-3 text-sm text-white hover:bg-white/20"
               >
                 Reports
@@ -259,6 +263,7 @@ export default function DashboardFilters({
               <button
                 type="button"
                 onClick={onOpenTradingReport}
+                data-tt-tour-target="dashboardReports"
                 className={`${DASHBOARD_MOBILE_ACTION_BTN_CLASS} min-w-0 flex-1 md:hidden`}
               >
                 Report
@@ -266,6 +271,7 @@ export default function DashboardFilters({
             ) : null}
             <Link
               href="/withdrawals"
+              data-tt-tour-target="dashboardWithdrawals"
               className={`${DASHBOARD_MOBILE_ACTION_BTN_CLASS} min-w-0 flex-1 md:hidden`}
             >
               Withdrawals
@@ -296,6 +302,7 @@ export default function DashboardFilters({
           </>
         }
       />
+      </div>
       {showPropFirmLink ? (
         <div className="tt-dash-hide-desktop-v1 -mt-1 mb-2 flex justify-end md:justify-start md:mb-3">
           <Link

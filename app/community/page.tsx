@@ -71,7 +71,15 @@ import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import { createRoomJoinNotification } from "@/lib/createRoomJoinNotification"
 import { createRoomMessageNotifications } from "@/lib/createRoomMessageNotifications"
-import { createUserRoom } from "@/lib/createUserRoom"
+import TradeRoomCreateWizard from "@/app/components/tradeRooms/TradeRoomCreateWizard"
+import ManageTradeRoomModal from "@/app/components/tradeRooms/ManageTradeRoomModal"
+import {
+  fetchTradeRoomById,
+  fetchViewerTradeRoomJoinRequest,
+  TRADE_ROOM_DETAIL_SELECT,
+  type TradeRoomRow,
+} from "@/lib/tradeRoomClient"
+import { attemptTradeRoomJoin, roomRequiresJoinApproval } from "@/lib/tradeRoomJoinFlow"
 import RoomNotificationSettingsSheet from "@/app/components/RoomNotificationSettingsSheet"
 import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
 import ReplyReferenceBlock from "@/app/components/replies/ReplyReferenceBlock"
@@ -149,16 +157,9 @@ import {
 } from "@/lib/roomMessageReconciliation"
 import { pickInitialTradeRoomId } from "@/lib/tradeRoomsEntry"
 
-type Room = {
-  id: string
-  name?: string | null
-  description?: string | null
-  slug?: string | null
-  image_url?: string | null
+type Room = TradeRoomRow & {
   /** If present from API joins, used as sidebar avatar fallback after image_url */
   avatar_url?: string | null
-  owner_user_id?: string | null
-  show_on_profile?: boolean | null
 }
 
 const memberRoomsRequestByUser = new Map<string, Promise<Room[]>>()
@@ -350,7 +351,10 @@ function CommunityContent() {
   const sectionParam = searchParams.get("section")
   const messageParam = searchParams.get("message")
   const setupMode = searchParams.get("setup") === "true"
-  const createMode = searchParams.get("create") === "true"
+  const manageMode = searchParams.get("manage") === "true"
+  const createMode =
+    searchParams.get("create") === "true" ||
+    searchParams.get("create") === "wizard"
   const [rooms, setRooms] = useState<Room[]>([])
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null)
   const [messages, setMessages] = useState<RoomMessage[]>([])
@@ -389,6 +393,12 @@ function CommunityContent() {
   const [roomImage, setRoomImage] = useState<string | null>(null)
   const [inviteTargetRoom, setInviteTargetRoom] = useState<Room | null>(null)
   const [showRoomSettings, setShowRoomSettings] = useState(false)
+  const [showCreateWizard, setShowCreateWizard] = useState(false)
+  const [showManageRoom, setShowManageRoom] = useState(false)
+  const [manageRoomDetail, setManageRoomDetail] = useState<TradeRoomRow | null>(
+    null
+  )
+  const [viewerJoinStatus, setViewerJoinStatus] = useState<string | null>(null)
   const [showManageMembers, setShowManageMembers] = useState(false)
   const [memberSearchQuery, setMemberSearchQuery] = useState("")
   const [manageMembers, setManageMembers] = useState<RoomMemberManage[]>([])
@@ -2441,18 +2451,9 @@ function CommunityContent() {
     const request = (async () => {
       const { data, error } = await supabase
         .from("room_members")
-        .select(`
-          room_id,
-          room:rooms!room_members_room_id_fkey (
-            id,
-            name,
-            description,
-            slug,
-            image_url,
-            owner_user_id,
-            show_on_profile
-          )
-        `)
+        .select(
+          `room_id, room:rooms!room_members_room_id_fkey (${TRADE_ROOM_DETAIL_SELECT})`
+        )
         .eq("user_id", userId)
         .is("left_at", null)
 
@@ -2486,65 +2487,68 @@ function CommunityContent() {
     setJoiningRoomId(roomId)
 
     try {
-    const authUser = user
+      const authUser = user
+      if (!authUser?.id) return
 
-    if (!authUser?.id) return
+      const target =
+        inviteTargetRoom?.id === roomId
+          ? inviteTargetRoom
+          : rooms.find((r) => r.id === roomId)
 
-    const { data: existing } = await supabase
-      .from("room_members")
-      .select("id, left_at")
-      .eq("room_id", roomId)
-      .eq("user_id", authUser.id)
-      .maybeSingle()
-
-    const alreadyActive =
-      existing != null && existing.left_at == null
-
-    if (!existing) {
-      const { error } = await supabase.from("room_members").insert({
-        room_id: roomId,
-        user_id: authUser.id,
-        notification_enabled: true,
-      })
-
-      if (error && error.code !== "23505") {
-        console.error("joinRoom error:", error)
+      if (!target) {
         showPopup({ type: "error", message: "Failed to join room" })
         return
       }
-    } else if (!alreadyActive) {
-      const { error } = await supabase
-        .from("room_members")
-        .update({ left_at: null, notification_enabled: true })
-        .eq("room_id", roomId)
-        .eq("user_id", authUser.id)
 
-      if (error) {
-        console.error("joinRoom reactivate:", error)
-        showPopup({ type: "error", message: "Failed to join room" })
+      const result = await attemptTradeRoomJoin(
+        supabase,
+        authUser.id,
+        target as TradeRoomRow
+      )
+
+      if (result.kind === "banned") {
+        showPopup({
+          type: "error",
+          message: "You cannot join this room.",
+        })
         return
       }
-    }
 
-    const nextRooms = await loadMemberRooms(authUser.id)
-    setRooms(nextRooms)
-    writeRoomSession(authUser.id, { rooms: nextRooms })
-    setInviteTargetRoom(null)
-    setSelectedRoomId(roomId)
+      if (result.kind === "error") {
+        showPopup({ type: "error", message: result.message })
+        return
+      }
 
-    if (alreadyActive) {
-      showPopup({
-        type: "warning",
-        message: "You're already in this room",
-      })
-    } else {
-      void import("@/lib/nativeHaptics").then(({ hapticMedium }) => {
-        hapticMedium("join-room")
-      })
-      await createRoomJoinNotification(supabase, roomId)
-      notifyGettingStartedChecklistMaybeCompleted()
-      setRoomNotificationsEnabled(true)
-    }
+      if (result.kind === "requested" || result.kind === "pending") {
+        setViewerJoinStatus("pending")
+        showPopup({
+          type: "success",
+          message: "Join request sent. The owner will review it.",
+        })
+        return
+      }
+
+      const alreadyActive = result.alreadyMember
+      const nextRooms = await loadMemberRooms(authUser.id)
+      setRooms(nextRooms)
+      writeRoomSession(authUser.id, { rooms: nextRooms })
+      setInviteTargetRoom(null)
+      setSelectedRoomId(roomId)
+      setViewerJoinStatus(null)
+
+      if (alreadyActive) {
+        showPopup({
+          type: "warning",
+          message: "You're already in this room",
+        })
+      } else {
+        void import("@/lib/nativeHaptics").then(({ hapticMedium }) => {
+          hapticMedium("join-room")
+        })
+        await createRoomJoinNotification(supabase, roomId)
+        notifyGettingStartedChecklistMaybeCompleted()
+        setRoomNotificationsEnabled(true)
+      }
     } finally {
       setJoiningRoomId(null)
     }
@@ -2613,49 +2617,49 @@ function CommunityContent() {
       requestDemoSignup("room")
       return
     }
-    if (creatingRoomRef.current || creatingRoom) return
+    if (!user?.id) return
 
-    creatingRoomRef.current = true
-    setCreatingRoom(true)
-
-    try {
-      if (!user?.id) return
-
-      const { data: existing, error: existingErr } = await supabase
-        .from("rooms")
-        .select("id, slug")
-        .eq("owner_user_id", user.id)
-        .maybeSingle()
-
-      if (existingErr) {
-        console.error(existingErr)
-      }
-
-      if (existing) {
-        router.push(
-          `/community?room=${encodeURIComponent(String(existing.slug ?? existing.id))}`
-        )
-        return
-      }
-
-      const username = String(profile?.username ?? "").trim() || "user"
-      const newRoom = await createUserRoom(user.id, username)
-      const slug = String(newRoom.slug ?? newRoom.id)
-
-      setRooms((prev) => [...prev, newRoom as Room])
-      setSelectedRoomId(String(newRoom.id))
-      setMobileRoomsOpen(false)
-
+    const owned = rooms.find((r) => r.owner_user_id === user.id)
+    if (owned) {
       router.push(
-        `/community?room=${encodeURIComponent(slug)}&setup=true`
+        `/community?room=${encodeURIComponent(String(owned.slug ?? owned.id))}`
       )
-    } catch (err) {
-      console.error(err)
-      showPopup({ type: "error", message: "Failed to create room" })
-    } finally {
-      creatingRoomRef.current = false
-      setCreatingRoom(false)
+      return
     }
+
+    const { data: existing } = await supabase
+      .from("rooms")
+      .select("id, slug")
+      .eq("owner_user_id", user.id)
+      .maybeSingle()
+
+    if (existing) {
+      router.push(
+        `/community?room=${encodeURIComponent(String(existing.slug ?? existing.id))}`
+      )
+      return
+    }
+
+    setShowCreateWizard(true)
+  }
+
+  function handleTradeRoomCreated(room: TradeRoomRow) {
+    setShowCreateWizard(false)
+    const next = room as Room
+    setRooms((prev) => [...prev, next])
+    setSelectedRoomId(room.id)
+    setMobileRoomsOpen(false)
+    const slug = String(room.slug ?? room.id)
+    router.push(`/community?room=${encodeURIComponent(slug)}&manage=true`)
+  }
+
+  async function openManageRoomPanel() {
+    if (!selectedRoomId) return
+    const detail =
+      (await fetchTradeRoomById(supabase, selectedRoomId)) ??
+      (rooms.find((r) => r.id === selectedRoomId) as TradeRoomRow | undefined)
+    if (detail) setManageRoomDetail(detail)
+    setShowManageRoom(true)
   }
 
   async function handleRoomImageUpload(file: File) {
@@ -2814,8 +2818,7 @@ function CommunityContent() {
         return
       }
 
-      const roomSelect =
-        "id, name, description, slug, image_url, owner_user_id, show_on_profile" as const
+      const roomSelect = TRADE_ROOM_DETAIL_SELECT
 
       const { data: slugRow } = await supabase
         .from("rooms")
@@ -2848,6 +2851,29 @@ function CommunityContent() {
       cancelled = true
     }
   }, [roomParam, rooms, loadingRooms])
+
+  useEffect(() => {
+    if (!needsJoin || !inviteTargetRoom?.id || !user?.id) {
+      setViewerJoinStatus(null)
+      return
+    }
+    void fetchViewerTradeRoomJoinRequest(supabase, inviteTargetRoom.id).then(
+      (status) => setViewerJoinStatus(status)
+    )
+  }, [needsJoin, inviteTargetRoom?.id, user?.id])
+
+  useEffect(() => {
+    if (createMode && user?.id && !loadingRooms) {
+      setShowCreateWizard(true)
+    }
+  }, [createMode, user?.id, loadingRooms])
+
+  useEffect(() => {
+    if (!selectedRoomId || !isOwner) return
+    if (manageMode || setupMode) {
+      void openManageRoomPanel()
+    }
+  }, [manageMode, setupMode, selectedRoomId, isOwner])
 
   useEffect(() => {
     if (!selectedRoomId || needsJoin) {
@@ -3841,7 +3867,7 @@ function CommunityContent() {
                     <button
                       type="button"
                       aria-label="Room settings"
-                      onClick={() => setShowRoomSettings(true)}
+                      onClick={() => void openManageRoomPanel()}
                       className={ROOM_MOBILE_HEADER_ICON_CLASS}
                     >
                       <span aria-hidden>⚙️</span>
@@ -4073,7 +4099,7 @@ function CommunityContent() {
                         <button
                           type="button"
                           aria-label="Room settings"
-                          onClick={() => setShowRoomSettings(true)}
+                          onClick={() => void openManageRoomPanel()}
                           className={`${ROOM_OWNER_HEADER_ACTION_CLASS} w-8`}
                         >
                           <span className="text-base leading-none" aria-hidden>
@@ -4108,117 +4134,6 @@ function CommunityContent() {
 
             </div>
 
-            {setupMode && isOwner && selectedRoomId ? (
-              <div className="border-b border-white/10 px-4 py-5 md:px-6">
-                <div className="mx-auto w-full max-w-2xl rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
-                  <h2 className="text-xl font-semibold text-blue-300">
-                    Set up your Trade Room
-                  </h2>
-
-                  <p className="mt-2 text-sm leading-relaxed text-gray-400">
-                    Customize your room, create channels, and share your invite
-                    link.
-                  </p>
-
-                  <div className="mt-6 space-y-5">
-                    <div>
-                      <p className="mb-2 text-sm font-medium text-gray-300">
-                        Trade Room Picture
-                      </p>
-                      <label className="inline-flex cursor-pointer items-center rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/10">
-                        Choose Trade Room Picture
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="sr-only"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0]
-                            e.target.value = ""
-                            roomImageCrop.handleFileSelected(file)
-                          }}
-                        />
-                      </label>
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-gray-300">
-                        Room name
-                      </label>
-                      <input
-                        type="text"
-                        value={roomName}
-                        onChange={(e) => setRoomName(e.target.value)}
-                        className="w-full rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
-                        placeholder="Room name"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => void handleRenameRoom()}
-                        className="mt-3 rounded-xl border border-blue-500/30 bg-blue-500/15 px-4 py-2 text-sm font-semibold text-blue-100 transition hover:bg-blue-500/25"
-                      >
-                        Save Name
-                      </button>
-                    </div>
-
-                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                      <label className="flex items-start gap-3 text-sm text-gray-300">
-                        <input
-                          type="checkbox"
-                          checked={showOnProfile}
-                          onChange={(e) => setShowOnProfile(e.target.checked)}
-                          className="mt-0.5"
-                        />
-                        <span>
-                          <span className="font-medium text-white">
-                            Show on my profile
-                          </span>
-                          <span className="mt-1 block text-xs leading-relaxed text-gray-400">
-                            If off, users can only join via invite link.
-                          </span>
-                        </span>
-                      </label>
-                    </div>
-
-                    <div>
-                      <p className="mb-2 text-sm font-medium text-gray-300">
-                        Invite link
-                      </p>
-                      <div className="flex flex-col gap-2 sm:flex-row">
-                        <input
-                          readOnly
-                          value={inviteLinkDisplay}
-                          className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-xs text-gray-200"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!inviteLinkDisplay) return
-                            void navigator.clipboard.writeText(inviteLinkDisplay)
-                          }}
-                          className="shrink-0 rounded-xl border border-white/10 bg-white/10 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/15"
-                        >
-                          Copy
-                        </button>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!inviteRoomKey) return
-                        router.push(
-                          `/trade-rooms?room=${encodeURIComponent(inviteRoomKey)}`
-                        )
-                      }}
-                      className="w-full rounded-xl bg-blue-500 py-3 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:hover:bg-blue-500 sm:w-auto sm:px-6"
-                    >
-                      Finish Setting Up
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
             {needsJoin && inviteTargetRoom ? (
               <div className="flex flex-1 flex-col items-center justify-center px-6 py-16 text-center">
                 <p className="mb-6 max-w-md text-gray-300">
@@ -4231,12 +4146,19 @@ function CommunityContent() {
                 <button
                   type="button"
                   onClick={() => void joinRoom(inviteTargetRoom.id)}
-                  disabled={joiningRoomId === inviteTargetRoom.id}
+                  disabled={
+                    joiningRoomId === inviteTargetRoom.id ||
+                    viewerJoinStatus === "pending"
+                  }
                   className="rounded-lg bg-blue-500 px-6 py-3 text-sm font-medium text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
                 >
                   {joiningRoomId === inviteTargetRoom.id
                     ? "Joining…"
-                    : "Join This Trade Room"}
+                    : viewerJoinStatus === "pending"
+                      ? "Request pending"
+                      : roomRequiresJoinApproval(inviteTargetRoom)
+                        ? "Request to join"
+                        : "Join This Trade Room"}
                 </button>
               </div>
             ) : (
@@ -5421,6 +5343,58 @@ function CommunityContent() {
         </div>
       ) : null}
       </div>
+      {user?.id ? (
+        <TradeRoomCreateWizard
+          open={showCreateWizard}
+          userId={user.id}
+          username={profile?.username}
+          ownedRoomSlug={
+            rooms.find((r) => r.owner_user_id === user.id)?.slug ?? null
+          }
+          onClose={() => setShowCreateWizard(false)}
+          onCreated={handleTradeRoomCreated}
+        />
+      ) : null}
+
+      {showManageRoom && manageRoomDetail && user?.id ? (
+        <ManageTradeRoomModal
+          open={showManageRoom}
+          room={manageRoomDetail}
+          viewerId={user.id}
+          isPlatformAdmin={isAdmin}
+          isMember={rooms.some((r) => r.id === manageRoomDetail.id)}
+          sections={sections.map((s) => ({ id: s.id, name: s.name }))}
+          onClose={() => setShowManageRoom(false)}
+          onRoomUpdated={(updated) => {
+            setManageRoomDetail(updated)
+            setRooms((prev) =>
+              prev.map((r) => (r.id === updated.id ? { ...r, ...updated } : r))
+            )
+            setRoomName(updated.name ?? "")
+            setShowOnProfile(updated.show_on_profile !== false)
+          }}
+          onOpenManageMembers={() => {
+            setMemberSearchQuery("")
+            setShowManageMembers(true)
+          }}
+          onOpenChannelSettings={(section) => {
+            const full = sections.find((s) => s.id === section.id)
+            if (full) openChannelSettings(full)
+            setShowManageRoom(false)
+          }}
+          onAddChannel={() => {
+            void handleAddSection()
+          }}
+          onDeleted={() => {
+            setShowManageRoom(false)
+            setManageRoomDetail(null)
+            setSelectedRoomId(null)
+            router.push("/community")
+          }}
+          onLeaveRoom={() => void handleLeaveRoom()}
+        />
+      ) : null}
+
       <ImageCropModal
         open={roomImageCrop.cropSourceFile != null}
         file={roomImageCrop.cropSourceFile}

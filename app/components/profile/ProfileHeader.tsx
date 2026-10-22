@@ -111,7 +111,12 @@ export default function ProfileHeader({
   const isOwnProfile = currentUserId === profile.id
 
   return (
-    <div className="relative bg-white/5 border border-white/10 rounded-xl p-6 backdrop-blur-md">
+    <div
+      className="relative bg-white/5 border border-white/10 rounded-xl p-6 backdrop-blur-md"
+      {...(isOwnProfile
+        ? { "data-tt-tour-target": "profileIdentity" }
+        : {})}
+    >
       {isOwnProfile ? (
         <input
           id="storyUploadInput"
@@ -255,13 +260,19 @@ export default function ProfileHeader({
                 {profile.bio || "No bio yet"}
               </p>
 
-              <ProfileTradeRoomSection
-                isOwnProfile={isOwnProfile}
-                hasRoom={hasRoom}
-                canShowVisitorRoomCta={canShowVisitorRoomCta}
-                onCreateRoom={onCreateRoom}
-                onViewRoom={onViewRoom}
-              />
+              <div
+                {...(isOwnProfile
+                  ? { "data-tt-tour-target": "profileTradeRoom" }
+                  : {})}
+              >
+                <ProfileTradeRoomSection
+                  isOwnProfile={isOwnProfile}
+                  hasRoom={hasRoom}
+                  canShowVisitorRoomCta={canShowVisitorRoomCta}
+                  onCreateRoom={onCreateRoom}
+                  onViewRoom={onViewRoom}
+                />
+              </div>
             </div>
           </div>
 

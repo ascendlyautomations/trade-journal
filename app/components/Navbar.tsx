@@ -670,6 +670,7 @@ export default function Navbar() {
     badgeClassName = NAV_UNREAD_BADGE_ABSOLUTE
   ) => (
     <div
+      data-tt-tour-target="dashboardNotifications"
       className={`relative shrink-0 cursor-pointer ${wrapperClassName}`.trim()}
       role="button"
       tabIndex={0}
@@ -844,6 +845,13 @@ export default function Navbar() {
                 <IntentPrefetchLink
                   key={item.href}
                   href={item.href}
+                  data-tt-tour-target={
+                    item.href === "/community"
+                      ? "feedTradeRooms"
+                      : item.href === "/explore"
+                        ? "feedExplore"
+                        : undefined
+                  }
                   className={`block rounded px-3 py-2 ${
                     isActive(item.href)
                       ? NAV_ITEM_ACTIVE
@@ -981,7 +989,11 @@ export default function Navbar() {
                   Dashboard
                 </IntentPrefetchLink>
               </span>
-              <span ref={setPinnedRef("trades")} className="shrink-0">
+              <span
+                ref={setPinnedRef("trades")}
+                className="shrink-0"
+                data-tt-tour-target="dashboardTrades"
+              >
                 <IntentPrefetchLink
                   href="/trades"
                   className={navTriggerClass(isActive("/trades"))}
@@ -1084,6 +1096,13 @@ export default function Navbar() {
                         <IntentPrefetchLink
                           key={item.href}
                           href={item.href}
+                          data-tt-tour-target={
+                            item.href === "/community"
+                              ? "feedTradeRooms"
+                              : item.href === "/explore"
+                                ? "feedExplore"
+                                : undefined
+                          }
                           className={`block rounded px-3 py-2 ${
                             isActive(item.href)
                               ? NAV_ITEM_ACTIVE
@@ -1416,6 +1435,7 @@ export default function Navbar() {
               </p>
               <IntentPrefetchLink
                 href="/explore"
+                data-tt-tour-target="feedExplore"
                 className={`rounded-lg px-3 py-1.5 transition ${
                   isActive("/explore")
                     ? NAV_ITEM_ACTIVE
@@ -1427,6 +1447,7 @@ export default function Navbar() {
               </IntentPrefetchLink>
               <IntentPrefetchLink
                 href="/community"
+                data-tt-tour-target="feedTradeRooms"
                 className={`rounded-lg px-3 py-1.5 transition ${
                   isActive("/community") || pathname.startsWith("/room/")
                     ? NAV_ITEM_ACTIVE
@@ -1627,6 +1648,7 @@ export default function Navbar() {
 
           <IntentPrefetchLink
             href="/trades"
+            data-tt-tour-target="dashboardTrades"
             className={`rounded-lg px-3 py-1.5 transition ${
               isActive("/trades")
                 ? NAV_ITEM_ACTIVE

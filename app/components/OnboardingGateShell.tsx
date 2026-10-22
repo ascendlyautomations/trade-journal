@@ -3,27 +3,11 @@
 import { useEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { useUserProfile } from "@/lib/useUserProfile"
-import { isEarlyAccessActive } from "@/lib/earlyAccess"
 import {
   isAllowedPathDuringOnboarding,
   profileNeedsOnboarding,
 } from "@/lib/profileOnboardingGate"
-import {
-  isSubscriptionExempt,
-  type SubscriptionAccessProfile,
-} from "@/lib/subscriptionAccess"
-import { isCreatorFlowActive, getPendingCreatorCode } from "@/lib/creatorAccess"
 import { resolveSignupProfileSetupPath } from "@/lib/signupFlow"
-
-function resolveProfileSetupPath(
-  profile: SubscriptionAccessProfile
-): "/choose-plan" | "/onboarding" {
-  if (isCreatorFlowActive() || getPendingCreatorCode()) return "/onboarding"
-  if (isEarlyAccessActive(profile) || isSubscriptionExempt(profile)) {
-    return "/onboarding"
-  }
-  return resolveSignupProfileSetupPath()
-}
 
 /**
  * Redirects users with incomplete profiles to /onboarding.
@@ -50,7 +34,7 @@ export default function OnboardingGateShell({
 
     if (needsOnboarding) {
       if (isAllowedPathDuringOnboarding(pathname)) return
-      router.replace(resolveProfileSetupPath(profile))
+      router.replace(resolveSignupProfileSetupPath())
       return
     }
 

@@ -22,16 +22,18 @@ describe("validateWebSocialOAuthSignup", () => {
     )
   })
 
-  it("requires terms for Apple on login tab", () => {
-    const msg = validateWebSocialOAuthSignup({
-      isLogin: true,
-      agreedToTerms: false,
-      earlyAccessPromotionEnabled: false,
-      signupPlanIntent: null,
-      requireSignupPlanIntent: true,
-      provider: "apple",
-    })
-    assert.match(msg ?? "", /Terms of Service/)
+  it("allows Apple login without terms", () => {
+    assert.equal(
+      validateWebSocialOAuthSignup({
+        isLogin: true,
+        agreedToTerms: false,
+        earlyAccessPromotionEnabled: false,
+        signupPlanIntent: null,
+        requireSignupPlanIntent: true,
+        provider: "apple",
+      }),
+      null
+    )
   })
 
   it("requires terms on signup", () => {

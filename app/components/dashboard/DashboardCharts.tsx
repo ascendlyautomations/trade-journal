@@ -141,14 +141,16 @@ function DashboardCharts({
   )
 
   const mobileEquity = deferredSectionsReady ? (
-    <DashboardEquityCurve
-      variant="mobile"
-      data={equityData}
-      totalTrades={totalTrades}
-      drawdownLimitLineY={drawdownLimitLineY}
-      equityCurveUsesAccountBalance={equityCurveUsesAccountBalance}
-      showPersonalDrawdownFloor={showPersonalDrawdownFloor}
-    />
+    <div data-tt-tour-target="dashboardPerformance">
+      <DashboardEquityCurve
+        variant="mobile"
+        data={equityData}
+        totalTrades={totalTrades}
+        drawdownLimitLineY={drawdownLimitLineY}
+        equityCurveUsesAccountBalance={equityCurveUsesAccountBalance}
+        showPersonalDrawdownFloor={showPersonalDrawdownFloor}
+      />
+    </div>
   ) : (
     <ChartSkeleton className="h-48" />
   )
@@ -164,19 +166,21 @@ function DashboardCharts({
 
   const desktopEquity =
     showEquity && deferredSectionsReady ? (
-      <DashboardEquityCurve
-        variant="desktop"
-        isPro={isPro}
-        data={equityData}
-        profitFactor={isPro ? profitFactor : undefined}
-        currentStreak={isPro ? currentStreak : undefined}
-        avgDay={isPro ? avgDay : undefined}
-        consistency={isPro ? consistency : undefined}
-        totalTrades={totalTrades}
-        drawdownLimitLineY={drawdownLimitLineY}
-        equityCurveUsesAccountBalance={equityCurveUsesAccountBalance}
-        showPersonalDrawdownFloor={showPersonalDrawdownFloor}
-      />
+      <div data-tt-tour-target="dashboardPerformance">
+        <DashboardEquityCurve
+          variant="desktop"
+          isPro={isPro}
+          data={equityData}
+          profitFactor={isPro ? profitFactor : undefined}
+          currentStreak={isPro ? currentStreak : undefined}
+          avgDay={isPro ? avgDay : undefined}
+          consistency={isPro ? consistency : undefined}
+          totalTrades={totalTrades}
+          drawdownLimitLineY={drawdownLimitLineY}
+          equityCurveUsesAccountBalance={equityCurveUsesAccountBalance}
+          showPersonalDrawdownFloor={showPersonalDrawdownFloor}
+        />
+      </div>
     ) : showEquity ? (
       <ChartSkeleton className="h-72" />
     ) : null

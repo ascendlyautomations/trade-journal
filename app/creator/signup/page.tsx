@@ -311,7 +311,6 @@ function CreatorSignupInner() {
               type="button"
               onClick={() => {
                 setIsLogin(true)
-                setAgreedToTerms(false)
               }}
               className={`flex-1 rounded-lg py-2 font-semibold transition md:py-1.5 ${
                 isLogin ? "bg-white text-black" : "text-white"

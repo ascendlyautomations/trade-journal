@@ -27,7 +27,7 @@ import {
 } from "@/lib/exploreSuggestedTraders"
 import {
   fetchExploreWeeklyTopPerformers,
-  type ExploreWeeklyTopPerformer,
+  type WeeklyTopPerformersPayload,
 } from "@/lib/exploreWeeklyTopPerformers"
 import {
   discoverFilterAvailability,
@@ -116,9 +116,16 @@ export default function ExplorePage() {
     null
   )
   const [gridColumns, setGridColumns] = useState(1)
-  const [weeklyTopPerformers, setWeeklyTopPerformers] = useState<
-    ExploreWeeklyTopPerformer[]
-  >([])
+  const [weeklyTopPayload, setWeeklyTopPayload] = useState<WeeklyTopPerformersPayload>(
+    {
+      performers: [],
+      periodTitle: "Top Performers This Week",
+      periodSubtitle:
+        "Calendar week rankings from public trades (all accounts)",
+      isHistoricalPeriod: false,
+      period: null,
+    }
+  )
   const [weeklyTopLoading, setWeeklyTopLoading] = useState(true)
   const [weeklyTopError, setWeeklyTopError] = useState<string | null>(null)
   const [memberRoomIds, setMemberRoomIds] = useState<Set<string>>(new Set())
@@ -170,13 +177,17 @@ export default function ExplorePage() {
     setWeeklyTopLoading(true)
     setWeeklyTopError(null)
     try {
-      const rows = await fetchExploreWeeklyTopPerformers({
+      const payload = await fetchExploreWeeklyTopPerformers({
         viewerId: currentUserId,
       })
-      setWeeklyTopPerformers(rows)
+      setWeeklyTopPayload(payload)
     } catch (error) {
       console.error("[explore] weekly top performers:", error)
-      setWeeklyTopPerformers([])
+      setWeeklyTopPayload((prev) => ({
+        ...prev,
+        performers: [],
+        period: null,
+      }))
       setWeeklyTopError("Couldn't load top performers. Please try again.")
     } finally {
       setWeeklyTopLoading(false)
@@ -711,7 +722,10 @@ export default function ExplorePage() {
 
         {!loading ? (
           <ExploreTopPerformersSection
-            performers={weeklyTopPerformers}
+            performers={weeklyTopPayload.performers}
+            periodTitle={weeklyTopPayload.periodTitle}
+            periodSubtitle={weeklyTopPayload.periodSubtitle}
+            hasLeaderboardPeriod={weeklyTopPayload.period != null}
             loading={weeklyTopLoading}
             error={weeklyTopError}
             onRetry={() => void loadWeeklyTopPerformers()}

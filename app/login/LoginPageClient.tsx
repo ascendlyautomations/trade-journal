@@ -14,13 +14,13 @@ import { useRouter } from "next/navigation"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
 import { persistReferralCodeFromUrl } from "@/lib/referralPersistence"
-import { clearSignupIntent, enterSignupFlow, setCheckoutBillingInterval, setSignupIntent, getSignupIntent, type SignupIntent } from "@/lib/signupFlow"
-import SignupPlanPicker from "@/app/components/SignupPlanPicker"
-import { markProfileUseFreeTier } from "@/lib/markFreeTierSignup"
 import {
-  TRAXPRO_DEFAULT_BILLING_INTERVAL,
-  type TraxProBillingIntervalId,
-} from "@/lib/traxProBillingPlans"
+  clearSignupFlow,
+  enterSignupFlow,
+  getCheckoutBillingInterval,
+  setSignupIntent,
+} from "@/lib/signupFlow"
+import type { TraxProBillingIntervalId } from "@/lib/traxProBillingPlans"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { prefetchCriticalAppRoutes } from "@/lib/routePrefetch"
 import { startTraxProCheckout } from "@/lib/startTraxProCheckout"
@@ -30,7 +30,6 @@ import {
   getPendingCreatorCode,
   normalizeCreatorAccessCode,
 } from "@/lib/creatorAccess"
-import { useEarlyAccessPromotion } from "@/lib/useEarlyAccessPromotion"
 import NativeIosLoginShell from "@/app/components/NativeIosLoginShell"
 import {
   clearWebSocialOAuthCallbackParams,
@@ -61,8 +60,6 @@ export default function LoginPageClient({
   initialNativeIos?: boolean
 }) {
   const { user, loading: authLoading } = useUserProfile()
-  const { enabled: earlyAccessPromotionEnabled } =
-    useEarlyAccessPromotion()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [name, setName] = useState("")
@@ -76,23 +73,13 @@ export default function LoginPageClient({
   const [appleLoading, setAppleLoading] = useState(false)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const checkoutInFlightRef = useRef(false)
-  const [billingInterval, setBillingInterval] = useState<TraxProBillingIntervalId>(
-    TRAXPRO_DEFAULT_BILLING_INTERVAL
-  )
-  const [signupPlanIntent, setSignupPlanIntent] = useState<SignupIntent | null>(
-    () => getSignupIntent()
-  )
   const { showPopup, feedbackModalProps } = useFeedbackPopup({ autoDismissMs: 3000 })
 
   const router = useRouter()
 
-  function applySignupPlanIntent(intent: SignupIntent) {
-    setSignupPlanIntent(intent)
-    setSignupIntent(intent)
+  function beginStandardFreeSignup() {
+    setSignupIntent("free")
     enterSignupFlow()
-    if (intent === "trial") {
-      setCheckoutBillingInterval(billingInterval)
-    }
   }
 
   function maybePrefetchDashboardBeforeNav(path: string) {
@@ -102,6 +89,7 @@ export default function LoginPageClient({
   }
 
   function handleBack() {
+    clearSignupFlow()
     router.push("/")
   }
 
@@ -112,7 +100,7 @@ export default function LoginPageClient({
 
   async function startCheckoutAfterAuth(
     _userId: string,
-    interval: TraxProBillingIntervalId = billingInterval
+    interval: TraxProBillingIntervalId = getCheckoutBillingInterval()
   ) {
     if (checkoutInFlightRef.current) return
     checkoutInFlightRef.current = true
@@ -202,8 +190,8 @@ export default function LoginPageClient({
     router.replace(next)
   }, [user?.id, authLoading, router])
 
-  async function handleSignUp(intent: SignupIntent) {
-    devLog("Signup clicked", intent)
+  async function handleSignUp() {
+    devLog("Signup clicked")
     if (loading) return
 
     if (!agreedToTerms) {
@@ -223,12 +211,7 @@ export default function LoginPageClient({
       return
     }
 
-    setSignupIntent(intent)
-    setSignupPlanIntent(intent)
-    if (intent === "trial") {
-      enterSignupFlow()
-      setCheckoutBillingInterval(billingInterval)
-    }
+    beginStandardFreeSignup()
 
     setLoading(true)
 
@@ -306,14 +289,7 @@ export default function LoginPageClient({
         clearStoredReferralCode()
       }
 
-      if (!earlyAccessPromotionEnabled && intent === "free") {
-        const freeResult = await markProfileUseFreeTier(supabase, user.id)
-        if (!freeResult.ok) {
-          console.error("Failed to mark free tier at signup:", freeResult.error)
-        }
-      }
-
-      if (!earlyAccessPromotionEnabled && shouldStartCheckout()) {
+      if (shouldStartCheckout()) {
         try {
           await startCheckoutAfterAuth(user.id)
           return
@@ -400,9 +376,9 @@ export default function LoginPageClient({
     const signupError = validateWebSocialOAuthSignup({
       isLogin,
       agreedToTerms,
-      earlyAccessPromotionEnabled,
-      signupPlanIntent,
-      requireSignupPlanIntent: true,
+      earlyAccessPromotionEnabled: false,
+      signupPlanIntent: "free",
+      requireSignupPlanIntent: false,
       provider,
     })
     if (signupError) {
@@ -411,35 +387,18 @@ export default function LoginPageClient({
     }
 
     if (!isLogin) {
-      if (earlyAccessPromotionEnabled) {
-        applySignupPlanIntent("trial")
-      } else {
-        const intent = signupPlanIntent ?? getSignupIntent()
-        if (!intent) {
-          showPopup({
-            type: "error",
-            message:
-              "Choose Start Free Trial or Continue Free below before signing up.",
-          })
-          return
-        }
-        applySignupPlanIntent(intent)
-      }
+      beginStandardFreeSignup()
     }
 
     setLoadingState(true)
 
     try {
-      if (!isLogin) {
-        enterSignupFlow()
-      }
-
       const redirectPath = resolveWebSocialOAuthRedirectPath({
         isLogin,
         agreedToTerms,
-        earlyAccessPromotionEnabled,
-        signupPlanIntent,
-        requireSignupPlanIntent: true,
+        earlyAccessPromotionEnabled: false,
+        signupPlanIntent: "free",
+        requireSignupPlanIntent: false,
         safeNextPath: getSafeNextPath(),
         shouldStartCheckout: shouldStartCheckout(),
       })
@@ -607,7 +566,6 @@ export default function LoginPageClient({
             type="button"
             onClick={() => {
               setIsLogin(true)
-              setAgreedToTerms(false)
             }}
             className={`flex-1 rounded-lg py-2 font-semibold transition md:py-1.5 ${
               isLogin ? "bg-white text-black" : "text-white"
@@ -632,7 +590,7 @@ export default function LoginPageClient({
           {isLogin ? "Sign in to continue" : "Create your account"}
         </h2>
 
-        {(!isLogin || !nativeIos) && (
+        {!isLogin && (
           <label className="mb-5 flex cursor-pointer items-start gap-3 text-left text-sm leading-snug text-gray-300 md:mb-3">
             <input
               type="checkbox"
@@ -678,7 +636,7 @@ export default function LoginPageClient({
           <AppleSignInButton
             label="continue"
             onClick={handleAppleLogin}
-            disabled={loading || googleLoading || !agreedToTerms}
+            disabled={loading || googleLoading || (!isLogin && !agreedToTerms)}
             loading={appleLoading}
             className="mb-4 md:mb-3"
           />
@@ -743,44 +701,14 @@ export default function LoginPageClient({
 
         {!isLogin ? (
           <div className="mt-6 md:mt-4">
-            {earlyAccessPromotionEnabled ? (
-              <button
-                type="button"
-                disabled={!agreedToTerms || loading}
-                onClick={() => void handleSignUp("trial")}
-                className="w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 md:py-2.5"
-              >
-                {loading ? "Creating account…" : "Create free account"}
-              </button>
-            ) : (
-              <>
-                <div className="relative mb-6 md:mb-4">
-                  <div className="absolute inset-0 flex items-center" aria-hidden>
-                    <div className="w-full border-t border-white/10" />
-                  </div>
-                  <p className="relative mx-auto w-fit bg-transparent px-3 text-center text-xs text-gray-400">
-                    Choose how you&apos;d like to get started
-                  </p>
-                </div>
-
-                <div className="space-y-3 md:space-y-2.5">
-                  <SignupPlanPicker
-                    billingInterval={billingInterval}
-                    onBillingIntervalChange={(interval) => {
-                      setBillingInterval(interval)
-                      setCheckoutBillingInterval(interval)
-                    }}
-                    selectedIntent={signupPlanIntent}
-                    onSelectIntent={applySignupPlanIntent}
-                    onSelectTrial={() => void handleSignUp("trial")}
-                    onSelectFree={() => void handleSignUp("free")}
-                    disabled={!agreedToTerms}
-                    loading={loading}
-                    billingPickerName="login-signup-billing"
-                  />
-                </div>
-              </>
-            )}
+            <button
+              type="button"
+              disabled={!agreedToTerms || loading}
+              onClick={() => void handleSignUp()}
+              className="w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 md:py-2.5"
+            >
+              {loading ? "Creating account…" : "Continue for Free"}
+            </button>
           </div>
         ) : null}
 

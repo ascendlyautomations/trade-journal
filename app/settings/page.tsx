@@ -7,6 +7,11 @@ import { ProfileAvatarImg } from "../components/SafeProfileAvatar"
 import AffiliateApplyModal from "../components/AffiliateApplyModal"
 import CustomSelect from "@/app/components/CustomSelect"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import ContextualTourReplayButton from "@/app/components/contextualTour/ContextualTourReplayButton"
+import {
+  CONTEXTUAL_TOUR_SETTINGS_TAB_EVENT,
+  type ContextualTourSettingsTabId,
+} from "@/lib/contextualTour/settingsTourTab"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import type { TableUpdate } from "@/lib/supabaseTypes"
@@ -398,6 +403,19 @@ export default function SettingsPage() {
   useScrollPageTopOnMount()
   const [activeTab, setActiveTab] = useState<TabId>("account")
   const skipScrollOnInitialTab = useRef(true)
+
+  useEffect(() => {
+    function onTourTab(event: Event) {
+      const tab = (event as CustomEvent<{ tab: ContextualTourSettingsTabId }>)
+        .detail?.tab
+      if (tab === "appearance" || tab === "broker-integrations") {
+        setActiveTab(tab)
+      }
+    }
+    window.addEventListener(CONTEXTUAL_TOUR_SETTINGS_TAB_EVENT, onTourTab)
+    return () =>
+      window.removeEventListener(CONTEXTUAL_TOUR_SETTINGS_TAB_EVENT, onTourTab)
+  }, [])
   const [isAdmin, setIsAdmin] = useState(false)
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
 
@@ -1221,6 +1239,13 @@ export default function SettingsPage() {
                           type="button"
                           onClick={() => selectSettingsPanel(item.id)}
                           aria-current={selected ? "page" : undefined}
+                          data-tt-tour-target={
+                            item.id === "broker-integrations"
+                              ? "settingsBroker"
+                              : item.id === "appearance"
+                                ? "settingsAppearance"
+                                : undefined
+                          }
                           className={settingsNavItemClass(selected)}
                         >
                           <span className="block font-medium text-white">
@@ -1287,7 +1312,23 @@ export default function SettingsPage() {
               </p>
             </div>
 
-            {activeTab === "appearance" && <AppearanceSettingsSection />}
+            {activeTab === "appearance" && (
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
+                  <p className="text-sm text-gray-300">
+                    New to TradeTraxs? Take a quick tour of Dashboard, Feed,
+                    Profile, and Settings.
+                  </p>
+                  <ContextualTourReplayButton className="mt-3 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500" />
+                </div>
+                <div
+                  className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm"
+                  data-tt-tour-target="settingsAppearance"
+                >
+                  <AppearanceSettingsSection />
+                </div>
+              </div>
+            )}
 
             {activeTab === "privacy" && user?.id ? (
               <SettingsPrivacySection

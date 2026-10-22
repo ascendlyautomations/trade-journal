@@ -1,0 +1,33 @@
+.tt-contextual-tour-root {
+  --tt-tour-scrim: rgb(0 0 0 / 0.72);
+  --tt-tour-card-bg: color-mix(in srgb, var(--tt-app-surface, #0f172a) 92%, transparent);
+  --tt-tour-card-border: color-mix(in srgb, var(--tt-app-foreground, #fff) 12%, transparent);
+  --tt-tour-card-text: var(--tt-app-foreground, #f8fafc);
+  --tt-tour-card-muted: color-mix(in srgb, var(--tt-app-foreground, #fff) 65%, transparent);
+}
+
+html[data-web-appearance="light"] .tt-contextual-tour-root {
+  --tt-tour-scrim: rgb(15 23 42 / 0.55);
+  --tt-tour-card-bg: color-mix(in srgb, #fff 94%, transparent);
+  --tt-tour-card-border: rgb(15 23 42 / 0.12);
+  --tt-tour-card-text: #0f172a;
+  --tt-tour-card-muted: rgb(51 65 85 / 0.85);
+}
+
+.tt-contextual-tour-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10070;
+  pointer-events: auto;
+}
+
+.tt-contextual-tour-card {
+  border: 1px solid var(--tt-tour-card-border);
+  background: var(--tt-tour-card-bg);
+  color: var(--tt-tour-card-text);
+  backdrop-filter: blur(12px);
+}
+
+.tt-contextual-tour-card-muted {
+  color: var(--tt-tour-card-muted);
+}

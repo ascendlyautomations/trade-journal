@@ -1,6 +1,5 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
-
-const FREE_TIER_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+import { isProActive } from "@/lib/subscription"
 
 export async function POST(req: Request) {
   const user = await getRouteUser(req)
@@ -10,7 +9,9 @@ export async function POST(req: Request) {
 
   const { data: profile, error } = await supabaseServiceRole
     .from("profiles")
-    .select("use_free_tier, is_pro, subscription_status, trial_end, created_at")
+    .select(
+      "use_free_tier, is_pro, creator_access, subscription_status, trial_end, early_access_enrolled_at, early_access_started_at, early_access_status, early_access_ends_at, early_access_campaign_id, early_access_enrollment_source"
+    )
     .eq("id", user.id)
     .maybeSingle()
 
@@ -22,14 +23,8 @@ export async function POST(req: Request) {
     return Response.json({ ok: true, applied: false })
   }
 
-  const createdAt = profile.created_at
-    ? new Date(String(profile.created_at)).getTime()
-    : NaN
-  if (
-    Number.isNaN(createdAt) ||
-    Date.now() - createdAt > FREE_TIER_WINDOW_MS
-  ) {
-    return Response.json({ error: "Free tier signup window expired" }, { status: 403 })
+  if (isProActive(profile)) {
+    return Response.json({ ok: true, applied: false })
   }
 
   const { error: updateErr } = await supabaseServiceRole

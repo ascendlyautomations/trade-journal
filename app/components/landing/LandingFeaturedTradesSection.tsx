@@ -63,7 +63,7 @@ function FeaturedTradePlaceholder() {
       className={`${LANDING_CARD_FULL} flex min-h-[280px] flex-col items-center justify-center px-6 py-10 text-center md:min-h-[320px]`}
     >
       <p className="text-base font-medium text-gray-300">
-        No featured trades yet this week.
+        No featured trades yet.
       </p>
       <p className="mt-2 max-w-sm text-sm leading-relaxed text-gray-400">
         Log great trades and yours could be featured next.
@@ -237,10 +237,10 @@ export default function LandingFeaturedTradesSection({
         <div className={LANDING_SECTION_SHELL}>
           <div className="mx-auto max-w-3xl text-center">
             <h2 id="featured-trades-heading" className={LANDING_HEADLINE_SM}>
-              Featured Trades of the Week
+              {featured.sectionTitle}
             </h2>
             <p className={`${LANDING_LEAD} mx-auto ${LANDING_LEAD_GAP}`}>
-              Discover some of the community&apos;s best trades from this week.
+              {featured.sectionLead}
             </p>
           </div>
 

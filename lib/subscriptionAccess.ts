@@ -34,7 +34,11 @@ export function hasActiveMembership(
   return isSubscriptionExempt(profile)
 }
 
-/** Beta, demo, paid, and trialing users skip Stripe checkout. */
+/**
+ * Users who may use the app without passing through signup checkout.
+ * Pro/trial/beta stay exempt; completed onboarding grants Free access without
+ * `use_free_tier` or promotional enrollment RPCs.
+ */
 export function isSubscriptionExempt(
   profile: SubscriptionAccessProfile | null | undefined
 ): boolean {
@@ -43,10 +47,11 @@ export function isSubscriptionExempt(
   if (profile.is_beta_tester === true) return true
   if (isBetaReferralRef(profile.referred_by)) return true
   if (profile.use_free_tier === true) return true
+  if (profile.onboarding_completed === true) return true
   return isProActive(profile)
 }
 
-/** Profile complete but no active subscription/trial (standard new signups). */
+/** True only when profile is complete but still blocked from the app (should not happen in normal web signup). */
 export function needsSubscriptionCheckout(
   profile: SubscriptionAccessProfile | null | undefined
 ): boolean {
@@ -99,8 +104,9 @@ export function isAllowedPathWithoutSubscription(pathname: string): boolean {
 /** Post-auth destination for standard app entry (not explicit checkout upgrade). */
 export function resolvePostAuthAppPath(
   profile: SubscriptionAccessProfile | null | undefined
-): "/choose-plan" | "/onboarding" | "/finish-trial" | "/dashboard" {
-  if (!profile || profileNeedsOnboarding(profile)) return resolveSignupProfileSetupPath()
-  if (needsSubscriptionCheckout(profile)) return "/finish-trial"
+): "/onboarding" | "/dashboard" {
+  if (!profile || profileNeedsOnboarding(profile)) {
+    return resolveSignupProfileSetupPath()
+  }
   return "/dashboard"
 }

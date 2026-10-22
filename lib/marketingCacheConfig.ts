@@ -17,3 +17,6 @@ export const LANDING_REVIEWS_REVALIDATE_SECONDS = 1_800
 
 /** Featured trades — refresh every 30 minutes. */
 export const LANDING_FEATURED_TRADES_REVALIDATE_SECONDS = 1_800
+
+/** Homepage weekly top traders — refresh every 30 minutes. */
+export const LANDING_WEEKLY_TOP_TRADERS_REVALIDATE_SECONDS = 1_800

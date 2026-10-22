@@ -4,6 +4,7 @@ import {
   type LeaderboardAccountTypeFilter,
   type TradeForLeaderboard,
 } from "./leaderboardChart.ts"
+import { filterTradesForLeaderboardDateRange } from "./weeklyLeaderboardPeriod.ts"
 export type ExploreWeeklyTopCategory = "pnl" | "rr" | "winRate"
 
 export type ExploreWeeklyTopPerformerPick = {
@@ -106,16 +107,23 @@ function pickMax<T>(
   return best
 }
 
-export function pickExploreWeeklyTopPerformers(
+export function pickWeeklyTopPerformersInRange(
   trades: TradeForLeaderboard[],
-  now = new Date()
+  start: Date,
+  end: Date
 ): ExploreWeeklyTopPerformerPick[] {
-  const windowTrades = filterTradesForLeaderboardWindow(
+  const windowTrades = filterTradesForLeaderboardDateRange(
     filterTradesForLeaderboardAccountType(trades, ACCOUNT),
-    "7D",
-    now
+    start,
+    end
   )
   const users = aggregateWeeklyUsers(windowTrades)
+  return pickWeeklyTopPerformersFromAggregates(users)
+}
+
+function pickWeeklyTopPerformersFromAggregates(
+  users: WeeklyUserAgg[]
+): ExploreWeeklyTopPerformerPick[] {
   const picks: ExploreWeeklyTopPerformerPick[] = []
 
   const pnlWinner = pickMax(
@@ -164,4 +172,17 @@ export function pickExploreWeeklyTopPerformers(
   }
 
   return picks
+}
+
+/** Rolling 7-day window (legacy callers / tests). */
+export function pickExploreWeeklyTopPerformers(
+  trades: TradeForLeaderboard[],
+  now = new Date()
+): ExploreWeeklyTopPerformerPick[] {
+  const windowTrades = filterTradesForLeaderboardWindow(
+    filterTradesForLeaderboardAccountType(trades, ACCOUNT),
+    "7D",
+    now
+  )
+  return pickWeeklyTopPerformersFromAggregates(aggregateWeeklyUsers(windowTrades))
 }

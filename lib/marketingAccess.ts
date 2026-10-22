@@ -52,6 +52,16 @@ export function shouldShowMarketingNavbar(
     return true
   }
 
+  // Browsing the marketing site (e.g. Home from /login) should keep chrome visible
+  // even if sessionStorage still marks an abandoned signup attempt.
+  if (
+    isSignupFlowActive() &&
+    pathname &&
+    (isMarketingRoute(pathname) || isPublicLegalRoute(pathname))
+  ) {
+    return true
+  }
+
   if (isSignupFlowActive()) return false
 
   // Only hide after auth has settled and we know the user still needs entry flow.

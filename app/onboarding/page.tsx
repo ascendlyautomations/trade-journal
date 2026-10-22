@@ -5,21 +5,15 @@ import { useRouter } from "next/navigation"
 import ProfileOnboarding from "@/app/components/ProfileOnboarding"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
-import { startTraxProCheckout } from "@/lib/startTraxProCheckout"
 import { markProfileUseFreeTier } from "@/lib/markFreeTierSignup"
 import { supabase } from "@/lib/supabaseClient"
-import {
-  clearSignupIntent,
-  getCheckoutBillingInterval,
-  getSignupIntent,
-} from "@/lib/signupFlow"
+import { clearSignupFlow, clearSignupIntent } from "@/lib/signupFlow"
 import { isEarlyAccessActive } from "@/lib/earlyAccess"
 import { isSubscriptionExempt } from "@/lib/subscriptionAccess"
 import {
   buildCreatorSignupPath,
   clearCreatorFlow,
   getPendingCreatorCode,
-  isCreatorFlowActive,
   redeemCreatorAccessCode,
 } from "@/lib/creatorAccess"
 import {
@@ -51,18 +45,9 @@ export default function OnboardingPage() {
     )
   }, [loading, user, router])
 
-  useEffect(() => {
-    if (loading || !user || !profile) return
-    if (isCreatorFlowActive() || getPendingCreatorCode()) return
-    if (isEarlyAccessActive(profile) || isSubscriptionExempt(profile)) return
-    if (!getSignupIntent()) {
-      router.replace("/choose-plan")
-    }
-  }, [loading, user, profile, router])
-
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-4 text-gray-300">
+      <div className="flex min-h-screen items-center justify-center px-4 text-sm text-gray-400">
         Loading…
       </div>
     )
@@ -70,7 +55,7 @@ export default function OnboardingPage() {
 
   if (!user) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-gray-300">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-sm text-gray-400">
         {oauthCallbackError ? (
           <p className="max-w-md text-center text-sm text-red-300" role="alert">
             {oauthCallbackError}
@@ -131,6 +116,7 @@ export default function OnboardingPage() {
             }
             clearCreatorFlow()
             clearSignupIntent()
+            clearSignupFlow()
             setProfile((p) =>
               p
                 ? {
@@ -163,42 +149,19 @@ export default function OnboardingPage() {
           const accessProfile = { ...mergedProfile, ...accessRow }
 
           if (
-            isEarlyAccessActive(accessProfile) ||
-            isSubscriptionExempt(accessProfile)
+            !isEarlyAccessActive(accessProfile) &&
+            !isSubscriptionExempt(accessProfile)
           ) {
-            clearSignupIntent()
-            router.replace("/dashboard")
-            router.refresh()
-            return
-          }
-
-          const signupIntent = getSignupIntent()
-          if (!signupIntent) {
-            router.replace("/choose-plan")
-            router.refresh()
-            return
-          }
-          if (signupIntent === "free") {
             const result = await markProfileUseFreeTier(supabase, user.id)
             if (!result.ok) {
-              console.error("Failed to mark free tier:", result.error)
+              console.error("Failed to mark free tier after onboarding:", result.error)
             }
-            clearSignupIntent()
-            router.replace("/dashboard")
-            router.refresh()
-            return
           }
 
-          try {
-            const checkoutUrl = await startTraxProCheckout({
-              billingInterval: getCheckoutBillingInterval(),
-            })
-            window.location.href = checkoutUrl
-          } catch (err) {
-            console.error("Checkout after onboarding failed:", err)
-            router.replace("/finish-trial")
-            router.refresh()
-          }
+          clearSignupIntent()
+          clearSignupFlow()
+          router.replace("/dashboard")
+          router.refresh()
         }}
       />
     </>

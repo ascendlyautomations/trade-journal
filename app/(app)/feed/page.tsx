@@ -3073,10 +3073,12 @@ function FeedPageContent() {
             mode={mode}
             onModeChange={handleFeedModeChange}
           />
-          <FeedContentToggle
-            contentType={contentType}
-            onContentTypeChange={setContentType}
-          />
+          <div data-tt-tour-target="feedContentFilters">
+            <FeedContentToggle
+              contentType={contentType}
+              onContentTypeChange={setContentType}
+            />
+          </div>
 
           {mode === "following" && user ? (
             <FeedStoriesBar

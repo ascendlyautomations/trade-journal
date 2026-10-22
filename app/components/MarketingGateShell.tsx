@@ -7,14 +7,9 @@ import { isInAppEntryFlow } from "@/lib/marketingAccess"
 import { profileNeedsOnboarding } from "@/lib/profileOnboardingGate"
 import {
   isSubscriptionGateSuspended,
-  needsSubscriptionCheckout,
   resolvePostAuthAppPath,
 } from "@/lib/subscriptionAccess"
 import { resolveSignupProfileSetupPath } from "@/lib/signupFlow"
-import {
-  buildCreatorRedeemPath,
-  getPendingCreatorCode,
-} from "@/lib/creatorAccess"
 import { useUserProfile } from "@/lib/useUserProfile"
 
 /**
@@ -44,16 +39,6 @@ export default function MarketingGateShell({ children }: { children: ReactNode }
 
     if (profileNeedsOnboarding(profile)) {
       router.replace(resolveSignupProfileSetupPath())
-      return
-    }
-
-    if (needsSubscriptionCheckout(profile)) {
-      const pendingCreatorCode = getPendingCreatorCode()
-      if (pendingCreatorCode) {
-        router.replace(buildCreatorRedeemPath(pendingCreatorCode))
-        return
-      }
-      router.replace("/finish-trial")
       return
     }
 

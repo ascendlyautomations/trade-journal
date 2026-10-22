@@ -61,9 +61,7 @@ export default function LandingPageClient({
   const hasActiveMembershipAccess =
     isAuthenticatedUser && !!profile && hasActiveMembership(profile)
   const purchase = useTraxProPurchaseCopy(!profileHasUsedCheckoutTrial(profile))
-  const trialCtaLabel = earlyAccessPromotionEnabled
-    ? "Create free account"
-    : purchase.buttonTitle
+  const trialCtaLabel = "Continue for Free"
 
   useEffect(() => {
     if (hasActiveMembershipAccess) clearSignupFlow()
@@ -77,7 +75,7 @@ export default function LandingPageClient({
       return
     }
     if (profile && needsSubscriptionCheckout(profile)) {
-      router.replace("/finish-trial")
+      router.replace("/dashboard")
     }
   }, [loading, isAuthenticatedUser, user?.id, profile, router, membershipReconciling])
 
@@ -126,10 +124,6 @@ export default function LandingPageClient({
         router.push(resolveSignupProfileSetupPath())
         return
       }
-      if (profile && needsSubscriptionCheckout(profile)) {
-        router.push("/finish-trial")
-        return
-      }
       router.push("/dashboard")
       return
     }
@@ -159,11 +153,6 @@ export default function LandingPageClient({
 
       if (profile && profileNeedsOnboarding(profile)) {
         router.push(resolveSignupProfileSetupPath())
-        return
-      }
-
-      if (profile && needsSubscriptionCheckout(profile)) {
-        router.push("/finish-trial")
         return
       }
 
@@ -255,21 +244,11 @@ export default function LandingPageClient({
             <div className="z-10 flex flex-wrap justify-center gap-3 md:gap-4">
               <button
                 type="button"
-                disabled={
-                  checkoutLoading ||
-                  loading ||
-                  (!earlyAccessPromotionEnabled && purchase.purchaseDisabled)
-                }
-                onClick={() =>
-                  earlyAccessPromotionEnabled
-                    ? handleStartTrial()
-                    : void handleSubscribe()
-                }
+                disabled={checkoutLoading || loading}
+                onClick={() => handleStartTrial()}
                 className="min-w-[168px] rounded-xl bg-blue-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 md:min-w-[220px] md:px-8 md:py-3.5 md:text-base"
               >
-                {checkoutLoading && !earlyAccessPromotionEnabled
-                  ? "Starting trial…"
-                  : trialCtaLabel}
+                {trialCtaLabel}
               </button>
 
               <button
@@ -302,11 +281,7 @@ export default function LandingPageClient({
           <LandingComingSoonSection />
           <LandingFinalCtaSection
             checkoutLoading={checkoutLoading}
-            onStartTrial={() =>
-              earlyAccessPromotionEnabled
-                ? handleStartTrial()
-                : void handleSubscribe()
-            }
+            onStartTrial={() => handleStartTrial()}
           />
 
           <MarketingFooter />

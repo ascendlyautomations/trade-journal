@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { profileNeedsUsername } from "@/lib/profileOnboardingGate"
 import { supabase } from "@/lib/supabaseClient"
 import { uploadAvatarFile } from "@/lib/avatarUpload"
@@ -29,6 +29,7 @@ import {
 import { mirrorAccountSettingsOnboardingCompleted } from "@/lib/profileSplitMirrorWrites"
 import { notifyBetaSignupAfterOnboardingComplete } from "@/lib/betaSignupNotify"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { markContextualTourAwaitingInvite } from "@/lib/contextualTour/awaitingInvite"
 
 export {
   profileNeedsOnboarding,
@@ -53,6 +54,43 @@ function sliceDateInput(raw: unknown): string {
   const d = new Date(s)
   if (Number.isNaN(d.getTime())) return ""
   return d.toISOString().slice(0, 10)
+}
+
+const FIELD_LABEL = "mb-1.5 block text-xs font-medium text-gray-300"
+
+const FIELD_HINT = "text-xs leading-snug text-gray-400"
+
+/** Matches NativeDateInput grey field chrome. */
+const CONTROL_BASE =
+  "w-full min-w-0 rounded-lg border border-white/10 bg-black/30 text-sm text-white transition-colors placeholder:text-gray-400 focus:border-blue-400/45 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
+
+const CONTROL_HEIGHT = "h-10 px-3"
+
+function OnboardingField({
+  label,
+  required,
+  hint,
+  children,
+  className = "",
+  htmlFor,
+}: {
+  label: string
+  required?: boolean
+  hint?: string
+  children: ReactNode
+  className?: string
+  htmlFor?: string
+}) {
+  return (
+    <div className={className}>
+      <label className={FIELD_LABEL} htmlFor={htmlFor}>
+        {label}
+        {required ? <span className="normal-case text-red-400/90"> *</span> : null}
+      </label>
+      {hint ? <p className={`-mt-1 mb-1.5 ${FIELD_HINT}`}>{hint}</p> : null}
+      {children}
+    </div>
+  )
 }
 
 type ProfileOnboardingProps = {
@@ -91,7 +129,7 @@ export default function ProfileOnboarding({
   const [bio, setBio] = useState(
     initialBio ? constrainProfileBio(String(initialBio)) : ""
   )
-  const bioTextareaRef = useAutoResizeTextarea(bio, { minLines: 3, maxLines: 3 })
+  const bioTextareaRef = useAutoResizeTextarea(bio, { minLines: 2, maxLines: 4 })
   const [tradingStyle, setTradingStyle] = useState(
     initialTradingStyle ? String(initialTradingStyle) : ""
   )
@@ -119,7 +157,6 @@ export default function ProfileOnboarding({
     },
     onValidationError: setError,
   })
-  const formShellRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (initialName != null && String(initialName).trim() !== "") return
@@ -152,6 +189,10 @@ export default function ProfileOnboarding({
 
   const invalidStartedTradingDate = isStartedTradingDateInFuture(startedTrading)
   const localTodayDate = getLocalTodayDateInputValue()
+
+  const subtitle = profileNeedsUsername(initialUsername)
+    ? "Pick a username and tell us how you trade — it only takes a minute."
+    : "Fill in the last few details to unlock your dashboard."
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -236,9 +277,9 @@ export default function ProfileOnboarding({
         return
       }
 
+      markContextualTourAwaitingInvite(userId)
       clearOnboardingFlag()
       notifyBetaSignupAfterOnboardingComplete("onboarding")
-      // Mirror is not on the critical path for navigation / creator redeem.
       void mirrorAccountSettingsOnboardingCompleted(supabase, userId, true).then(
         ({ error: mirrorErr }) => {
           if (mirrorErr) {
@@ -256,47 +297,52 @@ export default function ProfileOnboarding({
     }
   }
 
-  const onboardingFieldClass =
-    "w-full min-w-0 rounded-xl border border-white/10 bg-white/10 text-white focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
-
-  const inputClass = `${onboardingFieldClass} px-4 py-3`
-
-  const selectTriggerClass = `${onboardingFieldClass} flex cursor-pointer items-center justify-between px-4 py-3 text-sm`
-
+  const inputClass = `${CONTROL_BASE} ${CONTROL_HEIGHT}`
+  const selectTriggerClass = `${CONTROL_BASE} ${CONTROL_HEIGHT} flex cursor-pointer items-center justify-between`
   const selectMenuClass =
-    "fixed z-50 overflow-hidden rounded-xl border border-white/10 bg-[#3d4451] shadow-xl"
+    "fixed z-[200] max-h-60 overflow-y-auto rounded-lg border border-white/10 bg-[#0f172a] shadow-lg"
 
   return (
     <>
       <FeedbackModal {...feedbackModalProps} />
-      <div
-        ref={formShellRef}
-        className="flex min-h-screen items-start justify-center overflow-x-hidden px-4 py-8 md:items-center"
-      >
+      <div className="flex w-full justify-center px-4 py-5 sm:px-5 md:min-h-dvh md:items-center md:py-6">
         <form
           onSubmit={handleSubmit}
-          className="flex max-h-[min(90vh,720px)] w-full min-w-0 max-w-xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0f172a]/95 p-6 shadow-2xl backdrop-blur-xl sm:p-8"
+          aria-labelledby="onboarding-title"
+          className="w-full max-w-[700px] shrink-0 rounded-xl border border-white/10 bg-white/10 p-5 shadow-[0_24px_80px_-12px_rgba(0,0,0,0.65)] ring-1 ring-white/[0.06] backdrop-blur-md sm:p-6"
         >
-          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
-            <h2
+          <header className="mb-5">
+            <div className="mb-3 flex items-center gap-2.5">
+              <span
+                className="h-9 w-1 shrink-0 rounded-full bg-gradient-to-b from-blue-400 to-blue-600"
+                aria-hidden
+              />
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-300">
+                  TradeTraxs
+                </p>
+                <p className="text-[11px] text-gray-500">Profile setup</p>
+              </div>
+            </div>
+            <h1
               id="onboarding-title"
-              className="mb-2 text-center text-2xl font-semibold text-white"
+              className="text-[1.35rem] font-semibold leading-tight tracking-tight text-white sm:text-2xl"
             >
-              Let&apos;s get your account ready
-            </h2>
-            <p className="mb-6 text-center text-sm text-gray-300">
-              {profileNeedsUsername(initialUsername)
-                ? "Choose a username and a few trading details to unlock TradeTraxs."
-                : "Add the remaining details below to finish setting up your account."}
+              Set up your trader profile
+            </h1>
+            <p className="mt-1.5 max-w-[34rem] text-sm leading-snug text-gray-400">
+              {subtitle}
             </p>
+          </header>
 
-            <div className="mb-6 flex flex-col items-center gap-3">
+          <div className="mb-4 flex items-start gap-3 sm:gap-4">
+            <div className="flex shrink-0 flex-col items-center gap-1">
               <ProfileAvatarImg
                 src={avatarPreview}
-                className="h-24 w-24 border-2 border-white/20"
+                className="h-14 w-14 border border-white/15"
               />
-              <label className="cursor-pointer rounded-xl bg-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/20">
-                Upload photo (optional)
+              <label className="cursor-pointer text-center text-[11px] font-medium leading-tight text-blue-300 transition hover:text-blue-200">
+                Upload
                 <input
                   type="file"
                   accept="image/*"
@@ -304,97 +350,105 @@ export default function ProfileOnboarding({
                   onChange={onFileChange}
                 />
               </label>
+              <span className={`text-[10px] ${FIELD_HINT}`}>Optional</span>
             </div>
 
-            <label className="mb-1 block text-xs font-medium text-gray-300">
-              Username <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              autoComplete="username"
-              placeholder="username (lowercase only)"
-              className={`${inputClass} mb-1`}
-              value={username}
-              onChange={(e) =>
-                setUsername(sanitizeUsernameInputForTyping(e.target.value))
-              }
-            />
-            <p className="mb-4 text-xs text-gray-400">{USERNAME_FORMAT_HINT}</p>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <label className={FIELD_LABEL} htmlFor="onboarding-username">
+                Username
+                <span className="text-red-400/90"> *</span>
+              </label>
+              <input
+                id="onboarding-username"
+                type="text"
+                required
+                autoComplete="username"
+                placeholder="yourname"
+                className={inputClass}
+                value={username}
+                onChange={(e) =>
+                  setUsername(sanitizeUsernameInputForTyping(e.target.value))
+                }
+              />
+              <p className={`mt-1.5 ${FIELD_HINT}`}>{USERNAME_FORMAT_HINT}</p>
+            </div>
+          </div>
 
-            <label className="mb-1 block text-xs font-medium text-gray-300">
-              Trading style <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. Scalping, swing, Investor..."
-              className={`${inputClass} mb-4`}
-              value={tradingStyle}
-              onChange={(e) => setTradingStyle(e.target.value)}
-            />
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 sm:gap-4">
+            <OnboardingField label="Trading style" required htmlFor="onboarding-trading-style">
+              <input
+                id="onboarding-trading-style"
+                type="text"
+                required
+                placeholder="Scalping, swing, investor…"
+                className={inputClass}
+                value={tradingStyle}
+                onChange={(e) => setTradingStyle(e.target.value)}
+              />
+            </OnboardingField>
 
-            <label className="mb-1 block text-xs font-medium text-gray-300">
-              Trader type <span className="text-red-400">*</span>
-            </label>
-            <div className="mb-4">
+            <OnboardingField label="Trader type" required>
               <CustomSelect
                 value={traderType}
                 onChange={(value) => setTraderType(normalizeTraderType(value))}
-                placeholder="Select trader type"
+                placeholder="Select type"
                 triggerClassName={selectTriggerClass}
+                triggerLabelClassName="min-w-0 flex-1 truncate text-left text-white"
                 menuClassName={selectMenuClass}
-                portalContainerRef={formShellRef}
                 options={TRADER_TYPE_OPTIONS.map((option) => ({
                   label: option,
                   value: option,
                 }))}
               />
-            </div>
+            </OnboardingField>
+          </div>
 
-            <label className="mb-1 block text-xs font-medium text-gray-300">
-              Started trading <span className="text-red-400">*</span>
-            </label>
-            <p className="mb-2 text-xs text-gray-400">
-              Select the date you began trading
-            </p>
-            <div className="mb-4 w-full min-w-0">
+          <div className="mt-3.5 space-y-3.5 sm:mt-4">
+            <OnboardingField
+              label="Started trading"
+              required
+              hint="Must be today or earlier"
+              className="max-w-sm"
+            >
               <NativeDateInput
                 required
                 max={localTodayDate}
                 value={startedTrading}
                 onChange={(e) => handleStartedTradingChange(e.target.value)}
-                className="border-white/10 bg-white/10 focus-within:ring-2 focus-within:ring-blue-400"
+                className="tt-date-field--compact h-10 rounded-lg"
                 aria-label="Started trading date"
               />
-            </div>
+            </OnboardingField>
 
-            <label className="mb-1 block text-xs font-medium text-gray-300">
-              Bio
-            </label>
-            <textarea
-              ref={bioTextareaRef}
-              placeholder="Short bio (optional)"
-              rows={3}
-              className={`${inputClass} mb-4 resize-none overflow-hidden leading-normal`}
-              value={bio}
-              onChange={(e) => setBio(constrainProfileBio(e.target.value))}
-            />
+            <OnboardingField label="Bio" htmlFor="onboarding-bio">
+              <textarea
+                id="onboarding-bio"
+                ref={bioTextareaRef}
+                placeholder="Short bio (optional)"
+                rows={2}
+                className={`${CONTROL_BASE} min-h-[4.5rem] resize-none overflow-hidden px-3 py-2.5 leading-normal`}
+                value={bio}
+                onChange={(e) => setBio(constrainProfileBio(e.target.value))}
+              />
+            </OnboardingField>
           </div>
 
-          <div className="shrink-0 pt-1">
-            {error ? (
-              <p className="mb-4 text-center text-sm text-red-400">{error}</p>
-            ) : null}
-
-            <button
-              type="submit"
-              disabled={saving || invalidStartedTradingDate}
-              className="w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 disabled:hover:scale-100"
+          {error ? (
+            <p
+              className="mt-4 rounded-lg border border-red-500/25 bg-red-950/50 px-3 py-2 text-sm text-red-200"
+              role="alert"
             >
-              {saving ? "Saving…" : "Finish setup"}
-            </button>
-          </div>
+              {error}
+            </p>
+          ) : null}
+
+          <button
+            type="submit"
+            disabled={saving || invalidStartedTradingDate}
+            className="mt-4 h-10 w-full rounded-lg bg-blue-500 text-sm font-semibold text-white shadow-md shadow-blue-950/30 transition hover:bg-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/45 disabled:cursor-not-allowed disabled:opacity-55"
+          >
+            {saving ? "Saving…" : "Finish setup"}
+          </button>
         </form>
       </div>
       <ImageCropModal

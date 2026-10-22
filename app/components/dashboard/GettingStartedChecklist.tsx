@@ -29,6 +29,8 @@ export type GettingStartedChecklistProps = {
   embedded?: boolean
   /** Dashboard empty-state: show Welcome headline above Getting Started. */
   showWelcomeHeading?: boolean
+  /** Tighter card for zero-trade dashboard (collapsible header + slim progress). */
+  variant?: "default" | "compact"
   className?: string
 }
 
@@ -47,7 +49,7 @@ function ChecklistItemRow({
 
   const labelRow = (
     <span
-      className={`flex min-w-0 flex-1 items-start gap-3 text-sm md:text-base ${
+      className={`flex min-w-0 flex-1 items-start gap-2.5 text-sm ${
         item.complete ? "text-gray-400" : "text-gray-200"
       }`}
     >
@@ -118,8 +120,10 @@ export default function GettingStartedChecklist({
   defaultExpanded = true,
   embedded = false,
   showWelcomeHeading = false,
+  variant = "default",
   className = "",
 }: GettingStartedChecklistProps) {
+  const compact = variant === "compact"
   const { items, completedCount, totalCount } = progress
   const progressPct =
     totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
@@ -161,36 +165,73 @@ export default function GettingStartedChecklist({
 
   const shellClass = embedded
     ? className
-    : `rounded-xl border border-white/10 bg-white/5 p-6 backdrop-blur-md md:p-8 ${className}`
+    : compact
+      ? `rounded-xl border border-white/10 bg-white/5 p-3.5 backdrop-blur-md md:p-4 ${className}`
+      : `rounded-xl border border-white/10 bg-white/5 p-6 backdrop-blur-md md:p-8 ${className}`
+
+  const progressBar = (
+    <div
+      className={`overflow-hidden rounded-full bg-white/10 ${compact ? "mt-2.5 h-1.5" : "mt-4 h-2"}`}
+      role="progressbar"
+      aria-valuenow={completedCount}
+      aria-valuemin={0}
+      aria-valuemax={totalCount}
+      aria-label={`Getting started progress: ${completedCount} of ${totalCount} complete`}
+    >
+      <div
+        className="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-500 transition-[width] duration-300"
+        style={{ width: `${progressPct}%` }}
+      />
+    </div>
+  )
 
   const header = alwaysExpanded ? (
     <div className="flex w-full items-center justify-between gap-3">
-      <h3 className="text-lg font-semibold text-white">Getting Started</h3>
-      <p className="text-sm font-medium tabular-nums text-gray-300">
-        {completedCount} / {totalCount} Complete
+      <h3
+        className={
+          compact
+            ? "text-sm font-semibold text-white md:text-base"
+            : "text-lg font-semibold text-white"
+        }
+      >
+        Getting started
+      </h3>
+      <p className="text-xs font-medium tabular-nums text-gray-300 md:text-sm">
+        {completedCount}/{totalCount}
       </p>
     </div>
   ) : (
     <button
       type="button"
       onClick={toggleExpanded}
-      className="flex w-full items-center justify-between gap-3 text-left"
+      className="flex w-full items-center gap-3 text-left"
       aria-expanded={isExpanded}
     >
-      <h3 className="text-lg font-semibold text-white md:text-xl">
-        Getting Started
-      </h3>
-      <div className="flex items-center gap-2">
-        <p className="text-sm font-medium tabular-nums text-gray-300">
-          {completedCount} / {totalCount} Complete
-        </p>
-        <span
-          className="text-sm text-gray-400"
-          aria-hidden
-          title={isExpanded ? "Collapse" : "Expand"}
-        >
-          {isExpanded ? "▼" : "▶"}
-        </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-2">
+          <h3
+            className={
+              compact
+                ? "text-sm font-semibold text-white md:text-base"
+                : "text-lg font-semibold text-white md:text-xl"
+            }
+          >
+            Getting started
+          </h3>
+          <div className="flex shrink-0 items-center gap-2">
+            <p className="text-xs font-medium tabular-nums text-gray-300 md:text-sm">
+              {progressPct}%
+            </p>
+            <span
+              className="text-xs text-gray-400 md:text-sm"
+              aria-hidden
+              title={isExpanded ? "Collapse" : "Expand"}
+            >
+              {isExpanded ? "▼" : "▶"}
+            </span>
+          </div>
+        </div>
+        {!isExpanded ? progressBar : null}
       </div>
     </button>
   )
@@ -198,7 +239,7 @@ export default function GettingStartedChecklist({
   return (
     <>
       <div className={shellClass}>
-        {showWelcomeHeading ? (
+        {showWelcomeHeading && !compact ? (
           <h2 className="mb-4 text-xl font-semibold text-blue-300 md:mb-5 md:text-3xl">
             Welcome to TradeTraxs
           </h2>
@@ -207,21 +248,9 @@ export default function GettingStartedChecklist({
 
         {isExpanded ? (
           <>
-            <div
-              className="mt-4 h-2 overflow-hidden rounded-full bg-white/10"
-              role="progressbar"
-              aria-valuenow={completedCount}
-              aria-valuemin={0}
-              aria-valuemax={totalCount}
-              aria-label={`Getting started progress: ${completedCount} of ${totalCount} complete`}
-            >
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-500 transition-[width] duration-300"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
+            {progressBar}
 
-            <ul className="mt-5 space-y-3">
+            <ul className={compact ? "mt-3 space-y-1.5" : "mt-5 space-y-3"}>
               {items.map((item) => (
                 <ChecklistItemRow
                   key={item.id}

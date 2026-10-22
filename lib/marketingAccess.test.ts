@@ -57,4 +57,28 @@ describe("shouldShowMarketingNavbar", () => {
       true
     )
   })
+
+  it("shows for onboarded free users without use_free_tier", () => {
+    assert.equal(
+      shouldShowMarketingNavbar(
+        "/",
+        { id: "user-1" },
+        {
+          onboarding_completed: true,
+          username: "nick",
+          trader_type: "day",
+          trading_style: "scalp",
+          started_trading: "2020-01-01",
+          is_pro: false,
+          subscription_status: null,
+          creator_access: false,
+          trial_end: null,
+          use_free_tier: false,
+          is_beta_tester: false,
+        },
+        false
+      ),
+      true
+    )
+  })
 })
