@@ -120,7 +120,8 @@ struct TradeHistoryView: View {
             titleVisibility: .visible
         ) {
             Button("Delete Trade", role: .destructive) {
-                Task { await viewModel.confirmDelete() }
+                let item = viewModel.pendingDelete
+                Task { await viewModel.confirmDelete(item: item) }
             }
             Button("Cancel", role: .cancel) {
                 viewModel.pendingDelete = nil
@@ -129,6 +130,17 @@ struct TradeHistoryView: View {
             if let trade = viewModel.pendingDelete {
                 Text("\(trade.summary.symbol.ticker) will be removed from your journal.")
             }
+        }
+        .alert(
+            "Couldn't delete trade",
+            isPresented: Binding(
+                get: { viewModel.deleteErrorMessage != nil },
+                set: { if !$0 { viewModel.deleteErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { viewModel.deleteErrorMessage = nil }
+        } message: {
+            Text(viewModel.deleteErrorMessage ?? "")
         }
         .sheet(item: $viewModel.sharePayload) { payload in
             TradeHistoryShareSheet(items: [payload.text])
@@ -255,7 +267,7 @@ struct TradeHistoryView: View {
                         .padding(.vertical, 6)
                         .background(colors.fillSecondary, in: Capsule())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityLabel("Remove \(chip.title) filter")
                 }
                 if viewModel.showsClearAllChips {
@@ -265,7 +277,7 @@ struct TradeHistoryView: View {
                         Text("Clear All")
                             .experienceStyle(.caption, color: colors.accent)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityIdentifier("trades.clearAll")
                 }
             }

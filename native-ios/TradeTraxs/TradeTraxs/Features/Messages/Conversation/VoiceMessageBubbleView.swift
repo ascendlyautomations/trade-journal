@@ -17,7 +17,7 @@ struct VoiceMessageBubbleView: View {
                     .foregroundStyle(isOutgoing ? colors.onAccent : colors.accent)
                     .frame(width: 28, height: 28)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .accessibilityLabel(isActiveAndPlaying ? "Pause voice message" : "Play voice message")
 
             waveform

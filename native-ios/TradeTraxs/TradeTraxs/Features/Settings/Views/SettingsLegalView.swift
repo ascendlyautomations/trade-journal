@@ -19,7 +19,7 @@ struct SettingsLegalView: View {
                             systemImage: "safari"
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                 } else {
                     SettingsIntroBlock(
                         title: "Not available",

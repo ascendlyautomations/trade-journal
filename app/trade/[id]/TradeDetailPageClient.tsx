@@ -201,6 +201,7 @@ export default function TradeDetailPageClient({
       src={imgSrc}
       preset="feed-detail"
       displayMode={trade?.image_display_mode as string | null | undefined}
+      imageCrop={trade?.image_crop}
       onClick={setLightboxUrl}
     />
   ) : null

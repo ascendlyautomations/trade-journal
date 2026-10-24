@@ -50,7 +50,7 @@ describe("profile wall posts pagination", () => {
     assert.match(PROFILE_WALL_POST_SELECT, /content/)
     assert.match(PROFILE_WALL_POST_SELECT, /image_url/)
     assert.match(PROFILE_WALL_POST_SELECT, /room_id/)
-    assert.equal(PROFILE_WALL_POST_SELECT.includes("image_crop"), false)
+    assert.match(PROFILE_WALL_POST_SELECT, /image_crop/)
   })
 
   it("returns no rows and is exhausted for an empty wall", () => {

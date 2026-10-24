@@ -69,7 +69,7 @@ nonisolated enum ProfileStatisticsMetrics {
 
         var isAllTime: Bool { self == .allTime }
 
-        /// Inclusive lower bound for ``TradeInput.createdAt`` (matches SQL `profile_statistics_public_trades.created_at`).
+        /// Inclusive lower bound for the trade entry time stored on ``TradeInput/createdAt``.
         func inclusiveStartDate(relativeTo now: Date = Date()) -> Date? {
             var calendar = Calendar(identifier: .gregorian)
             calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
@@ -152,7 +152,7 @@ nonisolated enum ProfileStatisticsMetrics {
     ) -> TradeInput {
         TradeInput(
             pnl: trade.realizedPnL?.amount,
-            createdAt: trade.createdAt,
+            createdAt: trade.entryAt,
             isLong: trade.side == .long,
             session: trade.sessionLabel,
             accountMode: resolveAccountMode(trade: trade, accountModes: accountModes),

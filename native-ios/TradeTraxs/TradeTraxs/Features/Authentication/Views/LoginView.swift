@@ -192,7 +192,7 @@ struct LoginView: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(colors.accent)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityIdentifier("auth.toggleMode")
     }
 

@@ -87,6 +87,13 @@ enum SettingsHomeModel {
             )
         )
         items.append(SettingsHomeItem(route: .payouts, systemImage: "building.columns"))
+        items.append(
+            SettingsHomeItem(
+                route: .propFirmExpenses,
+                systemImage: "creditcard",
+                displayTitle: "Expense Tracker"
+            )
+        )
         if IosSubscriptionReleaseConfiguration.iosReferralProgramEnabled {
             items.append(SettingsHomeItem(route: .affiliate, systemImage: "gift"))
         }

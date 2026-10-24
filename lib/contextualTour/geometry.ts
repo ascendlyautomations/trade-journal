@@ -1,7 +1,16 @@
 import type { ContextualTourTargetId } from "./types"
 
-export const CONTEXTUAL_TOUR_RESOLVE_TIMEOUT_MS = 1200
-export const CONTEXTUAL_TOUR_STABILITY_TOLERANCE_PX = 1
+export const CONTEXTUAL_TOUR_RESOLVE_TIMEOUT_MS = 320
+
+const CHART_LIKE_TARGETS: ReadonlySet<ContextualTourTargetId> = new Set([
+  "dashboardPerformance",
+])
+
+export function resolveTimeoutMsForTarget(
+  targetId: ContextualTourTargetId
+): number {
+  return CHART_LIKE_TARGETS.has(targetId) ? 1200 : CONTEXTUAL_TOUR_RESOLVE_TIMEOUT_MS
+}
 
 export type TourRect = {
   x: number
@@ -30,14 +39,30 @@ export function domRectToTourRect(rect: DOMRect): TourRect {
   }
 }
 
-export function isStableRect(previous: TourRect, current: TourRect): boolean {
-  const t = CONTEXTUAL_TOUR_STABILITY_TOLERANCE_PX
-  return (
-    Math.abs(previous.x - current.x) <= t &&
-    Math.abs(previous.y - current.y) <= t &&
-    Math.abs(previous.width - current.width) <= t &&
-    Math.abs(previous.height - current.height) <= t
+export function intersectionArea(a: TourRect, b: TourRect): number {
+  const ix = Math.max(
+    0,
+    Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)
   )
+  const iy = Math.max(
+    0,
+    Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y)
+  )
+  return ix * iy
+}
+
+export function isElementTourVisible(el: HTMLElement): boolean {
+  if (typeof window === "undefined") return false
+  if (!el.isConnected) return false
+  const style = window.getComputedStyle(el)
+  if (
+    style.display === "none" ||
+    style.visibility === "hidden" ||
+    Number.parseFloat(style.opacity) === 0
+  ) {
+    return false
+  }
+  return el.getClientRects().length > 0
 }
 
 export function isMeasurableTarget(
@@ -45,37 +70,36 @@ export function isMeasurableTarget(
   viewport: TourRect
 ): boolean {
   if (!isUsableRect(frame) || !isUsableRect(viewport)) return false
-  const coversScreen =
-    frame.width >= viewport.width * 0.98 &&
-    frame.height >= viewport.height * 0.85
-  return !coversScreen
+  const coversWidth = frame.width >= viewport.width * 0.96
+  const coversHeight = frame.height >= viewport.height * 0.72
+  return !(coversWidth && coversHeight)
 }
 
 export function isRenderableSpotlight(
   frame: TourRect,
   viewport: TourRect
 ): boolean {
+  if (!isUsableRect(frame) || !isUsableRect(viewport)) return false
   if (!isMeasurableTarget(frame, viewport)) return false
-  const nearby = {
-    x: viewport.x - 32,
-    y: viewport.y - 32,
-    width: viewport.width + 64,
-    height: viewport.height + 64,
-  }
-  return rectsIntersect(frame, nearby)
-}
-
-function rectsIntersect(a: TourRect, b: TourRect): boolean {
-  return (
-    a.x < b.x + b.width &&
-    a.x + a.width > b.x &&
-    a.y < b.y + b.height &&
-    a.y + a.height > b.y
-  )
+  return intersectionArea(frame, viewport) > 64
 }
 
 export function skipsTourAutoscroll(target: ContextualTourTargetId): boolean {
-  return target === "profileIdentity" || target === "profileTradeRoom"
+  switch (target) {
+    case "profileIdentity":
+    case "profileTradeRoom":
+    case "dashboardTrades":
+    case "dashboardNotifications":
+    case "dashboardReports":
+    case "dashboardWithdrawals":
+    case "dashboardCalendar":
+    case "feedExplore":
+    case "feedTradeRooms":
+    case "feedContentFilters":
+      return true
+    default:
+      return false
+  }
 }
 
 export function needsScroll(
@@ -104,6 +128,29 @@ export function needsScroll(
   return iy < frame.height * 0.6 || ix < frame.width * 0.6
 }
 
+function scoreTourTargetCandidate(
+  el: HTMLElement,
+  viewport: TourRect
+): number {
+  const rect = el.getBoundingClientRect()
+  const frame = domRectToTourRect(rect)
+  if (!isUsableRect(frame)) return -1
+  if (!isRenderableSpotlight(frame, viewport)) return -1
+
+  const visible = intersectionArea(frame, viewport)
+  const area = frame.width * frame.height
+  const viewportArea = viewport.width * viewport.height
+  const allowLarge =
+    el.dataset.ttTourSpotlight === "large" ||
+    el.getAttribute("data-tt-tour-target") === "dashboardPerformance"
+  if (!allowLarge && area > viewportArea * 0.5) return -1
+
+  const visibilityRatio = visible / Math.max(1, area)
+  const compactBonus = el.dataset.ttTourPrefer === "compact" ? 2 : 1
+  // Prefer smaller, fully visible controls (buttons, nav links) over wide wrappers.
+  return (visible * visibilityRatio * compactBonus) / Math.sqrt(area)
+}
+
 export function findTourTargetElement(
   targetId: ContextualTourTargetId
 ): HTMLElement | null {
@@ -111,10 +158,25 @@ export function findTourTargetElement(
   const nodes = document.querySelectorAll(
     `[data-tt-tour-target="${targetId}"]`
   )
+  const viewport: TourRect = {
+    x: 0,
+    y: 0,
+    width: window.innerWidth,
+    height: window.innerHeight,
+  }
+
+  let best: HTMLElement | null = null
+  let bestScore = -1
+
   for (const node of nodes) {
     const el = node as HTMLElement
-    const rect = el.getBoundingClientRect()
-    if (rect.width > 1 && rect.height > 1) return el
+    if (!isElementTourVisible(el)) continue
+    const score = scoreTourTargetCandidate(el, viewport)
+    if (score > bestScore) {
+      bestScore = score
+      best = el
+    }
   }
-  return (nodes[0] as HTMLElement | null) ?? null
+
+  return best
 }

@@ -16,10 +16,10 @@ struct ShareButton: View {
                 showsCount: false,
                 iconColor: colors.secondaryText
             )
+            .engagementActionRowContainer()
+            .engagementMinimumTapTarget()
         }
-        .buttonStyle(.plain)
-        .engagementActionRowContainer()
-        .engagementMinimumTapTarget()
+        .buttonStyle(.experiencePlain)
         .accessibilityLabel("Share")
         .accessibilityIdentifier("interaction.share")
     }

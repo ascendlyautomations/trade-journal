@@ -36,7 +36,7 @@ export default function WithdrawalHistoryRow({
 }: WithdrawalHistoryRowProps) {
   const label = account
     ? formatTradingAccountSelectorLabel(account)
-    : "Account"
+    : item.note?.trim() || "Payout"
   const mode = account ? formatTradingAccountModeLabel(account.mode) : ""
   const dateIso =
     item.source === "fundedCycle"

@@ -19,36 +19,19 @@ enum CheckInHistoryContentFilter: String, CaseIterable, Identifiable, Hashable {
 enum CheckInHistoryFieldClassification {
     /// Daily check-in questionnaire fields (Sleep, Morning, Mental State, Notes).
     static func psychologyPreviewParts(for checkIn: TraderDailyCheckIn) -> [String] {
-        var parts: [String] = []
-        if let hours = checkIn.sleepHours {
-            parts.append("\(NumberDisplay.hours(NSDecimalNumber(decimal: hours).doubleValue)) Sleep")
-        }
-        if let quality = checkIn.sleepQuality {
-            parts.append("Sleep Quality \(quality)/5")
-        }
-        if let morning = checkIn.morningRating {
-            parts.append("Morning \(morning)/5")
-        }
-        if let stress = checkIn.stressLevel {
-            parts.append("Stress \(TraderDailyCheckInStressScale.displayText(for: stress))")
-        }
-        if let energy = checkIn.energyLevel {
-            parts.append("Energy \(energy)/5")
-        }
-        if let focus = checkIn.focusLevel {
-            parts.append("Focus \(focus)/5")
-        }
-        if let notes = checkIn.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
-            parts.append(notes)
-        }
-        return parts
+        PsychologyCheckInHistoryGate.psychologyPreviewParts(for: checkIn)
+    }
+
+    /// Distinct days under Check-In History → Psychology (web `countPsychologyCheckInHistoryDays`).
+    static func countPsychologyCheckInHistoryDays(_ checkIns: [TraderDailyCheckIn]) -> Int {
+        PsychologyCheckInHistoryGate.countPsychologyCheckInHistoryDays(checkIns)
     }
 }
 
 extension CheckInHistoryDaySummary {
     var hasPsychologyContent: Bool {
         guard let checkIn else { return false }
-        return !CheckInHistoryFieldClassification.psychologyPreviewParts(for: checkIn).isEmpty
+        return checkIn.qualifiesForPsychologyCheckInHistory
     }
 
     func matches(contentFilter: CheckInHistoryContentFilter) -> Bool {

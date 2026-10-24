@@ -420,6 +420,10 @@ struct AppRootView: View {
                         && navigation.store.paths.profile.isEmpty,
                     settingsHomeActive: navigation.store.selectedTab == .profile
                         && navigation.store.paths.profile == [.settings(.home)],
+                    payoutsActive: navigation.store.selectedTab == .profile
+                        && navigation.store.paths.profile.last == .settings(.payouts),
+                    expenseTrackerActive: navigation.store.selectedTab == .profile
+                        && navigation.store.paths.profile.last == .settings(.propFirmExpenses),
                     sceneActive: scenePhase != .background,
                     unobstructed: navigation.store.presentedSheet == nil
                         && navigation.store.presentedFullScreen == nil
@@ -643,6 +647,7 @@ struct AppRootView: View {
                 case .newPost:
                     CreatePostView(
                         data: appEnvironment.data,
+                        roomShare: PendingRoomShareStore.shared.consume(),
                         onDismiss: { navigation.coordinator.dismissFullScreen() }
                     )
                 case .newAchievement:
@@ -761,6 +766,12 @@ struct AppRootView: View {
         case .settings:
             navigation.coordinator.selectTab(.profile)
             navigation.coordinator.pushProfileSettingsHome(source: "appWalkthrough")
+        case .payouts:
+            navigation.coordinator.selectTab(.profile)
+            navigation.store.paths.profile = [.settings(.home), .settings(.payouts)]
+        case .expenseTracker:
+            navigation.coordinator.selectTab(.profile)
+            navigation.store.paths.profile = [.settings(.home), .settings(.propFirmExpenses)]
         }
     }
 

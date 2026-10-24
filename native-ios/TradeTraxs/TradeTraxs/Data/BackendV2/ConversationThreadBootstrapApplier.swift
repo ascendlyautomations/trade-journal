@@ -49,8 +49,18 @@ nonisolated enum ConversationThreadBootstrapApplier {
             detailCache.seed(profile)
         }
 
-        let peerUsername = bootstrap.data.participants.first(where: { ProfileID($0.user_id) != viewerID })?
+        let isGroup = convoWire.is_group.value ?? false
+        let rawPeerUsername = bootstrap.data.participants.first(where: { ProfileID($0.user_id) != viewerID })?
             .profiles?.username
+        let peerUsername: String? = {
+            if isGroup { return rawPeerUsername }
+            let trimmed = rawPeerUsername?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? "user" : trimmed
+        }()
+        let deletedPeer = ConversationInboxActivity.isDeletedDirectPeer(
+            isGroup: isGroup,
+            peerUsername: peerUsername
+        )
 
         var messages: [Message] = []
         var skipped = 0
@@ -81,9 +91,11 @@ nonisolated enum ConversationThreadBootstrapApplier {
             avatar: convoWire.avatar_url.flatMap {
                 MediaReference(id: $0, kind: .image, altText: nil)
             },
-            isGroup: convoWire.is_group.value ?? false,
+            isGroup: isGroup,
             isPinned: convoWire.is_pinned.value ?? false,
-            lastMessagePreview: latestMessage.map { ConversationInboxActivity.preview(for: $0) },
+            lastMessagePreview: deletedPeer
+                ? nil
+                : latestMessage.map { ConversationInboxActivity.preview(for: $0) },
             lastMessageAt: latestMessage?.createdAt,
             lastMessageID: latestMessage?.id,
             unreadCount: Int(bootstrap.data.unread_count.value ?? 0),

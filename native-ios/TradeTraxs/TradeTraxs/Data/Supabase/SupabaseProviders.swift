@@ -1210,6 +1210,33 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
 
 
 
+    /// Profile wall posts or public trades for one profile. Filter is `user_id`.
+    func watchProfileTable(
+        table: String,
+        profileID: String,
+        accessToken: String?,
+        debugOwner: String? = nil
+    ) -> RealtimeMessageWatch {
+        let safeTable = table.trimmingCharacters(in: .whitespacesAndNewlines)
+        let safeID = profileID.trimmingCharacters(in: .whitespacesAndNewlines)
+        return watch(
+            WatchSpec(
+                topic: "realtime:profile-table-\(safeTable)-\(safeID)",
+                routeKey: "profile-table:\(safeTable):\(safeID)",
+                bindings: [
+                    PostgresChangeBinding(
+                        table: safeTable,
+                        filter: "user_id=eq.\(safeID)",
+                        routeColumn: "user_id",
+                        emitsReactionEvents: false
+                    ),
+                ]
+            ),
+            accessToken: accessToken,
+            debugOwner: debugOwner
+        )
+    }
+
     /// Activity inbox — idle until `notifications` postgres_changes for the viewer.
     func watchNotifications(
         userID: String,
@@ -1925,7 +1952,9 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
             let scope = (record?[binding.routeColumn] as? String)
                 ?? (oldRecord?[binding.routeColumn] as? String)
             let scopedMatch: Bool
-            if spec.routeKey.hasPrefix("dm-read:")
+            if spec.routeKey.hasPrefix("profile-table:") {
+                scopedMatch = scope.map { spec.routeKey.hasSuffix(":\($0)") } ?? false
+            } else if spec.routeKey.hasPrefix("dm-read:")
                 || spec.routeKey.hasPrefix("room-read:")
                 || spec.routeKey.hasPrefix("notifications:")
                 || spec.routeKey == "member-rooms"

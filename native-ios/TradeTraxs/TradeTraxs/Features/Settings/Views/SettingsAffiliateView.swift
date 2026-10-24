@@ -51,7 +51,7 @@ struct SettingsAffiliateView: View {
                             systemImage: didCopyCode ? "checkmark" : "doc.on.doc"
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .tint(colors.accent)
                     .experienceDashboardListRow()
                     .accessibilityIdentifier("settings.affiliate.copy")
@@ -63,7 +63,7 @@ struct SettingsAffiliateView: View {
                             systemImage: "square.and.arrow.up"
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .tint(colors.accent)
                     .experienceDashboardListRow()
                 }

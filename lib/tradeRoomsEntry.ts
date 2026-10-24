@@ -31,5 +31,5 @@ export function buildTradeRoomsEntryHref(userId: string | null | undefined): str
   if (!roomId) return "/trade-rooms"
   const room = rooms.find((r) => r.id === roomId)
   if (!room) return "/trade-rooms"
-  return `/trade-rooms?room=${encodeURIComponent(tradeRoomUrlKey(room))}`
+  return `/community?room=${encodeURIComponent(tradeRoomUrlKey(room))}`
 }

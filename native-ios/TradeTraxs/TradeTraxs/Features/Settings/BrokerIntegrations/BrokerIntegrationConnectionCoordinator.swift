@@ -196,7 +196,7 @@ struct BrokerLinkExistingAccountSheet: View {
                                 }
                             }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                     }
                 }
 

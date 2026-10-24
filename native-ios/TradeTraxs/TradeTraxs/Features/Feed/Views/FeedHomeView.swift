@@ -16,14 +16,11 @@ struct FeedHomeView: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.appEnvironment) private var appEnvironment
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.tabIsActive) private var tabIsActive
     @Environment(\.navigationEnvironment) private var navigationEnvironment
     @State private var scrollViewportFrame: CGRect = .zero
     @State private var feedImageWarmGeneration: UInt64 = 0
-    @State private var feedScrollHeaderTracker = FeedScrollAwareHeaderTracker()
-    @State private var feedScrollChromeHidden = false
 
     init(
         data: DataEnvironment,
@@ -171,7 +168,6 @@ struct FeedHomeView: View {
             } else if oldFilter == .clips {
                 playbackCoordinator.endClipsExperience()
             }
-            resetFeedScrollAwareHeader()
         }
         .onDisappear {
             playbackCoordinator.releaseAllPlayers()
@@ -184,42 +180,6 @@ struct FeedHomeView: View {
             )
         }
         .accessibilityIdentifier("feed.home")
-        .onAppear {
-            if FeedScrollHeaderIsolation.suppressScrollToHide {
-                resetFeedScrollAwareHeader()
-            }
-            #if DEBUG
-            FeedScrollAwareHeaderDiagnostics.logBootConfiguration()
-            logFeedScrollChromeContext(surface: "feed.home")
-            if FeedScrollHeaderIsolation.suppressScrollToHide {
-                FeedScrollAwareHeaderDiagnostics.logScrollHeaderIsolationActive(surface: "feed.home")
-            }
-            #endif
-        }
-        #if DEBUG
-        .onChange(of: feedScrollChromeHidden) { _, hidden in
-            if FeedScrollHeaderIsolation.suppressScrollToHide, hidden {
-                FeedScrollAwareHeaderDiagnostics.logScrollHeaderIsolationChromeLeak()
-            }
-        }
-        .onChange(of: feedScrollAwareHeaderActive) { _, active in
-            FeedScrollAwareHeaderDiagnostics.logExperimentGateChange(
-                experimentActive: active,
-                isEnabled: FeedScrollAwareHeaderExperiment.isEnabled,
-                isClips: viewModel.contentFilter == .clips,
-                feedPathDepth: navigationEnvironment.store.paths.feed.count
-            )
-        }
-        .onChange(of: viewModel.phase) { _, _ in
-            logFeedScrollChromeContext(surface: "phaseChange")
-        }
-        .onChange(of: viewModel.contentFilter) { _, _ in
-            logFeedScrollChromeContext(surface: "filterChange")
-        }
-        .onChange(of: navigationEnvironment.store.paths.feed.count) { _, _ in
-            logFeedScrollChromeContext(surface: "feedPathChange")
-        }
-        #endif
     }
 
     private var feedHomeChromeDecorated: some View {
@@ -261,22 +221,9 @@ struct FeedHomeView: View {
                 }
             }
             .modifier(
-                DashboardScrollAwareHeaderHostModifier(
-                    reduceMotion: reduceMotion,
-                    experimentActive: feedScrollAwareHeaderActive,
-                    navigationBarVisibility: feedScrollAwareNavigationBarVisibility,
-                    homePathDepth: navigationEnvironment.store.paths.feed.count,
-                    categoryOverlayHidden: feedScrollChromeHidden && feedScrollAwareHeaderActive,
-                    chromeHidden: $feedScrollChromeHidden,
-                    onReset: resetFeedScrollAwareHeader
-                )
-            )
-            .modifier(
                 FeedClipsViewportLayoutModifier(
                     isClips: viewModel.contentFilter == .clips,
-                    categoryBar: contentFilterBar,
-                    hideCategoryBar: feedScrollChromeHidden && feedScrollAwareHeaderActive,
-                    reduceMotion: reduceMotion
+                    categoryBar: contentFilterBar
                 )
             )
             .feedClipsBoundsLogging(isEnabled: viewModel.contentFilter == .clips)
@@ -290,7 +237,10 @@ struct FeedHomeView: View {
         switch viewModel.phase {
         case .idle, .loading:
             if viewModel.entries.isEmpty {
-                FeedSkeleton()
+                VStack(spacing: 0) {
+                    contentFilterBar
+                    FeedSkeleton()
+                }
             } else if viewModel.contentFilter == .clips {
                 clipsExperience
             } else {
@@ -298,11 +248,14 @@ struct FeedHomeView: View {
             }
         case .failed(let message):
             if viewModel.entries.isEmpty {
-                ExperienceErrorState(
-                    title: "Couldn't load feed",
-                    message: message,
-                    onRetry: { Task { await viewModel.refresh() } }
-                )
+                VStack(spacing: 0) {
+                    contentFilterBar
+                    ExperienceErrorState(
+                        title: "Couldn't load feed",
+                        message: message,
+                        onRetry: { Task { await viewModel.refresh() } }
+                    )
+                }
             } else if viewModel.contentFilter == .clips {
                 clipsExperience
             } else {
@@ -312,13 +265,17 @@ struct FeedHomeView: View {
             if viewModel.contentFilter == .clips {
                 clipsExperience
             } else {
-                FeedSkeleton()
+                VStack(spacing: 0) {
+                    contentFilterBar
+                    FeedSkeleton()
+                }
             }
         case .loaded where viewModel.showsEmpty:
             if viewModel.contentFilter == .clips {
                 clipsEmptyState
             } else {
                 VStack(spacing: 0) {
+                    contentFilterBar
                     if viewModel.scope == .following {
                         storiesSection
                     }
@@ -355,6 +312,8 @@ struct FeedHomeView: View {
     private var feedList: some View {
         ScrollView {
             VStack(spacing: 0) {
+                contentFilterBar
+
                 if viewModel.scope == .following {
                     storiesSection
                     FeedSectionSeparator()
@@ -409,51 +368,16 @@ struct FeedHomeView: View {
                     }
                 }
             }
-            .padding(.top, feedTimelineCategoryClearance)
             .environment(\.feedScrollViewportFrame, scrollViewportFrame)
         }
         .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame in
             guard !framesApproximatelyEqual(scrollViewportFrame, frame) else { return }
             scrollViewportFrame = frame
         }
-        .modifier(
-            ScrollAwareHeaderScrollModifier(
-                isActive: feedScrollAwareHeaderActive,
-                reduceMotion: reduceMotion,
-                debugSurface: "feed.list",
-                trackingMode: .navigationBarInsetStable,
-                appliesChromeVisibilityAnimation: false,
-                tracker: $feedScrollHeaderTracker,
-                chromeHidden: $feedScrollChromeHidden
-            )
-        )
         .scrollContentBackground(.hidden)
         .accessibilityIdentifier("feed.list")
-        #if DEBUG
-        .background {
-            FeedScrollChromeUIKitProbe(label: "feed.list")
-        }
-        #endif
         .onAppear {
             scheduleFeedImageCacheWarmAndViewportGate()
-            #if DEBUG
-            FeedScrollAwareHeaderDiagnostics.logScrollListenerAttached(
-                isActive: feedScrollAwareHeaderActive,
-                surface: "feed.list"
-            )
-            if FeedScrollHeaderIsolation.suppressScrollToHide {
-                FeedScrollAwareHeaderDiagnostics.logScrollHeaderIsolationActive(surface: "feed.list")
-            }
-            logFeedScrollChromeContext(surface: "feed.list")
-            Task {
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
-                guard feedScrollAwareHeaderActive else { return }
-                FeedScrollAwareHeaderDiagnostics.logNoGeometryActionsWarning(
-                    surface: "feed.list",
-                    secondsVisible: 3
-                )
-            }
-            #endif
         }
         .onChange(of: viewModel.visibleEntryIDs) { _, _ in
             scheduleFeedImageCacheWarmAndViewportGate()
@@ -574,82 +498,12 @@ struct FeedHomeView: View {
         }
     }
 
-    private var feedScrollAwareHeaderActive: Bool {
-        guard !FeedScrollHeaderIsolation.suppressScrollToHide else { return false }
-        return FeedScrollAwareHeaderExperiment.isEnabled
-            && tabIsActive
-            && viewModel.contentFilter != .clips
-            && navigationEnvironment.store.paths.feed.isEmpty
-            && !viewModel.visibleEntries.isEmpty
-    }
-
-    private var feedScrollAwareNavigationBarVisibility: Visibility {
-        feedScrollAwareHeaderActive && feedScrollChromeHidden ? .hidden : .visible
-    }
-
-    /// Fixed scroll padding under the nav bar while the category strip is a non-scrolling overlay (height never collapses on chrome transitions).
-    private var feedTimelineCategoryClearance: CGFloat {
-        guard FeedScrollAwareHeaderExperiment.isEnabled,
-              viewModel.contentFilter != .clips
-        else { return 0 }
-        return FeedScrollAwareHeaderExperiment.categoryBarClearance
-    }
-
-    private func resetFeedScrollAwareHeader() {
-        feedScrollHeaderTracker.reset()
-        feedScrollChromeHidden = false
-    }
-
     private func framesApproximatelyEqual(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
         abs(lhs.origin.x - rhs.origin.x) < 0.5
             && abs(lhs.origin.y - rhs.origin.y) < 0.5
             && abs(lhs.size.width - rhs.size.width) < 0.5
             && abs(lhs.size.height - rhs.size.height) < 0.5
     }
-
-    #if DEBUG
-    private func logFeedScrollChromeContext(surface: String) {
-        FeedScrollAwareHeaderDiagnostics.logFeedHomeContext(
-            surface: "\(surface):\(feedScrollChromeSurfaceName)",
-            phase: feedScrollChromePhaseLabel,
-            contentFilter: viewModel.contentFilter.rawValue,
-            feedPathDepth: navigationEnvironment.store.paths.feed.count,
-            tabIsActive: tabIsActive,
-            experimentActive: feedScrollAwareHeaderActive,
-            entryCount: viewModel.entries.count,
-            visibleEntryCount: viewModel.visibleEntries.count,
-            chromeHidden: feedScrollChromeHidden
-        )
-    }
-
-    private var feedScrollChromePhaseLabel: String {
-        switch viewModel.phase {
-        case .idle: return "idle"
-        case .loading: return "loading"
-        case .loaded: return "loaded"
-        case .failed: return "failed"
-        }
-    }
-
-    private var feedScrollChromeSurfaceName: String {
-        switch viewModel.phase {
-        case .idle, .loading:
-            if viewModel.entries.isEmpty { return "FeedSkeleton" }
-            if viewModel.contentFilter == .clips { return "clipsExperience" }
-            return "feedList"
-        case .failed:
-            if viewModel.entries.isEmpty { return "ExperienceErrorState" }
-            if viewModel.contentFilter == .clips { return "clipsExperience" }
-            return "feedList"
-        case .loaded where viewModel.isQueryReloadInProgress && viewModel.visibleEntries.isEmpty:
-            return viewModel.contentFilter == .clips ? "clipsExperience" : "FeedSkeleton"
-        case .loaded where viewModel.showsEmpty:
-            return viewModel.contentFilter == .clips ? "clipsEmptyState" : "feedEmpty"
-        case .loaded:
-            return viewModel.contentFilter == .clips ? "clipsExperience" : "feedList"
-        }
-    }
-    #endif
 }
 
 /// Pull-to-refresh only for non-Clips feed modes — nested Clips pager owns its own scroll surface.
@@ -668,17 +522,10 @@ private struct FeedHomeRefreshModifier: ViewModifier {
     }
 }
 
-/// Clips mode uses a structural VStack so the pager starts exactly below the category bar.
-/// Timeline scroll-aware mode: category overlay + fixed top padding (see ``FeedScrollAwareHeaderExperiment/categoryBarClearance``).
+/// Clips keeps the category bar above the pager. Timeline scrolls that bar with the feed.
 private struct FeedClipsViewportLayoutModifier<CategoryBar: View>: ViewModifier {
     let isClips: Bool
     let categoryBar: CategoryBar
-    var hideCategoryBar: Bool = false
-    var reduceMotion: Bool = false
-
-    private var usesScrollAwareCategoryOverlay: Bool {
-        FeedScrollAwareHeaderExperiment.isEnabled && !isClips
-    }
 
     func body(content: Content) -> some View {
         if isClips {
@@ -690,24 +537,8 @@ private struct FeedClipsViewportLayoutModifier<CategoryBar: View>: ViewModifier 
                     .clipped()
                     .feedClipsBoundsAnchor(.pager)
             }
-        } else if usesScrollAwareCategoryOverlay {
-            content
-                .overlay(alignment: .top) {
-                    categoryBar
-                        .offset(y: hideCategoryBar ? -FeedScrollAwareHeaderExperiment.categoryBarClearance : 0)
-                        .opacity(hideCategoryBar ? 0 : 1)
-                        .allowsHitTesting(!hideCategoryBar)
-                        .accessibilityHidden(hideCategoryBar)
-                        .animation(
-                            reduceMotion ? nil : FeedScrollAwareHeaderExperiment.animation,
-                            value: hideCategoryBar
-                        )
-                }
         } else {
             content
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    categoryBar
-                }
         }
     }
 }

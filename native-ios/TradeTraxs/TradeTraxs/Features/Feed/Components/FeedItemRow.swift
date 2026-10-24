@@ -123,19 +123,27 @@ struct FeedItemRow: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             engagement
             if case .trade(_, let summary) = entry {
-                tradePostDetails(summary)
+                tradePostDetails(summary, opensOnTap: true)
             } else {
                 summary
             }
             feedCaptionPreview
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onOpen)
+            roomShareCard
             linkedEmbeds
         }
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.top, ExperienceSpacing.xxs)
         .padding(.bottom, ExperienceSpacing.sm)
+        .background {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onOpen)
+        }
     }
 
-    // MARK: - Layout B (text-only — engagement outside open target)
+    // MARK: - Layout B (text-only — body opens; like-row buttons stay independent)
 
     private var textLayout: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
@@ -167,6 +175,7 @@ struct FeedItemRow: View {
                     onSingleTap: onOpen
                 )
 
+                roomShareCard
                 engagement
             }
         }
@@ -291,6 +300,7 @@ struct FeedItemRow: View {
             vaultStore: vaultStore,
             onCommentTap: onOpen,
             onShareTap: onShare,
+            onEmptyAreaTap: onOpen,
             vaultRef: vaultRef,
             visualStyle: .feedCard
         )
@@ -312,6 +322,7 @@ struct FeedItemRow: View {
                 .experienceStyle(.headline, color: colors.primaryText)
                 .lineLimit(entry.hasDisplayMedia ? 2 : 4)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .feedOpensOnTap(entry.hasDisplayMedia, action: onOpen)
         }
     }
 
@@ -321,23 +332,30 @@ struct FeedItemRow: View {
 
     /// Trade metrics and copy-trade metadata — always below the engagement row.
     @ViewBuilder
-    private func tradePostDetails(_ summary: TradeSummary) -> some View {
-        tradeMetrics(summary)
-        if summary.mode == .copyTraded {
-            copyTradeFeedFooter(summary)
+    private func tradePostDetails(_ summary: TradeSummary, opensOnTap: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            tradeMetrics(summary, opensOnTap: opensOnTap)
+            if summary.mode == .copyTraded {
+                copyTradeFeedFooter(summary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .feedOpensOnTap(opensOnTap, action: onOpen)
+            }
         }
     }
 
-    private func tradeMetrics(_ summary: TradeSummary) -> some View {
+    private func tradeMetrics(_ summary: TradeSummary, opensOnTap: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             PublicTradeHeadlineRow(
                 ticker: summary.symbol.ticker,
                 realizedPnL: summary.realizedPnL
             )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .feedOpensOnTap(opensOnTap, action: onOpen)
             .accessibilityIdentifier("feed.trade.headline")
 
             PublicTradeMetaChipRow(summary: summary, showsSession: summary.mode != .copyTraded)
                 .accessibilityIdentifier("feed.trade.badges")
+                .feedOpensOnTap(opensOnTap, allowsSiblingScroll: true, action: onOpen)
         }
     }
 
@@ -378,6 +396,13 @@ struct FeedItemRow: View {
     // MARK: - Caption
 
     @ViewBuilder
+    private var roomShareCard: some View {
+        if case .post(_, let post) = entry, let share = post.roomShare {
+            FeedRoomShareCard(share: share)
+        }
+    }
+
+    @ViewBuilder
     private var feedCaptionPreview: some View {
         if let text = entry.feedCaptionText,
            let lineLimit = entry.feedCaptionLineLimit
@@ -390,6 +415,26 @@ struct FeedItemRow: View {
                     ? "feed.post.seeMore"
                     : "feed.caption.seeMore"
             )
+        }
+    }
+}
+
+private extension View {
+    /// Opens the feed item on a tap. Scrollable rows use a simultaneous tap so a drag still scrolls.
+    @ViewBuilder
+    func feedOpensOnTap(
+        _ isEnabled: Bool,
+        allowsSiblingScroll: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        if !isEnabled {
+            self
+        } else if allowsSiblingScroll {
+            self.simultaneousGesture(TapGesture().onEnded { action() })
+        } else {
+            self
+                .contentShape(Rectangle())
+                .onTapGesture(perform: action)
         }
     }
 }

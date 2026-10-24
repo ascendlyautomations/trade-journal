@@ -84,6 +84,7 @@ struct ActivityHomeView: View {
                     }
                 } label: {
                     ExperienceIcon(icon: .more, size: .md, color: colors.primaryText)
+                    .experienceControlHitTarget()
                 }
                 .accessibilityLabel("Activity options")
                 .accessibilityIdentifier("activity.menu")

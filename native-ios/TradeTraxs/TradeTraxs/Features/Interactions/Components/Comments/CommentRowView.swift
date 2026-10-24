@@ -36,7 +36,7 @@ struct CommentRowView: View {
                     size: 32
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .accessibilityLabel(authorAccessibilityName)
             .accessibilityHint("View profile")
             .accessibilityIdentifier(
@@ -57,10 +57,6 @@ struct CommentRowView: View {
                     Text(comment.authorUsername.map { "@\($0)" } ?? "Trader")
                         .experienceStyle(.footnote, color: colors.primaryText)
                         .lineLimit(1)
-                    ProfileTradeTraxsIdentityBadge(
-                        profileID: comment.authorProfileID,
-                        size: .inline
-                    )
                     Text(TradeDisplay.dateText(comment.createdAt))
                         .experienceStyle(.caption, color: colors.tertiaryText)
                     Spacer(minLength: 0)
@@ -81,7 +77,7 @@ struct CommentRowView: View {
                             Text("Reply")
                                 .experienceStyle(.caption2, color: colors.tertiaryText)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                         .accessibilityIdentifier("interaction.comment.reply")
                     }
                     Spacer(minLength: 0)

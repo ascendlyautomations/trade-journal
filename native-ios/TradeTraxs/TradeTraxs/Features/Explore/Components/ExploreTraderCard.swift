@@ -45,7 +45,6 @@ struct ExploreTraderCard: View {
                                 .font(ExperienceTypography.subheadline.weight(.semibold))
                                 .foregroundStyle(colors.primaryText)
                                 .lineLimit(1)
-                            ProfileTradeTraxsIdentityBadge(profile: profile, size: .inline)
                         }
                         .frame(height: usesCompactLayout ? nameRowHeight : nil, alignment: .center)
 
@@ -66,7 +65,7 @@ struct ExploreTraderCard: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
 
             followButton
         }
@@ -126,7 +125,7 @@ struct ExploreTraderCard: View {
                 .contentShape(Rectangle())
                 .frame(minHeight: ExperienceAccessibility.minTouchTarget)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityIdentifier(
             isFollowing
                 ? "explore.trader.following.\(trader.id.rawValue)"

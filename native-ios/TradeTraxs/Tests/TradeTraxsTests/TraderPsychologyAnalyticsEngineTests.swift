@@ -201,7 +201,7 @@ final class TraderPsychologyAnalyticsEngineTests: XCTestCase {
         let progress = PsychologyInsightsUnlockProgress.compute(trades: trades, checkIns: checkIns)
 
         XCTAssertEqual(progress.tradeCount, 4)
-        XCTAssertEqual(progress.tradingDayCheckInCount, 2)
+        XCTAssertEqual(progress.tradingDayCheckInCount, 3)
         XCTAssertTrue(progress.showsRequirementMessage)
     }
 

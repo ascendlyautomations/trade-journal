@@ -107,6 +107,12 @@ enum FeedBootstrapApplier {
             }
             item.caption = stringPayload(row.payload, keys: ["content", "body"])
             item.mediaURL = stringPayload(row.payload, keys: ["image_url"])
+            item.roomShare = RoomShareAttachment.parsed(
+                roomID: stringPayload(row.payload, keys: ["room_id"]),
+                name: stringPayload(row.payload, keys: ["room_name"]),
+                logoURL: stringPayload(row.payload, keys: ["room_logo"]),
+                description: stringPayload(row.payload, keys: ["room_description"])
+            )
         case .achievement:
             item.achievementID = AchievementID(
                 stringPayload(row.payload, keys: ["achievement_id"]) ?? row.id

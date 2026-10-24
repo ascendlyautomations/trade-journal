@@ -119,7 +119,7 @@ struct CSVImportView: View {
                             systemImage: "doc.text"
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .padding(.top, ExperienceSpacing.xs)
                     .accessibilityIdentifier("csvImport.chooseFile")
                 }

@@ -19,6 +19,8 @@ final class DashboardViewModel {
     private(set) var summary: DashboardChartMetrics.Summary?
     private(set) var psychologyReport: PsychologyAnalyticsReport?
     private(set) var psychologyInsightsUnlockProgress: PsychologyInsightsUnlockProgress = .zero
+    /// False until daily check-ins for psychology have been loaded (avoids 0/5 · 0/5 flash).
+    private(set) var psychologyUnlockMetricsReady = false
     private(set) var psychologyGuardrailNotices: [PsychologyGuardrailNotice] = []
     private(set) var accounts: [TradingAccount] = []
     private(set) var accountNames: [TradingAccountID: String] = [:]
@@ -26,6 +28,11 @@ final class DashboardViewModel {
 
     var accountFilter: DashboardAccountFilter = .all
     var dateRange: DashboardDateRange = .thirtyDays
+    var accountTypeFilter: ProfileStatisticsMetrics.Mode = .all
+    var showPublicOnly = false
+    var customDateInterval: DateInterval?
+    var showsScopeFilterSheet = false
+    var draftScopeFilters = DashboardScopeFilterDraft.defaults
     /// Widened preset for the equity hero when the dashboard selection has no trades in-range.
     private(set) var effectiveEquityChartRange: DashboardDateRange = .thirtyDays
 
@@ -70,6 +77,12 @@ final class DashboardViewModel {
     private var accountChartHydrateTask: Task<Void, Never>?
     private var aggregateChartSelectionToken: UInt64 = 0
     private var aggregateChartHydrateTask: Task<Void, Never>?
+    private var scopeFilterTradesHydrateTask: Task<Void, Never>?
+    /// Bumped on scope-filter edits — stale owner-trade hydrates must not commit.
+    private var scopeMetricsSelectionToken: UInt64 = 0
+    /// True while scoped KPIs need owner trades that are not in memory yet (avoid painting $0).
+    private(set) var isScopeFilteredMetricsLoading = false
+    private var ownerTradesWireNetworkRefreshAttempted = false
     private var dashboardGRDBBackgroundReconcileScheduled = false
     private var equityChartOverlayRetryScheduled = false
     private var analyticsReconciliationObserver: NSObjectProtocol?
@@ -137,10 +150,12 @@ final class DashboardViewModel {
         secondaryTask?.cancel()
         accountChartHydrateTask?.cancel()
         aggregateChartHydrateTask?.cancel()
+        scopeFilterTradesHydrateTask?.cancel()
         loadTask = nil
         secondaryTask = nil
         accountChartHydrateTask = nil
         aggregateChartHydrateTask = nil
+        scopeFilterTradesHydrateTask = nil
         loadGeneration &+= 1
         hasLoaded = false
         coldLoadFinished = false
@@ -149,6 +164,7 @@ final class DashboardViewModel {
         summary = nil
         psychologyReport = nil
         psychologyInsightsUnlockProgress = .zero
+        psychologyUnlockMetricsReady = false
         psychologyGuardrailNotices = []
         accounts = []
         accountNames = [:]
@@ -169,6 +185,9 @@ final class DashboardViewModel {
         isHomeTabActive = true
         pendingChartOverlayRefreshAfterInactive = false
         chartOverlayFetchSettledSelectionKey = nil
+        scopeMetricsSelectionToken = 0
+        isScopeFilteredMetricsLoading = false
+        ownerTradesWireNetworkRefreshAttempted = false
         phase = .idle
     }
 
@@ -605,11 +624,14 @@ final class DashboardViewModel {
         dashboardGRDBBackgroundReconcileScheduled = false
         loadGeneration &+= 1
         let generation = loadGeneration
-        await performLoad(
-            forceNetwork: true,
-            generation: generation,
-            refreshTrigger: .pullRefresh
-        )
+        await UncancelledRefresh.run { [weak self] in
+            guard let self else { return }
+            await self.performLoad(
+                forceNetwork: true,
+                generation: generation,
+                refreshTrigger: .pullRefresh
+            )
+        }
         isRefreshing = false
     }
 
@@ -720,6 +742,11 @@ final class DashboardViewModel {
         recomputePsychology()
     }
 
+    /// Re-run unlock gate when dashboard metrics/check-ins change without a full recompute.
+    func refreshPsychologyUnlockMetrics() {
+        recomputePsychology()
+    }
+
     /// Refetch session check-ins after a save on another device or surface.
     func syncDailyCheckInsFromNetwork() async {
         guard let profileID else { return }
@@ -768,6 +795,7 @@ final class DashboardViewModel {
             }
         }
         recompute()
+        kickOwnerTradesHydrationIfTradeWindowEmpty()
         ensureEquityChartOverlayIfNeeded()
         if usesDashboardAnalyticsV3, usesDashboardAnalyticsGRDB, analyticsV3Bootstrap != nil {
             DashboardAnalyticsGRDBProbe.logNetworkAvoided(reason: "account_metrics_local")
@@ -775,15 +803,91 @@ final class DashboardViewModel {
     }
 
     func setDateRange(_ range: DashboardDateRange) {
-        guard dateRange != range else { return }
+        guard dateRange != range || customDateInterval != nil else { return }
+        scopeMetricsSelectionToken &+= 1
         ExperienceHaptics.play(.selection)
         hasUserSelectedDateRangeForCurrentFilter = true
         pendingAutomaticDateRangeResolution = false
+        customDateInterval = nil
         dateRange = range
+        if let profileID {
+            persistScopeFilters(profileID: profileID)
+        }
         recompute()
+        kickOwnerTradesHydrationIfTradeWindowEmpty()
         if usesDashboardAnalyticsGRDB, analyticsV3Bootstrap != nil {
             DashboardAnalyticsGRDBProbe.logNetworkAvoided(reason: "preset_local")
         }
+    }
+
+    var scopeFilterTimeLabel: String {
+        DashboardScopeFilterSupport.compactTimeLabel(
+            dateRange: dateRange,
+            customInterval: customDateInterval
+        )
+    }
+
+    var showsScopeFilterIndicator: Bool {
+        accountTypeFilter != .all
+            || showPublicOnly
+            || customDateInterval != nil
+            || hasUserSelectedDateRangeForCurrentFilter
+    }
+
+    func openScopeFilters() {
+        ExperienceHaptics.play(.selection)
+        draftScopeFilters = makeScopeFilterDraft()
+        showsScopeFilterSheet = true
+    }
+
+    func resetDraftScopeFilters() {
+        draftScopeFilters = .defaults
+    }
+
+    func applyDraftScopeFilters() {
+        scopeMetricsSelectionToken &+= 1
+        ExperienceHaptics.play(.selection)
+        if let profileID {
+            promoteOwnerTradesFromSessionCache(profileID: profileID)
+        }
+        let draft = draftScopeFilters
+        if draft.timePeriod == .custom {
+            let start = draft.customStart ?? Date()
+            let end = draft.customEnd ?? start
+            customDateInterval = DashboardScopeFilterSupport.normalizedCustomInterval(start: start, end: end)
+            hasUserSelectedDateRangeForCurrentFilter = true
+            pendingAutomaticDateRangeResolution = false
+        } else {
+            customDateInterval = nil
+            if let range = draft.timePeriod.dateRange {
+                hasUserSelectedDateRangeForCurrentFilter = true
+                pendingAutomaticDateRangeResolution = false
+                dateRange = range
+            }
+        }
+        accountTypeFilter = draft.accountType
+        showPublicOnly = draft.visibility == .publicOnly
+        if let profileID {
+            persistScopeFilters(profileID: profileID)
+        }
+        recompute()
+        if let profileID {
+            kickDashboardOwnerTradesHydration(profileID: profileID)
+        }
+        if usesDashboardAnalyticsGRDB, analyticsV3Bootstrap != nil {
+            DashboardAnalyticsGRDBProbe.logNetworkAvoided(reason: "scope_filter_local")
+        }
+    }
+
+    func clientScopeFilter() -> DashboardClientScopeFilter {
+        DashboardClientScopeFilter(
+            accountFilter: accountFilter,
+            dateRange: dateRange,
+            customInterval: customDateInterval,
+            accountMode: accountTypeFilter,
+            showPublicOnly: showPublicOnly,
+            linkedAccountModes: Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
+        )
     }
 
     func openCalendar() {
@@ -804,6 +908,225 @@ final class DashboardViewModel {
     func openReports() {
         ExperienceHaptics.play(.selection)
         navigationCoordinator.open(.home(.reports))
+    }
+
+    /// Merged V3 + client insights for the active account and date range.
+    var insightsPresentation: DashboardInsightsPresentation {
+        let trades = resolvedFilteredTradesForDashboard()
+        let count = max(summary?.tradeCount ?? 0, trades.count)
+        return DashboardInsightsComposer.build(
+            serverInsights: summary?.insights ?? [],
+            trades: trades,
+            strategyHighlights: summary?.strategyHighlights,
+            isLoading: isDashboardInsightsLoading,
+            tradeCount: count
+        )
+    }
+
+    /// Psychology cards — hidden until web-aligned unlock gate passes (5 check-in days + 5 trades).
+    var dashboardPsychologyInsightCards: [PsychologyInsightCard] {
+        guard !psychologyInsightsUnlockProgress.showsRequirementMessage else { return [] }
+        return psychologyReport?.dashboardCards ?? []
+    }
+
+    /// True while V3 chart overlay (insights source) has not resolved for the current selection.
+    var isDashboardInsightsLoading: Bool {
+        guard usesDashboardAnalyticsV3, analyticsV3Bootstrap != nil else { return false }
+        guard (summary?.tradeCount ?? 0) > 0 else { return false }
+        return isEquityChartOverlayLoading
+    }
+
+    /// Filtered trades for insights/psychology — falls back to session owner cache when V3 metrics load before trade window.
+    func resolvedFilteredTradesForDashboard() -> [Trade] {
+        let scope = clientScopeFilter()
+        return DashboardChartMetrics.filteredTrades(
+            from: tradeInputsForScopeFiltering(),
+            scope: scope
+        )
+    }
+
+    private var dashboardLinkedAccountTypeStrings: [TradingAccountID: String] {
+        Dictionary(
+            uniqueKeysWithValues: accounts.map {
+                ($0.id, ProfileStatisticsMetrics.accountTypeString(for: $0.mode))
+            }
+        )
+    }
+
+    /// Trade rows for web-style dashboard filters — hydrates session cache when V3 cleared ``tradeInputs``.
+    private func tradeInputsForScopeFiltering() -> [DashboardChartMetrics.Input] {
+        if !tradeInputs.isEmpty { return tradeInputs }
+        if let profileID {
+            promoteOwnerTradesFromSessionCache(profileID: profileID)
+        }
+        if !tradeInputs.isEmpty { return tradeInputs }
+        guard let profileID,
+              let cached = SessionOwnerTradesStore.shared.cached(for: profileID)
+        else { return [] }
+        let accountTypes = dashboardLinkedAccountTypeStrings
+        return cached.compactMap { trade -> DashboardChartMetrics.Input? in
+            guard includesTradeInDashboardScope(trade) else { return nil }
+            let linked = trade.accountID.flatMap { accountTypes[$0] }
+            return DashboardScopeFilterSupport.makeChartInput(
+                trade: trade,
+                linkedAccountType: linked
+            )
+        }
+    }
+
+    /// Rebuild chart inputs after accounts arrive so wire rows match the latest account list.
+    private func reconcileTradeInputsWithOwnerStore(profileID: ProfileID) {
+        guard !accounts.isEmpty else { return }
+        SessionOwnerTradesStore.shared.hydrateFromDiskIfNeeded(
+            for: profileID,
+            detailCache: detailCache
+        )
+        guard let cached = SessionOwnerTradesStore.shared.cached(for: profileID),
+              !cached.isEmpty
+        else { return }
+        apply(trades: cached, accounts: accounts, profileID: profileID)
+    }
+
+    /// V3 bootstrap does not ship trade rows — hydrate session/disk owner trades for client insights + psych.
+    private func promoteOwnerTradesFromSessionCache(profileID: ProfileID) {
+        guard tradeInputs.isEmpty else { return }
+        let result = SessionOwnerTradesStore.shared.hydrateFromDiskIfNeeded(
+            for: profileID,
+            detailCache: detailCache
+        )
+        guard result.tradeCount > 0,
+              let cached = SessionOwnerTradesStore.shared.cached(for: profileID)
+        else { return }
+        apply(trades: cached, accounts: accounts, profileID: profileID)
+    }
+
+    /// Filtered trade count for psych gate — same scoped count as dashboard hero (`filteredTrades` on web).
+    private func filteredDashboardTradeCountForPsychologyGate(trades: [Trade]) -> Int {
+        let fromRows = trades.count
+        let scope = clientScopeFilter()
+        if scope.needsClientScopedTradeMetrics {
+            return max(summary?.tradeCount ?? 0, fromRows)
+        }
+        if let headline = summary?.tradeCount, headline > 0 {
+            return max(headline, fromRows)
+        }
+        if let bootstrap = analyticsV3Bootstrap {
+            let v3Count = DashboardAnalyticsMapper.tradeCount(
+                in: bootstrap,
+                accountFilter: accountFilter,
+                dateRange: dateRange
+            )
+            if v3Count > 0 { return max(v3Count, fromRows) }
+        }
+        if let authoritativeTotalTradeCount, authoritativeTotalTradeCount > 0 {
+            return max(authoritativeTotalTradeCount, fromRows)
+        }
+        return fromRows
+    }
+
+    private func psychologyCheckInsForUnlockGate() -> [TraderDailyCheckIn] {
+        var merged = SessionDailyCheckInsStore.shared.checkIns
+        let historyCheckIns = CheckInHistorySessionStore.shared.checkIns
+        if !historyCheckIns.isEmpty {
+            merged = TraderDailyCheckInMerge.preferNewer(primary: merged, secondary: historyCheckIns)
+        }
+        guard let profileID else { return merged }
+        if let today = TraderDailyCheckInStore.shared.todayCheckIn,
+           today.ownerProfileID == profileID
+        {
+            merged = TraderDailyCheckInMerge.preferNewer(primary: merged, secondary: [today])
+        }
+        return merged
+    }
+
+    private func ownerTradesCoverActiveAnalyticsScope() -> Bool {
+        guard let profileID else { return tradeInputs.isEmpty }
+        let cached = SessionOwnerTradesStore.shared.cached(for: profileID) ?? tradeInputs.map(\.trade)
+        return DashboardScopeFilterSupport.cachedOwnerTradesCoverAnalyticsScope(
+            trades: cached,
+            scope: clientScopeFilter(),
+            historyComplete: SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
+        )
+    }
+
+    private func ensureOwnerTradesForInsights(
+        profileID: ProfileID,
+        forceNetwork: Bool,
+        requireCompleteSnapshot: Bool = false,
+        scopeSelectionToken: UInt64? = nil
+    ) async {
+        await SessionNetworkGate.shared.awaitReady()
+        if let scopeSelectionToken, scopeSelectionToken != scopeMetricsSelectionToken {
+            return
+        }
+        promoteOwnerTradesFromSessionCache(profileID: profileID)
+        let needsCompleteJournal = requireCompleteSnapshot
+            && clientScopeFilter().needsClientScopedTradeMetrics
+            && !ownerTradesCoverActiveAnalyticsScope()
+        if needsCompleteJournal {
+            do {
+                let rows = try await SessionOwnerTradesStore.shared.ensureCompleteAnalyticsSnapshot(
+                    for: profileID,
+                    detailCache: detailCache,
+                    repository: trades
+                )
+                guard scopeSelectionToken == nil || scopeSelectionToken == scopeMetricsSelectionToken else {
+                    return
+                }
+                let accountList = accounts.isEmpty
+                    ? (try? await bootstrapAccounts(profileID: profileID, forceNetwork: false)) ?? accounts
+                    : accounts
+                apply(trades: rows, accounts: accountList, profileID: profileID)
+                isScopeFilteredMetricsLoading = false
+                recompute()
+            } catch {
+                guard scopeSelectionToken == nil || scopeSelectionToken == scopeMetricsSelectionToken else {
+                    return
+                }
+                isScopeFilteredMetricsLoading = false
+                if usesDashboardAnalyticsV3, analyticsV3Bootstrap != nil, !clientScopeFilter().needsClientScopedTradeMetrics {
+                    recomputeFromAnalyticsV3(bootstrap: analyticsV3Bootstrap!)
+                }
+            }
+            return
+        }
+        if !forceNetwork, !tradeInputs.isEmpty {
+            guard scopeSelectionToken == nil || scopeSelectionToken == scopeMetricsSelectionToken else {
+                return
+            }
+            isScopeFilteredMetricsLoading = false
+            recompute()
+            return
+        }
+        do {
+            let page = try await bootstrapTrades(profileID: profileID, forceNetwork: forceNetwork)
+            guard scopeSelectionToken == nil || scopeSelectionToken == scopeMetricsSelectionToken else {
+                return
+            }
+            guard !page.items.isEmpty else {
+                isScopeFilteredMetricsLoading = false
+                if !tradeInputs.isEmpty { recompute() }
+                return
+            }
+            let accountList: [TradingAccount]
+            if accounts.isEmpty {
+                accountList = try await bootstrapAccounts(profileID: profileID, forceNetwork: false)
+            } else {
+                accountList = accounts
+            }
+            guard scopeSelectionToken == nil || scopeSelectionToken == scopeMetricsSelectionToken else {
+                return
+            }
+            apply(trades: page.items, accounts: accountList, profileID: profileID)
+            isScopeFilteredMetricsLoading = false
+            recompute()
+        } catch {
+            guard scopeSelectionToken == nil || scopeSelectionToken == scopeMetricsSelectionToken else {
+                return
+            }
+            isScopeFilteredMetricsLoading = false
+            if !tradeInputs.isEmpty { recompute() }
+        }
     }
 
     func openWithdrawalsHistory() {
@@ -957,6 +1280,7 @@ final class DashboardViewModel {
             return
         }
         self.profileID = profileID
+        restoreScopeFiltersIfNeeded(profileID: profileID)
         if demoActive {
             SessionViewerGate.shared.bind(profileID.rawValue)
         }
@@ -1065,6 +1389,10 @@ final class DashboardViewModel {
                         payoutTotal = payout
                     }
                     hasLoaded = true
+                    await primePsychologyCheckInsForDashboard(
+                        profileID: profileID,
+                        forceNetwork: forceNetwork
+                    )
                     recompute()
                     phase = .loaded
                     #if DEBUG
@@ -1154,6 +1482,10 @@ final class DashboardViewModel {
                 return
             }
             hasLoaded = true
+            await primePsychologyCheckInsForDashboard(
+                profileID: profileID,
+                forceNetwork: forceNetwork
+            )
             recompute()
             phase = .loaded
             DashboardLoadProbe.markFirstUsefulRender()
@@ -1542,9 +1874,10 @@ final class DashboardViewModel {
                     trade: trade,
                     accountMode: accountMode
                 ) else { return nil }
-                return DashboardChartMetrics.Input(
+                let linked = trade.accountID.flatMap { accountTypes[$0] }
+                return DashboardScopeFilterSupport.makeChartInput(
                     trade: trade,
-                    accountType: trade.accountID.flatMap { accountTypes[$0] }
+                    linkedAccountType: linked
                 )
             }
         }
@@ -1554,14 +1887,16 @@ final class DashboardViewModel {
         guard hasLoaded else { return }
         guard includesTradeInDashboardScope(trade) else { return }
         SessionNetworkProbe.record(.localMutation, resource: "dashboard.trades", detail: trade.id.rawValue)
-        let accountType = trade.accountID.flatMap { id in
-            accounts.first(where: { $0.id == id }).map {
-                ProfileStatisticsMetrics.accountTypeString(for: $0.mode)
-            }
+        let linkedAccount = trade.accountID.flatMap { id in accounts.first(where: { $0.id == id }) }
+        let accountType = linkedAccount.map {
+            ProfileStatisticsMetrics.accountTypeString(for: $0.mode)
         }
         tradeInputs.removeAll { $0.trade.id == trade.id }
         tradeInputs.insert(
-            DashboardChartMetrics.Input(trade: trade, accountType: accountType),
+            DashboardScopeFilterSupport.makeChartInput(
+                trade: trade,
+                linkedAccountType: accountType
+            ),
             at: 0
         )
         recompute()
@@ -1587,6 +1922,7 @@ final class DashboardViewModel {
         }
         accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
         reconcileDashboardAccountFilterIfNeeded()
+        reconcileTradeInputsWithOwnerStore(profileID: profileID)
         recompute()
     }
 
@@ -1699,21 +2035,142 @@ final class DashboardViewModel {
             summary = nil
             hasLoaded = false
             phase = .idle
+            isScopeFilteredMetricsLoading = false
             return
         }
         resolveAutomaticDateRangeIfNeeded()
-        if usesDashboardAnalyticsV3, let bootstrap = analyticsV3Bootstrap {
-            recomputeFromAnalyticsV3(bootstrap: bootstrap)
+        let scope = clientScopeFilter()
+        let scopedTradeInputs = tradeInputsForScopeFiltering()
+
+        if scope.needsClientScopedTradeMetrics, !ownerTradesCoverActiveAnalyticsScope() {
+            isScopeFilteredMetricsLoading = true
+            if let profileID {
+                kickDashboardOwnerTradesHydration(
+                    profileID: profileID,
+                    requireCompleteSnapshot: true
+                )
+            }
             return
         }
+
+        if !scopedTradeInputs.isEmpty, scope.needsClientScopedTradeMetrics || !usesDashboardAnalyticsV3 {
+            if ownerTradeInputsNeedWireRefresh(scopedTradeInputs, scope: scope),
+               let profileID,
+               !ownerTradesWireNetworkRefreshAttempted
+            {
+                ownerTradesWireNetworkRefreshAttempted = true
+                isScopeFilteredMetricsLoading = true
+                kickDashboardOwnerTradesHydration(profileID: profileID, forceNetwork: true)
+                return
+            }
+            isScopeFilteredMetricsLoading = false
+            applyClientTradeScopeMetrics(scope)
+            return
+        }
+
+        if scope.needsClientScopedTradeMetrics {
+            isScopeFilteredMetricsLoading = true
+            if let profileID {
+                kickDashboardOwnerTradesHydration(
+                    profileID: profileID,
+                    requireCompleteSnapshot: true
+                )
+            }
+            return
+        }
+
+        isScopeFilteredMetricsLoading = false
+
+        if usesDashboardAnalyticsV3, let bootstrap = analyticsV3Bootstrap {
+            recomputeFromAnalyticsV3(bootstrap: bootstrap)
+            attachAccountLevelPayoutsToSummary()
+            return
+        }
+
         let result = DashboardChartMetrics.compute(
-            from: tradeInputs,
-            accountFilter: accountFilter,
-            dateRange: dateRange,
+            from: scopedTradeInputs,
+            scope: scope,
             payoutTotal: payoutTotal
         )
-        summary = result
+        summary = assigningAccountLevelPayouts(to: result)
         refreshEquityChartPresentation()
+        recomputePsychology()
+    }
+
+    /// Cached rows missing `mode` / `account_type` cannot satisfy Live/Funded/Eval filters (web uses row columns).
+    private func ownerTradeInputsNeedWireRefresh(
+        _ inputs: [DashboardChartMetrics.Input],
+        scope: DashboardClientScopeFilter
+    ) -> Bool {
+        guard scope.accountMode != DashboardClientScopeFilter.defaultAccountMode else { return false }
+        if !scope.linkedAccountModes.isEmpty { return false }
+        return !inputs.contains {
+            ProfileStatisticsMetrics.resolveAccountMode(
+                trade: $0.trade,
+                accountModes: scope.linkedAccountModes
+            ) != nil
+        }
+    }
+
+    /// Payouts / achievements — not scoped by dashboard trade filters (matches web + profile header).
+    private func assigningAccountLevelPayouts(
+        to summary: DashboardChartMetrics.Summary
+    ) -> DashboardChartMetrics.Summary {
+        var next = summary
+        next.payouts = payoutTotal
+        return next
+    }
+
+    private func attachAccountLevelPayoutsToSummary() {
+        guard var current = summary else { return }
+        current.payouts = payoutTotal
+        summary = current
+    }
+
+    private func kickOwnerTradesHydrationIfTradeWindowEmpty() {
+        guard let profileID else { return }
+        guard tradeInputsForScopeFiltering().isEmpty else { return }
+        kickDashboardOwnerTradesHydration(profileID: profileID)
+    }
+
+    /// Session owner-trades cache / single coalesced RPC — not a refetch per filter tap.
+    private func kickDashboardOwnerTradesHydration(
+        profileID: ProfileID,
+        forceNetwork: Bool = false,
+        requireCompleteSnapshot: Bool = false
+    ) {
+        promoteOwnerTradesFromSessionCache(profileID: profileID)
+        if !requireCompleteSnapshot, !forceNetwork, !tradeInputsForScopeFiltering().isEmpty {
+            isScopeFilteredMetricsLoading = false
+            recompute()
+            return
+        }
+
+        let selectionToken = scopeMetricsSelectionToken
+        scopeFilterTradesHydrateTask?.cancel()
+        scopeFilterTradesHydrateTask = Task { [weak self] in
+            guard let self else { return }
+            await self.ensureOwnerTradesForInsights(
+                profileID: profileID,
+                forceNetwork: forceNetwork,
+                requireCompleteSnapshot: requireCompleteSnapshot,
+                scopeSelectionToken: selectionToken
+            )
+        }
+    }
+
+    /// Web `useDashboardAnalytics` — filter owner trades client-side (V3 presets skip account type / public).
+    private func applyClientTradeScopeMetrics(_ scope: DashboardClientScopeFilter) {
+        let inputs = tradeInputsForScopeFiltering()
+        let scoped = DashboardChartMetrics.compute(
+            from: inputs,
+            scope: scope,
+            payoutTotal: payoutTotal
+        )
+        summary = assigningAccountLevelPayouts(to: scoped)
+        effectiveEquityChartRange = scope.dateRange
+        equityChartSummary = summary
+        equityChartAccountFilter = accountFilter
         recomputePsychology()
     }
 
@@ -1995,15 +2452,19 @@ final class DashboardViewModel {
         case .aggregate(let bundle):
             lastAccountScopedSummary = nil
             lastAccountScopedFilter = nil
-            summary = DashboardAnalyticsMapper.summary(from: bundle, payoutTotal: payoutTotal)
+            summary = assigningAccountLevelPayouts(
+                to: DashboardAnalyticsMapper.summary(from: bundle, payoutTotal: payoutTotal)
+            )
         case .account(let bundle, _):
-            let next = DashboardAnalyticsMapper.summary(from: bundle, payoutTotal: payoutTotal)
+            let next = assigningAccountLevelPayouts(
+                to: DashboardAnalyticsMapper.summary(from: bundle, payoutTotal: payoutTotal)
+            )
             summary = next
             lastAccountScopedSummary = next
             lastAccountScopedFilter = accountFilter
         case .accountMetricsMissing:
             if accountFilter == lastAccountScopedFilter, let lastAccountScopedSummary {
-                summary = lastAccountScopedSummary
+                summary = assigningAccountLevelPayouts(to: lastAccountScopedSummary)
             } else {
                 summary = nil
             }
@@ -2143,6 +2604,7 @@ final class DashboardViewModel {
         analyticsV3Bootstrap = applied.bootstrap
         assignAnalyticsV3Revision(applied.revision)
         apply(trades: [], accounts: applied.accounts, profileID: profileID)
+        promoteOwnerTradesFromSessionCache(profileID: profileID)
         if let payout = applied.payoutTotal {
             payoutTotal = payout
         }
@@ -2151,7 +2613,9 @@ final class DashboardViewModel {
             historyComplete: true
         )
         hasLoaded = true
+        await primePsychologyCheckInsForDashboard(profileID: profileID, forceNetwork: forceNetwork)
         recompute()
+        kickDashboardOwnerTradesHydration(profileID: profileID)
         phase = .loaded
         DashboardAnalyticsGRDBProbe.logRender(
             source: "network",
@@ -2168,6 +2632,10 @@ final class DashboardViewModel {
         if applied.payoutTotal != nil {
             DashboardLoadProbe.markFullHydration()
         }
+        scheduleDashboardPsychologyCheckInsHydration(
+            profileID: profileID,
+            forceNetwork: forceNetwork
+        )
         secondaryTask?.cancel()
         secondaryTask = Task { [weak self] in
             await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
@@ -2201,6 +2669,7 @@ final class DashboardViewModel {
             analyticsV3Bootstrap = applied.bootstrap
             assignAnalyticsV3Revision(applied.revision)
             apply(trades: [], accounts: applied.accounts, profileID: profileID)
+            promoteOwnerTradesFromSessionCache(profileID: profileID)
             if let payout = applied.payoutTotal {
                 payoutTotal = payout
             }
@@ -2209,7 +2678,9 @@ final class DashboardViewModel {
                 historyComplete: true
             )
             hasLoaded = true
+            await primePsychologyCheckInsForDashboard(profileID: profileID, forceNetwork: false)
             recompute()
+            kickDashboardOwnerTradesHydration(profileID: profileID)
             phase = .loaded
             DashboardAnalyticsGRDBProbe.logRender(
                 source: "json",
@@ -2260,6 +2731,10 @@ final class DashboardViewModel {
             #if DEBUG
             AnalyticsShadowReadCoordinator.scheduleColdStartProbeIfNeeded(viewerID: profileID)
             #endif
+            scheduleDashboardPsychologyCheckInsHydration(
+                profileID: profileID,
+                forceNetwork: false
+            )
             secondaryTask?.cancel()
             secondaryTask = Task { [weak self] in
                 await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
@@ -2331,6 +2806,11 @@ final class DashboardViewModel {
 
     /// Aligns ``dateRange`` (dropdown + V3 preset) with automatic widen/fallback when the user has not overridden the preset.
     private func resolveAutomaticDateRangeIfNeeded() {
+        let scope = clientScopeFilter()
+        if customDateInterval != nil || scope.needsClientScopedTradeMetrics {
+            effectiveEquityChartRange = dateRange
+            return
+        }
         guard !hasUserSelectedDateRangeForCurrentFilter else {
             effectiveEquityChartRange = dateRange
             return
@@ -2429,6 +2909,15 @@ final class DashboardViewModel {
     }
 
     private func refreshEquityChartPresentation(bootstrap: AnalyticsDashboardBootstrapV3? = nil) {
+        let scope = clientScopeFilter()
+        if scope.needsClientScopedTradeMetrics {
+            effectiveEquityChartRange = scope.dateRange
+            if let summary {
+                equityChartSummary = summary
+                equityChartAccountFilter = accountFilter
+            }
+            return
+        }
         let charts = chartOverlayForFilter()
         let honorUserSelectedRange = hasUserSelectedDateRangeForCurrentFilter
         let allowAutomaticWiden = !honorUserSelectedRange
@@ -2545,36 +3034,86 @@ final class DashboardViewModel {
         }
     }
 
-    private func recomputePsychology() {
-        let trades = DashboardChartMetrics.filteredTrades(
-            from: tradeInputs,
-            accountFilter: accountFilter,
-            dateRange: dateRange
+    private func makeScopeFilterDraft() -> DashboardScopeFilterDraft {
+        DashboardScopeFilterDraft(
+            timePeriod: DashboardTimePeriodPicker(
+                dateRange: dateRange,
+                usesCustomRange: customDateInterval != nil
+            ),
+            customStart: customDateInterval?.start ?? Date(),
+            customEnd: customDateInterval?.end ?? Date(),
+            accountType: accountTypeFilter,
+            visibility: showPublicOnly ? .publicOnly : .allTrades
         )
-        let sessionCheckIns = SessionDailyCheckInsStore.shared.checkIns
+    }
+
+    private func restoreScopeFiltersIfNeeded(profileID: ProfileID) {
+        guard let stored = DashboardScopeFilterPersistence.load(profileID: profileID) else { return }
+        if let raw = stored.dateRangeRaw, let range = DashboardDateRange(rawValue: raw) {
+            dateRange = range
+        }
+        if let start = stored.customStart, let end = stored.customEnd {
+            customDateInterval = DashboardScopeFilterSupport.normalizedCustomInterval(start: start, end: end)
+        } else {
+            customDateInterval = nil
+        }
+        if let modeRaw = stored.accountModeRaw,
+           DashboardScopeFilterSupport.dashboardAccountTypeCases.contains(where: { $0.rawValue == modeRaw }),
+           let mode = ProfileStatisticsMetrics.Mode(rawValue: modeRaw)
+        {
+            accountTypeFilter = mode
+        }
+        if let publicOnly = stored.showPublicOnly {
+            showPublicOnly = publicOnly
+        }
+        if stored.hasUserSelectedDateRange == true {
+            hasUserSelectedDateRangeForCurrentFilter = true
+            pendingAutomaticDateRangeResolution = false
+        }
+    }
+
+    private func persistScopeFilters(profileID: ProfileID) {
+        DashboardScopeFilterPersistence.save(
+            profileID: profileID,
+            stored: DashboardScopeFilterPersistence.Stored(
+                dateRangeRaw: dateRange.rawValue,
+                customStart: customDateInterval?.start,
+                customEnd: customDateInterval?.end,
+                accountModeRaw: accountTypeFilter.rawValue,
+                showPublicOnly: showPublicOnly,
+                hasUserSelectedDateRange: hasUserSelectedDateRangeForCurrentFilter
+            )
+        )
+    }
+
+    private func recomputePsychology() {
+        let trades = resolvedFilteredTradesForDashboard()
+        let gateCheckIns = psychologyCheckInsForUnlockGate()
         let report = TraderPsychologyAnalyticsEngine.buildReport(
             trades: trades,
-            checkIns: sessionCheckIns
+            checkIns: gateCheckIns
         )
         psychologyReport = report
-        psychologyInsightsUnlockProgress = PsychologyInsightsUnlockProgress.compute(
-            trades: trades,
-            checkIns: sessionCheckIns
+        psychologyInsightsUnlockProgress = PsychologyInsightsUnlockProgress(
+            tradingDayCheckInCount: PsychologyCheckInHistoryGate.countPsychologyCheckInHistoryDays(
+                gateCheckIns
+            ),
+            tradeCount: filteredDashboardTradeCountForPsychologyGate(trades: trades)
         )
         PsychologyAnalyticsSessionStore.shared.update(report)
 
         let facts = PsychologyCoachFactsBuilder.build(
             report: report,
             trades: trades,
-            checkIns: SessionDailyCheckInsStore.shared.checkIns
+            checkIns: gateCheckIns
         )
         let summary = PsychologyCoachDeterministicCoach.buildSummary(from: facts)
         PsychologyCoachSessionStore.shared.update(facts: facts, summary: summary)
 
         let todayKey = TraderPsychologyAnalyticsFoundation.todayCheckInDateKey()
-        let todayCheckIn = SessionDailyCheckInsStore.shared.checkIns.first { $0.checkInDate == todayKey }
+        let todayCheckIn = gateCheckIns.first { $0.checkInDate == todayKey }
             ?? TraderDailyCheckInStore.shared.todayCheckIn
-        let todayTrades = enrichedTodayTrades(from: trades, checkIns: SessionDailyCheckInsStore.shared.checkIns)
+        let todayTrades = enrichedTodayTrades(from: trades, checkIns: gateCheckIns)
         let dismissed = Set(PsychologyGuardrailDismissStore.shared.dismissedKeysForToday(tradingDay: todayKey))
         psychologyGuardrailNotices = PsychologyGuardrailEngine.activeNotices(
             facts: facts,
@@ -2625,6 +3164,7 @@ final class DashboardViewModel {
             )
         }
         // Payout cycles load on demand when a prop account is selected (prop firm card).
+        await ensureOwnerTradesForInsights(profileID: profileID, forceNetwork: forceNetwork)
         await hydrateCheckIns(profileID: profileID, forceNetwork: forceNetwork)
     }
 
@@ -2723,11 +3263,25 @@ final class DashboardViewModel {
         }
     }
 
-    private func hydrateCheckIns(profileID: ProfileID, forceNetwork: Bool) async {
-        guard let range = checkInDateRange(from: tradeInputs) else {
-            recomputePsychology()
-            return
+    private func primePsychologyCheckInsForDashboard(profileID: ProfileID, forceNetwork: Bool) async {
+        await SessionNetworkGate.shared.awaitReady()
+        await hydrateCheckIns(profileID: profileID, forceNetwork: forceNetwork)
+    }
+
+    private func scheduleDashboardPsychologyCheckInsHydration(
+        profileID: ProfileID,
+        forceNetwork: Bool
+    ) {
+        Task { [weak self] in
+            await self?.primePsychologyCheckInsForDashboard(
+                profileID: profileID,
+                forceNetwork: forceNetwork
+            )
         }
+    }
+
+    private func hydrateCheckIns(profileID: ProfileID, forceNetwork: Bool) async {
+        let range = PsychologyDashboardCheckInsLoader.dashboardWindow()
         if !forceNetwork,
            !SessionDailyCheckInsStore.shared.needsLoad(
                for: profileID,
@@ -2735,70 +3289,84 @@ final class DashboardViewModel {
                endDate: range.end
            )
         {
+            psychologyUnlockMetricsReady = true
             recomputePsychology()
             return
         }
         do {
-            let items: [TraderDailyCheckIn]
-            if BackendV2FeatureFlags.isEnabled(.dashboard), let rpc {
-                let accountID: TradingAccountID? = {
-                    if case .account(let id) = accountFilter { return id }
-                    return nil
-                }()
-                items = try await DashboardLoadProbe.measure(
-                    "dashboard.checkIns.rpc",
-                    kind: .network,
-                    blocksFirstUsefulRender: false,
-                    note: "psychology check-in window RPC"
-                ) {
-                    try await PsychologyCheckInBootstrapLoader.load(
-                        rpc: rpc,
-                        accountID: accountID
-                    )
-                }
-            } else {
-                items = try await DashboardLoadProbe.measure(
-                    "dashboard.checkIns",
-                    kind: .network,
-                    blocksFirstUsefulRender: false,
-                    note: "daily check-ins for psychology analytics"
-                ) {
-                    try await dailyCheckIns.checkIns(
-                        for: profileID,
-                        from: range.start,
-                        to: range.end
-                    )
-                }
+            let items = try await DashboardLoadProbe.measure(
+                "dashboard.psychologyCheckIns",
+                kind: .network,
+                blocksFirstUsefulRender: false,
+                note: "web fetchPsychologyDashboardCheckIns parity"
+            ) {
+                try await PsychologyDashboardCheckInsLoader.load(
+                    profileID: profileID,
+                    dailyCheckIns: dailyCheckIns,
+                    rpc: rpc
+                )
             }
             guard !Task.isCancelled else { return }
-            let seededRange: (start: String, end: String)
-            if items.isEmpty {
-                seededRange = range
-            } else {
-                let dates = items.map(\.checkInDate)
-                seededRange = (dates.min() ?? range.start, dates.max() ?? range.end)
-            }
-            SessionDailyCheckInsStore.shared.seed(items, for: profileID, range: seededRange)
+            commitPsychologyCheckInsForGate(items, profileID: profileID, window: range)
+            psychologyUnlockMetricsReady = true
             recomputePsychology()
         } catch {
+            await loadPsychologyCheckInsHistoryFallback(profileID: profileID, range: range)
+            psychologyUnlockMetricsReady = true
             recomputePsychology()
         }
     }
 
-    private func checkInDateRange(
-        from inputs: [DashboardChartMetrics.Input]
-    ) -> (start: String, end: String)? {
-        let todayKey = TraderPsychologyAnalyticsFoundation.todayCheckInDateKey()
-        guard !inputs.isEmpty else {
-            return (todayKey, todayKey)
+    private func commitPsychologyCheckInsForGate(
+        _ items: [TraderDailyCheckIn],
+        profileID: ProfileID,
+        window range: (start: String, end: String)
+    ) {
+        var merged = items
+        if let today = TraderDailyCheckInStore.shared.todayCheckIn,
+           today.ownerProfileID == profileID
+        {
+            merged = TraderDailyCheckInMerge.preferNewer(primary: merged, secondary: [today])
         }
-        let keys = inputs.map {
-            TraderPsychologyAnalyticsFoundation.tradeDateKey(for: $0.trade)
+        let seededRange: (start: String, end: String)
+        if merged.isEmpty {
+            seededRange = range
+        } else {
+            let dates = merged.map(\.checkInDate)
+            seededRange = (dates.min() ?? range.start, dates.max() ?? range.end)
         }
-        guard let start = keys.min(), let tradeEnd = keys.max() else { return nil }
-        let end = max(tradeEnd, todayKey)
-        return (start, end)
+        SessionDailyCheckInsStore.shared.seed(merged, for: profileID, range: seededRange)
+        syncCheckInHistorySessionStore(checkIns: merged)
     }
+
+    private func syncCheckInHistorySessionStore(checkIns: [TraderDailyCheckIn]) {
+        let eligible = resolvedFilteredTradesForDashboard().filter { $0.mode != .backtest }
+        CheckInHistorySessionStore.shared.update(
+            summaries: CheckInHistoryAggregator.buildSummaries(checkIns: checkIns, trades: eligible),
+            checkIns: checkIns,
+            trades: eligible
+        )
+    }
+
+    /// Check-In History uses PostgREST 90d — same source when combined loader fails.
+    private func loadPsychologyCheckInsHistoryFallback(
+        profileID: ProfileID,
+        range: (start: String, end: String)
+    ) async {
+        if let rows = try? await PsychologyDashboardCheckInsLoader.loadHistoryWindow(
+            profileID: profileID,
+            dailyCheckIns: dailyCheckIns
+        ), !rows.isEmpty {
+            commitPsychologyCheckInsForGate(rows, profileID: profileID, window: range)
+            return
+        }
+        guard BackendV2FeatureFlags.isEnabled(.dashboard), let rpc else { return }
+        guard let rpcRows = try? await PsychologyCheckInBootstrapLoader.load(rpc: rpc, accountID: nil),
+              !rpcRows.isEmpty
+        else { return }
+        commitPsychologyCheckInsForGate(rpcRows, profileID: profileID, window: range)
+    }
+
 
     private func startRealtime(profileID: ProfileID) async {
         _ = profileID
@@ -2842,6 +3410,7 @@ final class DashboardViewModel {
             analyticsV3Bootstrap = applied.bootstrap
             assignAnalyticsV3Revision(applied.revision)
             apply(trades: [], accounts: applied.accounts, profileID: profileID)
+            promoteOwnerTradesFromSessionCache(profileID: profileID)
             if let payout = applied.payoutTotal {
                 payoutTotal = payout
             }
@@ -2850,6 +3419,7 @@ final class DashboardViewModel {
                 historyComplete: true
             )
             hasLoaded = true
+            await primePsychologyCheckInsForDashboard(profileID: profileID, forceNetwork: false)
             recompute()
             phase = .loaded
             DashboardAnalyticsGRDBProbe.logRender(
@@ -2867,6 +3437,10 @@ final class DashboardViewModel {
             #if DEBUG
             ColdLaunchSummaryProbe.markDashboardFirstRender(source: "grdb")
             #endif
+            scheduleDashboardPsychologyCheckInsHydration(
+                profileID: profileID,
+                forceNetwork: false
+            )
             secondaryTask?.cancel()
             secondaryTask = Task { [weak self] in
                 await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()

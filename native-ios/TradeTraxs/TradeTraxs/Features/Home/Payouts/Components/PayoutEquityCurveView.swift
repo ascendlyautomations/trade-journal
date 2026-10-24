@@ -34,7 +34,9 @@ struct PayoutEquityCurveView: View {
                 }
             }
         }
-        .padding(ExperienceSpacing.md)
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.top, ExperienceSpacing.xs)
+        .padding(.bottom, ExperienceSpacing.md)
         .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
             cornerRadius: ExperienceRadius.md,
             style: .continuous

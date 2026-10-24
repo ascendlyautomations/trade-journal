@@ -354,7 +354,11 @@ export default function ProfilePostCard({
 
   const postImageBlock =
     imgSrc != null ? (
-      <DetailModalImage src={imgSrc} onClick={onImageClick} />
+      <DetailModalImage
+        src={imgSrc}
+        onClick={onImageClick}
+        imageCrop={post.image_crop}
+      />
     ) : null
 
   const postVaultRef = profileEngagementVaultRef(
@@ -628,6 +632,7 @@ export default function ProfilePostCard({
         <ContentMediaPreview
           src={imgSrc}
           preset="feed-thumb"
+          imageCrop={post.image_crop}
           onClick={onImageClick}
           className="tt-profile-post-media"
         />

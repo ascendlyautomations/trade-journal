@@ -5,9 +5,12 @@ import {
   fetchAccountPayoutEntriesForUser,
   groupPayoutEntriesByAccountId,
 } from "@/lib/accountPayoutEntry"
+import { isPayoutAchievementType } from "@/lib/achievementTypes"
 import {
   buildPayoutHistoryItems,
+  payoutAchievementsMissingFromHistory,
   type PayoutHistoryItem,
+  type UnmatchedPayoutAchievement,
 } from "@/lib/payoutHistory"
 import { fetchPayoutCycleHistoryForUser } from "@/lib/propfirmPayoutCycles"
 import { resolveWithdrawalsAccountRows } from "@/lib/withdrawalsAccountRows"
@@ -94,7 +97,6 @@ export function useWithdrawalsHistory(
         setLoadWarnings(warnings)
         return
       }
-      setLoadWarnings(warnings)
 
       const accountRows = await resolveWithdrawalsAccountRows(
         supabase,
@@ -108,11 +110,18 @@ export function useWithdrawalsHistory(
       const entriesByAccount = groupPayoutEntriesByAccountId(
         entriesResult.entries
       )
-      const history = buildPayoutHistoryItems({
+      const recorded = buildPayoutHistoryItems({
         accounts: accountRows,
         entriesByAccount,
         cyclesByAccount: cyclesResult.cyclesByAccount,
       })
+      const achievements = await fetchUnmatchedPayoutAchievements(userId)
+      if (achievements.warning) warnings.push(achievements.warning)
+      setLoadWarnings(warnings)
+      const history = [
+        ...recorded,
+        ...payoutAchievementsMissingFromHistory(achievements.rows, recorded),
+      ].sort((a, b) => b.dateMs - a.dateMs)
       setItems(history)
     } catch (err) {
       setError(
@@ -147,4 +156,42 @@ export function useWithdrawalsHistory(
     accountsById,
     refresh,
   }
+}
+
+function metadataId(metadata: unknown, key: string): string | null {
+  if (!metadata || typeof metadata !== "object") return null
+  const value = (metadata as Record<string, unknown>)[key]
+  const id = String(value ?? "").trim()
+  return id || null
+}
+
+async function fetchUnmatchedPayoutAchievements(
+  userId: string
+): Promise<{ rows: UnmatchedPayoutAchievement[]; warning: string | null }> {
+  const { data, error } = await supabase
+    .from("achievements")
+    .select(
+      "id, achievement_type, title, value_numeric, achieved_at, created_at, account_id, account_name, metadata"
+    )
+    .eq("user_id", userId)
+
+  if (error) {
+    return { rows: [], warning: `Profile payouts: ${error.message}` }
+  }
+
+  const rows = (data ?? [])
+    .filter((row) => isPayoutAchievementType(row.achievement_type))
+    .map((row) => ({
+      id: row.id,
+      achievementType: row.achievement_type,
+      title: row.account_name?.trim() || row.title,
+      amount: Number(row.value_numeric) || 0,
+      achievedAt: row.achieved_at,
+      createdAt: row.created_at,
+      accountId: row.account_id,
+      linkedCycleId: metadataId(row.metadata, "account_payout_cycle_id"),
+      linkedEntryId: metadataId(row.metadata, "account_payout_entry_id"),
+    }))
+
+  return { rows, warning: null }
 }

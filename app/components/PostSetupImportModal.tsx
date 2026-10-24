@@ -20,6 +20,7 @@ import {
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { MODAL_PANEL_MAX_HEIGHT_CLASS, useModalScrollLock } from "@/app/components/ui/modalLayout"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
+import { syncPropFirmAccountPurchaseExpense } from "@/lib/propFirmExpenses"
 import { useUserProfile } from "@/lib/useUserProfile"
 
 const CsvImportPanel = dynamic(() => import("@/app/components/CsvImportPanel"), {
@@ -182,6 +183,27 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
     }
 
     if (!data) return
+
+    const purchaseExpense = await syncPropFirmAccountPurchaseExpense(
+      supabase,
+      user.id,
+      String(data.id),
+      {
+        name: newAccount.name,
+        category: newAccount.category,
+        mode: newAccount.mode,
+        purchaseCost: newAccount.purchaseCost,
+        datePaid: newAccount.purchaseDate,
+      }
+    )
+    if (!purchaseExpense.ok) {
+      showPopup(
+        persistentError(
+          "Purchase Cost Not Saved",
+          "Account saved, but the purchase cost was not recorded. Edit the account and save again."
+        )
+      )
+    }
 
     const row: TradeAccountOption = {
       name: data.name,

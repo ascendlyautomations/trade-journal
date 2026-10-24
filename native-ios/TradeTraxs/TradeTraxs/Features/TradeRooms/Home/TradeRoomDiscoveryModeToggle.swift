@@ -25,7 +25,7 @@ struct TradeRoomDiscoveryModeToggle: View {
                             in: Capsule()
                         )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityAddTraits(selected ? .isSelected : [])
                 .accessibilityIdentifier("tradeRooms.discovery.mode.\(value.rawValue)")
             }

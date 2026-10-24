@@ -18,6 +18,9 @@ final class SessionDailyCheckInsStore {
     }
 
     func upsert(_ checkIn: TraderDailyCheckIn) {
+        if profileID == nil {
+            profileID = checkIn.ownerProfileID
+        }
         guard profileID == checkIn.ownerProfileID else { return }
         if var range = loadedRange {
             if checkIn.checkInDate < range.start { range.start = checkIn.checkInDate }
@@ -44,6 +47,7 @@ final class SessionDailyCheckInsStore {
         endDate: String
     ) -> Bool {
         guard self.profileID == profileID, let loadedRange else { return true }
+        if checkIns.isEmpty { return true }
         return loadedRange.start > startDate || loadedRange.end < endDate
     }
 }

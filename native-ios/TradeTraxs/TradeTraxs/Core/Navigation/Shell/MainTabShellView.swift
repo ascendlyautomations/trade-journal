@@ -169,6 +169,11 @@ struct MainTabShellView: View {
                 .id(currentUserProfile.tabAvatarRevision)
             }
         }
+        .background {
+            CreateTabSelectionGate {
+                coordinator.invokeCreateAction()
+            }
+        }
     }
 
     private var tabSelection: Binding<TabIdentifier> {
@@ -943,6 +948,191 @@ struct ProfileNavigationStack: View {
         case .roomInfo: return "Room Info"
         case .manageRoom: return "Manage Room"
         case .roomSettings: return "Trade Room Settings"
+        }
+    }
+}
+
+/// Eats the Create tab-bar tap before SwiftUI can switch pages.
+///
+/// A rejected `TabView` selection still paints the empty Create page for one frame, which is the flash.
+/// This control sits on top of that tab item, so the current page never changes and the composer opens over it.
+private struct CreateTabSelectionGate: UIViewRepresentable {
+    var onCreate: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onCreate: onCreate)
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.onCreate = onCreate
+        context.coordinator.install(from: uiView)
+    }
+
+    final class Coordinator: NSObject {
+        var onCreate: () -> Void
+        private var overlay: OverlayView?
+        private weak var host: UITabBarController?
+
+        init(onCreate: @escaping () -> Void) {
+            self.onCreate = onCreate
+        }
+
+        func install(from view: UIView) {
+            DispatchQueue.main.async { [weak self, weak view] in
+                guard let self, let view, view.window != nil else { return }
+                guard let tab = Self.tabBarController(in: view.window?.rootViewController) else { return }
+                if self.host !== tab || self.overlay?.superview == nil {
+                    self.overlay?.removeFromSuperview()
+                    let overlay = OverlayView()
+                    overlay.shield.addTarget(self, action: #selector(Coordinator.tapped), for: .touchUpInside)
+                    overlay.frame = tab.view.bounds
+                    overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                    tab.view.addSubview(overlay)
+                    self.overlay = overlay
+                    self.host = tab
+                }
+                self.overlay?.refresh()
+            }
+        }
+
+        @objc private func tapped() {
+            onCreate()
+        }
+
+        private static func tabBarController(in root: UIViewController?) -> UITabBarController? {
+            guard let root else { return nil }
+            if let tab = root as? UITabBarController { return tab }
+            for child in root.children {
+                if let found = tabBarController(in: child) { return found }
+            }
+            return nil
+        }
+    }
+
+    final class OverlayView: UIView {
+        let shield = UIButton(type: .custom)
+        private weak var blockedControl: UIView?
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            isUserInteractionEnabled = true
+            backgroundColor = .clear
+            shield.backgroundColor = .clear
+            shield.accessibilityLabel = TabIdentifier.create.displayName
+            addSubview(shield)
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+            let hit = super.hitTest(point, with: event)
+            return hit === self ? nil : hit
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            refresh()
+        }
+
+        func refresh() {
+            guard let tabBar = enclosingTabBar else { return }
+            superview?.bringSubviewToFront(self)
+            let createTitle = TabIdentifier.create.displayName
+            let control = Self.createControl(in: tabBar, title: createTitle)
+            if blockedControl !== control {
+                blockedControl?.isUserInteractionEnabled = true
+                blockedControl = control
+                control?.isUserInteractionEnabled = false
+            }
+
+            let frame: CGRect
+            if let control {
+                frame = control.convert(control.bounds, to: self)
+            } else if let items = tabBar.items,
+                      let index = items.firstIndex(where: { $0.title == createTitle }),
+                      !items.isEmpty
+            {
+                let width = tabBar.bounds.width / CGFloat(items.count)
+                let itemFrame = CGRect(
+                    x: width * CGFloat(index),
+                    y: 0,
+                    width: width,
+                    height: tabBar.bounds.height
+                )
+                frame = tabBar.convert(itemFrame, to: self)
+            } else {
+                shield.frame = .zero
+                return
+            }
+            shield.frame = frame
+            bringSubviewToFront(shield)
+            if superview?.subviews.last !== self {
+                superview?.bringSubviewToFront(self)
+            }
+        }
+
+        private var enclosingTabBar: UITabBar? {
+            var responder: UIResponder? = superview
+            while let current = responder {
+                if let tab = current as? UITabBarController { return tab.tabBar }
+                responder = current.next
+            }
+            return nil
+        }
+
+        /// The tab-bar button that owns the Create label, not the label itself.
+        private static func createControl(in tabBar: UITabBar, title: String) -> UIView? {
+            if let button = tabBarButton(in: tabBar, title: title) {
+                return button
+            }
+            guard var control = largestView(in: tabBar, accessibilityLabel: title) else { return nil }
+            while let parent = control.superview,
+                  parent !== tabBar,
+                  parent.isDescendant(of: tabBar),
+                  parent.bounds.width < tabBar.bounds.width * 0.45
+            {
+                control = parent
+            }
+            return control
+        }
+
+        private static func tabBarButton(in root: UIView, title: String) -> UIView? {
+            let selector = NSSelectorFromString("tabBarItem")
+            var match: UIView?
+            func walk(_ view: UIView) {
+                if view.responds(to: selector),
+                   let item = view.perform(selector)?.takeUnretainedValue() as? UITabBarItem,
+                   item.title == title
+                {
+                    let area = view.bounds.width * view.bounds.height
+                    let best = (match?.bounds.width ?? 0) * (match?.bounds.height ?? 0)
+                    if area >= best { match = view }
+                }
+                view.subviews.forEach(walk)
+            }
+            walk(root)
+            return match
+        }
+
+        private static func largestView(in root: UIView, accessibilityLabel: String) -> UIView? {
+            var match: UIView?
+            func walk(_ view: UIView) {
+                if view.accessibilityLabel == accessibilityLabel {
+                    let area = view.bounds.width * view.bounds.height
+                    let best = (match?.bounds.width ?? 0) * (match?.bounds.height ?? 0)
+                    if area > best { match = view }
+                }
+                view.subviews.forEach(walk)
+            }
+            walk(root)
+            return match
         }
     }
 }

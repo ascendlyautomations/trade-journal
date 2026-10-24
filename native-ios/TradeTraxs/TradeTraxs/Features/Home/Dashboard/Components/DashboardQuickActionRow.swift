@@ -74,7 +74,7 @@ struct DashboardQuickActionRow<Icon: View>: View {
                 .stroke(colors.border, lineWidth: 1)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityIdentifier(accessibilityIdentifier)
         .accessibilityLabel("\(title). \(subtitle)")
         .accessibilityHint(accessibilityHint ?? "")

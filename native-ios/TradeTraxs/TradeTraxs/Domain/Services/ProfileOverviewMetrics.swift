@@ -52,6 +52,17 @@ nonisolated enum ProfileOverviewMetrics {
         compute(from: tradeInputs(fromPublicJournal: trades))
     }
 
+    /// +1 / -1 / 0 for a single journal change in the public non-backtest overview universe.
+    static func publicOverviewCountDelta(old: Trade?, new: Trade?) -> Int {
+        let before = old.map { countsInPublicOverview($0) ? 1 : 0 } ?? 0
+        let after = new.map { countsInPublicOverview($0) ? 1 : 0 } ?? 0
+        return after - before
+    }
+
+    static func countsInPublicOverview(_ trade: Trade) -> Bool {
+        !excludingBacktest(tradeInputs(fromPublicJournal: [trade])).isEmpty
+    }
+
     static func compute(from publicTrades: [TradeInput]) -> Result {
         let trades = excludingBacktest(publicTrades)
         let total = trades.count

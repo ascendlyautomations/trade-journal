@@ -63,7 +63,7 @@ struct AuthTextField: View {
                                 height: ExperienceAccessibility.minTouchTarget
                             )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityLabel(isSecureVisible.wrappedValue ? "Hide password" : "Show password")
                 }
             }

@@ -9,6 +9,7 @@ import {
   CartesianGrid,
   ResponsiveContainer,
 } from "recharts"
+import ChartWhenSized from "@/app/components/dashboard/ChartWhenSized"
 import DashboardWidgetEmptyState from "@/app/components/dashboard/DashboardWidgetEmptyState"
 import {
   chartAxisTick,
@@ -91,20 +92,24 @@ export default function DashboardWeekdayChart({
       ) : (
         <>
           <div className="w-full overflow-hidden md:hidden">
-            <ResponsiveContainer width="100%" height={MOBILE_CHART_HEIGHT}>
-              <WeekdayLineChart
-                data={data}
-                margin={{ top: 4, right: 8, left: 4, bottom: 0 }}
-              />
-            </ResponsiveContainer>
+            <ChartWhenSized height={MOBILE_CHART_HEIGHT} className="w-full">
+              <ResponsiveContainer width="100%" height={MOBILE_CHART_HEIGHT}>
+                <WeekdayLineChart
+                  data={data}
+                  margin={{ top: 4, right: 8, left: 4, bottom: 0 }}
+                />
+              </ResponsiveContainer>
+            </ChartWhenSized>
           </div>
           <div className="hidden w-full overflow-hidden md:block">
-            <ResponsiveContainer width="100%" height={DESKTOP_CHART_HEIGHT}>
-              <WeekdayLineChart
-                data={data}
-                margin={{ top: 10, right: 20, left: 20, bottom: 20 }}
-              />
-            </ResponsiveContainer>
+            <ChartWhenSized height={DESKTOP_CHART_HEIGHT} className="w-full">
+              <ResponsiveContainer width="100%" height={DESKTOP_CHART_HEIGHT}>
+                <WeekdayLineChart
+                  data={data}
+                  margin={{ top: 10, right: 20, left: 20, bottom: 20 }}
+                />
+              </ResponsiveContainer>
+            </ChartWhenSized>
           </div>
         </>
       )}

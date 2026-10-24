@@ -91,6 +91,12 @@ const nextConfig: NextConfig = {
       { source: "/input", destination: "/app", permanent: false },
       { source: "/trade-history", destination: "/trades", permanent: false },
       { source: "/ai", destination: "/analyst", permanent: false },
+      {
+        source: "/trade-rooms",
+        has: [{ type: "query", key: "room", value: "(?<room>.+)" }],
+        destination: "/room/:room",
+        permanent: false,
+      },
       { source: "/trade-rooms", destination: "/community", permanent: false },
       {
         source: "/affiliate/connect/refresh",

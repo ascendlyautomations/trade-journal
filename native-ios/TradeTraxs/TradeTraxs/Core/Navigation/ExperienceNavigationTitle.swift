@@ -53,7 +53,7 @@ struct ExperienceArrowBackButton: View {
                 )
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityLabel("Back")
     }
 }

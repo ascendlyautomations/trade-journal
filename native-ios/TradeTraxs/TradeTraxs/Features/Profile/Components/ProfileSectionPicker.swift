@@ -52,7 +52,7 @@ struct ProfileSectionPicker: View {
                     }
                 }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityLabel(section.title)
         .accessibilityHint(section.accessibilityHint)
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)

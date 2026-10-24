@@ -37,7 +37,7 @@ struct GlobalUploadStatusBar: View {
                 .padding(.vertical, 10)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
 
             if presentation.showsRetry, let retryJobID = presentation.retryJobID {
                 Button("Retry") {

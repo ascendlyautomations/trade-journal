@@ -514,6 +514,10 @@ nonisolated enum FeedDTO {
         var image_crop: ContentImagePresentation?
         var created_at: String?
         var is_pinned: Bool?
+        var room_id: String?
+        var room_name: String?
+        var room_logo: String?
+        var room_description: String?
         var profiles: EmbeddedAuthor?
     }
 
@@ -582,6 +586,10 @@ nonisolated enum FeedDTO {
         var image_url: String?
         var image_crop: ContentImagePresentation?
         var created_at: String?
+        var room_id: String?
+        var room_name: String?
+        var room_logo: String?
+        var room_description: String?
         var profiles: ProfilesBox?
     }
 

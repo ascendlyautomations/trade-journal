@@ -27,6 +27,9 @@ import {
   READABLE_SECONDARY_CLASS,
 } from "@/lib/readableTextStyles"
 import { cn } from "@/app/components/ui/cn"
+import { sanitizeMoneyInput } from "@/lib/propFirmExpenses"
+import { isDateAfterToday } from "@/lib/tradeDateValidation"
+import NativeDateInput from "@/app/components/ui/NativeDateInput"
 
 export type PropFirmRules = TradingAccountPropFirmRules
 
@@ -37,6 +40,8 @@ export type AccountFormInitialValues = {
   category: AccountType
   mode: string
   rules: PropFirmRules | null
+  purchaseCost?: string | null
+  purchaseDate?: string | null
 }
 
 export interface Props {
@@ -49,6 +54,8 @@ export interface Props {
     category: string
     mode: string | null
     rules: PropFirmRules | null
+    purchaseCost: string | null
+    purchaseDate: string | null
   }) => void | Promise<void>
   /** When set, opens in edit mode with prefilled values. */
   initialAccount?: AccountFormInitialValues | null
@@ -145,6 +152,9 @@ export default function CreateAccountModal({
   const [winningDays, setWinningDays] = useState("")
   const [winningDaysMode, setWinningDaysMode] = useState<"na" | "required">("na")
   const [winningDayThreshold, setWinningDayThreshold] = useState("")
+  const [purchaseCost, setPurchaseCost] = useState("")
+  const [purchaseDate, setPurchaseDate] = useState("")
+  const [purchaseDateError, setPurchaseDateError] = useState<string | null>(null)
   const [sizeError, setSizeError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const savingRef = useRef(false)
@@ -173,6 +183,7 @@ export default function CreateAccountModal({
       setWinningDays(emptyForm.winningDays)
       setWinningDaysMode("na")
       setWinningDayThreshold(emptyForm.winningDayThreshold)
+      setPurchaseCost("")
       return
     }
 
@@ -219,6 +230,9 @@ export default function CreateAccountModal({
           ? String(initialAccount.rules.winningDayThreshold)
           : ""
       )
+      setPurchaseCost(initialAccount.purchaseCost ?? "")
+      setPurchaseDate(initialAccount.purchaseDate ?? "")
+      setPurchaseDateError(null)
     } else {
       setName(emptyForm.name)
       setSize(emptyForm.size)
@@ -234,8 +248,17 @@ export default function CreateAccountModal({
       setWinningDays(emptyForm.winningDays)
       setWinningDaysMode("na")
       setWinningDayThreshold(emptyForm.winningDayThreshold)
+      setPurchaseCost("")
+      setPurchaseDate("")
+      setPurchaseDateError(null)
     }
   }, [open, initialAccount])
+
+  useEffect(() => {
+    if (!open) return
+    setPurchaseCost(initialAccount?.purchaseCost ?? "")
+    setPurchaseDate(initialAccount?.purchaseDate ?? "")
+  }, [open, initialAccount?.purchaseCost, initialAccount?.purchaseDate])
 
   if (!open) return null
 
@@ -254,6 +277,9 @@ export default function CreateAccountModal({
     setWinningDays(emptyForm.winningDays)
     setWinningDaysMode("na")
     setWinningDayThreshold(emptyForm.winningDayThreshold)
+    setPurchaseCost("")
+    setPurchaseDate("")
+    setPurchaseDateError(null)
   }
 
   function handleCategoryChange(nextCategory: AccountType) {
@@ -297,6 +323,19 @@ export default function CreateAccountModal({
             : null,
       }
 
+      const showsPurchaseCost =
+        category === "Prop Firm" && (mode === "Eval" || mode === "Funded")
+      const trimmedPurchaseDate = purchaseDate.trim()
+      if (
+        showsPurchaseCost &&
+        purchaseCost.trim() &&
+        trimmedPurchaseDate &&
+        isDateAfterToday(trimmedPurchaseDate)
+      ) {
+        setPurchaseDateError("Purchase date cannot be in the future.")
+        return
+      }
+      setPurchaseDateError(null)
       await onSave({
         name: name.trim(),
         size: sizeForSave,
@@ -304,6 +343,8 @@ export default function CreateAccountModal({
         category,
         mode: resolveAccountModeForSave(category, mode),
         rules: category === "Prop Firm" ? parsedData : null,
+        purchaseCost: showsPurchaseCost ? purchaseCost.trim() || null : null,
+        purchaseDate: showsPurchaseCost ? trimmedPurchaseDate || null : null,
       })
     } finally {
       savingRef.current = false
@@ -496,6 +537,60 @@ export default function CreateAccountModal({
                 triggerClassName={SELECT_MODAL_TRIGGER_CLASS}
                 options={accountModeOptions(category)}
               />
+            </label>
+          ) : null}
+
+          {category === "Prop Firm" && (mode === "Eval" || mode === "Funded") ? (
+            <label className="block">
+              <span className={READABLE_FIELD_LABEL_CLASS}>
+                Account Purchase Cost
+              </span>
+              <div className="relative mt-1">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">
+                  $
+                </span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={purchaseCost}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/[$,\s]/g, "")
+                    const next = sanitizeMoneyInput(e.target.value)
+                    if (raw !== "" && next === "") return
+                    setPurchaseCost(next)
+                  }}
+                  className={cn(inputClass, "mt-0 pl-7")}
+                  placeholder="Optional"
+                  autoComplete="off"
+                />
+              </div>
+              <p className={READABLE_FIELD_HELPER_CLASS}>
+                Optional. The account name is saved as the prop firm name.
+                Saving again updates that expense instead of adding another.
+                Leave the cost blank to keep an expense you already recorded.
+              </p>
+            </label>
+          ) : null}
+
+          {category === "Prop Firm" && (mode === "Eval" || mode === "Funded") ? (
+            <label className="block">
+              <span className={READABLE_FIELD_LABEL_CLASS}>Purchase Date</span>
+              <NativeDateInput
+                value={purchaseDate}
+                onChange={(event) => {
+                  setPurchaseDateError(null)
+                  setPurchaseDate(event.currentTarget.value)
+                }}
+                className="mt-1 w-full"
+              />
+              <p className={READABLE_FIELD_HELPER_CLASS}>
+                Optional. Used when a purchase cost is saved. Leave blank to use today.
+              </p>
+              {purchaseDateError ? (
+                <p className="mt-1 text-sm text-red-300" role="alert">
+                  {purchaseDateError}
+                </p>
+              ) : null}
             </label>
           ) : null}
 

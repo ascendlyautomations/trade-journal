@@ -138,11 +138,28 @@ nonisolated struct DevelopmentProfileRepository: ProfileRepository {
         imageURL: String?,
         imageCrop: ContentImagePresentation?
     ) async throws -> Post {
+        try await createWallPost(
+            authorID: authorID,
+            content: content,
+            imageURL: imageURL,
+            imageCrop: imageCrop,
+            roomShare: nil
+        )
+    }
+
+    func createWallPost(
+        authorID: ProfileID,
+        content: String,
+        imageURL: String?,
+        imageCrop: ContentImagePresentation?,
+        roomShare: RoomShareAttachment?
+    ) async throws -> Post {
         try await base.createWallPost(
             authorID: authorID,
             content: content,
             imageURL: imageURL,
-            imageCrop: imageCrop
+            imageCrop: imageCrop,
+            roomShare: roomShare
         )
     }
 

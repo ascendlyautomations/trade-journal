@@ -21,4 +21,13 @@ nonisolated enum ProfilePayoutTotals {
             return false
         }
     }
+
+    /// Full payout label for profile cards and detail — prefers numeric value with cents.
+    static func payoutDisplayText(for achievement: Achievement) -> String? {
+        if let value = achievement.value {
+            return NumberDisplay.money(value.amount)
+        }
+        let trimmed = achievement.valueText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
 }

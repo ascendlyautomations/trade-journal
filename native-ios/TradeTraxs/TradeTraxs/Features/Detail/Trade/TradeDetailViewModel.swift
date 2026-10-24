@@ -229,14 +229,10 @@ final class TradeDetailViewModel {
         deleteErrorMessage = nil
         defer { isDeleting = false }
         do {
-            let owner: ProfileID
-            if let trade {
-                owner = trade.ownerProfileID
-            } else if let userID = await session.currentUserID {
-                owner = ProfileID(userID.rawValue)
-            } else {
+            guard let userID = await session.currentUserID else {
                 throw AppError.domain(.permission(.notAuthenticated))
             }
+            let owner = ProfileID(userID.rawValue)
             try await OwnerTradeDeletionService.deleteOwnedTrade(
                 tradeID: tradeID,
                 owner: owner,

@@ -32,7 +32,7 @@ struct TradeAIMessageCard: View {
                         Text(isExpanded ? "Collapse" : "Expand")
                             .experienceStyle(.caption2, color: colors.accent)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                 }
             }
 

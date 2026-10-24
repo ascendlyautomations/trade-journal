@@ -87,7 +87,7 @@ struct SettingsNotificationsView: View {
                         showsChevron: true
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
             }
         } header: {
             Text("iOS Permissions")
@@ -105,7 +105,7 @@ struct SettingsNotificationsView: View {
                     systemImage: "bell.badge"
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .accessibilityIdentifier("settings.notifications.category.tradetraxsReminders")
 
             ForEach(
@@ -126,7 +126,7 @@ struct SettingsNotificationsView: View {
                 } label: {
                     SettingsNavigationRow(title: category.title, systemImage: icon(for: category))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .disabled(!viewModel.masterEnabled)
                 .accessibilityIdentifier("settings.notifications.category.\(category.rawValue)")
             }

@@ -23,7 +23,7 @@ enum TextInputFocusGuard {
     }
 
     static func textInputIsFirstResponder() -> Bool {
-        guard let responder = firstResponder(in: activeWindow()) else { return false }
+        guard let responder = UIResponder.tradeTraxsCurrentFirstResponder as? UIView else { return false }
         return isEditableInput(responder)
     }
 
@@ -69,14 +69,27 @@ enum TextInputFocusGuard {
             .flatMap(\.windows)
             .first(where: \.isKeyWindow)
     }
+}
 
-    private static func firstResponder(in view: UIView?) -> UIView? {
-        guard let view else { return nil }
-        if view.isFirstResponder { return view }
-        for child in view.subviews {
-            if let found = firstResponder(in: child) { return found }
-        }
-        return nil
+private enum TradeTraxsFirstResponderBox {
+    static weak var current: UIResponder?
+}
+
+extension UIResponder {
+    /// First responder via `sendAction`, so keyboard transitions do not walk the window.
+    static var tradeTraxsCurrentFirstResponder: UIResponder? {
+        TradeTraxsFirstResponderBox.current = nil
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.tradeTraxsCaptureFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
+        return TradeTraxsFirstResponderBox.current
+    }
+
+    @objc fileprivate func tradeTraxsCaptureFirstResponder() {
+        TradeTraxsFirstResponderBox.current = self
     }
 }
 

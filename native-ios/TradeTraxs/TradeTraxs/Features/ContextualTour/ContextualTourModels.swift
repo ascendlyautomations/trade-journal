@@ -11,6 +11,8 @@ enum ContextualTourSurface: String, Equatable, Sendable {
     case feed
     case profile
     case settings
+    case payouts
+    case expenseTracker
 }
 
 enum ContextualTourStepRole: Equatable, Sendable {
@@ -48,6 +50,11 @@ enum ContextualTourTargetID: String, Hashable, Sendable {
     case profileIdentity
     case profileTradeRoom
     case settingsAppearance
+    case payoutsHistory
+    case expenseTrackerAdd
+    case expenseTrackerIncome
+    case expenseTrackerAnalytics
+    case expenseTrackerExport
 }
 
 struct ContextualTourStep: Equatable, Sendable {
@@ -197,6 +204,47 @@ enum ContextualTourCatalog {
             title: "Your Trade Room",
             message: "Your community space for market discussion.",
             surface: .profile,
+            presentsIfUnmeasured: true
+        ),
+        ContextualTourStep(
+            title: "Continue to Payouts",
+            message: "",
+            surface: .profile,
+            role: .sectionContinue
+        ),
+        ContextualTourStep(
+            target: .payoutsHistory,
+            title: "Withdrawals",
+            message: "Record prop firm payouts, review withdrawal history, and see what you've earned.",
+            surface: .payouts,
+            presentsIfUnmeasured: true
+        ),
+        ContextualTourStep(
+            target: .expenseTrackerAdd,
+            title: "Expense Tracker",
+            message: "Track evaluation purchases, activation fees, resets, trading tools, and business expenses.",
+            surface: .expenseTracker,
+            presentsIfUnmeasured: true
+        ),
+        ContextualTourStep(
+            target: .expenseTrackerIncome,
+            title: "Income",
+            message: "Add business income yourself and watch it next to your expenses.",
+            surface: .expenseTracker,
+            presentsIfUnmeasured: true
+        ),
+        ContextualTourStep(
+            target: .expenseTrackerAnalytics,
+            title: "Tax & profit",
+            message: "See net profit, spending breakdowns, an estimated tax reserve, and how each firm is doing.",
+            surface: .expenseTracker,
+            presentsIfUnmeasured: true
+        ),
+        ContextualTourStep(
+            target: .expenseTrackerExport,
+            title: "Export Tax CSV",
+            message: "Download income, payouts, and expenses when you're getting ready for taxes.",
+            surface: .expenseTracker,
             presentsIfUnmeasured: true
         ),
         ContextualTourStep(

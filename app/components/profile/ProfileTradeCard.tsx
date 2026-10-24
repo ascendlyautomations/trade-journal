@@ -310,6 +310,7 @@ export default function ProfileTradeCard({
       src={imageSrc}
       onClick={onImageClick}
       displayMode={trade.image_display_mode as string | null | undefined}
+      imageCrop={trade.image_crop}
     />
   ) : (
     <div className="flex min-h-[80px] w-full items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] text-xs text-gray-400">
@@ -322,6 +323,7 @@ export default function ProfileTradeCard({
       src={imageSrc}
       preset="feed-thumb"
       displayMode={trade.image_display_mode as string | null | undefined}
+      imageCrop={trade.image_crop}
       priority={screenshotPriority}
       onClick={onImageClick}
       className="tt-profile-trade-media"
@@ -361,6 +363,7 @@ export default function ProfileTradeCard({
           {showInteractions ? (
               <MobileCommentFocusLayout
                 commentsFocused={commentsFocused}
+                mobileMediaBeforeHeader
                 header={tradeAuthorHeader}
                 compactHeader={
                   <CommentFocusCompactStrip

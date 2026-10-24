@@ -123,11 +123,35 @@ function TradesPageMainContent({
 }: TradesPageMainContentProps) {
   const { isNativeIos } = usePlatformPresentation()
 
+  const performanceShareDisabled = !hasAnyTrades
+
   return (
     <>
       {isNativeIos ? null : <h1 className="sr-only">Trades</h1>}
       {isNativeIos ? null : (
-      <div className="w-full mt-2.5">
+      <div className="w-full mt-2.5 space-y-2.5">
+        <div className="flex flex-wrap items-center justify-center gap-2 md:justify-start md:gap-3">
+          <button
+            type="button"
+            onClick={onOpenQuickInput}
+            className="inline-flex h-[34px] items-center whitespace-nowrap rounded-lg bg-blue-500 px-4 text-sm font-semibold text-white transition hover:bg-blue-600"
+          >
+            Add Trade
+          </button>
+          <button
+            type="button"
+            onClick={onImportCsv}
+            className="inline-flex h-[34px] items-center whitespace-nowrap rounded-lg border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/15"
+          >
+            Import CSV
+          </button>
+          <Link
+            href="/settings#broker-integrations"
+            className="inline-flex h-[34px] items-center whitespace-nowrap rounded-lg border border-white/15 bg-white/5 px-4 text-sm font-semibold text-gray-100 transition hover:bg-white/10"
+          >
+            Connect Broker
+          </Link>
+        </div>
         <TradeFilterBar
           variant="trades"
           fullWidth
@@ -255,7 +279,15 @@ function TradesPageMainContent({
               >
                 Public
               </button>
-              <PerformanceShareButton onClick={onOpenPerformanceShare} />
+              <PerformanceShareButton
+                onClick={onOpenPerformanceShare}
+                disabled={performanceShareDisabled}
+                title={
+                  performanceShareDisabled
+                    ? "Share performance after you log your first trade"
+                    : undefined
+                }
+              />
             </div>
           }
         />
@@ -327,15 +359,28 @@ function TradesPageMainContent({
                   }
                   action={
                     hasAnyTrades ? undefined : (
-                    <div className="flex flex-wrap items-center justify-center gap-3">
-                      <Link
-                        href="/app"
-                        className="tt-trades-action rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:hover:bg-blue-500"
-                      >
-                        Add Trade
-                      </Link>
-                      
-                    </div>
+                      <div className="flex flex-wrap items-center justify-center gap-3">
+                        <button
+                          type="button"
+                          onClick={onOpenQuickInput}
+                          className="tt-trades-action rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+                        >
+                          Add Trade
+                        </button>
+                        <button
+                          type="button"
+                          onClick={onImportCsv}
+                          className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+                        >
+                          Import CSV
+                        </button>
+                        <Link
+                          href="/settings#broker-integrations"
+                          className="rounded-lg border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-gray-100 transition hover:bg-white/10"
+                        >
+                          Connect Broker
+                        </Link>
+                      </div>
                     )
                   }
                   className="py-10"

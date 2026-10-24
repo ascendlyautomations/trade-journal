@@ -24,7 +24,7 @@ struct ActivityFollowRequestsBanner: View {
             .padding(.vertical, ExperienceSpacing.sm)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityLabel("Follow Requests, \(count)")
         .accessibilityIdentifier("activity.followRequests")
     }

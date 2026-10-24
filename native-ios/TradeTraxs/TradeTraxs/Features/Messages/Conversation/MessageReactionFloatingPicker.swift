@@ -37,7 +37,7 @@ struct MessageBubbleActionMenu: View {
                                     in: Circle()
                                 )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                         .accessibilityLabel("React with \(emoji)")
                         .accessibilityIdentifier("message.reaction.menu.\(emoji)")
                     }
@@ -112,6 +112,6 @@ struct MessageBubbleActionMenu: View {
             .padding(.vertical, 7)
             .frame(minWidth: emojiRowWidth, alignment: .leading)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
     }
 }

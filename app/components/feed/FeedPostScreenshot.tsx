@@ -26,6 +26,8 @@ type FeedPostScreenshotProps = {
   priority?: boolean
   /** Trade Fit/Fill. Posts and achievements omit this and stay contained. */
   displayMode?: TradeScreenshotDisplayMode | string | null
+  /** Saved profile photo crop. Shown when present. */
+  imageCrop?: unknown
 }
 
 function FeedPostScreenshot({
@@ -37,6 +39,7 @@ function FeedPostScreenshot({
   onImageClick,
   priority = false,
   displayMode,
+  imageCrop,
 }: FeedPostScreenshotProps) {
   const preset =
     variant === "detail"
@@ -78,6 +81,7 @@ function FeedPostScreenshot({
         src={imageSrc}
         preset="feed-card"
         context="feed"
+        imageCrop={imageCrop}
         priority={priority}
         onClick={onImageClick}
       />

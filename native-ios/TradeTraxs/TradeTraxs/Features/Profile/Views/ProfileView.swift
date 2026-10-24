@@ -142,6 +142,7 @@ struct ProfileView: View {
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.body.weight(.semibold))
+                        .experienceControlHitTarget()
                     }
                     .accessibilityLabel("Profile actions")
                     .accessibilityIdentifier("profile.actions.menu")

@@ -55,8 +55,10 @@ export type DashboardFiltersProps = {
   copyGroups?: import("@/lib/copyTradingGroups").CopyTradingGroup[]
   /** Lazy-load copy trading groups when filter UI opens. */
   onRequestCopyGroups?: () => void
-  /** When false, hides Public toggle and Share performance controls (zero-trade dashboard). */
+  /** When false, hides Public toggle and Share performance controls. */
   showShareControls?: boolean
+  performanceShareDisabled?: boolean
+  tradingReportDisabled?: boolean
   /** Subtle link when filters indicate prop firm context (account or Eval/Funded mode). */
   showPropFirmLink?: boolean
 }
@@ -92,6 +94,8 @@ export default function DashboardFilters({
   onSaveGear,
   onCancelGear,
   showShareControls = true,
+  performanceShareDisabled = false,
+  tradingReportDisabled = false,
   showPropFirmLink = false,
   copyGroups = [],
   onRequestCopyGroups,
@@ -174,6 +178,27 @@ export default function DashboardFilters({
     )
   }
 
+  const addTradeDesktop = (
+    <button
+      type="button"
+      onClick={onOpenQuickInput}
+      className="inline-flex h-[34px] shrink-0 items-center whitespace-nowrap rounded-md bg-blue-500 px-4 text-sm font-medium text-white transition hover:bg-blue-600"
+    >
+      Add Trade
+    </button>
+  )
+
+  const addTradeMobileAccessory = (
+    <button
+      type="button"
+      onClick={onOpenQuickInput}
+      aria-label="Add trade"
+      className={`${DASHBOARD_MOBILE_ACTION_BTN_CLASS} min-w-0 flex-1 px-0 md:hidden`}
+    >
+      <span aria-hidden>+</span>
+    </button>
+  )
+
   const gearSettings = (
     <DashboardGearSettings
       showControls={showControls}
@@ -191,10 +216,10 @@ export default function DashboardFilters({
 
   return (
     <div>
-      <div data-tt-tour-target="dashboardAccountAndDates">
       <TradeFilterBar
         className={DASHBOARD_MOBILE_FILTER_MARGIN_CLASS}
         mobileThreeRowLayout
+        tourTargetId="dashboardAccountAndDates"
         accountPickerLayout="dashboard"
         accounts={accounts}
         accountFilter={accountFilter}
@@ -202,6 +227,8 @@ export default function DashboardFilters({
         isPro={isPro}
         copyGroups={copyGroups}
         onAccountPickerOpen={onRequestCopyGroups}
+        beforeAccountSelect={addTradeDesktop}
+        accountSelectAccessory={addTradeMobileAccessory}
         accountTypeFilter={accountTypeFilter}
         onAccountTypeChange={onAccountTypeChange}
         timeframe={timeframe}
@@ -253,8 +280,14 @@ export default function DashboardFilters({
               <button
                 type="button"
                 onClick={onOpenTradingReport}
+                disabled={tradingReportDisabled}
+                title={
+                  tradingReportDisabled
+                    ? "Reports unlock after you log your first trade"
+                    : undefined
+                }
                 data-tt-tour-target="dashboardReports"
-                className="tt-dash-desktop-only h-[34px] shrink-0 rounded-md bg-white/10 px-3 text-sm text-white hover:bg-white/20"
+                className="tt-dash-desktop-only h-[34px] shrink-0 rounded-md bg-white/10 px-3 text-sm text-white hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white/10"
               >
                 Reports
               </button>
@@ -263,8 +296,14 @@ export default function DashboardFilters({
               <button
                 type="button"
                 onClick={onOpenTradingReport}
+                disabled={tradingReportDisabled}
+                title={
+                  tradingReportDisabled
+                    ? "Reports unlock after you log your first trade"
+                    : undefined
+                }
                 data-tt-tour-target="dashboardReports"
-                className={`${DASHBOARD_MOBILE_ACTION_BTN_CLASS} min-w-0 flex-1 md:hidden`}
+                className={`${DASHBOARD_MOBILE_ACTION_BTN_CLASS} min-w-0 flex-1 md:hidden disabled:cursor-not-allowed disabled:opacity-50`}
               >
                 Report
               </button>
@@ -280,6 +319,12 @@ export default function DashboardFilters({
               <PerformanceShareButton
                 onClick={onOpenPerformanceShare}
                 size="dashboard"
+                disabled={performanceShareDisabled}
+                title={
+                  performanceShareDisabled
+                    ? "Share performance after you log your first trade"
+                    : undefined
+                }
               />
             ) : null}
             {showShareControls ? (
@@ -302,7 +347,6 @@ export default function DashboardFilters({
           </>
         }
       />
-      </div>
       {showPropFirmLink ? (
         <div className="tt-dash-hide-desktop-v1 -mt-1 mb-2 flex justify-end md:justify-start md:mb-3">
           <Link

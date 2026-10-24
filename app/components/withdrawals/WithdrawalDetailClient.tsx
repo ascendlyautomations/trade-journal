@@ -4,6 +4,8 @@ import { useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import AccountPayoutEntryEditorModal from "@/app/components/withdrawals/AccountPayoutEntryEditorModal"
+import PropFirmPayoutAssignmentSection from "@/app/components/withdrawals/PropFirmPayoutAssignmentSection"
+import Modal from "@/app/components/ui/Modal"
 import {
   deleteAccountPayoutEntry,
   type AccountPayoutEntryDraft,
@@ -17,9 +19,11 @@ import {
   type PayoutHistoryItem,
 } from "@/lib/payoutHistory"
 import {
+  deletePropPayout,
   formatPayoutDrawdownBehaviorLabel,
   formatPayoutHistoryDate,
 } from "@/lib/propfirmPayoutCycles"
+import type { PayoutDrawdownBehavior } from "@/lib/propfirmMetrics"
 import {
   formatTradingAccountModeLabel,
   formatTradingAccountSelectorLabel,
@@ -74,6 +78,9 @@ export default function WithdrawalDetailClient({
   const [editorError, setEditorError] = useState<string | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [drawdownChoiceOpen, setDrawdownChoiceOpen] = useState(false)
+  const [drawdownBehavior, setDrawdownBehavior] =
+    useState<PayoutDrawdownBehavior>("reset_to_account")
 
   const dateIso =
     item?.source === "fundedCycle"
@@ -101,7 +108,10 @@ export default function WithdrawalDetailClient({
     return <p className="text-sm text-gray-400">Loading withdrawal…</p>
   }
 
-  if (!item || !account) {
+  const fromAchievement =
+    item?.source === "achievementProp" || item?.source === "achievementLive"
+
+  if (!item || (!account && !fromAchievement)) {
     return (
       <div className="space-y-4">
         <p className="text-sm text-gray-300">
@@ -115,7 +125,12 @@ export default function WithdrawalDetailClient({
   }
 
   const title = screenTitle(item, account)
-  const displayNotes = stripWithdrawalDrawdownNotePrefix(item.note)
+  const accountLabel = account
+    ? `${formatTradingAccountSelectorLabel(account)} · ${formatTradingAccountModeLabel(account.mode)} · `
+    : ""
+  const displayNotes = fromAchievement
+    ? null
+    : stripWithdrawalDrawdownNotePrefix(item.note)
   const liveDdLabel = isLiveWithdrawalHistoryItem(item, account)
     ? liveDrawdownBehaviorLabel(item.note)
     : null
@@ -144,7 +159,7 @@ export default function WithdrawalDetailClient({
     if (!user?.id || !item?.ledgerEntryId) return
     if (
       !window.confirm(
-        "Delete this withdrawal? Your account value will update. This cannot be undone."
+        `Delete this withdrawal? ${formatCurrency(item.amount)} goes back on the account balance. This cannot be undone.`
       )
     ) {
       return
@@ -165,6 +180,52 @@ export default function WithdrawalDetailClient({
     router.refresh()
   }
 
+  async function handleDeletePropPayout() {
+    if (!user?.id || !item || item.source !== "fundedCycle") return
+    const cycleId = item.id.replace(/^cycle:/, "")
+    setDeleteBusy(true)
+    setActionError(null)
+    const result = await deletePropPayout(supabase, cycleId, drawdownBehavior)
+    setDeleteBusy(false)
+    if (!result.ok) {
+      setActionError(result.message)
+      return
+    }
+    setDrawdownChoiceOpen(false)
+    router.push("/withdrawals")
+    router.refresh()
+  }
+
+  async function handleDeleteAchievementPayout() {
+    if (!user?.id || !item?.id.startsWith("achievement:")) return
+    if (
+      !window.confirm(
+        "Delete this payout from Withdrawals? The profile post for it is removed too."
+      )
+    ) {
+      return
+    }
+    const achievementId = item.id.slice("achievement:".length)
+    setDeleteBusy(true)
+    setActionError(null)
+    const { error } = await supabase
+      .from("achievements")
+      .delete()
+      .eq("id", achievementId)
+      .eq("user_id", user.id)
+    setDeleteBusy(false)
+    if (error) {
+      setActionError(error.message)
+      return
+    }
+    router.push("/withdrawals")
+    router.refresh()
+  }
+
+  const canDeleteProp = item.source === "fundedCycle"
+  const canDeleteAchievement =
+    item.source === "achievementProp" || item.source === "achievementLive"
+
   return (
     <div className="space-y-6">
       <div>
@@ -182,20 +243,27 @@ export default function WithdrawalDetailClient({
           {formatCurrency(item.amount)}
         </p>
         <p className="mt-2 text-sm text-gray-300">
-          {formatTradingAccountSelectorLabel(account)}
-          {" · "}
-          {formatTradingAccountModeLabel(account.mode)}
-          {" · "}
+          {accountLabel}
           {isPropPayoutHistoryItem(item, account)
             ? "Prop payout"
             : isLiveWithdrawalHistoryItem(item, account)
               ? "Live withdrawal"
               : "Withdrawal"}
+          {fromAchievement && !account && item.note ? ` · ${item.note}` : ""}
         </p>
         <p className="mt-1 text-sm text-gray-400">
           {formatPayoutHistoryDate(dateIso)}
         </p>
       </div>
+
+      {(isPropPayoutHistoryItem(item, account) && account) || fromAchievement ? (
+        <PropFirmPayoutAssignmentSection
+          userId={user.id}
+          payoutKey={item.id}
+          accountId={item.accountId}
+          accountName={account?.name}
+        />
+      ) : null}
 
       {item.cycle ? (
         <dl className="space-y-3 rounded-xl border border-white/10 bg-white/5 p-5 text-sm">
@@ -277,12 +345,126 @@ export default function WithdrawalDetailClient({
             type="button"
             onClick={() => void handleDelete()}
             disabled={deleteBusy}
-            className="rounded-lg border border-red-500/40 px-4 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/10 disabled:opacity-50"
+            className="rounded-lg bg-red-500/15 px-4 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/25 disabled:opacity-50"
           >
             {deleteBusy ? "Deleting…" : "Delete Withdrawal"}
           </button>
         </div>
       ) : null}
+
+      {canDeleteProp ? (
+        <button
+          type="button"
+          onClick={() => {
+            setDrawdownBehavior(item.cycle?.drawdown_behavior ?? "reset_to_account")
+            setActionError(null)
+            setDrawdownChoiceOpen(true)
+          }}
+          disabled={deleteBusy}
+          className="rounded-lg bg-red-500/15 px-4 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/25 disabled:opacity-50"
+        >
+          Delete payout
+        </button>
+      ) : null}
+
+      {canDeleteAchievement ? (
+        <button
+          type="button"
+          onClick={() => void handleDeleteAchievementPayout()}
+          disabled={deleteBusy}
+          className="rounded-lg bg-red-500/15 px-4 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/25 disabled:opacity-50"
+        >
+          {deleteBusy ? "Deleting…" : "Delete payout"}
+        </button>
+      ) : null}
+
+      <Modal
+        open={drawdownChoiceOpen}
+        onClose={() => {
+          if (!deleteBusy) setDrawdownChoiceOpen(false)
+        }}
+        title="Delete payout"
+        footer={
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              disabled={deleteBusy}
+              onClick={() => setDrawdownChoiceOpen(false)}
+              className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-gray-200 hover:bg-white/10 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={deleteBusy}
+              onClick={() => void handleDeletePropPayout()}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
+            >
+              {deleteBusy ? "Deleting…" : "Delete payout"}
+            </button>
+          </div>
+        }
+      >
+        <p className="text-sm leading-relaxed text-gray-300">
+          {formatCurrency(item.amount)} goes back on the account balance. Where
+          should the drawdown move after this payout is deleted?
+        </p>
+        {actionError ? (
+          <p className="mt-3 text-sm text-red-300">{actionError}</p>
+        ) : null}
+        <div className="mt-4 space-y-3">
+          <label
+            className={`block cursor-pointer rounded-lg border px-3 py-3 ${
+              drawdownBehavior === "reset_to_account"
+                ? "border-blue-500/40 bg-blue-500/10"
+                : "border-white/10 bg-white/5"
+            }`}
+          >
+            <span className="flex items-start gap-2.5">
+              <input
+                type="radio"
+                name="delete-drawdown"
+                checked={drawdownBehavior === "reset_to_account"}
+                onChange={() => setDrawdownBehavior("reset_to_account")}
+                className="mt-1"
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-100">
+                  Reset drawdown to account value
+                </span>
+                <span className="mt-1 block text-xs text-gray-400">
+                  The drawdown floor moves back to the account starting balance.
+                </span>
+              </span>
+            </span>
+          </label>
+          <label
+            className={`block cursor-pointer rounded-lg border px-3 py-3 ${
+              drawdownBehavior === "keep_trailing"
+                ? "border-blue-500/40 bg-blue-500/10"
+                : "border-white/10 bg-white/5"
+            }`}
+          >
+            <span className="flex items-start gap-2.5">
+              <input
+                type="radio"
+                name="delete-drawdown"
+                checked={drawdownBehavior === "keep_trailing"}
+                onChange={() => setDrawdownBehavior("keep_trailing")}
+                className="mt-1"
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-100">
+                  Keep trailing drawdown
+                </span>
+                <span className="mt-1 block text-xs text-gray-400">
+                  The drawdown floor stays at its current trailing level.
+                </span>
+              </span>
+            </span>
+          </label>
+        </div>
+      </Modal>
 
       {editorInitialDraft ? (
         <AccountPayoutEntryEditorModal

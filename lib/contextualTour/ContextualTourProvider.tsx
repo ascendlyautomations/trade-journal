@@ -13,11 +13,10 @@ import {
 import { usePathname, useRouter } from "next/navigation"
 import { CONTEXTUAL_TOUR_DASHBOARD, informationalStepCount } from "./catalog"
 import {
-  CONTEXTUAL_TOUR_RESOLVE_TIMEOUT_MS,
+  resolveTimeoutMsForTarget,
   domRectToTourRect,
   findTourTargetElement,
   isRenderableSpotlight,
-  isStableRect,
   isUsableRect,
   needsScroll,
   skipsTourAutoscroll,
@@ -33,17 +32,17 @@ import {
   stepRole,
   type ContextualTourPhase,
   type ContextualTourStep,
-  type ContextualTourSurface,
   type ContextualTourTargetId,
 } from "./types"
 import {
-  pathnameMatchesTourSurface,
-  routeForTourSurface,
+  pathnameMatchesTourStep,
+  routeForTourStep,
 } from "./routes"
 import {
   dispatchContextualTourSettingsTab,
   settingsTabForTourTarget,
 } from "./settingsTourTab"
+import { prepareTourNavForTarget } from "./navMenuBridge"
 
 type ContextualTourContextValue = {
   phase: ContextualTourPhase
@@ -163,12 +162,14 @@ export function ContextualTourProvider({ userId, children }: ProviderProps) {
     [definition.id, definition.version, userId]
   )
 
-  const navigateToSurface = useCallback(
-    (surface: ContextualTourSurface) => {
+  const navigateForStep = useCallback(
+    (step: ContextualTourStep) => {
       if (!userId) return
-      const route = routeForTourSurface(surface, userId)
-      if (!pathnameMatchesTourSurface(pathname, surface, userId)) {
-        router.push(route)
+      if (stepRole(step) === "sectionContinue") return
+      const targetId = step.target
+      if (targetId) prepareTourNavForTarget(targetId)
+      if (!pathnameMatchesTourStep(pathname, step, userId)) {
+        router.push(routeForTourStep(step, userId))
       }
     },
     [pathname, router, userId]
@@ -188,15 +189,18 @@ export function ContextualTourProvider({ userId, children }: ProviderProps) {
       setStepIndex(index)
       setDisplayedStepIndex(index)
       setPhase("measuring")
-      setSpotlightRect(null)
+      const role = stepRole(step)
+      if (role === "sectionContinue" || role === "finish") {
+        setSpotlightRect(null)
+      }
       previousFrameRef.current = null
       resolveStartedAtRef.current = performance.now()
       scrollIssuedForStepRef.current = null
 
-      navigateToSurface(step.surface)
+      navigateForStep(step)
       applySettingsTabForStep(step)
     },
-    [applySettingsTabForStep, definition.steps, navigateToSurface, userId]
+    [applySettingsTabForStep, definition.steps, navigateForStep, userId]
   )
 
   const beginReplay = useCallback(() => {
@@ -296,7 +300,7 @@ export function ContextualTourProvider({ userId, children }: ProviderProps) {
     if (phase !== "measuring" && phase !== "presenting") return
     if (!userId || !currentStep) return
 
-    if (!pathnameMatchesTourSurface(pathname, currentStep.surface, userId)) {
+    if (!pathnameMatchesTourStep(pathname, currentStep, userId)) {
       return
     }
 
@@ -310,9 +314,11 @@ export function ContextualTourProvider({ userId, children }: ProviderProps) {
     if (role === "sectionContinue" || role === "finish") {
       setPhase("presenting")
       setHasPresentedStep(true)
-      setSpotlightRect(null)
+      if (role === "sectionContinue") setSpotlightRect(null)
       return
     }
+
+    prepareTourNavForTarget(targetId!)
 
     if (!targetId) {
       setPhase("presenting")
@@ -348,19 +354,13 @@ export function ContextualTourProvider({ userId, children }: ProviderProps) {
         needsScroll(frame, viewport, 72, 220)
       ) {
         scrollIssuedForStepRef.current = stepIndex
-        el?.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" })
+        el?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "auto" })
       }
 
-      const previous = previousFrameRef.current
-      if (
-        frame &&
-        isUsableRect(frame) &&
-        previous &&
-        isStableRect(previous, frame)
-      ) {
+      if (frame && isUsableRect(frame)) {
         const showSpotlight = isRenderableSpotlight(frame, viewport)
-        if (showSpotlight || step.presentsIfUnmeasured) {
-          setSpotlightRect(showSpotlight ? frame : null)
+        if (showSpotlight) {
+          setSpotlightRect(frame)
           setPhase("presenting")
           setHasPresentedStep(true)
           setDisplayedStepIndex(stepIndex)
@@ -368,15 +368,25 @@ export function ContextualTourProvider({ userId, children }: ProviderProps) {
           resolveStartedAtRef.current = null
           return
         }
-      }
-
-      if (frame && isUsableRect(frame)) {
+        if (step.presentsIfUnmeasured) {
+          if (frame && isUsableRect(frame)) setSpotlightRect(frame)
+          setPhase("presenting")
+          setHasPresentedStep(true)
+          setDisplayedStepIndex(stepIndex)
+          previousFrameRef.current = frame
+          resolveStartedAtRef.current = null
+          return
+        }
         previousFrameRef.current = frame
       }
 
-      if (elapsed >= CONTEXTUAL_TOUR_RESOLVE_TIMEOUT_MS) {
+      const resolveTimeoutMs = resolveTimeoutMsForTarget(targetId)
+
+      if (elapsed >= resolveTimeoutMs) {
         if (step.presentsIfUnmeasured) {
-          setSpotlightRect(null)
+          if (frame && isUsableRect(frame)) {
+            setSpotlightRect(frame)
+          }
           setPhase("presenting")
           setHasPresentedStep(true)
           setDisplayedStepIndex(stepIndex)
@@ -420,18 +430,16 @@ export function ContextualTourProvider({ userId, children }: ProviderProps) {
         width: window.innerWidth,
         height: window.innerHeight,
       }
-      if (isRenderableSpotlight(frame, viewport)) {
+      if (isUsableRect(frame) && isRenderableSpotlight(frame, viewport)) {
         setSpotlightRect(frame)
       }
     }
 
     window.addEventListener("resize", onLayout)
     window.addEventListener("scroll", onLayout, true)
-    const interval = window.setInterval(onLayout, 400)
     return () => {
       window.removeEventListener("resize", onLayout)
       window.removeEventListener("scroll", onLayout, true)
-      window.clearInterval(interval)
     }
   }, [currentStep, phase])
 

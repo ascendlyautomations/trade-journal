@@ -55,7 +55,7 @@ struct LeaderboardExploreCard: View {
                     .stroke(colors.border, lineWidth: 1)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .padding(.horizontal, ExperienceSpacing.md)
         .accessibilityIdentifier("explore.leaderboards.card")
         .accessibilityLabel("Leaderboards. \(subtitle)")

@@ -101,6 +101,28 @@ final class TradeEditDeleteExperienceTests: XCTestCase {
         }
     }
 
+    func testOwnerTradeDeletionServiceRejectsOwnerMismatch() async {
+        let owner = ProfileID("user.delete-owner")
+        let other = ProfileID("user.delete-other")
+        let trade = sampleTrade(id: "del-mismatch-1", owner: owner.rawValue)
+        let repository = DeleteTrackingTradeRepository(seed: trade)
+        let cache = DetailPresentationCache()
+        do {
+            try await OwnerTradeDeletionService.deleteOwnedTrade(
+                tradeID: trade.id,
+                owner: other,
+                previous: trade,
+                trades: repository,
+                session: EditTradeStubSession(userID: owner.rawValue),
+                detailCache: cache,
+                tradeDetailRepository: NullTradeDetailRepository()
+            )
+            XCTFail("Expected notOwner")
+        } catch {
+            XCTAssertEqual(repository.deleteCalls, [])
+        }
+    }
+
     func testOwnerTradeDeletionServiceMatchesDetailPath() async throws {
         let owner = ProfileID("user.delete-service")
         let trade = sampleTrade(id: "del-svc-1", owner: owner.rawValue)
@@ -228,6 +250,32 @@ final class TradeEditDeleteExperienceTests: XCTestCase {
         XCTAssertNil(viewModel.deletingAchievementID)
     }
 
+    func testProfileAchievementsContainerConfirmDeleteUsesDialogAchievementWhenPendingNil() async {
+        let owner = ProfileID("user.profile-ach-delete-dialog")
+        let achievement = sampleAchievement(id: "profile-ach-del-dialog-1", owner: owner.rawValue)
+        let cache = DetailPresentationCache()
+        cache.seed(achievement)
+        let repository = DeleteTrackingAchievementRepository(seed: achievement)
+        let environment = CompositionRoot.bootstrapAppEnvironment()
+        let viewModel = AchievementsContainerViewModel(
+            profileID: owner,
+            achievements: repository,
+            session: EditTradeStubSession(userID: owner.rawValue),
+            navigationCoordinator: environment.navigation.coordinator,
+            detailCache: cache,
+            viewerIsOwner: true
+        )
+        var snapshot = ProfileState(profileID: owner)
+        snapshot.isOwner = true
+        snapshot.achievements = [achievement]
+        snapshot.didLoadAchievements = true
+        viewModel.applyBootstrap(snapshot)
+        viewModel.pendingDelete = nil
+        await viewModel.confirmDelete(achievement: achievement)
+        XCTAssertEqual(repository.deleteCalls, [achievement.id])
+        XCTAssertTrue(viewModel.items.isEmpty)
+    }
+
     func testAchievementDetailDeleteIgnoresDuplicateTapWhileDeleting() async {
         let owner = ProfileID("user.ach-detail-delete")
         let achievement = sampleAchievement(id: "ach-detail-del-1", owner: owner.rawValue)
@@ -274,10 +322,51 @@ final class TradeEditDeleteExperienceTests: XCTestCase {
             tradeDetailRepository: environment.data.tradeDetailRepository,
             isOwner: true
         )
+        viewModel.installAuthoritativeV2JournalForTests([
+            TradeSummaryMapper.ownerJournal(fromListTrade: trade),
+        ])
         viewModel.pendingDelete = summary
         await viewModel.confirmDelete()
         XCTAssertEqual(repository.deleteCalls, [trade.id])
         XCTAssertNil(cache.trade(id: trade.id))
+        XCTAssertTrue(viewModel.journalItems.isEmpty)
+        XCTAssertTrue(viewModel.visibleItems.isEmpty)
+        XCTAssertNil(viewModel.deletingTradeID)
+        if case .deleted(let id, let deletedOwner) = TradeJournalMutationStore.shared.latest {
+            XCTAssertEqual(id, trade.id)
+            XCTAssertEqual(deletedOwner, owner)
+        } else {
+            XCTFail("Expected noteDeleted mutation")
+        }
+    }
+
+    func testProfileTradesContainerConfirmDeleteUsesDialogSummaryWhenPendingNil() async {
+        let owner = ProfileID("user.profile-delete-dialog")
+        let trade = sampleTrade(id: "profile-del-dialog-1", owner: owner.rawValue)
+        let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
+        let cache = DetailPresentationCache()
+        TradeJournalMutationStore.shared.configure(detailCache: cache)
+        cache.seed(trade)
+        let repository = DeleteTrackingTradeRepository(seed: trade)
+        let environment = CompositionRoot.bootstrapAppEnvironment()
+        let viewModel = TradesContainerViewModel(
+            profileID: owner,
+            trades: repository,
+            session: EditTradeStubSession(userID: owner.rawValue),
+            navigationCoordinator: environment.navigation.coordinator,
+            detailCache: cache,
+            tradeDetailRepository: environment.data.tradeDetailRepository,
+            isOwner: true
+        )
+        viewModel.installAuthoritativeV2JournalForTests([
+            TradeSummaryMapper.ownerJournal(fromListTrade: trade),
+        ])
+        viewModel.pendingDelete = nil
+        await viewModel.confirmDelete(summary: summary)
+        XCTAssertEqual(repository.deleteCalls, [trade.id])
+        XCTAssertNil(cache.trade(id: trade.id))
+        XCTAssertTrue(viewModel.journalItems.isEmpty)
+        XCTAssertTrue(viewModel.visibleItems.isEmpty)
         XCTAssertNil(viewModel.deletingTradeID)
         if case .deleted(let id, let deletedOwner) = TradeJournalMutationStore.shared.latest {
             XCTAssertEqual(id, trade.id)

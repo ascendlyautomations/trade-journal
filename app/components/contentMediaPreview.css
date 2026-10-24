@@ -4,6 +4,13 @@
   max-height: min(70dvh, 680px);
 }
 
+.tt-content-image-crop {
+  --tt-crop-max: min(70dvh, 680px);
+  width: min(100%, calc(var(--tt-crop-max) * var(--tt-crop-aspect, 1)));
+  max-height: var(--tt-crop-max);
+  margin-inline: auto;
+}
+
 .tt-content-media-preview--detail {
   max-height: min(78dvh, 920px);
 }
@@ -28,6 +35,14 @@
 @media (min-width: 768px) {
   .tt-content-media-preview {
     max-height: 520px;
+  }
+
+  .tt-content-image-crop {
+    --tt-crop-max: 520px;
+  }
+
+  .tt-content-image-crop--detail {
+    --tt-crop-max: min(72dvh, 860px);
   }
 
   .tt-content-media-preview--feed {

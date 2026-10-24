@@ -45,7 +45,7 @@ struct CompactRatingSelector: View {
                             )
                             .foregroundStyle(value == level ? colors.accent : colors.primaryText)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityLabel("\(title) \(level) of 5")
                     .accessibilityAddTraits(value == level ? .isSelected : [])
                 }

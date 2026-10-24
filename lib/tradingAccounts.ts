@@ -18,6 +18,7 @@ import {
 
 import { ACCOUNTS_SELECT } from "./appDataCache"
 import { fetchProfileOwnerPrivateFields } from "./profileOwnerPrivateFields"
+import { syncPropFirmAccountPurchaseExpense } from "./propFirmExpenses"
 
 export type TradingAccountPropFirmRules = {
   consistency: number | null
@@ -50,6 +51,10 @@ export type AccountFormInitialValues = {
   category: AccountType
   mode: string
   rules: TradingAccountPropFirmRules | null
+  /** Optional eval/funded purchase cost, prefilled from the linked expense. */
+  purchaseCost?: string | null
+  /** Purchase date for that linked expense, YYYY-MM-DD. */
+  purchaseDate?: string | null
 }
 
 export type CreateTradingAccountPayload = {
@@ -59,6 +64,10 @@ export type CreateTradingAccountPayload = {
   category: string
   mode: string | null
   rules: TradingAccountPropFirmRules | null
+  /** Optional amount paid for an eval or funded prop account. */
+  purchaseCost?: string | null
+  /** Purchase date for the linked expense. Blank uses today when a cost is saved. */
+  purchaseDate?: string | null
 }
 
 export const FREE_PLAN_ACCOUNT_LIMIT = 3
@@ -225,7 +234,11 @@ export async function insertTradingAccount(
     subscription_status?: string | null
     trial_end?: string | null
   } | null
-): Promise<{ account: TradingAccountListItem | null; error: Error | null }> {
+): Promise<{
+  account: TradingAccountListItem | null
+  error: Error | null
+  purchaseExpenseWarning?: string | null
+}> {
   const sizeGate = assertRequiredAccountValue(newAccount.size)
   if (!sizeGate.ok) {
     return { account: null, error: new Error(sizeGate.message) }
@@ -287,9 +300,24 @@ export async function insertTradingAccount(
     return { account: null, error: new Error("Account was not created") }
   }
 
+  const created = mapAccountRow(data as Record<string, unknown>)
+  const purchaseExpenseWarning = await purchaseExpenseWarningFor(
+    client,
+    userId,
+    created.id,
+    {
+      name: created.name,
+      category: String(created.category ?? newAccount.category),
+      mode: created.mode ?? newAccount.mode,
+      purchaseCost: newAccount.purchaseCost,
+      purchaseDate: newAccount.purchaseDate,
+    }
+  )
+
   return {
-    account: mapAccountRow(data as Record<string, unknown>),
+    account: created,
     error: null,
+    purchaseExpenseWarning,
   }
 }
 
@@ -316,7 +344,11 @@ export async function updateTradingAccount(
   accountId: string,
   payload: CreateTradingAccountPayload,
   previous: TradingAccountListItem
-): Promise<{ account: TradingAccountListItem | null; error: Error | null }> {
+): Promise<{
+  account: TradingAccountListItem | null
+  error: Error | null
+  purchaseExpenseWarning?: string | null
+}> {
   const name = payload.name.trim()
   if (!name) {
     return { account: null, error: new Error("Account name is required") }
@@ -374,10 +406,49 @@ export async function updateTradingAccount(
     return { account: null, error: syncError }
   }
 
+  const updated = mapAccountRow(data as Record<string, unknown>)
+  const purchaseExpenseWarning = await purchaseExpenseWarningFor(
+    client,
+    userId,
+    updated.id,
+    {
+      name: updated.name,
+      category: String(updated.category ?? payload.category),
+      mode: updated.mode ?? payload.mode,
+      purchaseCost: payload.purchaseCost,
+      purchaseDate: payload.purchaseDate,
+    }
+  )
+
   return {
-    account: mapAccountRow(data as Record<string, unknown>),
+    account: updated,
     error: null,
+    purchaseExpenseWarning,
   }
+}
+
+async function purchaseExpenseWarningFor(
+  client: SupabaseClient,
+  userId: string,
+  accountId: string,
+  input: {
+    name: string
+    category: string
+    mode: string | null
+    purchaseCost?: string | null
+    purchaseDate?: string | null
+  }
+): Promise<string | null> {
+  const expense = await syncPropFirmAccountPurchaseExpense(client, userId, accountId, {
+    name: input.name,
+    category: input.category,
+    mode: input.mode,
+    purchaseCost: input.purchaseCost,
+    datePaid: input.purchaseDate,
+  })
+  if (expense.ok) return null
+  console.error(expense.message)
+  return "Account saved, but the purchase cost was not recorded. Save the account again to retry."
 }
 
 /** Keep denormalized trade fields aligned when an account is renamed. */

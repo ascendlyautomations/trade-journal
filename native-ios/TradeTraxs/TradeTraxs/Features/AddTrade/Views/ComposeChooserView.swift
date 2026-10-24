@@ -25,7 +25,7 @@ struct ComposeChooserView: View {
                         systemImage: "plus.circle.fill"
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .listRowInsets(composeRowInsets)
                 .accessibilityIdentifier("compose.addTrade")
 
@@ -36,7 +36,7 @@ struct ComposeChooserView: View {
                         systemImage: "text.bubble"
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .listRowInsets(composeRowInsets)
                 .accessibilityIdentifier("compose.post")
 
@@ -47,7 +47,7 @@ struct ComposeChooserView: View {
                         systemImage: "play.rectangle.fill"
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .listRowInsets(composeRowInsets)
                 .accessibilityIdentifier("compose.reel")
 
@@ -58,7 +58,7 @@ struct ComposeChooserView: View {
                         systemImage: "trophy"
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .listRowInsets(composeRowInsets)
                 .accessibilityIdentifier("compose.achievement")
 
@@ -69,7 +69,7 @@ struct ComposeChooserView: View {
                         systemImage: "camera.circle.fill"
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .listRowInsets(composeRowInsets)
                 .accessibilityIdentifier("compose.story")
 
@@ -80,7 +80,7 @@ struct ComposeChooserView: View {
                         systemImage: "arrow.down.circle"
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .listRowInsets(composeRowInsets)
                 .accessibilityIdentifier("compose.withdrawal")
             }

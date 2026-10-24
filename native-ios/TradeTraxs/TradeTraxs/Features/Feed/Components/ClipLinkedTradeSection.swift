@@ -52,7 +52,7 @@ struct ClipLinkedTradeSection: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier("clips.linked.trade.\(trade.id.rawValue)")
     }

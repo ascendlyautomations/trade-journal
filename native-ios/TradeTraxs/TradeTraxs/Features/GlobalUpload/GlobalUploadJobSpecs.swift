@@ -93,6 +93,8 @@ struct PostUploadSpec: Sendable {
     var authorID: ProfileID
     var bodyText: String
     var imageData: Data?
+    /// Web pending room-share draft. Nil for a normal post.
+    var roomShare: RoomShareAttachment? = nil
 }
 
 struct PostUploadCheckpoint: Sendable, Equatable {

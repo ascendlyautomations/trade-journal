@@ -97,7 +97,7 @@ struct GettingStartedCard: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .disabled(task.isComplete)
         .accessibilityIdentifier("gettingStarted.task.\(task.id.rawValue)")
     }

@@ -87,4 +87,51 @@ nonisolated enum ProfileSectionSupport {
         }
         return pending + snapshot + tail
     }
+
+    /// Upserts a page into rows already on screen.
+    ///
+    /// A refresh adds and updates rows. It does not treat a short page as proof
+    /// that everything else was deleted. Explicit deletes remove rows separately.
+    nonisolated static func mergeKeepingExisting<T: Identifiable>(
+        incoming: [T],
+        loaded: [T],
+        orderedBy date: KeyPath<T, Date>
+    ) -> [T] where T.ID: Hashable {
+        guard !incoming.isEmpty else { return loaded }
+        guard !loaded.isEmpty else { return incoming }
+        var byID = Dictionary(uniqueKeysWithValues: loaded.map { ($0.id, $0) })
+        for item in incoming {
+            byID[item.id] = item
+        }
+        return byID.values.sorted { $0[keyPath: date] > $1[keyPath: date] }
+    }
+
+    /// Applies one server page without letting a short page replace a longer list.
+    ///
+    /// An empty page leaves the loaded rows in place. A page smaller than half the
+    /// loaded list is merged in and does not delete rows. A normal page still drops
+    /// rows the server omitted inside its window, and a complete page can drop the
+    /// older tail.
+    nonisolated static func applyingLoadedPage<T: Identifiable>(
+        incoming: [T],
+        loaded: [T],
+        orderedBy date: KeyPath<T, Date>,
+        pageIsComplete: Bool
+    ) -> [T] where T.ID: Hashable {
+        guard !incoming.isEmpty else { return loaded }
+        let suspiciousShrink = incoming.count * 2 < loaded.count
+        if loaded.isEmpty || suspiciousShrink {
+            return mergeKeepingExisting(
+                incoming: incoming,
+                loaded: loaded,
+                orderedBy: date
+            )
+        }
+        return reconcileLoadedSnapshot(
+            snapshot: incoming,
+            loaded: loaded,
+            orderedBy: date,
+            snapshotIsPartial: !pageIsComplete
+        )
+    }
 }

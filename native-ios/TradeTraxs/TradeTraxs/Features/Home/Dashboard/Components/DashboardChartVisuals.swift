@@ -108,7 +108,7 @@ struct DashboardWinLossRingView: View {
             .contentShape(Rectangle())
             .frame(minHeight: ExperienceAccessibility.minTouchTarget)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .disabled(action == nil)
         .accessibilityLabel("\(title), \(value). Double tap to view trades.")
     }
@@ -188,7 +188,7 @@ struct DashboardSessionBarsView: View {
                         .contentShape(Rectangle())
                         .frame(minHeight: ExperienceAccessibility.minTouchTarget)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityLabel("\(row.label), \(signedMoney(row.netPnL)), \(row.tradeCount) trades.")
                 }
             }
@@ -281,7 +281,7 @@ struct DashboardWeekdayHeatmapView: View {
                                 .frame(maxWidth: .infinity)
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.experiencePlain)
                             .frame(maxWidth: .infinity)
                             .accessibilityLabel("\(point.label), \(moneyLabel(point.value)). Double tap to view trades.")
                         }
@@ -380,7 +380,7 @@ struct DashboardHourTimelineView: View {
                     } label: {
                         hourBar(for: point)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityLabel(
                         "Hour \(point.label), \(moneyLabel(point.value)). Double tap to view trades."
                     )
@@ -619,7 +619,7 @@ struct DashboardLongShortDonutView: View {
             .contentShape(Rectangle())
             .frame(minHeight: ExperienceAccessibility.minTouchTarget)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .disabled(action == nil)
         .accessibilityLabel("\(title), \(count) trades. Double tap to view trades.")
     }
@@ -687,7 +687,7 @@ struct DashboardHoldHistogramView: View {
                                 .background(colors.fillSecondary.opacity(0.55), in: Capsule())
                                 .contentTransition(.numericText())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                         .frame(maxWidth: .infinity)
                         .disabled(bucket.count == 0 || onSelectBucket == nil)
                         .accessibilityLabel("\(bucket.label), \(bucket.count) trades. Double tap to view.")
@@ -845,7 +845,7 @@ struct DashboardLongShortComparisonView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .disabled(action == nil || side == nil)
     }
 

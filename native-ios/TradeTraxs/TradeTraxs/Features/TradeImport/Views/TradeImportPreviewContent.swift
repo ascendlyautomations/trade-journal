@@ -105,7 +105,7 @@ struct TradeImportPreviewContent: View {
                         } label: {
                             tradeRow(trade)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                     }
                     .accessibilityIdentifier("\(config.accessibilityPrefix).trade.\(trade.rowNumber)")
                 }

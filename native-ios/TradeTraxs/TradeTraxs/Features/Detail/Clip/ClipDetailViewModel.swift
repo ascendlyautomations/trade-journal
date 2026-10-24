@@ -84,8 +84,7 @@ final class ClipDetailViewModel {
         guard let player else { return }
         suspendedPlayback = true
         player.pause()
-        player.isMuted = true
-        player.volume = 0
+        FeedVideoAudioSession.applyMute(true, to: player)
         ClipShortFormPlayerFactory.stopNetworkLoading(player)
         #if DEBUG
         print("[VIDEO_PLAYBACK] owner=clipDetail action=stop reason=\(reason)")
@@ -97,8 +96,7 @@ final class ClipDetailViewModel {
     func resumePlaybackAfterBackground() {
         guard suspendedPlayback, let player else { return }
         suspendedPlayback = false
-        player.isMuted = false
-        player.volume = 1
+        FeedVideoAudioSession.applyMute(false, to: player)
         guard !didReachEnd else { return }
         player.playImmediately(atRate: 1)
     }
@@ -118,8 +116,7 @@ final class ClipDetailViewModel {
         ExperienceHaptics.play(.selection)
         suspendedPlayback = false
         didReachEnd = false
-        player.isMuted = false
-        player.volume = 1
+        FeedVideoAudioSession.applyMute(false, to: player)
         player.seek(to: .zero)
         player.playImmediately(atRate: 1)
     }
@@ -271,11 +268,6 @@ final class ClipDetailViewModel {
                 }
             }
 
-            newPlayer.playImmediately(atRate: 1)
-            #if DEBUG
-            print("[VIDEO_PLAYBACK] owner=clipDetail action=play")
-            #endif
-
             let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
             let duration = reel.durationSeconds.map(Double.init)
             let consumptionToken = newPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
@@ -290,6 +282,12 @@ final class ClipDetailViewModel {
                 }
             }
             self.consumptionTimeObserverToken = (newPlayer, consumptionToken)
+
+            FeedVideoAudioSession.applyMute(false, to: newPlayer)
+            newPlayer.playImmediately(atRate: 1)
+            #if DEBUG
+            print("[VIDEO_PLAYBACK] owner=clipDetail action=play")
+            #endif
 
             if let info = await VideoPresentationInfo.load(url: resolved.url) {
                 self.videoPresentation = info

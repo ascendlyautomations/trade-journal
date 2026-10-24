@@ -62,7 +62,7 @@ struct CommentReplyThreadView: View {
                         )
                         .experienceStyle(.caption, color: colors.secondaryText)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .padding(.leading, ExperienceSpacing.xl)
                     .accessibilityIdentifier("interaction.comment.replyToggle.\(rootComment.id.rawValue)")
                 }

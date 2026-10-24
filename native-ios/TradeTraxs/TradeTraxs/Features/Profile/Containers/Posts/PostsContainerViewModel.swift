@@ -9,7 +9,11 @@ final class PostsContainerViewModel {
 
     let profileOwnerID: ProfileID
     private(set) var isOwner: Bool
+    var pendingDelete: Post?
+    var deleteErrorMessage: String?
+    private(set) var deletingPostID: PostID?
     private let profiles: any ProfileRepository
+    private let session: any SessionProviding
     private let rpc: (any RPCClient)?
     private let navigationCoordinator: NavigationCoordinator
     private let detailCache: DetailPresentationCache
@@ -31,6 +35,7 @@ final class PostsContainerViewModel {
     init(
         profileID: ProfileID,
         profiles: any ProfileRepository,
+        session: any SessionProviding,
         rpc: (any RPCClient)? = nil,
         navigationCoordinator: NavigationCoordinator,
         detailCache: DetailPresentationCache,
@@ -40,6 +45,7 @@ final class PostsContainerViewModel {
         self.profileOwnerID = profileID
         self.isOwner = isOwner
         self.profiles = profiles
+        self.session = session
         self.rpc = rpc
         self.navigationCoordinator = navigationCoordinator
         self.detailCache = detailCache
@@ -93,11 +99,7 @@ final class PostsContainerViewModel {
                 }
                 return
             }
-            items = ProfileSectionSupport.reconcileLoadedSnapshot(
-                snapshot: snapshot.posts,
-                loaded: items,
-                orderedBy: \.createdAt
-            )
+            mergeIncomingPosts(snapshot.posts)
             #if DEBUG
             ProfilePostsSync.logReconciled(
                 beforeCount: beforeCount,
@@ -112,15 +114,12 @@ final class PostsContainerViewModel {
             return
         }
 
-        let reconciled = ProfileSectionSupport.reconcileSectionItems(
-            snapshotItems: snapshot.posts,
-            loadedItems: items,
-            hasLoaded: hasLoaded,
-            didLoadAuthoritative: snapshot.didLoadPosts,
-            orderedBy: \.createdAt
-        )
-        items = reconciled.items
-        hasLoaded = reconciled.hasLoaded
+        if items.isEmpty {
+            items = excludingDeletedPosts(sortedPosts(snapshot.posts))
+        } else {
+            mergeIncomingPosts(snapshot.posts)
+        }
+        hasLoaded = true
         #if DEBUG
         ProfilePostsSync.logReconciled(
             beforeCount: beforeCount,
@@ -134,6 +133,31 @@ final class PostsContainerViewModel {
         prefetchEngagement(for: items.map(\.id))
         ProfileTabLoadProbe.cache(.posts, count: items.count)
         ProfileTabLoadProbe.state(.posts, loaded: hasLoaded, loading: state.isLoading, count: items.count)
+    }
+
+    /// Web or another device published or edited this post. Keep every other post.
+    /// Does not mark an unloaded tab as loaded — one row must not replace the page fetch.
+    func noteRemoteUpsert(_ post: Post) {
+        guard post.authorProfileID == profileOwnerID else { return }
+        mergeIncomingPosts([post])
+        guard hasLoaded else { return }
+        detailCache.seed(posts: items)
+        state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+        prefetchEngagement(for: [post.id])
+        if isOwner {
+            OwnerProfileOptimisticStore.shared.syncOwnerPostsState(items)
+        }
+    }
+
+    /// A delete from the web or another device. Only this id leaves the list.
+    func noteRemoteDeleted(id: PostID) {
+        items.removeAll { $0.id == id }
+        detailCache.removePost(id: id)
+        guard hasLoaded else { return }
+        state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+        if isOwner {
+            OwnerProfileOptimisticStore.shared.syncOwnerPostsState(items)
+        }
     }
 
     /// Owner delete — drop from grid immediately.
@@ -217,6 +241,53 @@ final class PostsContainerViewModel {
         navigationCoordinator.openCompose(.post)
     }
 
+    func requestDelete(_ post: Post) {
+        guard isOwner, deletingPostID == nil else { return }
+        ExperienceHaptics.play(.warning)
+        TradeDeleteConfirmationPresenter.scheduleConfirmation { [weak self] in
+            self?.pendingDelete = post
+        }
+    }
+
+    func isDeletingPost(_ id: PostID) -> Bool {
+        deletingPostID == id
+    }
+
+    func confirmDelete(post explicitPost: Post? = nil) async {
+        guard isOwner, deletingPostID == nil else { return }
+        let post = explicitPost ?? pendingDelete
+        guard let post else { return }
+        pendingDelete = nil
+        deletingPostID = post.id
+        deleteErrorMessage = nil
+        defer { deletingPostID = nil }
+        let removedIndex = items.firstIndex { $0.id == post.id }
+        items.removeAll { $0.id == post.id }
+        state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+        do {
+            try await OwnerPostDeletionService.deleteOwnedPost(
+                postID: post.id,
+                owner: profileOwnerID,
+                profiles: profiles,
+                session: session,
+                detailCache: detailCache
+            )
+            noteDeleteSucceeded(id: post.id)
+            ExperienceHaptics.play(.success)
+        } catch {
+            if let removedIndex {
+                items.insert(post, at: min(removedIndex, items.count))
+            } else if !items.contains(where: { $0.id == post.id }) {
+                items.append(post)
+                items.sort { $0.createdAt > $1.createdAt }
+            }
+            state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+            detailCache.seed(posts: items)
+            deleteErrorMessage = ProfileSectionSupport.message(for: error)
+            ExperienceHaptics.play(.warning)
+        }
+    }
+
     private func performLoad(generation: UInt64) async {
         if ProfileSectionSupport.isLocalDevelopmentProfile(profileOwnerID) {
             guard generation == syncGeneration else {
@@ -255,27 +326,15 @@ final class PostsContainerViewModel {
         state = items.isEmpty ? .loading : state
         paginationGeneration &+= 1
         initialLoadFailureGrace.cancel()
+        // Wall pages use pinned and unpinned keysets. `rpc` stays for shell construction.
+        _ = rpc
         do {
-            let pageItems: [Post]
-            let cursor: String?
-            if BackendV2FeatureFlags.isEnabled(.profile), let rpc {
-                let applied = try await ProfileTabBootstrapLoader.load(
-                    tab: .posts,
-                    profileID: profileOwnerID,
-                    rpc: rpc,
-                    detailCache: nil,
-                    cursor: nil
-                )
-                pageItems = applied.posts ?? []
-                cursor = applied.nextCursor
-            } else {
-                let page = try await profiles.wallPosts(
-                    for: profileOwnerID,
-                    page: PageRequest(limit: ProfileTabBootstrapLoader.defaultPageSize)
-                )
-                pageItems = page.items
-                cursor = page.nextCursor
-            }
+            let page = try await profiles.wallPosts(
+                for: profileOwnerID,
+                page: PageRequest(limit: ProfileTabBootstrapLoader.defaultPageSize)
+            )
+            let pageItems = page.items
+            let cursor = page.nextCursor
             guard !Task.isCancelled else { return }
             guard generation == syncGeneration else {
                 #if DEBUG
@@ -292,11 +351,8 @@ final class PostsContainerViewModel {
             }
             let beforeCount = items.count
             let serverMerged = OwnerProfileOptimisticStore.merging(overlay: overlay, into: pageItems)
-            items = ProfileSectionSupport.reconcileLoadedSnapshot(
-                snapshot: serverMerged,
-                loaded: items,
-                orderedBy: \.createdAt,
-                snapshotIsPartial: cursor != nil
+            items = excludingDeletedPosts(
+                applyingServerPage(serverMerged, pageIsComplete: cursor == nil)
             )
             nextCursor = cursor
             detailCache.seed(posts: items)
@@ -351,43 +407,66 @@ final class PostsContainerViewModel {
 
     private func performLoadMore(cursor: String?, generation: Int) async {
         do {
-            let pageItems: [Post]
-            let newCursor: String?
-            if BackendV2FeatureFlags.isEnabled(.profile), let rpc {
-                let applied = try await ProfileTabBootstrapLoader.load(
-                    tab: .posts,
-                    profileID: profileOwnerID,
-                    rpc: rpc,
-                    detailCache: nil,
-                    cursor: cursor
-                )
-                pageItems = applied.posts ?? []
-                newCursor = applied.nextCursor
-            } else {
-                let page = try await profiles.wallPosts(
-                    for: profileOwnerID,
-                    page: PageRequest(cursor: cursor, limit: ProfileTabBootstrapLoader.defaultPageSize)
-                )
-                pageItems = page.items
-                newCursor = page.nextCursor
-            }
+            let page = try await profiles.wallPosts(
+                for: profileOwnerID,
+                page: PageRequest(cursor: cursor, limit: ProfileTabBootstrapLoader.defaultPageSize)
+            )
+            let newCursor = page.nextCursor
             guard generation == paginationGeneration, !Task.isCancelled else { return }
-            if pageItems.isEmpty {
+            if page.items.isEmpty {
                 nextCursor = nil
                 return
             }
-            appendUniquePosts(pageItems)
+            appendUniquePosts(page.items)
             nextCursor = newCursor
             state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
-            prefetchEngagement(for: pageItems.map(\.id))
+            prefetchEngagement(for: excludingDeletedPosts(page.items).map(\.id))
         } catch {
             guard generation == paginationGeneration else { return }
         }
     }
 
+    /// A page much smaller than the list already on screen is not a delete.
+    /// That was collapsing the profile to the one newest row.
+    private func applyingServerPage(_ incoming: [Post], pageIsComplete: Bool) -> [Post] {
+        sortedPosts(
+            ProfileSectionSupport.applyingLoadedPage(
+                incoming: incoming,
+                loaded: items,
+                orderedBy: \.createdAt,
+                pageIsComplete: pageIsComplete
+            )
+        )
+    }
+
+    private func excludingDeletedPosts(_ posts: [Post]) -> [Post] {
+        let deleted = OwnerProfileOptimisticStore.shared.deletedPostIDs
+        guard !deleted.isEmpty else { return posts }
+        return posts.filter { !deleted.contains($0.id) }
+    }
+
+    private func mergeIncomingPosts(_ incoming: [Post]) {
+        guard !incoming.isEmpty else { return }
+        let merged = ProfileSectionSupport.mergeKeepingExisting(
+            incoming: incoming,
+            loaded: items,
+            orderedBy: \.createdAt
+        )
+        items = excludingDeletedPosts(sortedPosts(merged))
+    }
+
+    private func sortedPosts(_ posts: [Post]) -> [Post] {
+        posts.sorted { lhs, rhs in
+            if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
+            if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
+            return lhs.id.rawValue > rhs.id.rawValue
+        }
+    }
+
     private func appendUniquePosts(_ pageItems: [Post]) {
         let existing = Set(items.map(\.id))
-        let fresh = pageItems.filter { !existing.contains($0.id) }
+        let deleted = OwnerProfileOptimisticStore.shared.deletedPostIDs
+        let fresh = pageItems.filter { !existing.contains($0.id) && !deleted.contains($0.id) }
         guard !fresh.isEmpty else {
             nextCursor = nil
             return

@@ -162,7 +162,7 @@ struct SocialSignInButtons: View {
             }
             .opacity(isEnabled && !isLoading ? ExperienceOpacity.opaque : ExperienceOpacity.disabled)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .disabled(!isEnabled || isLoading)
         .accessibilityIdentifier(identifier)
         .accessibilityLabel(title)

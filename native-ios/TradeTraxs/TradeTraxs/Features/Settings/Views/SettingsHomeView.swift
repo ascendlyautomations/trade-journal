@@ -31,7 +31,7 @@ struct SettingsHomeView: View {
                             systemImage: "person.crop.circle.badge.plus"
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     Button {
                         launchController.exitDemoExplore()
                     } label: {
@@ -41,7 +41,7 @@ struct SettingsHomeView: View {
                             isDestructive: true
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityIdentifier("settings.exitDemo")
                 } header: {
                     Text("Demo Mode")
@@ -56,7 +56,7 @@ struct SettingsHomeView: View {
                     } label: {
                         SettingsNavigationRow(title: "Admin", systemImage: "shield")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityIdentifier("settings.row.admin")
                 } header: {
                     Text("Internal")
@@ -76,7 +76,7 @@ struct SettingsHomeView: View {
                                 systemImage: item.systemImage
                             )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                         .accessibilityIdentifier("settings.row.\(item.route.rawValue)")
                         .modifier(SettingsAppearanceTourTarget(isAppearance: item.route == .appearance))
                     }
@@ -91,7 +91,7 @@ struct SettingsHomeView: View {
                                 systemImage: "star"
                             )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                         .accessibilityIdentifier("settings.row.leaveRating")
                     }
                     if section.id == "personal" {
@@ -106,7 +106,7 @@ struct SettingsHomeView: View {
                                 systemImage: "play.circle"
                             )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                         .accessibilityIdentifier("settings.row.appWalkthrough")
                     }
                 } header: {
@@ -130,7 +130,7 @@ struct SettingsHomeView: View {
                             systemImage: "externaldrive.badge.minus"
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .disabled(isClearingClipVideoCache)
                     .accessibilityIdentifier("settings.debug.clearClipVideoCache")
                     Button {
@@ -141,7 +141,7 @@ struct SettingsHomeView: View {
                             systemImage: "arrow.counterclockwise"
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityIdentifier("settings.debug.resetAppTour")
                 } header: {
                     Text("Developer")
@@ -162,7 +162,7 @@ struct SettingsHomeView: View {
                             isDestructive: true
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityIdentifier("settings.logout")
                 }
             }

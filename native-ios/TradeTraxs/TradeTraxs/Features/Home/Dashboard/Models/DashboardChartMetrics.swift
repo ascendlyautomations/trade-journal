@@ -10,6 +10,10 @@ nonisolated enum DashboardChartMetrics {
         var accountType: String?
     }
 
+    static func resolvedAccountMode(for input: Input) -> TradingAccountMode? {
+        DashboardScopeFilterSupport.profileStatisticsEffectiveMode(for: input.trade)
+    }
+
     struct Summary: Sendable, Equatable {
         var netPnL: Decimal
         var winRate: Decimal?
@@ -63,10 +67,32 @@ nonisolated enum DashboardChartMetrics {
     ) -> Summary {
         compute(
             from: inputs,
-            accountFilter: accountFilter,
-            accountMode: .all,
-            interval: nil,
-            dateRange: dateRange,
+            scope: DashboardClientScopeFilter(
+                accountFilter: accountFilter,
+                dateRange: dateRange,
+                customInterval: nil,
+                accountMode: .all,
+                showPublicOnly: false
+            ),
+            payoutTotal: payoutTotal,
+            now: now
+        )
+    }
+
+    static func compute(
+        from inputs: [Input],
+        scope: DashboardClientScopeFilter,
+        payoutTotal: Decimal?,
+        now: Date = Date()
+    ) -> Summary {
+        compute(
+            from: inputs,
+            accountFilter: scope.accountFilter,
+            accountMode: scope.accountMode,
+            linkedAccountModes: scope.linkedAccountModes,
+            interval: scope.customInterval,
+            dateRange: scope.customInterval == nil ? scope.dateRange : nil,
+            showPublicOnly: scope.showPublicOnly,
             payoutTotal: payoutTotal,
             now: now
         )
@@ -85,8 +111,10 @@ nonisolated enum DashboardChartMetrics {
             from: inputs,
             accountFilter: accountFilter,
             accountMode: accountMode,
+            linkedAccountModes: [:],
             interval: interval,
             dateRange: nil,
+            showPublicOnly: false,
             payoutTotal: payoutTotal,
             now: now
         )
@@ -96,8 +124,10 @@ nonisolated enum DashboardChartMetrics {
         from inputs: [Input],
         accountFilter: DashboardAccountFilter,
         accountMode: ProfileStatisticsMetrics.Mode,
+        linkedAccountModes: [TradingAccountID: TradingAccountMode],
         interval: DateInterval?,
         dateRange: DashboardDateRange?,
+        showPublicOnly: Bool,
         payoutTotal: Decimal?,
         now: Date
     ) -> Summary {
@@ -105,8 +135,10 @@ nonisolated enum DashboardChartMetrics {
             inputs,
             accountFilter: accountFilter,
             accountMode: accountMode,
+            linkedAccountModes: linkedAccountModes,
             interval: interval,
             dateRange: dateRange,
+            showPublicOnly: showPublicOnly,
             now: now
         )
         let trades = filtered.map(\.trade)
@@ -148,7 +180,7 @@ nonisolated enum DashboardChartMetrics {
                 createdAt: $0.trade.exitAt ?? $0.trade.entryAt,
                 isLong: $0.trade.side == .long,
                 session: $0.trade.sessionLabel,
-                accountMode: $0.trade.accountMode ?? TradingAccountMode.parseWireValue($0.accountType),
+                accountMode: resolvedAccountMode(for: $0),
                 sortKey: $0.trade.id.rawValue
             )
         }
@@ -209,12 +241,32 @@ nonisolated enum DashboardChartMetrics {
         dateRange: DashboardDateRange,
         now: Date = Date()
     ) -> [Trade] {
+        filteredTrades(
+            from: inputs,
+            scope: DashboardClientScopeFilter(
+                accountFilter: accountFilter,
+                dateRange: dateRange,
+                customInterval: nil,
+                accountMode: .all,
+                showPublicOnly: false
+            ),
+            now: now
+        )
+    }
+
+    static func filteredTrades(
+        from inputs: [Input],
+        scope: DashboardClientScopeFilter,
+        now: Date = Date()
+    ) -> [Trade] {
         filter(
             inputs,
-            accountFilter: accountFilter,
-            accountMode: .all,
-            interval: nil,
-            dateRange: dateRange,
+            accountFilter: scope.accountFilter,
+            accountMode: scope.accountMode,
+            linkedAccountModes: scope.linkedAccountModes,
+            interval: scope.customInterval,
+            dateRange: scope.customInterval == nil ? scope.dateRange : nil,
+            showPublicOnly: scope.showPublicOnly,
             now: now
         ).map(\.trade)
     }
@@ -231,8 +283,10 @@ nonisolated enum DashboardChartMetrics {
             inputs,
             accountFilter: accountFilter,
             accountMode: accountMode,
+            linkedAccountModes: [:],
             interval: interval,
             dateRange: nil,
+            showPublicOnly: false,
             now: now
         ).map(\.trade)
     }
@@ -249,8 +303,10 @@ nonisolated enum DashboardChartMetrics {
             inputs,
             accountFilter: accountFilter,
             accountMode: .all,
+            linkedAccountModes: [:],
             interval: nil,
             dateRange: dateRange,
+            showPublicOnly: false,
             now: now
         )
     }
@@ -259,14 +315,14 @@ nonisolated enum DashboardChartMetrics {
         _ inputs: [Input],
         accountFilter: DashboardAccountFilter,
         accountMode selectedMode: ProfileStatisticsMetrics.Mode,
+        linkedAccountModes: [TradingAccountID: TradingAccountMode],
         interval: DateInterval?,
         dateRange: DashboardDateRange?,
+        showPublicOnly: Bool,
         now: Date
     ) -> [Input] {
-        inputs.filter { input in
+        let scoped = inputs.filter { input in
             let trade = input.trade
-            let tradeAccountMode = trade.accountMode ?? TradingAccountMode.parseWireValue(input.accountType)
-            if tradeAccountMode == .backtest, selectedMode != .backtest { return false }
 
             switch accountFilter {
             case .all:
@@ -275,16 +331,13 @@ nonisolated enum DashboardChartMetrics {
                 guard trade.accountID == id else { return false }
             }
 
-            let tradeInput = ProfileStatisticsMetrics.TradeInput(
-                pnl: trade.realizedPnL?.amount,
-                createdAt: trade.entryAt,
-                isLong: trade.side == .long,
-                session: trade.sessionLabel,
-                accountMode: tradeAccountMode
-            )
-            guard ProfileStatisticsMetrics.matchesMode(tradeInput, selectedMode) else { return false }
+            guard DashboardScopeFilterSupport.matchesProfileStatisticsAccountModeFilter(
+                trade: trade,
+                linkedAccountModes: linkedAccountModes,
+                selected: selectedMode
+            ) else { return false }
 
-            let stamp = trade.exitAt ?? trade.entryAt
+            let stamp = DashboardScopeFilterSupport.dashboardTradeFilterDate(for: trade)
             if let interval {
                 return stamp >= interval.start && stamp <= interval.end
             }
@@ -293,6 +346,13 @@ nonisolated enum DashboardChartMetrics {
             }
             return true
         }
+        return applyPublicVisibilityFilter(scoped, showPublicOnly: showPublicOnly)
+    }
+
+    /// Profile → Stats public universe — `is_public` only (matches ``ProfileStatisticsTradeLoader``).
+    private static func applyPublicVisibilityFilter(_ inputs: [Input], showPublicOnly: Bool) -> [Input] {
+        guard showPublicOnly else { return inputs }
+        return inputs.filter { DashboardScopeFilterSupport.isProfileStatisticsPublicTrade($0.trade) }
     }
 
     // MARK: - Drawdown (web computeMaxDrawdown)
@@ -510,7 +570,7 @@ nonisolated enum DashboardChartMetrics {
         }
     }
 
-    // MARK: - Insights (web generateInsights subset)
+    // MARK: - Insights
 
     private static func insightItems(
         trades: [Trade],
@@ -543,7 +603,7 @@ nonisolated enum DashboardChartMetrics {
                 DashboardInsightItem(
                     id: "symbol",
                     title: "Lean into your edge market",
-                    body: "\(best.key) is your strongest average outcome (\(money(avg)) over \(best.value.count) trades). Size carefully there and journal what you’re doing differently.",
+                    body: "\(best.key) is your strongest average outcome (\(money(avg)) over \(best.value.count) trades). Size carefully there and journal what you're doing differently.",
                     kind: .symbol
                 )
             )

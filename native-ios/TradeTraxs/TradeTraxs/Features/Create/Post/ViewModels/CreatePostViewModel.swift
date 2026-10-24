@@ -20,6 +20,8 @@ final class CreatePostViewModel {
     var bodyText = ""
     private(set) var finalImage: UIImage?
     private(set) var finalImageData: Data?
+    /// Room attached by Share Room → Create Feed Post. Caption and photo stay optional.
+    let roomShare: RoomShareAttachment?
 
     private let profiles: any ProfileRepository
     private let session: any SessionProviding
@@ -46,6 +48,7 @@ final class CreatePostViewModel {
         uploadServices: GlobalUploadServices,
         contentDrafts: (any ContentDraftRepository)? = nil,
         restoredDraft: ContentDraft? = nil,
+        roomShare: RoomShareAttachment? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.profiles = profiles
@@ -54,6 +57,7 @@ final class CreatePostViewModel {
         self.objectStorage = objectStorage
         self.uploadServices = uploadServices
         self.contentDrafts = contentDrafts
+        self.roomShare = roomShare
         self.onDismiss = onDismiss
         if let restoredDraft, restoredDraft.type == .post {
             applyPostDraft(restoredDraft)
@@ -63,6 +67,7 @@ final class CreatePostViewModel {
     var hasUnsavedChanges: Bool {
         !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || finalImageData != nil
+            || roomShare != nil
     }
 
     var canPublish: Bool {
@@ -71,7 +76,9 @@ final class CreatePostViewModel {
 
     /// True when the draft has text or an image — used to enable the Publish button.
     var hasValidDraft: Bool {
-        !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || finalImageData != nil
+        !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || finalImageData != nil
+            || roomShare != nil
     }
 
     func loadIfNeeded() {
@@ -194,7 +201,8 @@ final class CreatePostViewModel {
         let spec = PostUploadSpec(
             authorID: viewerID,
             bodyText: bodyText,
-            imageData: finalImageData
+            imageData: finalImageData,
+            roomShare: roomShare
         )
         let jobID = GlobalUploadCoordinator.shared.enqueuePost(spec: spec, services: uploadServices)
         if let activeDraftID, let contentDrafts {
@@ -317,6 +325,7 @@ final class CreatePostViewModel {
                         MediaReference(id: "dev/create-post.jpg", kind: .image, altText: nil)
                     ]
                 }
+                fixture.roomShare = roomShare
                 post = fixture
             } else {
                 var imageURL: String?
@@ -339,7 +348,8 @@ final class CreatePostViewModel {
                     authorID: viewerID,
                     content: content,
                     imageURL: imageURL,
-                    imageCrop: nil
+                    imageCrop: nil,
+                    roomShare: roomShare
                 )
             }
 
@@ -372,7 +382,7 @@ final class CreatePostViewModel {
 
     private func validate() -> Bool {
         let text = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if text.isEmpty && finalImageData == nil {
+        if text.isEmpty && finalImageData == nil && roomShare == nil {
             formError = "Add text or an image to publish."
             return false
         }

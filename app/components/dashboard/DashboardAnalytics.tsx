@@ -14,7 +14,9 @@ const DashboardHoldTime = dynamic(() => import("./DashboardHoldTime"), {
   loading: () => <div className="h-44 animate-pulse rounded-xl bg-white/5" />,
 })
 const DashboardWeekdayChart = dynamic(() => import("./DashboardWeekdayChart"), {
-  loading: () => <div className="h-48 animate-pulse rounded-lg bg-white/5" />,
+  loading: () => (
+    <div className="min-h-[260px] animate-pulse rounded-xl border border-white/10 bg-white/5 md:min-h-[300px]" />
+  ),
 })
 
 type SymbolPerformanceRow = {

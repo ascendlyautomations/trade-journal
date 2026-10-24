@@ -233,6 +233,7 @@ type SettingsLinkItem = {
   id: string
   label: string
   href: string
+  description?: string
   newTab?: boolean
 }
 
@@ -308,6 +309,13 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
         id: "withdrawals",
         label: "Withdrawal History",
         href: "/withdrawals",
+      },
+      {
+        kind: "link",
+        id: "prop-firm-expenses",
+        label: "Expense Tracker",
+        href: "/prop-firm-expenses",
+        description: "Prop firm fees, business costs, and trading tools",
       },
       {
         kind: "panel",
@@ -1282,6 +1290,11 @@ export default function SettingsPage() {
                         <span className="block font-medium text-white">
                           {item.label}
                         </span>
+                        {item.description ? (
+                          <span className="mt-0.5 hidden text-xs text-gray-400 md:block">
+                            {item.description}
+                          </span>
+                        ) : null}
                       </a>
                     )
                   })}

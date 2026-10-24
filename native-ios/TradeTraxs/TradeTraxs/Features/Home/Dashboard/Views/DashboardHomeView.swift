@@ -11,8 +11,6 @@ struct DashboardHomeView: View {
     @Bindable private var brokerImportEligibilityStore = BrokerImportEligibilityStore.shared
     @Bindable private var withdrawalsHistory = WithdrawalsHistoryStore.shared
     @State private var entitlementGateRevision = 0
-    @State private var dashboardScrollHeaderTracker = FeedScrollAwareHeaderTracker()
-    @State private var dashboardScrollChromeHidden = false
     private let navigationCoordinator: NavigationCoordinator
     private let data: DataEnvironment?
 
@@ -80,6 +78,10 @@ struct DashboardHomeView: View {
             }
         }
         .experienceScreenBackground()
+        .sheet(isPresented: $viewModel.showsScopeFilterSheet) {
+            DashboardScopeFilterSheet(viewModel: viewModel)
+                .presentationDetents([.medium, .large])
+        }
         .experienceNavigationTitle("Dashboard")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -114,16 +116,6 @@ struct DashboardHomeView: View {
                 .contextualTourTarget(.dashboardNotifications)
             }
         }
-        .modifier(
-            DashboardScrollAwareHeaderHostModifier(
-                reduceMotion: reduceMotion,
-                experimentActive: dashboardScrollAwareHeaderActive,
-                navigationBarVisibility: dashboardScrollAwareNavigationBarVisibility,
-                homePathDepth: navigationEnvironment.store.paths.home.count,
-                chromeHidden: $dashboardScrollChromeHidden,
-                onReset: resetDashboardScrollAwareHeader
-            )
-        )
         .modifier(
             DashboardScrollHeaderOpaqueNavBarLifecycleModifier(
                 experimentActive: dashboardOpaqueNavBarExperimentActive,
@@ -196,6 +188,7 @@ struct DashboardHomeView: View {
         }
         .onChange(of: viewModel.summary?.tradeCount) { _, _ in
             revealContentIfNeeded()
+            viewModel.refreshPsychologyUnlockMetrics()
         }
         .onDisappear {
             viewModel.onDisappear()
@@ -217,12 +210,6 @@ struct DashboardHomeView: View {
         .onReceive(NotificationCenter.default.publisher(for: .monetizationConfigurationDidChange)) { _ in
             entitlementGateRevision += 1
         }
-        .onChange(of: viewModel.accountFilter) { _, _ in
-            resetDashboardScrollAwareHeader()
-        }
-        .onChange(of: viewModel.dateRange) { _, _ in
-            resetDashboardScrollAwareHeader()
-        }
     }
 
     private var dashboardFilterBarChrome: some View {
@@ -236,28 +223,24 @@ struct DashboardHomeView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .accessibilityIdentifier("dashboard.filters")
+            .opacity(contentRevealed || reduceMotion ? 1 : 0.001)
+            .animation(
+                ExperienceMotion.preferred(ExperienceMotion.navigation, reduceMotion: reduceMotion),
+                value: contentRevealed
+            )
+            .animation(
+                ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
+                value: viewModel.scopeFilterTimeLabel
+            )
+            .animation(
+                ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
+                value: viewModel.accountFilter
+            )
     }
 
-    private var dashboardScrollAwareHeaderActive: Bool {
-        FeedScrollAwareHeaderExperiment.dashboardScrollHeaderEnabled
-            && tabIsActive
-            && navigationEnvironment.store.paths.home.isEmpty
-            && viewModel.summary != nil
-    }
-
-    private var dashboardScrollAwareNavigationBarVisibility: Visibility {
-        dashboardScrollAwareHeaderActive && dashboardScrollChromeHidden ? .hidden : .visible
-    }
-
-    private func resetDashboardScrollAwareHeader() {
-        dashboardScrollHeaderTracker.reset()
-        dashboardScrollChromeHidden = false
-    }
-
-    /// Feed-equivalent opaque UIKit nav bar while testing scroll-header restore (Dashboard root only).
+    /// Opaque nav bar on the Dashboard root so header chrome stays visually stable.
     private var dashboardOpaqueNavBarExperimentActive: Bool {
         DashboardScrollHeaderOpaqueNavBarExperiment.matchesFeedOpaqueNavigationBar
-            && FeedScrollAwareHeaderExperiment.dashboardScrollHeaderEnabled
             && tabIsActive
             && navigationEnvironment.store.paths.home.isEmpty
             && viewModel.summary != nil
@@ -443,13 +426,8 @@ struct DashboardHomeView: View {
                         .padding(.horizontal, ExperienceSpacing.md)
                         .padding(.bottom, ExperienceSpacing.sm)
                     }
-                    DashboardInsightsSection(
-                        title: "Insights",
-                        subtitle: "Coaching from your recent activity",
-                        insights: summary.insights,
-                        unlockProgress: viewModel.psychologyInsightsUnlockProgress
-                    )
-                    .padding(.bottom, ExperienceSpacing.lg)
+                    DashboardInsightsSection(presentation: viewModel.insightsPresentation)
+                        .padding(.bottom, ExperienceSpacing.lg)
 
                     if restrictsPremiumPsychologyAndAI {
                         psychologyAnalyticsUpgradeSection
@@ -458,8 +436,9 @@ struct DashboardHomeView: View {
                         PsychologyInsightsSection(
                             title: "Psychology Insights",
                             subtitle: "Patterns from your trades and daily check-ins",
-                            cards: viewModel.psychologyReport?.dashboardCards ?? [],
+                            cards: viewModel.dashboardPsychologyInsightCards,
                             unlockProgress: viewModel.psychologyInsightsUnlockProgress,
+                            unlockMetricsReady: viewModel.psychologyUnlockMetricsReady,
                             onSelect: { card in
                                 viewModel.openPsychologyAnalytics(
                                     highlightSection: viewModel.psychologySectionID(for: card.category)
@@ -480,7 +459,7 @@ struct DashboardHomeView: View {
             )
             .animation(
                 ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-                value: viewModel.dateRange
+                value: viewModel.scopeFilterTimeLabel
             )
             .animation(
                 ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
@@ -490,35 +469,6 @@ struct DashboardHomeView: View {
                 revealContentIfNeeded()
             }
         }
-        .modifier(
-            ScrollAwareHeaderScrollModifier(
-                isActive: dashboardScrollAwareHeaderActive,
-                reduceMotion: reduceMotion,
-                debugSurface: "dashboard.scroll",
-                trackingMode: .navigationBarInsetStable,
-                tracker: $dashboardScrollHeaderTracker,
-                chromeHidden: $dashboardScrollChromeHidden
-            )
-        )
-        #if DEBUG
-        .background {
-            FeedScrollChromeUIKitProbe(label: "dashboard.scroll")
-        }
-        .onAppear {
-            FeedScrollAwareHeaderDiagnostics.logScrollListenerAttached(
-                isActive: dashboardScrollAwareHeaderActive,
-                surface: "dashboard.scroll"
-            )
-            Task {
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
-                guard dashboardScrollAwareHeaderActive else { return }
-                FeedScrollAwareHeaderDiagnostics.logNoGeometryActionsWarning(
-                    surface: "dashboard.scroll",
-                    secondsVisible: 3
-                )
-            }
-        }
-        #endif
         .scrollBounceBehavior(.basedOnSize, axes: .vertical)
         .onChange(of: ContextualTourCoordinator.shared.scrollTarget) { _, target in
             guard let target else { return }
@@ -624,11 +574,12 @@ struct DashboardHomeView: View {
                 navigationCoordinator.present(sheet: .dailyCheckIn)
             }
 
-            if includeBrokerImport, brokerImportEligibilityStore.showsDashboardImportAction {
-                DashboardBrokerImportCard(store: brokerImportEligibilityStore) {
-                    ExperienceHaptics.play(.selection)
-                    navigationCoordinator.present(sheet: .tradeImportReminder)
-                }
+            if includeBrokerImport, let data {
+                DashboardImportTradesSection(
+                    data: data,
+                    store: brokerImportEligibilityStore,
+                    navigationCoordinator: navigationCoordinator
+                )
             }
         }
         .padding(.horizontal, ExperienceSpacing.md)

@@ -97,6 +97,7 @@ enum SessionScopedCaches {
         CheckInHistorySessionStore.shared.invalidate()
         TradingReportSessionStore.shared.invalidate()
         CreateAchievementPrefillStore.shared.clear()
+        PendingRoomShareStore.shared.clear()
         Task { await data.cache.images.removeAllImages() }
         GlobalUploadCoordinator.shared.invalidateForSessionChange()
         SessionBillingEntitlementStore.shared.clear()

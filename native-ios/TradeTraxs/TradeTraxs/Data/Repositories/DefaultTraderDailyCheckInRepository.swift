@@ -47,7 +47,7 @@ nonisolated struct DefaultTraderDailyCheckInRepository: TraderDailyCheckInReposi
                 URLQueryItem(name: "order", value: "check_in_date.desc"),
             ]
         )
-        return try rows.map { try TraderDailyCheckInMapper.map($0) }
+        return rows.compactMap { TraderDailyCheckInMapper.mapIfValid($0) }
     }
 
     func upsert(

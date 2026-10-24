@@ -6,10 +6,14 @@ import DashboardMobileProTabs from "./DashboardMobileProTabs"
 import DashboardStatsGrid from "./DashboardStatsGrid"
 
 const DashboardEquityCurve = dynamic(() => import("./DashboardEquityCurve"), {
-  loading: () => <div className="h-48 animate-pulse rounded-lg bg-white/5" />,
+  loading: () => (
+    <div className="h-[268px] animate-pulse rounded-xl border border-white/10 bg-white/5 md:h-[300px]" />
+  ),
 })
 const DashboardWeekdayChart = dynamic(() => import("./DashboardWeekdayChart"), {
-  loading: () => <div className="h-48 animate-pulse rounded-lg bg-white/5" />,
+  loading: () => (
+    <div className="min-h-[260px] animate-pulse rounded-xl border border-white/10 bg-white/5 md:min-h-[300px]" />
+  ),
 })
 const DashboardSessionChart = dynamic(() => import("./DashboardSessionChart"), {
   loading: () => <div className="h-48 animate-pulse rounded-lg bg-white/5" />,
@@ -141,16 +145,14 @@ function DashboardCharts({
   )
 
   const mobileEquity = deferredSectionsReady ? (
-    <div data-tt-tour-target="dashboardPerformance">
-      <DashboardEquityCurve
-        variant="mobile"
-        data={equityData}
-        totalTrades={totalTrades}
-        drawdownLimitLineY={drawdownLimitLineY}
-        equityCurveUsesAccountBalance={equityCurveUsesAccountBalance}
-        showPersonalDrawdownFloor={showPersonalDrawdownFloor}
-      />
-    </div>
+    <DashboardEquityCurve
+      variant="mobile"
+      data={equityData}
+      totalTrades={totalTrades}
+      drawdownLimitLineY={drawdownLimitLineY}
+      equityCurveUsesAccountBalance={equityCurveUsesAccountBalance}
+      showPersonalDrawdownFloor={showPersonalDrawdownFloor}
+    />
   ) : (
     <ChartSkeleton className="h-48" />
   )
@@ -166,21 +168,19 @@ function DashboardCharts({
 
   const desktopEquity =
     showEquity && deferredSectionsReady ? (
-      <div data-tt-tour-target="dashboardPerformance">
-        <DashboardEquityCurve
-          variant="desktop"
-          isPro={isPro}
-          data={equityData}
-          profitFactor={isPro ? profitFactor : undefined}
-          currentStreak={isPro ? currentStreak : undefined}
-          avgDay={isPro ? avgDay : undefined}
-          consistency={isPro ? consistency : undefined}
-          totalTrades={totalTrades}
-          drawdownLimitLineY={drawdownLimitLineY}
-          equityCurveUsesAccountBalance={equityCurveUsesAccountBalance}
-          showPersonalDrawdownFloor={showPersonalDrawdownFloor}
-        />
-      </div>
+      <DashboardEquityCurve
+        variant="desktop"
+        isPro={isPro}
+        data={equityData}
+        profitFactor={isPro ? profitFactor : undefined}
+        currentStreak={isPro ? currentStreak : undefined}
+        avgDay={isPro ? avgDay : undefined}
+        consistency={isPro ? consistency : undefined}
+        totalTrades={totalTrades}
+        drawdownLimitLineY={drawdownLimitLineY}
+        equityCurveUsesAccountBalance={equityCurveUsesAccountBalance}
+        showPersonalDrawdownFloor={showPersonalDrawdownFloor}
+      />
     ) : showEquity ? (
       <ChartSkeleton className="h-72" />
     ) : null

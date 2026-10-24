@@ -146,15 +146,14 @@ nonisolated struct PsychologyInsightsUnlockProgress: Equatable, Sendable {
         min(tradeCount, Self.requiredCount)
     }
 
-    /// Check-ins on Eastern trade dates present in the same filtered trade set psychology analyzes.
+    var displayCheckInDayCountForGate: Int {
+        min(tradingDayCheckInCount, Self.requiredCount)
+    }
+
+    /// Matches web `computePsychologyInsightsUnlockProgress` — filtered trade count + Check-In History → Psychology day count.
     static func compute(trades: [Trade], checkIns: [TraderDailyCheckIn]) -> Self {
-        let checkInByDate = Dictionary(uniqueKeysWithValues: checkIns.map { ($0.checkInDate, $0) })
-        let tradingDaysWithCheckIn = Set(
-            trades.map { TraderPsychologyAnalyticsFoundation.tradeDateKey(for: $0) }
-                .filter { checkInByDate[$0] != nil }
-        )
-        return Self(
-            tradingDayCheckInCount: tradingDaysWithCheckIn.count,
+        Self(
+            tradingDayCheckInCount: PsychologyCheckInHistoryGate.countPsychologyCheckInHistoryDays(checkIns),
             tradeCount: trades.count
         )
     }

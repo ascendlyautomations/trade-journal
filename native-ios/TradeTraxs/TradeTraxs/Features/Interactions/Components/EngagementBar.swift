@@ -7,6 +7,8 @@ struct EngagementBar: View {
     @Bindable var vaultStore: VaultStore
     var onCommentTap: () -> Void
     var onShareTap: (() -> Void)? = nil
+    /// Tap on the row’s empty space, such as the gap beside Share. Buttons keep their own actions.
+    var onEmptyAreaTap: (() -> Void)? = nil
     var vaultRef: VaultContentRef?
     var visualStyle: EngagementBarVisualStyle = .standard
 
@@ -20,7 +22,13 @@ struct EngagementBar: View {
                 ShareButton(action: onShareTap)
             }
 
-            Spacer(minLength: 0)
+            if let onEmptyAreaTap {
+                Spacer(minLength: 0)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onEmptyAreaTap)
+            } else {
+                Spacer(minLength: 0)
+            }
 
             if let vaultRef {
                 VaultButton(ref: vaultRef, store: vaultStore) {
@@ -29,7 +37,14 @@ struct EngagementBar: View {
                 }
             }
         }
-        .frame(height: EngagementActionRowMetrics.rowHeight, alignment: .center)
+        .frame(maxWidth: .infinity, minHeight: EngagementActionRowMetrics.rowHeight, alignment: .center)
+        .background {
+            if let onEmptyAreaTap {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onEmptyAreaTap)
+            }
+        }
         .environment(\.engagementBarVisualStyle, visualStyle)
         .sheet(isPresented: $showsVaultSheet) {
             if let vaultRef {

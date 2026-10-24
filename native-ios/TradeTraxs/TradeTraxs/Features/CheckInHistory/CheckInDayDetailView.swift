@@ -144,7 +144,7 @@ struct CheckInDayDetailView: View {
                     .padding(ExperienceSpacing.md)
                     .background(colors.surfaceSecondary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
             }
         }
     }

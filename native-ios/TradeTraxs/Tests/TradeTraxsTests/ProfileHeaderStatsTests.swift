@@ -150,6 +150,61 @@ final class ProfileHeaderStatsTests: XCTestCase {
     }
 
     @MainActor
+    func testPartialOwnerTradeCacheDoesNotReplaceLoadedHeaderStats() {
+        let owner = ProfileID("owner-header-partial")
+        let cache = DetailPresentationCache()
+        defer { SessionOwnerTradesStore.shared.invalidate(profileID: owner) }
+
+        let winRate = Decimal(string: "0.62")
+        let profitFactor = Decimal(string: "1.8")
+        let payout = Decimal(string: "500")
+        cache.seed(
+            stats: ProfileStats(
+                profileID: owner,
+                followerCount: 12,
+                followingCount: 4,
+                postCount: 3,
+                tradeCount: 50,
+                publicTradeCount: 50,
+                winRate: winRate,
+                profitFactor: profitFactor,
+                payoutTotal: payout
+            )
+        )
+
+        var onlyNew = ProfileTradeFixtures.samples(owner: owner)[0]
+        onlyNew.id = TradeID("new-trade")
+        onlyNew.visibility = .public
+        onlyNew.realizedPnL = Money(amount: 10)
+        SessionOwnerTradesStore.shared.upsert(onlyNew, detailCache: cache)
+
+        ProfileOwnerHeaderStatsCoordinator.shared.configure(
+            detailCache: cache,
+            currentUserProfile: CurrentUserProfileStore(
+                profiles: ProfileHeaderStatsStubProfiles(),
+                session: ProfileHeaderStatsSession(viewerID: owner),
+                imagePipeline: PlaceholderImagePipeline(),
+                detailCache: cache
+            ),
+            profiles: ProfileHeaderStatsStubProfiles()
+        )
+
+        ProfileOwnerHeaderStatsCoordinator.shared.reconcile(ownerID: owner, publicOverviewDelta: 0)
+        XCTAssertEqual(cache.stats(for: owner)?.publicTradeCount, 50)
+        XCTAssertEqual(cache.stats(for: owner)?.winRate, winRate)
+
+        ProfileOwnerHeaderStatsCoordinator.shared.reconcile(ownerID: owner, publicOverviewDelta: 1)
+        let stats = cache.stats(for: owner)
+        XCTAssertEqual(stats?.publicTradeCount, 51)
+        XCTAssertEqual(stats?.tradeCount, 51)
+        XCTAssertEqual(stats?.winRate, winRate)
+        XCTAssertEqual(stats?.profitFactor, profitFactor)
+        XCTAssertEqual(stats?.followerCount, 12)
+        XCTAssertEqual(stats?.postCount, 3)
+        XCTAssertEqual(stats?.payoutTotal, payout)
+    }
+
+    @MainActor
     func testPartialStubCannotOverwriteRicherCachedStats() {
         let cache = DetailPresentationCache()
         let profileID = ProfileID("viewer")

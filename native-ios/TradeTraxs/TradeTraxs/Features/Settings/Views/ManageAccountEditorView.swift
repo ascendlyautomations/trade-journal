@@ -62,6 +62,9 @@ struct ManageAccountEditorView: View {
                 Section {
                     Toggle("Display in Account Dropdowns", isOn: $showInAccountDropdowns)
                         .accessibilityIdentifier("manageAccounts.showInDropdowns")
+                        .manageAccountFormRow()
+                } header: {
+                    sectionHeader("Visibility")
                 } footer: {
                     Text("Hide this account from account selectors without deleting its data.")
                 }
@@ -74,6 +77,7 @@ struct ManageAccountEditorView: View {
                     Text("Prop Firm").tag(TradingAccountCategory.propFirm)
                     Text("Backtest").tag(TradingAccountCategory.backtest)
                 }
+                .manageAccountFormRow()
                 .onChange(of: draft.category) { previous, category in
                     if category == .backtest,
                        ProAccessGate.presentFeatureIfNeeded(
@@ -91,23 +95,26 @@ struct ManageAccountEditorView: View {
                     }
                 }
 
-                SettingsLabeledField(title: "Account Name") {
+                accountField("Account Name") {
                     TextField("Name", text: $draft.name)
                         .textInputAutocapitalization(.words)
                         .accessibilityIdentifier("manageAccounts.name")
                 }
+                .manageAccountFormRow()
 
-                SettingsLabeledField(title: "Account Value", helper: "Starting or current account size") {
-                    TextField("0", text: $draft.sizeDigits.numericInput(.accountSize))
-                        .keyboardType(.numberPad)
-                        .accessibilityIdentifier("manageAccounts.size")
+                HStack(alignment: .top, spacing: ExperienceSpacing.md) {
+                    accountField("Account Value") {
+                        TextField("0", text: $draft.sizeDigits.numericInput(.accountSize))
+                            .keyboardType(.numberPad)
+                            .accessibilityIdentifier("manageAccounts.size")
+                    }
+                    accountField("Account ID") {
+                        TextField("Optional", text: $draft.accountNumber)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    }
                 }
-
-                SettingsLabeledField(title: "Account ID", helper: "Optional broker or firm account number") {
-                    TextField("Optional", text: $draft.accountNumber)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                }
+                .manageAccountFormRow()
 
                 if draft.category != .backtest {
                     Picker("Mode", selection: $draft.mode) {
@@ -116,69 +123,104 @@ struct ManageAccountEditorView: View {
                                 .tag(mode)
                         }
                     }
+                    .manageAccountFormRow()
                 }
 
-                SettingsLabeledField(title: "Note", helper: "Optional reminder for yourself") {
+                if draft.category == .propFirm,
+                   draft.mode == .evaluation || draft.mode == .funded {
+                    accountField(
+                        "Account Purchase Cost",
+                        caption: "Optional. Leave blank to keep a cost you already saved."
+                    ) {
+                        TextField("Optional", text: $draft.purchaseCostDigits.numericInput(.unsignedCurrency))
+                            .keyboardType(.decimalPad)
+                            .accessibilityIdentifier("manageAccounts.purchaseCost")
+                    }
+                    .manageAccountFormRow()
+                    DatePicker(
+                        "Purchase Date",
+                        selection: purchaseDateBinding,
+                        in: ...Date.now,
+                        displayedComponents: .date
+                    )
+                    .manageAccountFormRow()
+                    .accessibilityIdentifier("manageAccounts.purchaseDate")
+                }
+
+                accountField("Note") {
                     TextField("Optional", text: $draft.note, axis: .vertical)
                         .lineLimit(2...4)
                 }
+                .manageAccountFormRow()
             } header: {
-                Text("Account")
-            } footer: {
-                Text("These details help you organize trades across accounts.")
+                sectionHeader("Account")
             }
 
             if draft.category == .propFirm {
                 Section {
-                    SettingsLabeledField(title: "Max Drawdown", helper: "Dollars") {
-                        TextField("0", text: bindingDecimal(\.maxDrawdown))
-                            .keyboardType(.decimalPad)
+                    HStack(alignment: .top, spacing: ExperienceSpacing.md) {
+                        accountField("Max Drawdown") {
+                            TextField("0", text: bindingDecimal(\.maxDrawdown))
+                                .keyboardType(.decimalPad)
+                        }
+                        accountField("Daily Drawdown") {
+                            TextField("0", text: bindingDecimal(\.dailyDrawdown))
+                                .keyboardType(.decimalPad)
+                        }
                     }
+                    .manageAccountFormRow()
+
                     Picker("Drawdown Type", selection: bindingDrawdownType()) {
                         Text("Unspecified").tag(Optional<PropFirmDrawdownType>.none)
                         ForEach(PropFirmDrawdownType.allCases, id: \.self) { kind in
                             Text(kind.displayName).tag(Optional(kind))
                         }
                     }
-                    SettingsLabeledField(title: "Daily Drawdown", helper: "Dollars") {
-                        TextField("0", text: bindingDecimal(\.dailyDrawdown))
-                            .keyboardType(.decimalPad)
+                    .manageAccountFormRow()
+
+                    HStack(alignment: .top, spacing: ExperienceSpacing.md) {
+                        accountField("Profit Target") {
+                            TextField("0", text: bindingDecimal(\.profitTarget))
+                                .keyboardType(.decimalPad)
+                        }
+                        accountField("Consistency") {
+                            TextField("0", text: bindingDecimal(\.consistencyPercent))
+                                .keyboardType(.decimalPad)
+                        }
                     }
-                    SettingsLabeledField(title: "Profit Target", helper: "Dollars") {
-                        TextField("0", text: bindingDecimal(\.profitTarget))
-                            .keyboardType(.decimalPad)
+                    .manageAccountFormRow()
+
+                    HStack(alignment: .top, spacing: ExperienceSpacing.md) {
+                        accountField("Winning Days") {
+                            TextField("0", text: bindingInt(\.winningDaysRequired))
+                                .keyboardType(.numberPad)
+                                .accessibilityLabel("Winning days required")
+                        }
+                        accountField("Day Threshold") {
+                            TextField("0", text: bindingDecimal(\.winningDayThreshold))
+                                .keyboardType(.decimalPad)
+                                .accessibilityLabel("Winning day threshold")
+                        }
                     }
-                    SettingsLabeledField(title: "Consistency", helper: "Percent") {
-                        TextField("0", text: bindingDecimal(\.consistencyPercent))
-                            .keyboardType(.decimalPad)
-                    }
-                    SettingsLabeledField(title: "Winning Days Required") {
-                        TextField("0", text: bindingInt(\.winningDaysRequired))
-                            .keyboardType(.numberPad)
-                    }
-                    SettingsLabeledField(title: "Winning Day Threshold", helper: "Dollars") {
-                        TextField("0", text: bindingDecimal(\.winningDayThreshold))
-                            .keyboardType(.decimalPad)
-                    }
+                    .manageAccountFormRow()
                 } header: {
-                    Text("Prop Firm Rules")
-                } footer: {
-                    Text("Optional limits from your prop firm challenge or funded account.")
+                    sectionHeader("Prop Firm Rules")
                 }
             }
 
             if case .edit(let account) = mode {
                 Section {
-                    SettingsLabeledField(
-                        title: "Public Status",
-                        helper: "Optional label on your profile (e.g. Passed, Funded, Blown)"
+                    accountField(
+                        "Public Status",
+                        caption: "Optional label on your profile"
                     ) {
-                        TextField("Optional", text: $customPublicStatus)
+                        TextField("Passed, Funded, Blown", text: $customPublicStatus)
                             .textInputAutocapitalization(.words)
                             .accessibilityIdentifier("manageAccounts.publicStatus")
                     }
+                    .manageAccountFormRow()
                 } header: {
-                    Text("Profile")
+                    sectionHeader("Profile")
                 }
 
                 if PropFirmPayoutPolicy.supportsRecordPayout(for: account) {
@@ -190,8 +232,9 @@ struct ManageAccountEditorView: View {
                         }
                         .disabled(data == nil || navigationCoordinator == nil)
                         .accessibilityIdentifier("manageAccounts.recordPayout")
+                        .manageAccountFormRow()
                     } header: {
-                        Text("Payout Cycle")
+                        sectionHeader("Payout Cycle")
                     } footer: {
                         Text("Closes the current payout cycle and starts the next from your post-payout balance. Share publicly afterward with a payout Achievement.")
                     }
@@ -221,7 +264,7 @@ struct ManageAccountEditorView: View {
                             }
                         )
                     } header: {
-                        Text("Manual Payouts")
+                        sectionHeader("Manual Payouts")
                     } footer: {
                         Text("Private to you. Share payouts publicly by posting payout achievements.")
                     }
@@ -229,8 +272,9 @@ struct ManageAccountEditorView: View {
                     Section {
                         Text("Payout recording is not available for evaluation, simulated, or backtest accounts.")
                             .experienceStyle(.footnote, color: colors.secondaryText)
+                            .manageAccountFormRow()
                     } header: {
-                        Text("Payouts")
+                        sectionHeader("Payouts")
                     }
                 }
             }
@@ -241,12 +285,16 @@ struct ManageAccountEditorView: View {
                         .foregroundStyle(colors.loss)
                         .font(.footnote)
                         .accessibilityIdentifier("manageAccounts.formError")
+                        .manageAccountFormRow()
                 }
             }
         }
-        .experienceTradeTraxsFormStyle(pageBackground: false)
-        .experienceNavigationTitle(title)
         .scrollDismissesKeyboard(.interactively)
+        .experienceTradeTraxsFormStyle(pageBackground: false)
+        .experienceScreenBackground()
+        .listSectionSpacing(ExperienceSpacing.xxs)
+        .contentMargins(.top, ExperienceSpacing.xxs, for: .scrollContent)
+        .experienceNavigationTitle(title)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { dismiss() }
@@ -289,12 +337,36 @@ struct ManageAccountEditorView: View {
             guard let accountID = editAccountID else { return }
             let account = viewModel.accounts.first(where: { $0.id == accountID })
                 ?? editModeAccount
-            guard let account, PropFirmPayoutPolicy.supportsManualPayoutLedger(for: account) else { return }
-            await viewModel.loadPayoutEntries(for: accountID)
+            if let account, PropFirmPayoutPolicy.supportsManualPayoutLedger(for: account) {
+                await viewModel.loadPayoutEntries(for: accountID)
+            }
+            await loadAccountPurchaseCost(accountID: accountID)
         }
         .onChange(of: viewModel.accounts) { _, _ in
             syncInsightsFromViewModel()
         }
+    }
+
+    private func sectionHeader(_ title: LocalizedStringKey) -> some View {
+        Text(title)
+            .padding(.top, -ExperienceSpacing.xxs)
+    }
+
+    private func accountField<Content: View>(
+        _ title: String,
+        caption: String? = nil,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            Text(title)
+                .experienceStyle(.caption, color: colors.secondaryText)
+            content()
+            if let caption {
+                Text(caption)
+                    .experienceStyle(.caption, color: colors.tertiaryText)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func syncInsightsFromViewModel() {
@@ -313,6 +385,28 @@ struct ManageAccountEditorView: View {
     private var editModeAccount: TradingAccount? {
         if case .edit(let account) = mode { return account }
         return nil
+    }
+
+    private func loadAccountPurchaseCost(accountID: TradingAccountID) async {
+        guard let data else { return }
+        guard draft.category == .propFirm,
+              draft.mode == .evaluation || draft.mode == .funded
+        else { return }
+        guard draft.purchaseCostDigits.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard let expense = try? await PropFirmExpenseRepository(supabase: data.supabase)
+            .accountPurchaseExpense(accountID: accountID)
+        else { return }
+        draft.purchaseCostDigits = PropFirmExpenseMoney.editingText(expense.costPerAccount)
+        if draft.purchaseDate == nil, let date = PropFirmExpenseMoney.date(fromDay: expense.datePaid) {
+            draft.purchaseDate = date
+        }
+    }
+
+    private var purchaseDateBinding: Binding<Date> {
+        Binding(
+            get: { draft.purchaseDate ?? .now },
+            set: { draft.purchaseDate = $0 }
+        )
     }
 
     private func save() async {
@@ -394,5 +488,38 @@ private extension ManageAccountEditorView.Mode {
     var isCreate: Bool {
         if case .create = self { return true }
         return false
+    }
+}
+
+private enum ManageAccountFormLayout {
+    static let rowInsets = EdgeInsets(
+        top: ExperienceSpacing.xxs,
+        leading: ExperienceSpacing.md,
+        bottom: ExperienceSpacing.xxs,
+        trailing: ExperienceSpacing.md
+    )
+}
+
+private extension View {
+    /// Same grouped cards as Add Trade. Light mode paints an explicit card so the boxes stay visible.
+    func manageAccountFormRow() -> some View {
+        modifier(ManageAccountFormRowModifier())
+    }
+}
+
+private struct ManageAccountFormRowModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.themeColors) private var colors
+
+    func body(content: Content) -> some View {
+        if colorScheme == .dark {
+            content
+                .experienceDashboardListRow()
+                .listRowInsets(ManageAccountFormLayout.rowInsets)
+        } else {
+            content
+                .listRowBackground(colors.cardBackground)
+                .listRowInsets(ManageAccountFormLayout.rowInsets)
+        }
     }
 }

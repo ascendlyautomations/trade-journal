@@ -96,6 +96,8 @@ nonisolated enum TradeMapper: DTOMapper {
             isInitialImport: dto.is_initial_import,
             importSource: mapImportSource(dto.import_source),
             importFingerprint: dto.import_fingerprint,
+            wireMode: nilIfEmpty(dto.mode),
+            wireAccountType: nilIfEmpty(dto.account_type),
             accountMode: mapDenormalizedAccountMode(
                 accountType: dto.account_type,
                 mode: dto.mode

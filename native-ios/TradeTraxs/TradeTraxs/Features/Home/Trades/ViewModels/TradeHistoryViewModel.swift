@@ -32,6 +32,7 @@ final class TradeHistoryViewModel {
     var draftFilters = TradeHistoryFilters()
     var showsFilterSheet = false
     var pendingDelete: TradeOwnerJournalSummary?
+    var deleteErrorMessage: String?
     var sharePayload: SharePayload?
 
     /// Local-only constraints seeded from Dashboard chart taps (not server filter fields).
@@ -100,8 +101,50 @@ final class TradeHistoryViewModel {
     }
 
     var resultCountLabel: String {
-        let count = displayItems.count
+        let count = resolvedResultTradeCount
         return count == 1 ? "1 trade" : "\(count) trades"
+    }
+
+    /// Total trades for the current query — not limited to the loaded page.
+    private var resolvedResultTradeCount: Int {
+        if hasActiveQuery || hasLocalBrowseConstraints {
+            if let count = matchingTradeCountFromCompleteOwnerCache() {
+                return count
+            }
+        } else if let profileID,
+                  let meta = SessionOwnerTradesStore.shared.snapshotMetadata(for: profileID)
+        {
+            return meta.totalTradeCount
+        } else if let count = matchingTradeCountFromCompleteOwnerCache() {
+            return count
+        }
+
+        return items.count
+    }
+
+    private func matchingTradeCountFromCompleteOwnerCache() -> Int? {
+        guard let profileID else { return nil }
+        guard SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID),
+              let ownerTrades = SessionOwnerTradesStore.shared.cached(for: profileID)
+        else { return nil }
+
+        if hasLocalBrowseConstraints {
+            return TradeHistoryOwnerSeed.page(
+                from: ownerTrades,
+                query: currentQuery,
+                limit: .max,
+                context: matchContext
+            )
+            .items
+            .map(TradeSummaryMapper.ownerJournal(fromListTrade:))
+            .filter(matchesLocalBrowseConstraints)
+            .count
+        }
+        return TradeHistoryOwnerSeed.matchingCount(
+            from: ownerTrades,
+            query: currentQuery,
+            context: matchContext
+        )
     }
 
     var accountMenuTitle: String {
@@ -195,7 +238,11 @@ final class TradeHistoryViewModel {
     func refresh() async {
         coldLoadFinished = false
         loadGeneration &+= 1
-        await reload(reason: "refresh", preserveScroll: false, generation: loadGeneration)
+        let generation = loadGeneration
+        await UncancelledRefresh.run { [weak self] in
+            guard let self else { return }
+            await self.reload(reason: "refresh", preserveScroll: false, generation: generation)
+        }
     }
 
     func searchChanged() {
@@ -225,6 +272,18 @@ final class TradeHistoryViewModel {
     func openFilters() {
         ExperienceHaptics.play(.selection)
         draftFilters = filters
+        let hadLegacyNumericBounds = draftFilters.pnlMin != nil
+            || draftFilters.pnlMax != nil
+            || draftFilters.rrMin != nil
+            || draftFilters.rrMax != nil
+        draftFilters.pnlMin = nil
+        draftFilters.pnlMax = nil
+        draftFilters.rrMin = nil
+        draftFilters.rrMax = nil
+        if hadLegacyNumericBounds {
+            filters = draftFilters
+            Task { await reload(reason: "filters") }
+        }
         showsFilterSheet = true
     }
 
@@ -238,6 +297,10 @@ final class TradeHistoryViewModel {
 
     func applyDraftFilters() {
         ExperienceHaptics.play(.selection)
+        draftFilters.pnlMin = nil
+        draftFilters.pnlMax = nil
+        draftFilters.rrMin = nil
+        draftFilters.rrMax = nil
         filters = draftFilters
         showsFilterSheet = false
         Task { await reload(reason: "filters") }
@@ -418,11 +481,22 @@ final class TradeHistoryViewModel {
         }
     }
 
-    func confirmDelete() async {
-        guard let item = pendingDelete else { return }
+    func confirmDelete(item explicitItem: TradeOwnerJournalSummary? = nil) async {
+        let item = explicitItem ?? pendingDelete
+        guard let item else { return }
         pendingDelete = nil
+        deleteErrorMessage = nil
         let previous = TradeSummaryMapper.listMatchTrade(from: item)
-        let owner = item.summary.ownerProfileID
+        let owner: ProfileID
+        if let profileID {
+            owner = profileID
+        } else if let userID = await session.currentUserID {
+            owner = ProfileID(userID.rawValue)
+        } else {
+            deleteErrorMessage = SessionViewerIdentity.sessionUnavailableMessage
+            ExperienceHaptics.play(.warning)
+            return
+        }
         let removedIndex = items.firstIndex { $0.id == item.id }
         items.removeAll { $0.id == item.id }
         persistSnapshot()
@@ -445,7 +519,7 @@ final class TradeHistoryViewModel {
                 items = TradeHistorySortSupport.sorted(items, sort: filters.sort)
             }
             persistSnapshot()
-            paginationErrorMessage = ProfileSectionSupport.message(for: error)
+            deleteErrorMessage = ProfileSectionSupport.message(for: error)
             ExperienceHaptics.play(.warning)
         }
     }

@@ -311,6 +311,7 @@ final class ProfileBootstrapV2Tests: XCTestCase {
         let postsVM = PostsContainerViewModel(
             profileID: owner,
             profiles: environment.data.profiles,
+            session: environment.data.session,
             navigationCoordinator: environment.navigation.coordinator,
             detailCache: DetailPresentationCache()
         )
@@ -347,6 +348,7 @@ final class ProfileBootstrapV2Tests: XCTestCase {
         let postsVM = PostsContainerViewModel(
             profileID: owner,
             profiles: environment.data.profiles,
+            session: environment.data.session,
             navigationCoordinator: environment.navigation.coordinator,
             detailCache: DetailPresentationCache()
         )
@@ -386,6 +388,7 @@ final class ProfileBootstrapV2Tests: XCTestCase {
         let postsVM = PostsContainerViewModel(
             profileID: owner,
             profiles: environment.data.profiles,
+            session: environment.data.session,
             navigationCoordinator: environment.navigation.coordinator,
             detailCache: DetailPresentationCache()
         )

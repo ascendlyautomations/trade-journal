@@ -68,7 +68,7 @@ struct CreateComposerPreviewDismissButton: View {
                 .frame(width: 26, height: 26)
                 .background(.black.opacity(0.62), in: Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityLabel(accessibilityLabel)
     }
 }

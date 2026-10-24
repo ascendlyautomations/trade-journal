@@ -33,6 +33,7 @@ import {
   type QuickTradeCsvFormPatch,
 } from "@/lib/parseQuickCsvPaste"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
+import { syncPropFirmAccountPurchaseExpense } from "@/lib/propFirmExpenses"
 import { handleTradeNumericInput } from "@/lib/formatMoney"
 import TradeFormCurrencyInput from "@/app/components/trade/TradeFormCurrencyInput"
 import {
@@ -747,6 +748,27 @@ export default function QuickTradeModal({
       }
 
       if (!data) return
+
+      const purchaseExpense = await syncPropFirmAccountPurchaseExpense(
+        supabase,
+        userId,
+        String(data.id),
+        {
+          name: newAccount.name,
+          category: newAccount.category,
+          mode: newAccount.mode,
+          purchaseCost: newAccount.purchaseCost,
+          datePaid: newAccount.purchaseDate,
+        }
+      )
+      if (!purchaseExpense.ok) {
+        showPopup(
+          persistentError(
+            "Purchase Cost Not Saved",
+            "Account saved, but the purchase cost was not recorded. Edit the account and save again."
+          )
+        )
+      }
 
       upsertAccountInCache(userId, data)
 

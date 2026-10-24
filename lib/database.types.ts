@@ -130,6 +130,177 @@ export type Database = {
           },
         ]
       }
+      prop_firm_expenses: {
+        Row: {
+          account_id: string | null
+          cost_per_account: number
+          created_at: string
+          date_paid: string
+          expense_type: string
+          id: string
+          custom_category: string | null
+          notes: string | null
+          payment_label: string | null
+          project_label: string | null
+          prop_firm_name: string
+          quantity: number
+          recurrence: string | null
+          source: string
+          total_cost: number
+          tracker_kind: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          cost_per_account: number
+          created_at?: string
+          custom_category?: string | null
+          date_paid: string
+          expense_type: string
+          id?: string
+          notes?: string | null
+          payment_label?: string | null
+          project_label?: string | null
+          prop_firm_name: string
+          quantity: number
+          recurrence?: string | null
+          source?: string
+          tracker_kind?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          cost_per_account?: number
+          created_at?: string
+          custom_category?: string | null
+          date_paid?: string
+          expense_type?: string
+          id?: string
+          notes?: string | null
+          payment_label?: string | null
+          project_label?: string | null
+          prop_firm_name?: string
+          quantity?: number
+          recurrence?: string | null
+          source?: string
+          tracker_kind?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prop_firm_expenses_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expense_categories: {
+        Row: {
+          created_at: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      tracker_income: {
+        Row: {
+          amount: number
+          created_at: string
+          date_received: string
+          id: string
+          income_kind: string
+          name: string
+          notes: string | null
+          payment_label: string | null
+          project_label: string | null
+          recurrence: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          date_received: string
+          id?: string
+          income_kind: string
+          name: string
+          notes?: string | null
+          payment_label?: string | null
+          project_label?: string | null
+          recurrence?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          date_received?: string
+          id?: string
+          income_kind?: string
+          name?: string
+          notes?: string | null
+          payment_label?: string | null
+          project_label?: string | null
+          recurrence?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      prop_firm_expense_settings: {
+        Row: {
+          tax_reserve_percent: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          tax_reserve_percent: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          tax_reserve_percent?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      prop_firm_payout_assignments: {
+        Row: {
+          payout_key: string
+          prop_firm_name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          payout_key: string
+          prop_firm_name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          payout_key?: string
+          prop_firm_name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       account_settings: {
         Row: {
           banned_at: string | null
@@ -6294,6 +6465,13 @@ export type Database = {
         Args: { p_recipient: string; p_sender: string }
         Returns: boolean
       }
+      delete_prop_payout: {
+        Args: {
+          p_cycle_id: string
+          p_drawdown_behavior: string
+        }
+        Returns: undefined
+      }
       record_account_payout: {
         Args: {
           p_account_id: string
@@ -6303,6 +6481,17 @@ export type Database = {
           p_drawdown_floor_after_payout: number
           p_payout_amount: number
           p_remember_drawdown_behavior?: boolean
+        }
+        Returns: string
+      }
+      upsert_prop_firm_account_purchase_expense: {
+        Args: {
+          p_account_id: string
+          p_cost_per_account: number
+          p_date_paid?: string
+          p_expense_type: string
+          p_prop_firm_name: string
+          p_user_id: string
         }
         Returns: string
       }

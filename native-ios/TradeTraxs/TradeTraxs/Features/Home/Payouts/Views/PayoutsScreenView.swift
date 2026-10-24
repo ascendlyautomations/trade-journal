@@ -32,11 +32,12 @@ struct PayoutsScreenView: View {
     }
 
     private var historyItems: [PayoutHistoryItem] {
-        PayoutHistorySupport.buildHistory(
+        let recorded = PayoutHistorySupport.buildHistory(
             accounts: accountsViewModel.accounts,
             entriesByAccount: withdrawalsHistory.ledgerByAccount,
             cyclesByAccount: withdrawalsHistory.cyclesByAccount
         )
+        return (recorded + withdrawalsHistory.achievementPayouts).sorted { $0.date > $1.date }
     }
 
     private var accountsByID: [TradingAccountID: TradingAccount] {
@@ -100,10 +101,12 @@ struct PayoutsScreenView: View {
 
     private var content: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
-                totalSection
+            LazyVStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+                expensesButton
                     .padding(.horizontal, ExperienceSpacing.md)
                     .padding(.top, ExperienceSpacing.sm)
+                totalSection
+                    .padding(.horizontal, ExperienceSpacing.md)
 
                 PayoutEquityCurveView(
                     points: equityCurvePoints,
@@ -142,10 +145,39 @@ struct PayoutsScreenView: View {
             && (accountsViewModel.isLoading || accountsViewModel.isLoadingPayouts || isRevalidatingCycles)
     }
 
+    private var expensesButton: some View {
+        Button {
+            stackNavigation?.pushSettings(.propFirmExpenses)
+        } label: {
+            HStack(spacing: ExperienceSpacing.sm) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Prop Firm Expenses")
+                        .experienceStyle(.headline, color: colors.primaryText)
+                    Text("Track eval fees, resets, and net prop profit")
+                        .experienceStyle(.caption, color: colors.secondaryText)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(colors.secondaryText)
+            }
+            .padding(ExperienceSpacing.md)
+            .background(colors.profit.opacity(0.16), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                    .stroke(colors.profit.opacity(0.45), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(stackNavigation == nil)
+        .accessibilityIdentifier("withdrawals.propFirmExpenses")
+    }
+
     private var totalSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             Text("Total Withdrawals")
                 .experienceStyle(.subheadline, color: colors.secondaryText)
+                .contextualTourTarget(.payoutsHistory)
             Text(ProfileDisplay.formatMoney(totalWithdrawals))
                 .font(.system(.title2, design: .rounded).weight(.semibold).monospacedDigit())
                 .foregroundStyle(colors.primaryText)
@@ -156,7 +188,7 @@ struct PayoutsScreenView: View {
     }
 
     private func historySection(title: String, items: [PayoutHistoryItem]) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             Text(title)
                 .experienceStyle(.headline, color: colors.primaryText)
                 .padding(.horizontal, ExperienceSpacing.md)
@@ -195,7 +227,7 @@ struct PayoutsScreenView: View {
             } label: {
                 row
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
         } else {
             row
         }
@@ -269,8 +301,24 @@ struct PayoutsScreenView: View {
 
         await accountsViewModel.loadAllPayoutEntries()
         await revalidateCyclesFromServer()
+        await loadAchievementPayouts()
 
         logPublishedSummary(phase: "afterNetwork")
+    }
+
+    private func loadAchievementPayouts() async {
+        guard let data, let userID = await data.session.currentUserID else { return }
+        let recorded = PayoutHistorySupport.buildHistory(
+            accounts: accountsViewModel.accounts,
+            entriesByAccount: withdrawalsHistory.ledgerByAccount,
+            cyclesByAccount: withdrawalsHistory.cyclesByAccount
+        )
+        let extras = await PayoutHistorySupport.loadMissingAchievementPayouts(
+            achievements: data.achievements,
+            profileID: ProfileID(userID.rawValue),
+            recorded: recorded
+        )
+        withdrawalsHistory.setAchievementPayouts(extras)
     }
 
     private func revalidateCyclesFromServer() async {

@@ -16,6 +16,20 @@ nonisolated enum UncancelledWait {
     }
 }
 
+/// Runs a screen reload outside the caller's task.
+///
+/// SwiftUI `.refreshable` cancels its task while the spinner is still up.
+/// A child task inherits that cancellation and drops the server page, so a
+/// web post or trade stays hidden until the next cold launch.
+enum UncancelledRefresh {
+    static func run(_ operation: @escaping @MainActor () async -> Void) async {
+        let task = Task.detached { @MainActor in
+            await operation()
+        }
+        await task.value
+    }
+}
+
 /// Process-wide Backend V2 RPC single-flight — one underlying Task per canonical key.
 ///
 /// Equivalent callers share one detached fetch. One waiter cancelling does **not**

@@ -23,7 +23,7 @@ struct ThirdPartyAIConsentSheet: View {
                         Text("Privacy Policy")
                             .experienceStyle(.body, color: colors.accent)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityIdentifier("aiConsent.privacyPolicy")
                 }
                 .experiencePadding(.lg)

@@ -28,7 +28,7 @@ struct RoomChannelSwitcherView: View {
                                     .fill(isSelected ? colors.accent : colors.fillSecondary)
                             )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityAddTraits(isSelected ? [.isSelected] : [])
                     .accessibilityIdentifier("tradeRooms.channel.\(channel.id.rawValue)")
                 }

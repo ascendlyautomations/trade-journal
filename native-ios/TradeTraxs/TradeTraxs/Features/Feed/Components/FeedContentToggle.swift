@@ -48,7 +48,7 @@ struct FeedContentToggle: View {
                 in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityLabel(value.title)
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityIdentifier("feed.filter.\(value.rawValue)")

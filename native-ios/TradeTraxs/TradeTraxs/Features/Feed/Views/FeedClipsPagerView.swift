@@ -407,12 +407,11 @@ private struct FeedClipsPageView: View {
                                 .foregroundStyle(.white)
                                 .lineLimit(1)
                                 .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
-                            ProfileTradeTraxsIdentityBadge(profile: resolvedProfile, size: .compact)
                         }
                     }
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
 
                 if showsFollowButton {
                     followChip
@@ -526,7 +525,7 @@ private struct FeedClipsPageView: View {
                         .strokeBorder(Color.white.opacity(0.85), lineWidth: 1)
                 }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .disabled(followInFlight)
         .accessibilityLabel("Follow")
     }
@@ -648,7 +647,7 @@ private struct FeedClipsActionRailItem: View {
                 iconColor: iconColor
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
     }
 }
 

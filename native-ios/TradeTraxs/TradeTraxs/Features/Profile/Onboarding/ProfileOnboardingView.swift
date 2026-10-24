@@ -55,7 +55,7 @@ struct ProfileOnboardingView: View {
                             Text("Continue without photo")
                                 .experienceStyle(.body, color: colors.accent)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                         .disabled(viewModel.isSubmitting)
                         .accessibilityIdentifier("onboarding.continueWithoutPhoto")
                     }
@@ -64,7 +64,7 @@ struct ProfileOnboardingView: View {
                         Text("Use a different account")
                             .experienceStyle(.footnote, color: colors.secondaryText)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .frame(maxWidth: .infinity)
                     .accessibilityIdentifier("onboarding.signOut")
                 }
@@ -203,7 +203,7 @@ struct ProfileOnboardingView: View {
                             Text("Remove")
                                 .experienceStyle(.caption, color: colors.secondaryText)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                     }
                 }
 

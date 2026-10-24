@@ -69,9 +69,12 @@ final class RoomInfoViewModel {
     }
 
     var inviteLink: String {
-        let slug = (room?.slug ?? roomID.rawValue)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let key = slug.isEmpty ? roomID.rawValue : slug
+        Self.inviteLink(slug: room?.slug, roomID: roomID)
+    }
+
+    static func inviteLink(slug: String?, roomID: RoomID) -> String {
+        let trimmed = slug?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let key = trimmed.isEmpty ? roomID.rawValue : trimmed
         let encoded = key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? key
         return "https://www.tradetraxs.com/room/\(encoded)"
     }
@@ -110,6 +113,13 @@ final class RoomInfoViewModel {
         guard loadTask == nil else { return }
         phase = .idle
         loadTask = Task { await performLoad() }
+    }
+
+    func createFeedPost() {
+        guard let room, viewerID != nil else { return }
+        ExperienceHaptics.play(.selection)
+        PendingRoomShareStore.shared.stage(RoomShareAttachment(room: room))
+        navigationCoordinator?.present(fullScreen: .newPost)
     }
 
     func openOwner() {

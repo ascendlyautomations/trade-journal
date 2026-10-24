@@ -156,6 +156,7 @@ import {
   resetRoomMessageReconciliation,
 } from "@/lib/roomMessageReconciliation"
 import { pickInitialTradeRoomId } from "@/lib/tradeRoomsEntry"
+import { tradeRoomSharePath, tradeRoomShareUrl } from "@/lib/tradeRoomShareUrl"
 
 type Room = TradeRoomRow & {
   /** If present from API joins, used as sidebar avatar fallback after image_url */
@@ -866,14 +867,15 @@ function CommunityContent() {
     return selectedRoom.id ? String(selectedRoom.id) : ""
   }, [selectedRoom])
 
-  const inviteLinkDisplay = useMemo(() => {
-    if (!inviteOrigin || !inviteRoomKey) return ""
-    return `${inviteOrigin}/trade-rooms?room=${encodeURIComponent(inviteRoomKey)}`
+  const inviteLink = useMemo(() => {
+    if (!inviteRoomKey) return ""
+    const origin =
+      inviteOrigin ||
+      (typeof window !== "undefined" ? window.location.origin : "")
+    return origin
+      ? tradeRoomShareUrl(origin, inviteRoomKey)
+      : tradeRoomSharePath(inviteRoomKey)
   }, [inviteOrigin, inviteRoomKey])
-  const inviteLink =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/trade-rooms?room=${selectedRoom?.slug ?? ""}`
-      : ""
 
   const currentSection = useMemo(
     () => sections.find((s) => s.id === selectedSectionId) ?? null,
@@ -2484,11 +2486,21 @@ function CommunityContent() {
       requestDemoSignup("room")
       return
     }
+    const authUser = user
+    if (!authUser?.id) {
+      const key =
+        (inviteTargetRoom?.id === roomId
+          ? inviteTargetRoom.slug?.trim() || inviteTargetRoom.id
+          : "") ||
+        roomParam?.trim() ||
+        roomId
+      router.push(`/login?next=${encodeURIComponent(tradeRoomSharePath(key))}`)
+      return
+    }
+
     setJoiningRoomId(roomId)
 
     try {
-      const authUser = user
-      if (!authUser?.id) return
 
       const target =
         inviteTargetRoom?.id === roomId
@@ -2737,10 +2749,13 @@ function CommunityContent() {
 
   useEffect(() => {
     if (!user?.id) {
-      if (!profileLoading && !isDemoModeActive()) {
-        const returnPath = `/community${window.location.search}`
-        router.push(`/login?next=${encodeURIComponent(returnPath)}`)
+      if (profileLoading || isDemoModeActive()) return
+      if (roomParam?.trim()) {
+        setLoadingRooms(false)
+        return
       }
+      const returnPath = `/community${window.location.search}`
+      router.push(`/login?next=${encodeURIComponent(returnPath)}`)
       return
     }
 
@@ -2839,6 +2854,12 @@ function CommunityContent() {
 
       if (cancelled) return
       if (!row) {
+        if (!user?.id) {
+          router.push(
+            `/login?next=${encodeURIComponent(tradeRoomSharePath(decoded))}`
+          )
+          return
+        }
         setInviteTargetRoom(null)
         return
       }
@@ -2850,7 +2871,7 @@ function CommunityContent() {
     return () => {
       cancelled = true
     }
-  }, [roomParam, rooms, loadingRooms])
+  }, [roomParam, rooms, loadingRooms, user?.id, router])
 
   useEffect(() => {
     if (!needsJoin || !inviteTargetRoom?.id || !user?.id) {
@@ -3813,6 +3834,7 @@ function CommunityContent() {
           >
             <div
               data-tt-trade-rooms-controls
+              data-tt-tour-target="feedTradeRooms"
               className="border-b border-white/10 px-3 py-1.5 md:px-4 md:py-3"
             >
               <h1 className="sr-only">Trade Rooms</h1>
@@ -3844,7 +3866,9 @@ function CommunityContent() {
                   <span className="truncate text-sm font-semibold text-white">
                     {showCreateDiscoverView
                       ? "Create & Explore"
-                      : selectedRoom?.name || "Select room"}
+                      : selectedRoom?.name ||
+                        inviteTargetRoom?.name ||
+                        "Select room"}
                   </span>
                 </button>
                 {selectedRoomId && !needsJoin ? (
@@ -3874,7 +3898,7 @@ function CommunityContent() {
                     </button>
                     <ShareRoomMenu
                       room={selectedRoom!}
-                      inviteLink={inviteLinkDisplay || inviteLink}
+                      inviteLink={inviteLink}
                       user={
                         user?.id
                           ? { id: user.id, username: profile?.username }
@@ -4108,7 +4132,7 @@ function CommunityContent() {
                         </button>
                         <ShareRoomMenu
                           room={selectedRoom!}
-                          inviteLink={inviteLinkDisplay || inviteLink}
+                          inviteLink={inviteLink}
                           user={
                             user?.id
                               ? { id: user.id, username: profile?.username }

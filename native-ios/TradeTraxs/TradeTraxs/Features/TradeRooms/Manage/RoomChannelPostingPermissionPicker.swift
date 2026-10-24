@@ -29,7 +29,7 @@ struct RoomChannelPostingPermissionPicker: View {
                         Spacer(minLength: 0)
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .disabled(isDisabled)
             }
         }

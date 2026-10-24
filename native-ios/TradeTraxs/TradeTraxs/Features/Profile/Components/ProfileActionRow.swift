@@ -151,7 +151,7 @@ struct ProfileActionChip: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .disabled(!isEnabled)
         .opacity(isEnabled ? ExperienceOpacity.opaque : ExperienceOpacity.disabled)
         .fixedSize(horizontal: !expands, vertical: false)
@@ -263,7 +263,7 @@ struct ProfileTradeRoomDestinationRow: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityLabel(title)
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier(accessibilityIdentifier)

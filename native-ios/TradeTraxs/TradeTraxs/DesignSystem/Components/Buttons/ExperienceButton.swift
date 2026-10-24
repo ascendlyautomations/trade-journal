@@ -1,5 +1,26 @@
 import SwiftUI
 
+extension View {
+    /// Plain buttons hit-test opaque pixels, so padding and the gap between a title and its chevron are missed.
+    /// This fills the control’s layout bounds without changing how it looks.
+    func experienceControlHitTarget() -> some View {
+        background(Color.white.opacity(0.001))
+            .contentShape(Rectangle())
+    }
+}
+
+/// Replaces `.plain` / `.borderless` so the whole label is tappable, including padding and gaps.
+struct ExperiencePlainButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .experienceControlHitTarget()
+    }
+}
+
+extension ButtonStyle where Self == ExperiencePlainButtonStyle {
+    static var experiencePlain: ExperiencePlainButtonStyle { ExperiencePlainButtonStyle() }
+}
+
 enum ExperienceButtonStyleKind: Sendable {
     case primary
     case secondary
@@ -58,7 +79,7 @@ struct ExperienceButton: View {
                 ? ExperienceOpacity.opaque
                 : ExperienceOpacity.disabled)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .disabled(!isEnabled || isLoading)
         .animation(ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion), value: isLoading)
         .experienceAccessibility(
@@ -105,7 +126,7 @@ struct ExperienceIconButton: View {
             ExperienceIcon(icon: icon, size: .md, color: colors.primaryText)
                 .experienceTouchTarget()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .experienceAccessibility(
             label: accessibilityLabel,
             identifier: accessibilityIdentifier,

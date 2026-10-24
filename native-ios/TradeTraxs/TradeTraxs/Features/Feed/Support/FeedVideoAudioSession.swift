@@ -1,7 +1,7 @@
 import AVFoundation
 import Foundation
 
-/// Central, idempotent AVAudioSession setup for Feed inline / Clips pager playback.
+/// Central, idempotent AVAudioSession setup for Feed / Profile clip playback.
 enum FeedVideoAudioSession {
     private static var isPlaybackConfigured = false
 

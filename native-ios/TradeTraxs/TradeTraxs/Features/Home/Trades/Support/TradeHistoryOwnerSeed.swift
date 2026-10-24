@@ -38,4 +38,13 @@ enum TradeHistoryOwnerSeed {
             isPartial: ownerTrades.count >= SessionDiskCache.ownerTradesMaxCount
         )
     }
+
+    /// Count of journal trades matching the query (excludes backtests), without pagination.
+    static func matchingCount(
+        from ownerTrades: [Trade],
+        query: TradeHistoryQuery,
+        context: TradeHistoryMatchContext = TradeHistoryMatchContext()
+    ) -> Int {
+        page(from: ownerTrades, query: query, limit: .max, context: context).items.count
+    }
 }

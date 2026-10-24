@@ -81,9 +81,13 @@ enum MessagingBootstrapApplier {
             },
             isGroup: isGroup,
             isPinned: row.is_pinned,
-            lastMessagePreview: ConversationInboxActivity.preview(
-                fromStoredContent: row.last_message,
-                type: row.last_message_type
+            lastMessagePreview: ConversationInboxActivity.inboxPreview(
+                ConversationInboxActivity.preview(
+                    fromStoredContent: row.last_message,
+                    type: row.last_message_type
+                ),
+                isGroup: isGroup,
+                peerUsername: peerUsername
             ),
             lastMessageAt: lastAt,
             lastMessageID: lastMessageID,

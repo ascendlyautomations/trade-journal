@@ -132,9 +132,9 @@ private struct ExploreModeConversionPromptSheet: View {
                     Text(ExploreModeConversionPrompt.signInTitle)
                         .experienceStyle(.callout, color: colors.accent)
                         .frame(maxWidth: .infinity)
+                        .experienceTouchTarget()
                 }
-                .buttonStyle(.plain)
-                .experienceTouchTarget()
+                .buttonStyle(.experiencePlain)
                 .accessibilityIdentifier("explore.conversion.signIn")
             }
         }

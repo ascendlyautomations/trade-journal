@@ -17,13 +17,14 @@ import {
 import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import { tradeRoomSharePath } from "@/lib/tradeRoomShareUrl"
 
 const PANEL_CLASS =
   "rounded-xl border border-white/10 bg-white/5 p-2.5 backdrop-blur-md md:p-4"
 
 function roomHref(room: PopularTradeRoom): string {
   const key = room.slug?.trim() || room.id
-  return `/trade-rooms?room=${encodeURIComponent(key)}`
+  return tradeRoomSharePath(key)
 }
 
 function RoomAvatar({ room }: { room: PopularTradeRoom }) {

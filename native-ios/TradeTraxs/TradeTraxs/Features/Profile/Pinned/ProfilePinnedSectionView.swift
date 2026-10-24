@@ -96,7 +96,7 @@ struct ProfilePinnedCardView: View {
                     .fill(colors.surfacePrimary)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .task(id: item.preview.imageURL) {
             await loadImage()
         }

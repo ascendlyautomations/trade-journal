@@ -28,6 +28,14 @@ nonisolated protocol ProfileRepository: Sendable {
         imageURL: String?,
         imageCrop: ContentImagePresentation?
     ) async throws -> Post
+    /// Web `buildRoomSharePostInsert` — same wall post plus the room snapshot columns.
+    func createWallPost(
+        authorID: ProfileID,
+        content: String,
+        imageURL: String?,
+        imageCrop: ContentImagePresentation?,
+        roomShare: RoomShareAttachment?
+    ) async throws -> Post
     /// Deletes a wall post the viewer owns (`profile_posts`).
     func deleteWallPost(id: PostID) async throws
     func followState(from viewer: ProfileID, to target: ProfileID) async throws -> FollowState
@@ -70,6 +78,21 @@ nonisolated extension ProfileRepository {
         imageCrop: ContentImagePresentation?
     ) async throws -> Post {
         throw AppError.notImplemented(feature: "createWallPost")
+    }
+
+    func createWallPost(
+        authorID: ProfileID,
+        content: String,
+        imageURL: String?,
+        imageCrop: ContentImagePresentation?,
+        roomShare: RoomShareAttachment?
+    ) async throws -> Post {
+        try await createWallPost(
+            authorID: authorID,
+            content: content,
+            imageURL: imageURL,
+            imageCrop: imageCrop
+        )
     }
 
     func deleteWallPost(id: PostID) async throws {

@@ -11,13 +11,14 @@ import {
   type PopularTradeRoom,
 } from "@/lib/popularTradeRooms"
 import { scheduleDeferredWork } from "@/lib/scheduleDeferredWork"
+import { tradeRoomSharePath } from "@/lib/tradeRoomShareUrl"
 import { supabase } from "@/lib/supabaseClient"
 
 const FEED_POPULAR_ROOMS_LIMIT = 4
 
 function roomHref(room: PopularTradeRoom): string {
   const key = room.slug?.trim() || room.id
-  return `/community?room=${encodeURIComponent(key)}`
+  return tradeRoomSharePath(key)
 }
 
 function RoomAvatar({ room }: { room: PopularTradeRoom }) {

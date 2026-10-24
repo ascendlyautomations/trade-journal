@@ -133,7 +133,7 @@ struct VaultHomeView: View {
                         .fill(selected ? colors.accent : colors.fillPrimary)
                 }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
     }
 
     private func filterLabel(_ filter: VaultContentFilter) -> String {
@@ -174,7 +174,7 @@ struct VaultHomeView: View {
                         }
                         .padding(.vertical, ExperienceSpacing.xs)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .contextMenu {
                         Button("Rename") {
                             folderPendingRename = folder
@@ -198,7 +198,7 @@ struct VaultHomeView: View {
                         .experienceStyle(.body, color: colors.accent)
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
         }
     }
 
@@ -271,7 +271,7 @@ private struct VaultItemRow: View {
             .padding(ExperienceSpacing.sm)
             .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
     }
 
     private var title: String {

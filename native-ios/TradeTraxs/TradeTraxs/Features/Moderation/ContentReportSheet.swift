@@ -80,7 +80,7 @@ struct ContentReportSheet: View {
                             }
                         }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                 }
             }
 

@@ -186,18 +186,18 @@ final class BrokerIntegrationsViewModel {
         Task { await refreshAll() }
     }
 
-    func refreshAll() async {
+    func refreshAll(announceChange: Bool = true) async {
         if let refreshTask {
             await refreshTask.value
             return
         }
-        let task = Task { await performRefreshAll() }
+        let task = Task { await performRefreshAll(announceChange: announceChange) }
         refreshTask = task
         defer { refreshTask = nil }
         await task.value
     }
 
-    private func performRefreshAll() async {
+    private func performRefreshAll(announceChange: Bool) async {
         phase = .loaded
         importingMappingIds.removeAll()
 
@@ -208,7 +208,9 @@ final class BrokerIntegrationsViewModel {
         }
 
         reconcileImportPromptsWithPersistedState()
-        noteBrokerIntegrationChanged()
+        if announceChange {
+            noteBrokerIntegrationChanged()
+        }
     }
 
     private func reconcileImportPromptsWithPersistedState() {

@@ -90,7 +90,7 @@ struct FeedLinkedTradeEmbed: View {
                 in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityLabel("Linked trade \(summary.symbol.ticker)")
         .accessibilityIdentifier("feed.linked.trade.\(summary.id.rawValue)")
     }
@@ -139,7 +139,7 @@ struct FeedLinkedClipEmbed: View {
                 in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityLabel("Linked clip")
         .accessibilityIdentifier("feed.linked.clip.\(reel.id.rawValue)")
     }

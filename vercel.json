@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/expired-stories",
       "schedule": "15 7 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-trading-reports",
+      "schedule": "0 17 * * 6"
     }
   ]
 }

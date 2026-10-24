@@ -122,7 +122,7 @@ struct OwnerAccountFilterDropdown<Trigger: View>: View {
                     }
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityIdentifier(accessibilityIdentifier)
         .accessibilityAddTraits(.isButton)
         .anchorPreference(
@@ -301,7 +301,7 @@ private struct OwnerAccountFilterDropdownPanel: View {
             )
             .padding(.horizontal, ExperienceSpacing.sm)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
     }
 
     @ViewBuilder
@@ -334,7 +334,7 @@ private struct OwnerAccountFilterDropdownPanel: View {
             .padding(.horizontal, ExperienceSpacing.sm)
             .frame(height: rowHeight)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
     }
 
     @ViewBuilder

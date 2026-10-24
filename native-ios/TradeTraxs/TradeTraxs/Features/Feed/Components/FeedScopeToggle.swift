@@ -41,6 +41,7 @@ struct FeedScopeToggle: View {
                     .foregroundStyle(colors.secondaryText)
             }
             .contentShape(Rectangle())
+            .experienceControlHitTarget()
         }
         .accessibilityLabel("Feed scope")
         .accessibilityValue(title)

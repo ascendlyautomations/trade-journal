@@ -26,7 +26,7 @@ struct DemoModeAdminView: View {
                     } label: {
                         SettingsNavigationRow(title: "Version History", systemImage: "clock.arrow.circlepath")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityIdentifier("admin.demo.history")
                 }
             }
@@ -43,7 +43,7 @@ struct DemoModeAdminView: View {
             } label: {
                 SettingsNavigationRow(title: title, systemImage: symbol)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .accessibilityIdentifier("admin.demo.section.\(kind)")
         }
     }
@@ -95,7 +95,7 @@ struct DemoAdminBrowserView: View {
                         } label: {
                             SettingsNavigationRow(title: row.title, subtitle: row.subtitle, systemImage: nil, showsChevron: true)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                     }
                 }
             }
@@ -974,7 +974,7 @@ struct DemoAdminHistoryView: View {
                                 showsChevron: !version.isCurrent
                             )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                         .disabled(version.isCurrent)
                         .accessibilityIdentifier("admin.demo.version.\(version.version)")
                     }

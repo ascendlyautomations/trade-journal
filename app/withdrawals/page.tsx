@@ -86,7 +86,23 @@ export default function WithdrawalsPage() {
 
   return (
     <div className="tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
-      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:py-10">
+      <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+        <Link
+          href="/prop-firm-expenses#prop-firm"
+          className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-emerald-700/35 bg-emerald-500/15 px-4 py-4 text-left transition hover:bg-emerald-500/25"
+        >
+          <span>
+            <span className="block text-base font-semibold text-emerald-400">
+              Prop Firm Expenses
+            </span>
+            <span className="mt-0.5 block text-sm text-gray-400">
+              Track eval fees, resets, and net prop profit
+            </span>
+          </span>
+          <span className="text-lg text-emerald-400" aria-hidden>
+            →
+          </span>
+        </Link>
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
             <Link
@@ -95,7 +111,10 @@ export default function WithdrawalsPage() {
             >
               ← Dashboard
             </Link>
-            <h1 className="mt-2 text-2xl font-bold text-blue-300 sm:text-3xl">
+            <h1
+              className="mt-2 text-2xl font-bold text-blue-300 sm:text-3xl"
+              data-tt-tour-target="payoutsHistory"
+            >
               Withdrawals
             </h1>
             <p className="mt-1 text-sm text-gray-400">
@@ -161,32 +180,41 @@ export default function WithdrawalsPage() {
         ) : null}
 
         <div className="mb-6 space-y-6">
-          <div className="rounded-xl border border-white/10 bg-white/5 px-5 py-4">
-            <p className="text-sm text-gray-400">Total withdrawn</p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums text-white">
-              {formatCurrency(summary.total)}
-            </p>
-            {summary.count > 0 ? (
-              <p className="mt-1 text-xs text-gray-400">
-                {summary.count} recorded across Live and Prop accounts
-                {accountFilter !== "all" ? " (filtered)" : ""}
-              </p>
-            ) : null}
-          </div>
-
           {showInitialLoading ? (
             <p className="text-sm text-gray-400">Loading withdrawals…</p>
           ) : filteredByAccount.length === 0 && !error ? (
-            <EmptyState
-              title="No withdrawals yet"
-              description="Withdrawals you record from Create will appear here."
-            />
+            <>
+              <div className="rounded-xl border border-white/10 bg-white/5 px-5 py-4">
+                <p className="text-sm text-gray-400">Total withdrawn</p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums text-white">
+                  {formatCurrency(summary.total)}
+                </p>
+              </div>
+              <EmptyState
+                title="No withdrawals yet"
+                description="Withdrawals you record from Create will appear here."
+              />
+            </>
           ) : (
             <>
-              <WithdrawalsEquityCurve
-                data={chartPoints}
-                totalWithdrawn={summary.total}
-              />
+              <div className="grid items-start gap-6 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]">
+                <div className="rounded-xl border border-white/10 bg-white/5 px-5 py-4">
+                  <p className="text-sm text-gray-400">Total withdrawn</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-white">
+                    {formatCurrency(summary.total)}
+                  </p>
+                  {summary.count > 0 ? (
+                    <p className="mt-1 text-xs text-gray-400">
+                      {summary.count} recorded across Live and Prop accounts
+                      {accountFilter !== "all" ? " (filtered)" : ""}
+                    </p>
+                  ) : null}
+                </div>
+                <WithdrawalsEquityCurve
+                  data={chartPoints}
+                  totalWithdrawn={summary.total}
+                />
+              </div>
               <WithdrawalsCalendar
                 byDate={byDate}
                 selectedDateKey={selectedDateKey}
@@ -197,7 +225,7 @@ export default function WithdrawalsPage() {
         </div>
 
         {!showInitialLoading && filteredItems.length > 0 ? (
-          <div className="space-y-8">
+          <div className={liveItems.length > 0 && propItems.length > 0 ? "grid items-start gap-8 lg:grid-cols-2" : "space-y-8"}>
             {liveItems.length > 0 ? (
               <section>
                 <h2 className="mb-2 px-1 text-sm font-semibold uppercase tracking-wide text-gray-400">

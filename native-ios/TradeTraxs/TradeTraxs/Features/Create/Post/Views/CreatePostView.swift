@@ -17,6 +17,7 @@ struct CreatePostView: View {
 
     init(
         data: DataEnvironment,
+        roomShare: RoomShareAttachment? = nil,
         onDismiss: @escaping () -> Void
     ) {
         imagePipeline = data.imagePipeline
@@ -29,6 +30,7 @@ struct CreatePostView: View {
                 uploadServices: data.globalUploadServices(),
                 contentDrafts: data.contentDraftRepository(),
                 restoredDraft: ContentDraftLaunchStore.shared.consume(expecting: .post),
+                roomShare: roomShare,
                 onDismiss: onDismiss
             )
         )
@@ -119,6 +121,11 @@ struct CreatePostView: View {
                     attachedImagePreview(preview)
                 }
 
+                if let roomShare = viewModel.roomShare {
+                    FeedRoomShareCard(share: roomShare)
+                        .accessibilityIdentifier("createPost.roomShare")
+                }
+
                 if viewModel.finalImage == nil {
                     attachmentToolbar
                 }
@@ -156,7 +163,7 @@ struct CreatePostView: View {
 
                 ZStack(alignment: .topLeading) {
                     if viewModel.bodyText.isEmpty {
-                        Text("What's on your mind?")
+                        Text(viewModel.roomShare == nil ? "What's on your mind?" : "Add a caption (optional)")
                             .experienceStyle(.body, color: colors.tertiaryText)
                             .allowsHitTesting(false)
                     }

@@ -24,6 +24,9 @@ nonisolated enum ProfileTabBootstrapApplier {
     ) -> Applied {
         let encoder = JSONEncoder()
         let decoder = JSONDecoder()
+        if tab == .posts {
+            return applyPosts(bootstrap, encoder: encoder, decoder: decoder)
+        }
         guard !bootstrap.data.items.isEmpty,
               let payload = try? encoder.encode(JSONValue.array(bootstrap.data.items))
         else {
@@ -85,11 +88,7 @@ nonisolated enum ProfileTabBootstrapApplier {
             )
 
         case .posts:
-            guard let wires = try? decoder.decode([FeedDTO.ProfileWallPost].self, from: payload) else {
-                return emptyApplied(tab: tab, bootstrap: bootstrap)
-            }
-            let posts = wires.compactMap(ProfileTabWireMapping.mapWallPost)
-            return Applied(posts: posts, nextCursor: bootstrap.data.next_cursor)
+            return applyPosts(bootstrap, encoder: encoder, decoder: decoder)
 
         case .reels:
             guard let wires = try? decoder.decode([ProfileTabWireMapping.ReelWire].self, from: payload) else {
@@ -118,6 +117,22 @@ nonisolated enum ProfileTabBootstrapApplier {
             let achievements = wires.compactMap { ProfileTabWireMapping.mapAchievement($0) }
             return Applied(achievements: achievements, nextCursor: bootstrap.data.next_cursor)
         }
+    }
+
+    private static func applyPosts(
+        _ bootstrap: ProfileTabBootstrapV1,
+        encoder: JSONEncoder,
+        decoder: JSONDecoder
+    ) -> Applied {
+        var posts: [Post] = []
+        posts.reserveCapacity(bootstrap.data.items.count)
+        for item in bootstrap.data.items {
+            guard let data = try? encoder.encode(item) else { continue }
+            if let post = ProfileTabWireMapping.post(fromJSON: data, decoder: decoder) {
+                posts.append(post)
+            }
+        }
+        return Applied(posts: posts, nextCursor: bootstrap.data.next_cursor)
     }
 
     private static func emptyApplied(tab: ProfileTabKind, bootstrap: ProfileTabBootstrapV1) -> Applied {
@@ -195,8 +210,33 @@ nonisolated enum ProfileTabWireMapping {
             linkedTradeID: nil,
             isPinned: dto.is_pinned ?? false,
             createdAt: created,
-            updatedAt: created
+            updatedAt: created,
+            roomShare: RoomShareAttachment.parsed(
+                roomID: dto.room_id,
+                name: dto.room_name,
+                logoURL: dto.room_logo,
+                description: dto.room_description
+            )
         )
+    }
+
+    /// One wall-post row. A bad `image_crop` is dropped so the rest of the row still maps.
+    static func post(fromJSON data: Data, decoder: JSONDecoder = JSONDecoder()) -> Post? {
+        if let dto = try? decoder.decode(FeedDTO.ProfileWallPost.self, from: data),
+           let post = mapWallPost(dto) {
+            return post
+        }
+        guard var object = PostgresChangeRecordCodec.dictionary(from: data) else { return nil }
+        object.removeValue(forKey: "image_crop")
+        guard JSONSerialization.isValidJSONObject(object),
+              let retry = try? JSONSerialization.data(withJSONObject: object),
+              let dto = try? decoder.decode(FeedDTO.ProfileWallPost.self, from: retry)
+        else { return nil }
+        return mapWallPost(dto)
+    }
+
+    static func post(fromRealtimeRecord data: Data) -> Post? {
+        post(fromJSON: data)
     }
 
     static func mapReel(_ row: ReelWire, ownerID: ProfileID) -> Reel? {

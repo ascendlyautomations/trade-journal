@@ -82,7 +82,7 @@ struct FeedStoriesRow: View {
                         }
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityLabel(hasActiveStory ? "View your story" : "Add story")
 
                 Button(action: onAddStory) {
@@ -96,7 +96,7 @@ struct FeedStoriesRow: View {
                             Circle().stroke(colors.backgroundPrimary, lineWidth: 2)
                         )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityLabel("Add story")
                 .accessibilityIdentifier("feed.story.add")
             }
@@ -141,7 +141,7 @@ struct FeedStoriesRow: View {
                     .frame(width: 72)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityIdentifier("feed.story.\(story.id.rawValue)")
         .accessibilityLabel("Story from \(username)")
     }

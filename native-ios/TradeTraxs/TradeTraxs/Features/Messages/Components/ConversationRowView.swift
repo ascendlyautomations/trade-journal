@@ -17,11 +17,6 @@ struct ConversationRowView: View {
                         Text(item.displayName)
                             .experienceStyle(item.unreadCount > 0 ? .headline : .body, color: colors.primaryText)
                             .lineLimit(1)
-                        if let peer = item.peer {
-                            ProfileTradeTraxsIdentityBadge(profile: peer, size: .inline)
-                        } else if let peerID = item.peerProfileID {
-                            ProfileTradeTraxsIdentityBadge(profileID: peerID, size: .inline)
-                        }
                     }
                     if item.isMuted {
                         Image(systemName: "bell.slash.fill")
@@ -53,7 +48,7 @@ struct ConversationRowView: View {
             await loadAvatar()
         }
         .experienceAccessibility(
-            label: "\(item.displayName). \(item.preview)",
+            label: item.preview.isEmpty ? item.displayName : "\(item.displayName). \(item.preview)",
             hint: item.unreadCount > 0 ? "\(item.unreadCount) unread" : nil,
             identifier: "messages.conversation.\(item.id.rawValue)"
         )
@@ -86,7 +81,7 @@ struct ConversationRowView: View {
             Text("Typing…")
                 .experienceStyle(.subheadline, color: colors.accent)
                 .lineLimit(1)
-        } else {
+        } else if !item.preview.isEmpty {
             HStack(spacing: 4) {
                 if item.showsReadReceipt {
                     Image(systemName: "checkmark")

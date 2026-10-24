@@ -55,19 +55,22 @@ struct CommentComposerView: View {
                 Button {
                     Task { await viewModel.submit() }
                 } label: {
-                    if viewModel.isPosting {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 28))
-                            .foregroundStyle(
-                                viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                    ? colors.tertiaryText
-                                    : colors.accent
-                            )
+                    Group {
+                        if viewModel.isPosting {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.system(size: 28))
+                                .foregroundStyle(
+                                    viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                        ? colors.tertiaryText
+                                        : colors.accent
+                                )
+                        }
                     }
+                    .experienceTouchTarget()
                 }
-                .experienceTouchTarget()
+                .buttonStyle(.experiencePlain)
                 .disabled(
                     viewModel.isPosting
                         || viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -122,7 +125,7 @@ struct CommentComposerView: View {
                     .frame(width: 28, height: 28)
                     .background(colors.fillPrimary, in: Circle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .accessibilityLabel("Cancel reply")
             .accessibilityIdentifier("interaction.comment.replyCancel")
         }

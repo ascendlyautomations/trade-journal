@@ -215,7 +215,7 @@ struct SettingsSubscriptionView: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .accessibilityIdentifier(accessibilityID)
 
             if isExpanded {
@@ -333,7 +333,7 @@ struct SettingsSubscriptionView: View {
             .padding(.vertical, ExperienceSpacing.xxs)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .modifier(SubscriptionPlanListRowBackground(isSelected: isSelected))
         .accessibilityIdentifier("settings.subscription.product.\(product.id)")
     }
@@ -348,7 +348,7 @@ struct SettingsSubscriptionView: View {
                     systemImage: "arrow.up.right.square"
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
         }
     }
 
@@ -363,7 +363,7 @@ struct SettingsSubscriptionView: View {
                         systemImage: "arrow.clockwise"
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .disabled(subscriptionFooterActionsDisabled)
                 .accessibilityIdentifier("settings.subscription.restore")
             }
@@ -377,7 +377,7 @@ struct SettingsSubscriptionView: View {
                         systemImage: "giftcard"
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .disabled(subscriptionFooterActionsDisabled)
                 .accessibilityIdentifier("settings.subscription.redeemOfferCode")
             }
@@ -401,7 +401,7 @@ struct SettingsSubscriptionView: View {
                 Text("Privacy Policy")
                     .experienceStyle(.footnote, color: colors.secondaryText)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .accessibilityIdentifier("settings.subscription.privacy")
 
             Text("•")
@@ -413,7 +413,7 @@ struct SettingsSubscriptionView: View {
                 Text("Terms of Use")
                     .experienceStyle(.footnote, color: colors.secondaryText)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .accessibilityIdentifier("settings.subscription.terms")
 
             Spacer(minLength: 0)

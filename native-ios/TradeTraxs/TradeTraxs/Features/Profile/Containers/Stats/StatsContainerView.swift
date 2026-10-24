@@ -183,7 +183,7 @@ struct StatsContainerView: View {
                         chevronSize: chevronSize
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityIdentifier("profile.stats.mode.\(mode.rawValue)")
             }
 
@@ -211,8 +211,9 @@ struct StatsContainerView: View {
                     verticalPadding: verticalPadding,
                     chevronSize: chevronSize
                 )
+                .experienceControlHitTarget()
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .layoutPriority(1)
             .accessibilityLabel("Timeframe")
             .accessibilityValue(viewModel.selectedTimeframe.menuTitle)

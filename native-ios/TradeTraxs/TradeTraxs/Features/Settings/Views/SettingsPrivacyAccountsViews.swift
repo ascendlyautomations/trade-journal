@@ -36,7 +36,7 @@ struct SettingsPrivacyAccountRow: View {
                     }
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .task(id: profile.avatar?.id) {
                 await loadAvatar()
             }
@@ -243,7 +243,7 @@ struct SettingsDmPrivacyPickerView: View {
                         }
                         .padding(.vertical, ExperienceSpacing.xxs)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityIdentifier("settings.privacy.dm.\(option.rawValue)")
                 }
             } header: {

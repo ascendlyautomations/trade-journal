@@ -28,6 +28,8 @@ type LinkBody = {
     category?: string
     mode?: string | null
     rules?: TradingAccountPropFirmRules | null
+    purchaseCost?: string | null
+    purchaseDate?: string | null
   }
 }
 
@@ -161,6 +163,11 @@ export async function POST(req: Request, context: RouteContext) {
         tradetraxsAccountId: account.id,
       })
     } catch {
+      await integrationDb
+        .from("prop_firm_expenses")
+        .delete()
+        .eq("account_id", account.id)
+        .eq("user_id", user.id)
       await integrationDb
         .from("accounts")
         .delete()

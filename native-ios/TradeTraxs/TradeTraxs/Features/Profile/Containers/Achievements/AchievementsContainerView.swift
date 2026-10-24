@@ -10,6 +10,14 @@ struct AchievementsContainerView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appEnvironment) private var appEnvironment
+    @State private var browseLayout = ProfileBrowseLayoutStore.layout(for: .achievements)
+
+    private var gridColumns: [GridItem] {
+        [
+            GridItem(.flexible(), spacing: 2),
+            GridItem(.flexible(), spacing: 2),
+        ]
+    }
 
     var body: some View {
         ProfileSectionContainerChrome(
@@ -20,47 +28,40 @@ struct AchievementsContainerView: View {
             emptyAction: viewModel.isOwner ? { viewModel.addAchievement() } : nil,
             onRetry: { Task { await viewModel.refresh() } }
         ) {
-            LazyVStack(spacing: ExperienceSpacing.sm) {
-                ForEach(displayItems) { achievement in
-                    ProfileAchievementCard(
-                        achievement: achievement,
-                        imagePipeline: imagePipeline,
-                        engagementStore: engagementStore,
-                        vaultStore: vaultStore,
-                        onOpen: { viewModel.openAchievement(achievement) },
-                        isOwner: viewModel.isOwner,
-                        onReport: reportAction(for: achievement),
-                        onDelete: viewModel.isOwner
-                            ? {
-                                guard !viewModel.isDeletingAchievement(achievement.id) else { return }
-                                viewModel.requestDelete(achievement)
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                HStack {
+                    Spacer(minLength: 0)
+                    ProfileBrowseLayoutToggle(layout: $browseLayout)
+                }
+                .onChange(of: browseLayout) { _, layout in
+                    ProfileBrowseLayoutStore.save(layout, for: .achievements)
+                }
+
+                if browseLayout == .grid {
+                    LazyVGrid(columns: gridColumns, spacing: 2) {
+                        ForEach(displayItems) { achievement in
+                            ProfileAchievementGridTile(
+                                achievement: achievement,
+                                imagePipeline: imagePipeline,
+                                isPinned: isProfilePinned(achievement),
+                                onOpen: { viewModel.openAchievement(achievement) }
+                            )
+                            .task {
+                                await viewModel.loadMoreIfNeeded(currentAchievementID: achievement.id)
                             }
-                            : nil,
-                        isDeleteInProgress: viewModel.isDeletingAchievement(achievement.id),
-                        profilePin: profilePin,
-                        isProfilePinned: isProfilePinned(achievement)
-                    )
-                    .transition(
-                        reduceMotion
-                            ? .opacity
-                            : .opacity.combined(with: .move(edge: .bottom))
-                    )
-                    .task {
-                        await viewModel.loadMoreIfNeeded(currentAchievementID: achievement.id)
+                        }
                     }
+                    .accessibilityIdentifier("profile.achievements.grid")
+                } else {
+                    achievementList
                 }
             }
-            .animation(
-                ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-                value: displayItems.map(\.id)
-            )
             .onChange(of: displayItems.map(\.id)) { _, ids in
                 viewModel.prefetchEngagement(for: ids)
             }
             .onAppear {
                 viewModel.prefetchEngagement(for: displayItems.map(\.id))
             }
-            .accessibilityIdentifier("profile.achievements.list")
         }
         .confirmationDialog(
             "Delete Achievement?",
@@ -71,7 +72,8 @@ struct AchievementsContainerView: View {
             titleVisibility: .visible
         ) {
             Button("Delete Achievement", role: .destructive) {
-                Task { await viewModel.confirmDelete() }
+                let achievement = viewModel.pendingDelete
+                Task { await viewModel.confirmDelete(achievement: achievement) }
             }
             Button("Cancel", role: .cancel) {
                 viewModel.pendingDelete = nil
@@ -90,6 +92,44 @@ struct AchievementsContainerView: View {
         } message: {
             Text(viewModel.deleteErrorMessage ?? "")
         }
+    }
+
+    private var achievementList: some View {
+        LazyVStack(spacing: ExperienceSpacing.sm) {
+            ForEach(displayItems) { achievement in
+                ProfileAchievementCard(
+                    achievement: achievement,
+                    imagePipeline: imagePipeline,
+                    engagementStore: engagementStore,
+                    vaultStore: vaultStore,
+                    onOpen: { viewModel.openAchievement(achievement) },
+                    isOwner: viewModel.isOwner,
+                    onReport: reportAction(for: achievement),
+                    onDelete: viewModel.isOwner
+                        ? {
+                            guard !viewModel.isDeletingAchievement(achievement.id) else { return }
+                            viewModel.requestDelete(achievement)
+                        }
+                        : nil,
+                    isDeleteInProgress: viewModel.isDeletingAchievement(achievement.id),
+                    profilePin: profilePin,
+                    isProfilePinned: isProfilePinned(achievement)
+                )
+                .transition(
+                    reduceMotion
+                        ? .opacity
+                        : .opacity.combined(with: .move(edge: .bottom))
+                )
+                .task {
+                    await viewModel.loadMoreIfNeeded(currentAchievementID: achievement.id)
+                }
+            }
+        }
+        .animation(
+            ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
+            value: displayItems.map(\.id)
+        )
+        .accessibilityIdentifier("profile.achievements.list")
     }
 
     private var displayItems: [Achievement] {

@@ -39,7 +39,7 @@ struct TraxProMembershipInfoView: View {
                             systemImage: "creditcard"
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityIdentifier("traxpro.membership.viewPlans")
                 }
             }

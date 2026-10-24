@@ -591,23 +591,36 @@ nonisolated enum ContentImagePresentationCodec {
 /// Insert body for `profile_posts` — omits `image_crop` when the column is not deployed yet.
 nonisolated struct ProfileWallPostInsertBody: Encodable, Sendable {
     var user_id: String
-    var content: String
+    var content: String?
     var image_url: String?
     var image_crop: JSONValue?
     var includeImageCropKey: Bool
+    var room_id: String?
+    var room_name: String?
+    var room_logo: String?
+    var room_description: String?
 
     enum CodingKeys: String, CodingKey {
         case user_id, content, image_url, image_crop
+        case room_id, room_name, room_logo, room_description
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(user_id, forKey: .user_id)
-        try container.encode(content, forKey: .content)
+        if let content, !content.isEmpty {
+            try container.encode(content, forKey: .content)
+        } else {
+            try container.encodeNil(forKey: .content)
+        }
         try container.encodeIfPresent(image_url, forKey: .image_url)
         if includeImageCropKey {
             try container.encodeIfPresent(image_crop, forKey: .image_crop)
         }
+        try container.encodeIfPresent(room_id, forKey: .room_id)
+        try container.encodeIfPresent(room_name, forKey: .room_name)
+        try container.encodeIfPresent(room_logo, forKey: .room_logo)
+        try container.encodeIfPresent(room_description, forKey: .room_description)
     }
 }
 

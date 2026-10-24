@@ -70,7 +70,7 @@ export default function AchievementsPageDetailModal({
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1 space-y-2">
-                  <p className="text-xs uppercase tracking-wide text-blue-200/80">
+                  <p className="text-xs font-medium uppercase tracking-wide text-blue-300">
                     {typeLabel}
                   </p>
                   <h3 className="text-lg font-semibold leading-snug text-white">

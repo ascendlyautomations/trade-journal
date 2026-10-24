@@ -468,7 +468,8 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
     }
 
     func wallPosts(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Post> {
-        // Web Profile: select * / user_id / created_at desc — full list (no range).
+        // Web `fetchProfileWallPostsPage`: pinned and unpinned are separate keysets.
+        // A single created-at cursor after a pinned page skips newer unpinned posts.
         let limit = min(max(page.limit, 1), 100)
         let cursor = page.cursor ?? "-"
         let key = "profiles.wallPosts:\(profileID.rawValue):limit=\(limit):cursor=\(cursor)"
@@ -476,31 +477,155 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             key: key,
             resource: "profiles.wallPosts"
         ) { [supabase] in
-            var query: [URLQueryItem] = [
-                SupabaseQuery.select("*"),
-                SupabaseQuery.eq("user_id", profileID.rawValue),
-                URLQueryItem(name: "order", value: "created_at.desc"),
-                URLQueryItem(name: "limit", value: String(limit)),
-            ]
-            if let pageCursor = page.cursor, !pageCursor.isEmpty {
-                query.append(URLQueryItem(name: "created_at", value: "lt.\(pageCursor)"))
-            }
-            let rows: [FeedDTO.ProfileWallPost] = try await supabase.database.select(
-                FeedDTO.ProfileWallPost.self,
-                from: "profile_posts",
-                query: query
-            )
-            let items = rows.compactMap(Self.mapWallPost)
-            // Web client re-sort: pinned first, then created_at desc.
-            let sorted = items.sorted { lhs, rhs in
-                if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
-                return lhs.createdAt > rhs.createdAt
-            }
-            return CursorPage(
-                items: sorted,
-                nextCursor: SupabaseQuery.nextCursor(items: rows, limit: limit) { $0.created_at }
+            try await Self.wallPostsPage(
+                supabase: supabase,
+                profileID: profileID,
+                limit: limit,
+                cursor: page.cursor
             )
         }
+    }
+
+    /// `pinned|{createdAt}|{id}` continues the pinned stream.
+    /// `unpinned` starts the unpinned stream. `unpinned|{createdAt}|{id}` continues it.
+    private struct ProfileWallPostsCursor: Sendable {
+        var phase: Phase
+        var createdAt: String?
+        var id: String?
+
+        enum Phase: String {
+            case pinned
+            case unpinned
+        }
+
+        static func parse(_ raw: String?) -> ProfileWallPostsCursor {
+            guard let raw, !raw.isEmpty else {
+                return ProfileWallPostsCursor(phase: .pinned, createdAt: nil, id: nil)
+            }
+            let parts = raw.split(separator: "|", maxSplits: 2, omittingEmptySubsequences: false).map(String.init)
+            if let phase = Phase(rawValue: parts[0]) {
+                let createdAt = parts.count > 1 && !parts[1].isEmpty ? parts[1] : nil
+                let id = parts.count > 2 && !parts[2].isEmpty ? parts[2] : nil
+                return ProfileWallPostsCursor(phase: phase, createdAt: createdAt, id: id)
+            }
+            return ProfileWallPostsCursor(phase: .unpinned, createdAt: raw, id: nil)
+        }
+
+        var encoded: String {
+            guard let createdAt, !createdAt.isEmpty else { return phase.rawValue }
+            if let id, !id.isEmpty {
+                return "\(phase.rawValue)|\(createdAt)|\(id)"
+            }
+            return "\(phase.rawValue)|\(createdAt)"
+        }
+    }
+
+    private static func wallPostsPage(
+        supabase: SupabaseInfrastructure,
+        profileID: ProfileID,
+        limit: Int,
+        cursor rawCursor: String?
+    ) async throws -> CursorPage<Post> {
+        let cursor = ProfileWallPostsCursor.parse(rawCursor)
+        if cursor.phase == .pinned {
+            let pinned = try await fetchWallPostRows(
+                supabase: supabase,
+                profileID: profileID,
+                pinned: true,
+                afterCreatedAt: cursor.createdAt,
+                afterID: cursor.id,
+                limit: limit + 1
+            )
+            let pinnedPage = Array(pinned.prefix(limit))
+            if pinned.count > limit {
+                return CursorPage(
+                    items: pinnedPage.compactMap(mapWallPost),
+                    nextCursor: wallCursor(phase: .pinned, rows: pinnedPage)
+                )
+            }
+            let need = limit - pinnedPage.count
+            if need == 0 {
+                let probe = try await fetchWallPostRows(
+                    supabase: supabase,
+                    profileID: profileID,
+                    pinned: false,
+                    afterCreatedAt: nil,
+                    afterID: nil,
+                    limit: 1
+                )
+                let next = probe.isEmpty
+                    ? nil
+                    : ProfileWallPostsCursor(phase: .unpinned, createdAt: nil, id: nil).encoded
+                return CursorPage(items: pinnedPage.compactMap(mapWallPost), nextCursor: next)
+            }
+            let unpinned = try await fetchWallPostRows(
+                supabase: supabase,
+                profileID: profileID,
+                pinned: false,
+                afterCreatedAt: nil,
+                afterID: nil,
+                limit: need + 1
+            )
+            let unpinnedPage = Array(unpinned.prefix(need))
+            let next = unpinned.count > need
+                ? wallCursor(phase: .unpinned, rows: unpinnedPage)
+                : nil
+            return CursorPage(
+                items: (pinnedPage + unpinnedPage).compactMap(mapWallPost),
+                nextCursor: next
+            )
+        }
+
+        let unpinned = try await fetchWallPostRows(
+            supabase: supabase,
+            profileID: profileID,
+            pinned: false,
+            afterCreatedAt: cursor.createdAt,
+            afterID: cursor.id,
+            limit: limit + 1
+        )
+        let page = Array(unpinned.prefix(limit))
+        let next = unpinned.count > limit ? wallCursor(phase: .unpinned, rows: page) : nil
+        return CursorPage(items: page.compactMap(mapWallPost), nextCursor: next)
+    }
+
+    private static func fetchWallPostRows(
+        supabase: SupabaseInfrastructure,
+        profileID: ProfileID,
+        pinned: Bool,
+        afterCreatedAt: String?,
+        afterID: String?,
+        limit: Int
+    ) async throws -> [FeedDTO.ProfileWallPost] {
+        var query: [URLQueryItem] = [
+            SupabaseQuery.select("*"),
+            SupabaseQuery.eq("user_id", profileID.rawValue),
+            URLQueryItem(name: "is_pinned", value: pinned ? "eq.true" : "not.is.true"),
+            URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
+            URLQueryItem(name: "limit", value: String(limit)),
+        ]
+        if let afterCreatedAt, !afterCreatedAt.isEmpty {
+            if let afterID, !afterID.isEmpty {
+                query.append(contentsOf: SupabaseQuery.keysetBeforeCreatedAtID("\(afterCreatedAt)|\(afterID)"))
+            } else {
+                query.append(URLQueryItem(name: "created_at", value: "lt.\(afterCreatedAt)"))
+            }
+        }
+        return try await supabase.database.select(
+            FeedDTO.ProfileWallPost.self,
+            from: "profile_posts",
+            query: query
+        )
+    }
+
+    private static func wallCursor(phase: ProfileWallPostsCursor.Phase, rows: [FeedDTO.ProfileWallPost]) -> String? {
+        for row in rows.reversed() {
+            guard let createdAt = row.created_at, !createdAt.isEmpty,
+                  let id = row.id, !id.isEmpty
+            else { continue }
+            return ProfileWallPostsCursor(phase: phase, createdAt: createdAt, id: id).encoded
+        }
+        return nil
     }
 
     func wallPost(id: PostID) async throws -> Post {
@@ -524,13 +649,35 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         imageURL: String?,
         imageCrop: ContentImagePresentation?
     ) async throws -> Post {
+        try await createWallPost(
+            authorID: authorID,
+            content: content,
+            imageURL: imageURL,
+            imageCrop: imageCrop,
+            roomShare: nil
+        )
+    }
+
+    func createWallPost(
+        authorID: ProfileID,
+        content: String,
+        imageURL: String?,
+        imageCrop: ContentImagePresentation?,
+        roomShare: RoomShareAttachment?
+    ) async throws -> Post {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let logo = roomShare?.logoURL?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let about = roomShare?.description?.trimmingCharacters(in: .whitespacesAndNewlines)
         let body = ProfileWallPostInsertBody(
             user_id: authorID.rawValue,
-            content: trimmed,
+            content: trimmed.isEmpty ? nil : trimmed,
             image_url: imageURL?.trimmingCharacters(in: .whitespacesAndNewlines),
             image_crop: ContentImagePresentationCodec.encodeJSONValue(imageCrop),
-            includeImageCropKey: imageCrop != nil
+            includeImageCropKey: imageCrop != nil,
+            room_id: roomShare?.roomID.rawValue,
+            room_name: roomShare?.name,
+            room_logo: (logo?.isEmpty == false) ? logo : nil,
+            room_description: (about?.isEmpty == false) ? about : nil
         )
         let dto = try await ImageCropWireInsert.insertWallPost(
             supabase: supabase,
@@ -819,7 +966,13 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             linkedTradeID: nil,
             isPinned: dto.is_pinned ?? false,
             createdAt: created,
-            updatedAt: created
+            updatedAt: created,
+            roomShare: RoomShareAttachment.parsed(
+                roomID: dto.room_id,
+                name: dto.room_name,
+                logoURL: dto.room_logo,
+                description: dto.room_description
+            )
         )
     }
 

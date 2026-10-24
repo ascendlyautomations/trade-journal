@@ -100,6 +100,7 @@ nonisolated enum ImageCropWireInsert {
         var keys = ["user_id", "content"]
         if body.image_url != nil { keys.append("image_url") }
         if body.includeImageCropKey { keys.append("image_crop") }
+        if body.room_id != nil { keys.append("room_id") }
         return keys
     }
 

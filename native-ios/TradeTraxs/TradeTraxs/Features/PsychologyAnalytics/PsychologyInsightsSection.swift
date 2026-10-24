@@ -5,6 +5,7 @@ struct PsychologyInsightsSection: View {
     var subtitle: String? = nil
     let cards: [PsychologyInsightCard]
     var unlockProgress: PsychologyInsightsUnlockProgress = .zero
+    var unlockMetricsReady: Bool = true
     var onSelect: (PsychologyInsightCard) -> Void
     var onViewAll: () -> Void
 
@@ -42,7 +43,9 @@ struct PsychologyInsightsSection: View {
 
             if isSectionExpanded {
                 if cards.isEmpty {
-                    if unlockProgress.showsRequirementMessage {
+                    if !unlockMetricsReady {
+                        loadingState
+                    } else if unlockProgress.showsRequirementMessage {
                         requirementEmptyState
                     } else {
                         emptyState
@@ -56,7 +59,7 @@ struct PsychologyInsightsSection: View {
                             } label: {
                                 psychologyCard(card)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.experiencePlain)
                         }
                         if showsViewMore {
                             DashboardInsightViewMoreControl(isExpanded: showsAllCards) {
@@ -77,6 +80,18 @@ struct PsychologyInsightsSection: View {
         .accessibilityIdentifier("dashboard.psychologyInsights")
     }
 
+    private var loadingState: some View {
+        HStack(spacing: ExperienceSpacing.sm) {
+            ProgressView()
+            Text("Loading psychology insights…")
+                .experienceStyle(.footnote, color: colors.secondaryText)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.bottom, ExperienceSpacing.xs)
+        .accessibilityIdentifier("dashboard.psychologyInsights.loading")
+    }
+
     private var emptyState: some View {
         ExperienceEmptyState(
             icon: .chart,
@@ -88,13 +103,20 @@ struct PsychologyInsightsSection: View {
     }
 
     private var requirementEmptyState: some View {
-        ExperienceEmptyState(
-            icon: .chart,
-            title: "5 Daily Check-Ins & 5 Trades Required",
-            message: "Log check-ins and trade psychology to unlock insights.",
-            accessibilityIdentifier: "dashboard.psychologyInsights.requirements"
-        )
-        .padding(.horizontal, ExperienceSpacing.md)
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            ExperienceEmptyState(
+                icon: .chart,
+                title: "5 Daily Check-Ins & 5 Trades Required",
+                message: "Log check-ins and trade psychology to unlock insights.",
+                accessibilityIdentifier: "dashboard.psychologyInsights.requirements"
+            )
+            Text(
+                "Check-in days \(unlockProgress.displayCheckInDayCountForGate)/\(PsychologyInsightsUnlockProgress.requiredCount) · Trades \(unlockProgress.displayTradeCountForGate)/\(PsychologyInsightsUnlockProgress.requiredCount)"
+            )
+            .experienceStyle(.caption, color: colors.secondaryText)
+            .monospacedDigit()
+            .padding(.horizontal, ExperienceSpacing.md)
+        }
         .padding(.bottom, ExperienceSpacing.xs)
     }
 

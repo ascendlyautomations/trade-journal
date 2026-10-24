@@ -137,8 +137,8 @@ struct RoomConversationView: View {
                         Image(systemName: "gearshape")
                             .font(.system(size: 17, weight: .medium))
                             .foregroundStyle(colors.primaryText)
+                            .experienceTouchTarget()
                     }
-                    .experienceTouchTarget()
                     .accessibilityLabel("Manage Room")
                     .accessibilityIdentifier("tradeRooms.conversation.manage")
                 } else if viewModel.isMember {
@@ -158,6 +158,7 @@ struct RoomConversationView: View {
                         }
                     } label: {
                         ExperienceIcon(icon: .more, size: .md, color: colors.primaryText)
+                        .experienceControlHitTarget()
                     }
                     .accessibilityIdentifier("tradeRooms.conversation.menu")
                 }
@@ -379,8 +380,22 @@ struct RoomConversationView: View {
             },
             onMembersTap: { viewModel.openMembers() },
             onInfoTap: { viewModel.openRoomInfo() },
+            onCopyInviteLink: { copyInviteLink(for: room) },
+            onCreateFeedPost: viewModel.viewerID == nil ? nil : { createFeedPost(for: room) },
             imagePipeline: imagePipeline
         )
+    }
+
+    private func copyInviteLink(for room: TradeRoom) {
+        UIPasteboard.general.string = RoomInfoViewModel.inviteLink(slug: room.slug, roomID: room.id)
+        ExperienceHaptics.play(.selection)
+    }
+
+    private func createFeedPost(for room: TradeRoom) {
+        ExperienceHaptics.play(.selection)
+        PendingRoomShareStore.shared.stage(RoomShareAttachment(room: room))
+        let coordinator = navigationCoordinator ?? appEnvironment.navigation.coordinator
+        coordinator.present(fullScreen: .newPost)
     }
 
     private var messageList: some View {
@@ -680,7 +695,7 @@ struct RoomConversationView: View {
                     .stroke(colors.border, lineWidth: 1)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .padding(.bottom, ExperienceSpacing.sm)
     }
 

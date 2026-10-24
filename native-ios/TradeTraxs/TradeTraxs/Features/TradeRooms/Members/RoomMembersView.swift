@@ -89,8 +89,8 @@ struct RoomMembersView: View {
                         Image(systemName: "gearshape")
                             .font(.system(size: 17, weight: .medium))
                             .foregroundStyle(colors.primaryText)
+                            .experienceTouchTarget()
                     }
-                    .experienceTouchTarget()
                     .accessibilityLabel("Manage Room")
                     .accessibilityIdentifier("tradeRooms.members.manage")
                 }

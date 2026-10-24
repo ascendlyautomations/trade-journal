@@ -140,10 +140,15 @@ final class ContextualTourTests: XCTestCase {
             "Explore",
             "Profile",
             "Your Trade Room",
+            "Withdrawals",
+            "Expense Tracker",
+            "Income",
+            "Tax & profit",
+            "Export Tax CSV",
             "Appearance",
             "You're all set",
         ])
-        XCTAssertEqual(definition.steps.filter { $0.role == .sectionContinue }.count, 2)
+        XCTAssertEqual(definition.steps.filter { $0.role == .sectionContinue }.count, 3)
         XCTAssertFalse(informational.contains { $0.title == "Understand your trading" })
 
         for index in informational.indices {
@@ -516,6 +521,8 @@ final class ContextualTourTests: XCTestCase {
             feedRootActive: surface == .feed,
             profileRootActive: surface == .profile,
             settingsHomeActive: surface == .settings,
+            payoutsActive: surface == .payouts,
+            expenseTrackerActive: surface == .expenseTracker,
             sceneActive: true,
             unobstructed: true
         )

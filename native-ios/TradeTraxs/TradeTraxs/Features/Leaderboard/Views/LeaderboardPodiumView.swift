@@ -57,7 +57,7 @@ struct LeaderboardPodiumView: View {
             } label: {
                 card(for: row, emphasized: emphasized)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .frame(width: max(width, 0))
             .accessibilityIdentifier("leaderboard.podium.\(rank)")
         } else {

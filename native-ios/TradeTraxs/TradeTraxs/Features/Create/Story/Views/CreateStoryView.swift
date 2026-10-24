@@ -192,7 +192,7 @@ struct CreateStoryView: View {
                         title: "Choose Media"
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .disabled(viewModel.phase == .publishing)
                 .accessibilityIdentifier("createStory.media.picker")
 
@@ -205,7 +205,7 @@ struct CreateStoryView: View {
                             title: "Camera"
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .disabled(viewModel.phase == .publishing)
                     .accessibilityIdentifier("createStory.media.camera")
                 }

@@ -14,7 +14,8 @@ nonisolated struct PayoutEquityCurvePoint: Sendable, Equatable, Identifiable {
         switch source {
         case .liveLedger: return "Live Withdrawal"
         case .otherLedger: return "Withdrawal"
-        case .fundedCycle: return "Prop Payout"
+        case .fundedCycle, .achievementProp: return "Prop Payout"
+        case .achievementLive: return "Live Withdrawal"
         case nil: return nil
         }
     }

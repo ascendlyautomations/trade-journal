@@ -29,7 +29,7 @@ struct ReportsSectionHeader: View {
             .padding(.vertical, ExperienceSpacing.sm)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityAddTraits(.isHeader)
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
         .accessibilityHint("Double tap to \(isExpanded ? "collapse" : "expand")")

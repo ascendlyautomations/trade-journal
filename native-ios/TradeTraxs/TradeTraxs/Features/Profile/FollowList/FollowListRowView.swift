@@ -23,7 +23,6 @@ struct FollowListRowView: View {
                                 .font(.system(.subheadline, design: .default).weight(.semibold))
                                 .foregroundStyle(colors.primaryText)
                                 .lineLimit(1)
-                            ProfileTradeTraxsIdentityBadge(profile: profile, size: .compact)
                         }
                         Text("@\(profile.username)")
                             .font(.system(.footnote, design: .default))
@@ -33,7 +32,7 @@ struct FollowListRowView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .accessibilityIdentifier("followList.row.\(profile.id.rawValue)")
 
             followControl
@@ -48,6 +47,7 @@ struct FollowListRowView: View {
                             height: ExperienceAccessibility.minTouchTarget
                         )
                         .contentShape(Rectangle())
+                    .experienceControlHitTarget()
                 }
                 .accessibilityLabel("More")
                 .accessibilityIdentifier("followList.removeMenu.\(profile.id.rawValue)")
@@ -82,7 +82,7 @@ struct FollowListRowView: View {
                 )
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityIdentifier(
             isFollowing
                 ? "followList.following.\(profile.id.rawValue)"

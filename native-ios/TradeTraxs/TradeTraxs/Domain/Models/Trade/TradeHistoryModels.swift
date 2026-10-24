@@ -19,6 +19,8 @@ nonisolated struct TradeHistoryFilters: Hashable, Sendable {
     var accountMode: TradeHistoryAccountModeFilter = .all
     var tradingSession: TradeHistorySessionFilter = .all
     var visibility: TradeHistoryVisibilityFilter = .any
+    /// Trades that have a screenshot (`trades.image_url`).
+    var pictureOnly: Bool = false
     var sort: TradeHistorySort = .newest
 
     /// Any non-default filter or sort selection.
@@ -37,6 +39,7 @@ nonisolated struct TradeHistoryFilters: Hashable, Sendable {
         if accountMode != .all { return true }
         if tradingSession != .all { return true }
         if visibility != .any { return true }
+        if pictureOnly { return true }
         return false
     }
 
@@ -76,6 +79,9 @@ nonisolated struct TradeHistoryFilters: Hashable, Sendable {
         if visibility != .any {
             chips.append(.init(id: "visibility", title: visibility.title))
         }
+        if pictureOnly {
+            chips.append(.init(id: "pictureOnly", title: "Picture Only"))
+        }
         return chips
     }
 
@@ -95,6 +101,7 @@ nonisolated struct TradeHistoryFilters: Hashable, Sendable {
         case "accountMode": accountMode = .all
         case "tradingSession": tradingSession = .all
         case "visibility": visibility = .any
+        case "pictureOnly": pictureOnly = false
         default: break
         }
     }
@@ -103,7 +110,7 @@ nonisolated struct TradeHistoryFilters: Hashable, Sendable {
         self = TradeHistoryFilters()
     }
 
-    /// Resolved created_at window for server/client filtering (web journal uses created_at).
+    /// Entry-time window for journal filters — same timestamp as dashboard and profile stats.
     func createdAtBounds(now: Date = Date(), calendar: Calendar = .current) -> (start: Date?, end: Date?) {
         switch dateRange {
         case .allTime:
@@ -355,6 +362,7 @@ nonisolated struct TradeHistoryQuery: Hashable, Sendable {
         parts.append(filters.accountMode.rawValue)
         parts.append(filters.tradingSession.rawValue)
         parts.append(filters.visibility.rawValue)
+        parts.append(filters.pictureOnly ? "picture" : "anyMedia")
         parts.append(filters.sort.rawValue)
         parts.append(trimmedSearch.lowercased())
         return parts.joined(separator: "|")

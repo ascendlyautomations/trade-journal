@@ -13,7 +13,7 @@ struct SettingsSupportView: View {
                 } label: {
                     SettingsNavigationRow(title: "Help & Support", systemImage: "questionmark.circle")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityIdentifier("settings.support.row.contact")
 
                 Button {
@@ -22,7 +22,7 @@ struct SettingsSupportView: View {
                 } label: {
                     SettingsNavigationRow(title: "Product Feedback", systemImage: "text.bubble")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityIdentifier("settings.support.row.feedback")
 
                 Button {
@@ -31,7 +31,7 @@ struct SettingsSupportView: View {
                 } label: {
                     SettingsNavigationRow(title: "Report a Bug", systemImage: "ladybug")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityIdentifier("settings.support.row.bug")
             } header: {
                 Text("Help Center")

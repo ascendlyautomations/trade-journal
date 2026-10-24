@@ -273,41 +273,72 @@ export function SkeletonTradesPageContent({ tradeCount = 6 }: { tradeCount?: num
   )
 }
 
+function DashboardPulse({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "animate-pulse rounded-xl border border-white/10 bg-white/5",
+        className
+      )}
+    />
+  )
+}
+
+/** Same outer frame as the live dashboard so the route placeholder does not jump. */
 export function SkeletonDashboardPage() {
   return (
-    <div className="w-full px-3 pb-3 pt-0 text-white md:px-10 md:pb-10">
-      <SkeletonDashboardShell />
+    <div
+      data-tt-dashboard-canvas=""
+      aria-busy="true"
+      aria-label="Loading dashboard"
+      className="w-full min-w-0 max-w-full overflow-x-hidden px-2.5 pb-3 pt-4 text-white max-md:px-2 max-md:pb-2 max-md:pt-2 md:px-10 md:pb-10 md:pt-0 xl:px-8 2xl:px-12"
+    >
+      <div className="tt-dash-workspace relative z-50 mx-auto w-full max-w-[1600px] px-0 md:px-6 xl:max-w-[1900px] xl:px-0">
+        <DashboardPulse className="h-11 w-full" />
+        <DashboardPulse className="mt-3 h-8 w-40" />
+      </div>
+      <div className="tt-dash-workspace tt-dash-stack relative z-0 mx-auto mt-2 flex w-full min-w-0 max-w-[1600px] flex-col gap-2 overflow-x-hidden px-0 max-md:gap-2 md:mt-3 md:gap-3 md:px-6 xl:max-w-[1900px] xl:px-0">
+        <div className="grid grid-cols-2 items-stretch gap-2 md:gap-3">
+          <DashboardPulse className="h-[3.75rem]" />
+          <DashboardPulse className="h-[3.75rem]" />
+        </div>
+        <SkeletonDashboardShell />
+      </div>
     </div>
   )
 }
 
-/** Dashboard stats + charts placeholder — used while trades cache warms. */
+/** Content placeholder that follows the mobile stats layout and the desktop terminal. */
 export function SkeletonDashboardShell() {
   return (
-    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 md:gap-8 md:px-6">
-      <Skeleton className="h-4 w-24" />
-      <div className="grid gap-4 overflow-visible lg:grid-cols-3 md:gap-6">
-        <div className="grid grid-cols-2 gap-3 lg:col-span-1 md:grid-cols-3 lg:grid-cols-2">
+    <div aria-hidden className="flex flex-col gap-2 md:gap-3">
+      <div className="tt-dash-hide-desktop-v1 flex flex-col gap-2 md:gap-3">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
-            <SkeletonStatsCard key={i} />
+            <DashboardPulse key={i} className="h-14 md:h-[4.5rem]" />
           ))}
         </div>
-        <div className="space-y-4 lg:col-span-2 md:space-y-6">
-          <SkeletonChart />
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <SkeletonCard className="space-y-3">
-              <Skeleton className="h-4 w-28" />
-              {Array.from({ length: 3 }).map((_, i) => (
-                <SkeletonTradeCard key={i} className="border-0 bg-black/20 p-3" />
-              ))}
-            </SkeletonCard>
-            <SkeletonChart className="hidden md:block" />
-          </div>
-        </div>
+        <DashboardPulse className="h-[268px] md:h-[300px]" />
       </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 md:gap-6">
-        <SkeletonTable className="lg:col-span-2" />
-        <SkeletonChart className="hidden md:block" />
+
+      <div className="tt-dash-desktop-v1">
+        <div className="tt-dash-hero">
+          <DashboardPulse className="min-h-[22rem]" />
+          <DashboardPulse className="tt-dash-equity-plot min-h-[22rem]" />
+        </div>
+        <div className="tt-dash-strip tt-dash-kpi">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="tt-dash-strip-cell">
+              <DashboardPulse className="h-3 w-16 border-0" />
+              <DashboardPulse className="mt-2 h-6 w-20 border-0" />
+            </div>
+          ))}
+        </div>
+        <div className="tt-dash-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <DashboardPulse key={i} className="h-40" />
+          ))}
+        </div>
       </div>
     </div>
   )

@@ -3,50 +3,116 @@
 import { useEffect, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
 import { useContextualTour } from "@/lib/contextualTour/ContextualTourProvider"
+import {
+  computeTourHighlightRect,
+  computeTourPopoverPlacement,
+} from "@/lib/contextualTour/popoverLayout"
 import { stepRole } from "@/lib/contextualTour/types"
+import ContextualTourHighlightRing from "./ContextualTourHighlightRing"
 import "./contextualTour.css"
 
-const SPOTLIGHT_PAD = 8
-const SPOTLIGHT_RADIUS = 12
+function TourStepCard({
+  step,
+  tour,
+  isSectionContinue,
+  isFinish,
+  primaryLabel,
+}: {
+  step: NonNullable<ReturnType<typeof useContextualTour>["visibleStep"]>
+  tour: ReturnType<typeof useContextualTour>
+  isSectionContinue: boolean
+  isFinish: boolean
+  primaryLabel: string
+}) {
+  return (
+    <div data-tt-contextual-tour-card className="rounded-2xl p-4 sm:p-5">
+      {!isSectionContinue ? (
+        <p data-tt-tour-muted className="mb-1 text-xs font-medium uppercase tracking-wide">
+          {tour.progressLabel}
+        </p>
+      ) : null}
+      <h2 data-tt-tour-title id="tt-contextual-tour-title" className="text-base font-semibold leading-snug sm:text-lg">
+        {step.title}
+      </h2>
+      {step.message ? (
+        <p data-tt-tour-body id="tt-contextual-tour-body" className="mt-1.5 text-sm leading-relaxed">
+          {step.message}
+        </p>
+      ) : null}
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {!isSectionContinue && !isFinish && tour.stepIndex > 0 ? (
+          <button
+            type="button"
+            data-tt-tour-secondary
+            className="rounded-xl border px-3 py-1.5 text-sm font-medium transition hover:bg-white/10"
+            onClick={tour.back}
+          >
+            Back
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="ml-auto rounded-xl bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-blue-500"
+          onClick={() => {
+            if (isFinish) tour.finish()
+            else tour.next()
+          }}
+        >
+          {primaryLabel}
+        </button>
+        {!isFinish ? (
+          <button
+            type="button"
+            data-tt-tour-secondary
+            className="rounded-xl px-2 py-1.5 text-sm font-medium transition hover:text-white"
+            onClick={tour.skip}
+          >
+            Skip
+          </button>
+        ) : null}
+      </div>
+    </div>
+  )
+}
 
 export default function ContextualTourOverlay() {
   const tour = useContextualTour()
   const [mounted, setMounted] = useState(false)
-  const [reduceMotion, setReduceMotion] = useState(false)
+  const [viewport, setViewport] = useState({ width: 0, height: 0 })
 
   useEffect(() => {
     setMounted(true)
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)")
-    const sync = () => setReduceMotion(mq.matches)
-    sync()
-    mq.addEventListener("change", sync)
-    return () => mq.removeEventListener("change", sync)
   }, [])
 
   useEffect(() => {
     if (!tour.showsOverlay) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = "hidden"
+    const sync = () => {
+      setViewport({ width: window.innerWidth, height: window.innerHeight })
+    }
+    sync()
+    window.addEventListener("resize", sync)
+    window.addEventListener("scroll", sync, true)
     return () => {
-      document.body.style.overflow = prev
+      window.removeEventListener("resize", sync)
+      window.removeEventListener("scroll", sync, true)
     }
   }, [tour.showsOverlay])
 
   const step = tour.visibleStep
   const role = step ? stepRole(step) : null
 
-  const hole = useMemo(() => {
-    const r = tour.spotlightRect
-    if (!r) return null
-    return {
-      x: Math.max(0, r.x - SPOTLIGHT_PAD),
-      y: Math.max(0, r.y - SPOTLIGHT_PAD),
-      w: r.width + SPOTLIGHT_PAD * 2,
-      h: r.height + SPOTLIGHT_PAD * 2,
-    }
-  }, [tour.spotlightRect])
+  const highlightRect = useMemo(
+    () => computeTourHighlightRect(tour.spotlightRect),
+    [tour.spotlightRect]
+  )
 
-  if (!mounted || !tour.showsOverlay || !step) return null
+  const popover = useMemo(() => {
+    if (viewport.width <= 0) return null
+    return computeTourPopoverPlacement(tour.spotlightRect, viewport)
+  }, [tour.spotlightRect, viewport])
+
+  if (!mounted || !tour.showsOverlay || !step || !popover) return null
 
   const isSectionContinue = role === "sectionContinue"
   const isFinish = role === "finish"
@@ -63,107 +129,33 @@ export default function ContextualTourOverlay() {
           : "Continue"
       : "Next"
 
-  const content = (
-    <div
-      className="tt-contextual-tour-root tt-contextual-tour-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="tt-contextual-tour-title"
-      aria-describedby="tt-contextual-tour-body"
-    >
-      <svg
-        className="absolute inset-0 h-full w-full"
-        aria-hidden
-        style={{ pointerEvents: "auto" }}
-      >
-        <defs>
-          <mask id="tt-tour-spotlight-mask">
-            <rect width="100%" height="100%" fill="white" />
-            {hole ? (
-              <rect
-                x={hole.x}
-                y={hole.y}
-                width={hole.w}
-                height={hole.h}
-                rx={SPOTLIGHT_RADIUS}
-                ry={SPOTLIGHT_RADIUS}
-                fill="black"
-                style={{
-                  transition: reduceMotion
-                    ? "none"
-                    : "x 220ms ease, y 220ms ease, width 220ms ease, height 220ms ease",
-                }}
-              />
-            ) : null}
-          </mask>
-        </defs>
-        <rect
-          width="100%"
-          height="100%"
-          fill="var(--tt-tour-scrim)"
-          mask="url(#tt-tour-spotlight-mask)"
-          onClick={(e) => e.stopPropagation()}
-        />
-      </svg>
-
+  return createPortal(
+    <>
+      <ContextualTourHighlightRing rect={highlightRect} />
       {showCard ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6">
-          <div className="tt-contextual-tour-card pointer-events-auto w-full max-w-lg rounded-2xl p-5 shadow-2xl sm:p-6">
-            {!isSectionContinue ? (
-              <p className="tt-contextual-tour-card-muted mb-1 text-xs font-medium uppercase tracking-wide">
-                {tour.progressLabel}
-              </p>
-            ) : null}
-            <h2
-              id="tt-contextual-tour-title"
-              className="text-lg font-semibold leading-snug"
-            >
-              {step.title}
-            </h2>
-            {step.message ? (
-              <p
-                id="tt-contextual-tour-body"
-                className="tt-contextual-tour-card-muted mt-2 text-sm leading-relaxed"
-              >
-                {step.message}
-              </p>
-            ) : null}
-
-            <div className="mt-5 flex flex-wrap items-center gap-2">
-              {!isSectionContinue && !isFinish && tour.stepIndex > 0 ? (
-                <button
-                  type="button"
-                  className="rounded-xl border border-white/15 px-4 py-2 text-sm font-medium transition hover:bg-white/10"
-                  onClick={tour.back}
-                >
-                  Back
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="ml-auto rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500"
-                onClick={() => {
-                  if (isFinish) tour.finish()
-                  else tour.next()
-                }}
-              >
-                {primaryLabel}
-              </button>
-              {!isFinish ? (
-                <button
-                  type="button"
-                  className="rounded-xl px-3 py-2 text-sm font-medium tt-contextual-tour-card-muted transition hover:text-[var(--tt-tour-card-text)]"
-                  onClick={tour.skip}
-                >
-                  Skip
-                </button>
-              ) : null}
-            </div>
-          </div>
+        <div
+          data-tt-contextual-tour-popover
+          role="region"
+          aria-label="App walkthrough step"
+          aria-labelledby="tt-contextual-tour-title"
+          aria-describedby={step.message ? "tt-contextual-tour-body" : undefined}
+          className="pointer-events-auto fixed z-[10075] transition-[top,left] duration-200 ease-out motion-reduce:transition-none"
+          style={{
+            top: popover.top,
+            left: popover.left,
+            width: popover.width,
+          }}
+        >
+          <TourStepCard
+            step={step}
+            tour={tour}
+            isSectionContinue={isSectionContinue}
+            isFinish={isFinish}
+            primaryLabel={primaryLabel}
+          />
         </div>
       ) : null}
-    </div>
+    </>,
+    document.body
   )
-
-  return createPortal(content, document.body)
 }

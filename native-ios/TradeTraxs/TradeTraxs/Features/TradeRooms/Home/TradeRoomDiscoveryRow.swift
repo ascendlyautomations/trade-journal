@@ -54,7 +54,7 @@ struct TradeRoomDiscoveryRow: View {
                             .lineLimit(1)
 
                             if room.isOfficial {
-                                TradeRoomOfficialBadge(style: .checkmark)
+                                TradeRoomOfficialBadge(style: .label)
                             }
                         }
 
@@ -101,7 +101,7 @@ struct TradeRoomDiscoveryRow: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
 
             joinButton
         }
@@ -169,7 +169,7 @@ struct TradeRoomDiscoveryRow: View {
                     .padding(.vertical, presentation == .plainList ? 0 : 8)
                     .background(colors.accent, in: Capsule())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .disabled(!interactive)
             .accessibilityIdentifier("tradeRooms.discovery.join.\(room.id.rawValue)")
         }

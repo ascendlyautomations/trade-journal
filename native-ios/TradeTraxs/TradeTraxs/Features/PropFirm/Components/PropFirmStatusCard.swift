@@ -81,7 +81,7 @@ struct PropFirmStatusCard: View {
                 }
                 .padding(.top, ExperienceSpacing.xs)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .accessibilityIdentifier("dashboard.propFirm.details")
         }
         .padding(ExperienceSpacing.md)

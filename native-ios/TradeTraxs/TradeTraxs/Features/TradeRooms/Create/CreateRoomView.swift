@@ -280,7 +280,7 @@ struct CreateRoomView: View {
                                 .foregroundStyle(colors.tertiaryText)
                         }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityLabel("Permissions for \(channel.name.isEmpty ? "sub-room" : channel.name)")
                     .accessibilityIdentifier("createRoom.channelPermissions.\(channel.id.uuidString)")
                 }

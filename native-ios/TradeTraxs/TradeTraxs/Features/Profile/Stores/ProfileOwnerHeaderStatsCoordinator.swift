@@ -35,51 +35,70 @@ final class ProfileOwnerHeaderStatsCoordinator {
     }
 
     /// Recompute header trade metrics from the session owner journal (canonical ``ProfileOverviewMetrics``).
-    func reconcile(ownerID: ProfileID) {
+    ///
+    /// A partial owner-trade cache must not replace loaded header metrics with a smaller overview.
+    /// `publicOverviewDelta` adjusts the existing count when the cache cannot see the full journal.
+    func reconcile(ownerID: ProfileID, publicOverviewDelta: Int = 0) {
         let trades = SessionOwnerTradesStore.shared.cached(for: ownerID) ?? []
         let overview = ProfileOverviewMetrics.overview(fromPublicJournal: trades)
 
+        let loaded = loadedStats(ownerID: ownerID)
+        if let loaded,
+           loaded.hasLoadedHeaderMetrics,
+           overview.publicTradeCount < loaded.publicTradeCount
+        {
+            guard publicOverviewDelta != 0 else { return }
+            var kept = loaded
+            kept.publicTradeCount = max(0, loaded.publicTradeCount + publicOverviewDelta)
+            kept.tradeCount = max(0, loaded.tradeCount + publicOverviewDelta)
+            publish(kept)
+            return
+        }
+
+        guard let stats = statsApplying(overview, to: loaded, ownerID: ownerID) else { return }
         profiles?.invalidateCachedStats(for: ownerID)
-
-        guard let patched = patchExistingStats(ownerID: ownerID, overview: overview) else { return }
-
-        detailCache?.seed(stats: patched)
-        currentUserProfile?.applyOwnerJournalHeaderMetrics(patched)
-        activeProfileScreen?.applyExternalOwnerHeaderStats(patched)
+        publish(stats)
     }
 
-    private func patchExistingStats(
-        ownerID: ProfileID,
-        overview: ProfileOverviewMetrics.Result
-    ) -> ProfileStats? {
+    private func publish(_ stats: ProfileStats) {
+        detailCache?.seed(stats: stats)
+        currentUserProfile?.applyOwnerJournalHeaderMetrics(stats)
+        activeProfileScreen?.applyExternalOwnerHeaderStats(stats)
+    }
+
+    private func loadedStats(ownerID: ProfileID) -> ProfileStats? {
         let base =
             detailCache?.stats(for: ownerID)
             ?? (currentUserProfile?.profile?.id == ownerID ? currentUserProfile?.stats : nil)
             ?? activeProfileScreen?.state.stats
+        guard let base, base.profileID == ownerID else { return nil }
+        return base
+    }
 
-        guard var stats = base, stats.profileID == ownerID else {
-            return ProfileStats(
-                profileID: ownerID,
-                followerCount: 0,
-                followingCount: 0,
-                postCount: 0,
-                tradeCount: overview.publicTradeCount,
-                publicTradeCount: overview.publicTradeCount,
-                winRate: overview.winRate,
-                profitFactor: overview.profitFactor,
-                netPnL: overview.netPnL,
-                averageRR: overview.averageRR,
-                payoutTotal: nil,
-                expectancy: overview.expectancy
-            )
-        }
-
+    private func statsApplying(
+        _ overview: ProfileOverviewMetrics.Result,
+        to loaded: ProfileStats?,
+        ownerID: ProfileID
+    ) -> ProfileStats? {
+        var stats = loaded ?? ProfileStats(
+            profileID: ownerID,
+            followerCount: 0,
+            followingCount: 0,
+            postCount: 0,
+            tradeCount: 0,
+            publicTradeCount: 0,
+            payoutTotal: nil
+        )
+        guard stats.profileID == ownerID else { return nil }
         stats.tradeCount = overview.publicTradeCount
         stats.publicTradeCount = overview.publicTradeCount
         stats.winRate = overview.winRate
         stats.profitFactor = overview.profitFactor
         stats.netPnL = overview.netPnL
         stats.averageRR = overview.averageRR
+        if stats.expectancy == nil {
+            stats.expectancy = overview.expectancy
+        }
         return stats
     }
 }

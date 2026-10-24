@@ -187,6 +187,8 @@ export default function RithmicBrokerAccountsPanel({
               category: acc.category,
               mode: acc.mode,
               rules: acc.rules,
+              purchaseCost: acc.purchaseCost,
+              purchaseDate: acc.purchaseDate,
             },
           }),
         }

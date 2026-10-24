@@ -141,17 +141,37 @@ final class BacktestLabViewModel {
         }
     }
 
-    func confirmDelete() async {
-        guard let item = pendingDelete else { return }
+    func confirmDelete(item explicitItem: TradeOwnerJournalSummary? = nil) async {
+        let item = explicitItem ?? pendingDelete
+        guard let item else { return }
         pendingDelete = nil
+        let previous = TradeSummaryMapper.listMatchTrade(from: item)
+        let removedIndex = allTrades.firstIndex { $0.id == item.id }
+        let removed = removedIndex.map { allTrades[$0] }
+        allTrades.removeAll { $0.id == item.id }
         do {
-            try await trades.delete(id: item.id)
-            allTrades.removeAll { $0.id == item.id }
-            if let owner = profileID {
-                TradeJournalMutationStore.shared.noteDeleted(id: item.id, owner: owner)
+            let owner: ProfileID
+            if let profileID {
+                owner = profileID
+            } else if let userID = await session.currentUserID {
+                owner = ProfileID(userID.rawValue)
+            } else {
+                throw AppError.domain(.permission(.notAuthenticated))
             }
+            try await OwnerTradeDeletionService.deleteOwnedTrade(
+                tradeID: item.id,
+                owner: owner,
+                previous: previous,
+                trades: trades,
+                session: session,
+                detailCache: detailCache,
+                tradeDetailRepository: tradeDetailRepository
+            )
             ExperienceHaptics.play(.success)
         } catch {
+            if let removedIndex, let removed {
+                allTrades.insert(removed, at: min(removedIndex, allTrades.count))
+            }
             phase = .failed(ProfileSectionSupport.message(for: error))
             ExperienceHaptics.play(.warning)
         }

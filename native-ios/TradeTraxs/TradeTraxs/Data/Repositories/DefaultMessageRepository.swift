@@ -905,7 +905,11 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             },
             isGroup: isGroup,
             isPinned: dto.is_pinned == true,
-            lastMessagePreview: ConversationInboxActivity.preview(fromStoredContent: dto.last_message),
+            lastMessagePreview: ConversationInboxActivity.inboxPreview(
+                ConversationInboxActivity.preview(fromStoredContent: dto.last_message),
+                isGroup: isGroup,
+                peerUsername: peerUsername
+            ),
             lastMessageAt: lastAt,
             unreadCount: unreadCount,
             isMuted: isMuted,

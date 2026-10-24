@@ -1,31 +1,26 @@
 import Foundation
 
-/// Native Trading Reports — mirrors web `ensureTradingReportsLoaded` + notify.
+/// Native Trading Reports — mirrors web `ensureTradingReportsLoaded`.
 ///
 /// Report bodies are generated locally with ``TradingReportGenerator`` (web
-/// `generateTradingReport.ts`). The only BFF call is optional notify.
+/// `generateTradingReport.ts`). Weekly push is server-scheduled (Vercel cron).
 actor DefaultTradingReportRepository: TradingReportRepository {
     private let trades: any TradeRepository
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
-    private let supabase: SupabaseInfrastructure
 
     private var snapshot: TradingReportsSnapshot?
     private var tradeFingerprint: String?
     private var cachedEligibleTrades: [Trade] = []
     private var yearlyCache: [String: TradingYearlyReport] = [:]
-    private var notifiedKeys = Set<String>()
-
     init(
         trades: any TradeRepository,
         session: any SessionProviding,
-        detailCache: DetailPresentationCache,
-        supabase: SupabaseInfrastructure
+        detailCache: DetailPresentationCache
     ) {
         self.trades = trades
         self.session = session
         self.detailCache = detailCache
-        self.supabase = supabase
     }
 
     func ensureSnapshot(forceNetwork: Bool) async throws -> TradingReportsSnapshot {
@@ -47,7 +42,6 @@ actor DefaultTradingReportRepository: TradingReportRepository {
         tradeFingerprint = fingerprint
         yearlyCache = [:]
 
-        await maybeNotify(userID: await session.currentUserID?.rawValue, snapshot: next)
         return next
     }
 
@@ -139,48 +133,6 @@ actor DefaultTradingReportRepository: TradingReportRepository {
         return eligible
     }
 
-    // MARK: - Notify (web `requestTradingReportNotification`)
-
-    private func maybeNotify(userID: String?, snapshot: TradingReportsSnapshot) async {
-        guard let userID,
-              !DemoExperienceSupport.usesLocalBundledData(ProfileID(userID))
-        else { return }
-        guard let transport = supabase.transport else { return }
-
-        for periodKey: TradingReportPeriodKey in [.weeklyLast, .monthlyLast] {
-            guard let report = snapshot.report(for: periodKey),
-                  report.metrics.tradesTaken > 0
-            else { continue }
-
-            let notifyKey = "\(userID):\(periodKey.rawValue):\(report.periodStartIso)"
-            guard !notifiedKeys.contains(notifyKey) else { continue }
-            notifiedKeys.insert(notifyKey)
-
-            let body = NotifyBody(
-                periodKey: periodKey.rawValue,
-                periodId: TradingReportPeriods.periodID(for: periodKey),
-                kind: report.kind.rawValue,
-                title: report.kind == .weekly
-                    ? "Your Weekly Trading Report is Ready"
-                    : "Your Monthly Trading Report is Ready",
-                href: "/dashboard?report=\(periodKey.rawValue)"
-            )
-
-            do {
-                let data = try transport.encodeJSON(body)
-                _ = try await transport.send(
-                    host: .bff,
-                    path: "/api/trading-reports/notify",
-                    method: .post,
-                    body: data,
-                    requiresAuthentication: true
-                )
-            } catch {
-                // Best-effort — web also swallows notify failures.
-            }
-        }
-    }
-
     private static func fingerprint(_ trades: [Trade]) -> String {
         guard !trades.isEmpty else { return "0" }
         let head = trades.first?.id.rawValue ?? ""
@@ -200,13 +152,5 @@ actor DefaultTradingReportRepository: TradingReportRepository {
             }
         }()
         return "\(fingerprint):year:\(year):account:\(account):mode:\(filters.accountMode.rawValue)"
-    }
-
-    private struct NotifyBody: Encodable {
-        var periodKey: String
-        var periodId: String
-        var kind: String
-        var title: String
-        var href: String
     }
 }

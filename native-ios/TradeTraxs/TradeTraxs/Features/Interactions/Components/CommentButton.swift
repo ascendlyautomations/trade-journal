@@ -20,10 +20,10 @@ struct CommentButton: View {
                 count: count,
                 iconColor: colors.secondaryText
             )
+            .engagementActionRowContainer()
+            .engagementMinimumTapTarget()
         }
-        .buttonStyle(.plain)
-        .engagementActionRowContainer()
-        .engagementMinimumTapTarget()
+        .buttonStyle(.experiencePlain)
         .accessibilityLabel("Comments")
         .accessibilityValue("\(count)")
         .accessibilityIdentifier("interaction.comment.\(target.kind.rawValue).\(target.id)")

@@ -19,9 +19,9 @@ struct DemoExperienceLeaveButton: View {
                     Capsule()
                         .strokeBorder(colors.border.opacity(0.8), lineWidth: ExperienceBorder.hairline)
                 }
+                .experienceTouchTarget()
         }
-        .buttonStyle(.plain)
-        .experienceTouchTarget()
+        .buttonStyle(.experiencePlain)
         .accessibilityLabel("Leave Demo")
         .accessibilityHint("Returns to sign in")
         .accessibilityIdentifier("demo.leave")

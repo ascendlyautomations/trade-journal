@@ -8,16 +8,17 @@ export const PROFILE_WALL_POSTS_PAGE_SIZE = 12
 
 /**
  * Columns the Profile post card, room share, pin, edit, delete, and share
- * actions read. `image_crop` is unused by this UI.
+ * actions read. `image_crop` is the saved photo crop shared with iOS.
  */
 export const PROFILE_WALL_POST_SELECT =
-  "id, user_id, content, image_url, created_at, is_pinned, room_id, room_name, room_logo, room_description"
+  "id, user_id, content, image_url, image_crop, created_at, is_pinned, room_id, room_name, room_logo, room_description"
 
 export type ProfileWallPostPageRow = {
   id: string
   user_id?: string | null
   content?: string | null
   image_url?: string | null
+  image_crop?: unknown
   created_at?: string | null
   is_pinned?: boolean | null
   room_id?: string | null

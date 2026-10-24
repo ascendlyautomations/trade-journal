@@ -172,6 +172,8 @@ struct ContextualTourGates: Equatable, Sendable {
     var feedRootActive = false
     var profileRootActive = false
     var settingsHomeActive = false
+    var payoutsActive = false
+    var expenseTrackerActive = false
     var sceneActive = false
     var unobstructed = false
 

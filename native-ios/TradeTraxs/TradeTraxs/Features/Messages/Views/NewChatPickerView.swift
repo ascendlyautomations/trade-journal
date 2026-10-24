@@ -170,7 +170,7 @@ struct NewChatPickerView: View {
             .background(colors.backgroundSecondary)
             .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.lg))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
     }
 
     @ViewBuilder
@@ -273,7 +273,7 @@ struct NewChatPickerView: View {
         } label: {
             profileRow(profile, showsSelection: false, isSelected: false)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .listRowBackground(colors.backgroundPrimary)
     }
 
@@ -287,7 +287,7 @@ struct NewChatPickerView: View {
                 isSelected: viewModel.isGroupMemberSelected(profile)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .listRowBackground(colors.backgroundPrimary)
     }
 
@@ -299,7 +299,6 @@ struct NewChatPickerView: View {
                     Text(profile.displayName)
                         .experienceStyle(.body, color: colors.primaryText)
                         .lineLimit(1)
-                    ProfileTradeTraxsIdentityBadge(profile: profile, size: .inline)
                 }
                 Text("@\(profile.username)")
                     .experienceStyle(.caption, color: colors.secondaryText)

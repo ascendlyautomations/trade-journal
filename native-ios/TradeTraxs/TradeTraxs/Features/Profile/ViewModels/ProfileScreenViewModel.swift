@@ -22,6 +22,13 @@ final class ProfileScreenViewModel {
 
     private var bootstrapTask: Task<Void, Never>?
     private var isReconcilingFromDisk = false
+    /// User pull-to-refresh should take the server lists instead of keeping the previous tab pages.
+    private var acceptServerSectionLists = false
+    private var profileContentWatchProfileID: ProfileID?
+    private var profilePostsRealtimeTask: Task<Void, Never>?
+    private var profileTradesRealtimeTask: Task<Void, Never>?
+    private var profilePostsConsumer: RealtimeRouteConsumerHandle?
+    private var profileTradesConsumer: RealtimeRouteConsumerHandle?
 
     var pinnedContent: [ProfilePinnedItem] { state.pinnedContent }
 
@@ -111,7 +118,9 @@ final class ProfileScreenViewModel {
         bindProfileEntityRealtime()
     }
 
-    func onDisappearProfileEntityRealtime() {}
+    func onDisappearProfileEntityRealtime() {
+        stopProfileContentRealtime()
+    }
 
     /// Clears tab payloads when the viewer blocks the profile currently on screen.
     func hideContentForViewerBlockedPeerIfNeeded() {
@@ -136,19 +145,209 @@ final class ProfileScreenViewModel {
         applyLocalState(next)
     }
 
-    private func bindProfileEntityRealtime() {}
+    private func bindProfileEntityRealtime() {
+        guard let profileID = state.profileID ?? contentStore.resolvedProfileID else { return }
+        if profileContentWatchProfileID == profileID,
+           profilePostsRealtimeTask != nil,
+           profileTradesRealtimeTask != nil
+        {
+            return
+        }
+        stopProfileContentRealtime()
+        profileContentWatchProfileID = profileID
+        let hub = data.realtimeHub
+        let session = data.session
+        let profileRaw = profileID.rawValue
+        profilePostsRealtimeTask = Task { @MainActor [weak self] in
+            let token = await session.accessToken
+            guard let self, !Task.isCancelled else { return }
+            let watch = hub.watchProfileTable(
+                table: "profile_posts",
+                profileID: profileRaw,
+                accessToken: token,
+                debugOwner: "ProfilePosts"
+            )
+            self.profilePostsConsumer = watch.consumer
+            for await signal in watch.events {
+                if Task.isCancelled { break }
+                self.applyProfilePostSignal(signal)
+            }
+        }
+        profileTradesRealtimeTask = Task { @MainActor [weak self] in
+            let token = await session.accessToken
+            guard let self, !Task.isCancelled else { return }
+            let watch = hub.watchProfileTable(
+                table: "trades",
+                profileID: profileRaw,
+                accessToken: token,
+                debugOwner: "ProfileTrades"
+            )
+            self.profileTradesConsumer = watch.consumer
+            for await signal in watch.events {
+                if Task.isCancelled { break }
+                self.applyProfileTradeSignal(signal)
+            }
+        }
+    }
 
-    /// Owner journal header metrics — keep shell + ``ProfileContentStore`` aligned with detail cache.
+    private func stopProfileContentRealtime() {
+        profilePostsRealtimeTask?.cancel()
+        profileTradesRealtimeTask?.cancel()
+        profilePostsRealtimeTask = nil
+        profileTradesRealtimeTask = nil
+        let postsConsumer = profilePostsConsumer
+        let tradesConsumer = profileTradesConsumer
+        profilePostsConsumer = nil
+        profileTradesConsumer = nil
+        profileContentWatchProfileID = nil
+        let hub = data.realtimeHub
+        Task {
+            await hub.releaseWatch(postsConsumer)
+            await hub.releaseWatch(tradesConsumer)
+        }
+    }
+
+    private func applyProfilePostSignal(_ signal: MessageRealtimeSignal) {
+        guard let profileID = state.profileID ?? contentStore.resolvedProfileID else { return }
+        if signal.kind == .delete {
+            guard let raw = signal.messageID, !raw.isEmpty else { return }
+            let id = PostID(raw)
+            OwnerProfileOptimisticStore.shared.notePostDeleted(id: id)
+            shellViewModel?.posts?.noteRemoteDeleted(id: id)
+            forgetCachedPost(id: id)
+            Task { await persistMutationPatch { viewer in
+                ProfilePersistedCacheCoordinator.removePost(id: id, owner: profileID, viewerID: viewer)
+            } }
+            return
+        }
+        guard let payload = signal.recordPayload,
+              let post = ProfileTabWireMapping.post(fromRealtimeRecord: payload),
+              post.authorProfileID == profileID
+        else {
+            refreshLoadedPostsFromServer()
+            return
+        }
+        if let posts = shellViewModel?.posts {
+            posts.noteRemoteUpsert(post)
+            if posts.hasAuthoritativePayload {
+                rememberProfilePosts(posts.items)
+            }
+        } else {
+            rememberUnloadedPost(post)
+        }
+        Task { await persistMutationPatch { viewer in
+            ProfilePersistedCacheCoordinator.patchPost(post, viewerID: viewer)
+        } }
+    }
+
+    private func applyProfileTradeSignal(_ signal: MessageRealtimeSignal) {
+        guard let profileID = state.profileID ?? contentStore.resolvedProfileID else { return }
+        if signal.kind == .delete {
+            guard let raw = signal.messageID, !raw.isEmpty else { return }
+            let id = TradeID(raw)
+            shellViewModel?.trades?.noteRemoteTradeDeleted(id: id)
+            forgetCachedTrade(id: id)
+            Task { await persistMutationPatch { viewer in
+                ProfilePersistedCacheCoordinator.removeTrade(id: id, owner: profileID, viewerID: viewer)
+            } }
+            return
+        }
+        guard let payload = signal.recordPayload,
+              let trade = Self.trade(fromRealtimeRecord: payload),
+              trade.ownerProfileID == profileID
+        else {
+            refreshLoadedTradesFromServer()
+            return
+        }
+        shellViewModel?.trades?.noteRemoteTrade(trade)
+        Task { await persistMutationPatch { viewer in
+            ProfilePersistedCacheCoordinator.patchTrade(trade, viewerID: viewer)
+        } }
+    }
+
+    private func rememberProfilePosts(_ posts: [Post]) {
+        var next = state
+        next.posts = posts
+        next.didLoadPosts = true
+        guard next != state else { return }
+        state = next
+        shellViewModel?.adoptLatestState(next)
+    }
+
+    /// A live post for a tab that has not been opened yet. Keeps a cached list
+    /// current without starting that tab's fetch.
+    private func rememberUnloadedPost(_ post: Post) {
+        guard state.didLoadPosts else { return }
+        var posts = state.posts
+        if let index = posts.firstIndex(where: { $0.id == post.id }) {
+            posts[index] = post
+        } else {
+            posts.append(post)
+        }
+        let deleted = OwnerProfileOptimisticStore.shared.deletedPostIDs
+        posts.removeAll { deleted.contains($0.id) }
+        posts.sort { lhs, rhs in
+            if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
+            if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
+            return lhs.id.rawValue > rhs.id.rawValue
+        }
+        var next = state
+        next.posts = posts
+        next.lastUpdated = Date()
+        guard next != state else { return }
+        state = next
+        shellViewModel?.adoptLatestState(next)
+    }
+
+    private func forgetCachedPost(id: PostID) {
+        guard state.posts.contains(where: { $0.id == id }) else { return }
+        var next = state
+        next.posts.removeAll { $0.id == id }
+        next.lastUpdated = Date()
+        state = next
+        shellViewModel?.adoptLatestState(next)
+    }
+
+    private func forgetCachedTrade(id: TradeID) {
+        guard state.didLoadTrades, state.trades.contains(where: { $0.id == id }) else { return }
+        var next = state
+        next.trades.removeAll { $0.id == id }
+        next.tradeJournalPreview.removeAll { $0.id == id }
+        next.lastUpdated = Date()
+        state = next
+        shellViewModel?.adoptLatestState(next)
+    }
+
+    private func refreshLoadedPostsFromServer() {
+        guard let posts = shellViewModel?.posts, posts.hasAuthoritativePayload else { return }
+        Task { await posts.refresh() }
+    }
+
+    private func refreshLoadedTradesFromServer() {
+        guard let trades = shellViewModel?.trades, trades.hasAuthoritativePayload else { return }
+        Task { await trades.refresh() }
+    }
+
+    private static func trade(fromRealtimeRecord data: Data) -> Trade? {
+        if let dto = PostgresChangeRecordCodec.decode(TradeDTO.Trade.self, from: data),
+           let trade = try? TradeMapper.mapToDomain(dto) {
+            return trade
+        }
+        guard var object = PostgresChangeRecordCodec.dictionary(from: data) else { return nil }
+        object.removeValue(forKey: "image_crop")
+        guard JSONSerialization.isValidJSONObject(object),
+              let retry = try? JSONSerialization.data(withJSONObject: object),
+              let dto = PostgresChangeRecordCodec.decode(TradeDTO.Trade.self, from: retry)
+        else { return nil }
+        return try? TradeMapper.mapToDomain(dto)
+    }
+
+    /// Owner journal header metrics — patch the header only. Section lists stay as loaded.
     func applyExternalOwnerHeaderStats(_ stats: ProfileStats) {
         guard state.isOwner, state.profileID == stats.profileID else { return }
         var next = state
         next.stats = stats
-        applyLocalState(
-            next,
-            skipPostsBootstrap: true,
-            skipClipsBootstrap: true,
-            skipTradesBootstrap: true
-        )
+        commitProfileHeaderState(next)
     }
 
     /// FollowMutationCoordinator — keep ProfileState aligned with shared caches.
@@ -187,7 +386,11 @@ final class ProfileScreenViewModel {
     func refresh() async {
         ExperienceHaptics.play(.selection)
         state.isRefreshing = true
-        await performBootstrap(force: true)
+        await UncancelledRefresh.run { [weak self] in
+            guard let self else { return }
+            await self.performBootstrap(force: true)
+            await self.shellViewModel?.refreshSelected()
+        }
         state.isRefreshing = false
     }
 
@@ -595,13 +798,12 @@ final class ProfileScreenViewModel {
             var next = state
             let summary = TradeSummaryMapper.summary(fromPartialListTrade: trade)
             next.trades = OwnerProfileOptimisticStore.upserting(summary, into: preferredTradesBase())
+            next.didLoadTrades = true
             if next.phase == .idle || next.phase == .loading {
-                applyLocalState(next, skipTradesBootstrap: true)
-            } else {
                 next.phase = .loaded
                 next.didBootstrap = true
-                applyLocalState(next, skipTradesBootstrap: true)
             }
+            commitProfileHeaderState(next)
 
             if let visible = shellViewModel?.trades?.items {
                 syncTradesFromSection(visible)
@@ -609,7 +811,8 @@ final class ProfileScreenViewModel {
         } else {
             var next = state
             next.trades.removeAll { $0.id == trade.id }
-            applyLocalState(next, skipTradesBootstrap: true)
+            next.didLoadTrades = true
+            commitProfileHeaderState(next)
             shellViewModel?.trades?.handleJournalMutation()
         }
     }
@@ -840,7 +1043,8 @@ final class ProfileScreenViewModel {
         shellViewModel?.trades?.handleJournalMutation()
         var next = state
         next.trades.removeAll { $0.id == id }
-        applyLocalState(next, skipTradesBootstrap: true)
+        next.didLoadTrades = true
+        commitProfileHeaderState(next)
         if let visible = shellViewModel?.trades?.items {
             syncTradesFromSection(visible)
         }
@@ -909,6 +1113,16 @@ final class ProfileScreenViewModel {
         var copy = profile
         copy.avatar = preferred.map { MediaReference(id: $0, kind: .image, altText: nil) }
         return copy
+    }
+
+    /// Header/profile snapshot update that must not re-bootstrap Posts, Clips, Trades, Stats, or Achievements.
+    private func commitProfileHeaderState(_ next: ProfileState) {
+        var next = next
+        next.lastUpdated = state.lastUpdated
+        next.isRefreshing = state.isRefreshing
+        state = next
+        contentStore.applyBootstrap(next)
+        shellViewModel?.adoptLatestState(next)
     }
 
     private func applyLocalState(
@@ -1023,7 +1237,9 @@ final class ProfileScreenViewModel {
         guard !Task.isCancelled else { return }
         if force, !isReconcilingFromDisk {
             // Recreate section VMs so Stage 2 reloads once per tab after refresh.
+            // Drop the previous lists so a web post or trade is not kept in place of the server page.
             shellViewModel = nil
+            acceptServerSectionLists = true
         }
 
         if isReconcilingFromDisk, existingForReconcile.profile != nil {
@@ -1062,11 +1278,17 @@ final class ProfileScreenViewModel {
         case network
     }
 
-    private func publish(_ next: ProfileState, source: PublishSource) {
-        var next = ProfilePersistentReconcile.preservingAbsentSectionLoads(
-            incoming: next,
-            existing: state
-        )
+    private func publish(_ incoming: ProfileState, source: PublishSource) {
+        var next: ProfileState
+        if acceptServerSectionLists {
+            acceptServerSectionLists = false
+            next = incoming
+        } else {
+            next = ProfilePersistentReconcile.preservingAbsentSectionLoads(
+                incoming: incoming,
+                existing: state
+            )
+        }
         if isOwnerTarget {
             next = OwnerProfileOptimisticStore.shared.merging(into: next)
             if let profile = next.profile {
@@ -1087,6 +1309,7 @@ final class ProfileScreenViewModel {
         }
         syncShellIfNeeded()
         activateShellForLaunch()
+        bindProfileEntityRealtime()
 
         // Prefetch engagement only after the default trades section has data.
         if next.didLoadTrades, let trades = shellViewModel?.trades {

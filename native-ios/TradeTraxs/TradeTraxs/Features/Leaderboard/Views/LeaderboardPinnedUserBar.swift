@@ -29,7 +29,7 @@ struct LeaderboardPinnedUserBar: View {
             }
             .background(colors.fillSecondary)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityIdentifier("leaderboard.pinned.you")
     }
 

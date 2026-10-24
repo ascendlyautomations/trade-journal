@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Dashboard-only A/B: opaque UIKit navigation bar (Feed-equivalent) during scroll-header testing.
+/// Dashboard root uses the same opaque navigation bar as Feed.
 ///
 /// Revert by setting ``matchesFeedOpaqueNavigationBar`` to `false`.
 enum DashboardScrollHeaderOpaqueNavBarExperiment {

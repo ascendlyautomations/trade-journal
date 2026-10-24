@@ -77,7 +77,7 @@ struct ManageRoomChannelsView: View {
                 } label: {
                     channelHeader(channel: channel, showsDisclosure: true, chevronDown: isExpanded)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
             } else {
                 channelHeader(channel: channel, showsDisclosure: false, chevronDown: false)
             }

@@ -56,6 +56,7 @@ struct LeaderboardFiltersView: View {
                     colors.fillSecondary,
                     in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
                 )
+                .experienceControlHitTarget()
             }
             .accessibilityIdentifier("leaderboard.category")
             .accessibilityLabel("Category")
@@ -88,7 +89,7 @@ struct LeaderboardFiltersView: View {
                     Capsule().fill(selected ? colors.accent : colors.fillSecondary)
                 )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityIdentifier("leaderboard.timeframe.\(option.rawValue)")
     }
 }

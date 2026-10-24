@@ -69,9 +69,9 @@ struct SemanticColorPalette: Sendable {
         surfaceOverlay: .experience(lightHex: 0x0B1218, darkHex: 0x000000, lightAlpha: 0.45, darkAlpha: 0.55),
 
         textPrimary: .experience(lightHex: 0x101820, darkHex: 0xF2F6FA),
-        textSecondary: .experience(lightHex: 0x5B6775, darkHex: 0xA8B3BF),
-        textTertiary: .experience(lightHex: 0x7E8B99, darkHex: 0x7E8B99),
-        textQuaternary: .experience(lightHex: 0x9AA6B2, darkHex: 0x5C6772),
+        textSecondary: .experience(lightHex: 0x5B6775, darkHex: 0xC5D0D8),
+        textTertiary: .experience(lightHex: 0x7E8B99, darkHex: 0xAEB9C4),
+        textQuaternary: .experience(lightHex: 0x9AA6B2, darkHex: 0x8E9BAA),
         textInverse: .experience(lightHex: 0xFFFFFF, darkHex: 0x0B1218),
 
         separator: .experience(lightHex: 0xD7DEE6, darkHex: 0x2A3542),
@@ -89,7 +89,7 @@ struct SemanticColorPalette: Sendable {
 
         profit: .experience(lightHex: 0x148F4A, darkHex: 0x34D399),
         loss: .experience(lightHex: 0xC23030, darkHex: 0xF87171),
-        neutralMetric: .experience(lightHex: 0x5B6775, darkHex: 0xA8B3BF),
+        neutralMetric: .experience(lightHex: 0x5B6775, darkHex: 0xC5D0D8),
 
         accessibilityAccent: .experience(lightHex: 0x065F7A, darkHex: 0x7DDBF0),
         accessibilityProfit: .experience(lightHex: 0x0B6B38, darkHex: 0x6EE7B7),

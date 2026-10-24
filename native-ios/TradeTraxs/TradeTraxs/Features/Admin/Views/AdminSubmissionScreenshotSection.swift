@@ -39,7 +39,7 @@ struct AdminSubmissionScreenshotSection: View {
                         }
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityLabel("View screenshot")
             } else {
                 Text("No screenshot attached")

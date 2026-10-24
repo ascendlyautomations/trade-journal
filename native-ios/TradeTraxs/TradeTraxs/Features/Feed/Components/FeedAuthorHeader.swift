@@ -32,7 +32,6 @@ struct FeedAuthorHeader: View {
                             Text(displayName)
                                 .experienceStyle(.headline, color: colors.primaryText)
                                 .lineLimit(1)
-                            ProfileTradeTraxsIdentityBadge(profile: resolvedProfile, size: .compact)
                         }
 
                         HStack(spacing: 4) {
@@ -53,7 +52,7 @@ struct FeedAuthorHeader: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
 
             ContentOverflowMenu(
                 isOwner: isOwner,

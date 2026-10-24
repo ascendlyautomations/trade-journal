@@ -23,7 +23,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
 
     /// Web `FEED_PROFILE_POSTS_SELECT` (core columns + profiles embed).
     private static let profileFeedSelect =
-        "id,user_id,content,image_url,image_crop,created_at,profiles(username,avatar_url,name)"
+        "id,user_id,content,image_url,image_crop,created_at,room_id,room_name,room_logo,room_description,profiles(username,avatar_url,name)"
 
     /// Web `FEED_REELS_SELECT` without trade embed (list identity + profiles).
     private static let reelFeedSelect =
@@ -290,7 +290,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         )
         return rows.compactMap { row -> FeedItem? in
             guard let id = row.id, let author = row.user_id else { return nil }
-            return makeFeedItem(
+            var item = makeFeedItem(
                 id: id,
                 kind: .post,
                 author: author,
@@ -304,6 +304,13 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
                 imageCrop: row.image_crop,
                 profiles: row.profiles?.profile
             )
+            item.roomShare = RoomShareAttachment.parsed(
+                roomID: row.room_id,
+                name: row.room_name,
+                logoURL: row.room_logo,
+                description: row.room_description
+            )
+            return item
         }
     }
 

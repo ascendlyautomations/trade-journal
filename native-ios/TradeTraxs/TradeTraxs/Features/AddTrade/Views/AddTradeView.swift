@@ -330,7 +330,7 @@ struct AddTradeView: View {
                     .padding(.vertical, ExperienceSpacing.xxs)
                     .background(colors.accent, in: Capsule())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .accessibilityIdentifier("addTrade.connectBroker")
         }
         .padding(.horizontal, ExperienceSpacing.md)
@@ -693,7 +693,7 @@ struct AddTradeView: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityIdentifier("addTrade.psychologyRow")
     }
 
@@ -758,7 +758,7 @@ struct AddTradeView: View {
                         .foregroundStyle(colors.accent)
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .accessibilityIdentifier("addTrade.instrument")
             .accessibilityLabel(
                 viewModel.symbolText.isEmpty
@@ -925,7 +925,7 @@ struct AddTradeView: View {
                         .foregroundStyle(colors.accent)
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .accessibilityIdentifier("addTrade.account")
         } else {
             Picker("Account", selection: Binding(
@@ -1374,7 +1374,7 @@ struct AddTradeNewClipComposerView: View {
                             Spacer()
                         }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityIdentifier("addTrade.newClip.preview")
 
                     PhotosPicker(selection: $videoItem, matching: MediaPickerPolicy.videoOnly.matching) {

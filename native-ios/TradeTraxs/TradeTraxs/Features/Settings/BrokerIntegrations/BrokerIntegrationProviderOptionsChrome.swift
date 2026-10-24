@@ -53,7 +53,7 @@ struct BrokerIntegrationProviderConnectCard: View {
                     .stroke(colors.border, lineWidth: ExperienceBorder.thin)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .disabled(isDisabled)
         .accessibilityIdentifier("brokerIntegrations.connectCard.\(provider.rawValue)")
     }

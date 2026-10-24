@@ -137,9 +137,9 @@ struct CalendarHomeView: View {
                     .foregroundStyle(colors.primaryText)
                     .frame(width: 36, height: 36)
                     .background(colors.fillSecondary, in: Circle())
+                    .experienceTouchTarget()
             }
-            .buttonStyle(.plain)
-            .experienceTouchTarget()
+            .buttonStyle(.experiencePlain)
             .accessibilityLabel("Previous month")
 
             Spacer()
@@ -164,9 +164,9 @@ struct CalendarHomeView: View {
                     .foregroundStyle(colors.primaryText)
                     .frame(width: 36, height: 36)
                     .background(colors.fillSecondary, in: Circle())
+                    .experienceTouchTarget()
             }
-            .buttonStyle(.plain)
-            .experienceTouchTarget()
+            .buttonStyle(.experiencePlain)
             .accessibilityLabel("Next month")
         }
         .padding(.bottom, ExperienceSpacing.xxs)
@@ -183,9 +183,9 @@ struct CalendarHomeView: View {
                     .foregroundStyle(colors.primaryText)
                     .frame(width: 36, height: 36)
                     .background(colors.fillSecondary, in: Circle())
+                    .experienceTouchTarget()
             }
-            .buttonStyle(.plain)
-            .experienceTouchTarget()
+            .buttonStyle(.experiencePlain)
             .accessibilityLabel("Previous year")
 
             Spacer()
@@ -210,9 +210,9 @@ struct CalendarHomeView: View {
                     .foregroundStyle(colors.primaryText)
                     .frame(width: 36, height: 36)
                     .background(colors.fillSecondary, in: Circle())
+                    .experienceTouchTarget()
             }
-            .buttonStyle(.plain)
-            .experienceTouchTarget()
+            .buttonStyle(.experiencePlain)
             .accessibilityLabel("Next year")
         }
         .padding(.bottom, ExperienceSpacing.xxs)

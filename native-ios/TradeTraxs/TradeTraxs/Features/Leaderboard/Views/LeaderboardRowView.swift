@@ -43,7 +43,7 @@ struct LeaderboardRowView: View {
             .padding(.vertical, ExperienceSpacing.sm)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityIdentifier("leaderboard.row.\(row.profileID.rawValue)")
     }
 
@@ -100,7 +100,7 @@ struct LeaderboardRowView: View {
                 )
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityLabel(row.isFollowing ? "Following" : "Follow")
     }
 

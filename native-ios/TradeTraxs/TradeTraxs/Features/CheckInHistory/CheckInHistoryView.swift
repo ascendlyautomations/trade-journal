@@ -75,7 +75,7 @@ struct CheckInHistoryView: View {
                             Button { viewModel.openDay(day) } label: {
                                 CheckInHistoryDayRow(summary: day, contentFilter: contentFilter)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.experiencePlain)
                         }
                     }
                 }

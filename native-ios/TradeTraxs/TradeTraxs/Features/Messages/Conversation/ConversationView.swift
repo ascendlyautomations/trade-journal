@@ -568,7 +568,7 @@ struct ConversationView: View {
                     .stroke(colors.border, lineWidth: 1)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .padding(.bottom, ExperienceSpacing.sm)
         .accessibilityIdentifier("conversation.newMessagesIndicator")
     }
@@ -601,7 +601,7 @@ struct ConversationView: View {
                 } label: {
                     conversationHeaderTitleContent
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityLabel("View \(viewModel.title)'s profile")
                 .accessibilityHint("Opens profile")
             } else {

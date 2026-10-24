@@ -17,10 +17,10 @@ struct VaultButton: View {
                 showsCount: false,
                 iconColor: isVaulted ? colors.accent : colors.secondaryText
             )
+            .engagementActionRowContainer()
+            .engagementMinimumTapTarget()
         }
-        .buttonStyle(.plain)
-        .engagementActionRowContainer()
-        .engagementMinimumTapTarget()
+        .buttonStyle(.experiencePlain)
         .accessibilityLabel(isVaulted ? "Manage in Vault" : "Add to Vault")
         .accessibilityIdentifier("interaction.vault.\(ref.contentType.rawValue).\(ref.contentID)")
     }

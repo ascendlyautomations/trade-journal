@@ -95,10 +95,13 @@ final class ClipsContainerViewModel {
                 }
                 return
             }
-            items = ProfileSectionSupport.reconcileLoadedSnapshot(
-                snapshot: snapshot.clips,
-                loaded: items,
-                orderedBy: \.createdAt
+            items = excludingDeletedReels(
+                ProfileSectionSupport.applyingLoadedPage(
+                    incoming: snapshot.clips,
+                    loaded: items,
+                    orderedBy: \.createdAt,
+                    pageIsComplete: false
+                )
             )
             #if DEBUG
             ProfileClipsSync.logReconciled(
@@ -317,11 +320,13 @@ final class ClipsContainerViewModel {
             }
             let beforeCount = items.count
             let serverMerged = OwnerProfileOptimisticStore.merging(overlay: overlay, into: pageReels)
-            items = ProfileSectionSupport.reconcileLoadedSnapshot(
-                snapshot: serverMerged,
-                loaded: items,
-                orderedBy: \.createdAt,
-                snapshotIsPartial: cursor != nil
+            items = excludingDeletedReels(
+                ProfileSectionSupport.applyingLoadedPage(
+                    incoming: serverMerged,
+                    loaded: items,
+                    orderedBy: \.createdAt,
+                    pageIsComplete: cursor == nil
+                )
             )
             nextCursor = cursor
             detailCache.seed(reels: items)
@@ -435,9 +440,16 @@ final class ClipsContainerViewModel {
         }
     }
 
+    private func excludingDeletedReels(_ reels: [Reel]) -> [Reel] {
+        let deleted = OwnerProfileOptimisticStore.shared.deletedReelIDs
+        guard !deleted.isEmpty else { return reels }
+        return reels.filter { !deleted.contains($0.id) }
+    }
+
     private func appendUniqueReels(_ pageItems: [Reel]) {
         let existing = Set(items.map(\.id))
-        let fresh = pageItems.filter { !existing.contains($0.id) }
+        let deleted = OwnerProfileOptimisticStore.shared.deletedReelIDs
+        let fresh = pageItems.filter { !existing.contains($0.id) && !deleted.contains($0.id) }
         guard !fresh.isEmpty else {
             nextCursor = nil
             return

@@ -8,12 +8,14 @@ final class TradeHistoryExperienceTests: XCTestCase {
         TradeHistorySessionStore.shared.invalidate()
         TradeJournalMutationStore.shared.invalidate()
         SessionAccountsStore.shared.invalidate()
+        SessionOwnerTradesStore.shared.invalidate()
     }
 
     override func tearDown() {
         TradeHistorySessionStore.shared.invalidate()
         TradeJournalMutationStore.shared.invalidate()
         SessionAccountsStore.shared.invalidate()
+        SessionOwnerTradesStore.shared.invalidate()
         super.tearDown()
     }
 
@@ -265,6 +267,28 @@ final class TradeHistoryExperienceTests: XCTestCase {
         // Duplicate load-more at non-tail id should no-op.
         await viewModel.loadMoreIfNeeded(currentTradeID: viewModel.items.first?.id)
         XCTAssertEqual(repository.historyCallCount, 2)
+    }
+
+    func testResultCountLabelUsesAuthoritativeTotalNotLoadedPage() async {
+        let profileID = ProfileID("00000000-0000-4000-8000-000000000221")
+        SessionOwnerTradesStore.shared.invalidate(profileID: profileID)
+        SessionOwnerTradesStore.shared.noteBootstrapMetadata(
+            for: profileID,
+            historyComplete: false,
+            totalTradeCount: 50
+        )
+
+        let viewModel = TradeHistoryViewModel(
+            trades: TradeHistoryPagingStubRepository(),
+            session: TradeHistoryStubSession(userID: profileID.rawValue),
+            detailCache: DetailPresentationCache(),
+            tradeDetailRepository: NullTradeDetailRepository(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded && viewModel.items.count == 2 }
+
+        XCTAssertEqual(viewModel.resultCountLabel, "50 trades")
     }
 
     func testEmptyFilteredVsEmptyJournal() async {

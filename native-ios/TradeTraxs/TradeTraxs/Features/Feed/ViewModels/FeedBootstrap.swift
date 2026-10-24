@@ -221,31 +221,10 @@ enum FeedBootstrap: ScreenBootstrap {
         case .post:
             guard let postID = item.postID else { return nil }
             if let cached = detailCache.post(id: postID) {
-                return .post(item, cached)
+                return .post(item, Self.postKeepingRoomShare(cached, item: item, detailCache: detailCache))
             }
-            if item.caption != nil || item.mediaURL != nil {
-                let media: [MediaReference] = {
-                    guard let url = item.mediaURL?.trimmingCharacters(in: .whitespacesAndNewlines),
-                          !url.isEmpty else { return [] }
-                    if let reference = ContentImagePresentation.mediaReference(
-                        url: url,
-                        crop: item.imageCrop
-                    ) {
-                        return [reference]
-                    }
-                    return [MediaReference(id: url, kind: .image, altText: nil)]
-                }()
-                let post = Post(
-                    id: postID,
-                    authorProfileID: item.authorProfileID,
-                    body: item.caption ?? "",
-                    media: media,
-                    visibility: .public,
-                    linkedTradeID: item.tradeID,
-                    isPinned: false,
-                    createdAt: item.createdAt,
-                    updatedAt: item.createdAt
-                )
+            if item.caption != nil || item.mediaURL != nil || item.roomShare != nil {
+                let post = Self.wallPost(from: item, id: postID)
                 detailCache.seed(post)
                 return .post(item, post)
             }
@@ -449,31 +428,10 @@ enum FeedBootstrap: ScreenBootstrap {
         case .post:
             guard let postID = item.postID else { return nil }
             if let cached = detailCache.post(id: postID) {
-                return .post(item, cached)
+                return .post(item, postKeepingRoomShare(cached, item: item, detailCache: detailCache))
             }
-            if item.caption != nil || item.mediaURL != nil {
-                let media: [MediaReference] = {
-                    guard let url = item.mediaURL?.trimmingCharacters(in: .whitespacesAndNewlines),
-                          !url.isEmpty else { return [] }
-                    if let reference = ContentImagePresentation.mediaReference(
-                        url: url,
-                        crop: item.imageCrop
-                    ) {
-                        return [reference]
-                    }
-                    return [MediaReference(id: url, kind: .image, altText: nil)]
-                }()
-                let post = Post(
-                    id: postID,
-                    authorProfileID: item.authorProfileID,
-                    body: item.caption ?? "",
-                    media: media,
-                    visibility: .public,
-                    linkedTradeID: item.tradeID,
-                    isPinned: false,
-                    createdAt: item.createdAt,
-                    updatedAt: item.createdAt
-                )
+            if item.caption != nil || item.mediaURL != nil || item.roomShare != nil {
+                let post = wallPost(from: item, id: postID)
                 detailCache.seed(post)
                 return .post(item, post)
             }
@@ -557,5 +515,44 @@ enum FeedBootstrap: ScreenBootstrap {
         case .story:
             return nil
         }
+    }
+
+    private static func wallPost(from item: FeedItem, id: PostID) -> Post {
+        let media: [MediaReference] = {
+            guard let url = item.mediaURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !url.isEmpty else { return [] }
+            if let reference = ContentImagePresentation.mediaReference(
+                url: url,
+                crop: item.imageCrop
+            ) {
+                return [reference]
+            }
+            return [MediaReference(id: url, kind: .image, altText: nil)]
+        }()
+        return Post(
+            id: id,
+            authorProfileID: item.authorProfileID,
+            body: item.caption ?? "",
+            media: media,
+            visibility: .public,
+            linkedTradeID: item.tradeID,
+            isPinned: false,
+            createdAt: item.createdAt,
+            updatedAt: item.createdAt,
+            roomShare: item.roomShare
+        )
+    }
+
+    /// A cached wall post from before room columns were mapped still needs the snapshot on the item.
+    private static func postKeepingRoomShare(
+        _ cached: Post,
+        item: FeedItem,
+        detailCache: DetailPresentationCache
+    ) -> Post {
+        guard cached.roomShare == nil, let share = item.roomShare else { return cached }
+        var updated = cached
+        updated.roomShare = share
+        detailCache.seed(updated)
+        return updated
     }
 }

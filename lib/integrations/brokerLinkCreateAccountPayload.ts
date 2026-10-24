@@ -13,6 +13,8 @@ export type BrokerLinkCreateAccountBody = {
   category?: string
   mode?: string | null
   rules?: TradingAccountPropFirmRules | null
+  purchaseCost?: string | null
+  purchaseDate?: string | null
 }
 
 export function parseBrokerLinkCreateAccountPayload(
@@ -55,6 +57,8 @@ export function parseBrokerLinkCreateAccountPayload(
       category,
       mode,
       rules,
+      purchaseCost: body.purchaseCost?.trim() || null,
+      purchaseDate: body.purchaseDate?.trim() || null,
     },
   }
 }

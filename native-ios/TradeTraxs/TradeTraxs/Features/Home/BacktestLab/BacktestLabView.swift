@@ -58,7 +58,8 @@ struct BacktestLabView: View {
             titleVisibility: .visible
         ) {
             Button("Delete Trade", role: .destructive) {
-                Task { await viewModel.confirmDelete() }
+                let item = viewModel.pendingDelete
+                Task { await viewModel.confirmDelete(item: item) }
             }
             Button("Cancel", role: .cancel) {
                 viewModel.pendingDelete = nil
@@ -210,6 +211,7 @@ struct BacktestLabView: View {
             .padding(.horizontal, ExperienceSpacing.sm)
             .frame(minHeight: 32)
             .background(colors.fillSecondary, in: Capsule())
+            .experienceControlHitTarget()
         }
         .accessibilityIdentifier("backtest.lab.strategy")
     }
@@ -279,7 +281,7 @@ struct BacktestLabView: View {
                 } label: {
                     Image(systemName: "chevron.left")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 Spacer()
                 Text(TradingCalendarDay.monthTitle(
                     year: viewModel.calendarMonth.year,
@@ -292,7 +294,7 @@ struct BacktestLabView: View {
                 } label: {
                     Image(systemName: "chevron.right")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
             }
 
             if let month = viewModel.calendarMonthModel {

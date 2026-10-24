@@ -83,7 +83,7 @@ struct FollowRequestsView: View {
                                 ExperienceAvatar(initials: "?", size: 44)
                             }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
 
                         Button {
                             viewModel.openProfile(row.request.requesterProfileID)
@@ -99,7 +99,7 @@ struct FollowRequestsView: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
 
                         Button("Confirm") {
                             viewModel.approve(row.id)

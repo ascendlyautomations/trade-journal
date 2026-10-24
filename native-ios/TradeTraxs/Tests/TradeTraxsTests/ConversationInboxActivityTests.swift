@@ -411,6 +411,103 @@ final class ConversationInboxActivityTests: XCTestCase {
         XCTAssertEqual(row.lastMessageID, MessageID("m4"))
     }
 
+    func testDeletedAccountIsOmittedFromMessagesPage() {
+        let viewer = ProfileID("viewer-1")
+        let peer = ProfileID("peer-a")
+        var deleted = makeConversation(
+            id: "deleted-dm",
+            preview: "old text",
+            at: 100,
+            messageID: "m1"
+        )
+        deleted.peerUsername = "user"
+        deleted.participantProfileIDs = [viewer, peer]
+        XCTAssertTrue(
+            ConversationInboxActivity.shouldOmitFromMessagesPage(
+                deleted,
+                viewerID: viewer,
+                peerUsername: deleted.peerUsername
+            )
+        )
+
+        var orphaned = makeConversation(
+            id: "orphaned-dm",
+            preview: "gone",
+            at: 100,
+            messageID: "m2"
+        )
+        orphaned.peerUsername = "ada"
+        orphaned.participantProfileIDs = [viewer]
+        XCTAssertTrue(
+            ConversationInboxActivity.shouldOmitFromMessagesPage(
+                orphaned,
+                viewerID: viewer,
+                peerUsername: orphaned.peerUsername
+            )
+        )
+
+        var kept = makeConversation(
+            id: "kept-dm",
+            preview: "hello",
+            at: 100,
+            messageID: "m3"
+        )
+        kept.peerUsername = "ada"
+        kept.participantProfileIDs = [viewer, peer]
+        XCTAssertFalse(
+            ConversationInboxActivity.shouldOmitFromMessagesPage(
+                kept,
+                viewerID: viewer,
+                peerUsername: kept.peerUsername
+            )
+        )
+
+        var group = kept
+        group.isGroup = true
+        group.peerUsername = "user"
+        XCTAssertFalse(
+            ConversationInboxActivity.shouldOmitFromMessagesPage(
+                group,
+                viewerID: viewer,
+                peerUsername: group.peerUsername
+            )
+        )
+    }
+
+    func testDeletedPeerRemovesMessagePreviewFromInbox() {
+        var existing = makeConversation(
+            id: "deleted-dm",
+            preview: "still here",
+            at: 100,
+            messageID: "m-old"
+        )
+        existing.peerUsername = "user"
+        var incoming = existing
+        incoming.lastMessagePreview = nil
+        incoming.lastMessageAt = Date(timeIntervalSince1970: 200)
+        incoming.lastMessageID = MessageID("m-new")
+
+        let merged = ConversationInboxActivity.mergeConversations(existing: existing, incoming: incoming)
+        XCTAssertNil(merged.lastMessagePreview)
+
+        let message = makeMessage(
+            id: "m-live",
+            conversationID: existing.id,
+            body: "new text from deleted account",
+            at: 300
+        )
+        let patched = ConversationInboxActivity.applyingMessageActivity(to: existing, message: message)
+        XCTAssertNil(patched?.lastMessagePreview)
+        XCTAssertEqual(patched?.lastMessageID, MessageID("m-live"))
+
+        let kept = ConversationInboxActivity.inboxPreview(
+            "hello",
+            isGroup: false,
+            peerUsername: "ada"
+        )
+        XCTAssertEqual(kept, "hello")
+    }
+
     // MARK: - Helpers
 
     private func makeConversation(

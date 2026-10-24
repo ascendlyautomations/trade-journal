@@ -219,7 +219,7 @@ struct DashboardEquityHero: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .accessibilityLabel(label)
             .accessibilityHint("Opens withdrawal history")
             .accessibilityIdentifier("dashboard.accountValue.withdrawalSummary")

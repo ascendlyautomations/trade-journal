@@ -40,7 +40,7 @@ struct TradeJournalCard: View {
                 cardBody
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .contextMenu {
             Button {
                 onOpen()

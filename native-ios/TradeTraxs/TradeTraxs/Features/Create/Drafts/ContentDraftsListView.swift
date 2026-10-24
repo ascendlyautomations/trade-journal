@@ -144,7 +144,7 @@ private struct ContentDraftListRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
 
             HStack(spacing: ExperienceSpacing.md) {
                 Button("Edit", action: onOpen)
@@ -156,7 +156,7 @@ private struct ContentDraftListRow: View {
                     .font(.subheadline.weight(.medium))
                     .accessibilityIdentifier("contentDrafts.delete.\(draft.id.uuidString)")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.vertical, ExperienceSpacing.xxs)

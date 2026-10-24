@@ -1,6 +1,12 @@
 export type ContextualTourId = "dashboard"
 
-export type ContextualTourSurface = "dashboard" | "feed" | "profile" | "settings"
+export type ContextualTourSurface =
+  | "dashboard"
+  | "feed"
+  | "profile"
+  | "settings"
+  | "payouts"
+  | "expenseTracker"
 
 export type ContextualTourStepRole =
   | "spotlight"
@@ -23,6 +29,11 @@ export type ContextualTourTargetId =
   | "profileTradeRoom"
   | "settingsBroker"
   | "settingsAppearance"
+  | "payoutsHistory"
+  | "expenseTrackerAdd"
+  | "expenseTrackerIncome"
+  | "expenseTrackerAnalytics"
+  | "expenseTrackerExport"
 
 export type ContextualTourStep = {
   target?: ContextualTourTargetId

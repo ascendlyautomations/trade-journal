@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { invalidateWithdrawalsLedger } from "@/lib/withdrawalsLedgerInvalidate"
 import type {
   PayoutDrawdownBehavior,
   PropfirmEquityPayoutEventInput,
@@ -342,6 +343,31 @@ export async function recordAccountPayout(
       : null,
     error: null,
   }
+}
+
+/** Remove a completed prop payout and put the amount back on the open cycle. */
+export async function deletePropPayout(
+  supabase: SupabaseClient,
+  cycleId: string,
+  drawdownBehavior: PayoutDrawdownBehavior
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const id = String(cycleId).trim()
+  if (!id) return { ok: false, message: "Payout could not be deleted." }
+  if (drawdownBehavior !== "reset_to_account" && drawdownBehavior !== "keep_trailing") {
+    return { ok: false, message: "Choose where the drawdown should move." }
+  }
+
+  const { error } = await supabase.rpc("delete_prop_payout", {
+    p_cycle_id: id,
+    p_drawdown_behavior: drawdownBehavior,
+  })
+
+  if (error) {
+    return { ok: false, message: handleSupabaseError(error) }
+  }
+
+  invalidateWithdrawalsLedger()
+  return { ok: true }
 }
 
 export function isFundedPropfirmAccount(mode: unknown): boolean {

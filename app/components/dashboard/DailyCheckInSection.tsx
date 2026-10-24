@@ -2,7 +2,6 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import Button from "@/app/components/ui/Button"
 import { DAILY_CHECK_IN_QUERY_PARAM } from "@/lib/dailyCheckIn/constants"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { isDemoUserId } from "@/lib/demo/constants"
@@ -14,10 +13,9 @@ import { upsertDailyCheckIn } from "@/lib/dailyCheckIn/repository"
 import {
   draftFromCheckIn,
   emptyCheckInDraft,
-  stressLabel,
   type TraderDailyCheckInDraft,
 } from "@/lib/dailyCheckIn/types"
-import { formatSleepHoursInput, validateCheckInDraft } from "@/lib/dailyCheckIn/validation"
+import { validateCheckInDraft } from "@/lib/dailyCheckIn/validation"
 import { requestDailyCheckInNetworkRefresh } from "@/lib/dailyCheckIn/sessionCache"
 import { useTodayDailyCheckIn } from "@/lib/dailyCheckIn/useTodayDailyCheckIn"
 import DailyCheckInModal from "./DailyCheckInModal"
@@ -26,25 +24,13 @@ type DailyCheckInSectionProps = {
   userId: string
 }
 
-function MetricChip({
-  label,
-  value,
-}: {
-  label: string
-  value: string
-}) {
-  return (
-    <span className="tt-dash-checkin-chip inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-gray-200">
-      <span className="text-gray-400">{label}</span>
-      <span className="tabular-nums text-white">{value}</span>
-    </span>
-  )
-}
+const quickActionCardClass =
+  "tt-dash-checkin flex h-full min-h-[3.75rem] w-full min-w-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-left backdrop-blur-md transition hover:bg-white/[0.07]"
 
 export function DailyCheckInSectionSkeleton() {
   return (
     <div
-      className="tt-dash-checkin h-[4.5rem] animate-pulse rounded-xl border border-white/10 bg-white/5"
+      className="tt-dash-checkin h-full min-h-[3.75rem] animate-pulse rounded-xl border border-white/10 bg-white/5"
       aria-hidden
     />
   )
@@ -128,90 +114,44 @@ export default function DailyCheckInSection({
     return <DailyCheckInSectionSkeleton />
   }
 
+  const subtitle = loadError && !checkIn
+    ? "Couldn't load today's check-in"
+    : isCompletedToday
+      ? "Completed today"
+      : "Log how you're feeling today"
+
   return (
-    <>
-      <section
-        className="tt-dash-checkin rounded-xl border border-white/10 bg-white/5 px-3.5 py-3 backdrop-blur-md md:px-4"
+    <div className="min-w-0">
+      <button
+        type="button"
+        className={quickActionCardClass}
         data-testid="dailyCheckIn.card"
+        onClick={() => {
+          if (loadError && !checkIn) {
+            void refresh()
+            return
+          }
+          seedAndOpen()
+        }}
       >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm ${
-                  isCompletedToday
-                    ? "bg-emerald-500/15 text-emerald-400"
-                    : "bg-blue-500/15 text-blue-300"
-                }`}
-                aria-hidden
-              >
-                {isCompletedToday ? "✓" : "☀"}
-              </span>
-              <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-white">
-                  Daily Check-In
-                </h2>
-                <p className="text-xs text-gray-400">
-                  {isCompletedToday
-                    ? "Completed today"
-                    : "Log how you're feeling today"}
-                </p>
-              </div>
-            </div>
-            {isCompletedToday && checkIn ? (
-              <div className="mt-2 flex flex-wrap gap-1.5 pl-10">
-                <MetricChip
-                  label="Sleep"
-                  value={`${formatSleepHoursInput(checkIn.sleepHours)}h`}
-                />
-                <MetricChip
-                  label="Stress"
-                  value={
-                    checkIn.stressLevel != null
-                      ? stressLabel(checkIn.stressLevel)
-                      : "—"
-                  }
-                />
-                <MetricChip
-                  label="Energy"
-                  value={
-                    checkIn.energyLevel != null
-                      ? `${checkIn.energyLevel}/5`
-                      : "—"
-                  }
-                />
-                <MetricChip
-                  label="Focus"
-                  value={
-                    checkIn.focusLevel != null ? `${checkIn.focusLevel}/5` : "—"
-                  }
-                />
-              </div>
-            ) : null}
-            {loadError && !checkIn ? (
-              <p className="mt-2 pl-10 text-xs text-red-400">
-                {loadError}{" "}
-                <button
-                  type="button"
-                  className="underline"
-                  onClick={() => void refresh()}
-                >
-                  Retry
-                </button>
-              </p>
-            ) : null}
-          </div>
-          <Button
-            type="button"
-            variant={isCompletedToday ? "secondary" : "primary"}
-            size="sm"
-            onClick={seedAndOpen}
-            className="min-h-11 shrink-0"
-          >
-            {isCompletedToday ? "Edit" : "Check In"}
-          </Button>
-        </div>
-      </section>
+        <span
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm ${
+            isCompletedToday
+              ? "bg-emerald-500/15 text-emerald-400"
+              : "bg-blue-500/15 text-blue-300"
+          }`}
+          aria-hidden
+        >
+          {isCompletedToday ? "✓" : "☀"}
+        </span>
+        <span className="min-w-0 flex-1">
+          <h2 className="truncate text-sm font-semibold text-white">
+            Daily Check-In
+          </h2>
+          <p className="line-clamp-2 text-xs text-gray-400">{subtitle}</p>
+        </span>
+        <QuickActionChevron />
+      </button>
 
       {open ? (
         <DailyCheckInModal
@@ -230,7 +170,22 @@ export default function DailyCheckInSection({
           onSave={() => void handleSave()}
         />
       ) : null}
-    </>
+    </div>
+  )
+}
+
+function QuickActionChevron() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      aria-hidden
+      className="h-3.5 w-3.5 shrink-0 text-gray-500"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <path d="M7 5l5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }
 

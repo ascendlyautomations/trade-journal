@@ -111,7 +111,11 @@ function FeedProfilePostCard({
           />
         </div>
       ) : (
-        <FeedPostScreenshot imageSrc={imageSrc} priority={mediaPriority} />
+        <FeedPostScreenshot
+          imageSrc={imageSrc}
+          imageCrop={post.image_crop}
+          priority={mediaPriority}
+        />
       )}
 
       <FeedPostActions

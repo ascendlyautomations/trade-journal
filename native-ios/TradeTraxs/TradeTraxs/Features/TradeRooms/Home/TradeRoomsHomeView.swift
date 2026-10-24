@@ -170,7 +170,7 @@ struct TradeRoomsHomeView: View {
                     )
                     .contentShape(Circle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityLabel("Your Room")
                 .accessibilityIdentifier("tradeRooms.yourRoom")
             } else {
@@ -213,7 +213,7 @@ struct TradeRoomsHomeView: View {
                         TradeRoomCardView(item: item, imagePipeline: imagePipeline)
                             .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .contextMenu {
                         Button {
                             viewModel.openRoom(item)

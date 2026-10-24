@@ -41,7 +41,7 @@ struct CSVImportResultView: View {
                 Text("Import Another CSV")
                     .experienceStyle(.body, color: colors.accent)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .padding(.bottom, ExperienceSpacing.lg)
         }
         .padding(.horizontal, ExperienceSpacing.lg)

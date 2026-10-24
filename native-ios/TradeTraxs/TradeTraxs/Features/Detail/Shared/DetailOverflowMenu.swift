@@ -76,6 +76,7 @@ struct DetailOverflowMenu: View {
                     height: ExperienceAccessibility.minTouchTarget
                 )
                 .contentShape(Rectangle())
+            .experienceControlHitTarget()
         }
         .accessibilityLabel("More")
         .accessibilityIdentifier(accessibilityIdentifier)

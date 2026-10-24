@@ -95,7 +95,7 @@ export default function AchievementCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[11px] uppercase tracking-wide text-blue-200/80">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-blue-300">
             {headerLabel}
           </p>
           <h3 className="truncate text-sm font-semibold text-white">{achievement.title}</h3>

@@ -87,9 +87,7 @@ struct TradeDetailView: View {
                 let target = socialEngagementTarget(for: viewModel.tradeID)
                 data.engagementStore.prefetch([target])
             }
-            data.vaultStore.prefetch([
-                VaultContentRef(contentType: .trade, contentID: viewModel.tradeID.rawValue),
-            ])
+            data.vaultStore.prefetch([tradeVaultRef])
             if let tradeAI {
                 tradeAI.updateContext(trade: viewModel.trade, notes: viewModel.notes)
                 if !restrictsPremiumTradeAI {
@@ -218,7 +216,6 @@ struct TradeDetailView: View {
             username: viewModel.authorUsername,
             subtitle: viewModel.accountIdentityLine,
             dateText: TradeDisplay.dateText(trade.entryAt),
-            showsVerifiedBadge: viewModel.author?.showsTradeTraxsIdentityBadge == true,
             isOwner: viewModel.isOwner,
             contentLink: .trade(trade.id),
             ownerProfileID: trade.ownerProfileID,
@@ -231,13 +228,19 @@ struct TradeDetailView: View {
                 showsDeleteConfirm = true
             } : nil,
             onOpenAuthor: { viewModel.openAuthor() },
-            vaultRef: VaultContentRef(contentType: .trade, contentID: trade.id.rawValue),
+            vaultRef: tradeVaultRef,
             accessibilityIdentifier: "detail.trade.identity"
         )
     }
 
+    /// Social detail uses the feed row’s vault key when the trade was opened from the feed.
+    /// Journal keeps the trade record itself.
     private var tradeVaultRef: VaultContentRef {
-        VaultContentRef(contentType: .trade, contentID: viewModel.tradeID.rawValue)
+        if experience == .social,
+           let ref = VaultContentRef.from(socialEngagementTarget(for: viewModel.tradeID)) {
+            return ref
+        }
+        return VaultContentRef(contentType: .trade, contentID: viewModel.tradeID.rawValue)
     }
 
     private var isTradeVaulted: Bool {
@@ -338,6 +341,7 @@ struct TradeDetailView: View {
                 reference: media,
                 imagePipeline: imagePipeline
             )
+            socialEngagementBar(for: trade, scrollProxy: scrollProxy)
         }
 
         SocialTradeDetailHeader(
@@ -350,6 +354,22 @@ struct TradeDetailView: View {
 
         SocialTradePublicMetricsSection(trade: trade)
 
+        if viewModel.mediaReference == nil {
+            socialEngagementBar(for: trade, scrollProxy: scrollProxy)
+        }
+        CommentsSectionView(
+            target: socialEngagementTarget(for: trade.id),
+            contentOwnerUserID: trade.ownerProfileID.rawValue,
+            data: data
+        )
+        .id(Self.commentsAnchorID)
+    }
+
+    private func socialEngagementTarget(for tradeID: TradeID) -> InteractionTarget {
+        data.detailCache.feedEngagementTarget(forTrade: tradeID) ?? .trade(tradeID)
+    }
+
+    private func socialEngagementBar(for trade: Trade, scrollProxy: ScrollViewProxy) -> some View {
         EngagementBar(
             target: socialEngagementTarget(for: trade.id),
             store: data.engagementStore,
@@ -364,18 +384,8 @@ struct TradeDetailView: View {
                     scrollProxy.scrollTo(Self.commentsAnchorID, anchor: .top)
                 }
             },
-            vaultRef: VaultContentRef(contentType: .trade, contentID: trade.id.rawValue)
+            vaultRef: tradeVaultRef
         )
-        CommentsSectionView(
-            target: socialEngagementTarget(for: trade.id),
-            contentOwnerUserID: trade.ownerProfileID.rawValue,
-            data: data
-        )
-        .id(Self.commentsAnchorID)
-    }
-
-    private func socialEngagementTarget(for tradeID: TradeID) -> InteractionTarget {
-        data.detailCache.feedEngagementTarget(forTrade: tradeID) ?? .trade(tradeID)
     }
 
     private func logContentRenderedIfReady() {

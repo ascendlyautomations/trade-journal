@@ -41,7 +41,7 @@ struct SettingsAppearanceView: View {
                         .padding(.vertical, ExperienceSpacing.xs)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityLabel(option.metadata.displayName)
                     .accessibilityValue(option.isSelected ? "Selected" : "Not selected")
                     .accessibilityAddTraits(option.isSelected ? [.isSelected, .isButton] : .isButton)

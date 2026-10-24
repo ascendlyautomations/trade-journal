@@ -134,6 +134,10 @@ nonisolated struct TradingAccountDraft: Hashable, Codable, Sendable {
     var mode: TradingAccountMode
     var note: String
     var propFirmRules: PropFirmAccountRules?
+    /// Optional eval/funded purchase cost. Blank leaves any existing expense unchanged.
+    var purchaseCostDigits: String = ""
+    /// Purchase date for that linked expense. Nil uses today when a cost is saved.
+    var purchaseDate: Date? = nil
 }
 
 /// Core journal trade aggregate root.
@@ -187,6 +191,10 @@ nonisolated struct Trade: Hashable, Codable, Sendable, Identifiable {
     var importSource: TradeImportSource? = nil
     /// Deterministic import fingerprint — `trades.import_fingerprint`.
     var importFingerprint: String? = nil
+    /// Raw `trades.mode` column — dashboard account-type filter uses this before `wireAccountType` (web parity).
+    var wireMode: String? = nil
+    /// Raw `trades.account_type` column.
+    var wireAccountType: String? = nil
     /// Authoritative account mode from denormalized trade fields / linked account.
     var accountMode: TradingAccountMode? = nil
     /// Compact public account badge (Eval / Funded / Live / …) from denormalized trade mode fields.

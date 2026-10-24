@@ -103,7 +103,7 @@ struct AddTradePsychologySheet: View {
                                 : colors.primaryText
                         )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityLabel("Conviction \(level) of 5")
                 .accessibilityAddTraits(viewModel.confidenceLevel == level ? .isSelected : [])
                 .accessibilityIdentifier("addTrade.psychology.conviction.\(level)")

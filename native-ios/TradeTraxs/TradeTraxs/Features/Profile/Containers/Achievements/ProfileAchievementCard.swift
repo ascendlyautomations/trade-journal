@@ -100,6 +100,15 @@ struct ProfileAchievementCard: View {
         .accessibilityIdentifier("profile.achievements.card.\(achievement.id.rawValue)")
     }
 
+    private var payoutAmountColor: Color {
+        if let value = achievement.value {
+            return theme.metricColor(
+                for: NSDecimalNumber(decimal: value.amount).doubleValue
+            )
+        }
+        return colors.primaryText
+    }
+
     private var kindLabel: String {
         switch achievement.kind {
         case .propFirmPayout: return "Prop Firm Payout"
@@ -114,6 +123,16 @@ struct ProfileAchievementCard: View {
             if achievement.isFeatured {
                 ExperienceTag(title: "Featured", tone: .success)
             }
+            if ProfilePayoutTotals.isPayout(achievement.kind),
+               let payoutText = ProfilePayoutTotals.payoutDisplayText(for: achievement)
+            {
+                Text(payoutText)
+                    .font(ExperienceTypography.headline.monospacedDigit())
+                    .foregroundStyle(payoutAmountColor)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("profile.achievement.payoutAmount")
+            }
+
             HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
                 Text(achievement.title)
                     .experienceStyle(.headline, color: colors.primaryText)
@@ -143,17 +162,19 @@ struct ProfileAchievementCard: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                if let value = achievement.value {
-                    Text(TradeDisplay.pnlText(value))
-                        .experienceStyle(
-                            .metric,
-                            color: theme.metricColor(
-                                for: NSDecimalNumber(decimal: value.amount).doubleValue
+                if !ProfilePayoutTotals.isPayout(achievement.kind) {
+                    if let value = achievement.value {
+                        Text(TradeDisplay.pnlText(value))
+                            .experienceStyle(
+                                .metric,
+                                color: theme.metricColor(
+                                    for: NSDecimalNumber(decimal: value.amount).doubleValue
+                                )
                             )
-                        )
-                } else if let valueText = achievement.valueText, !valueText.isEmpty {
-                    Text(valueText)
-                        .experienceStyle(.caption, color: colors.secondaryText)
+                    } else if let valueText = achievement.valueText, !valueText.isEmpty {
+                        Text(valueText)
+                            .experienceStyle(.caption, color: colors.secondaryText)
+                    }
                 }
             }
 

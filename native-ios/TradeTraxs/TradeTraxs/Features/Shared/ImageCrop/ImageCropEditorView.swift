@@ -127,7 +127,7 @@ struct ImageCropEditorView: View {
                             }
                         }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityLabel(option.title)
                 .accessibilityAddTraits(aspectOption == option ? .isSelected : [])
             }

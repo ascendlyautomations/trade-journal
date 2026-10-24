@@ -23,6 +23,8 @@ struct ExperienceChip: View {
     var isSelected: Bool = false
     /// Tighter padding and type for dense rows (e.g. profile trader type).
     var compact: Bool = false
+    /// Overrides the compact or regular text size when a row needs a size in between.
+    var textRole: TypographyRole? = nil
     var action: (() -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
@@ -34,7 +36,7 @@ struct ExperienceChip: View {
         } label: {
             Text(title)
                 .experienceStyle(
-                    compact ? .caption : .callout,
+                    textRole ?? (compact ? .caption : .callout),
                     color: isSelected ? colors.onAccent : colors.primaryText
                 )
                 .lineLimit(1)
@@ -44,7 +46,7 @@ struct ExperienceChip: View {
                 .background(isSelected ? colors.accent : colors.fillSecondary)
                 .clipShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .disabled(action == nil)
         .experienceAccessibility(
             label: title,

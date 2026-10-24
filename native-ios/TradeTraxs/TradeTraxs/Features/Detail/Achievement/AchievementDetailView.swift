@@ -56,7 +56,7 @@ struct AchievementDetailView: View {
             let target = engagementTarget(forRouteID: viewModel.achievementID)
             data.engagementStore.prefetch([target])
             data.vaultStore.prefetch([
-                VaultContentRef(contentType: .achievement, contentID: viewModel.achievementID.rawValue),
+                vaultRef(forAchievementID: viewModel.achievementID),
             ])
         }
         .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
@@ -109,7 +109,6 @@ struct AchievementDetailView: View {
                             displayName: viewModel.authorDisplayName,
                             username: viewModel.authorUsername,
                             dateText: TradeDisplay.dateText(achievement.achievedAt),
-                            showsVerifiedBadge: viewModel.author?.showsTradeTraxsIdentityBadge == true,
                             isOwner: viewModel.isOwner,
                             contentLink: .achievement(achievement.id),
                             ownerProfileID: achievement.ownerProfileID,
@@ -122,10 +121,7 @@ struct AchievementDetailView: View {
                                 }
                                 : nil,
                             onOpenAuthor: { viewModel.openAuthor() },
-                            vaultRef: VaultContentRef(
-                                contentType: .achievement,
-                                contentID: achievement.id.rawValue
-                            ),
+                            vaultRef: vaultRef(for: achievement),
                             accessibilityIdentifier: "detail.achievement.identity"
                         )
                         .padding(.horizontal, ExperienceSpacing.lg)
@@ -190,10 +186,7 @@ struct AchievementDetailView: View {
                         scrollProxy.scrollTo(Self.commentsAnchorID, anchor: .top)
                     }
                 },
-                vaultRef: VaultContentRef(
-                    contentType: .achievement,
-                    contentID: achievement.id.rawValue
-                )
+                vaultRef: vaultRef(for: achievement)
             )
 
             if achievementHasAttachedImage(achievement) {
@@ -236,6 +229,17 @@ struct AchievementDetailView: View {
         }
     }
 
+    private func vaultRef(for achievement: Achievement) -> VaultContentRef {
+        vaultRef(forAchievementID: achievement.id)
+    }
+
+    /// Feed rows vault the achievement post. Detail uses that same key when it was opened from the feed.
+    private func vaultRef(forAchievementID achievementID: AchievementID) -> VaultContentRef {
+        let target = engagementTarget(forRouteID: achievementID)
+        return VaultContentRef.from(target)
+            ?? VaultContentRef(contentType: .achievement, contentID: achievementID.rawValue)
+    }
+
     private func engagementTarget(forRouteID achievementID: AchievementID) -> InteractionTarget {
         data.detailCache.feedEngagementTarget(forAchievement: achievementID)
             ?? .achievement(achievementID)
@@ -251,21 +255,19 @@ struct AchievementDetailView: View {
         if ProfilePayoutTotals.isPayout(achievement.kind),
            let payoutText = payoutDisplayText(for: achievement)
         {
-            HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
-                Text(achievement.title)
-                    .font(ExperienceTypography.title)
-                    .foregroundStyle(colors.primaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-                    .layoutPriority(1)
-
-                Spacer(minLength: ExperienceSpacing.xs)
-
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                 Text(payoutText)
                     .font(ExperienceTypography.title.monospacedDigit())
                     .foregroundStyle(payoutAmountColor(for: achievement))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("detail.achievement.payoutAmount")
+
+                Text(achievement.title)
+                    .font(ExperienceTypography.title)
+                    .foregroundStyle(colors.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("detail.achievement.payoutHeadline")
@@ -300,11 +302,7 @@ struct AchievementDetailView: View {
     }
 
     private func payoutDisplayText(for achievement: Achievement) -> String? {
-        if let value = achievement.value {
-            return TradeDisplay.pnlText(value)
-        }
-        let trimmed = achievement.valueText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? nil : trimmed
+        ProfilePayoutTotals.payoutDisplayText(for: achievement)
     }
 
     private func payoutAmountColor(for achievement: Achievement) -> Color {

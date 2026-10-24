@@ -79,7 +79,7 @@ struct FeedCaptionPreview: View {
                 Button(action: onSeeMore) {
                     seeMoreLabel
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityIdentifier(seeMoreAccessibilityIdentifier)
                 .accessibilityLabel("See more")
                 .accessibilityHint("Opens full caption")

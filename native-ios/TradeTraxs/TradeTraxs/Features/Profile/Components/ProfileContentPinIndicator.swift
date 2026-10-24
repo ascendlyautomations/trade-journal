@@ -9,3 +9,15 @@ struct ProfileContentPinIndicator: View {
             .accessibilityLabel("Pinned to profile")
     }
 }
+
+/// Pin badge for picture-grid tiles. Sits in the top-right corner over the photo.
+struct ProfileGridPinBadge: View {
+    var body: some View {
+        Image(systemName: "pin.fill")
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: 26, height: 26)
+            .background(.black.opacity(0.62), in: Circle())
+            .accessibilityLabel("Pinned to profile")
+    }
+}

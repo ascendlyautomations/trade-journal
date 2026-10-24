@@ -329,7 +329,7 @@ struct SettingsTradingAccountsView: View {
                 .padding(.vertical, ExperienceSpacing.xxs)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
         }
         .accessibilityIdentifier("settings.account.\(account.id.rawValue)")
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {

@@ -76,7 +76,7 @@ struct StoryShareRecipientPickerView: View {
                                 imagePipeline: imagePipeline
                             )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                         .disabled(viewModel.phase == .sending)
                     }
                 case .rooms:
@@ -90,7 +90,7 @@ struct StoryShareRecipientPickerView: View {
                         } label: {
                             ShareRecipientTradeRoomRow(room: room, imagePipeline: imagePipeline)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                         .disabled(viewModel.phase == .sending)
                     }
                 }

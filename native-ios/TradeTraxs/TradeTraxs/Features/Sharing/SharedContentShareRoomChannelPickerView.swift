@@ -60,7 +60,7 @@ struct SharedContentShareRoomChannelPickerView: View {
                     isSelected: selectedChannelID == channel.id
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .experienceDashboardListRow()
             .accessibilityIdentifier("sharedContentShare.roomChannel.\(channel.id.rawValue)")
         }

@@ -80,7 +80,7 @@ struct MessageReactionStrip: View {
                 )
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .disabled(!isEnabled)
         .accessibilityLabel("\(summary.emoji) \(summary.count)\(summary.reactedByViewer ? ", you reacted" : "")")
         .accessibilityIdentifier("message.reaction.\(summary.emoji)")

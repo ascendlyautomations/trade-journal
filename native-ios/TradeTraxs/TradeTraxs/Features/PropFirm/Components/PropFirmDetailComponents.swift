@@ -661,7 +661,7 @@ struct PropFirmExpandableRulesView: View {
                             }
                             .padding(.vertical, 8)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                         if index < rules.count - 1 {
                             Divider().opacity(0.35)
                         }

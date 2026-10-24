@@ -158,7 +158,6 @@ struct SharedReelMessageCard: View {
                         Text(author.displayName)
                             .experienceStyle(.caption, color: secondaryTextColor)
                             .lineLimit(1)
-                        ProfileTradeTraxsIdentityBadge(profile: author, size: .inline)
                     }
                 }
 
@@ -237,7 +236,6 @@ struct SharedAchievementMessageCard: View {
                         Text(author.displayName)
                             .experienceStyle(.caption, color: secondaryTextColor)
                             .lineLimit(1)
-                        ProfileTradeTraxsIdentityBadge(profile: author, size: .inline)
                     }
                 }
 

@@ -368,6 +368,8 @@ export default function TradovateIntegrationSettingsSection({
               category: newAccount.category,
               mode: newAccount.mode,
               rules: newAccount.rules,
+              purchaseCost: newAccount.purchaseCost,
+              purchaseDate: newAccount.purchaseDate,
             },
           }),
         }

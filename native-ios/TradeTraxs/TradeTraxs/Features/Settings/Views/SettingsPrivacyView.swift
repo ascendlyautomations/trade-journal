@@ -114,7 +114,7 @@ struct SettingsPrivacyView: View {
             }
             .padding(.vertical, ExperienceSpacing.xxs)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityIdentifier("settings.privacy.row.\(route.rawValue)")
     }
 

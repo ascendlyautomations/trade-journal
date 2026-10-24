@@ -78,7 +78,7 @@ struct SettingsAccountView: View {
                 } label: {
                     SettingsNavigationRow(title: "Password & Security", systemImage: "lock.shield")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
             }
 
             Section {
@@ -98,7 +98,7 @@ struct SettingsAccountView: View {
                         }
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .disabled(viewModel.isDeletingAccount || viewModel.isExportingAccountData || viewModel.exportShareItem != nil)
                 .accessibilityLabel("Download Account Data")
                 .accessibilityIdentifier("settings.account.downloadData")
@@ -116,7 +116,7 @@ struct SettingsAccountView: View {
                         showsChevron: false
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .disabled(viewModel.isDeletingAccount)
                 .accessibilityLabel("Delete Account")
                 .accessibilityHint("Permanently deletes your TradeTraxs account and associated data")
@@ -136,7 +136,7 @@ struct SettingsAccountView: View {
                         isDestructive: true
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .disabled(viewModel.isDeletingAccount)
             }
             }
@@ -289,7 +289,7 @@ private struct AppleSubscriptionDeletionWarningSheet: View {
                             systemImage: "arrow.up.right.square"
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityIdentifier("settings.account.deleteApple.manageSubscription")
 
                     Button(action: onContinueDeleting) {
@@ -300,7 +300,7 @@ private struct AppleSubscriptionDeletionWarningSheet: View {
                             .padding(.vertical, ExperienceSpacing.xxs)
                             .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityIdentifier("settings.account.deleteApple.continue")
                 }
 
@@ -408,7 +408,7 @@ struct SettingsSecurityView: View {
                 } label: {
                     SettingsPrimaryActionLabel(title: "Send Password Reset Email", systemImage: "envelope")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .disabled(viewModel.email?.isEmpty != false)
             } footer: {
                 Text(viewModel.passwordResetMessage ?? "You’ll get an email with steps to choose a new password.")

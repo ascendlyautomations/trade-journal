@@ -100,14 +100,6 @@ final class StatsContainerViewModel {
         // Statistics are never screen-bootstrap payload — do not defer the tab load on header phase.
         awaitingScreenBootstrap = false
 
-        if !hasLoadedAnalytics,
-           let updated = snapshot.lastUpdated,
-           let fetchedAt = analyticsFetchedAt,
-           updated > fetchedAt
-        {
-            modeResults = [:]
-        }
-
         if hasLoadedAnalytics {
             if snapshot.phase == .loaded || metrics != nil {
                 awaitingScreenBootstrap = false
@@ -263,7 +255,7 @@ final class StatsContainerViewModel {
                     profileID: profileID,
                     rpc: rpc
                 )
-                modeResults = applied.modeResults
+                adoptModeResults(applied.modeResults)
                 hasLoadedAnalytics = true
                 analyticsFetchedAt = Date()
                 initialLoadFailureGrace.cancel()
@@ -285,7 +277,6 @@ final class StatsContainerViewModel {
                     error: error
                 )
                 #endif
-                modeResults = [:]
                 ProfileAnalyticsGRDBProbe.logFallback(
                     viewer: profileID.rawValue,
                     subject: profileID.rawValue,
@@ -295,12 +286,20 @@ final class StatsContainerViewModel {
         }
 
         do {
-            tradeInputs = try await ProfileStatisticsTradeLoader.loadPublicTradeInputs(
+            let inputs = try await ProfileStatisticsTradeLoader.loadPublicTradeInputs(
                 profileID: profileID,
                 trades: trades,
                 rpc: rpc,
                 accountModes: accountModes
             )
+            if inputs.isEmpty, !modeResults.isEmpty {
+                hasLoadedAnalytics = true
+                analyticsFetchedAt = Date()
+                initialLoadFailureGrace.cancel()
+                recompute()
+                return
+            }
+            tradeInputs = inputs
             hasLoadedAnalytics = true
             hasLoadedTradeInputs = true
             analyticsFetchedAt = Date()
@@ -400,7 +399,7 @@ final class StatsContainerViewModel {
                     }
                     return
                 }
-                modeResults = presentation.modeResults
+                adoptModeResults(presentation.modeResults)
                 hasLoadedAnalytics = true
                 analyticsFetchedAt = Date()
                 initialLoadFailureGrace.cancel()
@@ -523,6 +522,14 @@ final class StatsContainerViewModel {
                 guard !Task.isCancelled else { return }
             }
         }
+    }
+
+    /// An empty analytics payload is not proof the section is empty once results are on screen.
+    private func adoptModeResults(
+        _ incoming: [ProfileStatisticsMetrics.Mode: ProfileStatisticsMetrics.Result]
+    ) {
+        if incoming.isEmpty, !modeResults.isEmpty { return }
+        modeResults = incoming
     }
 
     private func recompute() {

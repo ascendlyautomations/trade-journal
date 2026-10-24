@@ -80,6 +80,11 @@ nonisolated protocol TradeRepository: Sendable {
         accountID: TradingAccountID,
         input: RecordAccountPayoutInput
     ) async throws -> RecordAccountPayoutResult
+    /// Removes a completed prop payout, returns the amount to the open cycle, and moves the drawdown floor.
+    func deletePropPayout(
+        cycleID: String,
+        drawdownBehavior: PayoutDrawdownBehavior
+    ) async throws
     /// Whitelisted public profile account cards — `rpc_v1_profile_account_insights`.
     func profileAccountInsights(for profileID: ProfileID) async throws -> [ProfileAccountInsight]
     /// Web `insertCsvTradesWithAccount` — one bulk `trades` insert (not per-row).
@@ -233,6 +238,13 @@ extension TradeRepository {
         throw AppError.notImplemented(feature: "recordAccountPayout")
     }
 
+    func deletePropPayout(
+        cycleID: String,
+        drawdownBehavior: PayoutDrawdownBehavior
+    ) async throws {
+        throw AppError.notImplemented(feature: "deletePropPayout")
+    }
+
     func profileAccountInsights(for profileID: ProfileID) async throws -> [ProfileAccountInsight] {
         throw AppError.notImplemented(feature: "profileAccountInsights")
     }
@@ -307,8 +319,8 @@ nonisolated enum TradeHistoryLocalMatch {
         }
 
         let bounds = filters.createdAtBounds()
-        if let start = bounds.start, trade.createdAt < start { return false }
-        if let end = bounds.end, trade.createdAt >= end { return false }
+        if let start = bounds.start, trade.entryAt < start { return false }
+        if let end = bounds.end, trade.entryAt >= end { return false }
 
         let pnl = trade.realizedPnL?.amount ?? 0
         switch filters.result {
@@ -346,6 +358,10 @@ nonisolated enum TradeHistoryLocalMatch {
         case .any: break
         case .public: if trade.visibility != .public { return false }
         case .private: if trade.visibility != .private { return false }
+        }
+
+        if filters.pictureOnly, ProfileCardMediaPresence.tradeMedia(in: trade) == nil {
+            return false
         }
 
         let search = query.trimmedSearch

@@ -54,7 +54,7 @@ struct CopyTradingAccountsView: View {
                         } label: {
                             groupRow(group)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                         .experienceDashboardListRow()
                         .accessibilityIdentifier("copyTrading.group.\(group.id)")
                     }
@@ -77,7 +77,7 @@ struct CopyTradingAccountsView: View {
                     }
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .experienceDashboardListRow()
                 .accessibilityIdentifier("copyTrading.create")
             }
@@ -206,7 +206,7 @@ private struct CopyTradingGroupEditorView: View {
                             }
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                         .addCopyTradingFormRow()
                         .accessibilityIdentifier("copyTrading.account.\(account.id.rawValue)")
                     }

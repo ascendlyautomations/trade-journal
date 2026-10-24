@@ -25,9 +25,13 @@ private struct ExperienceFormFocusSyncOptionalModifier<F: Hashable>: ViewModifie
             .onReceive(NotificationCenter.default.publisher(for: .experienceKeyboardWillDismiss)) { _ in
                 focus = nil
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { notification in
-                guard TextInputFocusGuard.shouldReleaseBoundFocus(onKeyboardWillHide: notification) else { return }
-                focus = nil
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { notification in
+                // After the keyboard is gone. Clearing focus on will-hide runs during the
+                // show animation and steals the field before the first keystroke.
+                DispatchQueue.main.async {
+                    guard TextInputFocusGuard.shouldReleaseBoundFocus(onKeyboardWillHide: notification) else { return }
+                    focus = nil
+                }
             }
     }
 }
@@ -40,9 +44,11 @@ private struct ExperienceFormFocusSyncBoolModifier: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: .experienceKeyboardWillDismiss)) { _ in
                 isFocused = false
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { notification in
-                guard TextInputFocusGuard.shouldReleaseBoundFocus(onKeyboardWillHide: notification) else { return }
-                isFocused = false
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { notification in
+                DispatchQueue.main.async {
+                    guard TextInputFocusGuard.shouldReleaseBoundFocus(onKeyboardWillHide: notification) else { return }
+                    isFocused = false
+                }
             }
     }
 }

@@ -150,6 +150,7 @@ export default function FeedProfilePostDetailModal({
   ) : modalPostDetails.imageSrc != null ? (
     <DetailModalImage
       src={modalPostDetails.imageSrc}
+      imageCrop={post.image_crop}
       onClick={setLightboxUrl}
     />
   ) : null

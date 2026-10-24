@@ -68,15 +68,21 @@ final class PostDetailViewModel {
         deleteErrorMessage = nil
         defer { isDeleting = false }
         do {
-            if let viewer = await session.currentUserID,
-               viewer.rawValue.hasPrefix("dev.")
-            {
-                // Local development — mutate caches only.
+            let ownerID: ProfileID
+            if let authorProfileID = post?.authorProfileID {
+                ownerID = authorProfileID
+            } else if let viewer = await session.currentUserID {
+                ownerID = ProfileID(viewer.rawValue)
             } else {
-                try await profiles.deleteWallPost(id: postID)
+                throw AppError.domain(.permission(.notAuthenticated))
             }
-            cache.removePost(id: postID)
-            OwnerProfileOptimisticStore.shared.notePostDeleted(id: postID)
+            try await OwnerPostDeletionService.deleteOwnedPost(
+                postID: postID,
+                owner: ownerID,
+                profiles: profiles,
+                session: session,
+                detailCache: cache
+            )
             ExperienceHaptics.play(.success)
             navigationCoordinator.pop()
             return true

@@ -103,7 +103,6 @@ struct PostDetailView: View {
                             displayName: viewModel.authorDisplayName,
                             username: viewModel.authorUsername,
                             dateText: TradeDisplay.dateText(post.createdAt),
-                            showsVerifiedBadge: viewModel.author?.showsTradeTraxsIdentityBadge == true,
                             isOwner: viewModel.isOwner,
                             contentLink: .post(post.id),
                             ownerProfileID: post.authorProfileID,
@@ -156,6 +155,7 @@ struct PostDetailView: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
             if post.media.isEmpty {
                 caption(post)
+                roomShareCard(post)
             }
 
             EngagementBar(
@@ -174,6 +174,7 @@ struct PostDetailView: View {
 
             if !post.media.isEmpty {
                 caption(post)
+                roomShareCard(post)
             }
 
             CommentsSectionView(
@@ -223,6 +224,13 @@ struct PostDetailView: View {
             .frame(maxWidth: .infinity)
             .frame(minHeight: 200)
             .accessibilityIdentifier("detail.post.media")
+        }
+    }
+
+    @ViewBuilder
+    private func roomShareCard(_ post: Post) -> some View {
+        if let share = post.roomShare {
+            FeedRoomShareCard(share: share)
         }
     }
 

@@ -217,7 +217,7 @@ struct FeedClipMediaView: View {
                         .padding(8)
                         .background(.black.opacity(0.45), in: Circle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityLabel(playbackCoordinator.isMuted ? "Unmute clip" : "Mute clip")
                 .padding(ExperienceSpacing.md)
                 .zIndex(1)

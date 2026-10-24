@@ -37,7 +37,7 @@ struct TradeHistoryFilterBar: View {
                 }
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityLabel("Filters")
         .accessibilityIdentifier("trades.filters")
     }

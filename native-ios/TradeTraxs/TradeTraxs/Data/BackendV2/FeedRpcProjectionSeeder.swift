@@ -125,7 +125,13 @@ enum FeedRpcProjectionSeeder {
             linkedTradeID: tradeID,
             isPinned: false,
             createdAt: created,
-            updatedAt: created
+            updatedAt: created,
+            roomShare: RoomShareAttachment.parsed(
+                roomID: string(row.payload, keys: ["room_id"]),
+                name: string(row.payload, keys: ["room_name"]),
+                logoURL: string(row.payload, keys: ["room_logo"]),
+                description: string(row.payload, keys: ["room_description"])
+            )
         )
         detailCache.seed(post)
         if let tradeID {

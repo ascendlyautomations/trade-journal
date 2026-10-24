@@ -42,7 +42,10 @@ struct PayoutHistoryRowView: View {
 
     /// `Name · Mode` — authoritative mode, no inferred prop-firm labels.
     private var accountContextLine: String {
-        guard let account else { return "Account" }
+        guard let account else {
+            let title = item.note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return title.isEmpty ? "Payout" : title
+        }
         let trimmedName = account.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let mode = TradingAccountDisplay.ownerDropdownModeLabel(account.mode)
         if trimmedName.isEmpty {

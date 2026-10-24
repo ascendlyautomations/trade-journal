@@ -44,7 +44,7 @@ struct ExploreRoomCard: View {
                             .foregroundStyle(colors.primaryText)
                             .lineLimit(1)
                         if room.isOfficial {
-                            TradeRoomOfficialBadge(style: .checkmark)
+                            TradeRoomOfficialBadge(style: .label)
                         }
                     }
                     .frame(height: usesCompactLayout ? nameRowHeight : nil, alignment: .center)
@@ -80,7 +80,7 @@ struct ExploreRoomCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .padding(ExperienceSpacing.sm)
         .frame(width: cardWidth, height: usesCompactLayout ? cardHeight : nil, alignment: .topLeading)
         .background(

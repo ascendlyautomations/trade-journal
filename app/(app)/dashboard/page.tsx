@@ -17,6 +17,7 @@ import DashboardModals from "../../components/dashboard/DashboardModals"
 import DashboardRecentTrades from "../../components/dashboard/DashboardRecentTrades"
 import DashboardTradingReports from "../../components/dashboard/DashboardTradingReports"
 import { DailyCheckInDashboardSlot } from "../../components/dashboard/DailyCheckInSection"
+import DashboardBrokerIntegrationCard from "../../components/dashboard/DashboardBrokerIntegrationCard"
 import DashboardPsychologyInsights, {
   DashboardPsychologyInsightsPlacement,
   DashboardPsychologyInsightsSlot,
@@ -51,7 +52,7 @@ import {
   buildAccountFilterOptionsFromRows,
 } from "@/lib/tradeAccountDisplay"
 import EmptyState from "../../components/ui/EmptyState"
-import { SkeletonDashboardShell } from "../../components/ui/skeletons"
+import { SkeletonDashboardPage } from "../../components/ui/skeletons"
 import {
   mirrorAccountSettingsMaxDrawdownLimit,
 } from "@/lib/profileSplitMirrorWrites"
@@ -113,9 +114,25 @@ import { upsertAccountInCache } from "@/lib/appDataCache"
 import { invalidateDashboardBootstrap } from "@/lib/backendV2/dashboardBootstrapCache"
 import "./dashboardCanvas.css"
 
+function DashboardPremiumPreviewSkeleton() {
+  return (
+    <div className="border-t border-white/10 pt-6 md:pt-8" aria-hidden>
+      <div className="mb-4 h-6 w-64 animate-pulse rounded-md bg-white/10 md:mb-6" />
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:gap-3 lg:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div
+            key={index}
+            className="min-h-[220px] animate-pulse rounded-xl border border-white/10 bg-white/5 md:min-h-[260px]"
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 const DashboardPremiumPreviewSection = dynamic(
   () => import("../../components/dashboard/DashboardPremiumPreviewSection"),
-  { loading: () => <div className="h-48 animate-pulse rounded-xl bg-white/5" /> }
+  { loading: () => <DashboardPremiumPreviewSkeleton /> }
 )
 function DashboardDeferredSectionsSkeleton() {
   return (
@@ -1110,6 +1127,17 @@ export default function Dashboard() {
     liveAccountValue: dashboardLiveAccountValueMobile,
   }
 
+  if (statsStillLoading) {
+    return (
+      <>
+        <FeedbackModal {...feedbackModalProps} />
+        <NativeIosPullToRefresh onRefresh={refreshDashboardData}>
+          <SkeletonDashboardPage />
+        </NativeIosPullToRefresh>
+      </>
+    )
+  }
+
   return (
     <>
       <FeedbackModal {...feedbackModalProps} />
@@ -1122,7 +1150,7 @@ export default function Dashboard() {
       >
 
         <div className="tt-dash-workspace relative z-50 mx-auto w-full max-w-[1600px] px-0 md:px-6 xl:max-w-[1900px] xl:px-0">
-          {!statsStillLoading ? (
+          {user?.id ? (
             <DashboardFilters
               isPro={isPro}
               accounts={accounts}
@@ -1165,8 +1193,10 @@ export default function Dashboard() {
               hasUser={Boolean(user)}
               onSaveGear={() => void saveDashboardGearPanel()}
               onCancelGear={cancelDashboardGearPanel}
-              showShareControls={totalTrades > 0}
-              showTradingReportButton={Boolean(user?.id && dashboardUserIsPro && totalTrades > 0)}
+              showShareControls
+              showTradingReportButton={Boolean(user?.id && dashboardUserIsPro)}
+              tradingReportDisabled={totalTrades === 0}
+              performanceShareDisabled={totalTrades === 0}
               onOpenTradingReport={() => tradingReportsRef.current?.openReport()}
               showPropFirmLink={showPropFirmLink}
               onRequestCopyGroups={requestCopyGroups}
@@ -1179,7 +1209,15 @@ export default function Dashboard() {
 
           <div className="tt-dash-workspace tt-dash-stack relative z-0 mx-auto flex w-full min-w-0 max-w-[1600px] flex-col gap-2 overflow-x-hidden px-0 max-md:gap-2 md:gap-3 md:px-6 xl:max-w-[1900px] xl:px-0">
 
-  {user?.id ? <DailyCheckInDashboardSlot userId={user.id} /> : null}
+  {user?.id ? (
+    <div className="grid grid-cols-2 items-stretch gap-2 md:gap-3">
+      <DailyCheckInDashboardSlot userId={user.id} />
+      <DashboardBrokerIntegrationCard
+        userId={user.id}
+        onImportCsv={handleEmptyJournalImport}
+      />
+    </div>
+  ) : null}
 
   {/* Large Founding Challenge card only until the first trade; afterwards it
       stays reachable from the navbar Getting Started entry. */}
@@ -1196,24 +1234,7 @@ export default function Dashboard() {
     </div>
   ) : null}
 
-  {!hasNoTrades ? gettingStartedSectionMobile : null}
-
-  {statsStillLoading ? (
-    <SkeletonDashboardShell />
-  ) : (
-    <>
-      {hasNoTrades ? (
-        <div className="mt-2 flex flex-col gap-2 md:gap-3 max-md:mt-0">
-          {renderGettingStartedChecklist({
-            variant: "compact",
-            defaultExpanded: false,
-          })}
-          <DashboardJournalEmptyState
-            onAddTrade={handleEmptyJournalAddTrade}
-            onImportCsv={handleEmptyJournalImport}
-          />
-        </div>
-      ) : null}
+  {gettingStartedSectionMobile}
 
       {totalTrades === 0 && !hasNoTrades ? (
     <>
@@ -1226,7 +1247,14 @@ export default function Dashboard() {
     </>
       ) : (
     <>
-      {!hasNoTrades ? gettingStartedSection : null}
+      {gettingStartedSection}
+      {hasNoTrades ? (
+        <DashboardJournalEmptyState
+          onAddTrade={handleEmptyJournalAddTrade}
+          onImportCsv={handleEmptyJournalImport}
+          className="max-md:mt-0"
+        />
+      ) : null}
       {dashboardUserIsPro ? (
         <>
       {user?.id && deferredSectionsReady ? (
@@ -1368,11 +1396,11 @@ export default function Dashboard() {
         onSelectTrade={handleSelectRecentTrade}
       />
     ) : null}
-    </>
-  )}
-        </>
-      ) : (
-        <>
+      </>
+    )}
+      </>
+    ) : (
+      <>
           {desktopTerminal}
           <DashboardCharts
             isPro={false}
@@ -1420,14 +1448,12 @@ export default function Dashboard() {
           ) : deferredSectionsReady ? (
             <DashboardPremiumPreviewSection />
           ) : (
-            <DashboardDeferredSectionsSkeleton />
+            <DashboardPremiumPreviewSkeleton />
           )}
         </>
       )}
     </>
       )}
-    </>
-  )}
 
   {user?.id ? (
     <DashboardPsychologyInsightsPlacement

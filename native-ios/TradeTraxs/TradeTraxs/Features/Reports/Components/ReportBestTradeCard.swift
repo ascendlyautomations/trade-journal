@@ -64,7 +64,7 @@ struct ReportBestTradeCard: View {
                             .stroke(colors.border.opacity(0.5), lineWidth: ExperienceBorder.thin)
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityLabel(accessibilityLabel(for: trade))
                 .accessibilityHint("Opens trade detail")
                 .accessibilityIdentifier("reports.detail.bestTrade.open")

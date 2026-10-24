@@ -359,8 +359,7 @@ final class DataEnvironment {
             tradingReports: DefaultTradingReportRepository(
                 trades: tradesRepository,
                 session: session,
-                detailCache: detailCache,
-                supabase: supabase
+                detailCache: detailCache
             ),
             psychologyReports: DefaultPsychologyReportRepository(
                 trades: tradesRepository,
@@ -496,8 +495,7 @@ final class DataEnvironment {
                 tradingReports: DefaultTradingReportRepository(
                     trades: tradesRepository,
                     session: session,
-                    detailCache: detailCache,
-                    supabase: supabase
+                    detailCache: detailCache
                 )
             )
         }
@@ -619,8 +617,7 @@ final class DataEnvironment {
         let tradingReports: any TradingReportRepository = DefaultTradingReportRepository(
             trades: DemoTradeRepository(),
             session: session,
-            detailCache: detailCache,
-            supabase: supabase
+            detailCache: detailCache
         )
 
         AppLog.application.info(

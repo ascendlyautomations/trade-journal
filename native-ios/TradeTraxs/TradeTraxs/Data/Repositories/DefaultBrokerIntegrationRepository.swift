@@ -176,6 +176,8 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
             var category: String
             var mode: String
             var rules: String? = nil
+            var purchaseCost: String
+            var purchaseDate: String
         }
         struct Body: Encodable {
             var action: String = "create"
@@ -187,7 +189,9 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
             size: NumericInputFieldSupport.plainNumericString(from: draft.sizeDigits),
             accountNumber: draft.accountNumber.trimmingCharacters(in: .whitespacesAndNewlines),
             category: BrokerIntegrationAccountDraftEncoding.webCategory(draft.category),
-            mode: BrokerIntegrationAccountDraftEncoding.webMode(draft.mode, category: draft.category)
+            mode: BrokerIntegrationAccountDraftEncoding.webMode(draft.mode, category: draft.category),
+            purchaseCost: NumericInputFieldSupport.plainNumericString(from: draft.purchaseCostDigits),
+            purchaseDate: draft.purchaseDate.map { PropFirmExpenseMoney.dayString(from: $0) } ?? ""
         )
         let body = try transport.encodeJSON(
             Body(brokerIntegrationAccountId: brokerIntegrationAccountId, createAccount: payload)
@@ -341,6 +345,8 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
             var category: String
             var mode: String
             var rules: String? = nil
+            var purchaseCost: String
+            var purchaseDate: String
         }
         struct Body: Encodable {
             var action: String = "create"
@@ -352,7 +358,9 @@ nonisolated struct DefaultBrokerIntegrationRepository: BrokerIntegrationReposito
             size: NumericInputFieldSupport.plainNumericString(from: draft.sizeDigits),
             accountNumber: draft.accountNumber.trimmingCharacters(in: .whitespacesAndNewlines),
             category: BrokerIntegrationAccountDraftEncoding.webCategory(draft.category),
-            mode: BrokerIntegrationAccountDraftEncoding.webMode(draft.mode, category: draft.category)
+            mode: BrokerIntegrationAccountDraftEncoding.webMode(draft.mode, category: draft.category),
+            purchaseCost: NumericInputFieldSupport.plainNumericString(from: draft.purchaseCostDigits),
+            purchaseDate: draft.purchaseDate.map { PropFirmExpenseMoney.dayString(from: $0) } ?? ""
         )
         let body = try transport.encodeJSON(
             Body(brokerIntegrationAccountId: brokerIntegrationAccountId, createAccount: payload)

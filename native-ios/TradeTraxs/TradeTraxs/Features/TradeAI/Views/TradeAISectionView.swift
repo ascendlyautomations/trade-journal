@@ -138,6 +138,7 @@ struct TradeAISectionView: View {
                 colors.fillSecondary,
                 in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
             )
+            .experienceControlHitTarget()
         }
         .disabled(viewModel.isAnalyzing)
         .accessibilityIdentifier("detail.trade.ai.selector")
@@ -190,7 +191,7 @@ struct TradeAISectionView: View {
                         in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
                     )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .disabled(!canAnalyze)
             .accessibilityIdentifier("detail.trade.ai.analyze")
         }

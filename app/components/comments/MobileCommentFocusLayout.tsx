@@ -18,6 +18,8 @@ type MobileCommentFocusLayoutProps = {
   comments: ReactNode
   /** Screenshot shown above panel on mobile (hidden when focused). */
   mobileMedia?: ReactNode
+  /** Profile trade modal — media + actions above author header on mobile. */
+  mobileMediaBeforeHeader?: boolean
   /** When true, engagement row renders below collapsible content (public trade page). */
   engagementAfterCollapsible?: boolean
   engagementClassName?: string
@@ -35,6 +37,7 @@ export default function MobileCommentFocusLayout({
   collapsibleContent,
   comments,
   mobileMedia,
+  mobileMediaBeforeHeader = false,
   engagementAfterCollapsible = false,
   engagementClassName = "shrink-0 border-b border-white/10 px-4 py-2",
 }: MobileCommentFocusLayoutProps) {
@@ -58,17 +61,23 @@ export default function MobileCommentFocusLayout({
       </div>
     ) : null
 
+  const mobileMediaBlock =
+    mobileMedia && !collapse ? (
+      <div className="shrink-0 md:hidden">{mobileMedia}</div>
+    ) : null
+
+  const headerBlock =
+    collapse && compactHeader ? (
+      <div className="shrink-0 border-b border-white/10">{compactHeader}</div>
+    ) : header ? (
+      <div className="shrink-0">{header}</div>
+    ) : null
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      {collapse && compactHeader ? (
-        <div className="shrink-0 border-b border-white/10">{compactHeader}</div>
-      ) : header ? (
-        <div className="shrink-0">{header}</div>
-      ) : null}
-
-      {mobileMedia && !collapse ? (
-        <div className="shrink-0 md:hidden">{mobileMedia}</div>
-      ) : null}
+      {mobileMediaBeforeHeader ? mobileMediaBlock : null}
+      {headerBlock}
+      {!mobileMediaBeforeHeader ? mobileMediaBlock : null}
 
       {engagementAfterCollapsible ? null : engagementBlock}
       {collapsibleBlock}

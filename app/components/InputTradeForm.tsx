@@ -13,6 +13,7 @@ import {
   assertCanCreateTradingAccount,
   FREE_PLAN_ACCOUNT_LIMIT,
 } from "@/lib/tradingAccounts"
+import { syncPropFirmAccountPurchaseExpense } from "@/lib/propFirmExpenses"
 import {
   countTradeEntryEnabledAccounts,
   filterAccountsForDropdown,
@@ -2018,6 +2019,27 @@ export default function InputTradeForm({
     }
 
     if (!data) return
+
+    const purchaseExpense = await syncPropFirmAccountPurchaseExpense(
+      supabase,
+      userId,
+      String(data.id),
+      {
+        name: newAccount.name,
+        category: newAccount.category,
+        mode: newAccount.mode,
+        purchaseCost: newAccount.purchaseCost,
+        datePaid: newAccount.purchaseDate,
+      }
+    )
+    if (!purchaseExpense.ok) {
+      showPopup(
+        persistentError(
+          "Purchase Cost Not Saved",
+          "Account saved, but the purchase cost was not recorded. Edit the account and save again."
+        )
+      )
+    }
 
     upsertAccountInCache(userId, data)
 

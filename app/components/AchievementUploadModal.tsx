@@ -27,6 +27,7 @@ import ScrollableModalShell from "@/app/components/ui/ScrollableModalShell"
 import Modal from "@/app/components/ui/Modal"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { persistentError } from "@/lib/feedbackPresets"
+import { syncPropFirmAccountPurchaseExpense } from "@/lib/propFirmExpenses"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import type { Json, TableInsert, TableUpdate } from "@/lib/supabaseTypes"
 import {
@@ -414,6 +415,8 @@ export default function AchievementUploadModal({
     category: string
     mode: string | null
     rules: unknown
+    purchaseCost?: string | null
+    purchaseDate?: string | null
   }) {
     if (isDemoModeActive()) {
       requestDemoSignup("save")
@@ -466,6 +469,27 @@ export default function AchievementUploadModal({
       }
 
       if (!data) return
+
+      const purchaseExpense = await syncPropFirmAccountPurchaseExpense(
+        supabase,
+        userId,
+        String(data.id),
+        {
+          name: newAccount.name,
+          category: newAccount.category,
+          mode: newAccount.mode,
+          purchaseCost: newAccount.purchaseCost,
+        datePaid: newAccount.purchaseDate,
+        }
+      )
+      if (!purchaseExpense.ok) {
+        showPopup(
+          persistentError(
+            "Purchase Cost Not Saved",
+            "Account saved, but the purchase cost was not recorded. Edit the account and save again."
+          )
+        )
+      }
 
       upsertAccountInCache(userId, data)
 

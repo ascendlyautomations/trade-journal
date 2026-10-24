@@ -93,6 +93,7 @@ struct ManageAccountsFilterBar: View {
             .padding(.horizontal, ExperienceSpacing.sm)
             .frame(minHeight: 32)
             .background(colors.fillSecondary, in: Capsule())
+            .experienceControlHitTarget()
         }
         .accessibilityIdentifier(accessibilityID)
     }

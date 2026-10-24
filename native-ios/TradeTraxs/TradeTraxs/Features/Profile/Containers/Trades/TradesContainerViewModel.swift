@@ -441,14 +441,26 @@ final class TradesContainerViewModel {
         deletingTradeID == id
     }
 
-    func confirmDelete() async {
-        guard isOwner, deletingTradeID == nil, let summary = pendingDelete else { return }
+    func noteDeleteSucceeded(id: TradeID) {
+        journalItems.removeAll { $0.id == id }
+        detailCache.removeTrade(id: id)
+        updateStateForVisibleItems()
+    }
+
+    /// Pass ``summary`` from the confirmation dialog — `pendingDelete` is often cleared before the action runs.
+    func confirmDelete(summary explicitSummary: TradeSummary? = nil) async {
+        guard isOwner, deletingTradeID == nil else { return }
+        let summary = explicitSummary ?? pendingDelete
+        guard let summary else { return }
         pendingDelete = nil
         deletingTradeID = summary.id
         deleteErrorMessage = nil
         defer { deletingTradeID = nil }
         let previous = TradeSummaryMapper.previewTrade(from: summary)
-        let owner = summary.ownerProfileID
+        let owner = profileID
+        let removedIndex = journalItems.firstIndex { $0.id == summary.id }
+        journalItems.removeAll { $0.id == summary.id }
+        updateStateForVisibleItems()
         do {
             try await OwnerTradeDeletionService.deleteOwnedTrade(
                 tradeID: summary.id,
@@ -459,8 +471,17 @@ final class TradesContainerViewModel {
                 detailCache: detailCache,
                 tradeDetailRepository: tradeDetailRepository
             )
+            noteDeleteSucceeded(id: summary.id)
             ExperienceHaptics.play(.success)
         } catch {
+            if let removedIndex {
+                let journal = TradeSummaryMapper.ownerJournal(fromListTrade: previous)
+                journalItems.insert(journal, at: min(removedIndex, journalItems.count))
+            } else if !journalItems.contains(where: { $0.id == summary.id }) {
+                journalItems.append(TradeSummaryMapper.ownerJournal(fromListTrade: previous))
+                journalItems.sort { $0.summary.entryAt > $1.summary.entryAt }
+            }
+            updateStateForVisibleItems()
             deleteErrorMessage = ProfileSectionSupport.message(for: error)
             ExperienceHaptics.play(.warning)
         }
@@ -727,25 +748,40 @@ final class TradesContainerViewModel {
                 applyAuthoritativeJournalPage(
                     pageJournal,
                     reset: reset,
-                    pageIsPartial: newCursor != nil
+                    pageIsComplete: newCursor == nil
                 )
             } else {
                 let preserveIDs = ownerPublicTradePreserveIDs()
                 let pageSummaries = pageJournal.map(\.summary)
                 if reset, !journalItems.isEmpty {
-                    let reconciled = ProfilePersistentReconcile.reconcileTradeSummaries(
-                        existing: items,
-                        incoming: pageSummaries,
-                        preserveIDs: preserveIDs
-                    ).items
-                    var next = reconcileJournal(
-                        snapshot: reconciled,
-                        loaded: journalItems,
-                        snapshotIsPartial: newCursor != nil
-                    )
-                    let pageByID = Dictionary(uniqueKeysWithValues: pageJournal.map { ($0.id, $0) })
-                    next = next.map { pageByID[$0.id] ?? $0 }
-                    journalItems = next
+                    let suspiciousShrink = pageJournal.count * 2 < journalItems.count
+                    if suspiciousShrink {
+                        applyAuthoritativeJournalPage(
+                            pageJournal,
+                            reset: true,
+                            pageIsComplete: false
+                        )
+                    } else {
+                        let reconciled = ProfilePersistentReconcile.reconcileTradeSummaries(
+                            existing: items,
+                            incoming: pageSummaries,
+                            preserveIDs: preserveIDs
+                        ).items
+                        let mergedSummaries = ProfileSectionSupport.reconcileLoadedSnapshot(
+                            snapshot: reconciled,
+                            loaded: journalItems.map(\.summary),
+                            orderedBy: \.createdAt,
+                            snapshotIsPartial: newCursor != nil
+                        )
+                        var next = ProfileTradesJournalMapping.replaceSummaries(
+                            mergedSummaries,
+                            in: journalItems,
+                            preserveRicherExisting: hasAuthoritativeV2Journal
+                        )
+                        let pageByID = Dictionary(uniqueKeysWithValues: pageJournal.map { ($0.id, $0) })
+                        next = next.map { pageByID[$0.id] ?? $0 }
+                        journalItems = next
+                    }
                 } else {
                     journalItems = pageJournal
                 }
@@ -873,22 +909,45 @@ final class TradesContainerViewModel {
         }
     }
 
+    /// A web publish or edit of a public trade. Other journal rows stay.
+    func noteRemoteTrade(_ trade: Trade) {
+        guard trade.ownerProfileID == profileID else { return }
+        guard hasLoaded || isHydratingAuthoritativeJournal else { return }
+        if trade.visibility != .public {
+            noteRemoteTradeDeleted(id: trade.id)
+            return
+        }
+        let journal = TradeSummaryMapper.ownerJournal(fromListTrade: trade)
+        if let index = journalItems.firstIndex(where: { $0.id == journal.id }) {
+            journalItems[index] = journal
+        } else {
+            journalItems.insert(journal, at: 0)
+        }
+        guard hasLoaded else { return }
+        detailCache.seedPresentationSeed(TradeSummaryMapper.presentationSeed(fromListTrade: trade))
+        updateStateForVisibleItems()
+    }
+
+    func noteRemoteTradeDeleted(id: TradeID) {
+        journalItems.removeAll { $0.id == id }
+        detailCache.removeTrade(id: id)
+        updateStateForVisibleItems()
+    }
+
     private func reconcileJournal(
         snapshot: [TradeSummary],
-        loaded: [TradeOwnerJournalSummary],
-        snapshotIsPartial: Bool
+        loaded: [TradeOwnerJournalSummary]
     ) -> [TradeOwnerJournalSummary] {
         guard !loaded.isEmpty else {
             return ProfileTradesJournalMapping.journalItems(from: snapshot)
         }
-        let reconciled = ProfileSectionSupport.reconcileLoadedSnapshot(
-            snapshot: snapshot,
+        let merged = ProfileSectionSupport.mergeKeepingExisting(
+            incoming: snapshot,
             loaded: loaded.map(\.summary),
-            orderedBy: \.createdAt,
-            snapshotIsPartial: snapshotIsPartial
+            orderedBy: \.createdAt
         )
         return ProfileTradesJournalMapping.replaceSummaries(
-            reconciled,
+            merged,
             in: loaded,
             preserveRicherExisting: hasAuthoritativeV2Journal
         )
@@ -897,26 +956,28 @@ final class TradesContainerViewModel {
     private func applyAuthoritativeJournalPage(
         _ pageJournal: [TradeOwnerJournalSummary],
         reset: Bool,
-        pageIsPartial: Bool
+        pageIsComplete: Bool
     ) {
         guard !pageJournal.isEmpty else { return }
         if journalItems.isEmpty {
             journalItems = pageJournal
             return
         }
-        if reset {
+        let suspiciousShrink = pageJournal.count * 2 < journalItems.count
+        if reset, !suspiciousShrink {
             journalItems = ProfileSectionSupport.reconcileLoadedSnapshot(
                 snapshot: pageJournal,
                 loaded: journalItems,
                 orderedBy: \.summary.createdAt,
-                snapshotIsPartial: pageIsPartial
+                snapshotIsPartial: !pageIsComplete
             )
             return
         }
         let pageByID = Dictionary(uniqueKeysWithValues: pageJournal.map { ($0.id, $0) })
-        journalItems = journalItems.map { pageByID[$0.id] ?? $0 }
         let known = Set(journalItems.map(\.id))
-        journalItems.append(contentsOf: pageJournal.filter { !known.contains($0.id) })
+        let fresh = pageJournal.filter { !known.contains($0.id) }
+        let updated = journalItems.map { pageByID[$0.id] ?? $0 }
+        journalItems = reset ? fresh + updated : updated + fresh
     }
 
     /// Bootstrap already returned this page. Keep it when the journal rows still
@@ -937,20 +998,11 @@ final class TradesContainerViewModel {
         snapshot: ProfileState,
         summaries: [TradeSummary]
     ) -> [TradeOwnerJournalSummary] {
-        let pageIsPartial = snapshot.tradesNextCursor != nil
         if hasAuthoritativeV2Journal, !journalItems.isEmpty {
-            return reconcileJournal(
-                snapshot: summaries,
-                loaded: journalItems,
-                snapshotIsPartial: pageIsPartial
-            )
+            return reconcileJournal(snapshot: summaries, loaded: journalItems)
         }
         guard let preview = Self.journalPreview(snapshot.tradeJournalPreview, orderedLike: summaries) else {
-            return reconcileJournal(
-                snapshot: summaries,
-                loaded: journalItems,
-                snapshotIsPartial: pageIsPartial
-            )
+            return reconcileJournal(snapshot: summaries, loaded: journalItems)
         }
         if journalItems.isEmpty { return preview }
         let existingByID = Dictionary(uniqueKeysWithValues: journalItems.map { ($0.id, $0) })
@@ -963,14 +1015,7 @@ final class TradesContainerViewModel {
             return row
         }
         let previewIDs = Set(preview.map(\.id))
-        let newest = preview.map(\.summary.createdAt).max()
-        let oldest = preview.map(\.summary.createdAt).min()
-        let extras = journalItems.filter { row in
-            if previewIDs.contains(row.id) { return false }
-            let stamp = row.summary.createdAt
-            if let newest, stamp > newest { return true }
-            return pageIsPartial && oldest.map { stamp < $0 } == true
-        }
+        let extras = journalItems.filter { !previewIDs.contains($0.id) }
         merged.append(contentsOf: extras)
         return merged
     }

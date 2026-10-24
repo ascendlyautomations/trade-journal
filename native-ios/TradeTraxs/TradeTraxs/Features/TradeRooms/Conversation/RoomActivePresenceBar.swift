@@ -43,7 +43,7 @@ struct RoomActivePresenceBar: View {
             .padding(.horizontal, ExperienceSpacing.md)
             .padding(.vertical, ExperienceSpacing.xs)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityIdentifier("tradeRooms.conversation.activePresence")
         .accessibilityLabel("\(members.count) active traders")
     }
@@ -85,22 +85,16 @@ struct RoomActivePresenceSheet: View {
                                     if !member.profile.displayName.isEmpty,
                                        member.profile.displayName != member.profile.username
                                     {
-                                        HStack(spacing: 4) {
-                                            Text(member.profile.displayName)
-                                                .experienceStyle(.caption, color: colors.tertiaryText)
-                                                .lineLimit(1)
-                                            ProfileTradeTraxsIdentityBadge(
-                                                profile: member.profile,
-                                                size: .inline
-                                            )
-                                        }
+                                        Text(member.profile.displayName)
+                                            .experienceStyle(.caption, color: colors.tertiaryText)
+                                            .lineLimit(1)
                                     }
                                 }
                                 Spacer(minLength: 0)
                             }
                             .padding(.vertical, 2)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                     }
                     .listStyle(.plain)
                 }

@@ -337,7 +337,7 @@ async function notifyTradingReport(input: {
     title,
     body:
       kind === "weekly"
-        ? "Your weekly trading summary is ready to review."
+        ? "Your Weekly Trading Report is Ready"
         : "Your monthly trading summary is ready to review.",
     href,
     periodKey,

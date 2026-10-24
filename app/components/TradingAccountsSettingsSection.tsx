@@ -33,6 +33,7 @@ import { useFreePlanAccountSlotSelection } from "@/app/components/FreePlanAccoun
 import { useUserProfile } from "@/lib/useUserProfile"
 import { useProGate } from "@/lib/useProGate"
 import { knownTraxProActiveForPreflight } from "@/lib/billingEntitlement"
+import { fetchAccountPurchaseCostInput } from "@/lib/propFirmExpenses"
 
 const ACCOUNTS_PAGE_SIZE = 5
 
@@ -73,6 +74,8 @@ export default function TradingAccountsSettingsSection({
   const [creating, setCreating] = useState(false)
   const [editModalAccount, setEditModalAccount] =
     useState<TradingAccountListItem | null>(null)
+  const [editPurchaseCost, setEditPurchaseCost] = useState("")
+  const [editPurchaseDate, setEditPurchaseDate] = useState("")
   const [savingEdit, setSavingEdit] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [page, setPage] = useState(0)
@@ -87,9 +90,37 @@ export default function TradingAccountsSettingsSection({
 
   const editFormValues = useMemo(
     () =>
-      editModalAccount ? tradingAccountToFormValues(editModalAccount) : null,
-    [editModalAccount]
+      editModalAccount
+        ? {
+            ...tradingAccountToFormValues(editModalAccount),
+            purchaseCost: editPurchaseCost,
+            purchaseDate: editPurchaseDate,
+          }
+        : null,
+    [editModalAccount, editPurchaseCost, editPurchaseDate]
   )
+
+  useEffect(() => {
+    if (!userId || !editModalAccount) {
+      setEditPurchaseCost("")
+      setEditPurchaseDate("")
+      return
+    }
+    let cancelled = false
+    void fetchAccountPurchaseCostInput(
+      supabase,
+      userId,
+      editModalAccount.id
+    ).then((value) => {
+      if (!cancelled) {
+        setEditPurchaseCost(value.cost)
+        setEditPurchaseDate(value.purchaseDate)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [userId, editModalAccount])
 
   const filteredAccounts = useMemo(() => {
     const sorted = sortAccountsForDisplay(accounts)
@@ -221,7 +252,7 @@ export default function TradingAccountsSettingsSection({
       return
     }
 
-    const { account, error } = await insertTradingAccount(
+    const { account, error, purchaseExpenseWarning } = await insertTradingAccount(
       supabase,
       userId,
       newAccount
@@ -247,7 +278,10 @@ export default function TradingAccountsSettingsSection({
     setShowCreateModal(false)
     invalidateAccountCaches()
     void refreshAccounts({ force: true })
-    showPopup({ type: "success", message: "Account created" })
+    showPopup({
+      type: purchaseExpenseWarning ? "error" : "success",
+      message: purchaseExpenseWarning ?? "Account created",
+    })
   }
 
   function openNoteEditor(account: TradingAccountListItem) {
@@ -258,7 +292,7 @@ export default function TradingAccountsSettingsSection({
     if (!userId || !editModalAccount || savingEdit) return
 
     setSavingEdit(true)
-    const { account, error } = await updateTradingAccount(
+    const { account, error, purchaseExpenseWarning } = await updateTradingAccount(
       supabase,
       userId,
       editModalAccount.id,
@@ -282,7 +316,10 @@ export default function TradingAccountsSettingsSection({
     if (!account) return
 
     setEditModalAccount(null)
-    showPopup({ type: "success", message: "Account updated" })
+    showPopup({
+      type: purchaseExpenseWarning ? "error" : "success",
+      message: purchaseExpenseWarning ?? "Account updated",
+    })
     invalidateAccountCaches()
     await refreshAccounts({ force: true })
   }

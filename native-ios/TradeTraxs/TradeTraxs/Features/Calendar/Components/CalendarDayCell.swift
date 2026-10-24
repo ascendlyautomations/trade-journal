@@ -39,7 +39,7 @@ struct CalendarDayCell: View {
                     .strokeBorder(borderColor, lineWidth: isSelected || cell.isToday ? 1.5 : 0)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .disabled(cell.dayNumber == nil)
         .opacity(cell.isCurrentMonth ? 1 : 0.35)
         .accessibilityLabel(CalendarFormatting.accessibilityLabel(for: cell))

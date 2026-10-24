@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Account + date range menus with Trades, Reports, and Withdrawals tools — compact header controls.
+/// Account selector + compact scope filters with Trades, Reports, and Withdrawals tools.
 struct DashboardFilterBar: View {
     @Bindable var viewModel: DashboardViewModel
 
@@ -12,7 +12,7 @@ struct DashboardFilterBar: View {
                 accountMenu
                     .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
                     .layoutPriority(0)
-                dateMenu
+                scopeFilterButton
                     .layoutPriority(2)
                     .fixedSize(horizontal: true, vertical: false)
             }
@@ -71,7 +71,7 @@ struct DashboardFilterBar: View {
                 )
                 .background(colors.fillSecondary, in: Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier(accessibilityIdentifier)
     }
@@ -112,25 +112,33 @@ struct DashboardFilterBar: View {
         }
     }
 
-    private var dateMenu: some View {
-        Menu {
-            ForEach(DashboardDateRange.allCases) { range in
-                Button {
-                    viewModel.setDateRange(range)
-                } label: {
-                    if viewModel.dateRange == range {
-                        Label(range.title, systemImage: "checkmark")
-                    } else {
-                        Text(range.title)
-                    }
+    private var scopeFilterButton: some View {
+        Button {
+            viewModel.openScopeFilters()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.footnote.weight(.semibold))
+                Text(viewModel.scopeFilterTimeLabel)
+                    .experienceStyle(.footnote, color: colors.primaryText)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, ExperienceSpacing.sm)
+            .frame(minHeight: 32)
+            .background(colors.fillSecondary, in: Capsule())
+            .overlay(alignment: .topTrailing) {
+                if viewModel.showsScopeFilterIndicator {
+                    Circle()
+                        .fill(colors.accent)
+                        .frame(width: 7, height: 7)
+                        .offset(x: 4, y: -4)
                 }
             }
-        } label: {
-            menuLabel(viewModel.dateRange.title)
         }
-        .accessibilityLabel("Date range")
-        .accessibilityValue(viewModel.dateRange.title)
-        .accessibilityIdentifier("dashboard.dateRange")
+        .buttonStyle(.experiencePlain)
+        .accessibilityLabel("Dashboard filters")
+        .accessibilityValue(viewModel.scopeFilterTimeLabel)
+        .accessibilityIdentifier("dashboard.scopeFilters")
     }
 
     private func accountMenuLabel(_ title: String) -> some View {
@@ -150,17 +158,4 @@ struct DashboardFilterBar: View {
         .clipShape(Capsule())
     }
 
-    private func menuLabel(_ title: String) -> some View {
-        HStack(spacing: 4) {
-            Text(title)
-                .experienceStyle(.footnote, color: colors.primaryText)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            ExperienceIcon(icon: .chevronDown, size: .xs, color: colors.secondaryText)
-        }
-        .padding(.horizontal, ExperienceSpacing.sm)
-        .frame(minHeight: 32)
-        .background(colors.fillSecondary)
-        .clipShape(Capsule())
-    }
 }

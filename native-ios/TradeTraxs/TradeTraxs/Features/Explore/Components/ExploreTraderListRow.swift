@@ -41,7 +41,6 @@ struct ExploreTraderListRow: View {
                                 .experienceStyle(.subheadline, color: colors.primaryText)
                                 .fontWeight(.semibold)
                                 .lineLimit(1)
-                            ProfileTradeTraxsIdentityBadge(profile: profile, size: .inline)
                         }
                         Text("@\(profile.username)")
                             .experienceStyle(.caption, color: colors.secondaryText)
@@ -56,7 +55,7 @@ struct ExploreTraderListRow: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
 
             if showsFollowControl {
                 Button(action: onToggleFollow) {
@@ -69,7 +68,7 @@ struct ExploreTraderListRow: View {
                             Capsule().fill(isFollowing ? colors.fillSecondary : colors.accent)
                         )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityIdentifier(
                     isFollowing
                         ? "explore.trader.following.\(trader.id.rawValue)"

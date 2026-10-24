@@ -1,11 +1,25 @@
 import Foundation
 
+/// Payout achievement that has not been matched to a withdrawal or cycle yet.
+nonisolated struct UnmatchedPayoutAchievement: Sendable {
+    var id: String
+    var kind: AchievementKind
+    var title: String
+    var amount: Decimal
+    var achievedAt: Date
+    var accountID: TradingAccountID?
+    var linkedCycleID: String?
+    var linkedEntryID: String?
+}
+
 /// Unified payout history row — manual ledger + funded prop-firm cycles.
 nonisolated struct PayoutHistoryItem: Identifiable, Hashable, Sendable {
     enum Source: Hashable, Sendable {
         case liveLedger
         case otherLedger
         case fundedCycle
+        case achievementProp
+        case achievementLive
     }
 
     var id: String
@@ -72,6 +86,79 @@ nonisolated enum PayoutHistorySupport {
         return items.sorted { $0.date > $1.date }
     }
 
+    /// Payout achievements that never became a withdrawal or payout cycle.
+    static func missingAchievementPayouts(
+        achievements: [UnmatchedPayoutAchievement],
+        recorded: [PayoutHistoryItem]
+    ) -> [PayoutHistoryItem] {
+        let window: TimeInterval = 14 * 24 * 60 * 60
+        let completedCycleIDs = Set(
+            recorded
+                .filter { $0.source == .fundedCycle }
+                .map { $0.id.replacingOccurrences(of: "cycle:", with: "") }
+        )
+        let ledgerIDs = Set(recorded.compactMap { $0.ledgerEntryID?.rawValue })
+        let cent = Decimal(string: "0.01") ?? 0.01
+
+        return achievements.compactMap { achievement in
+            guard achievement.amount > 0 else { return nil }
+            if let entryID = achievement.linkedEntryID, ledgerIDs.contains(entryID) { return nil }
+            if let cycleID = achievement.linkedCycleID, completedCycleIDs.contains(cycleID) { return nil }
+            if let accountID = achievement.accountID,
+               recorded.contains(where: { item in
+                   item.accountID == accountID
+                   && abs(item.amount - achievement.amount) < cent
+                   && abs(item.date.timeIntervalSince(achievement.achievedAt)) <= window
+               }) {
+                return nil
+            }
+            let prop = achievement.kind == .propFirmPayout
+            return PayoutHistoryItem(
+                id: "achievement:\(achievement.id)",
+                amount: achievement.amount,
+                date: achievement.achievedAt,
+                accountID: achievement.accountID ?? TradingAccountID(""),
+                ledgerEntryID: nil,
+                source: prop ? .achievementProp : .achievementLive,
+                note: achievement.title
+            )
+        }
+    }
+
+    static func loadMissingAchievementPayouts(
+        achievements repository: any AchievementRepository,
+        profileID: ProfileID,
+        recorded: [PayoutHistoryItem]
+    ) async -> [PayoutHistoryItem] {
+        let page = try? await repository.achievements(
+            for: profileID,
+            page: PageRequest(limit: 500),
+            publicOnly: false
+        )
+        let links = (try? await repository.withdrawalAchievementLinks(for: profileID)) ?? []
+        var linkByID: [AchievementID: WithdrawalAchievementLinkRow] = [:]
+        for link in links {
+            linkByID[link.achievementID] = link
+        }
+        let rows: [UnmatchedPayoutAchievement] = (page?.items ?? []).compactMap { achievement in
+            guard achievement.kind == .propFirmPayout || achievement.kind == .liveTradingPayout else { return nil }
+            guard let amount = achievement.value?.amount, amount > 0 else { return nil }
+            let link = linkByID[achievement.id]
+            let title = achievement.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            return UnmatchedPayoutAchievement(
+                id: achievement.id.rawValue,
+                kind: achievement.kind,
+                title: title.isEmpty ? (achievement.kind == .propFirmPayout ? "Prop Firm Payout" : "Payout") : title,
+                amount: amount,
+                achievedAt: achievement.achievedAt,
+                accountID: achievement.accountID,
+                linkedCycleID: link?.payoutCycleID,
+                linkedEntryID: link?.ledgerEntryID?.rawValue
+            )
+        }
+        return missingAchievementPayouts(achievements: rows, recorded: recorded)
+    }
+
     static func summary(for items: [PayoutHistoryItem]) -> (total: Decimal, count: Int, average: Decimal?) {
         guard !items.isEmpty else { return (0, 0, nil) }
         let total = items.reduce(Decimal.zero) { $0 + $1.amount }
@@ -106,6 +193,10 @@ nonisolated enum PayoutHistorySupport {
             return true
         case .otherLedger:
             return account?.mode == .live
+        case .achievementProp:
+            return false
+        case .achievementLive:
+            return true
         }
     }
 
@@ -116,7 +207,12 @@ nonisolated enum PayoutHistorySupport {
         case .liveLedger:
             return false
         case .otherLedger:
-            return account?.mode == .funded
+            // Past prop payouts, including eval accounts, were saved on the ledger.
+            return account?.isPropFirmAccount == true
+        case .achievementProp:
+            return true
+        case .achievementLive:
+            return false
         }
     }
 }

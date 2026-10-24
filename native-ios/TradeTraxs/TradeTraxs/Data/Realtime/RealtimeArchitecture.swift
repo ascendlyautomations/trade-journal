@@ -346,6 +346,24 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
         )
     }
 
+    /// One profile table (`profile_posts` or `trades`) — idle until postgres_changes.
+    func watchProfileTable(
+        table: String,
+        profileID: String,
+        accessToken: String?,
+        debugOwner: String? = nil
+    ) -> RealtimeMessageWatch {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
+            return Self.emptyMessageWatch(routeKey: "profile-table:\(table):\(profileID)")
+        }
+        return live.watchProfileTable(
+            table: table,
+            profileID: profileID,
+            accessToken: accessToken,
+            debugOwner: debugOwner
+        )
+    }
+
     /// Activity — idle until `notifications` postgres_changes for the viewer.
     func watchNotifications(
         userID: String,

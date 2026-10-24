@@ -42,7 +42,7 @@ struct TradeRoomDiscoveryScopeToggle: View {
                     }
                 }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityIdentifier("tradeRooms.discovery.scope.\(value.rawValue)")
     }

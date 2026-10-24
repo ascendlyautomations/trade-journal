@@ -99,6 +99,10 @@ struct RoomInfoView: View {
                     .experienceDashboardListRow()
                 inviteLinkRow
                     .experienceDashboardListRow()
+                if viewModel.viewerID != nil {
+                    createFeedPostRow
+                        .experienceDashboardListRow()
+                }
                 ownerRow
                     .experienceDashboardListRow()
             }
@@ -219,6 +223,28 @@ struct RoomInfoView: View {
             .accessibilityIdentifier("tradeRooms.info.invite.copy")
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private var createFeedPostRow: some View {
+        Button {
+            viewModel.createFeedPost()
+        } label: {
+            HStack(spacing: ExperienceSpacing.sm) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Create Feed Post")
+                        .experienceStyle(.body, color: colors.primaryText)
+                    Text("Share a join card on your feed")
+                        .experienceStyle(.caption, color: colors.tertiaryText)
+                }
+                Spacer(minLength: ExperienceSpacing.xs)
+                Image(systemName: "square.and.arrow.up")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(colors.accent)
+            }
+            .experienceControlHitTarget()
+        }
+        .buttonStyle(.experiencePlain)
+        .accessibilityIdentifier("tradeRooms.info.createFeedPost")
     }
 
     @ViewBuilder

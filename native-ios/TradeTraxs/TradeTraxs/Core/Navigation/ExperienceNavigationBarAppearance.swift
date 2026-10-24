@@ -58,7 +58,7 @@ enum ExperienceNavigationBarAppearance {
         ExperienceGroupedListAppearance.sync(colors: colors)
     }
 
-    /// Opaque nav bar (`isTranslucent = false`) — Feed tab and Dashboard scroll-header experiment.
+    /// Opaque nav bar (`isTranslucent = false`) — Feed tab and Dashboard root.
     /// Uses the same ``SemanticColorPalette/navigationBackground`` as default Home chrome.
     static func configureOpaqueBarChrome(colors: SemanticColorPalette = ThemePaletteAnchor.current) {
         let background = UIColor(colors.navigationBackground)
@@ -105,5 +105,10 @@ enum ExperienceGroupedListAppearance {
         UITableView.appearance().backgroundColor = page
         UICollectionView.appearance().backgroundColor = page
         UITableView.appearance().separatorColor = separator
+        // Deliver the tap to the text field immediately. The default delay waits to see
+        // if the touch is a scroll, which holds the keyboard open before typing starts.
+        UIScrollView.appearance().delaysContentTouches = false
+        UITableView.appearance().delaysContentTouches = false
+        UICollectionView.appearance().delaysContentTouches = false
     }
 }

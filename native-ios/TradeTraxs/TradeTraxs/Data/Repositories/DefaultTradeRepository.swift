@@ -330,12 +330,16 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             items.append(SupabaseQuery.eq("is_public", "false"))
         }
 
+        if filters.pictureOnly {
+            items.append(URLQueryItem(name: "image_url", value: "not.is.null"))
+        }
+
         let bounds = filters.createdAtBounds()
         if let start = bounds.start {
-            items.append(URLQueryItem(name: "created_at", value: "gte.\(ISO8601.string(from: start))"))
+            items.append(URLQueryItem(name: "entry_time", value: "gte.\(ISO8601.string(from: start))"))
         }
         if let end = bounds.end {
-            items.append(URLQueryItem(name: "created_at", value: "lt.\(ISO8601.string(from: end))"))
+            items.append(URLQueryItem(name: "entry_time", value: "lt.\(ISO8601.string(from: end))"))
         }
 
         switch filters.direction {
@@ -864,7 +868,14 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
                 into: "accounts",
                 returning: TradeDTO.Account.self
             )
-            return try TradingAccountMapper.mapToDomain(row)
+            let account = try TradingAccountMapper.mapToDomain(row)
+            await Self.syncAccountPurchaseExpense(
+                supabase: supabase,
+                ownerID: ownerID,
+                accountID: account.id,
+                draft: draft
+            )
+            return account
         } catch {
             throw Self.mapAccountMutationError(error)
         }
@@ -910,9 +921,36 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
                     SupabaseQuery.eq("user_id", ownerID.rawValue),
                 ]
             )
+            await Self.syncAccountPurchaseExpense(
+                supabase: supabase,
+                ownerID: ownerID,
+                accountID: account.id,
+                draft: draft
+            )
             return account
         } catch {
             throw Self.mapAccountMutationError(error)
+        }
+    }
+
+    /// Purchase-cost sync must not fail the account save. A later edit retries the same upsert.
+    private static func syncAccountPurchaseExpense(
+        supabase: SupabaseInfrastructure,
+        ownerID: ProfileID,
+        accountID: TradingAccountID,
+        draft: TradingAccountDraft
+    ) async {
+        let cost = draft.purchaseCostDigits.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cost.isEmpty else { return }
+        do {
+            try await PropFirmExpenseRepository(supabase: supabase).syncAccountPurchase(
+                userID: ownerID,
+                accountID: accountID,
+                draft: draft
+            )
+        } catch {
+            Logger(subsystem: "TradeTraxs", category: "PropFirmExpenses")
+                .error("Account purchase expense sync failed: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -1081,6 +1119,24 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             )
         }
         return RecordAccountPayoutResult(cycleID: cycleID, accountPreferences: preferences)
+    }
+
+    func deletePropPayout(
+        cycleID: String,
+        drawdownBehavior: PayoutDrawdownBehavior
+    ) async throws {
+        struct Body: Encodable {
+            var p_cycle_id: String
+            var p_drawdown_behavior: String
+        }
+        let body = Body(
+            p_cycle_id: cycleID,
+            p_drawdown_behavior: drawdownBehavior.rawValue
+        )
+        _ = try await supabase.database.rpcData(
+            functionName: "delete_prop_payout",
+            parametersJSON: try JSONEncoder().encode(body)
+        )
     }
 
     func profileAccountInsights(for profileID: ProfileID) async throws -> [ProfileAccountInsight] {

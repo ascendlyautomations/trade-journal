@@ -46,7 +46,7 @@ nonisolated enum PsychologyCheckInBootstrapLoader {
             )
         )
         try bootstrap.validateContractVersion()
-        return try bootstrap.data.check_ins.map { try TraderDailyCheckInMapper.map($0) }
+        return bootstrap.data.check_ins.compactMap { TraderDailyCheckInMapper.mapIfValid($0) }
     }
 }
 

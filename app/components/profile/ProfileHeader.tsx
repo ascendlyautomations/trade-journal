@@ -260,19 +260,13 @@ export default function ProfileHeader({
                 {profile.bio || "No bio yet"}
               </p>
 
-              <div
-                {...(isOwnProfile
-                  ? { "data-tt-tour-target": "profileTradeRoom" }
-                  : {})}
-              >
-                <ProfileTradeRoomSection
-                  isOwnProfile={isOwnProfile}
-                  hasRoom={hasRoom}
-                  canShowVisitorRoomCta={canShowVisitorRoomCta}
-                  onCreateRoom={onCreateRoom}
-                  onViewRoom={onViewRoom}
-                />
-              </div>
+              <ProfileTradeRoomSection
+                isOwnProfile={isOwnProfile}
+                hasRoom={hasRoom}
+                canShowVisitorRoomCta={canShowVisitorRoomCta}
+                onCreateRoom={onCreateRoom}
+                onViewRoom={onViewRoom}
+              />
             </div>
           </div>
 

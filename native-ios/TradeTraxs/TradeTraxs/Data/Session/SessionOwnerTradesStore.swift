@@ -25,6 +25,9 @@ final class SessionOwnerTradesStore {
 
     /// Analytics window — Realtime / local mutations keep this coherent longer.
     private let freshTTL: TimeInterval = 10 * 60
+    /// Matches `rpc_v1_trades_owner_rows` dashboard page. A shorter page is the full journal.
+    static let analyticsPageLimit = 500
+    private var completeInFlight: [ProfileID: Task<[Trade], Error>] = [:]
 
     private init() {}
 
@@ -140,7 +143,71 @@ final class SessionOwnerTradesStore {
         defer { inFlight[profileID] = nil }
 
         let loaded = try await task.value
-        seed(loaded, for: profileID, detailCache: detailCache)
+        let pageIsFullJournal = loaded.count < limit
+        if pageIsFullJournal {
+            seed(
+                loaded,
+                for: profileID,
+                detailCache: detailCache,
+                historyComplete: true,
+                totalTradeCount: loaded.count
+            )
+        } else {
+            seed(loaded, for: profileID, detailCache: detailCache)
+            let knownTotal = metadataByOwner[profileID]?.totalTradeCount ?? loaded.count
+            noteBootstrapMetadata(
+                for: profileID,
+                historyComplete: false,
+                totalTradeCount: max(knownTotal, loaded.count)
+            )
+        }
+        return loaded
+    }
+
+    /// Full owner journal for analytics when the 500-row window would drop rows.
+    /// Uses the existing unbounded owner-rows read (`p_limit` omitted), then caches it as complete.
+    func ensureCompleteAnalyticsSnapshot(
+        for profileID: ProfileID,
+        detailCache: DetailPresentationCache,
+        repository: any TradeRepository
+    ) async throws -> [Trade] {
+        if isCompleteSnapshot(for: profileID), let cached = tradesByOwner[profileID] {
+            return cached
+        }
+        if let cached = tradesByOwner[profileID],
+           cached.count < Self.analyticsPageLimit,
+           isFresh(for: profileID)
+        {
+            noteBootstrapMetadata(
+                for: profileID,
+                historyComplete: true,
+                totalTradeCount: cached.count
+            )
+            return cached
+        }
+        if let existing = completeInFlight[profileID] {
+            return try await existing.value
+        }
+
+        let task = Task {
+            try await repository.trades(
+                ownedBy: profileID,
+                accountID: nil,
+                entryFrom: Date(timeIntervalSince1970: 0),
+                entryTo: Date().addingTimeInterval(60 * 60 * 24 * 2),
+                limit: Int.max
+            )
+        }
+        completeInFlight[profileID] = task
+        defer { completeInFlight[profileID] = nil }
+        let loaded = try await task.value
+        seed(
+            loaded,
+            for: profileID,
+            detailCache: detailCache,
+            historyComplete: true,
+            totalTradeCount: loaded.count
+        )
         return loaded
     }
 
@@ -211,12 +278,16 @@ final class SessionOwnerTradesStore {
             metadataByOwner[profileID] = nil
             inFlight[profileID]?.cancel()
             inFlight[profileID] = nil
+            completeInFlight[profileID]?.cancel()
+            completeInFlight[profileID] = nil
         } else {
             inFlight.values.forEach { $0.cancel() }
+            completeInFlight.values.forEach { $0.cancel() }
             tradesByOwner = [:]
             loadedAt = [:]
             metadataByOwner = [:]
             inFlight = [:]
+            completeInFlight = [:]
         }
         SessionNetworkProbe.record(.cacheInvalidated, resource: "ownerTrades", detail: profileID?.rawValue ?? "all")
     }

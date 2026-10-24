@@ -659,6 +659,195 @@ final class DashboardExperienceTests: XCTestCase {
         XCTAssertEqual(summary.currentEquity, 70)
     }
 
+    func testWebDashboardAccountTypeFilterUsesModeBeforeAccountType() {
+        let profileID = ProfileID("dev.dashboard.account-type")
+        let now = Date()
+        let trade = Trade(
+            id: TradeID("funded-trade"),
+            ownerProfileID: profileID,
+            accountID: nil,
+            symbol: Symbol(ticker: "NQ"),
+            side: .long,
+            mode: .live,
+            quantity: 1,
+            entryPrice: 1,
+            exitPrice: 2,
+            entryAt: now.addingTimeInterval(-86_400),
+            exitAt: now,
+            realizedPnL: Money(amount: 500),
+            riskReward: 2,
+            points: nil,
+            sessionLabel: "NY",
+            visibility: .private,
+            publicCaption: nil,
+            thumbnail: nil,
+            notePreview: nil,
+            wireMode: "funded",
+            wireAccountType: "live",
+            createdAt: now,
+            updatedAt: now
+        )
+        let input = DashboardScopeFilterSupport.makeChartInput(trade: trade, linkedAccountType: nil)
+        let fundedScope = DashboardClientScopeFilter(
+            accountFilter: .all,
+            dateRange: .all,
+            customInterval: nil,
+            accountMode: .funded,
+            showPublicOnly: false
+        )
+        XCTAssertEqual(DashboardChartMetrics.filteredTrades(from: [input], scope: fundedScope).count, 1)
+
+        let liveScope = DashboardClientScopeFilter(
+            accountFilter: .all,
+            dateRange: .all,
+            customInterval: nil,
+            accountMode: .live,
+            showPublicOnly: false
+        )
+        XCTAssertTrue(DashboardChartMetrics.filteredTrades(from: [input], scope: liveScope).isEmpty)
+    }
+
+    func testPublicOnlyFilterMatchesProfileStatisticsIsPublicOnly() {
+        let profileID = ProfileID("dev.dashboard.public")
+        let now = Date()
+        let captionOnlyTrade = Trade(
+            id: TradeID("public-note"),
+            ownerProfileID: profileID,
+            accountID: nil,
+            symbol: Symbol(ticker: "ES"),
+            side: .long,
+            mode: .live,
+            quantity: 1,
+            entryPrice: 1,
+            exitPrice: 2,
+            entryAt: now.addingTimeInterval(-86_400),
+            exitAt: now,
+            realizedPnL: Money(amount: 100),
+            riskReward: 1,
+            points: nil,
+            sessionLabel: "NY",
+            visibility: .private,
+            publicCaption: "Shared setup",
+            thumbnail: nil,
+            notePreview: nil,
+            createdAt: now,
+            updatedAt: now
+        )
+        let privateTrade = Trade(
+            id: TradeID("private"),
+            ownerProfileID: profileID,
+            accountID: nil,
+            symbol: Symbol(ticker: "ES"),
+            side: .long,
+            mode: .live,
+            quantity: 1,
+            entryPrice: 1,
+            exitPrice: 2,
+            entryAt: now.addingTimeInterval(-172_800),
+            exitAt: now.addingTimeInterval(-86_400),
+            realizedPnL: Money(amount: 50),
+            riskReward: 1,
+            points: nil,
+            sessionLabel: "NY",
+            visibility: .private,
+            publicCaption: nil,
+            thumbnail: nil,
+            notePreview: nil,
+            createdAt: now,
+            updatedAt: now
+        )
+        let flaggedPublicTrade = Trade(
+            id: TradeID("public-flag"),
+            ownerProfileID: profileID,
+            accountID: nil,
+            symbol: Symbol(ticker: "ES"),
+            side: .long,
+            mode: .live,
+            quantity: 1,
+            entryPrice: 1,
+            exitPrice: 2,
+            entryAt: now.addingTimeInterval(-3 * 86_400),
+            exitAt: now.addingTimeInterval(-2 * 86_400),
+            realizedPnL: Money(amount: 75),
+            riskReward: 1,
+            points: nil,
+            sessionLabel: "NY",
+            visibility: .public,
+            publicCaption: nil,
+            thumbnail: nil,
+            notePreview: nil,
+            createdAt: now,
+            updatedAt: now
+        )
+        let scope = DashboardClientScopeFilter(
+            accountFilter: .all,
+            dateRange: .all,
+            customInterval: nil,
+            accountMode: .all,
+            showPublicOnly: true
+        )
+        let inputs = [
+            DashboardChartMetrics.Input(trade: captionOnlyTrade, accountType: nil),
+            DashboardChartMetrics.Input(trade: privateTrade, accountType: nil),
+            DashboardChartMetrics.Input(trade: flaggedPublicTrade, accountType: nil),
+        ]
+        let filtered = DashboardChartMetrics.filteredTrades(from: inputs, scope: scope)
+        XCTAssertEqual(filtered.count, 1)
+        XCTAssertEqual(filtered.first?.id, flaggedPublicTrade.id)
+    }
+
+    func testDashboardFundedFilterUsesProfileStatisticsAccountModeResolution() {
+        let profileID = ProfileID("dev.dashboard.profile-mode")
+        let now = Date()
+        let fundedAccount = TradingAccountID("funded-acct")
+        let trade = Trade(
+            id: TradeID("prop-trade"),
+            ownerProfileID: profileID,
+            accountID: fundedAccount,
+            symbol: Symbol(ticker: "NQ"),
+            side: .long,
+            mode: .live,
+            quantity: 1,
+            entryPrice: 1,
+            exitPrice: 2,
+            entryAt: now.addingTimeInterval(-86_400),
+            exitAt: now,
+            realizedPnL: Money(amount: 250),
+            riskReward: 1,
+            points: nil,
+            sessionLabel: "NY",
+            visibility: .private,
+            publicCaption: nil,
+            thumbnail: nil,
+            notePreview: nil,
+            wireMode: "live",
+            wireAccountType: nil,
+            accountMode: nil,
+            createdAt: now,
+            updatedAt: now
+        )
+        let scope = DashboardClientScopeFilter(
+            accountFilter: .all,
+            dateRange: .all,
+            customInterval: nil,
+            accountMode: .funded,
+            showPublicOnly: false,
+            linkedAccountModes: [fundedAccount: .funded]
+        )
+        let input = DashboardChartMetrics.Input(trade: trade, accountType: "funded")
+        XCTAssertEqual(DashboardChartMetrics.filteredTrades(from: [input], scope: scope).count, 1)
+
+        let liveScope = DashboardClientScopeFilter(
+            accountFilter: .all,
+            dateRange: .all,
+            customInterval: nil,
+            accountMode: .live,
+            showPublicOnly: false,
+            linkedAccountModes: [fundedAccount: .funded]
+        )
+        XCTAssertTrue(DashboardChartMetrics.filteredTrades(from: [input], scope: liveScope).isEmpty)
+    }
+
     func testDashboardInsightDisplayCopyNeverContainsEmDash() {
         let emDash = "\u{2014}"
         let insight = DashboardInsightItem(

@@ -1,33 +1,39 @@
-.tt-contextual-tour-root {
-  --tt-tour-scrim: rgb(0 0 0 / 0.72);
-  --tt-tour-card-bg: color-mix(in srgb, var(--tt-app-surface, #0f172a) 92%, transparent);
-  --tt-tour-card-border: color-mix(in srgb, var(--tt-app-foreground, #fff) 12%, transparent);
-  --tt-tour-card-text: var(--tt-app-foreground, #f8fafc);
-  --tt-tour-card-muted: color-mix(in srgb, var(--tt-app-foreground, #fff) 65%, transparent);
+/**
+ * Tour UI must stay transparent at the host level. Global theme rules in
+ * authenticatedAppearance.css paint solid surfaces on [role="dialog"] and
+ * .z-[10070] — do not use those on full-viewport tour hosts.
+ */
+
+[data-tt-contextual-tour-popover],
+[data-tt-contextual-tour-ring] {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
-html[data-web-appearance="light"] .tt-contextual-tour-root {
-  --tt-tour-scrim: rgb(15 23 42 / 0.55);
-  --tt-tour-card-bg: color-mix(in srgb, #fff 94%, transparent);
-  --tt-tour-card-border: rgb(15 23 42 / 0.12);
-  --tt-tour-card-text: #0f172a;
-  --tt-tour-card-muted: rgb(51 65 85 / 0.85);
+[data-tt-contextual-tour-card] {
+  background-color: #0f172a !important;
+  color: #f1f5f9 !important;
+  border: 1px solid rgb(148 163 184 / 0.25) !important;
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.45);
 }
 
-.tt-contextual-tour-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 10070;
-  pointer-events: auto;
+[data-tt-contextual-tour-card] [data-tt-tour-muted] {
+  color: #94a3b8 !important;
 }
 
-.tt-contextual-tour-card {
-  border: 1px solid var(--tt-tour-card-border);
-  background: var(--tt-tour-card-bg);
-  color: var(--tt-tour-card-text);
-  backdrop-filter: blur(12px);
+[data-tt-contextual-tour-card] [data-tt-tour-title] {
+  color: #f8fafc !important;
 }
 
-.tt-contextual-tour-card-muted {
-  color: var(--tt-tour-card-muted);
+[data-tt-contextual-tour-card] [data-tt-tour-body] {
+  color: #cbd5e1 !important;
+}
+
+[data-tt-contextual-tour-card] button[data-tt-tour-secondary] {
+  color: #e2e8f0 !important;
+  border-color: rgb(148 163 184 / 0.35) !important;
 }

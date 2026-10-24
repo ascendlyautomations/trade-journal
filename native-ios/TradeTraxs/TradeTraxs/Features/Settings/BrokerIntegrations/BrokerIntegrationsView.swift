@@ -224,7 +224,7 @@ struct BrokerIntegrationsView: View {
         } label: {
             brokerSectionHeader(provider: provider, isExpanded: isExpanded)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityIdentifier("brokerIntegrations.section.\(provider.rawValue)")
 
         if isExpanded {
@@ -298,7 +298,7 @@ struct BrokerIntegrationsView: View {
                     Task { await viewModel.refreshAll() }
                 }
                 .font(.footnote)
-                .buttonStyle(.borderless)
+                .buttonStyle(.experiencePlain)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         default:
@@ -383,7 +383,7 @@ struct BrokerIntegrationsView: View {
                     Task { await viewModel.refreshAll() }
                 }
                 .font(.footnote)
-                .buttonStyle(.borderless)
+                .buttonStyle(.experiencePlain)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         default:
@@ -409,7 +409,7 @@ struct BrokerIntegrationsView: View {
                     Task { await viewModel.refreshAll() }
                 }
                 .font(.footnote)
-                .buttonStyle(.borderless)
+                .buttonStyle(.experiencePlain)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         case .loaded:
@@ -545,7 +545,7 @@ struct BrokerIntegrationsView: View {
                 .experienceStyle(.caption, color: colors.secondaryText)
             Button(BrokerSyncPresentation.reconnectPrimaryActionTitle(provider: provider), action: onReconnect)
                 .font(.footnote)
-                .buttonStyle(.borderless)
+                .buttonStyle(.experiencePlain)
                 .disabled(viewModel.isBrokerConnectionMutationActive)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -568,14 +568,14 @@ struct BrokerIntegrationsView: View {
                 .font(.footnote)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.experiencePlain)
         .disabled(viewModel.isBrokerConnectionMutationActive)
     }
 
     private func brokerDisconnectRow(onDisconnect: @escaping () -> Void) -> some View {
         Button("Disconnect", role: .destructive, action: onDisconnect)
             .font(.footnote)
-            .buttonStyle(.borderless)
+            .buttonStyle(.experiencePlain)
             .frame(maxWidth: .infinity, alignment: .leading)
             .disabled(viewModel.isBrokerConnectionMutationActive)
     }
@@ -658,7 +658,7 @@ struct BrokerIntegrationsView: View {
                         account: account
                     )
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.experiencePlain)
             }
         }
         .padding(.vertical, ExperienceSpacing.xxs)

@@ -13,6 +13,8 @@ struct RoomConversationHeaderView: View {
     let onJoinTap: () -> Void
     let onMembersTap: () -> Void
     let onInfoTap: () -> Void
+    var onCopyInviteLink: (() -> Void)? = nil
+    var onCreateFeedPost: (() -> Void)? = nil
     let imagePipeline: any ImagePipeline
 
     @Environment(\.themeColors) private var colors
@@ -43,6 +45,9 @@ struct RoomConversationHeaderView: View {
             }
             Spacer(minLength: ExperienceSpacing.xs)
             HStack(spacing: ExperienceSpacing.xs) {
+                if onCopyInviteLink != nil || onCreateFeedPost != nil {
+                    shareMenu
+                }
                 headerIconButton(
                     systemName: "person.2",
                     accessibilityLabel: "Members",
@@ -78,7 +83,7 @@ struct RoomConversationHeaderView: View {
                                 .fill(isJoinEnabled ? colors.accent : colors.fillSecondary)
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .disabled(!isJoinEnabled || isJoining)
                     .accessibilityIdentifier("tradeRooms.conversation.join")
                 }
@@ -104,11 +109,31 @@ struct RoomConversationHeaderView: View {
                 .foregroundStyle(colors.primaryText)
                 .frame(width: 32, height: 32)
                 .background(colors.fillSecondary, in: Circle())
+                .experienceTouchTarget()
         }
-        .buttonStyle(.plain)
-        .experienceTouchTarget()
+        .buttonStyle(.experiencePlain)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    private var shareMenu: some View {
+        Menu {
+            if let onCopyInviteLink {
+                Button("Copy Link", action: onCopyInviteLink)
+            }
+            if let onCreateFeedPost {
+                Button("Create Feed Post", action: onCreateFeedPost)
+            }
+        } label: {
+            Image(systemName: "square.and.arrow.up")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(colors.primaryText)
+                .frame(width: 32, height: 32)
+                .background(colors.fillSecondary, in: Circle())
+                .experienceControlHitTarget()
+        }
+        .accessibilityLabel("Share room")
+        .accessibilityIdentifier("tradeRooms.conversation.share")
     }
 
     private var logo: some View {

@@ -1062,6 +1062,8 @@ export default function PropFirmPage() {
           category: "Prop Firm",
           mode: resolveAccountModeForSave("Prop Firm", "Funded"),
           rules: account.rules,
+          purchaseCost: account.purchaseCost,
+          purchaseDate: account.purchaseDate,
         }
       )
       if (error || !updated) {
@@ -1116,6 +1118,8 @@ export default function PropFirmPage() {
           category: "Prop Firm",
           mode: resolveAccountModeForSave("Prop Firm", "Funded"),
           rules: account.rules,
+          purchaseCost: account.purchaseCost,
+          purchaseDate: account.purchaseDate,
         }
       )
       if (error || !created) {

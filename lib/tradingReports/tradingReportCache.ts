@@ -1,7 +1,5 @@
-import { isDemoUserId } from "@/lib/demo/constants"
 import { generateAllTradingReports } from "./generateTradingReport"
 import { resolveNewTradingReportBadge } from "./tradingReportSeen"
-import { requestTradingReportNotification } from "./tradingReportNotifications"
 import type {
   NewTradingReportBadge,
   TradingReportPeriodKey,
@@ -25,7 +23,6 @@ type CacheEntry = {
 
 const reportsByUser = new Map<string, CacheEntry>()
 const listeners = new Set<() => void>()
-const notifiedPeriods = new Set<string>()
 const badgeByUser = new Map<string, NewTradingReportBadge>()
 
 function notify() {
@@ -108,35 +105,6 @@ export function getNewTradingReportBadge(
   badgeByUser.set(userId, next)
   return next
 }
-
-function maybeQueueNotifications(userId: string, snapshot: TradingReportsSnapshot) {
-  if (isDemoUserId(userId)) return
-
-  for (const periodKey of ["weekly_last", "monthly_last"] as const) {
-    const report = snapshot.reports[periodKey]
-    if (report.metrics.tradesTaken === 0) continue
-
-    const badge = resolveNewTradingReportBadge(userId, {
-      weeklyLast: periodKey === "weekly_last",
-      monthlyLast: periodKey === "monthly_last",
-    })
-    if (!badge) continue
-
-    const notifyKey = `${userId}:${periodKey}:${report.periodStartIso}`
-    if (notifiedPeriods.has(notifyKey)) continue
-    notifiedPeriods.add(notifyKey)
-
-    void requestTradingReportNotification({
-      periodKey,
-      kind: report.kind,
-      title:
-        report.kind === "weekly"
-          ? "Your Weekly Trading Report is Ready"
-          : "Your Monthly Trading Report is Ready",
-    })
-  }
-}
-
 export function ensureTradingReportsLoaded(
   trades: any[],
   userId: string | null | undefined,
@@ -171,8 +139,6 @@ export function ensureTradingReportsLoaded(
     tradeFingerprint: fingerprint,
   })
   notify()
-
-  maybeQueueNotifications(userId, snapshot)
 
   return snapshot
 }

@@ -46,17 +46,21 @@ nonisolated enum TraderDailyCheckInDTO {
 }
 
 nonisolated enum TraderDailyCheckInMapper {
-    static func map(_ dto: TraderDailyCheckInDTO.Row) throws -> TraderDailyCheckIn {
-        guard let id = dto.id?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty else {
-            throw AppError.domain(.notFound(entity: "trader_daily_check_ins", id: "row"))
-        }
+    /// Web `mapCheckInRow` — skip invalid rows instead of failing the whole batch.
+    static func mapIfValid(_ dto: TraderDailyCheckInDTO.Row) -> TraderDailyCheckIn? {
+        let userID = dto.user_id.trimmingCharacters(in: .whitespacesAndNewlines)
+        let checkInDate = normalizedCheckInDateKey(dto.check_in_date)
+        guard !userID.isEmpty, let checkInDate else { return nil }
+
+        let trimmedID = dto.id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let id = trimmedID.isEmpty ? "\(userID)-\(checkInDate)" : trimmedID
         let createdAt = ISO8601.date(from: dto.created_at) ?? Date()
         let updatedAt = ISO8601.date(from: dto.updated_at) ?? createdAt
         let sleepHours = dto.sleep_hours.map { Decimal($0) }
         return TraderDailyCheckIn(
             id: TraderDailyCheckInID(id),
-            ownerProfileID: ProfileID(dto.user_id),
-            checkInDate: dto.check_in_date,
+            ownerProfileID: ProfileID(userID),
+            checkInDate: checkInDate,
             sleepHours: sleepHours,
             sleepQuality: dto.sleep_quality,
             morningRating: dto.morning_rating,
@@ -67,6 +71,25 @@ nonisolated enum TraderDailyCheckInMapper {
             createdAt: createdAt,
             updatedAt: updatedAt
         )
+    }
+
+    static func map(_ dto: TraderDailyCheckInDTO.Row) throws -> TraderDailyCheckIn {
+        guard let mapped = mapIfValid(dto) else {
+            throw AppError.domain(.notFound(entity: "trader_daily_check_ins", id: "row"))
+        }
+        return mapped
+    }
+
+    private static func normalizedCheckInDateKey(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if trimmed.count >= 10 {
+            let prefix = String(trimmed.prefix(10))
+            if prefix.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil {
+                return prefix
+            }
+        }
+        return trimmed
     }
 
     static func upsertBody(

@@ -26,7 +26,7 @@ struct ReportCard: View {
             Button(action: onTap) {
                 cardContent(showTrailingAsButton: false)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .disabled(isDisabled || isGenerating)
         case .interactive(let trailingAction):
             cardContent(showTrailingAsButton: true, trailingAction: trailingAction)
@@ -43,7 +43,7 @@ struct ReportCard: View {
                 Button(action: onTap) {
                     leadingContent
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .disabled(isDisabled || isGenerating)
             } else {
                 leadingContent
@@ -94,7 +94,7 @@ struct ReportCard: View {
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(colors.accent)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
             } else {
                 Text(trailingTitle)
                     .font(.footnote.weight(.semibold))

@@ -125,7 +125,7 @@ private struct CalendarYearMonthGrid: View {
                     .padding(.vertical, ExperienceSpacing.xxs)
                     .background(background(for: card), in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .disabled(card.isFutureMonth)
                 .accessibilityIdentifier("calendar.year.month.\(card.month)")
                 .accessibilityLabel("\(card.abbreviation), \(displayPnL(for: card))")

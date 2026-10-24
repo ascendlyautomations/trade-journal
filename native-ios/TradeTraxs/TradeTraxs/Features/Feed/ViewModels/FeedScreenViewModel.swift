@@ -200,10 +200,11 @@ final class FeedScreenViewModel {
         let generation = bootstrapGeneration
         prepareQueryReload(resetEntriesPhase: false)
         state.isRefreshing = true
-        bootstrapTask = Task {
-            await performBootstrap(forceNetwork: true, resetting: true, generation: generation, trigger: trigger)
-            state.isRefreshing = false
-            bootstrapTask = nil
+        bootstrapTask = Task.detached { @MainActor [weak self] in
+            guard let self else { return }
+            await self.performBootstrap(forceNetwork: true, resetting: true, generation: generation, trigger: trigger)
+            self.state.isRefreshing = false
+            self.bootstrapTask = nil
         }
         await bootstrapTask?.value
     }

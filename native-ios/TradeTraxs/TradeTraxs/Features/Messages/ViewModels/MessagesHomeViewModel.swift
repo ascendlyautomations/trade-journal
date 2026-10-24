@@ -74,7 +74,7 @@ final class MessagesHomeViewModel {
 
     var showsEmpty: Bool {
         phase == .loaded
-            && inboxStore.visibleConversations.isEmpty
+            && messagesPageConversations.isEmpty
             && inboxStore.rooms.isEmpty
     }
 
@@ -123,8 +123,22 @@ final class MessagesHomeViewModel {
         }
     }
 
+    /// Direct chats still shown on Messages. Deleted accounts (`@user` / missing peer) are left out.
+    private var messagesPageConversations: [Conversation] {
+        inboxStore.visibleConversations.filter { conversation in
+            let peerID = MessagesInboxSupport.peerID(in: conversation, viewerID: viewerID)
+            let peerUsername = conversation.peerUsername
+                ?? peerID.flatMap { domain.profile(id: $0) }?.username
+            return !ConversationInboxActivity.shouldOmitFromMessagesPage(
+                conversation,
+                viewerID: viewerID,
+                peerUsername: peerUsername
+            )
+        }
+    }
+
     private var filteredDirectMessages: [DirectMessageInboxItem] {
-        let items = inboxStore.visibleConversations.map(makeDMItem)
+        let items = messagesPageConversations.map(makeDMItem)
         let query = normalizedQuery
         guard !query.isEmpty else { return items }
         return items.filter {
@@ -391,7 +405,13 @@ final class MessagesHomeViewModel {
         let peerID = MessagesInboxSupport.peerID(in: conversation, viewerID: viewerID)
         let peer = peerID.flatMap { domain.profile(id: $0) }
         let unread = inboxStore.unreadCount(for: conversation)
-        let preview = conversation.lastMessagePreview?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let deletedPeer = ConversationInboxActivity.isDeletedDirectPeer(
+            isGroup: conversation.isGroup,
+            peerUsername: conversation.peerUsername ?? peer?.username
+        )
+        let preview = deletedPeer
+            ? nil
+            : conversation.lastMessagePreview?.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayName: String = {
             if conversation.isGroup,
                let title = conversation.title?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -422,7 +442,7 @@ final class MessagesHomeViewModel {
             peerProfileID: peerID,
             displayName: displayName,
             username: username,
-            preview: (preview?.isEmpty == false ? preview! : "No messages yet"),
+            preview: deletedPeer ? "" : (preview?.isEmpty == false ? preview! : "No messages yet"),
             timestamp: conversation.lastMessageAt,
             unreadCount: unread,
             isMuted: conversation.isMuted || inboxStore.isMuted(conversation.id),

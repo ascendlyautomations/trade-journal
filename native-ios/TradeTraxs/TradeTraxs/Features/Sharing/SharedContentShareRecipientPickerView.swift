@@ -97,7 +97,7 @@ struct SharedContentShareRecipientPickerView: View {
                                 isSelected: viewModel.isConversationSelected(conversation.id)
                             )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                         .disabled(viewModel.phase == .sending)
                         .experienceDashboardListRow()
                         .accessibilityIdentifier("sharedContentShare.conversation.\(conversation.id.rawValue)")
@@ -115,7 +115,7 @@ struct SharedContentShareRecipientPickerView: View {
                                 channelTitle: viewModel.selectedChannelDisplayTitle(for: room.id)
                             )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                         .disabled(viewModel.phase == .sending)
                         .experienceDashboardListRow()
                         .accessibilityIdentifier("sharedContentShare.room.\(room.id.rawValue)")

@@ -12,18 +12,19 @@ enum OwnerTradeDeletionService {
         detailCache: DetailPresentationCache,
         tradeDetailRepository: any TradeDetailRepository
     ) async throws {
-        if let viewer = await session.currentUserID {
-            if !viewer.rawValue.hasPrefix("dev.") {
-                try await trades.delete(id: tradeID)
-            }
-        } else {
+        guard let viewer = await session.currentUserID else {
             throw AppError.domain(.permission(.notAuthenticated))
         }
+        let viewerProfile = ProfileID(viewer.rawValue)
+        guard viewerProfile == owner else {
+            throw AppError.domain(.permission(.notOwner))
+        }
+        try await trades.delete(id: tradeID)
         detailCache.removeTrade(id: tradeID)
         await tradeDetailRepository.evict(tradeID: tradeID)
         TradeJournalMutationStore.shared.noteDeleted(
             id: tradeID,
-            owner: owner,
+            owner: viewerProfile,
             previous: previous
         )
     }

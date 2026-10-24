@@ -152,7 +152,7 @@ export default function FeedRoomShareCard({
 
   return (
     <div
-      className={`rounded-xl border border-white/10 bg-gradient-to-br from-[#0b1f3a]/90 to-[#0f172a]/90 p-4 ${className}`}
+      className={`rounded-xl border border-[var(--tt-border,#d0d7de)] bg-[var(--tt-surface-nested,#f3f4f6)] p-4 ${className}`}
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex items-start gap-3">
@@ -162,22 +162,22 @@ export default function FeedRoomShareCard({
           loading={mediaPriority ? "eager" : "lazy"}
           fetchPriority={mediaPriority ? "high" : undefined}
           decoding="async"
-          className="h-14 w-14 shrink-0 rounded-full border border-white/10 object-cover"
+          className="h-14 w-14 shrink-0 rounded-full border border-[var(--tt-border,#d0d7de)] object-cover"
           onError={(e) => {
             e.currentTarget.src = "/default-avatar.png"
           }}
         />
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-base font-semibold text-white">
+          <h3 className="truncate text-base font-semibold text-[var(--tt-text,#1f2328)]">
             {roomName}
           </h3>
-          <p className="mt-0.5 text-xs text-gray-400">
+          <p className="mt-0.5 text-xs text-[var(--tt-text-muted,#57606a)]">
             {memberCount == null
               ? "Loading members…"
               : formatRoomMemberCount(memberCount)}
           </p>
           {roomDescription ? (
-            <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-gray-300">
+            <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-[var(--tt-text-muted,#57606a)]">
               {roomDescription}
             </p>
           ) : null}
@@ -188,7 +188,7 @@ export default function FeedRoomShareCard({
         type="button"
         onClick={(e) => void handleAction(e)}
         disabled={actionBusy}
-        className="mt-4 w-full rounded-lg bg-green-500/25 px-4 py-2.5 text-sm font-semibold text-green-100 transition hover:bg-green-500/35 disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-4 w-full rounded-lg bg-[#1a7f37] px-4 py-2.5 text-sm font-semibold text-[#ffffff] transition hover:bg-[#166534] disabled:cursor-not-allowed disabled:opacity-60"
       >
         {actionBusy
           ? isMember

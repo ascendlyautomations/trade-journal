@@ -10,6 +10,7 @@ final class WithdrawalsHistoryStore {
     private(set) var profileID: ProfileID?
     private(set) var ledgerByAccount: [TradingAccountID: [AccountPayoutEntry]] = [:]
     private(set) var cyclesByAccount: [TradingAccountID: [AccountPayoutCycle]] = [:]
+    private(set) var achievementPayouts: [PayoutHistoryItem] = []
 
     private init() {}
 
@@ -125,6 +126,22 @@ final class WithdrawalsHistoryStore {
         WithdrawalsTrace.storeIdentity("prependCompletedPropCycle")
     }
 
+    func replaceAccountCycles(
+        _ cycles: [AccountPayoutCycle],
+        accountID: TradingAccountID,
+        profileID: ProfileID
+    ) {
+        self.profileID = profileID
+        var grouped = cyclesByAccount
+        grouped[accountID] = cycles
+        cyclesByAccount = grouped
+        SessionPayoutCyclesStore.shared.seed(cycles, for: accountID, profileID: profileID)
+    }
+
+    func setAchievementPayouts(_ items: [PayoutHistoryItem]) {
+        achievementPayouts = items
+    }
+
     func ledgerEntryCount() -> Int {
         ledgerByAccount.values.reduce(0) { $0 + $1.count }
     }
@@ -175,10 +192,12 @@ final class WithdrawalsHistoryStore {
         if let profileID, self.profileID == profileID {
             ledgerByAccount = [:]
             cyclesByAccount = [:]
+            achievementPayouts = []
         } else if profileID == nil {
             self.profileID = nil
             ledgerByAccount = [:]
             cyclesByAccount = [:]
+            achievementPayouts = []
         }
     }
 }

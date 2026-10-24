@@ -32,7 +32,7 @@ struct CommentLikeButton: View {
                 }
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .disabled(!isEnabled || isBusy)
         .opacity(isBusy ? 0.6 : 1)
         .accessibilityLabel(snapshot.liked ? "Unlike comment" : "Like comment")

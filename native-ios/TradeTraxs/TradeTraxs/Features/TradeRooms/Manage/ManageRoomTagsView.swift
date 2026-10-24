@@ -103,7 +103,7 @@ struct ManageRoomTagsView: View {
                         .symbolRenderingMode(.monochrome)
                         .foregroundStyle(.red)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityLabel("Delete \(tag.name)")
             }
 
@@ -115,7 +115,7 @@ struct ManageRoomTagsView: View {
                 } label: {
                     tagLabel(tag)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
             }
         }
     }

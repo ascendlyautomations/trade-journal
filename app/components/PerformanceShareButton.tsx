@@ -7,6 +7,8 @@ export type PerformanceShareButtonProps = {
   className?: string
   /** `dashboard` matches 34px mobile header controls; default `trades` toolbar sizing. */
   size?: "trades" | "dashboard"
+  disabled?: boolean
+  title?: string
 }
 
 export function PerformanceShareIcon() {
@@ -34,6 +36,8 @@ export default function PerformanceShareButton({
   onClick,
   className,
   size = "trades",
+  disabled = false,
+  title,
 }: PerformanceShareButtonProps) {
   const mobileClass =
     size === "dashboard"
@@ -44,12 +48,13 @@ export default function PerformanceShareButton({
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className={cn(
         mobileClass,
-        "md:order-2 md:h-[34px] md:w-auto md:rounded-md md:px-3 md:py-1 md:text-sm md:text-white",
+        "md:order-2 md:h-[34px] md:w-auto md:rounded-md md:px-3 md:py-1 md:text-sm md:text-white disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white/10",
         className
       )}
-      title="Share performance"
+      title={title ?? "Share performance"}
       aria-label="Share performance"
     >
       <PerformanceShareIcon />

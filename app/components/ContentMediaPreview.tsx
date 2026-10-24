@@ -1,7 +1,12 @@
 "use client"
 
 import type { SyntheticEvent } from "react"
+import ContentImageCropFrame from "@/app/components/ContentImageCropFrame"
 import StorageImage from "@/app/components/ui/StorageImage"
+import {
+  parseSavedContentImageCrop,
+  type SavedContentImageCrop,
+} from "@/lib/contentImageCrop"
 import type { StorageImagePreset } from "@/lib/optimizedStorageImage"
 import {
   resolveTradeScreenshotDisplayMode,
@@ -17,6 +22,8 @@ type ContentMediaPreviewProps = {
   preset?: StorageImagePreset
   /** Trade Fit shows the whole image. Fill covers the bounded width. */
   displayMode?: TradeScreenshotDisplayMode | string | null
+  /** Saved `image_crop`. When present, this framing wins over Fit/Fill. */
+  imageCrop?: unknown
   /**
    * card: scrolling surfaces outside Feed (contain, or Fill when a trade asks).
    * detail: complete image in a modal.
@@ -33,14 +40,15 @@ type ContentMediaPreviewProps = {
 
 /**
  * Scrolling content preview. Aspect comes from the file.
- * Desktop height is capped; the image is not stretched or re-cropped
- * unless the trade's Fit/Fill setting is Fill.
+ * Desktop height is capped. A saved crop frames the photo; otherwise the
+ * image is not re-cropped unless the trade's Fit/Fill setting is Fill.
  */
 export default function ContentMediaPreview({
   src,
   alt = "",
   preset = "feed-thumb",
   displayMode,
+  imageCrop,
   context,
   variant = "card",
   onClick,
@@ -49,8 +57,8 @@ export default function ContentMediaPreview({
   imageClassName = "",
 }: ContentMediaPreviewProps) {
   const resolvedContext = context ?? (variant === "detail" ? "detail" : "card")
+  const savedCrop: SavedContentImageCrop | null = parseSavedContentImageCrop(imageCrop)
   const mode = resolveTradeScreenshotDisplayMode(displayMode)
-  const detailClass = resolvedContext === "detail" ? "tt-content-media-preview--detail" : ""
   const click = onClick
     ? (event: SyntheticEvent) => {
         event.stopPropagation()
@@ -58,6 +66,21 @@ export default function ContentMediaPreview({
       }
     : undefined
 
+  if (savedCrop) {
+    return (
+      <ContentImageCropFrame
+        src={src}
+        crop={savedCrop}
+        alt={alt}
+        preset={resolvedContext === "detail" ? "feed-detail" : preset}
+        priority={priority}
+        onClick={onClick}
+        className={`${resolvedContext === "detail" ? "tt-content-image-crop--detail" : ""} ${className}`}
+        imageClassName={imageClassName}
+      />
+    )
+  }
+  const detailClass = resolvedContext === "detail" ? "tt-content-media-preview--detail" : ""
   if (resolvedContext === "feed") {
     return (
       <div

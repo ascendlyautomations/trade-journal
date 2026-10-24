@@ -180,6 +180,7 @@ struct YearlyReportFilterBar: View {
                 ExperienceIcon(icon: .chevronDown, size: .xs, color: colors.accent)
             }
             .frame(minHeight: ExperienceAccessibility.minTouchTarget)
+            .experienceControlHitTarget()
         }
         .accessibilityIdentifier("reports.yearly.mode")
     }
@@ -477,7 +478,7 @@ struct YearlyReportMonthBreakdownView: View {
                 .padding(ExperienceSpacing.sm)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .background(colors.backgroundSecondary.opacity(0.65), in: RoundedRectangle(
                 cornerRadius: ExperienceRadius.sm,
                 style: .continuous

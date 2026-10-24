@@ -903,10 +903,10 @@ html[data-tt-appearance="light"] [data-tt-app] .border-red-400\/50 {
   border-color: color-mix(in srgb, var(--tt-negative) 45%, transparent);
 }
 
-html[data-tt-appearance="dark"] [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
-html[data-tt-appearance="light"] [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]),
-html[data-tt-appearance="dark"] .z-\[10070\],
-html[data-tt-appearance="light"] .z-\[10070\] {
+html[data-tt-appearance="dark"] [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]):not([data-tt-contextual-tour-popover]),
+html[data-tt-appearance="light"] [role="dialog"]:not([aria-label="Stories"]):not([aria-label="Clip viewer"]):not([data-tt-contextual-tour-popover]),
+html[data-tt-appearance="dark"] .z-\[10070\]:not([data-tt-contextual-tour-popover]):not([data-tt-contextual-tour-ring]),
+html[data-tt-appearance="light"] .z-\[10070\]:not([data-tt-contextual-tour-popover]):not([data-tt-contextual-tour-ring]) {
   background-color: var(--tt-surface);
   background-image: none;
   border-color: var(--tt-border);
@@ -1432,4 +1432,10 @@ html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-psych-upgra
 html[data-tt-appearance="light"] [data-tt-dashboard-canvas] .tt-dash-psych-upgrade .bg-white\/5 {
   background-color: var(--tt-surface);
   border-color: var(--tt-border);
+}
+
+html[data-tt-appearance="light"] [data-tt-app] button.tt-expense-chip {
+  background-color: #ffffff;
+  color: #1f2328;
+  border-color: #d0d7de;
 }

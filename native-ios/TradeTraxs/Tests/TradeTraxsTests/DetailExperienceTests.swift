@@ -70,6 +70,7 @@ final class DetailExperienceTests: XCTestCase {
         let posts = PostsContainerViewModel(
             profileID: profileID,
             profiles: environment.data.profiles,
+            session: environment.data.session,
             navigationCoordinator: environment.navigation.coordinator,
             detailCache: environment.data.detailCache
         )

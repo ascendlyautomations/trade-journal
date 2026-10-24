@@ -41,7 +41,7 @@ export default function FeedAchievementDetailMeta({
       <h3 className="text-base font-semibold leading-snug text-white">
         {achievement.title}
       </h3>
-      <p className="text-xs uppercase tracking-wide text-blue-200/80">
+      <p className="text-xs font-medium uppercase tracking-wide text-blue-300">
         {formatCategoryLabel(achievement) || achievementTypeLabel(achievement.achievement_type)}
       </p>
       {description ? (

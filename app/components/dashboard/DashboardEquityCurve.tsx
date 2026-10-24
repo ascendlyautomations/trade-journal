@@ -126,6 +126,11 @@ export default function DashboardEquityCurve({
     // Chart-first: no title. Keep chart height; tighten card chrome only.
     return (
       <div className="w-full block overflow-visible rounded-xl border border-white/10 bg-white/10 px-2 pb-1 pt-1.5 backdrop-blur-md md:hidden">
+        <div
+          data-tt-tour-target="dashboardPerformance"
+          data-tt-tour-spotlight="large"
+          className="w-full min-h-[200px]"
+        >
         {showEmpty ? (
           <ChartEmptyState />
         ) : (
@@ -196,6 +201,7 @@ export default function DashboardEquityCurve({
           </ResponsiveContainer>
         </ChartWhenSized>
         )}
+        </div>
       </div>
     )
   }
@@ -211,6 +217,11 @@ export default function DashboardEquityCurve({
               .join(" · ")}
           </p>
         </div>
+        <div
+          data-tt-tour-target="dashboardPerformance"
+          data-tt-tour-spotlight="large"
+          className="min-h-[200px] w-full flex-1"
+        >
         {showEmpty ? (
           <ChartEmptyState />
         ) : (
@@ -287,6 +298,7 @@ export default function DashboardEquityCurve({
             </ResponsiveContainer>
           </ChartWhenSized>
         )}
+        </div>
       </div>
     )
   }
@@ -297,6 +309,11 @@ export default function DashboardEquityCurve({
         Equity Curve
       </h2>
 
+      <div
+        data-tt-tour-target="dashboardPerformance"
+        data-tt-tour-spotlight="large"
+        className="w-full min-h-[200px]"
+      >
       {showEmpty ? (
         <ChartEmptyState />
       ) : (
@@ -434,6 +451,7 @@ export default function DashboardEquityCurve({
       ) : null}
       </>
       )}
+      </div>
     </div>
   )
 }

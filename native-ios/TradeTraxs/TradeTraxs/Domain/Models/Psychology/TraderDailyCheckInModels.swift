@@ -144,3 +144,73 @@ nonisolated enum TraderDailyCheckInValidation {
         return nil
     }
 }
+
+extension TraderDailyCheckIn {
+    /// Check-In History → Psychology filter (web `psychologyPreviewParts` non-empty).
+    nonisolated var qualifiesForPsychologyCheckInHistory: Bool {
+        !PsychologyCheckInHistoryGate.psychologyPreviewParts(for: self).isEmpty
+    }
+}
+
+nonisolated enum PsychologyCheckInHistoryGate {
+    /// Web `psychologyPreviewParts` — day counts only when preview would be non-empty in Check-In History → Psychology.
+    static func psychologyPreviewParts(for checkIn: TraderDailyCheckIn) -> [String] {
+        var parts: [String] = []
+        if let hours = checkIn.sleepHours {
+            parts.append("\(NumberDisplay.hours(NSDecimalNumber(decimal: hours).doubleValue)) Sleep")
+        }
+        if let quality = checkIn.sleepQuality {
+            parts.append("Sleep Quality \(quality)/5")
+        }
+        if let morning = checkIn.morningRating {
+            parts.append("Morning \(morning)/5")
+        }
+        if let stress = checkIn.stressLevel {
+            parts.append("Stress \(TraderDailyCheckInStressScale.displayText(for: stress))")
+        }
+        if let energy = checkIn.energyLevel {
+            parts.append("Energy \(energy)/5")
+        }
+        if let focus = checkIn.focusLevel {
+            parts.append("Focus \(focus)/5")
+        }
+        if let notes = checkIn.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+            parts.append(notes)
+        }
+        return parts
+    }
+
+    /// Web `countPsychologyCheckInHistoryDays`.
+    static func countPsychologyCheckInHistoryDays(_ checkIns: [TraderDailyCheckIn]) -> Int {
+        var dates = Set<String>()
+        for row in checkIns {
+            if !psychologyPreviewParts(for: row).isEmpty {
+                dates.insert(row.checkInDate)
+            }
+        }
+        return dates.count
+    }
+}
+
+/// Web `mergeCheckInsByDatePreferNewer` — range fetch + psychology RPC window.
+nonisolated enum TraderDailyCheckInMerge {
+    static func preferNewer(
+        primary: [TraderDailyCheckIn],
+        secondary: [TraderDailyCheckIn]
+    ) -> [TraderDailyCheckIn] {
+        var byDate: [String: TraderDailyCheckIn] = [:]
+        for row in primary {
+            byDate[row.checkInDate] = row
+        }
+        for row in secondary {
+            if let existing = byDate[row.checkInDate] {
+                if row.updatedAt > existing.updatedAt {
+                    byDate[row.checkInDate] = row
+                }
+            } else {
+                byDate[row.checkInDate] = row
+            }
+        }
+        return byDate.values.sorted { $0.checkInDate > $1.checkInDate }
+    }
+}

@@ -23,7 +23,7 @@ struct RoomMemberRowView: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
 
             if showsManageButton, let onManage {
                 Button("Manage") {
@@ -62,7 +62,6 @@ struct RoomMemberRowView: View {
                 Text(item.profile.displayName)
                     .experienceStyle(.subheadline, color: colors.primaryText)
                     .lineLimit(1)
-                ProfileTradeTraxsIdentityBadge(profile: item.profile, size: .inline)
             }
             Text("@\(item.profile.username)")
                 .experienceStyle(.footnote, color: colors.secondaryText)

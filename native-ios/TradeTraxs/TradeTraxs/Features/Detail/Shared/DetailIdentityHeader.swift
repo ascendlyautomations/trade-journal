@@ -41,7 +41,7 @@ struct DetailIdentityHeader: View {
                     identityRow
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
             } else {
                 identityRow
             }

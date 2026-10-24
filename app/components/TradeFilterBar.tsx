@@ -48,6 +48,8 @@ export type TradeFilterBarProps = {
   customRangeStart?: string
   customRangeEnd?: string
   onCustomRangeApply?: (start: string, end: string) => void
+  /** Contextual tour anchor for account + timeframe controls. */
+  tourTargetId?: string
   /** Prepended controls (e.g. Trade History win/loss toggle) */
   leading?: ReactNode
   /**
@@ -116,6 +118,7 @@ export default function TradeFilterBar({
   isPro = false,
   copyGroups = [],
   onAccountPickerOpen,
+  tourTargetId,
 }: TradeFilterBarProps) {
   const isTradesVariant = _variant === "trades"
   const [timeframeOpen, setTimeframeOpen] = useState(false)
@@ -173,6 +176,9 @@ export default function TradeFilterBar({
       >
         {fullWidth ? (
           <div
+            {...(tourTargetId
+              ? { "data-tt-tour-target": tourTargetId }
+              : {})}
             className={`relative z-50 flex max-w-full overflow-visible rounded-xl border border-white/10 bg-white/5 backdrop-blur-md w-full flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:justify-center md:px-4 md:py-3 ${
               isTradesVariant ? "px-2 py-3" : "px-3 py-2"
             }`}
@@ -219,6 +225,9 @@ export default function TradeFilterBar({
           </div>
         ) : (
           <div
+            {...(tourTargetId
+              ? { "data-tt-tour-target": tourTargetId }
+              : {})}
             className={
               mobileThreeRowLayout
                 ? `relative z-50 flex w-full max-w-full flex-col items-stretch gap-2 overflow-visible rounded-xl border border-white/10 bg-white/5 px-3 py-2 backdrop-blur-md ${DASHBOARD_MOBILE_FILTER_SHELL_CLASS} md:flex-row md:flex-wrap md:items-center md:justify-center md:gap-3 md:px-4 md:py-3 lg:flex-nowrap`

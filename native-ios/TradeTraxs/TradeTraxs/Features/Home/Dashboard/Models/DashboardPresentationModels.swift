@@ -421,6 +421,19 @@ nonisolated enum DashboardInsightKind: String, Hashable, Sendable {
     case direction
 }
 
+nonisolated enum DashboardInsightTone: String, Hashable, Sendable {
+    case positive
+    case negative
+    case warning
+    case neutral
+}
+
+nonisolated enum DashboardInsightSection: String, Hashable, Sendable {
+    case performance
+    case advancedEdge
+    case riskBehavior
+}
+
 nonisolated struct DashboardSessionPerformanceRow: Identifiable, Hashable, Sendable {
     var id: String { label }
     var label: String
@@ -503,6 +516,10 @@ nonisolated struct DashboardInsightItem: Identifiable, Hashable, Sendable {
     var title: String
     var body: String
     var kind: DashboardInsightKind
+    var tone: DashboardInsightTone = .neutral
+    var section: DashboardInsightSection = .performance
+    /// Optional highlighted metric (avg P&L, win rate line, etc.).
+    var metric: String?
 
     /// Display copy — em dashes normalized to commas (templates + future dynamic text).
     var displayTitle: String { GeneratedProseNormalizer.normalize(title) }

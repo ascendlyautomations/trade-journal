@@ -311,7 +311,7 @@ struct MessagesHomeView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .messagesInboxConversationListRowStyle(colors: colors)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             roomTrailingActions(item)
@@ -351,7 +351,7 @@ struct MessagesHomeView: View {
                 .experienceStyle(.subheadline, color: colors.accent)
                 .frame(maxWidth: .infinity, alignment: .center)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .messagesInboxConversationListRowStyle(colors: colors)
         .accessibilityLabel(expanded.wrappedValue ? "Show less" : "Show more")
     }
@@ -364,7 +364,7 @@ struct MessagesHomeView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
     }
 
     @ViewBuilder

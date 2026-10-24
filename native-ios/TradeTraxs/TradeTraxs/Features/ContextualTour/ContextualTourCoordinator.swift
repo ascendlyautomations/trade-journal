@@ -370,6 +370,10 @@ final class ContextualTourCoordinator {
             return gates.profileRootActive
         case .settings:
             return gates.settingsHomeActive
+        case .payouts:
+            return gates.payoutsActive
+        case .expenseTracker:
+            return gates.expenseTrackerActive
         }
     }
 

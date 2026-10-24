@@ -49,6 +49,10 @@ import {
 import { useEarlyAccessPromotion } from "@/lib/useEarlyAccessPromotion"
 import { isNativeIos } from "@/lib/nativePlatform"
 import { NATIVE_IOS_OPEN_APP_MENU_EVENT } from "@/lib/nativeIosAppMenu"
+import {
+  CONTEXTUAL_TOUR_NAV_MENU_EVENT,
+  type ContextualTourNavMenuDetail,
+} from "@/lib/contextualTour/navMenuBridge"
 import { useMobileAutoHideNavbar } from "@/app/components/useMobileAutoHideNavbar"
 import CreateHubMenu, {
   CreateHubMobileLinks,
@@ -215,6 +219,21 @@ export default function Navbar() {
 
   const navRef = useRef<HTMLDivElement>(null)
   const badgeText = (count: number) => (count > 99 ? "99+" : String(count))
+
+  useEffect(() => {
+    function onTourNavMenu(event: Event) {
+      const detail = (event as CustomEvent<ContextualTourNavMenuDetail>).detail
+      if (!detail?.menu) return
+      if (detail.openMobileNav) setIsOpen(true)
+      setActiveMenu(detail.menu)
+      setMoreSubmenu(null)
+      setAccountMenuOpen(false)
+    }
+    window.addEventListener(CONTEXTUAL_TOUR_NAV_MENU_EVENT, onTourNavMenu)
+    return () => {
+      window.removeEventListener(CONTEXTUAL_TOUR_NAV_MENU_EVENT, onTourNavMenu)
+    }
+  }, [])
 
   // CLOSE ON OUTSIDE CLICK (nav + slide menu + desktop dropdowns)
   useEffect(() => {

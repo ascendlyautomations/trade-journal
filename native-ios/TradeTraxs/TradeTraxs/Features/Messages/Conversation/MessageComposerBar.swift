@@ -108,9 +108,10 @@ struct MessageComposerBar: View {
                     height: ExperienceAccessibility.minTouchTarget
                 )
                 .contentShape(Rectangle())
+            .experienceControlHitTarget()
         }
         .menuStyle(.button)
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .fixedSize(horizontal: true, vertical: true)
         .disabled(isSending || !isEnabled)
         .accessibilityLabel("Add")
@@ -183,7 +184,7 @@ struct MessageComposerBar: View {
                 .frame(width: 36, height: 36)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .disabled(isSending || !isEnabled)
         .accessibilityLabel("Record voice message")
         .accessibilityIdentifier("conversation.composer.mic")
@@ -191,16 +192,19 @@ struct MessageComposerBar: View {
 
     private var sendButton: some View {
         Button(action: onSend) {
-            if isSending {
-                ProgressView()
-                    .frame(width: 28, height: 28)
-            } else {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(colors.accent)
+            Group {
+                if isSending {
+                    ProgressView()
+                        .frame(width: 28, height: 28)
+                } else {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundStyle(colors.accent)
+                }
             }
+            .experienceTouchTarget()
         }
-        .experienceTouchTarget()
+        .buttonStyle(.experiencePlain)
         .fixedSize(horizontal: true, vertical: true)
         .disabled(isSending)
         .accessibilityLabel("Send")
@@ -216,8 +220,9 @@ struct MessageComposerBar: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(colors.secondaryText)
                     .frame(width: 36, height: 36)
+                    .experienceTouchTarget()
             }
-            .experienceTouchTarget()
+            .buttonStyle(.experiencePlain)
             .accessibilityLabel("Cancel recording")
 
             HStack(spacing: ExperienceSpacing.xs) {
@@ -237,8 +242,9 @@ struct MessageComposerBar: View {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 30))
                     .foregroundStyle(colors.accent)
+                    .experienceTouchTarget()
             }
-            .experienceTouchTarget()
+            .buttonStyle(.experiencePlain)
             .accessibilityLabel("Send voice message")
             .accessibilityIdentifier("conversation.composer.voice.send")
         }

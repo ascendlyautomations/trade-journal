@@ -9,6 +9,8 @@ struct ProfilePostCard: View {
     let vaultStore: VaultStore
     let onOpen: () -> Void
     var isOwner: Bool = true
+    var onDelete: (() -> Void)? = nil
+    var isDeleteInProgress: Bool = false
     var onReport: (() -> Void)? = nil
     var profilePin: ProfilePinCallbacks? = nil
     var isProfilePinned: Bool = false
@@ -21,7 +23,9 @@ struct ProfilePostCard: View {
 
     private var caption: String {
         let trimmed = post.body.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Post" : trimmed
+        if !trimmed.isEmpty { return trimmed }
+        if let name = post.roomShare?.name, !name.isEmpty { return name }
+        return "Post"
     }
 
     private var mediaReference: MediaReference? {
@@ -65,6 +69,10 @@ struct ProfilePostCard: View {
                 )
                 .accessibilityLabel(accessibilityLabel)
 
+                if let share = post.roomShare {
+                    FeedRoomShareCard(share: share)
+                }
+
                 EngagementBar(
                     target: target,
                     store: engagementStore,
@@ -81,6 +89,9 @@ struct ProfilePostCard: View {
             ContentOverflowMenu(
                 isOwner: isOwner,
                 onReport: onReport,
+                editTitle: "Edit Post",
+                deleteTitle: "Delete Post",
+                onDelete: isOwner && !isDeleteInProgress ? onDelete : nil,
                 onPin: profilePin.map { pin in
                     {
                         pin.requestPin(

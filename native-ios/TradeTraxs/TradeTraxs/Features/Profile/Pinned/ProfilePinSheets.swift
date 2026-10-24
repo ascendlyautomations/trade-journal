@@ -87,7 +87,7 @@ struct ProfileManagePinnedSheet: View {
                             } label: {
                                 Image(systemName: "arrow.up")
                             }
-                            .buttonStyle(.borderless)
+                            .buttonStyle(.experiencePlain)
                         }
                         if item.position < sorted.count {
                             Button {
@@ -95,7 +95,7 @@ struct ProfileManagePinnedSheet: View {
                             } label: {
                                 Image(systemName: "arrow.down")
                             }
-                            .buttonStyle(.borderless)
+                            .buttonStyle(.experiencePlain)
                         }
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {

@@ -674,6 +674,7 @@ final class GlobalUploadCoordinator {
                 if spec.imageData != nil {
                     fixture.media = [MediaReference(id: "dev/create-post.jpg", kind: .image, altText: nil)]
                 }
+                fixture.roomShare = spec.roomShare
                 post = fixture
             } else {
                 var imageURL = checkpoint.uploadedImagePublicURL
@@ -727,7 +728,8 @@ final class GlobalUploadCoordinator {
                     authorID: spec.authorID,
                     content: content,
                     imageURL: imageURL,
-                    imageCrop: nil
+                    imageCrop: nil,
+                    roomShare: spec.roomShare
                 )
                 GlobalUploadJobDiagnostics.log(
                     id: jobID,

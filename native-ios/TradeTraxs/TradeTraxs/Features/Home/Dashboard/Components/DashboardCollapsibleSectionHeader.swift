@@ -27,7 +27,7 @@ struct DashboardCollapsibleSectionHeader: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
 
             if let trailing {
                 trailing
@@ -43,7 +43,7 @@ struct DashboardCollapsibleSectionHeader: View {
                     .frame(width: 28, height: 28)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .accessibilityLabel(isExpanded ? "Collapse section" : "Expand section")
         }
         .padding(.horizontal, ExperienceSpacing.md)
@@ -69,7 +69,7 @@ struct DashboardInsightViewMoreControl: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, ExperienceSpacing.xxs)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityIdentifier("dashboard.insightViewMore")
     }
 }

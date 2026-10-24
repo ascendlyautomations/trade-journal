@@ -27,6 +27,7 @@ final class AchievementsContainerViewModel {
     private var isScreenOwned = false
     private var awaitingScreenBootstrap = false
     private let initialLoadFailureGrace = ProfileSectionFailureGrace()
+    private var syncGeneration: UInt64 = 0
 
     var hasAuthoritativePayload: Bool { hasLoaded }
 
@@ -89,6 +90,22 @@ final class AchievementsContainerViewModel {
 
         awaitingScreenBootstrap = false
         initialLoadFailureGrace.cancel()
+        if hasLoaded, !items.isEmpty, !snapshot.achievements.isEmpty {
+            items = excludingDeletedAchievements(
+                ProfileSectionSupport.applyingLoadedPage(
+                    incoming: snapshot.achievements,
+                    loaded: items,
+                    orderedBy: \.achievedAt,
+                    pageIsComplete: false
+                )
+            )
+            detailCache.seed(achievements: items)
+            state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+            prefetchEngagement(for: items.map(\.id))
+            ProfileTabLoadProbe.cache(.achievements, count: items.count)
+            ProfileTabLoadProbe.state(.achievements, loaded: hasLoaded, loading: state.isLoading, count: items.count)
+            return
+        }
         let reconciled = ProfileSectionSupport.reconcileSectionItems(
             snapshotItems: snapshot.achievements,
             loadedItems: items,
@@ -96,7 +113,7 @@ final class AchievementsContainerViewModel {
             didLoadAuthoritative: snapshot.didLoadAchievements,
             orderedBy: \.achievedAt
         )
-        items = reconciled.items
+        items = excludingDeletedAchievements(reconciled.items)
         hasLoaded = reconciled.hasLoaded
         detailCache.seed(achievements: items)
         state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
@@ -114,13 +131,17 @@ final class AchievementsContainerViewModel {
             return
         }
         ProfileTabLoadProbe.loadStarted(.achievements)
-        loadTask = Task { await performLoad(reset: true) }
+        syncGeneration &+= 1
+        let generation = syncGeneration
+        loadTask = Task { await performLoad(reset: true, generation: generation) }
     }
 
     func refresh() async {
+        syncGeneration &+= 1
+        let generation = syncGeneration
         loadTask?.cancel()
         cancelLoadMore(reason: "refresh")
-        await performLoad(reset: true)
+        await performLoad(reset: true, generation: generation)
     }
 
     func loadMoreIfNeeded() async {
@@ -175,8 +196,10 @@ final class AchievementsContainerViewModel {
         deletingAchievementID == id
     }
 
-    func confirmDelete() async {
-        guard isOwner, deletingAchievementID == nil, let achievement = pendingDelete else { return }
+    func confirmDelete(achievement explicitAchievement: Achievement? = nil) async {
+        guard isOwner, deletingAchievementID == nil else { return }
+        let achievement = explicitAchievement ?? pendingDelete
+        guard let achievement else { return }
         pendingDelete = nil
         deletingAchievementID = achievement.id
         deleteErrorMessage = nil
@@ -208,12 +231,13 @@ final class AchievementsContainerViewModel {
         _ = reason
     }
 
-    private func performLoad(reset: Bool) async {
+    private func performLoad(reset: Bool, generation: UInt64) async {
         if reset {
             cancelLoadMore(reason: "reset")
         }
 
         if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+            guard generation == syncGeneration else { return }
             hasLoaded = true
             items = profileID == DemoExperienceSupport.profileID
                 ? DemoGraph.achievements(owner: profileID)
@@ -250,18 +274,26 @@ final class AchievementsContainerViewModel {
                 pageItems = page.items
                 cursor = page.nextCursor
             }
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, generation == syncGeneration else {
+                if generation == syncGeneration {
+                    loadTask = nil
+                }
+                return
+            }
             let overlay = OwnerProfileOptimisticStore.shared.achievements.filter {
                 $0.ownerProfileID == profileID
             }
-            let page = OwnerProfileOptimisticStore.merging(overlay: overlay, into: pageItems)
-                .filter { !OwnerProfileOptimisticStore.shared.deletedAchievementIDs.contains($0.id) }
-            items = ProfileSectionSupport.reconcileLoadedSnapshot(
-                snapshot: page,
-                loaded: items,
-                orderedBy: \.achievedAt,
-                snapshotIsPartial: cursor != nil
-            ).filter { !OwnerProfileOptimisticStore.shared.deletedAchievementIDs.contains($0.id) }
+            let page = excludingDeletedAchievements(
+                OwnerProfileOptimisticStore.merging(overlay: overlay, into: pageItems)
+            )
+            items = excludingDeletedAchievements(
+                ProfileSectionSupport.applyingLoadedPage(
+                    incoming: page,
+                    loaded: items,
+                    orderedBy: \.achievedAt,
+                    pageIsComplete: cursor == nil
+                )
+            )
             nextCursor = cursor
             detailCache.seed(achievements: items)
             hasLoaded = true
@@ -274,7 +306,12 @@ final class AchievementsContainerViewModel {
                 OwnerProfileOptimisticStore.shared.syncOwnerAchievementsState(items)
             }
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, generation == syncGeneration else {
+                if generation == syncGeneration {
+                    loadTask = nil
+                }
+                return
+            }
             if items.isEmpty {
                 if awaitingScreenBootstrap {
                     state = .loading
@@ -289,7 +326,9 @@ final class AchievementsContainerViewModel {
                 }
             }
         }
-        loadTask = nil
+        if generation == syncGeneration {
+            loadTask = nil
+        }
     }
 
     private func performLoadMore(cursor: String?, generation: Int) async {
@@ -330,9 +369,16 @@ final class AchievementsContainerViewModel {
         }
     }
 
+    private func excludingDeletedAchievements(_ achievements: [Achievement]) -> [Achievement] {
+        let deleted = OwnerProfileOptimisticStore.shared.deletedAchievementIDs
+        guard !deleted.isEmpty else { return achievements }
+        return achievements.filter { !deleted.contains($0.id) }
+    }
+
     private func appendUnique(_ pageItems: [Achievement]) {
         let existing = Set(items.map(\.id))
-        let fresh = pageItems.filter { !existing.contains($0.id) }
+        let deleted = OwnerProfileOptimisticStore.shared.deletedAchievementIDs
+        let fresh = pageItems.filter { !existing.contains($0.id) && !deleted.contains($0.id) }
         guard !fresh.isEmpty else {
             nextCursor = nil
             return

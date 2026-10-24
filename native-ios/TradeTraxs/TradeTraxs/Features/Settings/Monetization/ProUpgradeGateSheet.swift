@@ -180,7 +180,7 @@ struct ProUpgradeGateSheet: View {
                     Text("Privacy Policy")
                         .experienceStyle(.footnote, color: colors.secondaryText)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityIdentifier("proUpgrade.privacy")
 
                 Text("•")
@@ -192,7 +192,7 @@ struct ProUpgradeGateSheet: View {
                     Text("Terms of Use")
                         .experienceStyle(.footnote, color: colors.secondaryText)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityIdentifier("proUpgrade.terms")
 
                 Spacer(minLength: 0)
@@ -242,7 +242,7 @@ struct ProUpgradeGateSheet: View {
             .padding(ExperienceSpacing.sm)
             .background(colors.backgroundSecondary.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
     }
 }
 

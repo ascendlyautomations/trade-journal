@@ -69,6 +69,7 @@ final class ProfileShellViewModel {
             posts = PostsContainerViewModel(
                 profileID: profileID,
                 profiles: data.profiles,
+                session: data.session,
                 rpc: data.rpc,
                 navigationCoordinator: navigationCoordinator,
                 detailCache: data.detailCache,
@@ -256,6 +257,7 @@ final class ProfileShellViewModel {
                 posts = PostsContainerViewModel(
                     profileID: profileID,
                     profiles: data.profiles,
+                    session: data.session,
                     rpc: data.rpc,
                     navigationCoordinator: navigationCoordinator,
                     detailCache: data.detailCache,

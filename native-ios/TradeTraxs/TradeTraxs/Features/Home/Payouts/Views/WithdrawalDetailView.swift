@@ -25,7 +25,16 @@ struct WithdrawalDetailView: View {
     @State private var editingAccountID: TradingAccountID?
     @State private var editorDraft = AccountPayoutEntryDraft(amountDigits: "", payoutDate: .now, note: "")
     @State private var confirmsDelete = false
+    @State private var showsDrawdownDelete = false
+    @State private var isDeletingPropPayout = false
     @State private var imageOwnerID: String?
+    @State private var firmDraft = ""
+    @State private var firmSuggestions: [String] = []
+    @State private var assignedFirmName: String?
+    @State private var linkedFirmName: String?
+    @State private var firmNameFromAccount = false
+    @State private var firmStatus: String?
+    @State private var isSavingFirm = false
 
     @Environment(\.themeColors) private var colors
     @Environment(\.dismiss) private var dismiss
@@ -48,11 +57,12 @@ struct WithdrawalDetailView: View {
     }
 
     private var historyItem: PayoutHistoryItem? {
-        let items = PayoutHistorySupport.buildHistory(
+        let recorded = PayoutHistorySupport.buildHistory(
             accounts: accountsViewModel.accounts,
             entriesByAccount: withdrawalsHistory.ledgerByAccount,
             cyclesByAccount: withdrawalsHistory.cyclesByAccount
         )
+        let items = (recorded + withdrawalsHistory.achievementPayouts).sorted { $0.date > $1.date }
         return items.first { $0.id == historyItemID }
     }
 
@@ -67,14 +77,26 @@ struct WithdrawalDetailView: View {
     }
 
     private var screenTitle: String {
-        guard let item = historyItem, let account else { return "Withdrawal" }
+        guard let item = historyItem else { return "Withdrawal" }
         return PayoutHistorySupport.isPropPayout(item, account: account) ? "Payout" : "Withdrawal"
     }
 
     var body: some View {
         Group {
-            if let item = historyItem, let account {
-                detailContent(item: item, account: account)
+            if let item = historyItem {
+                let fromAchievement = item.source == .achievementProp || item.source == .achievementLive
+                if account != nil || fromAchievement {
+                    detailContent(item: item, account: account)
+                } else if !didFinishHydrate {
+                    ProgressView("Loading withdrawal…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ExperienceEmptyState(
+                        icon: .payouts,
+                        title: "Withdrawal unavailable",
+                        message: "This withdrawal could not be loaded. Pull to refresh from Withdrawals."
+                    )
+                }
             } else if !didFinishHydrate {
                 ProgressView("Loading withdrawal…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -129,31 +151,47 @@ struct WithdrawalDetailView: View {
                 Task { await deleteCurrent() }
             }
         } message: {
-            Text("This removes the withdrawal and updates your account balance. It cannot be undone.")
+            Text("The withdrawal amount goes back on the account balance. This cannot be undone.")
+        }
+        .sheet(isPresented: $showsDrawdownDelete) {
+            propPayoutDeleteSheet
         }
         .accessibilityIdentifier("withdrawals.detail.\(historyItemID)")
     }
 
     @ViewBuilder
-    private func detailContent(item: PayoutHistoryItem, account: TradingAccount) -> some View {
+    private func detailContent(item: PayoutHistoryItem, account: TradingAccount?) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
                 headerBlock(item: item, account: account)
                 if let cycle = cycle(for: item) {
                     cycleFacts(cycle)
                 }
-                if let notes = trimmedNotes(item.note) {
+                if account != nil, let notes = trimmedNotes(item.note) {
                     notesBlock(notes)
                 }
                 if let imageURL = trimmedNotes(item.imageURL), let url = URL(string: imageURL) {
                     pictureBlock(url)
                 }
-                achievementActionBlock(item: item, account: account)
+                if PayoutHistorySupport.isPropPayout(item, account: account)
+                    || item.source == .achievementLive
+                    || item.source == .achievementProp {
+                    firmAssignmentBlock(item: item)
+                }
+                if let account {
+                    achievementActionBlock(item: item, account: account)
+                }
                 if item.isEditable {
                     Button("Delete Withdrawal", role: .destructive) {
                         confirmsDelete = true
                     }
                     .accessibilityIdentifier("withdrawals.detail.delete")
+                } else if item.source == .fundedCycle {
+                    Button("Delete Payout", role: .destructive) {
+                        showsDrawdownDelete = true
+                    }
+                    .disabled(isDeletingPropPayout)
+                    .accessibilityIdentifier("withdrawals.detail.deletePayout")
                 }
             }
             .padding(.horizontal, ExperienceSpacing.md)
@@ -161,7 +199,7 @@ struct WithdrawalDetailView: View {
         }
     }
 
-    private func headerBlock(item: PayoutHistoryItem, account: TradingAccount) -> some View {
+    private func headerBlock(item: PayoutHistoryItem, account: TradingAccount?) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             Text(ProfileDisplay.formatMoney(item.amount))
                 .font(.system(.largeTitle, design: .rounded).weight(.semibold).monospacedDigit())
@@ -200,6 +238,133 @@ struct WithdrawalDetailView: View {
             Spacer(minLength: ExperienceSpacing.sm)
             Text(value)
                 .experienceStyle(.subheadline, color: colors.primaryText)
+        }
+    }
+
+    private func firmAssignmentBlock(item: PayoutHistoryItem) -> some View {
+        let current = assignedFirmName ?? linkedFirmName
+        return VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            Text("Prop firm")
+                .experienceStyle(.headline, color: colors.primaryText)
+            Text(current ?? "Unassigned")
+                .experienceStyle(.body, color: colors.primaryText)
+            if assignedFirmName == nil, linkedFirmName != nil {
+                Text(firmNameFromAccount ? "From the account name" : "From the linked expense")
+                    .experienceStyle(.caption, color: colors.secondaryText)
+            }
+            Text("Assigning a firm updates the expense tracker for this payout. The payout amount and account balance stay the same.")
+                .experienceStyle(.caption, color: colors.secondaryText)
+            if !firmSuggestions.isEmpty {
+                Menu {
+                    ForEach(firmSuggestions, id: \.self) { name in
+                        Button(name) { firmDraft = name }
+                    }
+                } label: {
+                    Text("Use an existing firm")
+                        .experienceStyle(.subheadline, color: colors.accent)
+                }
+            }
+            TextField("Apex, Topstep", text: $firmDraft)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel("Prop firm name")
+            if let firmStatus {
+                Text(firmStatus)
+                    .experienceStyle(.caption, color: colors.secondaryText)
+            }
+            ExperienceButton(
+                title: isSavingFirm ? "Saving…" : "Assign to prop firm",
+                kind: .primary
+            ) {
+                Task { await saveFirm(for: item) }
+            }
+            .disabled(isSavingFirm)
+            .accessibilityIdentifier("withdrawals.detail.assignFirm")
+            if assignedFirmName != nil {
+                Button {
+                    Task { await clearFirm(for: item) }
+                } label: {
+                    Text("Remove assignment")
+                        .experienceStyle(.subheadline, color: colors.secondaryText)
+                }
+                .disabled(isSavingFirm)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(ExperienceSpacing.sm)
+        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+    }
+
+    private func saveFirm(for item: PayoutHistoryItem) async {
+        guard let userID = await data.session.currentUserID else { return }
+        isSavingFirm = true
+        firmStatus = nil
+        defer { isSavingFirm = false }
+        do {
+            let repository = PropFirmExpenseRepository(supabase: data.supabase)
+            try await repository.savePayoutAssignment(
+                userID: ProfileID(userID.rawValue),
+                payoutKey: item.id,
+                firmName: firmDraft
+            )
+            let saved = PropFirmExpenseRepository.normalizedFirmName(firmDraft) ?? firmDraft
+            assignedFirmName = saved
+            firmDraft = saved
+            PropFirmPayoutAssignmentStore.shared.set(name: saved, for: item.id)
+            firmStatus = "Firm saved for this payout."
+        } catch {
+            firmStatus = UserFacingError.message(for: error)
+        }
+    }
+
+    private func clearFirm(for item: PayoutHistoryItem) async {
+        guard let userID = await data.session.currentUserID else { return }
+        isSavingFirm = true
+        firmStatus = nil
+        defer { isSavingFirm = false }
+        do {
+            try await PropFirmExpenseRepository(supabase: data.supabase).clearPayoutAssignment(
+                userID: ProfileID(userID.rawValue),
+                payoutKey: item.id
+            )
+            assignedFirmName = nil
+            firmDraft = ""
+            PropFirmPayoutAssignmentStore.shared.set(name: nil, for: item.id)
+            firmStatus = nil
+        } catch {
+            firmStatus = UserFacingError.message(for: error)
+        }
+    }
+
+    private func loadFirmAssignment(for item: PayoutHistoryItem) async {
+        guard let userID = await data.session.currentUserID else { return }
+        let profileID = ProfileID(userID.rawValue)
+        let repository = PropFirmExpenseRepository(supabase: data.supabase)
+        async let assignmentTask = repository.payoutAssignments(userID: profileID)
+        async let expenseTask = repository.list(userID: profileID)
+        if let names = try? await assignmentTask {
+            PropFirmPayoutAssignmentStore.shared.replace(names)
+            assignedFirmName = names[item.id]
+            if firmDraft.isEmpty, let assigned = names[item.id] {
+                firmDraft = assigned
+            }
+        }
+        guard let expenses = try? await expenseTask else { return }
+        var seen: [String: String] = [:]
+        for expense in expenses {
+            guard let name = PropFirmExpenseRepository.normalizedFirmName(expense.propFirmName) else { continue }
+            if seen[name.lowercased()] == nil { seen[name.lowercased()] = name }
+        }
+        firmSuggestions = seen.values.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        let linked = PropFirmYearOverviewBuilder.attributedFirmName(accountID: item.accountID, expenses: expenses)
+        if let linked {
+            linkedFirmName = linked
+            firmNameFromAccount = false
+        } else {
+            let inferred = TradingAccountDisplay.inferPropFirmName(
+                accountsViewModel.accounts.first { $0.id == item.accountID }?.name
+            )
+            linkedFirmName = inferred.isEmpty ? nil : inferred
+            firmNameFromAccount = linkedFirmName != nil
         }
     }
 
@@ -258,7 +423,7 @@ struct WithdrawalDetailView: View {
                     style: .continuous
                 ))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .accessibilityIdentifier("withdrawals.detail.postedAchievement")
         } else if PropFirmPayoutCycleSupport.achievementPrefill(for: item, account: account) != nil {
             ExperienceButton(title: "Post as Achievement", kind: .primary) {
@@ -276,10 +441,14 @@ struct WithdrawalDetailView: View {
         navigationCoordinator.openComposeAchievement()
     }
 
-    private func accountLine(account: TradingAccount, item: PayoutHistoryItem) -> String {
+    private func accountLine(account: TradingAccount?, item: PayoutHistoryItem) -> String {
+        let kind = PayoutHistorySupport.isPropPayout(item, account: account) ? "Prop payout" : "Live withdrawal"
+        guard let account else {
+            let title = item.note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return title.isEmpty ? kind : "\(title) · \(kind)"
+        }
         let trimmedName = account.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let mode = TradingAccountDisplay.ownerDropdownModeLabel(account.mode)
-        let kind = PayoutHistorySupport.isPropPayout(item, account: account) ? "Prop payout" : "Live withdrawal"
         if trimmedName.isEmpty {
             return "\(mode) · \(kind)"
         }
@@ -330,6 +499,62 @@ struct WithdrawalDetailView: View {
         dismiss()
     }
 
+    private var propPayoutDeleteSheet: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+                Text("This payout goes back on the account balance. Where should the drawdown move?")
+                    .experienceStyle(.body, color: colors.secondaryText)
+                ExperienceButton(
+                    title: "Reset drawdown to account value",
+                    kind: .secondary,
+                    isEnabled: !isDeletingPropPayout,
+                    isLoading: isDeletingPropPayout,
+                    accessibilityIdentifier: "withdrawals.detail.deletePayout.reset"
+                ) {
+                    Task { await deletePropPayout(behavior: .resetToAccount) }
+                }
+                ExperienceButton(
+                    title: "Keep trailing drawdown",
+                    kind: .secondary,
+                    isEnabled: !isDeletingPropPayout,
+                    accessibilityIdentifier: "withdrawals.detail.deletePayout.trailing"
+                ) {
+                    Task { await deletePropPayout(behavior: .keepTrailing) }
+                }
+                if let formError = accountsViewModel.formError, !formError.isEmpty {
+                    Text(formError)
+                        .experienceStyle(.footnote, color: colors.negativePnL)
+                }
+            }
+            .padding(ExperienceSpacing.md)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .experienceScreenBackground()
+            .experienceNavigationTitle("Delete payout")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showsDrawdownDelete = false }
+                        .disabled(isDeletingPropPayout)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private func deletePropPayout(behavior: PayoutDrawdownBehavior) async {
+        guard let item = historyItem, item.source == .fundedCycle else { return }
+        let cycleID = item.id.replacingOccurrences(of: "cycle:", with: "")
+        isDeletingPropPayout = true
+        let deleted = await accountsViewModel.deletePropPayout(
+            cycleID: cycleID,
+            accountID: item.accountID,
+            drawdownBehavior: behavior
+        )
+        isDeletingPropPayout = false
+        guard deleted else { return }
+        showsDrawdownDelete = false
+        dismiss()
+    }
+
     private func hydrate() async {
         defer { didFinishHydrate = true }
         guard let userID = await data.session.currentUserID else { return }
@@ -340,6 +565,23 @@ struct WithdrawalDetailView: View {
         accountsViewModel.seedWithdrawalsAccountsFromSessionCache()
         await accountsViewModel.ensureAccountsReadyForWithdrawals()
         await accountsViewModel.loadAllPayoutEntries()
+        let recorded = PayoutHistorySupport.buildHistory(
+            accounts: accountsViewModel.accounts,
+            entriesByAccount: withdrawalsHistory.ledgerByAccount,
+            cyclesByAccount: withdrawalsHistory.cyclesByAccount
+        )
+        let extras = await PayoutHistorySupport.loadMissingAchievementPayouts(
+            achievements: data.achievements,
+            profileID: profileID,
+            recorded: recorded
+        )
+        withdrawalsHistory.setAchievementPayouts(extras)
+        if let item = historyItem,
+           PayoutHistorySupport.isPropPayout(item, account: account)
+            || item.source == .achievementLive
+            || item.source == .achievementProp {
+            await loadFirmAssignment(for: item)
+        }
         do {
             let rows = try await data.achievements.withdrawalAchievementLinks(for: profileID)
             linkStore.applyFetched(rows)

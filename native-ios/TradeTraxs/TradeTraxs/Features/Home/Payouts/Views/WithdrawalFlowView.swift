@@ -98,7 +98,7 @@ struct WithdrawalFlowView: View {
             Text("Payout History")
                 .experienceStyle(.subheadline, color: colors.accent)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .simultaneousGesture(TapGesture().onEnded { ExperienceHaptics.play(.selection) })
         .accessibilityIdentifier("withdrawal.payoutHistory")
     }
@@ -151,7 +151,7 @@ struct WithdrawalFlowView: View {
                                 systemImage: accountIcon(for: account)
                             )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.experiencePlain)
                         .experienceDashboardListRow()
                         .accessibilityIdentifier("withdrawal.account.\(account.id.rawValue)")
                     }

@@ -6,7 +6,12 @@ import {
 import type { AccountPayoutCycle } from "@/lib/propfirmPayoutCycles"
 import { selectCompletedPayoutHistory } from "@/lib/propfirmPayoutCycles"
 
-export type PayoutHistorySource = "liveLedger" | "otherLedger" | "fundedCycle"
+export type PayoutHistorySource =
+  | "liveLedger"
+  | "otherLedger"
+  | "fundedCycle"
+  | "achievementProp"
+  | "achievementLive"
 
 export type PayoutHistoryItem = {
   id: string
@@ -127,6 +132,10 @@ export function isLiveWithdrawalHistoryItem(
           .trim()
           .toLowerCase() === "live"
       )
+    case "achievementProp":
+      return false
+    case "achievementLive":
+      return true
   }
 }
 
@@ -140,12 +149,12 @@ export function isPropPayoutHistoryItem(
     case "liveLedger":
       return false
     case "otherLedger":
-      return (
-        isPropFirmTradingAccount(account) &&
-        String(account?.mode ?? "")
-          .trim()
-          .toLowerCase() === "funded"
-      )
+      // Past prop payouts, including eval accounts, were saved on the ledger.
+      return isPropFirmTradingAccount(account)
+    case "achievementProp":
+      return true
+    case "achievementLive":
+      return false
   }
 }
 
@@ -167,6 +176,97 @@ export function filterPropPayouts(
   )
 }
 
+/** Prop payouts, plus an achievement withdrawal once a firm is chosen for it. */
+export function filterPropFirmTrackerPayouts(
+  items: PayoutHistoryItem[],
+  accountsById: Record<string, PayoutHistoryAccount | undefined>,
+  assignments: Record<string, string>
+): PayoutHistoryItem[] {
+  const prop = filterPropPayouts(items, accountsById)
+  const ids = new Set(prop.map((item) => item.id))
+  const linked = items.filter(
+    (item) =>
+      item.source === "achievementLive" &&
+      Boolean(assignments[item.id]?.trim()) &&
+      !ids.has(item.id)
+  )
+  return [...prop, ...linked]
+}
+
 export function payoutHistoryItemHref(itemId: string): string {
   return `/withdrawals/${encodeURIComponent(itemId)}`
+}
+
+const MATCH_WINDOW_MS = 14 * 24 * 60 * 60 * 1000
+
+export type UnmatchedPayoutAchievement = {
+  id: string
+  achievementType: string | null
+  title: string | null
+  amount: number
+  achievedAt: string | null
+  createdAt: string | null
+  accountId: string | null
+  linkedCycleId: string | null
+  linkedEntryId: string | null
+}
+
+/** Payout achievements that never became a withdrawal or payout cycle. */
+export function payoutAchievementsMissingFromHistory(
+  achievements: UnmatchedPayoutAchievement[],
+  items: PayoutHistoryItem[]
+): PayoutHistoryItem[] {
+  const completedCycleIds = new Set(
+    items
+      .filter((item) => item.source === "fundedCycle")
+      .map((item) => item.id.replace(/^cycle:/, ""))
+  )
+  const ledgerIds = new Set(
+    items.map((item) => item.ledgerEntryId).filter((id): id is string => Boolean(id))
+  )
+
+  return achievements.flatMap((achievement) => {
+    const amount = Number(achievement.amount)
+    if (!Number.isFinite(amount) || amount <= 0) return []
+    if (achievement.linkedEntryId && ledgerIds.has(achievement.linkedEntryId)) return []
+    if (achievement.linkedCycleId && completedCycleIds.has(achievement.linkedCycleId)) return []
+    const dateMs = achievementInstant(achievement.achievedAt, achievement.createdAt)
+    const accountId = String(achievement.accountId ?? "").trim()
+    if (
+      accountId &&
+      items.some(
+        (item) =>
+          item.accountId === accountId &&
+          Math.abs(item.amount - amount) < 0.01 &&
+          Math.abs(item.dateMs - dateMs) <= MATCH_WINDOW_MS
+      )
+    ) {
+      return []
+    }
+    const prop = isPropFirmPayoutAchievement(achievement.achievementType)
+    const payoutDate = dateMs > 0 ? new Date(dateMs).toISOString().slice(0, 10) : null
+    return [{
+      id: `achievement:${achievement.id}`,
+      amount,
+      dateMs,
+      payoutDate,
+      accountId,
+      ledgerEntryId: null,
+      source: prop ? "achievementProp" : "achievementLive",
+      note: achievement.title?.trim() || (prop ? "Prop Firm Payout" : "Payout"),
+      imageUrl: null,
+      cycle: null,
+      isEditable: false,
+    } satisfies PayoutHistoryItem]
+  })
+}
+
+function achievementInstant(achievedAt: string | null, createdAt: string | null): number {
+  const ms = Date.parse(String(achievedAt || createdAt || ""))
+  return Number.isFinite(ms) ? ms : 0
+}
+
+function isPropFirmPayoutAchievement(type: string | null): boolean {
+  const value = String(type ?? "").trim().toLowerCase()
+  return value === "prop_firm_payout" || value === "prop_firm_payouts"
 }

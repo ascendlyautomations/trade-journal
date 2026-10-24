@@ -73,7 +73,7 @@ struct TradeRoomJoinRequestDetailView: View {
                             ExperienceIcon(icon: .forward, size: .sm, color: colors.tertiaryText)
                         }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                 } header: {
                     Text("Requester")
                 }
@@ -102,7 +102,7 @@ struct TradeRoomJoinRequestDetailView: View {
                             ExperienceIcon(icon: .forward, size: .sm, color: colors.tertiaryText)
                         }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                 } header: {
                     Text("Trade Room")
                 }

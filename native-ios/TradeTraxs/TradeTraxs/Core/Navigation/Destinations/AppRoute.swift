@@ -153,6 +153,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
     case brokerIntegrations = "broker-integrations"
     case copyTradingAccounts = "copy-trading-accounts"
     case payouts
+    case propFirmExpenses = "prop-firm-expenses"
     /// One withdrawal opened from Withdrawals. The row id lives in ``WithdrawalDetailSelection``.
     case withdrawalDetail = "withdrawal-detail"
     case privacy
@@ -193,6 +194,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
         case .brokerIntegrations: return "Broker Integrations"
         case .copyTradingAccounts: return "Copy Trading Accounts"
         case .payouts: return "Withdrawals"
+        case .propFirmExpenses: return "Expense Tracker"
         case .withdrawalDetail: return "Withdrawal"
         case .privacy: return "Privacy"
         case .privacyBlockedAccounts: return "Blocked Accounts"

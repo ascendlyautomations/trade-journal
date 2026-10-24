@@ -10,6 +10,7 @@ import {
   roomDisplayInitials,
 } from "@/lib/popularTradeRooms"
 import { profilePath } from "@/lib/profileRoutes"
+import { tradeRoomSharePath } from "@/lib/tradeRoomShareUrl"
 
 export type ExploreSearchProfileResult = {
   id: string
@@ -34,7 +35,7 @@ type ExploreSearchResultsPanelProps = {
 
 function roomHref(room: PopularTradeRoom): string {
   const key = room.slug?.trim() || room.id
-  return `/trade-rooms?room=${encodeURIComponent(key)}`
+  return tradeRoomSharePath(key)
 }
 
 function SearchRoomAvatar({ room }: { room: PopularTradeRoom }) {

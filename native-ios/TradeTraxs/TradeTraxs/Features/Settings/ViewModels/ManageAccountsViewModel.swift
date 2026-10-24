@@ -437,6 +437,25 @@ final class ManageAccountsViewModel {
         }
     }
 
+    func deletePropPayout(
+        cycleID: String,
+        accountID: TradingAccountID,
+        drawdownBehavior: PayoutDrawdownBehavior
+    ) async -> Bool {
+        await mutate {
+            guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
+            try await trades.deletePropPayout(cycleID: cycleID, drawdownBehavior: drawdownBehavior)
+            let cycles = try await trades.payoutCycleHistory(for: accountID)
+            WithdrawalsHistoryStore.shared.replaceAccountCycles(
+                cycles,
+                accountID: accountID,
+                profileID: viewerID
+            )
+            AccountMutationStore.shared.notePayoutRecorded(accountID: accountID)
+            ExperienceHaptics.play(.selection)
+        }
+    }
+
     func rowTitle(for account: TradingAccount) -> String {
         if let firm = TradingAccountDisplay.propFirmName(for: account) {
             return firm

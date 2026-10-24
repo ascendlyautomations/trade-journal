@@ -19,9 +19,6 @@ struct ActivityRowView: View {
                             .fontWeight(row.isUnread ? .semibold : .regular)
                             .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
-                        if let actor = row.actor {
-                            ProfileTradeTraxsIdentityBadge(profile: actor, size: .inline)
-                        }
                     }
                     if let secondary = row.secondaryText {
                         Text(secondary)
@@ -46,7 +43,7 @@ struct ActivityRowView: View {
             .background(row.isUnread ? colors.secondaryBackground.opacity(0.55) : Color.clear)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityLabel(row.accessibilityLabel)
         .accessibilityIdentifier("activity.row.\(row.id.rawValue)")
     }
@@ -66,7 +63,7 @@ struct ActivityRowView: View {
                             debugSurface: "activity"
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityLabel(profile.displayName)
                 } else {
                     FollowListAvatarView(

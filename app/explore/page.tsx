@@ -622,7 +622,10 @@ export default function ExplorePage() {
           </h1>
         </header>
 
-        <section className={`${PANEL_CLASS} relative z-20`}>
+        <section
+          data-tt-tour-target="feedExplore"
+          className={`${PANEL_CLASS} relative z-20`}
+        >
           <div className="flex items-stretch gap-2">
             <label htmlFor="explore-search" className="sr-only">
               Search people or Trade Rooms

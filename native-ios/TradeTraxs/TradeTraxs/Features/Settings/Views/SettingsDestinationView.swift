@@ -108,6 +108,8 @@ struct SettingsDestinationView: View {
                 CopyTradingAccountsView(data: data)
             case .payouts:
                 PayoutsScreenView(data: data, navigationCoordinator: navigationCoordinator)
+            case .propFirmExpenses:
+                PropFirmExpensesView(data: data)
             case .withdrawalDetail:
                 if let historyItemID = WithdrawalDetailSelection.historyItemID {
                     WithdrawalDetailView(

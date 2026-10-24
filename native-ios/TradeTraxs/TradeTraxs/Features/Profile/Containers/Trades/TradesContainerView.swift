@@ -11,6 +11,7 @@ struct TradesContainerView: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appEnvironment) private var appEnvironment
+    @State private var browseLayout = ProfileBrowseLayoutStore.layout(for: .trades)
 
     var body: some View {
         ProfileSectionContainerChrome(
@@ -48,7 +49,8 @@ struct TradesContainerView: View {
             titleVisibility: .visible
         ) {
             Button("Delete Trade", role: .destructive) {
-                Task { await viewModel.confirmDelete() }
+                let summary = viewModel.pendingDelete
+                Task { await viewModel.confirmDelete(summary: summary) }
             }
             Button("Cancel", role: .cancel) {
                 viewModel.pendingDelete = nil
@@ -87,64 +89,99 @@ struct TradesContainerView: View {
     @ViewBuilder
     private var tradesContent: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-            ProfileTradesFilterBar(viewModel: viewModel)
+            ProfileTradesFilterBar(viewModel: viewModel, browseLayout: $browseLayout)
+                .onChange(of: browseLayout) { _, layout in
+                    ProfileBrowseLayoutStore.save(layout, for: .trades)
+                }
 
             if let message = viewModel.filterEmptyMessage {
                 Text(message)
                     .experienceStyle(.footnote, color: colors.secondaryText)
                     .accessibilityIdentifier("profile.trades.filterEmpty")
             } else {
-                LazyVStack(spacing: ExperienceSpacing.sm) {
-                    ForEach(displayItems) { summary in
-                        ProfileTradeCard(
-                            summary: summary,
-                            imagePipeline: imagePipeline,
-                            engagementStore: engagementStore,
-                            vaultStore: vaultStore,
-                            showsOwnerActions: viewModel.showsOwnerActions,
-                            onOpen: { viewModel.openTrade(summary) },
-                            onShare: { viewModel.shareTrade(summary) },
-                            onEdit: { viewModel.editTrade(summary) },
-                            onDelete: viewModel.showsOwnerActions
-                                ? {
-                                    guard !viewModel.isDeletingTrade(summary.id) else { return }
-                                    viewModel.requestDelete(summary)
-                                }
-                                : nil,
-                            isDeleteInProgress: viewModel.isDeletingTrade(summary.id),
-                            onReport: reportAction(for: summary),
-                            profilePin: profilePin,
-                            isProfilePinned: isProfilePinned(summary),
-                            copyTradeModeSummaryLine: summary.copyTradePublicModeSummary
-                        )
-                        .id("\(summary.id.rawValue)-\(summary.copyTradePublicModeSummary ?? "")")
-                        .transition(
-                            reduceMotion
-                                ? .opacity
-                                : .opacity.combined(with: .move(edge: .bottom))
-                        )
-                        .task {
-                            await viewModel.loadMoreIfNeeded(currentTradeID: summary.id)
-                        }
-                    }
+                if browseLayout == .grid {
+                    tradeGrid
+                } else {
+                    tradeList
                 }
-                .animation(
-                    ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-                    value: displayItems.map(\.id)
-                )
-                .onChange(of: displayItems.map(\.id)) { _, ids in
-                    viewModel.prefetchEngagement(for: ids)
-                }
-                .onAppear {
-                    viewModel.prefetchEngagement(for: displayItems.map(\.id))
-                }
-                .accessibilityIdentifier("profile.trades.list")
-
                 if viewModel.paginationErrorMessage != nil {
                     loadMoreFailure
                 }
             }
         }
+    }
+
+    private var tradeGridColumns: [GridItem] {
+        [
+            GridItem(.flexible(), spacing: 2),
+            GridItem(.flexible(), spacing: 2),
+        ]
+    }
+
+    private var tradeGrid: some View {
+        LazyVGrid(columns: tradeGridColumns, spacing: 2) {
+            ForEach(displayItems) { summary in
+                ProfileTradeGridTile(
+                    summary: summary,
+                    imagePipeline: imagePipeline,
+                    isPinned: isProfilePinned(summary),
+                    onOpen: { viewModel.openTrade(summary) }
+                )
+                .task {
+                    await viewModel.loadMoreIfNeeded(currentTradeID: summary.id)
+                }
+            }
+        }
+        .onChange(of: displayItems.map(\.id)) { _, ids in
+            viewModel.prefetchEngagement(for: ids)
+        }
+        .onAppear {
+            viewModel.prefetchEngagement(for: displayItems.map(\.id))
+        }
+        .accessibilityIdentifier("profile.trades.grid")
+    }
+
+    private var tradeList: some View {
+        LazyVStack(spacing: ExperienceSpacing.sm) {
+            ForEach(displayItems) { summary in
+                ProfileTradeCard(
+                    summary: summary,
+                    imagePipeline: imagePipeline,
+                    engagementStore: engagementStore,
+                    vaultStore: vaultStore,
+                    showsOwnerActions: viewModel.showsOwnerActions,
+                    onOpen: { viewModel.openTrade(summary) },
+                    onShare: { viewModel.shareTrade(summary) },
+                    onEdit: { viewModel.editTrade(summary) },
+                    onDelete: viewModel.showsOwnerActions
+                        ? {
+                            guard !viewModel.isDeletingTrade(summary.id) else { return }
+                            viewModel.requestDelete(summary)
+                        }
+                        : nil,
+                    isDeleteInProgress: viewModel.isDeletingTrade(summary.id),
+                    onReport: reportAction(for: summary),
+                    profilePin: profilePin,
+                    isProfilePinned: isProfilePinned(summary),
+                    copyTradeModeSummaryLine: summary.copyTradePublicModeSummary
+                )
+                .id("\(summary.id.rawValue)-\(summary.copyTradePublicModeSummary ?? "")")
+                .task {
+                    await viewModel.loadMoreIfNeeded(currentTradeID: summary.id)
+                }
+            }
+        }
+        .animation(
+            ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
+            value: displayItems.map(\.id)
+        )
+        .onChange(of: displayItems.map(\.id)) { _, ids in
+            viewModel.prefetchEngagement(for: ids)
+        }
+        .onAppear {
+            viewModel.prefetchEngagement(for: displayItems.map(\.id))
+        }
+        .accessibilityIdentifier("profile.trades.list")
     }
 
     private var loadMoreFailure: some View {
@@ -157,7 +194,7 @@ struct TradesContainerView: View {
                 Text("Try again")
                     .experienceStyle(.footnote, color: colors.accent)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, ExperienceSpacing.xs)

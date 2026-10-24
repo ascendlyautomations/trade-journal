@@ -5,6 +5,59 @@ import Foundation
 /// Latest preview/timestamp/order derive from the newest canonical message regardless of sender.
 /// Unread count is owned by ``MessagesInboxStore`` / server unread RPC — never inferred here.
 nonisolated enum ConversationInboxActivity {
+    /// Web inbox fallback when a DM peer profile username is gone (`profile?.username || "user"`).
+    /// Those rows render as `@user`.
+    static func isDeletedDirectPeer(isGroup: Bool, peerUsername: String?) -> Bool {
+        guard !isGroup, let peerUsername else { return false }
+        let trimmed = peerUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty || trimmed.caseInsensitiveCompare("user") == .orderedSame
+    }
+
+    /// Web `isOrphanedDirectConversation`: account deletion removes the other participant row.
+    static func isOrphanedDirectConversation(
+        isGroup: Bool,
+        participantIDs: [ProfileID],
+        viewerID: ProfileID?
+    ) -> Bool {
+        guard !isGroup, let viewerID else { return false }
+        let ids = participantIDs
+            .map { $0.rawValue.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !ids.isEmpty else { return false }
+        let viewer = viewerID.rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard ids.contains(where: { $0.caseInsensitiveCompare(viewer) == .orderedSame }) else { return false }
+        return !ids.contains(where: { $0.caseInsensitiveCompare(viewer) != .orderedSame })
+    }
+
+    /// Deleted DM peers stay off the Messages page. Groups stay.
+    static func shouldOmitFromMessagesPage(
+        _ conversation: Conversation,
+        viewerID: ProfileID?,
+        peerUsername: String?
+    ) -> Bool {
+        if isOrphanedDirectConversation(
+            isGroup: conversation.isGroup,
+            participantIDs: conversation.participantProfileIDs,
+            viewerID: viewerID
+        ) {
+            return true
+        }
+        return isDeletedDirectPeer(
+            isGroup: conversation.isGroup,
+            peerUsername: peerUsername ?? conversation.peerUsername
+        )
+    }
+
+    /// Inbox preview for a deleted DM peer is omitted. Web does not keep the message string on that row.
+    static func inboxPreview(_ preview: String?, isGroup: Bool, peerUsername: String?) -> String? {
+        if isDeletedDirectPeer(isGroup: isGroup, peerUsername: peerUsername) {
+            return nil
+        }
+        guard let preview else { return nil }
+        let trimmed = preview.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     /// Preview text for an inbox row from a domain message.
     static func preview(for message: Message) -> String {
         if message.kind == .system { return "System message" }
@@ -102,6 +155,18 @@ nonisolated enum ConversationInboxActivity {
         merged.isPinned = existing.isPinned || incoming.isPinned
         merged.isMuted = existing.isMuted || incoming.isMuted
 
+        if isDeletedDirectPeer(isGroup: incoming.isGroup, peerUsername: incoming.peerUsername)
+            || isDeletedDirectPeer(isGroup: existing.isGroup, peerUsername: existing.peerUsername)
+        {
+            if !isIncomingActivityNewer(incoming, than: existing) {
+                merged.lastMessageAt = existing.lastMessageAt
+                merged.lastMessageID = existing.lastMessageID
+                merged.updatedAt = max(existing.updatedAt, incoming.updatedAt)
+            }
+            merged.lastMessagePreview = nil
+            return merged
+        }
+
         if isIncomingActivityNewer(incoming, than: existing) {
             if merged.lastMessageID == nil {
                 merged.lastMessageID = existing.lastMessageID
@@ -128,7 +193,11 @@ nonisolated enum ConversationInboxActivity {
         message: Message
     ) -> Conversation {
         var patch = conversation
-        patch.lastMessagePreview = preview(for: message)
+        patch.lastMessagePreview = inboxPreview(
+            preview(for: message),
+            isGroup: conversation.isGroup,
+            peerUsername: conversation.peerUsername
+        )
         patch.lastMessageAt = message.createdAt
         patch.lastMessageID = message.id
         patch.updatedAt = max(conversation.updatedAt, message.createdAt)
@@ -141,7 +210,11 @@ nonisolated enum ConversationInboxActivity {
         message: Message
     ) -> Conversation? {
         var patch = conversation
-        patch.lastMessagePreview = preview(for: message)
+        patch.lastMessagePreview = inboxPreview(
+            preview(for: message),
+            isGroup: conversation.isGroup,
+            peerUsername: conversation.peerUsername
+        )
         patch.lastMessageAt = message.createdAt
         patch.lastMessageID = message.id
         patch.updatedAt = message.createdAt

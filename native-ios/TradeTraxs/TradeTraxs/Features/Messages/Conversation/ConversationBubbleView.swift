@@ -95,7 +95,7 @@ struct ConversationBubbleView: View {
                             size: ConversationBubbleLayout.avatarColumnWidth
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.experiencePlain)
                     .accessibilityLabel("View profile")
                     .accessibilityIdentifier("conversation.bubble.senderAvatar")
                 } else {
@@ -160,7 +160,7 @@ struct ConversationBubbleView: View {
                     Text("Failed · Tap to retry")
                         .experienceStyle(.caption2, color: colors.warning)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
             } else if item.showsTimestamp {
                 Text(ConversationThreadSupport.timeLabel(item.message.createdAt))
                     .experienceStyle(.caption2, color: colors.tertiaryText)
@@ -305,7 +305,7 @@ struct ConversationBubbleView: View {
                 } label: {
                     storyShareBubbleContent(payload: payload)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
             }
         }
         .accessibilityIdentifier("conversation.bubble.storyShare")
@@ -576,7 +576,7 @@ struct ConversationBubbleView: View {
                 .foregroundStyle(isSelected ? colors.accent : colors.tertiaryText)
                 .frame(width: 28, height: 28)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
         .accessibilityLabel(isSelected ? "Selected" : "Not selected")
         .accessibilityIdentifier("conversation.bubble.selection")
     }

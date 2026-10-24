@@ -207,7 +207,7 @@ struct ProfileHeaderView: View {
                     )
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .accessibilityLabel(
                 store.isOwner ? "View your story" : "View @\(profile.username)'s story"
             )
@@ -230,7 +230,7 @@ struct ProfileHeaderView: View {
                     .font(.system(.footnote, design: .default).weight(.medium))
                     .foregroundStyle(colors.secondaryText)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .accessibilityIdentifier("profile.followers")
 
             Text("•")
@@ -243,7 +243,7 @@ struct ProfileHeaderView: View {
                     .font(.system(.footnote, design: .default).weight(.medium))
                     .foregroundStyle(colors.secondaryText)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.experiencePlain)
             .accessibilityIdentifier("profile.following")
         }
         .lineLimit(1)

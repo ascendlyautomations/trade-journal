@@ -35,6 +35,6 @@ struct SettingsAboutView: View {
         } label: {
             SettingsNavigationRow(title: route.title, systemImage: "doc.text")
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.experiencePlain)
     }
 }

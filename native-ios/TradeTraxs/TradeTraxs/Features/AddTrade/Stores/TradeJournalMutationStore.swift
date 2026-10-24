@@ -53,7 +53,10 @@ final class TradeJournalMutationStore {
             scope: AnalyticsLocalMutationScopeBuilder.create(trade: trade)
         )
         ProfileAnalyticsOwnerInvalidation.submitTradeMutation(old: nil, new: trade)
-        ProfileOwnerHeaderStatsCoordinator.shared.reconcile(ownerID: trade.ownerProfileID)
+        ProfileOwnerHeaderStatsCoordinator.shared.reconcile(
+            ownerID: trade.ownerProfileID,
+            publicOverviewDelta: ProfileOverviewMetrics.publicOverviewCountDelta(old: nil, new: trade)
+        )
         GettingStartedRefreshCenter.noteTradePersisted(trade)
     }
 
@@ -70,7 +73,13 @@ final class TradeJournalMutationStore {
         AnalyticsLocalMutationRouter.submit(kind: .update, scope: scope)
         ProfileAnalyticsOwnerInvalidation.submitTradeMutation(old: previous, new: trade)
         if ProfileAnalyticsOwnerInvalidation.affectsOwnerJournalHeaderMetrics(old: previous, new: trade) {
-            ProfileOwnerHeaderStatsCoordinator.shared.reconcile(ownerID: trade.ownerProfileID)
+            let delta = previous.map {
+                ProfileOverviewMetrics.publicOverviewCountDelta(old: $0, new: trade)
+            } ?? 0
+            ProfileOwnerHeaderStatsCoordinator.shared.reconcile(
+                ownerID: trade.ownerProfileID,
+                publicOverviewDelta: delta
+            )
         }
         GettingStartedRefreshCenter.noteTradeVisibilityUpdated(trade, previous: previous)
     }
@@ -115,7 +124,10 @@ final class TradeJournalMutationStore {
         } else {
             ProfileAnalyticsOwnerInvalidation.invalidateOwnerSnapshot(viewerID: owner)
         }
-        ProfileOwnerHeaderStatsCoordinator.shared.reconcile(ownerID: owner)
+        ProfileOwnerHeaderStatsCoordinator.shared.reconcile(
+            ownerID: owner,
+            publicOverviewDelta: ProfileOverviewMetrics.publicOverviewCountDelta(old: previous, new: nil)
+        )
     }
 
     /// CSV / bulk import — bounded invalidation; authoritative reload via mounted observers.

@@ -225,7 +225,7 @@ struct CreateReelView: View {
                             } label: {
                                 clipPreviewContent(draft: draft, thumb: draft.thumbnailPreview)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.experiencePlain)
                             .accessibilityLabel("Play clip preview")
                         } else {
                             clipPreviewContent(draft: draft, thumb: draft.thumbnailPreview)
@@ -378,7 +378,7 @@ struct CreateReelView: View {
                     .padding(.vertical, ExperienceSpacing.xs)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.experiencePlain)
                 .accessibilityIdentifier("createReel.linkTrade")
             }
         }
