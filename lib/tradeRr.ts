@@ -1,5 +1,12 @@
 /** RR storage and analytics helpers — missing RR is null, not 0. */
 
+/** Row shape for RR aggregates; includes rr/pnl so index-signature trade rows stay assignable. */
+export type TradeRrStatsRow = {
+  rr?: unknown
+  pnl?: unknown
+  max_rr_reached?: unknown
+}
+
 export function hasStoredRr(value: unknown): value is number {
   if (value === null || value === undefined) return false
   if (typeof value === "string" && value.trim() === "") return false
@@ -16,9 +23,7 @@ export function parseOptionalRr(raw: unknown): number | null {
 }
 
 /** @deprecated Dashboard Avg R:R uses {@link averageRealizedRrFromTrades}. */
-export function averageRrFromTrades(
-  trades: { rr?: unknown }[]
-): number | null {
+export function averageRrFromTrades(trades: TradeRrStatsRow[]): number | null {
   let sum = 0
   let count = 0
 
@@ -33,7 +38,7 @@ export function averageRrFromTrades(
 
 /** Mean max R:R reached over trades with a stored value; null when none qualify. */
 export function averageMaxRrReachedFromTrades(
-  trades: { max_rr_reached?: unknown }[]
+  trades: TradeRrStatsRow[]
 ): number | null {
   let sum = 0
   let count = 0

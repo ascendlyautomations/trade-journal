@@ -1,4 +1,4 @@
-import { hasStoredRr } from "./tradeRr.ts"
+import { hasStoredRr, type TradeRrStatsRow } from "./tradeRr.ts"
 
 /** Descriptive copy when at least one paired trade exists. */
 export const RR_TARGET_MIN_PAIRED_DESCRIPTIVE = 1
@@ -23,14 +23,8 @@ export type DashboardRrTargetAnalysis = {
   bullets: string[]
 }
 
-type TradeLike = {
-  rr?: unknown
-  max_rr_reached?: unknown
-  pnl?: unknown
-}
-
 /** Strict eligibility for the R:R Targeting panel only (not dashboard Avg Max R:R KPI). */
-export function isRrTargetingEligibleTrade(t: TradeLike): boolean {
+export function isRrTargetingEligibleTrade(t: TradeRrStatsRow): boolean {
   if (!hasStoredRr(t.rr) || !hasStoredRr(t.max_rr_reached)) return false
   const target = Number(t.rr)
   return Number.isFinite(target) && target > 0
@@ -50,7 +44,7 @@ function formatR(value: number): string {
 }
 
 function averageOnPaired(
-  paired: TradeLike[],
+  paired: TradeRrStatsRow[],
   pick: (target: number, max: number) => number
 ): number | null {
   if (paired.length === 0) return null
@@ -74,7 +68,7 @@ function buildSampleSummary(pairedCount: number, tradeCount: number): string {
 }
 
 export function computeDashboardRrTargetAnalysis(
-  trades: TradeLike[]
+  trades: TradeRrStatsRow[]
 ): DashboardRrTargetAnalysis {
   const tradeCount = trades.length
   const paired = trades.filter(isRrTargetingEligibleTrade)

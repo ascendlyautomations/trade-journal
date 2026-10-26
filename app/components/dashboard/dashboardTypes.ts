@@ -21,6 +21,7 @@ export type DashboardTradeRow = {
   pnl?: number | null
   public_description?: string | null
   rr?: unknown
+  max_rr_reached?: unknown
   session?: string | null
   strategy?: string | null
   ticker?: string | null

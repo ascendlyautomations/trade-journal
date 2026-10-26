@@ -204,6 +204,7 @@ import { toggleMessageReaction } from "@/lib/messageReactionToggle"
 import { handleMessageReactionDoubleClick } from "@/lib/messageReactionDoubleTap"
 import {
   MESSAGE_REACTION_DOUBLE_TAP_EMOJI,
+  MESSAGE_REACTIONS,
   patchRoomMessageReactions,
   type MessageReactionEmoji,
   type MessageReactionRow,
