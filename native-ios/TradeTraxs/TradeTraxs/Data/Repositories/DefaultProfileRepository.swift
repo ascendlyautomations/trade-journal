@@ -215,13 +215,51 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
 
         let profileKey = "profile:\(submission.profileID.rawValue)"
         cache.memory.remove(forKey: profileKey)
-        let dto: ProfileDTO.Profile = try await supabase.database.selectOne(
-            ProfileDTO.Profile.self,
+        struct OnboardingConfirmRow: Decodable {
+            var id: String?
+            var username: String?
+            var onboarding_completed: Bool?
+            var name: String?
+            var bio: String?
+            var avatar_url: String?
+            var trader_type: String?
+            var trading_style: String?
+            var primary_market: String?
+            var started_trading: String?
+        }
+        let confirm: OnboardingConfirmRow = try await supabase.database.selectOne(
+            OnboardingConfirmRow.self,
             from: "profiles",
             query: [
-                SupabaseQuery.select(Self.publicProfileSelect),
+                SupabaseQuery.select(Self.onboardingFieldsSelect),
                 SupabaseQuery.eq("id", submission.profileID.rawValue),
             ]
+        )
+        guard confirm.onboarding_completed == true else {
+            throw AppError.domain(
+                .conflict(message: "Could not save onboarding. Check your connection and try again.")
+            )
+        }
+        let expectedUsername = ProfileUsernamePolicy.normalize(submission.username)
+        let savedUsername = ProfileUsernamePolicy.normalize(confirm.username ?? "")
+        guard savedUsername == expectedUsername else {
+            throw AppError.domain(
+                .conflict(message: "Profile update did not apply. Try again.")
+            )
+        }
+        let dto = ProfileDTO.Profile(
+            id: confirm.id,
+            username: confirm.username,
+            name: confirm.name,
+            bio: confirm.bio,
+            avatar_url: confirm.avatar_url,
+            trader_type: confirm.trader_type,
+            trading_style: confirm.trading_style,
+            primary_market: confirm.primary_market,
+            started_trading: confirm.started_trading,
+            is_private: nil,
+            is_creator: nil,
+            created_at: nil
         )
         let profile = try ProfileMapper.mapToDomain(dto)
         cache.memory.set(profile, forKey: profileKey)
@@ -741,11 +779,16 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             var follower_id: String
             var following_id: String
         }
-        _ = try await supabase.database.insert(
-            Body(follower_id: viewer.rawValue, following_id: target.rawValue),
-            into: "followers",
-            returning: Body.self
-        )
+        do {
+            _ = try await supabase.database.insert(
+                Body(follower_id: viewer.rawValue, following_id: target.rawValue),
+                into: "followers",
+                returning: Body.self
+            )
+        } catch {
+            if Self.isFollowUniqueViolation(error) { return }
+            throw error
+        }
         cache.memory.remove(forKey: "profile-stats:\(viewer.rawValue)")
         cache.memory.remove(forKey: "profile-stats:\(target.rawValue)")
         RepositoryRequestFlight.shared.invalidate(
@@ -1054,6 +1097,11 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         guard let value else { return nil }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func isFollowUniqueViolation(_ error: Error) -> Bool {
+        let text = String(describing: error).lowercased()
+        return text.contains("23505") || text.contains("duplicate") || text.contains("unique")
     }
 }
 

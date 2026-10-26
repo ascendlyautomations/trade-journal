@@ -24,7 +24,7 @@ import {
   tradeRelationForViewer,
   tradeSelectForViewer,
 } from "@/lib/publicAccountPrivacy"
-import { rpcTradeOwnerRead } from "@/lib/tradeOwnerRead"
+import { rpcTradeOwnerReadResult } from "@/lib/tradeOwnerRead"
 import { hasStoredTradePoints } from "@/lib/resolveTradePoints"
 import {
   computeActualPoints,
@@ -110,24 +110,36 @@ export default function TradeDetailPageClient({
             .maybeSingle()
         ).data != null
 
-      const { data, error } = isOwner
-        ? { data: await rpcTradeOwnerRead(supabase, tradeId), error: null }
-        : await supabase
-            .from(tradeRelationForViewer(false))
-            .select(tradeSelectForViewer(false))
-            .eq("id", tradeId)
-            .maybeSingle()
-            .overrideTypes<Record<string, unknown> | null, { merge: false }>()
+      let tradeRow: Record<string, unknown> | null = null
+      let loadError: unknown = null
+      if (isOwner) {
+        const ownerRead = await rpcTradeOwnerReadResult(supabase, tradeId)
+        if (ownerRead.ok) {
+          tradeRow = ownerRead.row
+        } else {
+          loadError =
+            ownerRead.reason === "not_found"
+              ? null
+              : new Error(ownerRead.message)
+        }
+      } else {
+        const { data, error } = await supabase
+          .from(tradeRelationForViewer(false))
+          .select(tradeSelectForViewer(false))
+          .eq("id", tradeId)
+          .maybeSingle()
+          .overrideTypes<Record<string, unknown> | null, { merge: false }>()
+        loadError = error
+        tradeRow = asJsonObject(error ? null : data)
+      }
 
       if (cancelled) return
-
-      const tradeRow = asJsonObject(error ? null : data)
       const resolvedTrade = tradeRow
         ? sanitizeTradeForViewer(tradeRow, { isOwner })
         : null
 
       let owner: typeof ownerProfile = null
-      if (error && !resolvedTrade) {
+      if (loadError && !resolvedTrade) {
         setTrade(null)
         setOwnerProfile(null)
       } else {

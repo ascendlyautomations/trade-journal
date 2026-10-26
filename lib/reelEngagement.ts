@@ -13,6 +13,11 @@ import {
   ensureLikeNotification,
   refreshLikeNotificationUi,
 } from "./likeNotifications"
+import {
+  beginSocialMutation,
+  rollbackSocialMutationIfCurrent,
+  socialMutationKey,
+} from "./socialMutationEpoch.ts"
 
 export type ReelLikeMeta = { count: number; liked: boolean }
 
@@ -184,6 +189,11 @@ export async function toggleReelLike(
   const { userId, ownerUserId, meta, onMetaChange } = params
   if (!reelId || !userId) return false
 
+  const mutationKey = socialMutationKey("reel-like", reelId, userId)
+  const epoch = beginSocialMutation(mutationKey)
+  const rollback = () =>
+    rollbackSocialMutationIfCurrent(mutationKey, epoch, () => onMetaChange(meta))
+
   const optimistic: ReelLikeMeta = meta.liked
     ? { count: Math.max(0, meta.count - 1), liked: false }
     : { count: meta.count + 1, liked: true }
@@ -206,7 +216,7 @@ export async function toggleReelLike(
           message: error.message,
           code: error.code,
         })
-        onMetaChange(meta)
+        rollback()
         return false
       }
 
@@ -240,7 +250,7 @@ export async function toggleReelLike(
         details: error.details,
         hint: error.hint,
       })
-      onMetaChange(meta)
+      rollback()
       return false
     }
 
@@ -255,7 +265,7 @@ export async function toggleReelLike(
     return true
   } catch (err) {
     console.error("[reel-like] toggle failed", err)
-    onMetaChange(meta)
+    rollback()
     return false
   }
 }

@@ -52,6 +52,10 @@ final class WithdrawalAchievementLinkStore {
         }
     }
 
+    func unregisterLedgerEntry(_ entryID: AccountPayoutEntryID) {
+        achievementByLedgerEntryID.removeValue(forKey: entryID.rawValue)
+    }
+
     func invalidate() {
         achievementByLedgerEntryID = [:]
         achievementByPayoutCycleID = [:]

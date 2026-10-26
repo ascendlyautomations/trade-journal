@@ -40,7 +40,7 @@ function isAppleAppSiteAssociationPath(pathname: string): boolean {
   )
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const host = request.headers.get("host") ?? ""
   const forwardedProto = request.headers.get("x-forwarded-proto")
   const url = request.nextUrl.clone()
@@ -70,7 +70,7 @@ export function middleware(request: NextRequest) {
   // Capacitor server.url is the site origin (not /native). Send native `/`
   // through the auth-aware cold-start entry without touching web marketing.
   //
-  // Must use an absolute URL here: Next's middleware adapter does
+  // Must use an absolute URL here: Next's proxy adapter does
   // `new NextURL(Location)` without a base (see next/dist server web adapter),
   // so a relative Location like "/native" throws TypeError: Invalid URL.
   if (url.pathname === "/" && isNativeShellRequest(request)) {
@@ -105,7 +105,7 @@ export const config = {
      * Skip /api so BFF POSTs reach Node route handlers without edge request
      * rewriting. Cloning headers via NextResponse.next({ request }) on API
      * POSTs can drop the edge→serverless handoff (Vercel logs show only
-     * source:"edge-middleware", no serverless / route logs) — seen on iOS
+     * source:"edge-proxy", no serverless / route logs) — seen on iOS
      * Tradovate sync while GETs on the same tree still invoked serverless.
      * Pages still get host canonicalization, native `/` → `/native`, x-pathname.
      */

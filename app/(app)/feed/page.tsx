@@ -70,6 +70,7 @@ import {
   queryFeedComments,
   reelDetailFeedItem,
   withInsertedParentCommentId,
+  dedupeFeedItems,
   type FeedContentFilter,
   type FeedItem,
 } from "../../components/feed/feedPostHelpers"
@@ -1514,7 +1515,7 @@ function FeedPageContent() {
           currentPage === 0
             ? viewerFiltered
             : excludeViewerOwnFeedItems(
-                [...postsRef.current, ...viewerFiltered],
+                dedupeFeedItems([...postsRef.current, ...viewerFiltered]),
                 userId
               )
 

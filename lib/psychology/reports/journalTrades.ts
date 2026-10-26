@@ -110,6 +110,9 @@ export async function ensurePsychologyJournalTrades(
       limit: ids.length ? undefined : PSYCHOLOGY_REPORT_TRADE_CAP,
     })
     if (error) throw error
+    if (ids.length > 0 && rows.length === 0) {
+      throw new Error("Could not load journal trades for psychology report.")
+    }
     const mapped = (rows.length ? rows : capped)
       .map((row) => mapPsychologyReportTrade(row))
       .filter((row): row is PsychologyReportTrade => row != null)

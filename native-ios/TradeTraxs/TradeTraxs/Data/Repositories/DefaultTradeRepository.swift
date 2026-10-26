@@ -1054,10 +1054,22 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
     }
 
     func deletePayoutEntry(id: AccountPayoutEntryID) async throws {
-        try await supabase.database.delete(
-            from: "account_payout_entries",
-            query: [SupabaseQuery.eq("id", id.rawValue)]
-        )
+        struct Params: Encodable {
+            var p_entry_id: String
+        }
+        do {
+            _ = try await supabase.database.rpcData(
+                functionName: "delete_account_payout_entry",
+                parametersJSON: try JSONEncoder().encode(Params(p_entry_id: id.rawValue))
+            )
+        } catch {
+            CriticalOperationLog.failure(
+                "delete_account_payout_entry",
+                error: error,
+                context: ["entry_id": id.rawValue]
+            )
+            throw error
+        }
     }
 
     func payoutCycleHistory(for accountIDs: [TradingAccountID]) async throws -> [AccountPayoutCycle] {
@@ -1097,10 +1109,20 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             p_balance_before_payout: NSDecimalNumber(decimal: input.balanceBeforePayout).doubleValue,
             p_remember_drawdown_behavior: input.rememberDrawdownBehavior
         )
-        let data = try await supabase.database.rpcData(
-            functionName: "record_account_payout",
-            parametersJSON: try JSONEncoder().encode(body)
-        )
+        let data: Data
+        do {
+            data = try await supabase.database.rpcData(
+                functionName: "record_account_payout",
+                parametersJSON: try JSONEncoder().encode(body)
+            )
+        } catch {
+            CriticalOperationLog.failure(
+                "record_account_payout",
+                error: error,
+                context: ["account_id": accountID.rawValue]
+            )
+            throw error
+        }
         let cycleID: String
         if let decoded = try? JSONDecoder().decode(String.self, from: data) {
             cycleID = decoded

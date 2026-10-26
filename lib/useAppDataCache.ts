@@ -10,6 +10,7 @@ import {
   getAccountsLoadingSnapshot,
   getAccountsSnapshot,
   getTradesLoadingSnapshot,
+  getTradesLoadError,
   getTradesSnapshot,
   subscribeAppDataCache,
 } from "@/lib/appDataCache"
@@ -28,6 +29,18 @@ function getTradesLoadingServerSnapshot(): boolean {
 
 function getAccountsLoadingServerSnapshot(): boolean {
   return false
+}
+
+function getTradesLoadErrorServerSnapshot(): string | null {
+  return null
+}
+
+export function useTradesLoadError(userId: string | null | undefined): string | null {
+  return useSyncExternalStore(
+    subscribeAppDataCache,
+    () => getTradesLoadError(userId),
+    getTradesLoadErrorServerSnapshot
+  )
 }
 
 export function useCachedTrades(

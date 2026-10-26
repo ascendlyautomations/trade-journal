@@ -112,16 +112,36 @@ const nextConfig: NextConfig = {
   },
 };
 
+/** Build-time upload when org, project, and token are all set (Vercel env). */
+const sentryUploadConfigured = Boolean(
+  process.env.SENTRY_AUTH_TOKEN &&
+    process.env.SENTRY_ORG &&
+    process.env.SENTRY_PROJECT
+)
+
+/**
+ * Runtime reporting: SENTRY_DSN / NEXT_PUBLIC_SENTRY_DSN (instrumentation).
+ * Upload: SENTRY_AUTH_TOKEN + SENTRY_ORG + SENTRY_PROJECT; optional SENTRY_RELEASE
+ * or VERCEL_GIT_COMMIT_SHA for release name.
+ */
 const sentryBuildOptions = {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
-  silent: !process.env.CI,
-  ...(process.env.SENTRY_AUTH_TOKEN
+  silent: true,
+  ...(sentryUploadConfigured
     ? {
         authToken: process.env.SENTRY_AUTH_TOKEN,
         widenClientFileUpload: true,
+        release: {
+          name:
+            process.env.SENTRY_RELEASE ??
+            process.env.VERCEL_GIT_COMMIT_SHA,
+        },
       }
-    : {}),
+    : {
+        disableServerWebpackPlugin: true,
+        disableClientWebpackPlugin: true,
+      }),
 };
 
 export default withSentryConfig(nextConfig, sentryBuildOptions);

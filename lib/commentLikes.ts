@@ -7,6 +7,11 @@ import {
   refreshLikeNotificationUi,
 } from "./likeNotifications"
 import { hapticLight } from "@/lib/nativeHaptics"
+import {
+  beginSocialMutation,
+  rollbackSocialMutationIfCurrent,
+  socialMutationKey,
+} from "./socialMutationEpoch.ts"
 import { isUuidLike } from "@/lib/tradeAccountDisplay"
 
 export type CommentLikeSource =
@@ -170,6 +175,16 @@ export async function toggleCommentLike(
   } = params
   if (!commentId || !userId) return false
 
+  const mutationKey = socialMutationKey(
+    "comment-like",
+    commentSource,
+    commentId,
+    userId
+  )
+  const epoch = beginSocialMutation(mutationKey)
+  const rollback = () =>
+    rollbackSocialMutationIfCurrent(mutationKey, epoch, () => onMetaChange(meta))
+
   const optimistic: CommentLikeMeta = meta.liked
     ? { count: Math.max(0, meta.count - 1), liked: false }
     : { count: meta.count + 1, liked: true }
@@ -188,7 +203,7 @@ export async function toggleCommentLike(
 
       if (error) {
         console.error("[comment-like] unlike failed", error)
-        onMetaChange(meta)
+        rollback()
         return false
       }
 
@@ -215,7 +230,7 @@ export async function toggleCommentLike(
 
     if (error) {
       console.error("[comment-like] insert failed", error)
-      onMetaChange(meta)
+      rollback()
       return false
     }
 
@@ -234,7 +249,7 @@ export async function toggleCommentLike(
     return true
   } catch (err) {
     console.error("[comment-like] toggle failed", err)
-    onMetaChange(meta)
+    rollback()
     return false
   }
 }

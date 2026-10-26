@@ -71,6 +71,7 @@ export default function FollowButton({
   )
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
+  const followMutationEpochRef = useRef(0)
 
   useEffect(() => {
     const fromSets = stateFromSets(targetUserId, followingIds, requestedIds)
@@ -114,6 +115,9 @@ export default function FollowButton({
     onFollowingChange?.(targetUserId, false)
     onRequestedChange?.(targetUserId, false)
 
+    followMutationEpochRef.current += 1
+    const mutationEpoch = followMutationEpochRef.current
+
     busyRef.current = true
     setBusy(true)
 
@@ -127,9 +131,11 @@ export default function FollowButton({
 
       if (!result.ok) {
         console.error("[follow] unfollow/cancel failed", result.message)
-        setFollowState(prevState)
-        onFollowingChange?.(targetUserId, prevState === "following")
-        onRequestedChange?.(targetUserId, prevState === "requested")
+        if (followMutationEpochRef.current === mutationEpoch) {
+          setFollowState(prevState)
+          onFollowingChange?.(targetUserId, prevState === "following")
+          onRequestedChange?.(targetUserId, prevState === "requested")
+        }
         return
       }
 
@@ -169,6 +175,9 @@ export default function FollowButton({
     onFollowingChange?.(targetUserId, optimisticState === "following")
     onRequestedChange?.(targetUserId, optimisticState === "requested")
 
+    followMutationEpochRef.current += 1
+    const mutationEpoch = followMutationEpochRef.current
+
     busyRef.current = true
     setBusy(true)
 
@@ -180,9 +189,11 @@ export default function FollowButton({
 
       if (!result.ok) {
         console.error("[follow] request failed", result.message)
-        setFollowState(prevState)
-        onFollowingChange?.(targetUserId, false)
-        onRequestedChange?.(targetUserId, false)
+        if (followMutationEpochRef.current === mutationEpoch) {
+          setFollowState(prevState)
+          onFollowingChange?.(targetUserId, false)
+          onRequestedChange?.(targetUserId, false)
+        }
         return
       }
 

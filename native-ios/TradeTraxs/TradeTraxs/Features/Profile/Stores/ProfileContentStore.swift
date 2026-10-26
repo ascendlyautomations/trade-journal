@@ -52,6 +52,7 @@ final class ProfileContentStore {
     private var loadTask: Task<Void, Never>?
     private var loadedAvatarKey: String?
     private var followInFlight = false
+    private var followMutationEpoch: UInt64 = 0
     private var viewerID: ProfileID?
 
     init(
@@ -223,6 +224,8 @@ final class ProfileContentStore {
         }
         guard let viewerID else { return }
         followInFlight = true
+        followMutationEpoch &+= 1
+        let mutationEpoch = followMutationEpoch
         defer { followInFlight = false }
 
         let previous = isFollowing
@@ -254,6 +257,7 @@ final class ProfileContentStore {
                 try await profiles.unfollow(from: viewerID, to: profileID)
             }
         } catch {
+            guard followMutationEpoch == mutationEpoch else { return }
             isFollowing = previous
             FollowMutationCoordinator.shared.applyEdgeChange(
                 viewer: viewerID,

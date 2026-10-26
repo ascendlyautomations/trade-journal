@@ -32,6 +32,7 @@ final class CommentsViewModel {
     private var trackedCommentIDs: [String] = []
     private var busyCommentIDs: Set<CommentID> = []
     private var busyPinCommentIDs: Set<CommentID> = []
+    private var commentLikeMutationEpoch: [CommentID: UInt64] = [:]
     private var expandedReplyThreads: Set<CommentID> = []
     private var viewerUserID: String?
 
@@ -227,6 +228,8 @@ final class CommentsViewModel {
         guard !busyCommentIDs.contains(comment.id) else { return }
 
         busyCommentIDs.insert(comment.id)
+        commentLikeMutationEpoch[comment.id, default: 0] += 1
+        let mutationEpoch = commentLikeMutationEpoch[comment.id]!
         defer { busyCommentIDs.remove(comment.id) }
 
         let previous = likesByCommentID[comment.id] ?? .empty
@@ -237,7 +240,9 @@ final class CommentsViewModel {
         do {
             try await repository.setCommentLiked(optimistic.liked, commentID: comment.id, source: commentLikeSource)
         } catch {
-            likesByCommentID[comment.id] = previous
+            if commentLikeMutationEpoch[comment.id] == mutationEpoch {
+                likesByCommentID[comment.id] = previous
+            }
             ExperienceHaptics.play(.warning)
         }
     }

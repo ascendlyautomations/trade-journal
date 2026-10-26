@@ -6,6 +6,7 @@ import { scheduleDeferredWork } from "./scheduleDeferredWork"
 import { ensureTradingAccountsSettingsLoaded } from "./tradingAccountsSettingsCache"
 import { ensureNotificationPreferencesLoaded } from "./notificationPreferencesCache"
 import { isBackendV2Enabled } from "./backendV2/flags.ts"
+import { reportCriticalOperationFailure } from "./criticalOperationTelemetry.ts"
 
 let warmedUserId: string | null = null
 let criticalStartedUserId: string | null = null
@@ -35,11 +36,32 @@ export function startCriticalDashboardWarm(
       )
       await loadDashboardBootstrapForUser(supabase, id, {
         caller: "startCriticalDashboardWarm",
-      }).catch(() => null)
+      }).catch((err) => {
+        reportCriticalOperationFailure({
+          operation: "dashboard_warm_bootstrap",
+          error: err,
+          context: { user_id: id },
+        })
+        return null
+      })
     } else {
       await Promise.all([
-        ensureTradesLoaded(supabase, id).catch(() => []),
-        ensureAccountsLoaded(supabase, id).catch(() => []),
+        ensureTradesLoaded(supabase, id).catch((err) => {
+          reportCriticalOperationFailure({
+            operation: "dashboard_warm_trades",
+            error: err,
+            context: { user_id: id },
+          })
+          return []
+        }),
+        ensureAccountsLoaded(supabase, id).catch((err) => {
+          reportCriticalOperationFailure({
+            operation: "dashboard_warm_accounts",
+            error: err,
+            context: { user_id: id },
+          })
+          return []
+        }),
       ])
     }
   })()

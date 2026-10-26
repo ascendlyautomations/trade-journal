@@ -12,6 +12,11 @@ import {
   type LikeMeta,
 } from "@/lib/optimisticMutation"
 import {
+  beginSocialMutation,
+  rollbackSocialMutationIfCurrent,
+  socialMutationKey,
+} from "@/lib/socialMutationEpoch"
+import {
   ensureLikeNotification,
   refreshLikeNotificationUi,
 } from "@/lib/likeNotifications"
@@ -36,6 +41,10 @@ export async function toggleContentLike(
   const contentId = params.contentId.trim()
   const { kind, userId, ownerUserId, meta, tradeId, onMetaChange } = params
   if (!contentId || !userId) return false
+
+  const mutationKey = socialMutationKey("content-like", kind, contentId, userId)
+  const epoch = beginSocialMutation(mutationKey)
+  const rollback = () => rollbackSocialMutationIfCurrent(mutationKey, epoch, () => onMetaChange(meta))
 
   const optimistic = nextLikeMeta(meta)
   onMetaChange(optimistic)
@@ -70,7 +79,7 @@ export async function toggleContentLike(
 
       if (error) {
         console.error(`[${kind}-like] unlike failed`, error)
-        onMetaChange(meta)
+        rollback()
         return false
       }
 
@@ -109,7 +118,7 @@ export async function toggleContentLike(
 
     if (error) {
       console.error(`[${kind}-like] insert failed`, error)
-      onMetaChange(meta)
+      rollback()
       return false
     }
 
@@ -135,7 +144,7 @@ export async function toggleContentLike(
     return true
   } catch (err) {
     console.error(`[${kind}-like] toggle failed`, err)
-    onMetaChange(meta)
+    rollback()
     return false
   }
 }

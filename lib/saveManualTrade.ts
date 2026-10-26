@@ -13,7 +13,7 @@ import { uploadContentImageToStorage } from "@/lib/contentImagePipeline"
 import { createMonotonicReporter } from "@/lib/uploadProgress/reportProgress"
 import type { UploadProgressOptions } from "@/lib/uploadProgress/types"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
-import { rpcTradeOwnerRead } from "@/lib/tradeOwnerRead"
+import { rpcTradeOwnerReadResult } from "@/lib/tradeOwnerRead"
 import { hapticSuccess } from "@/lib/nativeHaptics"
 
 export type ManualTradeAccount = {
@@ -290,15 +290,19 @@ export async function saveManualTrade(
     }
   }
 
-  const newTradeData = await rpcTradeOwnerRead(client, String(inserted.id))
-  if (!newTradeData) {
+  const ownerRead = await rpcTradeOwnerReadResult(client, String(inserted.id))
+  if (!ownerRead.ok) {
     return {
       ok: false,
       code: "save",
-      message: "Couldn't save trade. Check your connection and try again.",
-      error: new Error("Owner trade read failed after insert."),
+      message:
+        ownerRead.reason === "not_found"
+          ? "Trade saved but could not be loaded. Pull to refresh."
+          : "Couldn't save trade. Check your connection and try again.",
+      error: ownerRead.error ?? new Error(ownerRead.message),
     }
   }
+  const newTradeData = ownerRead.row
 
   if (newTradeData) {
     prependTradeInCache(userId, newTradeData)

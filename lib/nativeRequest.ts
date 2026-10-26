@@ -2,7 +2,7 @@ import { cookies, headers } from "next/headers"
 
 /**
  * Server-side native shell detection (cookie from /native + Capacitor UA).
- * Mirrors middleware `isNativeShellRequest` so SSR and the WebView agree.
+ * Mirrors proxy `isNativeShellRequest` so SSR and the WebView agree.
  */
 export async function isNativeShellRequest(): Promise<boolean> {
   const cookieStore = await cookies()

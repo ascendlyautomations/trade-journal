@@ -277,6 +277,19 @@ export default function ProfileOnboarding({
         return
       }
 
+      const { confirmProfileOnboardingPersisted } = await import(
+        "@/lib/confirmProfileOnboardingPersisted"
+      )
+      const confirmed = await confirmProfileOnboardingPersisted(
+        supabase,
+        userId,
+        u
+      )
+      if (!confirmed.ok) {
+        setError(confirmed.message)
+        return
+      }
+
       markContextualTourAwaitingInvite(userId)
       clearOnboardingFlag()
       notifyBetaSignupAfterOnboardingComplete("onboarding")

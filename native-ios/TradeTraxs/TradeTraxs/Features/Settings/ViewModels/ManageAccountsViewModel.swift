@@ -432,6 +432,7 @@ final class ManageAccountsViewModel {
                 accountID: accountID,
                 profileID: viewerID
             )
+            WithdrawalAchievementLinkStore.shared.unregisterLedgerEntry(entryID)
             AccountMutationStore.shared.notePayoutRecorded(accountID: accountID)
             ExperienceHaptics.play(.selection)
         }

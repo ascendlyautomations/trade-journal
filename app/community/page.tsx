@@ -2500,35 +2500,22 @@ function CommunityContent() {
 
     setBanningMemberId(targetUserId)
 
-    const { error: banError } = await supabase.from("room_bans").insert({
-      room_id: selectedRoomId,
-      user_id: targetUserId,
-      banned_by: user.id,
-    })
-
-    if (banError && banError.code !== "23505") {
-      setBanningMemberId(null)
-      console.error("handleBanMember:", banError)
-      showPopup(persistentError("Ban Failed", "Failed to ban member"))
-      return
-    }
-
-    const { error: removeError } = await softRemoveMember(
+    const { banTradeRoomMember } = await import("@/lib/banTradeRoomMember")
+    const banned = await banTradeRoomMember(
+      supabase,
       selectedRoomId,
       targetUserId
     )
 
     setBanningMemberId(null)
 
-    if (removeError) {
-      console.error("handleBanMember remove:", removeError)
-      showPopup({
-        type: "warning",
-        message: "User banned but failed to remove membership",
-      })
-    } else {
-      showPopup({ type: "success", message: "Member banned" })
+    if (!banned.ok) {
+      console.error("handleBanMember:", banned.error)
+      showPopup(persistentError("Ban Failed", banned.error))
+      return
     }
+
+    showPopup({ type: "success", message: "Member banned" })
 
     await loadManageMembers(selectedRoomId)
     await loadMemberStats(selectedRoomId)

@@ -14,6 +14,7 @@ final class EngagementStore {
     private var requestedTargets: Set<InteractionTarget> = []
     private var pendingTargets: Set<InteractionTarget> = []
     private var inFlightLikes: Set<InteractionTarget> = []
+    private var likeMutationEpoch: [InteractionTarget: UInt64] = [:]
     private var prefetchTask: Task<Void, Never>?
 
     init(repository: any InteractionRepository) {
@@ -56,6 +57,8 @@ final class EngagementStore {
         }
         guard !inFlightLikes.contains(target) else { return }
         inFlightLikes.insert(target)
+        likeMutationEpoch[target, default: 0] += 1
+        let mutationEpoch = likeMutationEpoch[target]!
         defer { inFlightLikes.remove(target) }
 
         let previous = snapshot(for: target)
@@ -86,13 +89,15 @@ final class EngagementStore {
                 isRollback: false
             )
         } catch {
-            snapshots[target] = previous
-            await presentationWriteThrough?.propagateEngagement(
-                target: target,
-                snapshot: previous,
-                source: .engagementStore,
-                isRollback: true
-            )
+            if likeMutationEpoch[target] == mutationEpoch {
+                snapshots[target] = previous
+                await presentationWriteThrough?.propagateEngagement(
+                    target: target,
+                    snapshot: previous,
+                    source: .engagementStore,
+                    isRollback: true
+                )
+            }
             ExperienceHaptics.play(.warning)
         }
     }
@@ -105,6 +110,8 @@ final class EngagementStore {
         guard !previous.viewerHasLiked else { return }
 
         inFlightLikes.insert(target)
+        likeMutationEpoch[target, default: 0] += 1
+        let mutationEpoch = likeMutationEpoch[target]!
         defer { inFlightLikes.remove(target) }
 
         let optimistic = EngagementSnapshot(
@@ -136,13 +143,15 @@ final class EngagementStore {
                 isRollback: false
             )
         } catch {
-            snapshots[target] = previous
-            await presentationWriteThrough?.propagateEngagement(
-                target: target,
-                snapshot: previous,
-                source: .engagementStore,
-                isRollback: true
-            )
+            if likeMutationEpoch[target] == mutationEpoch {
+                snapshots[target] = previous
+                await presentationWriteThrough?.propagateEngagement(
+                    target: target,
+                    snapshot: previous,
+                    source: .engagementStore,
+                    isRollback: true
+                )
+            }
             ExperienceHaptics.play(.warning)
         }
     }
@@ -215,6 +224,7 @@ final class EngagementStore {
         requestedTargets = []
         pendingTargets = []
         inFlightLikes = []
+        likeMutationEpoch = [:]
     }
 
     // MARK: - Private

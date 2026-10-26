@@ -31,21 +31,22 @@ export async function joinTradeRoom(
       notification_enabled: true,
     })
 
-    if (error && error.code !== "23505") {
-      console.error("joinTradeRoom insert:", error)
-      return { ok: false, error: toUserFacingErrorMessage(error) }
+    if (error) {
+      if (error.code === "23505") {
+        const reactivated = await reactivateRoomMembership(
+          supabase,
+          roomId,
+          userId
+        )
+        if (!reactivated.ok) return reactivated
+      } else {
+        console.error("joinTradeRoom insert:", error)
+        return { ok: false, error: toUserFacingErrorMessage(error) }
+      }
     }
   } else if (!alreadyActive) {
-    const { error } = await supabase
-      .from("room_members")
-      .update({ left_at: null, notification_enabled: true })
-      .eq("room_id", roomId)
-      .eq("user_id", userId)
-
-    if (error) {
-      console.error("joinTradeRoom reactivate:", error)
-      return { ok: false, error: toUserFacingErrorMessage(error) }
-    }
+    const reactivated = await reactivateRoomMembership(supabase, roomId, userId)
+    if (!reactivated.ok) return reactivated
   }
 
   if (!alreadyActive) {
@@ -56,4 +57,22 @@ export async function joinTradeRoom(
 
   hapticMedium("join-room")
   return { ok: true, alreadyMember: alreadyActive }
+}
+
+async function reactivateRoomMembership(
+  supabase: SupabaseClient,
+  roomId: string,
+  userId: string
+): Promise<JoinTradeRoomResult> {
+  const { error } = await supabase
+    .from("room_members")
+    .update({ left_at: null, notification_enabled: true })
+    .eq("room_id", roomId)
+    .eq("user_id", userId)
+
+  if (error) {
+    console.error("joinTradeRoom reactivate:", error)
+    return { ok: false, error: toUserFacingErrorMessage(error) }
+  }
+  return { ok: true, alreadyMember: false }
 }

@@ -7,6 +7,7 @@ import {
   TRADES_APP_SELECT,
 } from "./publicAccountPrivacy"
 import { rpcTradesOwnerRows } from "./tradeOwnerRead"
+import { reportCriticalOperationFailure } from "./criticalOperationTelemetry"
 import { isNativeIos } from "./nativePlatform"
 import {
   persistDashboardAccounts,
@@ -48,6 +49,8 @@ type TradesEntry = CacheEntry<any[]> & {
    * Independent from `historyComplete`. Full journal history implies this.
    */
   analyticsHistoryComplete: boolean
+  /** Set when the latest trades fetch failed; cleared on successful cache write. */
+  lastLoadError: string | null
 }
 type AccountsEntry = CacheEntry<any[]>
 
@@ -76,6 +79,11 @@ function notify() {
   for (const listener of listeners) {
     listener()
   }
+}
+
+export function getTradesLoadError(userId: string | null | undefined): string | null {
+  if (!userId) return null
+  return tradesByUser.get(userId)?.lastLoadError ?? null
 }
 
 export function subscribeAppDataCache(listener: () => void): () => void {
@@ -437,6 +445,7 @@ export function setTradesCache(
       historyComplete && options?.analyticsHistoryComplete !== false
         ? true
         : analyticsHistoryComplete,
+    lastLoadError: null,
   })
   persistDashboardTrades(userId, trades)
   notify()
@@ -483,6 +492,7 @@ export function seedTradesCache(
     historyComplete,
     analyticsHistoryComplete:
       options?.analyticsHistoryComplete ?? historyComplete,
+    lastLoadError: null,
   })
   notify()
 }
@@ -1039,6 +1049,7 @@ export async function ensureTradesLoaded(
     loading: true,
     historyComplete: previousHistoryComplete,
     analyticsHistoryComplete: previousAnalyticsComplete,
+    lastLoadError: entry?.lastLoadError ?? null,
   })
   if (!wasLoading) notify()
 
@@ -1050,6 +1061,15 @@ export async function ensureTradesLoaded(
   // A failed fetch must never be cached as a valid empty history — that makes
   // a trade-owning user look like a 0-trade user (false empty dashboard).
   if (error) {
+    reportCriticalOperationFailure({
+      operation: "trades_cache_load",
+      error,
+      context: {
+        user_id: userId,
+        had_cached_data: previousData.length > 0,
+        is_retry: options?.isRetry === true,
+      },
+    })
     tradesByUser.set(userId, {
       userId,
       data: previousData,
@@ -1058,6 +1078,7 @@ export async function ensureTradesLoaded(
       loading: false,
       historyComplete: previousHistoryComplete,
       analyticsHistoryComplete: previousAnalyticsComplete,
+      lastLoadError: error.message,
     })
     notify()
     // One delayed retry recovers transient startup failures (token refresh).

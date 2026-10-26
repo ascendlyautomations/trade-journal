@@ -348,79 +348,16 @@ export async function deleteAccountPayoutEntry(
     return { ok: false, message: "Withdrawal could not be deleted." }
   }
 
-  const { data: existing, error: loadError } = await supabase
-    .from("account_payout_entries")
-    .select("id, account_id, amount, payout_date")
-    .eq("id", id)
-    .eq("user_id", ownerId)
-    .maybeSingle()
-
-  if (loadError) {
-    return { ok: false, message: handleSupabaseError(loadError) }
-  }
-  if (!existing) {
-    return {
-      ok: false,
-      message: "Withdrawal not found or you do not have permission to delete it.",
-    }
-  }
-
-  const { data, error } = await supabase
-    .from("account_payout_entries")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", ownerId)
-    .select("id")
-    .maybeSingle()
+  const { error } = await supabase.rpc("delete_account_payout_entry", {
+    p_entry_id: id,
+  })
 
   if (error) {
     return { ok: false, message: handleSupabaseError(error) }
   }
-  if (!data) {
-    return {
-      ok: false,
-      message: "Withdrawal not found or you do not have permission to delete it.",
-    }
-  }
-
-  await deletePayoutAchievementsForLedgerEntry(supabase, ownerId, {
-    id,
-    accountId: String(existing.account_id ?? ""),
-    amount: Number(existing.amount) || 0,
-    payoutDate: String(existing.payout_date ?? ""),
-  })
 
   invalidateWithdrawalsLedger()
   return { ok: true }
-}
-
-async function deletePayoutAchievementsForLedgerEntry(
-  supabase: SupabaseClient,
-  userId: string,
-  entry: { id: string; accountId: string; amount: number; payoutDate: string }
-): Promise<void> {
-  const { data } = await supabase
-    .from("achievements")
-    .select("id, account_id, value_numeric, achieved_at, metadata, achievement_type")
-    .eq("user_id", userId)
-    .in("achievement_type", ["prop_firm_payout", "live_trading_payout", "payout"])
-
-  const ids = (data ?? [])
-    .filter((row) => {
-      const metadata =
-        row.metadata && typeof row.metadata === "object"
-          ? (row.metadata as Record<string, unknown>)
-          : {}
-      if (String(metadata.account_payout_entry_id ?? "") === entry.id) return true
-      if (String(row.account_id ?? "") !== entry.accountId) return false
-      if (Math.abs((Number(row.value_numeric) || 0) - entry.amount) >= 0.02) return false
-      const achieved = String(row.achieved_at ?? "")
-      return achieved.slice(0, 10) === entry.payoutDate
-    })
-    .map((row) => row.id)
-
-  if (ids.length === 0) return
-  await supabase.from("achievements").delete().eq("user_id", userId).in("id", ids)
 }
 
 export function sumManualWithdrawals(

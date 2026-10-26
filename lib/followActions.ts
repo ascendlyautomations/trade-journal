@@ -16,6 +16,7 @@ import {
   isDemoProfileId,
 } from "@/lib/demo/demoProfile"
 import { hapticLight } from "@/lib/nativeHaptics"
+import { isUniqueViolation } from "@/lib/optimisticMutation"
 
 export type FollowUiState = "none" | "following" | "requested"
 
@@ -127,6 +128,10 @@ export async function followOrRequest(
     })
 
     if (error) {
+      if (isUniqueViolation(error)) {
+        hapticLight("follow")
+        return { ok: true, state: "requested" }
+      }
       console.error("[follow] request insert failed", error)
       return { ok: false, message: toUserFacingErrorMessage(error) }
     }
@@ -142,6 +147,10 @@ export async function followOrRequest(
   })
 
   if (error) {
+    if (isUniqueViolation(error)) {
+      hapticLight("follow")
+      return { ok: true, state: "following" }
+    }
     console.error("[follow] insert failed", error)
     return { ok: false, message: toUserFacingErrorMessage(error) }
   }

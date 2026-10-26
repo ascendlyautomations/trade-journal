@@ -253,17 +253,72 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
     }
 
     func join(roomID: RoomID, profileID: ProfileID) async throws -> RoomMembership {
-        struct Body: Encodable, Decodable {
-            var room_id: String
-            var user_id: String
+        struct MembershipRow: Decodable {
+            var id: String?
+            var left_at: String?
         }
-        let body = Body(room_id: roomID.rawValue, user_id: profileID.rawValue)
-        let row: RoomDTO.Membership = try await supabase.database.insert(
-            body,
-            into: "room_members",
-            returning: RoomDTO.Membership.self
+        let existing: [MembershipRow] = try await supabase.database.select(
+            MembershipRow.self,
+            from: "room_members",
+            query: [
+                SupabaseQuery.select("id, left_at"),
+                SupabaseQuery.eq("room_id", roomID.rawValue),
+                SupabaseQuery.eq("user_id", profileID.rawValue),
+                URLQueryItem(name: "limit", value: "1"),
+            ]
         )
-        return mapMembership(row) ?? RoomMembership(
+
+        if let row = existing.first, row.left_at != nil {
+            struct ReactivateBody: Encodable {
+                var left_at: String? = nil
+                var notification_enabled: Bool = true
+            }
+            _ = try await supabase.database.update(
+                ReactivateBody(),
+                table: "room_members",
+                query: [
+                    SupabaseQuery.eq("room_id", roomID.rawValue),
+                    SupabaseQuery.eq("user_id", profileID.rawValue),
+                ],
+                returning: RoomDTO.Membership.self
+            )
+        } else if existing.isEmpty {
+            struct Body: Encodable {
+                var room_id: String
+                var user_id: String
+                var notification_enabled: Bool = true
+            }
+            do {
+                _ = try await supabase.database.insert(
+                    Body(room_id: roomID.rawValue, user_id: profileID.rawValue),
+                    into: "room_members",
+                    returning: RoomDTO.Membership.self
+                )
+            } catch {
+                if Self.isUniqueViolation(error) {
+                    struct ReactivateBody: Encodable {
+                        var left_at: String? = nil
+                        var notification_enabled: Bool = true
+                    }
+                    _ = try await supabase.database.update(
+                        ReactivateBody(),
+                        table: "room_members",
+                        query: [
+                            SupabaseQuery.eq("room_id", roomID.rawValue),
+                            SupabaseQuery.eq("user_id", profileID.rawValue),
+                        ],
+                        returning: RoomDTO.Membership.self
+                    )
+                } else {
+                    throw error
+                }
+            }
+        }
+
+        if let membership = try await membership(roomID: roomID, profileID: profileID) {
+            return membership
+        }
+        return RoomMembership(
             roomID: roomID,
             profileID: profileID,
             role: .member,
@@ -273,12 +328,16 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
     }
 
     func leave(roomID: RoomID, profileID: ProfileID) async throws {
-        try await supabase.database.delete(
-            from: "room_members",
+        struct Body: Encodable { var left_at: String }
+        _ = try await supabase.database.update(
+            Body(left_at: ISO8601.string(from: Date())),
+            table: "room_members",
             query: [
                 SupabaseQuery.eq("room_id", roomID.rawValue),
                 SupabaseQuery.eq("user_id", profileID.rawValue),
-            ]
+                URLQueryItem(name: "left_at", value: "is.null"),
+            ],
+            returning: RoomDTO.Membership.self
         )
     }
 
@@ -1060,22 +1119,17 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
     }
 
     func banMember(roomID: RoomID, profileID: ProfileID, bannedBy: ProfileID) async throws {
-        struct BanBody: Encodable {
-            var room_id: String
-            var user_id: String
-            var banned_by: String
+        struct Params: Encodable {
+            var p_room_id: String
+            var p_user_id: String
         }
-        struct BanRow: Decodable { var id: String? }
-        _ = try? await supabase.database.insert(
-            BanBody(
-                room_id: roomID.rawValue,
-                user_id: profileID.rawValue,
-                banned_by: bannedBy.rawValue
-            ),
-            into: "room_bans",
-            returning: BanRow.self
+        _ = bannedBy
+        _ = try await supabase.database.rpcData(
+            functionName: "rpc_v1_ban_trade_room_member",
+            parametersJSON: try JSONEncoder().encode(
+                Params(p_room_id: roomID.rawValue, p_user_id: profileID.rawValue)
+            )
         )
-        try await removeMember(roomID: roomID, profileID: profileID)
     }
 
     func unbanMember(roomID: RoomID, banID: String) async throws {
@@ -1407,5 +1461,10 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
         )
         if data.isEmpty || data == Data("null".utf8) { return nil }
         return try JSONDecoder().decode(RoomDTO.Room.self, from: data)
+    }
+
+    private static func isUniqueViolation(_ error: Error) -> Bool {
+        let text = String(describing: error).lowercased()
+        return text.contains("23505") || text.contains("duplicate") || text.contains("unique")
     }
 }

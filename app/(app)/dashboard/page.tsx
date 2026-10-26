@@ -97,7 +97,11 @@ import { useGettingStartedProgress } from "@/lib/GettingStartedProgressProvider"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { shouldShowProForLifeCard } from "@/lib/earlyAccess"
 import { usePrefetchSecondaryRoutesWhenReady } from "@/lib/usePrefetchSecondaryRoutesWhenReady"
-import { useCachedAccounts, useCachedTrades } from "@/lib/useAppDataCache"
+import {
+  useCachedAccounts,
+  useCachedTrades,
+  useTradesLoadError,
+} from "@/lib/useAppDataCache"
 import {
   ensureAccountsLoaded,
   ensureTradesLoaded,
@@ -225,6 +229,7 @@ export default function Dashboard() {
   const { trades, loading: tradesLoading } = useCachedTrades(user?.id, {
     analyticsHistory: true,
   })
+  const tradesLoadError = useTradesLoadError(user?.id)
   const { accounts: accountRows, loading: accountsLoading } =
     useCachedAccounts(user?.id)
   const {
@@ -866,7 +871,9 @@ export default function Dashboard() {
   usePrefetchSecondaryRoutesWhenReady(dashboardInteractive)
 
   const hasNoTrades =
-    !statsStillLoading && tradesExcludingBacktest.length === 0
+    !statsStillLoading &&
+    tradesExcludingBacktest.length === 0 &&
+    !tradesLoadError
 
   const onboardingCompletedForAutoShow = profile
     ? profile.onboarding_completed === true
@@ -1360,6 +1367,13 @@ export default function Dashboard() {
       ) : (
     <>
       {gettingStartedSection}
+      {tradesLoadError && tradesExcludingBacktest.length === 0 ? (
+        <EmptyState
+          title="Couldn't load trades"
+          description="Check your connection and try again."
+          className="rounded-xl border border-white/10 bg-white/5 py-12 backdrop-blur-md"
+        />
+      ) : null}
       {hasNoTrades ? (
         <DashboardJournalEmptyState
           onAddTrade={handleEmptyJournalAddTrade}
