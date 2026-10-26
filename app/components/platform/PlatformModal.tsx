@@ -9,6 +9,10 @@ import {
 } from "@/app/components/ui/modalLayout"
 import { usePlatformPresentation } from "./usePlatformPresentation"
 import NativeIosPlatformModal from "./native/NativeIosPlatformModal"
+import {
+  DETAIL_MODAL_MEDIA_ACTIONS_WRAP_CLASS,
+  DETAIL_MODAL_MEDIA_COLUMN_STACK_CLASS,
+} from "@/app/components/ui/detailModalEngagement"
 
 /** Matches fixed app chrome: navbar + safe-area-top (+ demo banner when active). */
 export const NAVBAR_HEIGHT_CLASS = "top-[var(--app-header-offset)]"
@@ -77,10 +81,10 @@ function buildDetailBody({
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
         {splitMedia ? (
           <div className="hidden md:min-h-0 md:flex-1 md:flex-col md:overflow-y-auto md:border-r md:border-white/10 md:flex">
-            <div className="flex shrink-0 flex-col gap-2 p-3">
+            <div className={DETAIL_MODAL_MEDIA_COLUMN_STACK_CLASS}>
               {splitMedia}
               {splitMediaActions ? (
-                <div className="shrink-0 border-t border-white/10 px-1 pt-2">
+                <div className={DETAIL_MODAL_MEDIA_ACTIONS_WRAP_CLASS}>
                   {splitMediaActions}
                 </div>
               ) : null}
@@ -89,10 +93,10 @@ function buildDetailBody({
         ) : null}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:w-[400px] md:shrink-0 lg:w-[420px]">
           {splitMedia && !suppressMobileSplitMedia ? (
-            <div className="shrink-0 flex flex-col gap-2 md:hidden">
+            <div className="flex shrink-0 flex-col gap-0 md:hidden">
               {splitMedia}
               {splitMediaActions ? (
-                <div className="shrink-0 border-b border-white/10 px-4 pb-2 pt-1">
+                <div className={DETAIL_MODAL_MEDIA_ACTIONS_WRAP_CLASS}>
                   {splitMediaActions}
                 </div>
               ) : null}

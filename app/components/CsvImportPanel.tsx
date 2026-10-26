@@ -16,6 +16,7 @@ import {
   type CsvSelectedAccount,
   insertCsvTradesWithAccount,
 } from "@/lib/insertCsvTradesWithAccount"
+import { filterExistingCsvImportRows } from "@/lib/filterExistingCsvImportRows"
 import { feedbackPresets, persistentSuccess } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { buildCsvSupportNotes } from "@/lib/csvImportSupportNotes"
@@ -444,8 +445,18 @@ export default function CsvImportPanel({
               )
             }
 
-            const ins = await supabase.from("trades").insert(rowsToInsert).select("id")
-            error = ins.error
+            const novelRows = await filterExistingCsvImportRows(
+              supabase,
+              user.id,
+              rowsToInsert,
+              null
+            )
+            if (novelRows.length === 0) {
+              error = null
+            } else {
+              const ins = await supabase.from("trades").insert(novelRows).select("id")
+              error = ins.error
+            }
           }
 
           if (error) {

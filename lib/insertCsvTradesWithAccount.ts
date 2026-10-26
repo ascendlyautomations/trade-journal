@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { tradesInsertRowsPrivate } from "@/lib/csvTradeParsers"
 import { assertAccountAllowsNewTrades } from "@/lib/freePlanAccountSlots"
+import { filterExistingCsvImportRows } from "@/lib/filterExistingCsvImportRows"
 
 /** Same shape as `InputTradeForm`’s `selectedAccount` (name/size from `accounts` table). */
 export type CsvSelectedAccount = {
@@ -81,5 +82,15 @@ export async function insertCsvTradesWithAccount(
       ? { isInitialImport: insertOptions.isInitialImport }
       : {}),
   })
-  return client.from("trades").insert(rows).select("id")
+
+  const novel = await filterExistingCsvImportRows(
+    client,
+    user.id,
+    rows,
+    selectedAccount.id
+  )
+  if (novel.length === 0) {
+    return { data: [], error: null }
+  }
+  return client.from("trades").insert(novel).select("id")
 }

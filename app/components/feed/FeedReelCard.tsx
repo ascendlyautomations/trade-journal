@@ -135,7 +135,7 @@ function FeedReelCard({
         </div>
       </div>
 
-      <div className="px-4 pt-3">
+      <div className="px-4 pt-3 pb-0">
         <ReelThumbnailPreview
           reel={post}
           onClick={handleArticleClick}

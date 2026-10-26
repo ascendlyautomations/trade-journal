@@ -72,6 +72,10 @@ import {
 import {
   getDashboardTradingDayKey,
 } from "@/lib/dashboardTradeDate"
+import {
+  DASHBOARD_DEFAULT_TIME_FILTER,
+  resolveInitialDashboardTimeframe,
+} from "@/lib/dashboardInitialTimeframe"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import {
@@ -168,6 +172,41 @@ function saveDashboardGearPrefs(p: DashboardGearPersistedPrefs) {
   }
 }
 
+function mergeDashboardGearPrefs(
+  patch: Partial<DashboardGearPersistedPrefs>
+): DashboardGearPersistedPrefs {
+  const existing = loadDashboardGearPrefs()
+  return {
+    timeFilter:
+      patch.timeFilter ??
+      existing?.timeFilter ??
+      DASHBOARD_DEFAULT_TIME_FILTER,
+    hasUserSelectedTimeframe:
+      patch.hasUserSelectedTimeframe ?? existing?.hasUserSelectedTimeframe,
+    accountFilter: patch.accountFilter ?? existing?.accountFilter ?? "all",
+    accountTypeFilter:
+      patch.accountTypeFilter ?? existing?.accountTypeFilter ?? "all",
+    showPublicOnly:
+      patch.showPublicOnly ?? existing?.showPublicOnly ?? false,
+    showEquity: patch.showEquity ?? existing?.showEquity ?? true,
+    showDrawdown: patch.showDrawdown ?? existing?.showDrawdown ?? true,
+    showInsights: patch.showInsights ?? existing?.showInsights ?? true,
+    showSessions: patch.showSessions ?? existing?.showSessions ?? true,
+    showBestSetup: patch.showBestSetup ?? existing?.showBestSetup ?? true,
+    showWorstSetup: patch.showWorstSetup ?? existing?.showWorstSetup ?? true,
+    showWarnings: patch.showWarnings ?? existing?.showWarnings ?? true,
+  }
+}
+
+function inferredUserSelectedDashboardTimeframe(
+  prefs: Partial<DashboardGearPersistedPrefs> | null
+): boolean {
+  if (!prefs) return false
+  if (prefs.hasUserSelectedTimeframe === true) return true
+  if (prefs.hasUserSelectedTimeframe === false) return false
+  return prefs.timeFilter != null
+}
+
 export default function Dashboard() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const {
@@ -216,7 +255,8 @@ export default function Dashboard() {
       (copyGroupsRequested || isCopyGroupFilterValue(accountFilter))
   )
   const [accountTypeFilter, setAccountTypeFilter] = useState("all")
-  const [timeFilter, setTimeFilter] = useState("all")
+  const [timeFilter, setTimeFilter] = useState(DASHBOARD_DEFAULT_TIME_FILTER)
+  const [hasUserSelectedTimeframe, setHasUserSelectedTimeframe] = useState(false)
   const [customRangeStart, setCustomRangeStart] = useState("")
   const [customRangeEnd, setCustomRangeEnd] = useState("")
   const [selectedDate, setSelectedDate] = useState("")
@@ -320,18 +360,44 @@ export default function Dashboard() {
   const deferredTradesExcludingBacktest = useDeferredValue(tradesExcludingBacktest)
 
   function handleDashboardTimeframeChange(value: string) {
+    setHasUserSelectedTimeframe(true)
     setTimeFilter(value)
     if (value !== "custom") {
       setCustomRangeStart("")
       setCustomRangeEnd("")
     }
+    saveDashboardGearPrefs(
+      mergeDashboardGearPrefs({
+        timeFilter: value,
+        hasUserSelectedTimeframe: true,
+      })
+    )
+  }
+
+  function handleDashboardSelectedDateChange(value: string) {
+    if (value.trim()) {
+      setHasUserSelectedTimeframe(true)
+      saveDashboardGearPrefs(
+        mergeDashboardGearPrefs({
+          hasUserSelectedTimeframe: true,
+        })
+      )
+    }
+    setSelectedDate(value)
   }
 
   function handleDashboardCustomRangeApply(start: string, end: string) {
+    setHasUserSelectedTimeframe(true)
     setSelectedDate("")
     setCustomRangeStart(start)
     setCustomRangeEnd(end)
     setTimeFilter("custom")
+    saveDashboardGearPrefs(
+      mergeDashboardGearPrefs({
+        timeFilter: "custom",
+        hasUserSelectedTimeframe: true,
+      })
+    )
   }
 
   const tradesForPerformanceSharePool = useMemo(
@@ -570,6 +636,9 @@ export default function Dashboard() {
     const p = loadDashboardGearPrefs()
     if (!p) return
 
+    const userSelectedTimeframe = inferredUserSelectedDashboardTimeframe(p)
+    setHasUserSelectedTimeframe(userSelectedTimeframe)
+
     const {
       timeFilter: hydratedTimeFilter,
       accountFilter: hydratedAccountFilter,
@@ -582,12 +651,16 @@ export default function Dashboard() {
       copyGroups,
     })
 
-    setTimeFilter(hydratedTimeFilter)
+    if (userSelectedTimeframe) {
+      setTimeFilter(hydratedTimeFilter)
+    } else {
+      setTimeFilter(DASHBOARD_DEFAULT_TIME_FILTER)
+    }
     setAccountFilter(hydratedAccountFilter)
     setAccountTypeFilter(hydratedAccountTypeFilter)
 
     const filtersChanged =
-      hydratedTimeFilter !== p.timeFilter ||
+      (userSelectedTimeframe && hydratedTimeFilter !== p.timeFilter) ||
       hydratedAccountFilter !== p.accountFilter ||
       hydratedAccountTypeFilter !== p.accountTypeFilter
 
@@ -601,25 +674,57 @@ export default function Dashboard() {
     if (typeof p.showWarnings === "boolean") setShowWarnings(p.showWarnings)
 
     if (filtersChanged) {
-      saveDashboardGearPrefs({
-        timeFilter: hydratedTimeFilter,
-        accountFilter: hydratedAccountFilter,
-        accountTypeFilter: hydratedAccountTypeFilter,
-        showPublicOnly:
-          typeof p.showPublicOnly === "boolean" ? p.showPublicOnly : false,
-        showEquity: typeof p.showEquity === "boolean" ? p.showEquity : true,
-        showDrawdown: typeof p.showDrawdown === "boolean" ? p.showDrawdown : true,
-        showInsights: typeof p.showInsights === "boolean" ? p.showInsights : true,
-        showSessions: typeof p.showSessions === "boolean" ? p.showSessions : true,
-        showBestSetup: typeof p.showBestSetup === "boolean" ? p.showBestSetup : true,
-        showWorstSetup: typeof p.showWorstSetup === "boolean" ? p.showWorstSetup : true,
-        showWarnings: typeof p.showWarnings === "boolean" ? p.showWarnings : true,
-      })
+      saveDashboardGearPrefs(
+        mergeDashboardGearPrefs({
+          timeFilter: userSelectedTimeframe
+            ? hydratedTimeFilter
+            : DASHBOARD_DEFAULT_TIME_FILTER,
+          hasUserSelectedTimeframe: userSelectedTimeframe,
+          accountFilter: hydratedAccountFilter,
+          accountTypeFilter: hydratedAccountTypeFilter,
+          showPublicOnly:
+            typeof p.showPublicOnly === "boolean" ? p.showPublicOnly : false,
+          showEquity: typeof p.showEquity === "boolean" ? p.showEquity : true,
+          showDrawdown:
+            typeof p.showDrawdown === "boolean" ? p.showDrawdown : true,
+          showInsights:
+            typeof p.showInsights === "boolean" ? p.showInsights : true,
+          showSessions:
+            typeof p.showSessions === "boolean" ? p.showSessions : true,
+          showBestSetup:
+            typeof p.showBestSetup === "boolean" ? p.showBestSetup : true,
+          showWorstSetup:
+            typeof p.showWorstSetup === "boolean" ? p.showWorstSetup : true,
+          showWarnings:
+            typeof p.showWarnings === "boolean" ? p.showWarnings : true,
+        })
+      )
     }
   }, [
     pageDataLoading,
     tradesExcludingBacktest,
     accountRows,
+    accountById,
+    copyGroups,
+  ])
+
+  useEffect(() => {
+    if (pageDataLoading || !didHydrateDashboardPrefs.current) return
+    if (hasUserSelectedTimeframe) return
+    const resolved = resolveInitialDashboardTimeframe({
+      trades: tradesExcludingBacktest,
+      accountFilter,
+      accountTypeFilter,
+      accountById,
+      copyGroups,
+    })
+    setTimeFilter((current) => (current === resolved ? current : resolved))
+  }, [
+    pageDataLoading,
+    hasUserSelectedTimeframe,
+    tradesExcludingBacktest,
+    accountFilter,
+    accountTypeFilter,
     accountById,
     copyGroups,
   ])
@@ -631,6 +736,8 @@ export default function Dashboard() {
     winRate,
     totalPnL,
     avgRR,
+    avgMaxRrReached,
+    rrTargetAnalysis,
     biggestLoss,
     bestTrade,
     avgWin,
@@ -983,6 +1090,7 @@ export default function Dashboard() {
       copyGroups
     )
 
+    setHasUserSelectedTimeframe(true)
     setTimeFilter(gearDraft.timeFilter)
     setAccountFilter(nextAccount)
     setAccountTypeFilter(gearDraft.accountTypeFilter)
@@ -995,19 +1103,22 @@ export default function Dashboard() {
     setShowWorstSetup(gearDraft.showWorstSetup)
     setShowWarnings(gearDraft.showWarnings)
 
-    saveDashboardGearPrefs({
-      timeFilter: gearDraft.timeFilter,
-      accountFilter: nextAccount,
-      accountTypeFilter: gearDraft.accountTypeFilter,
-      showPublicOnly: gearDraft.showPublicOnly,
-      showEquity: gearDraft.showEquity,
-      showDrawdown: gearDraft.showDrawdown,
-      showInsights: gearDraft.showInsights,
-      showSessions: gearDraft.showSessions,
-      showBestSetup: gearDraft.showBestSetup,
-      showWorstSetup: gearDraft.showWorstSetup,
-      showWarnings: gearDraft.showWarnings,
-    })
+    saveDashboardGearPrefs(
+      mergeDashboardGearPrefs({
+        timeFilter: gearDraft.timeFilter,
+        hasUserSelectedTimeframe: true,
+        accountFilter: nextAccount,
+        accountTypeFilter: gearDraft.accountTypeFilter,
+        showPublicOnly: gearDraft.showPublicOnly,
+        showEquity: gearDraft.showEquity,
+        showDrawdown: gearDraft.showDrawdown,
+        showInsights: gearDraft.showInsights,
+        showSessions: gearDraft.showSessions,
+        showBestSetup: gearDraft.showBestSetup,
+        showWorstSetup: gearDraft.showWorstSetup,
+        showWarnings: gearDraft.showWarnings,
+      })
+    )
 
     setShowControls(false)
   }
@@ -1096,6 +1207,7 @@ export default function Dashboard() {
       lossCount={lossCount}
       profitFactor={displayedProfitFactor}
       avgRR={avgRR}
+      avgMaxRrReached={avgMaxRrReached}
       expectancyData={expectancyData}
       bestDay={bestDay}
       bestTrade={bestTrade}
@@ -1165,7 +1277,7 @@ export default function Dashboard() {
               customRangeEnd={customRangeEnd}
               onCustomRangeApply={handleDashboardCustomRangeApply}
               selectedDate={selectedDate}
-              onSelectedDateChange={setSelectedDate}
+              onSelectedDateChange={handleDashboardSelectedDateChange}
               showPublicOnly={showPublicOnly}
               onTogglePublicOnly={() => setShowPublicOnly(!showPublicOnly)}
               onOpenPerformanceShare={() => {
@@ -1284,6 +1396,7 @@ export default function Dashboard() {
     totalTrades={totalTrades}
     winRate={winRate}
     avgRR={avgRR}
+    avgMaxRrReached={avgMaxRrReached}
     totalPnL={totalPnL}
     profitFactor={displayedProfitFactor}
     avgWin={avgWin}
@@ -1375,6 +1488,7 @@ export default function Dashboard() {
           tradingReportsRef.current?.openPsychology(reportId)
         }
         symbolPerformanceRows={symbolPerformanceRows}
+        rrTargetAnalysis={rrTargetAnalysis}
         hasAnyTrades={tradesExcludingBacktest.length > 0}
         longShortPerformance={longShortPerformance}
         holdTimeStats={holdTimeStats}
@@ -1419,6 +1533,7 @@ export default function Dashboard() {
             totalTrades={totalTrades}
             winRate={winRate}
             avgRR={avgRR}
+            avgMaxRrReached={avgMaxRrReached}
             totalPnL={totalPnL}
             profitFactor={displayedProfitFactor}
             avgWin={avgWin}

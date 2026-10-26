@@ -3,6 +3,10 @@ import {
   buildAccountFilterOptionsFromRows,
   tradeMatchesAccountFilter,
 } from "@/lib/tradeAccountDisplay"
+import {
+  DASHBOARD_DEFAULT_TIME_FILTER,
+  migrateLegacyDashboardTimeFilter,
+} from "@/lib/dashboardInitialTimeframe"
 import type { DashboardGearPersistedPrefs } from "./dashboardGearTypes"
 import type { CopyTradingGroup } from "@/lib/copyTradingGroups"
 import {
@@ -54,6 +58,10 @@ export const DASHBOARD_GEAR_SECTION_TITLE =
 export const DASHBOARD_VALID_TIME_FILTERS = [
   "all",
   "daily",
+  "7d",
+  "30d",
+  "90d",
+  "1y",
   "weekly",
   "monthly",
   "yearly",
@@ -78,13 +86,14 @@ type TradeForAccountFilter = {
 }
 
 export function sanitizeDashboardTimeFilter(value: string | undefined): string {
+  const migrated = migrateLegacyDashboardTimeFilter(value)
   if (
-    value &&
-    (DASHBOARD_VALID_TIME_FILTERS as readonly string[]).includes(value)
+    migrated &&
+    (DASHBOARD_VALID_TIME_FILTERS as readonly string[]).includes(migrated)
   ) {
-    return value
+    return migrated
   }
-  return "all"
+  return DASHBOARD_DEFAULT_TIME_FILTER
 }
 
 export function sanitizeDashboardAccountTypeFilter(

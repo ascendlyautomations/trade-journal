@@ -74,12 +74,24 @@ import { createRoomMessageNotifications } from "@/lib/createRoomMessageNotificat
 import TradeRoomCreateWizard from "@/app/components/tradeRooms/TradeRoomCreateWizard"
 import ManageTradeRoomModal from "@/app/components/tradeRooms/ManageTradeRoomModal"
 import {
+  fetchMemberTagAssignments,
+  fetchRoomMemberTags,
   fetchTradeRoomById,
   fetchViewerTradeRoomJoinRequest,
+  assignMemberTag,
+  removeMemberTagAssignment,
   TRADE_ROOM_DETAIL_SELECT,
+  type RoomMemberTag,
   type TradeRoomRow,
 } from "@/lib/tradeRoomClient"
+import {
+  canAssignRoomMemberTag,
+  canModerateRoomMemberTarget,
+  canModerateTradeRoom,
+  memberHasModeratorTag,
+} from "@/lib/tradeRoomModerationPermission"
 import { attemptTradeRoomJoin, roomRequiresJoinApproval } from "@/lib/tradeRoomJoinFlow"
+import { fetchTradeRoomInviteLookup } from "@/lib/tradeRoomInviteLookup"
 import RoomNotificationSettingsSheet from "@/app/components/RoomNotificationSettingsSheet"
 import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
 import ReplyReferenceBlock from "@/app/components/replies/ReplyReferenceBlock"
@@ -109,13 +121,14 @@ import {
 } from "@/lib/roomChannelNotificationPreferences"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 import { isUserAdmin } from "@/lib/adminUsers"
-import { isProfileUuidSegment } from "@/lib/profileRoutes"
 import { isBetaAnnouncementsSection } from "@/lib/betaHub"
 import { subscribeCommunityRoomLiveChannel } from "@/lib/communityRoomLiveChannel"
 import { subscribeCommunityRoomUnreadRealtime } from "@/lib/communityRoomUnread"
 import { toggleMessageReaction } from "@/lib/messageReactionToggle"
+import { handleMessageReactionDoubleClick } from "@/lib/messageReactionDoubleTap"
 import {
   aggregateRoomMessageReactions,
+  MESSAGE_REACTION_DOUBLE_TAP_EMOJI,
   patchRoomMessageReactions,
   type RoomMessageReactionEmoji,
   type RoomMessageReactionRow,
@@ -156,6 +169,7 @@ import {
   resetRoomMessageReconciliation,
 } from "@/lib/roomMessageReconciliation"
 import { pickInitialTradeRoomId } from "@/lib/tradeRoomsEntry"
+import { nativeIosAppStoreURL } from "@/lib/nativeIosAppStore"
 import { tradeRoomSharePath, tradeRoomShareUrl } from "@/lib/tradeRoomShareUrl"
 
 type Room = TradeRoomRow & {
@@ -385,7 +399,12 @@ function CommunityContent() {
   const [sections, setSections] = useState<any[]>([])
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
   const [isOwner, setIsOwner] = useState(false)
+  const [isRoomModerator, setIsRoomModerator] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [roomMemberTags, setRoomMemberTags] = useState<RoomMemberTag[]>([])
+  const [memberTagAssignments, setMemberTagAssignments] = useState<
+    { user_id: string; tag_id: string }[]
+  >([])
   const [activeMembers, setActiveMembers] = useState<number>(0)
   const [leftMembers, setLeftMembers] = useState<number>(0)
   const [showOnProfile, setShowOnProfile] = useState(true)
@@ -648,6 +667,53 @@ function CommunityContent() {
   const selectedRoom = useMemo(
     () => rooms.find((r) => r.id === selectedRoomId) ?? null,
     [rooms, selectedRoomId]
+  )
+
+  const canModerateRoom = useMemo(
+    () =>
+      canModerateTradeRoom({
+        viewerId: user?.id,
+        ownerUserId: selectedRoom?.owner_user_id,
+        hasModeratorTag: isRoomModerator,
+        roomKind: selectedRoom?.room_kind,
+        isPlatformAdmin: isAdmin,
+      }),
+    [
+      user?.id,
+      selectedRoom?.owner_user_id,
+      selectedRoom?.room_kind,
+      isRoomModerator,
+      isAdmin,
+    ]
+  )
+
+  const tagIdsForMember = useCallback(
+    (memberUserId: string) =>
+      memberTagAssignments
+        .filter((row) => row.user_id === memberUserId)
+        .map((row) => row.tag_id),
+    [memberTagAssignments]
+  )
+
+  const canActOnMember = useCallback(
+    (targetUserId: string) =>
+      canModerateRoomMemberTarget({
+        viewerId: user?.id,
+        ownerUserId: selectedRoom?.owner_user_id,
+        targetUserId,
+        targetTagIds: tagIdsForMember(targetUserId),
+        tags: roomMemberTags,
+        canManageRoom: isOwner,
+        canModerateRoom,
+      }),
+    [
+      user?.id,
+      selectedRoom?.owner_user_id,
+      tagIdsForMember,
+      roomMemberTags,
+      isOwner,
+      canModerateRoom,
+    ]
   )
 
   useEffect(() => {
@@ -1110,10 +1176,12 @@ function CommunityContent() {
   useEffect(() => {
     if (!selectedRoomId || !user?.id) {
       setIsOwner(false)
+      setIsRoomModerator(false)
       return
     }
     if (isDemoUserId(user.id)) {
       setIsOwner(fetchDemoRoomOwnerUserId(selectedRoomId) === user.id)
+      setIsRoomModerator(false)
       return
     }
     const room =
@@ -1121,6 +1189,28 @@ function CommunityContent() {
       (inviteTargetRoom?.id === selectedRoomId ? inviteTargetRoom : null)
     setIsOwner(room?.owner_user_id === user.id)
   }, [selectedRoomId, user?.id, rooms, inviteTargetRoom])
+
+  useEffect(() => {
+    if (!selectedRoomId || !user?.id || isDemoUserId(user.id)) {
+      setIsRoomModerator(false)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      const [tags, assignments] = await Promise.all([
+        fetchRoomMemberTags(supabase, selectedRoomId),
+        fetchMemberTagAssignments(supabase, selectedRoomId),
+      ])
+      if (cancelled) return
+      const mine = assignments
+        .filter((row) => row.user_id === user.id)
+        .map((row) => row.tag_id)
+      setIsRoomModerator(memberHasModeratorTag({ tagIds: mine, tags }))
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedRoomId, user?.id])
 
   useEffect(() => {
     setActiveMessageMenuId(null)
@@ -1140,9 +1230,9 @@ function CommunityContent() {
   }, [selectedRoomId, isOwner, needsJoin])
 
   useEffect(() => {
-    if (!showManageMembers || !selectedRoomId || !isOwner) return
+    if (!showManageMembers || !selectedRoomId || !canModerateRoom) return
     void loadManageMembers(selectedRoomId)
-  }, [showManageMembers, selectedRoomId, isOwner])
+  }, [showManageMembers, selectedRoomId, canModerateRoom])
 
   function applySectionFiltersToQuery(
     q: any,
@@ -2320,6 +2410,20 @@ function CommunityContent() {
       setBannedUsers((bansResult.data ?? []) as RoomBanManage[])
     }
 
+    const [tags, assignments] = await Promise.all([
+      fetchRoomMemberTags(supabase, roomId),
+      fetchMemberTagAssignments(supabase, roomId),
+    ])
+    setRoomMemberTags(tags)
+    setMemberTagAssignments(assignments)
+    const viewerId = userIdRef.current
+    if (viewerId) {
+      const mine = assignments
+        .filter((row) => row.user_id === viewerId)
+        .map((row) => row.tag_id)
+      setIsRoomModerator(memberHasModeratorTag({ tagIds: mine, tags }))
+    }
+
     setLoadingManageMembers(false)
   }
 
@@ -2332,9 +2436,45 @@ function CommunityContent() {
       .is("left_at", null)
   }
 
+  async function toggleMemberTagAssignment(
+    memberUserId: string,
+    tag: RoomMemberTag
+  ) {
+    if (!selectedRoomId) return
+    if (
+      !canAssignRoomMemberTag({
+        tagName: tag.name,
+        canManageRoom: isOwner,
+        canModerateRoom,
+      })
+    ) {
+      return
+    }
+    const assigned = tagIdsForMember(memberUserId).includes(tag.id)
+    const result = assigned
+      ? await removeMemberTagAssignment(
+          supabase,
+          selectedRoomId,
+          memberUserId,
+          tag.id
+        )
+      : await assignMemberTag(
+          supabase,
+          selectedRoomId,
+          memberUserId,
+          tag.id
+        )
+    if (result.error) {
+      showPopup({ type: "error", message: result.error })
+      return
+    }
+    await loadManageMembers(selectedRoomId)
+  }
+
   async function handleRemoveMember(targetUserId: string) {
     if (!selectedRoomId || !user?.id) return
     if (targetUserId === user.id) return
+    if (!canActOnMember(targetUserId)) return
 
     setRemovingMemberId(targetUserId)
 
@@ -2356,6 +2496,7 @@ function CommunityContent() {
   async function handleBanMember(targetUserId: string) {
     if (!selectedRoomId || !user?.id) return
     if (targetUserId === user.id) return
+    if (!canActOnMember(targetUserId)) return
 
     setBanningMemberId(targetUserId)
 
@@ -2833,24 +2974,10 @@ function CommunityContent() {
         return
       }
 
-      const roomSelect = TRADE_ROOM_DETAIL_SELECT
-
-      const { data: slugRow } = await supabase
-        .from("rooms")
-        .select(roomSelect)
-        .eq("slug", decoded)
-        .maybeSingle()
-
-      let row = slugRow
-
-      if (!row && isProfileUuidSegment(decoded)) {
-        const { data: idRow } = await supabase
-          .from("rooms")
-          .select(roomSelect)
-          .eq("id", decoded)
-          .maybeSingle()
-        row = idRow
-      }
+      const row: TradeRoomRow | null = await fetchTradeRoomInviteLookup(
+        supabase,
+        decoded
+      )
 
       if (cancelled) return
       if (!row) {
@@ -4108,6 +4235,19 @@ function CommunityContent() {
                       </button>
                     ) : null}
 
+                    {!isOwner && canModerateRoom && selectedRoomId && !needsJoin ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMemberSearchQuery("")
+                          setShowManageMembers(true)
+                        }}
+                        className="rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-xs text-gray-200 hover:bg-white/10"
+                      >
+                        Moderate
+                      </button>
+                    ) : null}
+
                     {!isOwner && selectedRoomId && !needsJoin ? (
                       <button
                         type="button"
@@ -4167,6 +4307,27 @@ function CommunityContent() {
                   </span>{" "}
                   to view channels and messages.
                 </p>
+                {!nativeIos && roomParam && inviteLink ? (
+                  <p className="mb-6 max-w-md text-sm text-gray-400">
+                    Have the TradeTraxs app?{" "}
+                    <a
+                      href={inviteLink}
+                      className="text-blue-300 underline-offset-2 hover:underline"
+                    >
+                      Open this invite
+                    </a>
+                    . New here?{" "}
+                    <a
+                      href={nativeIosAppStoreURL()}
+                      className="text-blue-300 underline-offset-2 hover:underline"
+                      rel="noopener noreferrer"
+                      target="_blank"
+                    >
+                      Get the iOS app
+                    </a>
+                    .
+                  </p>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => void joinRoom(inviteTargetRoom.id)}
@@ -4394,6 +4555,20 @@ function CommunityContent() {
                             id={roomMessageElementId(msg.id)}
                             data-room-message-id={msg.id}
                             className="group relative rounded-xl border border-white/10 bg-white/5 p-3"
+                            onDoubleClick={(e) =>
+                              handleMessageReactionDoubleClick(
+                                e,
+                                Boolean(user?.id) &&
+                                  !needsJoin &&
+                                  msg.send_status !== "sending" &&
+                                  msg.send_status !== "failed",
+                                () =>
+                                  void toggleRoomMessageReaction(
+                                    msg.id,
+                                    MESSAGE_REACTION_DOUBLE_TAP_EMOJI
+                                  )
+                              )
+                            }
                           >
                             <div className="mb-1 flex flex-wrap items-center gap-2">
                               <ProfileAvatarLink
@@ -4441,6 +4616,8 @@ function CommunityContent() {
                                 message={msg}
                                 viewerUserId={user?.id}
                                 isRoomOwner={isOwner}
+                                isRoomModerator={isRoomModerator}
+                                roomOwnerUserId={selectedRoom?.owner_user_id}
                                 activeMenuId={activeMessageMenuId}
                                 setActiveMenuId={setActiveMessageMenuId}
                                 onEdit={() => startEditMessage(msg)}
@@ -4523,6 +4700,20 @@ function CommunityContent() {
                           ? MICRO.softEnter
                           : ""
                       }`.trim()}
+                      onDoubleClick={(e) =>
+                        handleMessageReactionDoubleClick(
+                          e,
+                          Boolean(user?.id) &&
+                            !needsJoin &&
+                            msg.send_status !== "sending" &&
+                            msg.send_status !== "failed",
+                          () =>
+                            void toggleRoomMessageReaction(
+                              msg.id,
+                              MESSAGE_REACTION_DOUBLE_TAP_EMOJI
+                            )
+                        )
+                      }
                     >
                       <div className="mb-1 flex flex-wrap items-center gap-2">
                         <ProfileAvatarLink
@@ -4556,6 +4747,8 @@ function CommunityContent() {
                           message={msg}
                           viewerUserId={user?.id}
                           isRoomOwner={isOwner}
+                          isRoomModerator={isRoomModerator}
+                          roomOwnerUserId={selectedRoom?.owner_user_id}
                           activeMenuId={activeMessageMenuId}
                           setActiveMenuId={setActiveMessageMenuId}
                           onEdit={() => startEditMessage(msg)}
@@ -4879,7 +5072,7 @@ function CommunityContent() {
         </div>
       ) : null}
 
-      {showManageMembers && isOwner && selectedRoomId ? (
+      {showManageMembers && canModerateRoom && selectedRoomId ? (
         <div
           className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
           onClick={() => {
@@ -4933,78 +5126,117 @@ function CommunityContent() {
                         const avatarSrc = member.profiles?.avatar_url
                         const isRemoving = removingMemberId === member.user_id
                         const isBanning = banningMemberId === member.user_id
+                        const memberTagIds = tagIdsForMember(member.user_id)
+                        const showsModerationActions =
+                          !isSelf && canActOnMember(member.user_id)
+                        const assignableTags = roomMemberTags.filter((tag) =>
+                          canAssignRoomMemberTag({
+                            tagName: tag.name,
+                            canManageRoom: isOwner,
+                            canModerateRoom,
+                          })
+                        )
 
                         return (
                           <div
                             key={member.user_id}
-                            className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-2"
+                            className="rounded-xl border border-white/10 bg-white/5 p-2"
                           >
-                            <ProfileAvatarLink
-                              userId={member.user_id}
-                              username={username}
-                              src={avatarSrc}
-                              imgClassName="h-9 w-9 shrink-0 rounded-full object-cover"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <ProfileUsernameLink
+                            <div className="flex items-center gap-3">
+                              <ProfileAvatarLink
                                 userId={member.user_id}
                                 username={username}
-                                className="block truncate text-sm font-medium text-white"
+                                src={avatarSrc}
+                                imgClassName="h-9 w-9 shrink-0 rounded-full object-cover"
                               />
-                              {displayName ? (
-                                <p className="truncate text-xs text-gray-400">
-                                  {displayName}
-                                </p>
+                              <div className="min-w-0 flex-1">
+                                <ProfileUsernameLink
+                                  userId={member.user_id}
+                                  username={username}
+                                  className="block truncate text-sm font-medium text-white"
+                                />
+                                {displayName ? (
+                                  <p className="truncate text-xs text-gray-400">
+                                    {displayName}
+                                  </p>
+                                ) : null}
+                              </div>
+                              {isSelf ? (
+                                <span className="shrink-0 text-xs text-gray-400">
+                                  You
+                                </span>
+                              ) : showsModerationActions ? (
+                                <div className="flex shrink-0 items-center gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={memberActionBusy}
+                                    onClick={() =>
+                                      setMemberActionConfirm({
+                                        kind: "ban",
+                                        userId: member.user_id,
+                                      })
+                                    }
+                                    className="inline-flex items-center gap-1 rounded bg-orange-500/10 px-2 py-1 text-xs text-orange-400 hover:bg-orange-500/20 disabled:opacity-50"
+                                  >
+                                    {isBanning ? (
+                                      <>
+                                        <ActionSpinner className="border-orange-400" />
+                                        Banning...
+                                      </>
+                                    ) : (
+                                      "Ban"
+                                    )}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={memberActionBusy}
+                                    onClick={() =>
+                                      setMemberActionConfirm({
+                                        kind: "remove",
+                                        userId: member.user_id,
+                                      })
+                                    }
+                                    className="inline-flex items-center gap-1 rounded bg-red-500/10 px-2 py-1 text-xs text-red-400 hover:bg-red-500/20 disabled:opacity-50"
+                                  >
+                                    {isRemoving ? (
+                                      <>
+                                        <ActionSpinner className="border-red-400" />
+                                        Removing...
+                                      </>
+                                    ) : (
+                                      "Remove"
+                                    )}
+                                  </button>
+                                </div>
                               ) : null}
                             </div>
-                            {isSelf ? (
-                              <span className="shrink-0 text-xs text-gray-400">
-                                Owner
-                              </span>
-                            ) : (
-                              <div className="flex shrink-0 items-center gap-1">
-                                <button
-                                  type="button"
-                                  disabled={memberActionBusy}
-                                  onClick={() =>
-                                    setMemberActionConfirm({
-                                      kind: "ban",
-                                      userId: member.user_id,
-                                    })
-                                  }
-                                  className="inline-flex items-center gap-1 rounded bg-orange-500/10 px-2 py-1 text-xs text-orange-400 hover:bg-orange-500/20 disabled:opacity-50"
-                                >
-                                  {isBanning ? (
-                                    <>
-                                      <ActionSpinner className="border-orange-400" />
-                                      Banning...
-                                    </>
-                                  ) : (
-                                    "Ban"
-                                  )}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={memberActionBusy}
-                                  onClick={() =>
-                                    setMemberActionConfirm({
-                                      kind: "remove",
-                                      userId: member.user_id,
-                                    })
-                                  }
-                                  className="inline-flex items-center gap-1 rounded bg-red-500/10 px-2 py-1 text-xs text-red-400 hover:bg-red-500/20 disabled:opacity-50"
-                                >
-                                  {isRemoving ? (
-                                    <>
-                                      <ActionSpinner className="border-red-400" />
-                                      Removing...
-                                    </>
-                                  ) : (
-                                    "Remove"
-                                  )}
-                                </button>
+                            {canModerateRoom && assignableTags.length > 0 ? (
+                              <div className="mt-2 flex flex-wrap gap-1.5 pl-12">
+                                {assignableTags.map((tag) => {
+                                  const active = memberTagIds.includes(tag.id)
+                                  return (
+                                    <button
+                                      key={tag.id}
+                                      type="button"
+                                      disabled={memberActionBusy || isSelf}
+                                      onClick={() =>
+                                        void toggleMemberTagAssignment(
+                                          member.user_id,
+                                          tag
+                                        )
+                                      }
+                                      className={`rounded-full border px-2 py-0.5 text-[11px] font-medium transition ${
+                                        active
+                                          ? "border-blue-400/50 bg-blue-500/20 text-blue-200"
+                                          : "border-white/10 bg-white/5 text-gray-400 hover:bg-white/10"
+                                      } disabled:opacity-50`}
+                                    >
+                                      {tag.name}
+                                    </button>
+                                  )
+                                })}
                               </div>
-                            )}
+                            ) : null}
                           </div>
                         )
                       })}

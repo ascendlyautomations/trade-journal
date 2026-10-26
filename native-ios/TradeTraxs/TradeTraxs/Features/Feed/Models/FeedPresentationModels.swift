@@ -41,6 +41,16 @@ nonisolated enum FeedContentFilter: String, CaseIterable, Hashable, Sendable {
         case .achievements: return .trophy
         }
     }
+
+    /// Neighbor in ``filterStripOrder`` — positive offset is swipe-left (toward Achievements).
+    func adjacentFilter(offset: Int) -> FeedContentFilter? {
+        guard offset != 0,
+              let index = Self.filterStripOrder.firstIndex(of: self)
+        else { return nil }
+        let target = index + offset
+        guard Self.filterStripOrder.indices.contains(target) else { return nil }
+        return Self.filterStripOrder[target]
+    }
 }
 
 /// Hydrated feed row — wraps domain models already used by Profile cards / Detail.

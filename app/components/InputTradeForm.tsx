@@ -49,7 +49,14 @@ import PostTradeReflectionSheet from "@/app/components/trade/PostTradeReflection
 import { rpcTradeOwnerRead } from "@/lib/tradeOwnerRead"
 import { profilePath } from "@/lib/profileRoutes"
 import { hasStoredTradePoints } from "@/lib/resolveTradePoints"
-import { parseOptionalRr } from "@/lib/tradeRr"
+import {
+  maxRrReachedForTradeSave,
+  parseOptionalRr,
+} from "@/lib/tradeRr"
+import {
+  realizedRrForManualTradeSave,
+  validateManualTradeRiskFields,
+} from "@/lib/tradePointsAndRealizedRr"
 import {
   resolveCopyGroupAccounts,
 } from "@/lib/copyTradingGroups"
@@ -318,6 +325,7 @@ export default function InputTradeForm({
   const [direction, setDirection] = useState("Long")
   const [pnl, setPnl] = useState("")
   const [rr, setRR] = useState("")
+  const [maxRrReached, setMaxRrReached] = useState("")
   const [points, setPoints] = useState("")
   const [session, setSession] = useState("NY")
   const [sessionManuallySet, setSessionManuallySet] = useState(false)
@@ -699,6 +707,10 @@ export default function InputTradeForm({
       t.pnl != null && t.pnl !== "" ? String(t.pnl).replace(/,/g, "") : ""
     )
     setRR(t.rr != null && t.rr !== "" ? String(t.rr) : "")
+    const maxRr = (t as { max_rr_reached?: unknown }).max_rr_reached
+    setMaxRrReached(
+      maxRr != null && maxRr !== "" ? String(maxRr).replace(/,/g, "") : ""
+    )
     setPoints(t.points != null && t.points !== "" ? String(t.points) : "")
     setSession(t.session || "NY")
     // Preserve the saved session; do not let auto-detect overwrite while editing.
@@ -815,6 +827,7 @@ export default function InputTradeForm({
     setDirection("Long")
     setPnl("")
     setRR("")
+    setMaxRrReached("")
     setPoints("")
     setSession("NY")
     setSessionManuallySet(false)
@@ -1076,8 +1089,38 @@ export default function InputTradeForm({
       report({ percent: 35, stage: "Saving trade…" })
     }
 
-    const parsedPnl = parseFloat(pnl) || 0
+    const parsedPnl = parseFloat(String(pnl).replace(/,/g, "")) || 0
+    const riskValidation = validateManualTradeRiskFields({
+      pnl: parsedPnl,
+      pointsRaw: points,
+      targetedRrRaw: rr,
+      maxRrReachedRaw: maxRrReached,
+    })
+    if (!riskValidation.ok) {
+      const message =
+        riskValidation.pointsTarget ??
+        riskValidation.targetedRr ??
+        riskValidation.maxRrReached ??
+        "Complete required risk fields."
+      showPopup(persistentError("Required Fields", message))
+      throw new Error(message)
+    }
+
     const parsedRR = parseOptionalRr(rr)
+    const parsedMaxRrReached = parseOptionalRr(maxRrReached)
+    const maxRrForInsert =
+      parsedPnl > 0 ? parsedMaxRrReached : parsedMaxRrReached
+    const realizedRrForSave = realizedRrForManualTradeSave({
+      points,
+      rr: parsedRR,
+      direction,
+      entry_price: parseFloat(entryPrice) || null,
+      exit_price: parseFloat(exitPrice) || null,
+    })
+    const maxRrForUpdate = maxRrReachedForTradeSave(
+      parsedPnl,
+      parsedMaxRrReached
+    )
     const parsedPoints = parseFloat(points) || 0
     const parsedContracts = Number.parseInt(contracts, 10)
     const contractsNum = Number.isFinite(parsedContracts) ? parsedContracts : 0
@@ -1191,6 +1234,8 @@ export default function InputTradeForm({
         news_event: newsEvent,
         timeframe: timeframeToSave,
         is_public: isPublic,
+        max_rr_reached: maxRrForInsert,
+        realized_rr: realizedRrForSave,
       }
 
       const copyResult = await insertCopyTradedTrades({
@@ -1302,6 +1347,8 @@ export default function InputTradeForm({
         news_event: newsEvent,
         timeframe: timeframeToSave,
         is_public: isPublic,
+        max_rr_reached: maxRrForInsert,
+        realized_rr: realizedRrForSave,
       }
 
       const copyResult = await insertCopyTradedTrades({
@@ -1447,6 +1494,10 @@ export default function InputTradeForm({
         direction,
         pnl: Number.isFinite(parsedPnl) ? parsedPnl : 0,
         rr: parsedRR,
+        ...(maxRrForUpdate !== undefined
+          ? { max_rr_reached: maxRrForUpdate }
+          : {}),
+        ...(realizedRrForSave != null ? { realized_rr: realizedRrForSave } : {}),
         points: Number.isFinite(parsedPoints) ? parsedPoints : 0,
         contracts: contractsNum,
         session: sessionToSave,
@@ -1653,6 +1704,8 @@ export default function InputTradeForm({
       news_event: newsEvent,
       timeframe: timeframeToSave,
       is_public: isPublic,
+      max_rr_reached: maxRrForInsert,
+      realized_rr: realizedRrForSave,
       ...(createAsUnreviewed ? { reviewed: false } : {}),
     }
 
@@ -2517,6 +2570,33 @@ export default function InputTradeForm({
             </p>
           )}
 
+          <div>
+            <label className={fieldLabelClass}>
+              Max R:R Reached
+              {(parseFloat(String(pnl).replace(/,/g, "")) || 0) <= 0 ? (
+                <span className="text-red-400/90"> *</span>
+              ) : null}
+            </label>
+            <input
+              placeholder="e.g. 2.5"
+              type="text"
+              value={maxRrReached}
+              onChange={(e) =>
+                handleTradeNumericInput(e.target.value, setMaxRrReached, {
+                  allowDecimal: true,
+                  onDecimalError: setDecimalError,
+                })
+              }
+              className={TRADE_FIELD_CONTROL_CLASS}
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Highest reward-to-risk ratio reached before the trade closed.
+              {(parseFloat(String(pnl).replace(/,/g, "")) || 0) > 0
+                ? " Optional on winning trades."
+                : " Required on breakeven and losing trades."}
+            </p>
+          </div>
+
           {/* Mobile: Symbol + Strategy share a row; sm+ keeps the stacked layout. */}
           <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-1">
             <div>
@@ -2591,7 +2671,9 @@ export default function InputTradeForm({
 
           <div className="grid grid-cols-2 gap-x-3 gap-y-2">
             <div>
-              <label className={fieldLabelClass}>Risk Reward</label>
+              <label className={fieldLabelClass}>
+                Targeted Risk/Reward<span className="text-red-400/90"> *</span>
+              </label>
               <input
                 placeholder="e.g. 2.5"
                 type="text"
@@ -2607,7 +2689,9 @@ export default function InputTradeForm({
               />
             </div>
             <div>
-              <label className={fieldLabelClass}>Points</label>
+              <label className={fieldLabelClass}>
+                Points Targeted<span className="text-red-400/90"> *</span>
+              </label>
               <input
                 placeholder="e.g. 15.5"
                 type="text"
@@ -2616,7 +2700,7 @@ export default function InputTradeForm({
                 onChange={(e) =>
                   handleTradeNumericInput(e.target.value, setPoints, {
                     allowDecimal: true,
-                    allowNegative: true,
+                    allowNegative: false,
                     onDecimalError: setDecimalError,
                   })
                 }

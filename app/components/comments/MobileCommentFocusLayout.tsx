@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react"
 import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
+import { DETAIL_MODAL_PANEL_ENGAGEMENT_CLASS } from "@/app/components/ui/detailModalEngagement"
 
 type MobileCommentFocusLayoutProps = {
   /** User intentionally opened/focused comments (💬, deep link, etc.). */
@@ -39,7 +40,7 @@ export default function MobileCommentFocusLayout({
   mobileMedia,
   mobileMediaBeforeHeader = false,
   engagementAfterCollapsible = false,
-  engagementClassName = "shrink-0 border-b border-white/10 px-4 py-2",
+  engagementClassName = DETAIL_MODAL_PANEL_ENGAGEMENT_CLASS,
 }: MobileCommentFocusLayoutProps) {
   const isMobile = useMaxMdViewport()
   const collapse = isMobile && commentsFocused

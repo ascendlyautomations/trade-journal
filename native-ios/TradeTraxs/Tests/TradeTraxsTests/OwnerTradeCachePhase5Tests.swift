@@ -50,6 +50,39 @@ final class OwnerTradeCachePhase5Tests: XCTestCase {
         ))
     }
 
+    func testOwnerSeedAppliesDashboardWeekdayFilterBeforePagination() {
+        var mondayComps = DateComponents()
+        mondayComps.year = 2026
+        mondayComps.month = 1
+        mondayComps.day = 5
+        mondayComps.hour = 9
+        let monday = Calendar.current.date(from: mondayComps)!
+        var tuesdayComps = mondayComps
+        tuesdayComps.day = 6
+        let tuesday = Calendar.current.date(from: tuesdayComps)!
+
+        let mon = makeTrade(id: "mon", owner: viewerID, createdAt: monday, entryAt: monday)
+        let tue = makeTrade(id: "tue", owner: viewerID, createdAt: tuesday, entryAt: tuesday)
+        SessionOwnerTradesStore.shared.seed(
+            [mon, tue],
+            for: viewerID,
+            detailCache: DetailPresentationCache(),
+            historyComplete: true,
+            totalTradeCount: 2
+        )
+
+        let weekday = TradeHistoryLaunchSeed.calendarWeekday(forHeatmapLabel: "Mon")
+        let seeded = TradeHistoryOwnerSeed.page(
+            from: [mon, tue],
+            query: TradeHistoryQuery(),
+            limit: 40,
+            tradeFilter: { trade in
+                Calendar.current.component(.weekday, from: trade.entryAt) == weekday
+            }
+        )
+        XCTAssertEqual(seeded.items.map(\.id), [mon.id])
+    }
+
     func testPartialSnapshotBlocksTradeHistoryFirstPageSeed() {
         let trades = (0..<500).map { index in
             makeTrade(id: "t-\(index)", owner: viewerID, createdAt: Date(timeIntervalSince1970: Double(index)))

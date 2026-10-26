@@ -37,8 +37,8 @@ export default function FeedAchievementDetailMeta({
       : null
 
   return (
-    <div className="space-y-2 border-b border-white/10 px-4 py-3 text-sm">
-      <h3 className="text-base font-semibold leading-snug text-white">
+    <div className="space-y-1 border-b border-white/10 px-4 py-1 text-sm">
+      <h3 className="text-sm font-semibold leading-snug text-white">
         {achievement.title}
       </h3>
       <p className="text-xs font-medium uppercase tracking-wide text-blue-300">

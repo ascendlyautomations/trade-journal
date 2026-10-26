@@ -200,27 +200,31 @@ final class ActivityExperienceTests: XCTestCase {
         XCTAssertFalse(ActivityInboxStore.shared.items.isEmpty)
     }
 
-    func testFeedPresentationSyncsWhenDiskCacheAlreadyLoaded() async {
+    func testFeedPresentationRevisitUsesSessionCacheWithoutRefetch() async {
         let repo = ActivityStubNotificationRepository(
             items: ActivityFixtures.notifications(),
             profiles: ActivityFixtures.profiles()
         )
         ActivityFixtures.seedStore(ActivityInboxStore.shared)
         XCTAssertTrue(ActivityInboxStore.shared.hasLoaded)
-        await ActivityInboxStore.shared.bootstrapUnreadIfNeeded(
-            notifications: repo,
-            session: ActivityStubSession(userID: ActivityFixtures.viewerID.rawValue),
-            realtimeHub: nil
-        )
-        XCTAssertEqual(repo.notificationsPageCallCount, 0)
+        let session = ActivityStubSession(userID: ActivityFixtures.viewerID.rawValue)
         await ActivityInboxStore.shared.startIfNeeded(
             notifications: repo,
             followRequests: ActivityStubFollowRequestRepository(),
-            session: ActivityStubSession(userID: ActivityFixtures.viewerID.rawValue),
+            session: session,
+            realtimeHub: nil,
+            feedPresentation: false
+        )
+        XCTAssertEqual(repo.notificationsPageCallCount, 0)
+        XCTAssertFalse(ActivityInboxStore.shared.items.isEmpty)
+        await ActivityInboxStore.shared.startIfNeeded(
+            notifications: repo,
+            followRequests: ActivityStubFollowRequestRepository(),
+            session: session,
             realtimeHub: nil,
             feedPresentation: true
         )
-        XCTAssertEqual(repo.notificationsPageCallCount, 1)
+        XCTAssertEqual(repo.notificationsPageCallCount, 0)
         XCTAssertFalse(ActivityInboxStore.shared.items.isEmpty)
     }
 

@@ -133,9 +133,25 @@ export function resolveDashboardPeriodStartMs(
       start.setHours(0, 0, 0, 0)
       return start.getTime()
     }
+    case "7d":
     case "weekly": {
       const start = new Date(now)
       start.setDate(now.getDate() - 7)
+      return start.getTime()
+    }
+    case "30d": {
+      const start = new Date(now)
+      start.setDate(now.getDate() - 30)
+      return start.getTime()
+    }
+    case "90d": {
+      const start = new Date(now)
+      start.setDate(now.getDate() - 90)
+      return start.getTime()
+    }
+    case "1y": {
+      const start = new Date(now)
+      start.setDate(now.getDate() - 365)
       return start.getTime()
     }
     case "monthly": {
@@ -200,10 +216,25 @@ function withdrawalMatchesDashboardPeriod(
   if (context.timeFilter === "daily") {
     return instant.toDateString() === now.toDateString()
   }
-  if (context.timeFilter === "weekly") {
+  if (context.timeFilter === "7d" || context.timeFilter === "weekly") {
     const weekAgo = new Date(now)
     weekAgo.setDate(now.getDate() - 7)
     return instant >= weekAgo
+  }
+  if (context.timeFilter === "30d") {
+    const start = new Date(now)
+    start.setDate(now.getDate() - 30)
+    return instant >= start
+  }
+  if (context.timeFilter === "90d") {
+    const start = new Date(now)
+    start.setDate(now.getDate() - 90)
+    return instant >= start
+  }
+  if (context.timeFilter === "1y") {
+    const start = new Date(now)
+    start.setDate(now.getDate() - 365)
+    return instant >= start
   }
   if (context.timeFilter === "monthly") {
     return (

@@ -40,6 +40,7 @@ const USER_AUTHORITATIVE_TRADE_FIELDS = new Set([
   "reviewed",
   "is_pinned",
   "rr",
+  "max_rr_reached",
   "broker_enrichment_status",
   "reviewed",
 ])
@@ -94,9 +95,19 @@ export async function upsertReconstructedBrokerTrades(
   tradesWithPnL: number
   tradesWithoutPnL: number
   numericTickersPersisted: number
+  tradeWriteFailures: Array<{
+    lifecycleKey: string
+    operation: "insert" | "update" | "execution_link"
+    message: string
+  }>
 }> {
   let tradesCreated = 0
   let tradesUpdated = 0
+  const tradeWriteFailures: Array<{
+    lifecycleKey: string
+    operation: "insert" | "update" | "execution_link"
+    message: string
+  }> = []
   let tradesWithPnL = 0
   let tradesWithoutPnL = 0
   let numericTickersPersisted = 0
@@ -253,12 +264,18 @@ export async function upsertReconstructedBrokerTrades(
         .eq("id", existingTradeId)
         .eq("user_id", params.userId)
         .select("id")
-      if (!error) {
+      if (error) {
+        tradeWriteFailures.push({
+          lifecycleKey: lifecycle.lifecycleKey,
+          operation: "update",
+          message: error.message,
+        })
+      } else {
         tradesUpdated += 1
         updatedTradeIds.push(existingTradeId)
       }
 
-      await supabase
+      const { error: linkErr } = await supabase
         .from("broker_integration_executions")
         .update({
           lifecycle_key: lifecycle.lifecycleKey,
@@ -270,6 +287,13 @@ export async function upsertReconstructedBrokerTrades(
         .eq("user_id", params.userId)
         .eq("provider", importSource)
         .in("external_fill_id", lifecycle.fillIds)
+      if (linkErr) {
+        tradeWriteFailures.push({
+          lifecycleKey: lifecycle.lifecycleKey,
+          operation: "execution_link",
+          message: linkErr.message,
+        })
+      }
       continue
     }
 
@@ -280,11 +304,18 @@ export async function upsertReconstructedBrokerTrades(
       .select("id")
       .single()
 
-    if (error || !inserted) continue
+    if (error || !inserted) {
+      tradeWriteFailures.push({
+        lifecycleKey: lifecycle.lifecycleKey,
+        operation: "insert",
+        message: error?.message ?? "insert returned no row",
+      })
+      continue
+    }
     tradesCreated += 1
     newTradeIds.push(String(inserted.id))
 
-    await supabase
+    const { error: linkErr } = await supabase
       .from("broker_integration_executions")
       .update({
         lifecycle_key: lifecycle.lifecycleKey,
@@ -296,6 +327,13 @@ export async function upsertReconstructedBrokerTrades(
       .eq("user_id", params.userId)
       .eq("provider", importSource)
       .in("external_fill_id", lifecycle.fillIds)
+    if (linkErr) {
+      tradeWriteFailures.push({
+        lifecycleKey: lifecycle.lifecycleKey,
+        operation: "execution_link",
+        message: linkErr.message,
+      })
+    }
   }
 
   return {
@@ -306,5 +344,6 @@ export async function upsertReconstructedBrokerTrades(
     tradesWithPnL,
     tradesWithoutPnL,
     numericTickersPersisted,
+    tradeWriteFailures,
   }
 }

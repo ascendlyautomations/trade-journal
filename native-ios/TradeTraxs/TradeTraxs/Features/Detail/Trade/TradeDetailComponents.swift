@@ -78,9 +78,9 @@ struct SocialTradeDetailHeader: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .top, spacing: ExperienceSpacing.xs) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(TradeDisplay.tickerText(trade.symbol))
                         .font(.system(.title3, design: .default).weight(.bold))
                         .foregroundStyle(colors.primaryText)
@@ -93,7 +93,7 @@ struct SocialTradeDetailHeader: View {
 
                 Spacer(minLength: ExperienceSpacing.xs)
 
-                VStack(alignment: .trailing, spacing: ExperienceSpacing.xxs) {
+                VStack(alignment: .trailing, spacing: 2) {
                     Text(TradeDisplay.pnlText(trade.realizedPnL))
                         .font(.system(.title3, design: .rounded).weight(.bold).monospacedDigit())
                         .foregroundStyle(theme.metricColor(for: pnlAmount))
@@ -188,19 +188,46 @@ struct TradeDetailQuickStatsSection: View {
     var body: some View {
         TradeDetailGroupedSurface {
             VStack(spacing: TradeDetailLayout.groupSpacing) {
+                TradeDetailCompactStatRow(cells: {
+                    var cells: [TradeDetailStatCell] = [
+                        TradeDetailStatCell(
+                            label: "P&L",
+                            value: TradeDisplay.pnlText(trade.realizedPnL),
+                            valueColor: pnlTone
+                        ),
+                        TradeDetailStatCell(
+                            label: "Targeted R:R",
+                            value: TradeDisplay.compactRRText(trade.riskReward) ?? "—"
+                        ),
+                    ]
+                    if let maxRr = TradeDisplay.compactRRText(trade.maxRrReached) {
+                        cells.append(
+                            TradeDetailStatCell(label: "Max R:R", value: maxRr)
+                        )
+                    }
+                    cells.append(
+                        TradeDetailStatCell(
+                            label: "Contracts",
+                            value: TradeDisplay.contractsText(for: trade.quantity)
+                        )
+                    )
+                    return cells
+                }())
+
+                TradeDetailStatDivider()
+
                 TradeDetailCompactStatRow(cells: [
                     TradeDetailStatCell(
-                        label: "P&L",
-                        value: TradeDisplay.pnlText(trade.realizedPnL),
-                        valueColor: pnlTone
+                        label: "Points Targeted",
+                        value: TradeDisplay.pointsText(trade.points) ?? "—"
                     ),
                     TradeDetailStatCell(
-                        label: "RR",
-                        value: TradeDisplay.compactRRText(trade.riskReward) ?? "—"
+                        label: "Actual Points",
+                        value: TradeDisplay.pointsText(TradePointsAndRealizedRr.computeActualPoints(trade: trade)) ?? "—"
                     ),
                     TradeDetailStatCell(
-                        label: "Contracts",
-                        value: TradeDisplay.contractsText(for: trade.quantity)
+                        label: "Realized R:R",
+                        value: TradeDisplay.compactRRText(TradePointsAndRealizedRr.resolveRealizedRr(trade: trade)) ?? "—"
                     ),
                 ])
 

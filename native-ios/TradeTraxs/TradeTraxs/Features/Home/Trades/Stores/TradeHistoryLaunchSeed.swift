@@ -30,6 +30,8 @@ enum TradeHistoryLaunchSeed {
 
     private static var pending: Payload?
 
+    static var hasPending: Bool { pending != nil }
+
     static func set(_ payload: Payload) {
         pending = payload
     }

@@ -7,6 +7,7 @@ import { isProActive } from "@/lib/subscription"
 import { fetchProfileOwnerPrivateFields } from "@/lib/profileOwnerPrivateFields"
 import { inferTradeDirectionFromPrices } from "@/lib/inferTradeDirection"
 import { parseOptionalRr } from "@/lib/tradeRr"
+import { realizedRrForManualTradeSave } from "@/lib/tradePointsAndRealizedRr"
 import { assertAccountAllowsNewTrades } from "@/lib/freePlanAccountSlots"
 import { uploadContentImageToStorage } from "@/lib/contentImagePipeline"
 import { createMonotonicReporter } from "@/lib/uploadProgress/reportProgress"
@@ -217,12 +218,30 @@ export async function saveManualTrade(
   const parsedRr = parseOptionalRr(input.rr)
   const now = new Date()
 
+  const points = Number.isFinite(input.points) ? input.points : 0
+  const entryPrice =
+    input.entryPrice != null && Number.isFinite(input.entryPrice)
+      ? input.entryPrice
+      : null
+  const exitPrice =
+    input.exitPrice != null && Number.isFinite(input.exitPrice)
+      ? input.exitPrice
+      : null
+  const realizedRr = realizedRrForManualTradeSave({
+    points,
+    rr: parsedRr,
+    entry_price: entryPrice,
+    exit_price: exitPrice,
+    direction,
+  })
+
   const tradeData = {
     ticker: input.ticker.trim(),
     direction,
     pnl: Number.isFinite(input.pnl) ? input.pnl : 0,
     rr: parsedRr,
-    points: Number.isFinite(input.points) ? input.points : 0,
+    ...(realizedRr != null ? { realized_rr: realizedRr } : {}),
+    points,
     contracts: Number.isFinite(input.contracts) ? input.contracts : 0,
     session: sessionToSave,
     notes: null,
@@ -239,14 +258,8 @@ export async function saveManualTrade(
     created_at: now.toISOString(),
     date: now.toISOString(),
     trade_date: input.entryDate,
-    entry_price:
-      input.entryPrice != null && Number.isFinite(input.entryPrice)
-        ? input.entryPrice
-        : null,
-    exit_price:
-      input.exitPrice != null && Number.isFinite(input.exitPrice)
-        ? input.exitPrice
-        : null,
+    entry_price: entryPrice,
+    exit_price: exitPrice,
     entry_time: entryTimeIso,
     exit_time: exitTimeIso,
     psychology_notes: null,

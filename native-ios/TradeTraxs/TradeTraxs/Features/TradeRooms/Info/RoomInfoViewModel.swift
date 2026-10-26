@@ -73,10 +73,11 @@ final class RoomInfoViewModel {
     }
 
     static func inviteLink(slug: String?, roomID: RoomID) -> String {
-        let trimmed = slug?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let key = trimmed.isEmpty ? roomID.rawValue : trimmed
-        let encoded = key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? key
-        return "https://www.tradetraxs.com/room/\(encoded)"
+        TradeRoomShareLink.inviteString(slug: slug, roomID: roomID)
+    }
+
+    static func inviteURL(slug: String?, roomID: RoomID) -> URL? {
+        TradeRoomShareLink.universalURL(slug: slug, roomID: roomID)
     }
 
     var displayedMemberCount: Int? {

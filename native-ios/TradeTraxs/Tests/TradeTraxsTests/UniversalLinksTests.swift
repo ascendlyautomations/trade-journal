@@ -24,6 +24,10 @@ final class UniversalLinksTests: XCTestCase {
 
     func testRoomShortLinkOpensMessagesTab() throws {
         let url = try XCTUnwrap(URL(string: "https://www.tradetraxs.com/room/futures-lounge"))
+        XCTAssertEqual(
+            TradeRoomShareLink.inviteString(slug: "futures-lounge", roomID: RoomID("room-uuid")),
+            "https://www.tradetraxs.com/room/futures-lounge"
+        )
         XCTAssertEqual(parser.parse(url: url), .messages(.room(RoomID("futures-lounge"))))
     }
 
@@ -111,6 +115,18 @@ final class UniversalLinksTests: XCTestCase {
         XCTAssertEqual(store.sessionPhase, .authenticated)
         XCTAssertNil(store.pendingAfterAuth)
         XCTAssertEqual(store.paths.feed, [.profile(ProfileID("cold-user"))])
+    }
+
+    @MainActor
+    func testMarkUnauthenticatedCanPreservePendingDeepLink() {
+        let store = NavigationStore(state: .initial)
+        let coordinator = NavigationCoordinator(store: store)
+        coordinator.stashForAuthentication(.messages(.room(RoomID("futures-traders"))))
+        coordinator.markUnauthenticated(clearPendingAfterAuth: false)
+        XCTAssertEqual(
+            store.pendingAfterAuth?.asAppDestination,
+            .messages(.room(RoomID("futures-traders")))
+        )
     }
 
     @MainActor

@@ -699,8 +699,8 @@ html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-section-subt
 
   [data-tt-dashboard-canvas] .tt-dash-deeper {
     display: grid;
-    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
-    gap: 18px;
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 0.95fr) minmax(0, 1.1fr);
+    gap: 14px;
     align-items: stretch;
   }
 

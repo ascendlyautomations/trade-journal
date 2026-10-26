@@ -2,7 +2,8 @@ import {
   compareDashboardTradesChronological,
   type DashboardTradeDateFields,
 } from "./dashboardTradeDate"
-import { averageRrFromTrades, hasStoredRr } from "./tradeRr"
+import { averageRealizedRrFromTrades } from "./tradePointsAndRealizedRr"
+import { hasStoredRr } from "./tradeRr"
 
 export type LongShortSideStats = {
   totalTrades: number
@@ -63,8 +64,8 @@ export function normalizeTradeDirection(
 
 export const isValidTradeRR = hasStoredRr
 
-/** sum(rr) / trades with valid rr; missing RR excluded from denominator. */
-export const computeSideAvgRR = averageRrFromTrades
+/** Mean realized R:R for the side; missing realized values excluded. */
+export const computeSideAvgRR = averageRealizedRrFromTrades
 
 /** Matches dashboard grossProfit / grossLoss profit factor. */
 export function computeSideProfitFactor(trades: { pnl?: unknown }[]): number {

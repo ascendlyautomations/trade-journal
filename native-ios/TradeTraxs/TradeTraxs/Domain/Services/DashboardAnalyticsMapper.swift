@@ -7,6 +7,7 @@ nonisolated enum DashboardAnalyticsMapper {
         case .sevenDays: return "d7"
         case .thirtyDays: return "d30"
         case .ninetyDays: return "d90"
+        case .oneYear: return "ytd"
         case .ytd: return "ytd"
         case .all: return "all"
         }
@@ -148,6 +149,19 @@ nonisolated enum DashboardAnalyticsMapper {
             payouts: payoutTotal,
             expectancy: DashboardAnalyticsComposer.expectancy(ingredients),
             averageRR: DashboardAnalyticsComposer.averageRR(ingredients),
+            averageMaxRrReached: nil,
+            rrTargetAnalysis: DashboardRrTargetAnalysis(
+                tradeCount: ingredients.tradeCount,
+                pairedCount: 0,
+                pairedNonPositiveCount: 0,
+                pairedPositiveCount: 0,
+                avgTargetRr: nil,
+                avgMaxRrReached: nil,
+                avgTargetAttainmentRatio: nil,
+                sampleSummary: nil,
+                headline: nil,
+                bullets: []
+            ),
             tradeCount: ingredients.tradeCount,
             winCount: ingredients.winCount,
             lossCount: ingredients.lossCount,

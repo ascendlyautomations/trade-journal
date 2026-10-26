@@ -155,6 +155,8 @@ nonisolated struct Trade: Hashable, Codable, Sendable, Identifiable {
     var exitAt: Date?
     var realizedPnL: Money?
     var riskReward: Decimal?
+    var maxRrReached: Decimal? = nil
+    var realizedRr: Decimal? = nil
     var points: Decimal?
     var sessionLabel: String?
     var visibility: ContentVisibility
@@ -270,6 +272,9 @@ nonisolated struct TradeDraft: Hashable, Codable, Sendable {
     var exitAt: Date?
     var realizedPnL: Money?
     var riskReward: Decimal? = nil
+    /// Highest R:R reached before close (`trades.max_rr_reached`), optional journal field.
+    var maxRrReached: Decimal? = nil
+    var realizedRr: Decimal? = nil
     var points: Decimal? = nil
     var sessionLabel: String? = nil
     var strategy: String? = nil

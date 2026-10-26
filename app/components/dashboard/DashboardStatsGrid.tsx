@@ -57,6 +57,7 @@ export type DashboardStatsGridProps = {
   totalTrades: number
   winRate: number
   avgRR: number | null
+  avgMaxRrReached?: number | null
   totalPnL: number
   profitFactor?: number | null
   avgWin: number
@@ -430,6 +431,7 @@ function FreeDashboardKpis({
   totalTrades,
   winRate,
   avgRR,
+  avgMaxRrReached = null,
   totalPnL,
   profitFactor = 0,
   bestWinStreak,
@@ -440,6 +442,7 @@ function FreeDashboardKpis({
   | "totalTrades"
   | "winRate"
   | "avgRR"
+  | "avgMaxRrReached"
   | "totalPnL"
   | "profitFactor"
   | "bestWinStreak"
@@ -457,6 +460,10 @@ function FreeDashboardKpis({
         <StripStat title="Win Rate" value={`${winRate.toFixed(1)}%`} />
         <StripStat title="Trades" value={formatNumber(totalTrades)} />
         <StripStat title="Avg RR" value={formatRR(avgRR)} />
+        <StripStat
+          title="Avg Max R"
+          value={formatRR(avgMaxRrReached)}
+        />
         <StripStat
           title="Profit Factor"
           value={formatProfitFactor(profitFactor)}
@@ -487,6 +494,7 @@ export default function DashboardStatsGrid({
   totalTrades,
   winRate,
   avgRR,
+  avgMaxRrReached = null,
   totalPnL,
   profitFactor = 0,
   avgWin,
@@ -512,6 +520,7 @@ export default function DashboardStatsGrid({
           totalTrades={totalTrades}
           winRate={winRate}
           avgRR={avgRR}
+          avgMaxRrReached={avgMaxRrReached}
           totalPnL={totalPnL}
           profitFactor={profitFactor}
           bestWinStreak={bestWinStreak}
@@ -542,6 +551,10 @@ export default function DashboardStatsGrid({
           */}
           <Stat title="Best Win Streak" value={bestWinStreak} />
           <Stat title="Avg RR" value={formatRR(avgRR)} />
+          <Stat
+            title="Avg Max R:R"
+            value={formatRR(avgMaxRrReached)}
+          />
         </div>
 
         {liveAccountValue}
@@ -558,6 +571,10 @@ export default function DashboardStatsGrid({
         <StripStat title="Win %" value={`${winRate.toFixed(1)}%`} />
         <StripStat title="Trades" value={formatNumber(totalTrades)} />
         <StripStat title="Avg RR" value={formatRR(avgRR)} />
+        <StripStat
+          title="Avg Max R"
+          value={formatRR(avgMaxRrReached)}
+        />
         <StripStat
           title="Profit Factor"
           value={formatProfitFactor(profitFactor)}
@@ -585,6 +602,10 @@ export default function DashboardStatsGrid({
           subtitle={bestWinStreakSubtitle(bestWinStreak)}
         />
         <ExpectancyStat expectancyData={expectancyData} />
+        <Stat
+          title="Avg Max R:R Reached"
+          value={formatRR(avgMaxRrReached)}
+        />
         <Stat title="Avg Win" value={formatCurrency(avgWin)} positive />
         <Stat
           title="Best Trade"

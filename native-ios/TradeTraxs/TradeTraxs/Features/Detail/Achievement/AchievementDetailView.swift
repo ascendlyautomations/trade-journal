@@ -5,6 +5,7 @@ struct AchievementDetailView: View {
     @State private var viewModel: AchievementDetailViewModel
     @State private var contentRevealed = false
     @State private var showsDeleteConfirm = false
+    @State private var showsShareSheet = false
     private let imagePipeline: any ImagePipeline
     private let data: DataEnvironment
 
@@ -94,6 +95,15 @@ struct AchievementDetailView: View {
         } message: {
             Text(viewModel.deleteErrorMessage ?? "")
         }
+        .sheet(isPresented: $showsShareSheet) {
+            if let achievement = viewModel.achievement,
+               let url = DetailContentLink.achievement(achievement.id).url
+            {
+                AchievementDetailShareSheet(
+                    items: ["\(achievement.title) on TradeTraxs", url]
+                )
+            }
+        }
         .accessibilityIdentifier("detail.achievement.root")
     }
 
@@ -148,14 +158,21 @@ struct AchievementDetailView: View {
                                     }
                                 }
                             )
+                            achievementEngagementBar(achievement, scrollProxy: proxy)
+                                .padding(.horizontal, ExperienceSpacing.lg)
+                                .padding(.top, ExperienceSpacing.xxs)
                         }
 
-                        achievementBody(achievement, scrollProxy: proxy)
+                        achievementBody(
+                            achievement,
+                            scrollProxy: proxy,
+                            showsMediaEngagement: achievementHasAttachedImage(achievement)
+                        )
                             .padding(.horizontal, ExperienceSpacing.lg)
                             .padding(
                                 .top,
                                 achievementHasAttachedImage(achievement)
-                                    ? ExperienceSpacing.md
+                                    ? ExperienceSpacing.xs
                                     : ExperienceSpacing.sm
                             )
                             .padding(.bottom, ExperienceSpacing.xl)
@@ -168,28 +185,16 @@ struct AchievementDetailView: View {
 
     private func achievementBody(
         _ achievement: Achievement,
-        scrollProxy: ScrollViewProxy
+        scrollProxy: ScrollViewProxy,
+        showsMediaEngagement: Bool
     ) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
-            if !achievementHasAttachedImage(achievement) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            if !showsMediaEngagement {
                 achievementTextContent(achievement)
+                achievementEngagementBar(achievement, scrollProxy: scrollProxy)
             }
 
-            EngagementBar(
-                target: engagementTarget(for: achievement),
-                store: data.engagementStore,
-                vaultStore: data.vaultStore,
-                onCommentTap: {
-                    withAnimation(
-                        ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion)
-                    ) {
-                        scrollProxy.scrollTo(Self.commentsAnchorID, anchor: .top)
-                    }
-                },
-                vaultRef: vaultRef(for: achievement)
-            )
-
-            if achievementHasAttachedImage(achievement) {
+            if showsMediaEngagement {
                 achievementTextContent(achievement)
             }
 
@@ -202,6 +207,26 @@ struct AchievementDetailView: View {
         }
     }
 
+    private func achievementEngagementBar(
+        _ achievement: Achievement,
+        scrollProxy: ScrollViewProxy
+    ) -> some View {
+        EngagementBar(
+            target: engagementTarget(for: achievement),
+            store: data.engagementStore,
+            vaultStore: data.vaultStore,
+            onCommentTap: {
+                withAnimation(
+                    ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion)
+                ) {
+                    scrollProxy.scrollTo(Self.commentsAnchorID, anchor: .top)
+                }
+            },
+            onShareTap: { showsShareSheet = true },
+            vaultRef: vaultRef(for: achievement)
+        )
+    }
+
     private static let commentsAnchorID = "detail.achievement.comments"
 
     private func achievementHasAttachedImage(_ achievement: Achievement) -> Bool {
@@ -211,7 +236,7 @@ struct AchievementDetailView: View {
 
     @ViewBuilder
     private func achievementTextContent(_ achievement: Achievement) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             achievementTitleRow(achievement)
 
             achievementMetadataTags(achievement)
@@ -257,14 +282,14 @@ struct AchievementDetailView: View {
         {
             VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                 Text(payoutText)
-                    .font(ExperienceTypography.title.monospacedDigit())
+                    .font(ExperienceTypography.headline.monospacedDigit())
                     .foregroundStyle(payoutAmountColor(for: achievement))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("detail.achievement.payoutAmount")
 
                 Text(achievement.title)
-                    .font(ExperienceTypography.title)
+                    .font(ExperienceTypography.headline)
                     .foregroundStyle(colors.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -273,7 +298,7 @@ struct AchievementDetailView: View {
             .accessibilityIdentifier("detail.achievement.payoutHeadline")
         } else {
             Text(achievement.title)
-                .experienceStyle(.title, color: colors.primaryText)
+                .experienceStyle(.headline, color: colors.primaryText)
         }
     }
 
@@ -313,4 +338,14 @@ struct AchievementDetailView: View {
         }
         return colors.primaryText
     }
+}
+
+private struct AchievementDetailShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

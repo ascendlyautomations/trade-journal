@@ -141,6 +141,17 @@ struct RoomConversationView: View {
                     }
                     .accessibilityLabel("Manage Room")
                     .accessibilityIdentifier("tradeRooms.conversation.manage")
+                } else if viewModel.canModerateRoom {
+                    Button {
+                        viewModel.openMembers()
+                    } label: {
+                        Image(systemName: "person.2.badge.gearshape")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(colors.primaryText)
+                            .experienceTouchTarget()
+                    }
+                    .accessibilityLabel("Moderate members")
+                    .accessibilityIdentifier("tradeRooms.conversation.moderate")
                 } else if viewModel.isMember {
                     Menu {
                         Button(
@@ -380,6 +391,7 @@ struct RoomConversationView: View {
             },
             onMembersTap: { viewModel.openMembers() },
             onInfoTap: { viewModel.openRoomInfo() },
+            inviteShareURL: RoomInfoViewModel.inviteURL(slug: room.slug, roomID: room.id),
             onCopyInviteLink: { copyInviteLink(for: room) },
             onCreateFeedPost: viewModel.viewerID == nil ? nil : { createFeedPost(for: room) },
             imagePipeline: imagePipeline

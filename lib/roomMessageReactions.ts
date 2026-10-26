@@ -1,10 +1,11 @@
 /** V1 message reactions — DMs (`message_reactions`) + Trade Rooms (`room_message_reactions`). */
 
-export const ROOM_MESSAGE_REACTIONS = ["👍", "🔥", "😂", "‼️"] as const
+export const ROOM_MESSAGE_REACTIONS = ["❤️", "👍", "🔥", "😂", "‼️"] as const
 
 export const MESSAGE_REACTIONS = ROOM_MESSAGE_REACTIONS
 
-export const MESSAGE_REACTION_DOUBLE_TAP_EMOJI = "👍" as const
+/** Double-tap adds/removes this reaction (not thumbs-up). */
+export const MESSAGE_REACTION_DOUBLE_TAP_EMOJI = "❤️" as const
 
 export type RoomMessageReactionEmoji = (typeof ROOM_MESSAGE_REACTIONS)[number]
 

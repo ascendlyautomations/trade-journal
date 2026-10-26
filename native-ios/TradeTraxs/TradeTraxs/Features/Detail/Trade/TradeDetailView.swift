@@ -335,34 +335,39 @@ struct TradeDetailView: View {
 
     @ViewBuilder
     private func socialTradeContent(_ trade: Trade, scrollProxy: ScrollViewProxy) -> some View {
-        if let media = viewModel.mediaReference {
-            TradeDetailMediaView(
-                mediaID: trade.id.rawValue,
-                reference: media,
-                imagePipeline: imagePipeline
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            if let media = viewModel.mediaReference {
+                TradeDetailMediaView(
+                    mediaID: trade.id.rawValue,
+                    reference: media,
+                    imagePipeline: imagePipeline
+                )
+                socialEngagementBar(for: trade, scrollProxy: scrollProxy)
+            }
+
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                SocialTradeDetailHeader(
+                    trade: trade,
+                    accountLine: trade.mode == .copyTraded
+                        ? viewModel.socialCopyTradeModeSummary
+                        : viewModel.accountIdentityLine
+                )
+                .accessibilityIdentifier("detail.trade.headline")
+
+                SocialTradePublicMetricsSection(trade: trade)
+            }
+
+            if viewModel.mediaReference == nil {
+                socialEngagementBar(for: trade, scrollProxy: scrollProxy)
+            }
+
+            CommentsSectionView(
+                target: socialEngagementTarget(for: trade.id),
+                contentOwnerUserID: trade.ownerProfileID.rawValue,
+                data: data
             )
-            socialEngagementBar(for: trade, scrollProxy: scrollProxy)
+            .id(Self.commentsAnchorID)
         }
-
-        SocialTradeDetailHeader(
-            trade: trade,
-            accountLine: trade.mode == .copyTraded
-                ? viewModel.socialCopyTradeModeSummary
-                : viewModel.accountIdentityLine
-        )
-        .accessibilityIdentifier("detail.trade.headline")
-
-        SocialTradePublicMetricsSection(trade: trade)
-
-        if viewModel.mediaReference == nil {
-            socialEngagementBar(for: trade, scrollProxy: scrollProxy)
-        }
-        CommentsSectionView(
-            target: socialEngagementTarget(for: trade.id),
-            contentOwnerUserID: trade.ownerProfileID.rawValue,
-            data: data
-        )
-        .id(Self.commentsAnchorID)
     }
 
     private func socialEngagementTarget(for tradeID: TradeID) -> InteractionTarget {
@@ -384,6 +389,7 @@ struct TradeDetailView: View {
                     scrollProxy.scrollTo(Self.commentsAnchorID, anchor: .top)
                 }
             },
+            onShareTap: { showsShareSheet = true },
             vaultRef: tradeVaultRef
         )
     }

@@ -51,24 +51,28 @@ struct PropFirmExpensesView: View {
         .experienceNavigationTitle("Expense Tracker")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("Income") {
-                    editingIncome = nil
-                    incomeDraft = .empty()
-                    viewModel.formError = nil
-                    showsIncomeEditor = true
+                Menu {
+                    Button {
+                        presentAddIncome()
+                    } label: {
+                        Label("Income", systemImage: "arrow.down.circle")
+                    }
+                    .accessibilityIdentifier("propFirmExpenses.addIncome")
+                    .contextualTourTarget(.expenseTrackerIncome)
+
+                    Button {
+                        presentAddExpense()
+                    } label: {
+                        Label("Expense", systemImage: "arrow.up.circle")
+                    }
+                    .accessibilityIdentifier("propFirmExpenses.add")
+                    .contextualTourTarget(.expenseTrackerAdd)
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.body.weight(.semibold))
                 }
-                .accessibilityIdentifier("propFirmExpenses.addIncome")
-                .contextualTourTarget(.expenseTrackerIncome)
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Expense") {
-                    editorExpense = nil
-                    draft = .empty()
-                    viewModel.formError = nil
-                    showsEditor = true
-                }
-                .accessibilityIdentifier("propFirmExpenses.add")
-                .contextualTourTarget(.expenseTrackerAdd)
+                .accessibilityLabel("Add income or expense")
+                .accessibilityIdentifier("propFirmExpenses.addMenu")
             }
         }
         .task { await viewModel.load() }
@@ -183,18 +187,33 @@ struct PropFirmExpensesView: View {
                 .pickerStyle(.menu)
                 .accessibilityIdentifier("propFirmExpenses.taxYear")
             }
-            Text("Income and expenses. Withdrawals you already recorded are included.")
-                .experienceStyle(.caption, color: colors.secondaryText)
             HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
                 metric("Income", PropFirmExpenseMoney.format(incomeTotal), tint: colors.profit)
                 metric("Expenses", PropFirmExpenseMoney.format(expenseTotal), tint: colors.primaryText)
                 metric("Net", PropFirmExpenseMoney.format(net), tint: net > 0 ? colors.profit : net < 0 ? colors.loss : colors.primaryText)
             }
             .fixedSize(horizontal: false, vertical: true)
-            Text("Withdrawals \(PropFirmExpenseMoney.format(withdrawalTotal)) · Business income \(PropFirmExpenseMoney.format(businessTotal))")
-                .experienceStyle(.subheadline, color: colors.secondaryText)
+            if let breakdown = incomeBreakdownCaption(
+                withdrawals: withdrawalTotal,
+                business: businessTotal
+            ) {
+                Text(breakdown)
+                    .experienceStyle(.subheadline, color: colors.secondaryText)
+            }
         }
         .padding(.horizontal, ExperienceSpacing.md)
+    }
+
+    private func incomeBreakdownCaption(withdrawals: Decimal, business: Decimal) -> String? {
+        var parts: [String] = []
+        if withdrawals > 0 {
+            parts.append("Withdrawals \(PropFirmExpenseMoney.format(withdrawals))")
+        }
+        if business > 0 {
+            parts.append("Business income \(PropFirmExpenseMoney.format(business))")
+        }
+        guard !parts.isEmpty else { return nil }
+        return parts.joined(separator: " · ")
     }
 
     private var incomeRowsForDisplay: [TrackerIncome] {
@@ -243,26 +262,13 @@ struct PropFirmExpensesView: View {
 
     private var incomeHistory: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            HStack {
-                Text("Income")
-                    .experienceStyle(.headline, color: colors.primaryText)
-                Spacer()
-                Button("Withdrawals") {
-                    stackNavigation?.pushSettings(.payouts)
-                }
-                .font(.subheadline.weight(.semibold))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .foregroundStyle(.white)
-                .background(colors.accent.opacity(0.9), in: Capsule())
-                .accessibilityIdentifier("propFirmExpenses.withdrawals")
-            }
-            .padding(.horizontal, ExperienceSpacing.md)
+            sectionTitle("Income")
+                .padding(.horizontal, ExperienceSpacing.md)
             if visibleIncome.isEmpty {
                 ExperienceEmptyState(
                     icon: .chart,
                     title: "No income yet",
-                    message: "Withdrawals you already recorded show up here. Add business income for money a project receives."
+                    message: "Add business income for client or project payments."
                 )
             } else {
                 let rows = displayed(visibleIncome, expanded: showsAllIncome)
@@ -367,39 +373,42 @@ struct PropFirmExpensesView: View {
                 .foregroundStyle(colors.primaryText)
             Text("Budgeting estimate on positive net payouts after expenses. This is not a tax calculation or your tax liability.")
                 .experienceStyle(.caption, color: colors.secondaryText)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: ExperienceSpacing.xs) {
-                    ForEach([15, 20, 25, 30], id: \.self) { preset in
-                        let selected = !showsCustomPercent && viewModel.reservePercent == Decimal(preset)
-                        Button("\(preset)%") {
-                            showsCustomPercent = false
-                            Task { await viewModel.setReservePercent(Decimal(preset)) }
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: ExperienceSpacing.xs) {
+                        ForEach([15, 20, 25, 30], id: \.self) { preset in
+                            let selected = !showsCustomPercent && viewModel.reservePercent == Decimal(preset)
+                            reservePercentChip(
+                                title: "\(preset)%",
+                                selected: selected
+                            ) {
+                                showsCustomPercent = false
+                                Task { await viewModel.setReservePercent(Decimal(preset)) }
+                            }
+                            .id("reservePreset\(preset)")
                         }
-                        .buttonStyle(.plain)
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .foregroundStyle(selected ? colors.primaryText : colors.secondaryText)
-                        .background(
-                            selected ? colors.accent.opacity(0.85) : colors.fillSecondary.opacity(0.45),
-                            in: Capsule()
-                        )
-                    }
-                    Button("Custom") {
-                        showsCustomPercent = true
-                        if customPercent.isEmpty {
-                            customPercent = PropFirmYearOverviewBuilder.percentLabel(viewModel.reservePercent)
+                        reservePercentChip(
+                            title: "Custom",
+                            selected: showsCustomPercent
+                        ) {
+                            showsCustomPercent = true
+                            if customPercent.isEmpty {
+                                customPercent = PropFirmYearOverviewBuilder.percentLabel(viewModel.reservePercent)
+                            }
                         }
+                        .id("reserveCustom")
                     }
-                    .buttonStyle(.plain)
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .foregroundStyle(showsCustomPercent ? colors.primaryText : colors.secondaryText)
-                    .background(
-                        showsCustomPercent ? colors.accent.opacity(0.85) : colors.fillSecondary.opacity(0.45),
-                        in: Capsule()
-                    )
+                    .padding(.horizontal, 4)
+                }
+                .onAppear {
+                    scrollTaxReserveSelectionIntoView(proxy: proxy, animated: false)
+                }
+                .onChange(of: showsCustomPercent) { _, _ in
+                    scrollTaxReserveSelectionIntoView(proxy: proxy, animated: true)
+                }
+                .onChange(of: viewModel.reservePercent) { _, _ in
+                    scrollTaxReserveSelectionIntoView(proxy: proxy, animated: true)
                 }
             }
             if showsCustomPercent {
@@ -803,6 +812,64 @@ struct PropFirmExpensesView: View {
         return names.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
+    private func reservePercentChip(
+        title: String,
+        selected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .foregroundStyle(selected ? colors.primaryText : colors.secondaryText)
+                .background(
+                    selected ? colors.accent.opacity(0.85) : colors.fillSecondary.opacity(0.45),
+                    in: Capsule()
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func scrollTaxReserveSelectionIntoView(
+        proxy: ScrollViewProxy,
+        animated: Bool
+    ) {
+        let target: String = {
+            if showsCustomPercent || !PropFirmYearOverviewBuilder.isPreset(viewModel.reservePercent) {
+                return "reserveCustom"
+            }
+            let preset = Int(NSDecimalNumber(decimal: viewModel.reservePercent).doubleValue.rounded())
+            if [15, 20, 25, 30].contains(preset) {
+                return "reservePreset\(preset)"
+            }
+            return "reserveCustom"
+        }()
+        let scroll = {
+            proxy.scrollTo(target, anchor: .center)
+        }
+        if animated {
+            withAnimation(.easeInOut(duration: 0.25), scroll)
+        } else {
+            scroll()
+        }
+    }
+
+    private func presentAddIncome() {
+        editingIncome = nil
+        incomeDraft = .empty()
+        viewModel.formError = nil
+        showsIncomeEditor = true
+    }
+
+    private func presentAddExpense() {
+        editorExpense = nil
+        draft = .empty()
+        viewModel.formError = nil
+        showsEditor = true
+    }
+
     private func historySubtitle(_ expense: PropFirmExpense) -> String {
         var parts = [expense.trackerKind.title, expense.categoryTitle]
         if let recurrence = expense.recurrence { parts.append(recurrence.title) }
@@ -1142,7 +1209,7 @@ private struct TrackerIncomeEditorSheet: View {
                 }
                 Text(draft.incomeKind == .business
                      ? "Money the business or project received, such as a client payment."
-                     : "Withdrawals already recorded are included. Add one here only when it is not listed there.")
+                     : "Record a withdrawal that is not already listed in your income history.")
                     .experienceStyle(.caption, color: colors.secondaryText)
                 SettingsLabeledField(title: draft.incomeKind == .business ? "Who paid you" : "Withdrawal from") {
                     TextField(draft.incomeKind == .business ? "Client or payer" : "Broker, firm, or account", text: $draft.name)

@@ -49,7 +49,7 @@ export default function AchievementDetailModal({
         splitPanel={
           <div className="flex min-h-0 flex-col">
             {!imageSrc ? (
-              <div className="flex justify-end border-b border-white/10 px-4 py-2">
+              <div className="flex justify-end border-b border-white/10 px-4 py-1">
                 <VaultEngagementButton
                   contentRef={{
                     contentType: "achievement",

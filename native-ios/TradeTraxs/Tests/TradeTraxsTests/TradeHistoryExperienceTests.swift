@@ -364,6 +364,60 @@ final class TradeHistoryExperienceTests: XCTestCase {
         XCTAssertEqual(viewModel.items.count, 1)
     }
 
+    func testWeekdayBrowseUsesCompleteOwnerCacheWithoutNetwork() async {
+        let profileID = ProfileID("00000000-0000-4000-8000-000000000230")
+        let cache = DetailPresentationCache()
+        var mondayComps = DateComponents()
+        mondayComps.year = 2026
+        mondayComps.month = 1
+        mondayComps.day = 5
+        mondayComps.hour = 10
+        let monday = Calendar.current.date(from: mondayComps)!
+        var tuesdayComps = mondayComps
+        tuesdayComps.day = 6
+        let tuesday = Calendar.current.date(from: tuesdayComps)!
+
+        var monTrade = makeTrade(id: "mon", profileID: profileID, side: .long, pnl: 40)
+        monTrade.entryAt = monday
+        monTrade.exitAt = monday
+        monTrade.createdAt = monday
+        var tueTrade = makeTrade(id: "tue", profileID: profileID, side: .long, pnl: 12)
+        tueTrade.entryAt = tuesday
+        tueTrade.exitAt = tuesday
+        tueTrade.createdAt = tuesday
+
+        SessionOwnerTradesStore.shared.seed(
+            [monTrade, tueTrade],
+            for: profileID,
+            detailCache: cache,
+            historyComplete: true,
+            totalTradeCount: 2
+        )
+
+        TradeHistoryLaunchSeed.set(
+            .init(
+                filters: TradeHistoryFilters(),
+                weekday: TradeHistoryLaunchSeed.calendarWeekday(forHeatmapLabel: "Mon")
+            )
+        )
+
+        let repository = TradeHistoryStubTradeRepository()
+        let viewModel = TradeHistoryViewModel(
+            trades: repository,
+            session: TradeHistoryStubSession(userID: profileID.rawValue),
+            detailCache: cache,
+            tradeDetailRepository: NullTradeDetailRepository(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+
+        XCTAssertEqual(repository.historyCallCount, 0)
+        XCTAssertEqual(viewModel.items.count, 1)
+        XCTAssertEqual(viewModel.items.first?.id, monTrade.id)
+        XCTAssertTrue(viewModel.isEmptyFiltered == false)
+    }
+
     func testMutationStoreTriggersReloadWithoutPolling() async {
         let profileID = ProfileID("00000000-0000-4000-8000-000000000222")
         let repository = TradeHistoryPagingStubRepository()

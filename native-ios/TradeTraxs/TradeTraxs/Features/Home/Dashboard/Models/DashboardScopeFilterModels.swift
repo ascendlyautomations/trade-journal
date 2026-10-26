@@ -16,7 +16,7 @@ nonisolated struct DashboardClientScopeFilter: Equatable, Sendable {
 
     /// Custom date ranges are not in V3 presets — always recompute from trade rows.
     var requiresLocalMetricsRecompute: Bool {
-        usesCustomTimeRange
+        usesCustomTimeRange || dateRange == .oneYear
     }
 
     /// Web dashboard filters (account type, public) — client trade rows like `useDashboardAnalytics`.
@@ -35,7 +35,7 @@ nonisolated enum DashboardTimePeriodPicker: String, CaseIterable, Identifiable, 
     case sevenDays
     case thirtyDays
     case ninetyDays
-    case ytd
+    case oneYear
     case custom
 
     var id: String { rawValue }
@@ -46,7 +46,7 @@ nonisolated enum DashboardTimePeriodPicker: String, CaseIterable, Identifiable, 
         case .sevenDays: return "7D"
         case .thirtyDays: return "30D"
         case .ninetyDays: return "90D"
-        case .ytd: return "YTD"
+        case .oneYear: return "1Y"
         case .custom: return "Custom Range"
         }
     }
@@ -57,7 +57,7 @@ nonisolated enum DashboardTimePeriodPicker: String, CaseIterable, Identifiable, 
         case .sevenDays: return .sevenDays
         case .thirtyDays: return .thirtyDays
         case .ninetyDays: return .ninetyDays
-        case .ytd: return .ytd
+        case .oneYear: return .oneYear
         case .custom: return nil
         }
     }
@@ -72,7 +72,7 @@ nonisolated enum DashboardTimePeriodPicker: String, CaseIterable, Identifiable, 
         case .sevenDays: self = .sevenDays
         case .thirtyDays: self = .thirtyDays
         case .ninetyDays: self = .ninetyDays
-        case .ytd: self = .ytd
+        case .oneYear, .ytd: self = .oneYear
         }
     }
 }
@@ -206,6 +206,8 @@ nonisolated enum DashboardScopeFilterSupport {
             return Calendar.current.date(byAdding: .day, value: -30, to: now)
         case .ninetyDays:
             return Calendar.current.date(byAdding: .day, value: -90, to: now)
+        case .oneYear:
+            return Calendar.current.date(byAdding: .day, value: -365, to: now)
         case .ytd:
             let year = Calendar.current.component(.year, from: now)
             return Calendar.current.date(from: DateComponents(year: year, month: 1, day: 1))

@@ -15,16 +15,22 @@ import {
 import { supabase } from "../../../lib/supabaseClient"
 import { asJsonObject } from "@/lib/supabaseProjectedQuery"
 import {
+  formatRR,
   formatSignedPnlDisplay,
-  formatTradePoints,
 } from "@/lib/formatDisplay"
+import { hasStoredRr } from "@/lib/tradeRr"
 import {
   sanitizeTradeForViewer,
   tradeRelationForViewer,
   tradeSelectForViewer,
 } from "@/lib/publicAccountPrivacy"
 import { rpcTradeOwnerRead } from "@/lib/tradeOwnerRead"
-import { resolveTradePoints } from "@/lib/resolveTradePoints"
+import { hasStoredTradePoints } from "@/lib/resolveTradePoints"
+import {
+  computeActualPoints,
+  formatSignedPoints,
+  resolveRealizedRr,
+} from "@/lib/tradePointsAndRealizedRr"
 import ContentMediaPreview from "@/app/components/ContentMediaPreview"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import TradeCopyTradingDetails from "@/app/components/trade/TradeCopyTradingDetails"
@@ -182,7 +188,10 @@ export default function TradeDetailPageClient({
   const pnlLabel = Number.isNaN(pnl)
     ? "—"
     : `${pnlPositive ? "+" : "-"}$${Math.abs(pnl)}`
-  const resolvedPoints = trade ? resolveTradePoints(trade) : null
+  const pointsTargeted =
+    trade && hasStoredTradePoints(trade.points) ? Number(trade.points) : null
+  const actualPoints = trade ? computeActualPoints(trade) : null
+  const realizedRr = trade ? resolveRealizedRr(trade) : null
 
   const tradeCompactMeta = trade ? (
     <>
@@ -230,11 +239,31 @@ export default function TradeDetailPageClient({
           {pnlLabel}
         </span>
       </div>
-      {resolvedPoints !== null ? (
+      {pointsTargeted !== null ? (
         <p className="text-sm text-gray-400">
-          Points:{" "}
+          Points Targeted:{" "}
           <span className="tabular-nums text-gray-200">
-            {formatTradePoints(trade)}
+            {formatSignedPoints(pointsTargeted)}
+          </span>
+        </p>
+      ) : null}
+      <p className="text-sm text-gray-400">
+        Actual Points:{" "}
+        <span className="tabular-nums text-gray-200">
+          {formatSignedPoints(actualPoints)}
+        </span>
+      </p>
+      <p className="text-sm text-gray-400">
+        Realized R:R:{" "}
+        <span className="tabular-nums text-gray-200">
+          {realizedRr != null ? formatRR(realizedRr) : "—"}
+        </span>
+      </p>
+      {hasStoredRr((trade as { max_rr_reached?: unknown }).max_rr_reached) ? (
+        <p className="text-sm text-gray-400">
+          Max R:R Reached:{" "}
+          <span className="tabular-nums text-gray-200">
+            {formatRR((trade as { max_rr_reached?: unknown }).max_rr_reached)}
           </span>
         </p>
       ) : null}
@@ -372,7 +401,7 @@ export default function TradeDetailPageClient({
                 mobileMedia={tradeImage ?? undefined}
                 engagement={
                   <TradeSocialEngagementBar
-                    className="px-4 py-2"
+                    className="px-4 py-1"
                     onCommentsFocus={() => setCommentsFocused(true)}
                   />
                 }

@@ -162,8 +162,48 @@ export async function insertCopyTradedTrades({
   const insertedIDs = (insertedTrades ?? [])
     .map((row) => (row.id ? String(row.id) : ""))
     .filter(Boolean)
+
+  if (insertedIDs.length !== rows.length) {
+    console.error("[insertCopyTradedTrades] partial insert", {
+      expected: rows.length,
+      inserted: insertedIDs.length,
+    })
+    return {
+      ok: false,
+      message:
+        "Only part of the copy-traded batch was saved. Sync your journal and retry once to avoid duplicates.",
+    }
+  }
+
   const owned = await rpcTradesOwnerRows(client, { tradeIds: insertedIDs })
-  const trades = owned.rows.length > 0 ? owned.rows : insertedIDs.map((id) => ({ id }))
+  if (owned.error) {
+    console.error("[insertCopyTradedTrades] owner read error:", owned.error)
+    return {
+      ok: false,
+      message: toUserFacingErrorMessage(
+        owned.error,
+        "Trades were saved but could not be loaded. Refresh your journal before retrying."
+      ),
+    }
+  }
+
+  if (owned.rows.length === 0) {
+    return {
+      ok: false,
+      message:
+        "Trades were saved but could not be confirmed. Refresh your journal before retrying.",
+    }
+  }
+
+  if (owned.rows.length !== insertedIDs.length) {
+    return {
+      ok: false,
+      message:
+        "Copy-traded batch confirmation was incomplete. Refresh your journal before retrying.",
+    }
+  }
+
+  const trades = owned.rows
   for (const trade of trades) {
     prependTradeInCache(userId, trade)
   }

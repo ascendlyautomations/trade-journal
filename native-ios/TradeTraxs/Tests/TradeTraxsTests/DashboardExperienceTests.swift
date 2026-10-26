@@ -35,7 +35,7 @@ final class DashboardExperienceTests: XCTestCase {
             accountFilter: .all,
             now: now
         )
-        XCTAssertEqual(singleTradeResolved, .all, "Single trade across history should land on All Time")
+        XCTAssertEqual(singleTradeResolved, .ninetyDays, "Single trade in 90D window should select 90D")
 
         let trade90DayWindow = (0..<3).map { index in
             DashboardChartMetrics.Input(
@@ -73,7 +73,7 @@ final class DashboardExperienceTests: XCTestCase {
         XCTAssertEqual(multiTradeResolved, .ninetyDays, "Three trades in 90D should prefer 90D over empty 30D")
     }
 
-    func testInitialDateRangeFallbackPrefersFirstRangeWithTwoOrMoreTrades() {
+    func testInitialDateRangeFallbackPrefersFirstRangeWithOneOrMoreTrades() {
         let profileID = ProfileID("dev.dashboard.two-plus")
         let now = Date()
         let accountID = TradingAccountID("dev-account")
@@ -108,35 +108,32 @@ final class DashboardExperienceTests: XCTestCase {
             )
         }
 
-        let sparseThenYTD = [
-            trade("30d-one", dayOffset: -5),
-            trade("90d-one", dayOffset: -45),
-            trade("ytd-1", dayOffset: -120),
-            trade("ytd-2", dayOffset: -121),
-            trade("ytd-3", dayOffset: -122),
-            trade("ytd-4", dayOffset: -123),
-            trade("ytd-5", dayOffset: -124),
-            trade("ytd-6", dayOffset: -125),
-            trade("ytd-7", dayOffset: -126),
-        ]
         XCTAssertEqual(
             DashboardDateRangeFallback.initialEffectiveRange(
-                tradeInputs: sparseThenYTD,
+                tradeInputs: [trade("30d-one", dayOffset: -5)],
                 accountFilter: .all,
                 now: now
             ),
-            .ytd
+            .thirtyDays
+        )
+
+        let sparseThenOneYear = [
+            trade("90d-one", dayOffset: -45),
+            trade("1y-1", dayOffset: -120),
+        ]
+        XCTAssertEqual(
+            DashboardDateRangeFallback.initialEffectiveRange(
+                tradeInputs: sparseThenOneYear,
+                accountFilter: .all,
+                now: now
+            ),
+            .oneYear
         )
 
         let allTimeOnly = (0..<15).map { trade("all-\($0)", dayOffset: -400 - $0) }
-        let oneEachUntilAll = [
-            trade("30d-one", dayOffset: -5),
-            trade("90d-one", dayOffset: -45),
-            trade("ytd-one", dayOffset: -120),
-        ] + allTimeOnly
         XCTAssertEqual(
             DashboardDateRangeFallback.initialEffectiveRange(
-                tradeInputs: oneEachUntilAll,
+                tradeInputs: allTimeOnly,
                 accountFilter: .all,
                 now: now
             ),
@@ -198,8 +195,7 @@ final class DashboardExperienceTests: XCTestCase {
                 accountFilter: .account(accountA),
                 now: now
             ),
-            .all,
-            "Single-trade account should land on All Time"
+            .thirtyDays
         )
         XCTAssertEqual(
             DashboardDateRangeFallback.initialEffectiveRange(
@@ -207,8 +203,7 @@ final class DashboardExperienceTests: XCTestCase {
                 accountFilter: .account(accountB),
                 now: now
             ),
-            .all,
-            "Single-trade account should land on All Time"
+            .oneYear
         )
         XCTAssertEqual(
             DashboardDateRangeFallback.initialEffectiveRange(
@@ -216,19 +211,18 @@ final class DashboardExperienceTests: XCTestCase {
                 accountFilter: .account(accountC),
                 now: now
             ),
-            .all,
-            "Single-trade account should land on All Time"
+            .ninetyDays
         )
     }
 
     func testEquityChartRangeResolverWidenOrderMatchesSupportedPresets() {
         XCTAssertEqual(
             DashboardEquityChartRangeResolver.widenOrder(from: .thirtyDays),
-            [.thirtyDays, .ninetyDays, .ytd, .all]
+            [.thirtyDays, .ninetyDays, .oneYear, .all]
         )
         XCTAssertEqual(
             DashboardEquityChartRangeResolver.widenOrder(from: .sevenDays),
-            [.sevenDays, .thirtyDays, .ninetyDays, .ytd, .all]
+            [.sevenDays, .thirtyDays, .ninetyDays, .oneYear, .all]
         )
     }
 

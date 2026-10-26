@@ -8,6 +8,54 @@ final class ExploreExperienceTests: XCTestCase {
         super.tearDown()
     }
 
+    func testMergeDiscoverableFirstPlacesNonFollowedTradersAheadOfFollowed() {
+        let followed = ExploreTraderSuggestion(
+            profile: Profile(
+                id: ProfileID("followed-1"),
+                userID: UserID("followed-1"),
+                username: "followed",
+                displayName: "Followed",
+                bio: nil,
+                avatar: nil,
+                traderType: nil,
+                tradingStyle: nil,
+                primaryMarket: nil,
+                startedTradingAt: nil,
+                isPrivate: false,
+                isCreator: false,
+                createdAt: .now
+            ),
+            followerCount: 0,
+            score: 1,
+            identityLine: nil
+        )
+        let discover = ExploreTraderSuggestion(
+            profile: Profile(
+                id: ProfileID("new-1"),
+                userID: UserID("new-1"),
+                username: "newbie",
+                displayName: "New",
+                bio: nil,
+                avatar: nil,
+                traderType: nil,
+                tradingStyle: nil,
+                primaryMarket: nil,
+                startedTradingAt: nil,
+                isPrivate: false,
+                isCreator: false,
+                createdAt: .now
+            ),
+            followerCount: 0,
+            score: 1,
+            identityLine: nil
+        )
+        let merged = ExploreFollowingSupport.mergeDiscoverableFirst(
+            discoverable: [discover, followed],
+            following: [followed]
+        )
+        XCTAssertEqual(merged.map(\.id), [discover.id, followed.id])
+    }
+
     func testSuggestedTraderExperienceLineCopy() {
         let start = Calendar.current.date(byAdding: .month, value: -26, to: Date())!
         let profile = Profile(

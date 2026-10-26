@@ -449,6 +449,7 @@ describe("analytics trade history", () => {
       "exit_time",
       "pnl",
       "rr",
+      "max_rr_reached",
       "direction",
       "ticker",
       "strategy",

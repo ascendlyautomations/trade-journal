@@ -37,7 +37,10 @@ export async function rpcTradesOwnerRows(
     return { rows: [], error: new Error(error.message) }
   }
   if (!Array.isArray(data)) {
-    return { rows: [], error: null }
+    return {
+      rows: [],
+      error: new Error("Invalid rpc_v1_trades_owner_rows response"),
+    }
   }
   const rows = data
     .map((row) => asJsonObject(row))

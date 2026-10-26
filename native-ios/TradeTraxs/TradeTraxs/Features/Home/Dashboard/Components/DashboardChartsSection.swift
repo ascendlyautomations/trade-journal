@@ -99,6 +99,12 @@ struct DashboardChartsSection: View {
                     )
                 }
             }
+            chartBlock(
+                title: "R:R Targeting",
+                subtitle: "Target R:R vs how far trades ran before exit"
+            ) {
+                DashboardRrTargetAnalysisView(analysis: summary.rrTargetAnalysis)
+            }
             if !summary.symbolPerformance.isEmpty {
                 chartBlock(
                     title: "Symbol Performance",

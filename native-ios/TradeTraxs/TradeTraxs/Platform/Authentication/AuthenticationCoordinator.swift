@@ -384,7 +384,7 @@ final class AuthenticationCoordinator {
                 return
             }
             if navigation.store.sessionPhase != .unauthenticated {
-                navigation.coordinator.markUnauthenticated()
+                navigation.coordinator.markUnauthenticated(clearPendingAfterAuth: false)
             }
             navigation.clearDeferredAuthenticatedSnapshot()
             if boundUserID != nil {

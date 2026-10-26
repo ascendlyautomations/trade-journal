@@ -1,8 +1,10 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 import {
+  averageMaxRrReachedFromTrades,
   averageRrFromTrades,
   hasStoredRr,
+  maxRrReachedForTradeSave,
   parseOptionalRr,
 } from "./tradeRr.ts"
 
@@ -56,5 +58,40 @@ describe("averageRrFromTrades", () => {
   it("includes genuine zero RR trades", () => {
     const avg = averageRrFromTrades([{ rr: 0 }, { rr: 2 }])
     assert.equal(avg, 1)
+  })
+})
+
+describe("averageMaxRrReachedFromTrades", () => {
+  it("ignores trades without stored max R:R", () => {
+    const avg = averageMaxRrReachedFromTrades([
+      { max_rr_reached: null },
+      { max_rr_reached: 1.25 },
+      { max_rr_reached: 2.5 },
+    ])
+    assert.equal(avg, 1.875)
+  })
+
+  it("returns null when no trades have max R:R", () => {
+    assert.equal(averageMaxRrReachedFromTrades([{}, { max_rr_reached: "" }]), null)
+  })
+
+  it("includes genuine zero max R:R trades", () => {
+    const avg = averageMaxRrReachedFromTrades([
+      { max_rr_reached: 0 },
+      { max_rr_reached: 2 },
+    ])
+    assert.equal(avg, 1)
+  })
+})
+
+describe("maxRrReachedForTradeSave", () => {
+  it("allows optional max R:R when P&L is positive", () => {
+    assert.equal(maxRrReachedForTradeSave(100, 2), 2)
+    assert.equal(maxRrReachedForTradeSave(100, null), undefined)
+  })
+
+  it("persists parsed value when P&L is zero or negative", () => {
+    assert.equal(maxRrReachedForTradeSave(0, 1.5), 1.5)
+    assert.equal(maxRrReachedForTradeSave(-50, null), null)
   })
 })

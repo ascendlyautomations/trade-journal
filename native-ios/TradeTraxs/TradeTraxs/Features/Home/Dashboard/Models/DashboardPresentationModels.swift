@@ -6,6 +6,8 @@ nonisolated enum DashboardDateRange: String, CaseIterable, Identifiable, Sendabl
     case sevenDays
     case thirtyDays
     case ninetyDays
+    case oneYear
+    /// Legacy persisted preset — maps to calendar YTD for V3 bundles.
     case ytd
 
     var id: String { rawValue }
@@ -16,7 +18,8 @@ nonisolated enum DashboardDateRange: String, CaseIterable, Identifiable, Sendabl
         case .sevenDays: return "7D"
         case .thirtyDays: return "30D"
         case .ninetyDays: return "90D"
-        case .ytd: return "YTD"
+        case .oneYear: return "1Y"
+        case .ytd: return "1Y"
         }
     }
 
@@ -33,6 +36,9 @@ nonisolated enum DashboardDateRange: String, CaseIterable, Identifiable, Sendabl
         case .ninetyDays:
             guard let start = calendar.date(byAdding: .day, value: -90, to: now) else { return true }
             return date >= start
+        case .oneYear:
+            guard let start = calendar.date(byAdding: .day, value: -365, to: now) else { return true }
+            return date >= start
         case .ytd:
             let year = calendar.component(.year, from: now)
             var comps = DateComponents()
@@ -45,43 +51,57 @@ nonisolated enum DashboardDateRange: String, CaseIterable, Identifiable, Sendabl
     }
 }
 
-/// Per-account Home date-range resolution — prefer 30D when it has enough trades for a
-/// meaningful equity curve (2+), else the next wider preset; single-trade accounts use All Time.
+/// Automatic dashboard timeframe — default 30D, expand while empty (matches web).
 nonisolated enum DashboardDateRangeFallback {
-    /// Minimum trades required before an automatic preset is considered useful for the equity curve.
-    static let minimumTradeCountForInitialRange = 2
+    static let minimumTradeCountForInitialRange = 1
 
-    /// Wider presets after the default 30D window (7D omitted — narrower than 30D).
     static let initialLoadOrder: [DashboardDateRange] = [
         .thirtyDays,
         .ninetyDays,
-        .ytd,
+        .oneYear,
         .all,
     ]
+
+    static func initialEffectiveRange(
+        accountFilter: DashboardAccountFilter,
+        tradeInputs: [DashboardChartMetrics.Input],
+        analyticsBootstrap: AnalyticsDashboardBootstrapV3? = nil,
+        now: Date = Date()
+    ) -> DashboardDateRange {
+        for range in initialLoadOrder {
+            let tradeCount: Int
+            if !tradeInputs.isEmpty {
+                tradeCount = filteredTradeCount(
+                    tradeInputs: tradeInputs,
+                    accountFilter: accountFilter,
+                    dateRange: range,
+                    now: now
+                )
+            } else if let analyticsBootstrap, range != .oneYear {
+                tradeCount = DashboardAnalyticsMapper.tradeCount(
+                    in: analyticsBootstrap,
+                    accountFilter: accountFilter,
+                    dateRange: range
+                )
+            } else {
+                tradeCount = 0
+            }
+            if tradeCount >= minimumTradeCountForInitialRange {
+                return range
+            }
+        }
+        return .thirtyDays
+    }
 
     static func initialEffectiveRange(
         analyticsBootstrap: AnalyticsDashboardBootstrapV3,
         accountFilter: DashboardAccountFilter
     ) -> DashboardDateRange {
-        for range in initialLoadOrder {
-            let tradeCount = DashboardAnalyticsMapper.tradeCount(
-                in: analyticsBootstrap,
-                accountFilter: accountFilter,
-                dateRange: range
-            )
-            if tradeCount >= minimumTradeCountForInitialRange {
-                return range
-            }
-        }
-        let allTimeCount = DashboardAnalyticsMapper.tradeCount(
-            in: analyticsBootstrap,
+        initialEffectiveRange(
             accountFilter: accountFilter,
-            dateRange: .all
+            tradeInputs: [],
+            analyticsBootstrap: analyticsBootstrap
         )
-        if allTimeCount >= 1 {
-            return .all
-        }
-        return .thirtyDays
     }
 
     static func initialEffectiveRange(
@@ -89,28 +109,12 @@ nonisolated enum DashboardDateRangeFallback {
         accountFilter: DashboardAccountFilter,
         now: Date = Date()
     ) -> DashboardDateRange {
-        for range in initialLoadOrder {
-            let tradeCount = filteredTradeCount(
-                tradeInputs: tradeInputs,
-                accountFilter: accountFilter,
-                dateRange: range,
-                now: now
-            )
-            if tradeCount >= minimumTradeCountForInitialRange {
-                return range
-            }
-        }
-
-        let allTimeCount = filteredTradeCount(
-            tradeInputs: tradeInputs,
+        initialEffectiveRange(
             accountFilter: accountFilter,
-            dateRange: .all,
+            tradeInputs: tradeInputs,
+            analyticsBootstrap: nil,
             now: now
         )
-        if allTimeCount >= 1 {
-            return .all
-        }
-        return .thirtyDays
     }
 
     private static func filteredTradeCount(
@@ -138,13 +142,13 @@ nonisolated enum DashboardEquityChartRangeResolver {
         .sevenDays,
         .thirtyDays,
         .ninetyDays,
-        .ytd,
+        .oneYear,
         .all,
     ]
 
     static func widenOrder(from requested: DashboardDateRange) -> [DashboardDateRange] {
         guard let start = supportedWidenOrder.firstIndex(of: requested) else {
-            return [.thirtyDays, .ninetyDays, .ytd, .all]
+            return [.thirtyDays, .ninetyDays, .oneYear, .all]
         }
         return Array(supportedWidenOrder[start...])
     }
@@ -327,6 +331,9 @@ nonisolated enum DashboardEquityChartSeries {
             return DateInterval(start: start, end: now)
         case .ninetyDays:
             guard let start = calendar.date(byAdding: .day, value: -90, to: now) else { return nil }
+            return DateInterval(start: start, end: now)
+        case .oneYear:
+            guard let start = calendar.date(byAdding: .day, value: -365, to: now) else { return nil }
             return DateInterval(start: start, end: now)
         case .ytd:
             let year = calendar.component(.year, from: now)

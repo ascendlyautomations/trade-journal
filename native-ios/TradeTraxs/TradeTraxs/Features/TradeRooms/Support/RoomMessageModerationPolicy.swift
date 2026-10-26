@@ -18,17 +18,37 @@ enum RoomMessageModerationPolicy {
         return senderProfileID == viewerID
     }
 
-    /// Authors may delete own messages; room owners may delete any member message in their room.
+    /// Authors may delete own messages; owners/moderators may delete member messages (not the owner's).
     static func canDeleteMessage(
         viewerID: ProfileID?,
         senderProfileID: ProfileID,
-        isRoomOwner: Bool
+        isRoomOwner: Bool,
+        isRoomModerator: Bool = false,
+        roomOwnerProfileID: ProfileID? = nil
     ) -> Bool {
         guard viewerID != nil else { return false }
         if isOwnMessage(viewerID: viewerID, senderProfileID: senderProfileID) {
             return true
         }
-        return isRoomOwner
+        let canModerate = isRoomOwner || isRoomModerator
+        guard canModerate else { return false }
+        if let roomOwnerProfileID,
+           senderProfileID == roomOwnerProfileID,
+           !isRoomOwner {
+            return false
+        }
+        return true
+    }
+
+    /// Staff removing another member's message (confirmation required in UI).
+    static func isStaffDeletingAnotherMembersMessage(
+        viewerID: ProfileID?,
+        senderProfileID: ProfileID,
+        isRoomOwner: Bool,
+        isRoomModerator: Bool
+    ) -> Bool {
+        guard isRoomOwner || isRoomModerator else { return false }
+        return !isOwnMessage(viewerID: viewerID, senderProfileID: senderProfileID)
     }
 
     /// Owner removing another member's message (confirmation required in UI).
@@ -37,21 +57,32 @@ enum RoomMessageModerationPolicy {
         senderProfileID: ProfileID,
         isRoomOwner: Bool
     ) -> Bool {
-        guard isRoomOwner else { return false }
-        return !isOwnMessage(viewerID: viewerID, senderProfileID: senderProfileID)
+        isStaffDeletingAnotherMembersMessage(
+            viewerID: viewerID,
+            senderProfileID: senderProfileID,
+            isRoomOwner: isRoomOwner,
+            isRoomModerator: false
+        )
     }
 
-    /// Room owners may ban active members (not self, not the owner account).
+    /// Owners/moderators may ban or remove eligible members.
     static func canBanMember(
         viewerID: ProfileID?,
         targetProfileID: ProfileID,
-        roomOwnerProfileID: ProfileID?
+        roomOwnerProfileID: ProfileID?,
+        canManageRoom: Bool,
+        canModerateRoom: Bool,
+        targetMemberTags: [RoomMemberTag] = []
     ) -> Bool {
-        guard isRoomOwner(roomOwnerProfileID: roomOwnerProfileID, viewerID: viewerID) else {
-            return false
-        }
-        guard let viewerID else { return false }
-        return targetProfileID != viewerID && targetProfileID != roomOwnerProfileID
+        guard let roomOwnerProfileID, let viewerID else { return false }
+        return TradeRoomModerationPermission.canModerateMemberTarget(
+            canManageRoom: canManageRoom,
+            canModerateRoom: canModerateRoom,
+            viewerID: viewerID,
+            roomOwnerProfileID: roomOwnerProfileID,
+            targetProfileID: targetProfileID,
+            targetMemberTags: targetMemberTags
+        )
     }
 
     /// Manage member from message long-press — another member's sent, non-system message.
@@ -60,13 +91,19 @@ enum RoomMessageModerationPolicy {
         senderProfileID: ProfileID,
         roomOwnerProfileID: ProfileID?,
         messageKind: MessageKind,
-        sendState: ConversationBubbleItem.SendState
+        sendState: ConversationBubbleItem.SendState,
+        canManageRoom: Bool,
+        canModerateRoom: Bool,
+        targetMemberTags: [RoomMemberTag] = []
     ) -> Bool {
         guard sendState == .sent, messageKind != .system else { return false }
         return canBanMember(
             viewerID: viewerID,
             targetProfileID: senderProfileID,
-            roomOwnerProfileID: roomOwnerProfileID
+            roomOwnerProfileID: roomOwnerProfileID,
+            canManageRoom: canManageRoom,
+            canModerateRoom: canModerateRoom,
+            targetMemberTags: targetMemberTags
         )
         && !isOwnMessage(viewerID: viewerID, senderProfileID: senderProfileID)
     }

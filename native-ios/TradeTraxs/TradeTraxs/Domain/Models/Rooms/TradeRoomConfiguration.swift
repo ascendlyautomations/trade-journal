@@ -265,7 +265,7 @@ nonisolated struct TradeRoomConfiguration: Hashable, Sendable {
     }
 
     var effectiveJoinPolicy: TradeRoomJoinPolicy {
-        visibility == .public ? joinPolicy : .open
+        visibility == .public ? joinPolicy : .approval
     }
 
     var hasUnsavedDraftChanges: Bool {

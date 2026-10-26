@@ -21,6 +21,8 @@ nonisolated enum DashboardChartMetrics {
         var payouts: Decimal?
         var expectancy: Decimal?
         var averageRR: Decimal?
+        var averageMaxRrReached: Decimal?
+        var rrTargetAnalysis: DashboardRrTargetAnalysis
         var tradeCount: Int
         var winCount: Int
         var lossCount: Int
@@ -165,14 +167,16 @@ nonisolated enum DashboardChartMetrics {
             return winRateFrac * (avgWin ?? 0) - lossRate * (avgLossAbs ?? 0)
         }()
 
-        var rrSum = Decimal(0)
-        var rrCount = 0
+        let averageRR = TradePointsAndRealizedRr.averageRealizedRr(trades: trades)
+
+        var maxRrSum = Decimal(0)
+        var maxRrCount = 0
         for trade in trades {
-            guard let rr = trade.riskReward else { continue }
-            rrSum += rr
-            rrCount += 1
+            guard let maxRr = trade.maxRrReached else { continue }
+            maxRrSum += maxRr
+            maxRrCount += 1
         }
-        let averageRR: Decimal? = rrCount > 0 ? rrSum / Decimal(rrCount) : nil
+        let averageMaxRrReached: Decimal? = maxRrCount > 0 ? maxRrSum / Decimal(maxRrCount) : nil
 
         let statsInputs = filtered.map {
             ProfileStatisticsMetrics.TradeInput(
@@ -197,6 +201,8 @@ nonisolated enum DashboardChartMetrics {
             payouts: payoutTotal,
             expectancy: expectancy,
             averageRR: averageRR,
+            averageMaxRrReached: averageMaxRrReached,
+            rrTargetAnalysis: DashboardRrTargetAnalysis.compute(from: trades),
             tradeCount: tradeCount,
             winCount: winCount,
             lossCount: lossCount,
@@ -669,7 +675,7 @@ nonisolated enum DashboardChartMetrics {
             row.pnl += pnl
             row.trades += 1
             if pnl > 0 { row.wins += 1 }
-            if let rr = trade.riskReward {
+            if let rr = TradePointsAndRealizedRr.resolveRealizedRr(trade: trade) {
                 row.rrSum += rr
                 row.rrCount += 1
             }
@@ -764,7 +770,10 @@ nonisolated enum DashboardChartMetrics {
             var rrSum = Decimal(0)
             var rrCount = 0
             for trade in scoped {
-                if let rr = trade.riskReward { rrSum += rr; rrCount += 1 }
+                if let rr = TradePointsAndRealizedRr.resolveRealizedRr(trade: trade) {
+                    rrSum += rr
+                    rrCount += 1
+                }
             }
             return DashboardDirectionSideSnapshot(
                 trades: scoped.count,

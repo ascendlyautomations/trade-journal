@@ -52,8 +52,40 @@ final class TradeRoomsExperienceTests: XCTestCase {
         await waitFor { viewModel.phase == .loaded }
 
         viewModel.searchText = "risk"
+        viewModel.searchChanged()
         XCTAssertEqual(viewModel.filteredItems.count, 1)
         XCTAssertEqual(viewModel.filteredItems.first?.room.name, "Risk First")
+    }
+
+    func testHomeSearchDiscoveryIncludesOfficialRoomsFromRPC() async {
+        let store = MessagesInboxStore.shared
+        TradeRoomsFixtures.seedInbox(store)
+        let official = ExploreRoomSuggestion(
+            id: RoomID("official-futures"),
+            name: "Futures Traders",
+            slug: "futures-traders",
+            roomKind: .official
+        )
+        let viewModel = TradeRoomsHomeViewModel(
+            messages: TradeRoomsStubMessageRepository(),
+            rooms: TradeRoomsStubRoomRepository(),
+            explore: TradeRoomsSearchExploreRepository(searchResults: [official]),
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: TradeRoomsFixtures.viewerID.rawValue),
+            detailCache: DetailPresentationCache(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
+            inboxStore: store
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+
+        viewModel.searchText = "futures"
+        viewModel.searchChanged()
+        await waitFor { viewModel.searchDiscoveryPhase == .loaded }
+
+        XCTAssertTrue(
+            viewModel.searchDiscoveryDisplayRooms.contains { $0.id == official.id && $0.isOfficial }
+        )
     }
 
     func testRoomMessageReactionSemanticsAggregateAndPatch() {
@@ -757,6 +789,39 @@ final class TradeRoomsExperienceTests: XCTestCase {
             }
             try? await Task.sleep(nanoseconds: 20_000_000)
         }
+    }
+}
+
+private struct TradeRoomsSearchExploreRepository: ExploreRepository {
+    let searchResults: [ExploreRoomSuggestion]
+
+    func discoverableProfiles(page: PageRequest) async throws -> CursorPage<Profile> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+
+    func socialCounts(for profileIDs: [ProfileID]) async throws -> ExploreSocialCounts { .empty }
+    func tradeActivitySummaries(limit: Int) async throws -> [ProfileID: ExploreTraderRanking.TradeSummary] { [:] }
+    func popularRooms(limit: Int) async throws -> [ExploreRoomSuggestion] { [] }
+    func discoverRooms(
+        mode: TradeRoomDiscoveryMode,
+        scope: TradeRoomDiscoveryScope,
+        limit: Int
+    ) async throws -> [ExploreRoomSuggestion] { [] }
+    func searchRooms(query: String, limit: Int) async throws -> [ExploreRoomSuggestion] {
+        let lowered = query.lowercased()
+        return searchResults.filter {
+            $0.name.lowercased().contains(lowered) || $0.slug.lowercased().contains(lowered)
+        }
+    }
+    func tradeRoomsHomeBootstrap(
+        scope: TradeRoomDiscoveryScope,
+        limit: Int,
+        suggestedCursor: String?,
+        popularCursor: String?
+    ) async throws -> TradeRoomsHomeBootstrap {
+        _ = suggestedCursor
+        _ = popularCursor
+        return TradeRoomsFixtures.homeBootstrap(scope: scope)
     }
 }
 

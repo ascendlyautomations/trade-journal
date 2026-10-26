@@ -41,7 +41,12 @@ export default function ReviewPage() {
   }, [currentPage, trades])
 
   const fetchTrades = useCallback(async () => {
-    const { rows } = await rpcTradesOwnerRows(supabase)
+    const { rows, error } = await rpcTradesOwnerRows(supabase)
+    if (error) {
+      console.error("review trades load:", error)
+      setLoading(false)
+      return
+    }
     const data = rows
       .filter(
         (row) =>

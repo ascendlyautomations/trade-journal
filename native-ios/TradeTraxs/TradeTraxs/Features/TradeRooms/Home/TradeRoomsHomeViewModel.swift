@@ -33,8 +33,12 @@ final class TradeRoomsHomeViewModel {
     private(set) var discoveryPhase: Phase = .idle
     private(set) var discoveryErrorMessage: String?
     private(set) var isLoadingMoreDiscovery = false
+    private(set) var searchDiscoveryRooms: [ExploreRoomSuggestion] = []
+    private(set) var searchDiscoveryPhase: Phase = .idle
 
     private static let discoveryInitialLimit = 20
+    private static let searchDiscoveryLimit = 20
+    private static let searchDebounceNanoseconds: UInt64 = 280_000_000
 
     private static func nonEmptyCursor(_ raw: String?) -> String? {
         let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -57,6 +61,8 @@ final class TradeRoomsHomeViewModel {
     private let joinCoordinator: TradeRoomJoinActionCoordinator
 
     private var loadTask: Task<Void, Never>?
+    private var searchTask: Task<Void, Never>?
+    private var searchGeneration: UInt64 = 0
     /// Hosting tab selected (Home / Feed / Profile). Narrow guard for home discovery RPC only.
     private var isHostingTabActive = true
 
@@ -172,7 +178,17 @@ final class TradeRoomsHomeViewModel {
     }
 
     var showsFilteredEmpty: Bool {
-        phase == .loaded && !items.isEmpty && filteredItems.isEmpty
+        guard phase == .loaded else { return false }
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return false }
+        if searchDiscoveryPhase == .loading { return false }
+        return filteredItems.isEmpty && searchDiscoveryDisplayRooms.isEmpty
+    }
+
+    /// Public discovery hits while searching — excludes joined rooms already shown as inbox cards.
+    var searchDiscoveryDisplayRooms: [ExploreRoomSuggestion] {
+        let inboxIDs = Set(filteredItems.map(\.id))
+        return searchDiscoveryRooms.filter { !inboxIDs.contains($0.id) }
     }
 
     /// Chip on screen. Members open on Your Rooms from cache before the user picks a chip.
@@ -419,7 +435,7 @@ final class TradeRoomsHomeViewModel {
 
     func joinState(for roomID: RoomID) -> TradeRoomDiscoveryJoinState {
         if joinedRoomIDs.contains(roomID) { return .joined }
-        let pool = yourRoomsItems + suggestedItems + popularItems
+        let pool = yourRoomsItems + suggestedItems + popularItems + searchDiscoveryRooms
         guard let room = pool.first(where: { $0.id == roomID }) else {
             return joinCoordinator.mutationStates[roomID] ?? .idle
         }
@@ -427,6 +443,27 @@ final class TradeRoomsHomeViewModel {
             for: room,
             isJoined: false
         )
+    }
+
+    func searchChanged() {
+        searchTask?.cancel()
+        searchGeneration &+= 1
+        let generation = searchGeneration
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count >= 2 else {
+            searchDiscoveryRooms = []
+            searchDiscoveryPhase = .idle
+            return
+        }
+
+        searchDiscoveryRooms = localDiscoveryMatches(for: query)
+        searchDiscoveryPhase = searchDiscoveryRooms.isEmpty ? .loading : .loaded
+
+        searchTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: Self.searchDebounceNanoseconds)
+            guard !Task.isCancelled, let self else { return }
+            await self.performSearchDiscovery(query: query, generation: generation)
+        }
     }
 
     /// Authoritative ownership from Trade Rooms RPC — never inferred client-side.
@@ -469,6 +506,65 @@ final class TradeRoomsHomeViewModel {
         }
         if let index = popularItems.firstIndex(where: { $0.id == roomID }) {
             popularItems[index] = transform(popularItems[index])
+        }
+        if let index = searchDiscoveryRooms.firstIndex(where: { $0.id == roomID }) {
+            searchDiscoveryRooms[index] = transform(searchDiscoveryRooms[index])
+        }
+    }
+
+    private func localDiscoveryMatches(for query: String) -> [ExploreRoomSuggestion] {
+        func matches(_ room: ExploreRoomSuggestion) -> Bool {
+            room.name.localizedCaseInsensitiveContains(query)
+                || room.slug.localizedCaseInsensitiveContains(query)
+                || (room.description?.localizedCaseInsensitiveContains(query) ?? false)
+                || room.discoveryTags.contains { $0.localizedCaseInsensitiveContains(query) }
+        }
+        var seen = Set<RoomID>()
+        var merged: [ExploreRoomSuggestion] = []
+        for room in yourRoomsItems + suggestedItems + popularItems {
+            guard matches(room), !seen.contains(room.id) else { continue }
+            seen.insert(room.id)
+            merged.append(room)
+        }
+        return merged
+    }
+
+    private func mergeSearchDiscoveryRows(
+        local: [ExploreRoomSuggestion],
+        remote: [ExploreRoomSuggestion]
+    ) -> [ExploreRoomSuggestion] {
+        var seen = Set(local.map(\.id))
+        var merged = local
+        for row in remote where !seen.contains(row.id) {
+            merged.append(row)
+            seen.insert(row.id)
+        }
+        for row in remote {
+            if let index = merged.firstIndex(where: { $0.id == row.id }) {
+                merged[index] = row
+            }
+        }
+        return merged
+    }
+
+    private func performSearchDiscovery(query: String, generation: UInt64) async {
+        searchDiscoveryPhase = .loading
+        let local = localDiscoveryMatches(for: query)
+        do {
+            let remote = try await explore.searchRooms(
+                query: query,
+                limit: Self.searchDiscoveryLimit
+            )
+            guard !Task.isCancelled, generation == searchGeneration else { return }
+            searchDiscoveryRooms = mergeSearchDiscoveryRows(local: local, remote: remote)
+            searchDiscoveryPhase = .loaded
+        } catch {
+            guard !Task.isCancelled, generation == searchGeneration else { return }
+            searchDiscoveryRooms = local
+            searchDiscoveryPhase = .loaded
+            if searchDiscoveryRooms.isEmpty {
+                discoveryErrorMessage = ProfileSectionSupport.message(for: error)
+            }
         }
     }
 

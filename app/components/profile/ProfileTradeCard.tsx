@@ -27,7 +27,12 @@ import type {
   ProfileCardIdentity,
   ProfileTradeRow,
 } from "./profileTypes"
-import { detailModalEngagementInPanel } from "@/app/components/ui/detailModalEngagement"
+import {
+  DETAIL_MODAL_MEDIA_ACTIONS_WRAP_CLASS,
+  DETAIL_MODAL_MEDIA_COLUMN_STACK_CLASS,
+  DETAIL_MODAL_PANEL_ENGAGEMENT_CLASS,
+  detailModalEngagementInPanel,
+} from "@/app/components/ui/detailModalEngagement"
 import { profileEngagementVaultRef } from "@/lib/vault/refs"
 import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
 
@@ -348,10 +353,10 @@ export default function ProfileTradeCard({
       <article className={cardShellClass}>
         {imageSrc ? (
           <div className="hidden md:min-h-0 md:flex-1 md:flex-col md:overflow-y-auto md:border-r md:border-white/10 md:flex">
-            <div className="flex shrink-0 flex-col gap-2 p-3">
+            <div className={DETAIL_MODAL_MEDIA_COLUMN_STACK_CLASS}>
               {tradeImageBlock}
               {tradeEngagementBar ? (
-                <div className="shrink-0 border-t border-white/10 px-1 pt-2">
+                <div className={DETAIL_MODAL_MEDIA_ACTIONS_WRAP_CLASS}>
                   {tradeEngagementBar}
                 </div>
               ) : null}
@@ -395,7 +400,7 @@ export default function ProfileTradeCard({
                         commentsFocused,
                         isMobile
                       ) ? (
-                        <div className="border-b border-white/10 px-4 py-2">
+                        <div className="border-b border-white/10 px-4 py-1">
                           {tradeEngagementBar}
                         </div>
                       ) : null}
@@ -411,9 +416,9 @@ export default function ProfileTradeCard({
                     ? tradeEngagementBar ?? undefined
                     : undefined
                 }
-                engagementClassName="shrink-0 border-t border-white/10 px-3 py-1.5 md:px-4 md:py-2"
+                engagementClassName={`${DETAIL_MODAL_PANEL_ENGAGEMENT_CLASS} md:px-4`}
                 collapsibleContent={
-                  <div className="space-y-2 px-3 pb-2 pt-3 md:space-y-3 md:px-4 md:pb-3 md:pt-4">
+                  <div className="space-y-2 px-3 pb-2 pt-1.5 md:space-y-2 md:px-4 md:pb-3 md:pt-2">
                     {tradeDetails}
                   </div>
                 }
@@ -489,7 +494,7 @@ export default function ProfileTradeCard({
               scrollToCommentsOnMount={scrollToCommentsOnMount}
               deferCommentsUntilExpanded={!commentsExpanded}
             >
-            <div className="border-t border-white/10 px-3 py-1.5 md:px-4 md:py-2">
+            <div className="border-t border-white/10 px-3 py-1 md:px-4">
               <TradeSocialEngagementBar
                 vaultContentRef={profileTradeVaultRef(
                   trade.id,

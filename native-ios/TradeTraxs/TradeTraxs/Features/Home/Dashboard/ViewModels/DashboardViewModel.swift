@@ -267,6 +267,12 @@ final class DashboardViewModel {
                 tone: .neutral
             ),
             DashboardMetricChip(
+                id: "maxRr",
+                label: "Avg Max R",
+                value: summary.averageMaxRrReached.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "—",
+                tone: .neutral
+            ),
+            DashboardMetricChip(
                 id: "trades",
                 label: "Trades",
                 value: "\(summary.tradeCount)",
@@ -1226,6 +1232,10 @@ final class DashboardViewModel {
         case .ninetyDays:
             filters.dateRange = .custom
             filters.customStart = calendar.date(byAdding: .day, value: -90, to: now)
+            filters.customEnd = now
+        case .oneYear:
+            filters.dateRange = .custom
+            filters.customStart = calendar.date(byAdding: .day, value: -365, to: now)
             filters.customEnd = now
         case .ytd:
             filters.dateRange = .custom
@@ -2536,7 +2546,32 @@ final class DashboardViewModel {
         #if DEBUG
         runV3ParityAgainstLegacyDiskCacheIfPresent(bootstrap: bootstrap)
         #endif
+        overlayClientRrJournalMetrics()
         recomputePsychology()
+    }
+
+    /// V3 SQL aggregates use targeted `rr`; journal R:R KPIs and breakdowns use owner trades (web parity).
+    private func overlayClientRrJournalMetrics() {
+        guard var current = summary else { return }
+        let scope = clientScopeFilter()
+        let inputs = tradeInputsForScopeFiltering()
+        guard !inputs.isEmpty else {
+            current.averageRR = nil
+            current.averageMaxRrReached = nil
+            summary = current
+            return
+        }
+        let clientMetrics = DashboardChartMetrics.compute(
+            from: inputs,
+            scope: scope,
+            payoutTotal: nil
+        )
+        current.averageRR = clientMetrics.averageRR
+        current.averageMaxRrReached = clientMetrics.averageMaxRrReached
+        current.rrTargetAnalysis = clientMetrics.rrTargetAnalysis
+        current.symbolPerformance = clientMetrics.symbolPerformance
+        current.longShortComparison = clientMetrics.longShortComparison
+        summary = current
     }
 
     #if DEBUG
@@ -2816,41 +2851,20 @@ final class DashboardViewModel {
             return
         }
 
-        let charts = chartOverlayForFilter()
-        let resolved: DashboardDateRange?
-
-        if usesDashboardAnalyticsV3 {
-            guard let bootstrap = analyticsV3Bootstrap else {
-                if tradeInputs.isEmpty, authoritativeTotalTradeCount == 0 {
-                    pendingAutomaticDateRangeResolution = false
-                }
-                return
+        let scopedInputs = tradeInputsForScopeFiltering()
+        if scopedInputs.isEmpty, analyticsV3Bootstrap == nil, !initialTradeHistoryReady {
+            if authoritativeTotalTradeCount == 0 {
+                pendingAutomaticDateRangeResolution = false
             }
-            resolved = DashboardEquityChartRangeResolver.effectiveRange(
-                requested: dateRange,
-                analyticsBootstrap: bootstrap,
-                accountFilter: accountFilter,
-                accountCharts: charts,
-                allowAutomaticWiden: true
-            )
-            pendingAutomaticDateRangeResolution = false
-        } else {
-            guard initialTradeHistoryReady else {
-                if tradeInputs.isEmpty, authoritativeTotalTradeCount == 0 {
-                    pendingAutomaticDateRangeResolution = false
-                }
-                return
-            }
-            resolved = DashboardEquityChartRangeResolver.effectiveRange(
-                requested: dateRange,
-                tradeInputs: tradeInputs,
-                accountFilter: accountFilter,
-                allowAutomaticWiden: true
-            )
-            pendingAutomaticDateRangeResolution = false
+            return
         }
 
-        guard let resolved else { return }
+        let resolved = DashboardDateRangeFallback.initialEffectiveRange(
+            accountFilter: accountFilter,
+            tradeInputs: scopedInputs,
+            analyticsBootstrap: analyticsV3Bootstrap
+        )
+        pendingAutomaticDateRangeResolution = false
         if dateRange != resolved {
             dateRange = resolved
         }
@@ -3049,8 +3063,12 @@ final class DashboardViewModel {
 
     private func restoreScopeFiltersIfNeeded(profileID: ProfileID) {
         guard let stored = DashboardScopeFilterPersistence.load(profileID: profileID) else { return }
-        if let raw = stored.dateRangeRaw, let range = DashboardDateRange(rawValue: raw) {
-            dateRange = range
+        if let raw = stored.dateRangeRaw {
+            if raw == DashboardDateRange.ytd.rawValue {
+                dateRange = .oneYear
+            } else if let range = DashboardDateRange(rawValue: raw) {
+                dateRange = range
+            }
         }
         if let start = stored.customStart, let end = stored.customEnd {
             customDateInterval = DashboardScopeFilterSupport.normalizedCustomInterval(start: start, end: end)

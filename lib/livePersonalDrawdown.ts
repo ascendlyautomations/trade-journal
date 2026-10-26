@@ -146,10 +146,25 @@ function withdrawalMatchesDashboardPeriod(
   if (period.timeFilter === "daily") {
     return instant.toDateString() === now.toDateString()
   }
-  if (period.timeFilter === "weekly") {
+  if (period.timeFilter === "7d" || period.timeFilter === "weekly") {
     const weekAgo = new Date(now)
     weekAgo.setDate(now.getDate() - 7)
     return instant >= weekAgo
+  }
+  if (period.timeFilter === "30d") {
+    const start = new Date(now)
+    start.setDate(now.getDate() - 30)
+    return instant >= start
+  }
+  if (period.timeFilter === "90d") {
+    const start = new Date(now)
+    start.setDate(now.getDate() - 90)
+    return instant >= start
+  }
+  if (period.timeFilter === "1y") {
+    const start = new Date(now)
+    start.setDate(now.getDate() - 365)
+    return instant >= start
   }
   if (period.timeFilter === "monthly") {
     return (

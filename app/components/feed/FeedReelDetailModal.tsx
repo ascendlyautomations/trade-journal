@@ -20,7 +20,10 @@ import { feedCommentTarget } from "./feedPostHelpers"
 import { resolveReelCaption } from "@/lib/reels"
 import type { FeedLikeMeta } from "./FeedPostCard"
 import { DETAIL_MODAL_STACKED_Z_INDEX_CLASS } from "@/app/components/ui/modalLayout"
-import { detailModalEngagementInPanel } from "@/app/components/ui/detailModalEngagement"
+import {
+  detailModalEngagementInPanel,
+  DETAIL_MODAL_MEDIA_ACTIONS_WRAP_CLASS,
+} from "@/app/components/ui/detailModalEngagement"
 import { useIsNativeIos } from "@/lib/useIsNativeIos"
 import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
 
@@ -223,6 +226,12 @@ export default function FeedReelDetailModal({
     </div>
   )
 
+  const showEngagementInPanel = detailModalEngagementInPanel(
+    true,
+    commentsFocused,
+    isMobile
+  )
+
   const engagementRow = (
     <PostInteractionsEngagement
       post={post}
@@ -238,9 +247,22 @@ export default function FeedReelDetailModal({
     />
   )
 
+  const engagementUnderMedia = !showEngagementInPanel ? (
+    <div className={DETAIL_MODAL_MEDIA_ACTIONS_WRAP_CLASS}>{engagementRow}</div>
+  ) : null
+
   const splitPanel = (
     <MobileCommentFocusLayout
       commentsFocused={commentsFocused}
+      mobileMediaBeforeHeader
+      mobileMedia={
+        !commentsFocused ? (
+          <div className="flex flex-col">
+            {splitMedia}
+            {engagementUnderMedia}
+          </div>
+        ) : undefined
+      }
       header={
         <div className="flex items-center border-b border-white/5">
           <div className="min-w-0 flex-1">
@@ -282,14 +304,9 @@ export default function FeedReelDetailModal({
           onExpand={() => setCommentsFocused(false)}
         />
       }
-      engagement={
-        detailModalEngagementInPanel(true, commentsFocused, isMobile)
-          ? engagementRow
-          : undefined
-      }
-      engagementClassName="shrink-0 border-b border-white/10 px-4 py-2"
+      engagement={showEngagementInPanel ? engagementRow : undefined}
       collapsibleContent={
-        <div className="space-y-3 border-b border-white/10 px-4 py-4 text-sm">
+        <div className="space-y-1 border-b border-white/10 px-4 py-1 text-sm">
           <TradeReelSummaryStrip
             post={post}
             viewerUserId={user?.id ?? null}
@@ -329,9 +346,9 @@ export default function FeedReelDetailModal({
         layout="split"
         onClose={onClose}
         splitMedia={splitMedia}
-        splitMediaActions={engagementRow}
+        splitMediaActions={!showEngagementInPanel ? engagementRow : undefined}
         splitPanel={splitPanel}
-        suppressMobileSplitMedia={commentsFocused}
+        suppressMobileSplitMedia
         zIndexClass={
           stacked ? DETAIL_MODAL_STACKED_Z_INDEX_CLASS : undefined
         }

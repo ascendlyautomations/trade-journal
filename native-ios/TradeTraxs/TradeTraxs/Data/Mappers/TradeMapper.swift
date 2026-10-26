@@ -69,6 +69,8 @@ nonisolated enum TradeMapper: DTOMapper {
             exitAt: ISO8601.date(from: dto.exit_time),
             realizedPnL: pnl.map { Money(amount: $0, currencyCode: "USD") },
             riskReward: DecimalParser.parseFlexible(dto.rr),
+            maxRrReached: DecimalParser.parseFlexible(dto.max_rr_reached),
+            realizedRr: DecimalParser.parseFlexible(dto.realized_rr),
             points: DecimalParser.parseFlexible(dto.points),
             sessionLabel: dto.session,
             visibility: visibility,
@@ -161,6 +163,7 @@ nonisolated enum TradeMapper: DTOMapper {
             exit_time: domain.exitAt.map(ISO8601.string(from:)),
             pnl: FlexibleNumber(domain.realizedPnL?.amount),
             rr: FlexibleNumber(domain.riskReward),
+            max_rr_reached: FlexibleNumber(domain.maxRrReached),
             points: FlexibleNumber(domain.points),
             session: domain.sessionLabel,
             is_public: domain.visibility == .public,
@@ -215,6 +218,18 @@ nonisolated enum TradeMapper: DTOMapper {
     private static func psychologyDouble(from confidence: Int?) -> Double? {
         guard let confidence, confidence > 0 else { return nil }
         return Double(confidence)
+    }
+
+    private static func maxRrReachedWireValue(from draft: TradeDraft) -> Double? {
+        draft.maxRrReached.map { NSDecimalNumber(decimal: $0).doubleValue }
+    }
+
+    private static func realizedRrWireValue(from draft: TradeDraft) -> Double? {
+        if let stored = draft.realizedRr {
+            return NSDecimalNumber(decimal: stored).doubleValue
+        }
+        return TradePointsAndRealizedRr.computeRealizedRrFromDraft(draft)
+            .map { NSDecimalNumber(decimal: $0).doubleValue }
     }
 
     private static func psychologyFields(from draft: TradeDraft) -> (
@@ -277,6 +292,8 @@ nonisolated enum TradeMapper: DTOMapper {
             trade_date: tradeDate,
             pnl: draft.realizedPnL.map { NSDecimalNumber(decimal: $0.amount).doubleValue } ?? 0,
             rr: draft.riskReward.map { NSDecimalNumber(decimal: $0).doubleValue },
+            max_rr_reached: maxRrReachedWireValue(from: draft),
+            realized_rr: realizedRrWireValue(from: draft),
             points: draft.points.map { NSDecimalNumber(decimal: $0).doubleValue } ?? 0,
             session: session,
             strategy: Self.nilIfEmpty(draft.strategy),
@@ -342,6 +359,8 @@ nonisolated enum TradeMapper: DTOMapper {
             trade_date: tradeDate,
             pnl: draft.realizedPnL.map { NSDecimalNumber(decimal: $0.amount).doubleValue } ?? 0,
             rr: draft.riskReward.map { NSDecimalNumber(decimal: $0).doubleValue },
+            max_rr_reached: maxRrReachedWireValue(from: draft),
+            realized_rr: realizedRrWireValue(from: draft),
             points: draft.points.map { NSDecimalNumber(decimal: $0).doubleValue } ?? 0,
             session: session,
             strategy: Self.nilIfEmpty(draft.strategy),

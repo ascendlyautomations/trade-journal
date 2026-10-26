@@ -33,21 +33,38 @@ export function canEditRoomMessage(
   return isTextRoomMessage(message)
 }
 
-/** Authors may delete own messages; room owners may delete any message in their room. */
+/** Authors may delete own messages; owners/moderators may delete member messages (not the owner's). */
 export function canDeleteRoomMessage(
   viewerUserId: string | null | undefined,
   message: { user_id: string },
-  options: { isRoomOwner: boolean }
+  options: {
+    isRoomOwner: boolean
+    isRoomModerator?: boolean
+    roomOwnerUserId?: string | null
+  }
 ): boolean {
   if (!viewerUserId) return false
   if (isOwnRoomMessage(viewerUserId, message)) return true
-  return options.isRoomOwner
+  const canModerate = options.isRoomOwner || Boolean(options.isRoomModerator)
+  if (!canModerate) return false
+  if (
+    options.roomOwnerUserId &&
+    message.user_id === options.roomOwnerUserId &&
+    !options.isRoomOwner
+  ) {
+    return false
+  }
+  return true
 }
 
 export function canModerateRoomMessage(
   viewerUserId: string | null | undefined,
   message: RoomMessageLike,
-  options: { isRoomOwner: boolean }
+  options: {
+    isRoomOwner: boolean
+    isRoomModerator?: boolean
+    roomOwnerUserId?: string | null
+  }
 ): boolean {
   return (
     canEditRoomMessage(viewerUserId, message) ||

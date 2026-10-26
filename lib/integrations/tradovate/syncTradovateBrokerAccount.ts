@@ -954,6 +954,11 @@ export async function syncTradovateBrokerAccount(
     let tradesWithPnL = 0
     let tradesWithoutPnL = 0
     let numericTickersPersisted = 0
+    let tradeWriteFailures: Array<{
+      lifecycleKey: string
+      operation: "insert" | "update" | "execution_link"
+      message: string
+    }> = []
 
     if (persistTrades) {
       const persistTradesStarted = Date.now()
@@ -966,6 +971,7 @@ export async function syncTradovateBrokerAccount(
         tradesWithPnL,
         tradesWithoutPnL,
         numericTickersPersisted,
+        tradeWriteFailures,
       } = await upsertReconstructedBrokerTrades(
         supabase,
         {
@@ -1022,8 +1028,11 @@ export async function syncTradovateBrokerAccount(
 
     const successAt = new Date().toISOString()
     const durationMs = Date.now() - started
+    const tradePersistIncomplete = persistTrades && tradeWriteFailures.length > 0
     const syncLockStatus =
-      acquisitionStatus === "IMPORT_SUCCESS_PARTIAL" ? "partial" : "success"
+      acquisitionStatus === "IMPORT_SUCCESS_PARTIAL" || tradePersistIncomplete
+        ? "partial"
+        : "success"
     let lifecycleGrossTotal: number | null = null
     for (const lifecycle of completed) {
       const contractIdKey = String(lifecycle.contractId).trim()
@@ -1063,7 +1072,7 @@ export async function syncTradovateBrokerAccount(
       stageDurationsMs,
     })
 
-    const clientSync = deriveTradovateClientSyncResult({
+    let clientSync = deriveTradovateClientSyncResult({
       acquisitionStatus,
       stats: fillAcquisition.stats,
       acquisitionErrors: fillAcquisition.acquisitionErrors,
@@ -1072,6 +1081,15 @@ export async function syncTradovateBrokerAccount(
       newExecutions,
       importPreviewTradeCount: importablePreviews.length,
     })
+
+    if (tradePersistIncomplete) {
+      clientSync = {
+        ok: false,
+        syncOutcome: "provider_failure",
+        errorCode: "trade_persist_partial",
+        error: `Saved fills but ${tradeWriteFailures.length} trade write(s) failed. Sync again to retry.`,
+      }
+    }
 
     const partialErrorCode =
       !clientSync.ok && clientSync.errorCode
@@ -1089,8 +1107,8 @@ export async function syncTradovateBrokerAccount(
     await releaseBrokerSyncLock(supabase, brokerIntegrationAccountId, {
       lastSyncStatus: syncLockStatus,
       lastSyncSuccessAt: successAt,
-      lastSyncErrorCode: clientSync.ok ? null : partialErrorCode,
-      lastSyncErrorMessage: clientSync.ok ? null : partialErrorMessage,
+      lastSyncErrorCode: clientSync.ok ? null : clientSync.errorCode ?? partialErrorCode,
+      lastSyncErrorMessage: clientSync.ok ? null : clientSync.error ?? partialErrorMessage,
       maxExternalFillId: maxFillId != null ? String(maxFillId) : null,
       maxExecutedAt: maxExecutedAt,
       lastAutoSyncAt: trigger === "manual" ? undefined : successAt,
@@ -1134,7 +1152,7 @@ export async function syncTradovateBrokerAccount(
     })
 
     return {
-      ok: clientSync.ok,
+      ok: clientSync.ok && !tradePersistIncomplete,
       status: syncLockStatus,
       syncOutcome: clientSync.syncOutcome,
       acquisitionStatus,
@@ -1152,18 +1170,25 @@ export async function syncTradovateBrokerAccount(
       existingLifecycleCountAtStart,
       previewEligibleCount,
       persistCalled: persistTrades,
-      ...(!clientSync.ok
+      ...(tradePersistIncomplete
         ? {
             error: clientSync.error,
             errorCode: clientSync.errorCode,
-            failureCategory: "provider_api_failure" as TradovateSyncFailureCategory,
-            failureStage: "fill_list" as TradovateSyncFailureStage,
+            failureCategory: "supabase_write_failure" as TradovateSyncFailureCategory,
+            failureStage: "persist_trades" as TradovateSyncFailureStage,
           }
-        : clientSync.syncOutcome === "no_available_trade_history"
+        : !clientSync.ok
           ? {
+              error: clientSync.error,
               errorCode: clientSync.errorCode,
+              failureCategory: "provider_api_failure" as TradovateSyncFailureCategory,
+              failureStage: "fill_list" as TradovateSyncFailureStage,
             }
-          : {}),
+          : clientSync.syncOutcome === "no_available_trade_history"
+            ? {
+                errorCode: clientSync.errorCode,
+              }
+            : {}),
     }
   } catch (err) {
     let code = "sync_failed"

@@ -48,7 +48,10 @@ final class ActivityHomeViewModel {
     }
 
     var sections: [ActivitySectionModel] {
-        ActivityPresentation.sections(from: inboxStore.items, actors: actors)
+        ActivityPresentation.sections(
+            from: inboxStore.items,
+            actors: resolvedActors(for: inboxStore.items)
+        )
     }
 
     var showsEmpty: Bool {
@@ -250,6 +253,7 @@ final class ActivityHomeViewModel {
             phase = .loading
         } else if inboxStore.hasLoaded {
             phase = .loaded
+            seedActorsFromDetailCache(for: inboxStore.items)
         }
 
         await inboxStore.startIfNeeded(
@@ -296,16 +300,39 @@ final class ActivityHomeViewModel {
 #endif
     }
 
+    private func resolvedActors(for items: [ActivityNotification]) -> [ProfileID: Profile] {
+        var map = actors
+        for id in Set(items.compactMap(\.actorProfileID)) {
+            if map[id] == nil, let cached = detailCache.profile(id: id) {
+                map[id] = cached
+            }
+        }
+        return map
+    }
+
+    private func seedActorsFromDetailCache(for items: [ActivityNotification]) {
+        var next = actors
+        var changed = false
+        for id in Set(items.compactMap(\.actorProfileID)) {
+            if next[id] == nil, let cached = detailCache.profile(id: id) {
+                next[id] = cached
+                changed = true
+            }
+        }
+        if changed {
+            actors = next
+        }
+    }
+
     private func hydrateActors(for items: [ActivityNotification]) async {
+        seedActorsFromDetailCache(for: items)
         let ids = Array(Set(items.compactMap(\.actorProfileID)))
         guard !ids.isEmpty else { return }
 
         var next = actors
         var missing: [ProfileID] = []
         for id in ids {
-            if let cached = detailCache.profile(id: id) {
-                next[id] = cached
-            } else if next[id] == nil {
+            if next[id] == nil {
                 missing.append(id)
             }
         }

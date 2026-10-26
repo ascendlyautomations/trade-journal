@@ -10,6 +10,7 @@ struct RoomInfoView: View {
     @State private var logoImage: Image?
     @State private var ownerAvatarImage: Image?
     @State private var inviteLinkCopied = false
+    @State private var showsInviteShareSheet = false
 
     init(
         roomID: RoomID,
@@ -207,22 +208,42 @@ struct RoomInfoView: View {
     }
 
     private var inviteLinkRow: some View {
-        HStack(spacing: ExperienceSpacing.sm) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Invite Link")
-                    .experienceStyle(.body, color: colors.primaryText)
-                Text("Share room invite")
-                    .experienceStyle(.caption, color: colors.tertiaryText)
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            HStack(spacing: ExperienceSpacing.sm) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Invite Link")
+                        .experienceStyle(.body, color: colors.primaryText)
+                    Text("Opens this room in TradeTraxs")
+                        .experienceStyle(.caption, color: colors.tertiaryText)
+                }
+                Spacer(minLength: ExperienceSpacing.xs)
+                Button("Share") {
+                    showsInviteShareSheet = true
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(colors.accent)
+                .accessibilityIdentifier("tradeRooms.info.invite.share")
+                Button(inviteLinkCopied ? "Copied" : "Copy") {
+                    copyInviteLink()
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(colors.accent)
+                .accessibilityIdentifier("tradeRooms.info.invite.copy")
             }
-            Spacer(minLength: ExperienceSpacing.xs)
-            Button(inviteLinkCopied ? "Copied" : "Copy") {
-                copyInviteLink()
-            }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(colors.accent)
-            .accessibilityIdentifier("tradeRooms.info.invite.copy")
+            Text(viewModel.inviteLink)
+                .experienceStyle(.caption2, color: colors.secondaryText)
+                .lineLimit(2)
+                .textSelection(.enabled)
         }
         .accessibilityElement(children: .combine)
+        .sheet(isPresented: $showsInviteShareSheet) {
+            if let url = RoomInfoViewModel.inviteURL(
+                slug: viewModel.room?.slug,
+                roomID: viewModel.roomID
+            ) {
+                TradeRoomInviteActivityShareSheet(items: [url])
+            }
+        }
     }
 
     private var createFeedPostRow: some View {

@@ -1256,7 +1256,7 @@ export default function QuickTradeModal({
             {/* Row 2: Points · Contracts · RR · Direction */}
             <div className={FIELD_METRICS_ROW_CLASS}>
               <div>
-                <FieldLabel htmlFor="quick-trade-points">Points</FieldLabel>
+                <FieldLabel htmlFor="quick-trade-points">Points Targeted</FieldLabel>
                 <input
                   id="quick-trade-points"
                   type="text"

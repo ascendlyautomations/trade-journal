@@ -5024,6 +5024,8 @@ export type Database = {
           public_description: string | null
           reviewed: boolean | null
           rr: number | null
+          max_rr_reached: number | null
+          realized_rr: number | null
           session: string | null
           source_account_id: string | null
           strategy: string | null
@@ -5086,6 +5088,8 @@ export type Database = {
           public_description?: string | null
           reviewed?: boolean | null
           rr?: number | null
+          max_rr_reached?: number | null
+          realized_rr?: number | null
           session?: string | null
           source_account_id?: string | null
           strategy?: string | null
@@ -5148,6 +5152,8 @@ export type Database = {
           public_description?: string | null
           reviewed?: boolean | null
           rr?: number | null
+          max_rr_reached?: number | null
+          realized_rr?: number | null
           session?: string | null
           source_account_id?: string | null
           strategy?: string | null

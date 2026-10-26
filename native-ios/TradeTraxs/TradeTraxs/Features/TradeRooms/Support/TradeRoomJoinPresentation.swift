@@ -144,6 +144,12 @@ nonisolated enum TradeRoomJoinPresentation {
     static func action(for joinPolicy: TradeRoomJoinPolicy) -> TradeRoomJoinAction {
         joinPolicy == .approval ? .requestJoin : .directJoin
     }
+
+    /// Matches web `roomRequiresJoinApproval` — private rooms always require owner approval.
+    static func requiresJoinApproval(isPrivate: Bool, joinPolicy: TradeRoomJoinPolicy) -> Bool {
+        if isPrivate { return true }
+        return joinPolicy == .approval
+    }
 }
 
 nonisolated enum TradeRoomJoinAction: Sendable {

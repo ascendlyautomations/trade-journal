@@ -15,7 +15,7 @@ export function parseOptionalRr(raw: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-/** Mean RR over trades with a stored RR value; null when none qualify. */
+/** @deprecated Dashboard Avg R:R uses {@link averageRealizedRrFromTrades}. */
 export function averageRrFromTrades(
   trades: { rr?: unknown }[]
 ): number | null {
@@ -29,4 +29,33 @@ export function averageRrFromTrades(
   }
 
   return count > 0 ? sum / count : null
+}
+
+/** Mean max R:R reached over trades with a stored value; null when none qualify. */
+export function averageMaxRrReachedFromTrades(
+  trades: { max_rr_reached?: unknown }[]
+): number | null {
+  let sum = 0
+  let count = 0
+
+  for (const trade of trades) {
+    if (!hasStoredRr(trade.max_rr_reached)) continue
+    sum += Number(trade.max_rr_reached)
+    count += 1
+  }
+
+  return count > 0 ? sum / count : null
+}
+
+/** Persist max R:R for non-positive P&L; optional finite value when P&L is positive. */
+export function maxRrReachedForTradeSave(
+  pnl: number,
+  parsed: number | null
+): number | null | undefined {
+  if (!Number.isFinite(pnl)) return parsed ?? undefined
+  if (pnl > 0) {
+    if (parsed == null) return undefined
+    return parsed
+  }
+  return parsed
 }

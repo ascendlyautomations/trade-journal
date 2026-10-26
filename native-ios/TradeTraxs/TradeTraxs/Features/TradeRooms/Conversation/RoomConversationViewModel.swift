@@ -223,7 +223,10 @@ final class RoomConversationViewModel {
         if isOwner || isMember { return true }
         guard let room else { return false }
         if room.isPrivate { return false }
-        if room.joinPolicy == .approval { return false }
+        if TradeRoomJoinPresentation.requiresJoinApproval(
+            isPrivate: room.isPrivate,
+            joinPolicy: room.joinPolicy
+        ) { return false }
         if joinRequestState == .pending { return false }
         return true
     }
@@ -259,7 +262,30 @@ final class RoomConversationViewModel {
         return TradeRoomManagementPermission.canManage(room: room, viewerID: viewerID)
     }
 
+    private(set) var viewerHasModeratorTag = false
+
+    var canModerateRoom: Bool {
+        guard let room else { return false }
+        return TradeRoomModerationPermission.canModerate(
+            room: room,
+            viewerID: viewerID,
+            viewerHasModeratorTag: viewerHasModeratorTag
+        )
+    }
+
     private var tagStore: SessionRoomMemberTagsStore { .shared }
+
+    private func refreshViewerModeratorStatus() {
+        guard let viewerID else {
+            viewerHasModeratorTag = false
+            return
+        }
+        viewerHasModeratorTag = TradeRoomModerationPermission.viewerHasModeratorTag(
+            viewerID: viewerID,
+            roomID: roomID,
+            tagStore: tagStore
+        )
+    }
 
     /// Member/owner shell — composer may still be read-only on announcement channels.
     var canShowComposer: Bool {
@@ -776,15 +802,18 @@ final class RoomConversationViewModel {
         return RoomMessageModerationPolicy.canDeleteMessage(
             viewerID: viewerID,
             senderProfileID: item.message.senderProfileID,
-            isRoomOwner: isOwner
+            isRoomOwner: isOwner,
+            isRoomModerator: viewerHasModeratorTag && !isOwner,
+            roomOwnerProfileID: room?.ownerProfileID
         )
     }
 
     func isOwnerModerationDelete(_ item: ConversationBubbleItem) -> Bool {
-        RoomMessageModerationPolicy.isOwnerDeletingAnotherMembersMessage(
+        RoomMessageModerationPolicy.isStaffDeletingAnotherMembersMessage(
             viewerID: viewerID,
             senderProfileID: item.message.senderProfileID,
-            isRoomOwner: isOwner
+            isRoomOwner: isOwner,
+            isRoomModerator: viewerHasModeratorTag && !isOwner
         )
     }
 
@@ -796,13 +825,25 @@ final class RoomConversationViewModel {
     }
 
     func canManageMessageMember(_ item: ConversationBubbleItem) -> Bool {
-        RoomMessageModerationPolicy.canManageMessageMember(
+        let tags = memberTags(for: item.message.senderProfileID)
+        return RoomMessageModerationPolicy.canManageMessageMember(
             viewerID: viewerID,
             senderProfileID: item.message.senderProfileID,
             roomOwnerProfileID: room?.ownerProfileID,
             messageKind: item.message.kind,
-            sendState: item.sendState
+            sendState: item.sendState,
+            canManageRoom: canManageRoom,
+            canModerateRoom: canModerateRoom,
+            targetMemberTags: tags
         )
+    }
+
+    private func memberTags(for profileID: ProfileID) -> [RoomMemberTag] {
+        let tags = tagStore.tags(for: roomID)
+        let assigned = tagStore.assignments(for: roomID)
+            .filter { $0.profileID == profileID }
+            .map(\.tagID)
+        return tags.filter { assigned.contains($0.id) }
     }
 
     func requestManageMember(_ item: ConversationBubbleItem) {
@@ -818,16 +859,15 @@ final class RoomConversationViewModel {
         return RoomMessageModerationPolicy.canBanMember(
             viewerID: viewerID,
             targetProfileID: item.id,
-            roomOwnerProfileID: room.ownerProfileID
+            roomOwnerProfileID: room.ownerProfileID,
+            canManageRoom: canManageRoom,
+            canModerateRoom: canModerateRoom,
+            targetMemberTags: item.tags
         )
     }
 
     func canRemoveMember(_ item: RoomMemberItem) -> Bool {
-        guard let room else { return false }
-        guard TradeRoomManagementPermission.canManage(room: room, viewerID: viewerID),
-              let viewerID
-        else { return false }
-        return item.role != .owner && item.id != viewerID && item.id != room.ownerProfileID
+        canBanMember(item)
     }
 
     func requestMemberAction(_ action: ManageRoomViewModel.MemberAction) {
@@ -908,14 +948,9 @@ final class RoomConversationViewModel {
 
     private func banMember(profileID: ProfileID) async {
         memberModerationErrorMessage = nil
-        guard isOwner,
-              let viewerID,
-              let room,
-              RoomMessageModerationPolicy.canBanMember(
-                viewerID: viewerID,
-                targetProfileID: profileID,
-                roomOwnerProfileID: room.ownerProfileID
-              )
+        guard let member = memberItem(for: profileID),
+              canBanMember(member),
+              let viewerID
         else { return }
         pendingMemberAction = nil
         showsBanMemberConfirmation = false
@@ -1660,6 +1695,7 @@ final class RoomConversationViewModel {
                let management = rooms as? any RoomManagementRepository
             {
                 try? await tagStore.hydrateTags(roomID: activeRoomID, repository: management)
+                refreshViewerModeratorStatus()
             }
             applyPendingDeepLinkFocusSelectingChannel()
             if selectedChannelID == nil || !channels.contains(where: { $0.id == selectedChannelID }) {

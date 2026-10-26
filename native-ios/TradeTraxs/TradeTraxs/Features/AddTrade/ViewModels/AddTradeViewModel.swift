@@ -30,6 +30,7 @@ final class AddTradeViewModel {
         case pnl
         case points
         case rr
+        case maxRrReached
     }
 
     private(set) var phase: Phase = .idle
@@ -49,6 +50,11 @@ final class AddTradeViewModel {
     var pnlText = ""
     var pointsText = ""
     var rrText = ""
+    var maxRrReachedText = ""
+
+    var requiresMaxRrReached: Bool {
+        (Self.parseDecimal(pnlText, style: .signedPnL) ?? 0) <= 0
+    }
     var entryAt: Date = .now
     var exitAt: Date = .now
     var includeExitTime = false
@@ -912,6 +918,7 @@ final class AddTradeViewModel {
         pnlText = Self.decimalFieldText(trade.realizedPnL?.amount, style: .signedPnL)
         pointsText = Self.decimalFieldText(trade.points, style: .tradeQuantity)
         rrText = Self.decimalFieldText(trade.riskReward, style: .riskReward)
+        maxRrReachedText = Self.decimalFieldText(trade.maxRrReached, style: .riskReward)
         entryAt = trade.entryAt
         if let exit = trade.exitAt {
             exitAt = exit
@@ -1136,6 +1143,7 @@ final class AddTradeViewModel {
             exitAt: includeExitTime ? exitAt : nil,
             realizedPnL: Money(amount: pnl),
             riskReward: Self.parseOptionalRiskReward(rrText),
+            maxRrReached: Self.parseOptionalRiskReward(maxRrReachedText),
             points: Self.parseDecimal(pointsText, style: .tradeQuantity) ?? 0,
             sessionLabel: sessionLabel,
             strategy: Self.nilIfEmpty(strategyText),
@@ -1155,6 +1163,7 @@ final class AddTradeViewModel {
             imageURL: nil,
             imageCrop: nil
         )
+        draft.realizedRr = TradePointsAndRealizedRr.computeRealizedRrFromDraft(draft)
         if let group = selectedCopyGroup {
             let members = resolvedCopyAccounts(group)
             if !members.isEmpty {
@@ -1245,6 +1254,8 @@ final class AddTradeViewModel {
             exitAt: trade.exitAt,
             realizedPnL: trade.realizedPnL,
             riskReward: trade.riskReward,
+            maxRrReached: trade.maxRrReached,
+            realizedRr: trade.realizedRr,
             points: trade.points,
             sessionLabel: trade.sessionLabel,
             strategy: trade.strategy,
@@ -1368,11 +1379,18 @@ final class AddTradeViewModel {
         {
             errors[.pnl] = "Enter a valid P&L"
         }
-        if !rrText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           Self.parseOptionalRiskReward(rrText) == nil
-        {
-            errors[.rr] = "Enter a valid R:R"
-        }
+        let pnlForRisk = Self.parseDecimal(pnlText, style: .signedPnL) ?? 0
+        let riskValidation = TradePointsAndRealizedRr.validateManualRiskFields(
+            pnl: pnlForRisk,
+            pointsText: pointsText,
+            rrText: rrText,
+            maxRrText: maxRrReachedText,
+            parsePoints: { Self.parseDecimal($0, style: .tradeQuantity) },
+            parseRr: Self.parseOptionalRiskReward
+        )
+        if let message = riskValidation.points { errors[.points] = message }
+        if let message = riskValidation.rr { errors[.rr] = message }
+        if let message = riskValidation.maxRr { errors[.maxRrReached] = message }
         if !entryPriceText.isEmpty, Self.parseDecimal(entryPriceText, style: .tradePrice) == nil {
             errors[.entry] = "Invalid entry price"
         }

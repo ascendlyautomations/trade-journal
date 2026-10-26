@@ -62,6 +62,12 @@ const EMPTY_SNAPSHOT: UserStreaksSnapshot = {
   computedAt: 0,
 }
 
+function streakSnapshotIsMaterialized(
+  snapshot: UserStreaksSnapshot | null | undefined
+): snapshot is UserStreaksSnapshot {
+  return snapshot != null && snapshot.computedAt > 0
+}
+
 const streaksByUser = new Map<string, CacheEntry>()
 const listeners = new Set<() => void>()
 
@@ -385,7 +391,25 @@ export async function ensureUserStreaksLoaded(
 
   // Journal and winning streaks only need analytics fields (pnl, is_public, times).
   // Post and reel streak queries below stay unbounded and unchanged.
-  await ensureAnalyticsTradesHistory(supabase, userId).catch(() => [])
+  const priorSnapshot =
+    (existing?.data && streakSnapshotIsMaterialized(existing.data)
+      ? existing.data
+      : null) ?? getUserStreaksSnapshot(userId)
+  try {
+    await ensureAnalyticsTradesHistory(supabase, userId)
+  } catch (loadErr) {
+    const preserved = streakSnapshotIsMaterialized(priorSnapshot)
+    streaksByUser.set(userId, {
+      userId,
+      data: preserved ? priorSnapshot : EMPTY_SNAPSHOT,
+      invalidated: !preserved,
+      loading: false,
+    })
+    notify()
+    if (preserved) return priorSnapshot
+    throw loadErr
+  }
+
   const trades = [...getTradesSnapshot(userId)]
   const { signals: milestoneSignals, postingTimestamps } =
     await fetchStreakMilestoneBundle(supabase, userId, trades, {

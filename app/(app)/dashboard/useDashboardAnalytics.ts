@@ -11,7 +11,15 @@ import {
   computeLongShortPerformance,
   type LongShortPerformance,
 } from "@/lib/dashboardLongShortStats"
-import { averageRrFromTrades, hasStoredRr } from "@/lib/tradeRr"
+import {
+  computeDashboardRrTargetAnalysis,
+  type DashboardRrTargetAnalysis,
+} from "@/lib/dashboardRrTargetAnalysis"
+import { averageMaxRrReachedFromTrades, hasStoredRr } from "@/lib/tradeRr"
+import {
+  averageRealizedRrFromTrades,
+  resolveRealizedRr,
+} from "@/lib/tradePointsAndRealizedRr"
 import {
   computeHoldTimeStats,
   type HoldTimeStats,
@@ -470,6 +478,8 @@ export type DashboardAnalyticsResult = {
   winRate: number
   totalPnL: number
   avgRR: number | null
+  avgMaxRrReached: number | null
+  rrTargetAnalysis: DashboardRrTargetAnalysis
   biggestLoss: number
   bestTrade: number
   avgWin: number
@@ -592,7 +602,9 @@ export function useDashboardAnalytics({
     const winRate = totalTrades ? (wins.length / totalTrades) * 100 : 0
     const totalPnL = filteredTrades.reduce((sum, t) => sum + (t.pnl || 0), 0)
 
-    const avgRR = averageRrFromTrades(filteredTrades)
+    const avgRR = averageRealizedRrFromTrades(filteredTrades)
+    const avgMaxRrReached = averageMaxRrReachedFromTrades(filteredTrades)
+    const rrTargetAnalysis = computeDashboardRrTargetAnalysis(filteredTrades)
 
     const losses = filteredTrades
   .map(t => Number(t.pnl) || 0)
@@ -650,8 +662,9 @@ const biggestLoss = losses.length > 0
       tickerAgg[ticker].totalPnL += Number(t.pnl) || 0
       tickerAgg[ticker].totalTrades += 1
       if ((Number(t.pnl) || 0) > 0) tickerAgg[ticker].wins += 1
-      if (hasStoredRr(t.rr)) {
-        tickerAgg[ticker].rrSum += Number(t.rr)
+      const realized = resolveRealizedRr(t)
+      if (realized != null) {
+        tickerAgg[ticker].rrSum += realized
         tickerAgg[ticker].rrCount += 1
       }
     })
@@ -681,8 +694,9 @@ const biggestLoss = losses.length > 0
       strategyAgg[strategy].totalPnL += Number(t.pnl) || 0
       strategyAgg[strategy].totalTrades += 1
       if ((Number(t.pnl) || 0) > 0) strategyAgg[strategy].wins += 1
-      if (hasStoredRr(t.rr)) {
-        strategyAgg[strategy].rrSum += Number(t.rr)
+      const realized = resolveRealizedRr(t)
+      if (realized != null) {
+        strategyAgg[strategy].rrSum += realized
         strategyAgg[strategy].rrCount += 1
       }
     })
@@ -895,6 +909,8 @@ const biggestLoss = losses.length > 0
       winRate,
       totalPnL,
       avgRR,
+      avgMaxRrReached,
+      rrTargetAnalysis,
       biggestLoss,
       bestTrade,
       avgWin,

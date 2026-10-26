@@ -103,14 +103,19 @@ final class NavigationCoordinator {
     }
 
     /// Returns to the auth stack. Clears main presentations and all tab paths.
-    func markUnauthenticated(clearPersistedNavigation: Bool = false) {
+    func markUnauthenticated(
+        clearPersistedNavigation: Bool = false,
+        clearPendingAfterAuth: Bool = true
+    ) {
         dismissPresentation()
         store.sessionPhase = .unauthenticated
         store.paths = NavigationPathStore()
         store.paths.resetAuth(to: .login)
         store.selectedTab = .home
         store.previousContentTab = .home
-        store.pendingAfterAuth = nil
+        if clearPendingAfterAuth {
+            store.pendingAfterAuth = nil
+        }
         didEnterAuthenticatedShell = false
         emit(.sessionPhaseChanged(.unauthenticated))
         if clearPersistedNavigation {

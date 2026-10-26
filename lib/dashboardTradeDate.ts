@@ -1,7 +1,7 @@
 import {
   getTradingDayKey,
   resolveTradingTimeSourceForKey,
-} from "./formatDate"
+} from "./formatDate.ts"
 
 /** Trade fields used for dashboard date resolution (entry/exit first, then created_at). */
 export type DashboardTradeDateFields = {
@@ -94,10 +94,25 @@ export function tradeMatchesDashboardTimeFilter(
   if (timeFilter === "daily") {
     return tradeDate.toDateString() === now.toDateString()
   }
-  if (timeFilter === "weekly") {
-    const weekAgo = new Date(now)
-    weekAgo.setDate(now.getDate() - 7)
-    return tradeDate >= weekAgo
+  if (timeFilter === "7d" || timeFilter === "weekly") {
+    const start = new Date(now)
+    start.setDate(now.getDate() - 7)
+    return tradeDate >= start
+  }
+  if (timeFilter === "30d") {
+    const start = new Date(now)
+    start.setDate(now.getDate() - 30)
+    return tradeDate >= start
+  }
+  if (timeFilter === "90d") {
+    const start = new Date(now)
+    start.setDate(now.getDate() - 90)
+    return tradeDate >= start
+  }
+  if (timeFilter === "1y") {
+    const start = new Date(now)
+    start.setDate(now.getDate() - 365)
+    return tradeDate >= start
   }
   if (timeFilter === "monthly") {
     return (

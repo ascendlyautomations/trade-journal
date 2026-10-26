@@ -5,6 +5,7 @@ import { calculateDirectionalPoints } from "./resolveTradePoints.ts"
 import { CSV_RR_HEADER_ALIASES, parseCsvRrValue } from "./csvRrAliases.ts"
 import { sanitizeCsvTextField } from "./csvFormulaSanitize.ts"
 import { devLog, devWarn, devDebug } from "./devLog"
+import { csvTradeImportFingerprint } from "./csvImportFingerprint.ts"
 
 export type CsvRow = Record<string, string>
 
@@ -1635,13 +1636,18 @@ export function tradesInsertRowsPrivate<T extends Record<string, unknown>>(
   const forceImported = options?.forceImportedAccountType !== false
   const isInitialImport =
     typeof options?.isInitialImport === "boolean" ? options.isInitialImport : true
-  return rows.map((row) => ({
-    ...row,
-    is_public: false,
-    is_initial_import: isInitialImport,
-    ...(forceImported ? { account_type: "imported" } : {}),
-    created_at: importedAt,
-  }))
+  return rows.map((row) => {
+    const fingerprint = csvTradeImportFingerprint(row)
+    return {
+      ...row,
+      is_public: false,
+      is_initial_import: isInitialImport,
+      import_source: "csv",
+      import_fingerprint: fingerprint,
+      ...(forceImported ? { account_type: "imported" } : {}),
+      created_at: importedAt,
+    }
+  })
 }
 
 export function buildTradesFromParsedCsv(

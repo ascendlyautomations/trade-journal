@@ -10,6 +10,8 @@ type RoomMessageActionsMenuProps = {
   message: { id: string; user_id: string; type?: string | null }
   viewerUserId: string | null | undefined
   isRoomOwner: boolean
+  isRoomModerator?: boolean
+  roomOwnerUserId?: string | null
   activeMenuId: string | null
   setActiveMenuId: (id: string | null) => void
   onEdit: () => void
@@ -21,18 +23,30 @@ export default function RoomMessageActionsMenu({
   message,
   viewerUserId,
   isRoomOwner,
+  isRoomModerator = false,
+  roomOwnerUserId,
   activeMenuId,
   setActiveMenuId,
   onEdit,
   onDelete,
   deleting = false,
 }: RoomMessageActionsMenuProps) {
-  if (!canModerateRoomMessage(viewerUserId, message, { isRoomOwner })) {
+  const moderationOptions = {
+    isRoomOwner,
+    isRoomModerator,
+    roomOwnerUserId,
+  }
+
+  if (!canModerateRoomMessage(viewerUserId, message, moderationOptions)) {
     return null
   }
 
   const showEdit = canEditRoomMessage(viewerUserId, message)
-  const showDelete = canDeleteRoomMessage(viewerUserId, message, { isRoomOwner })
+  const showDelete = canDeleteRoomMessage(
+    viewerUserId,
+    message,
+    moderationOptions
+  )
   const menuOpen = activeMenuId === message.id
 
   return (

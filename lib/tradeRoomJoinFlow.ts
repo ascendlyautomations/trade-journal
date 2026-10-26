@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { joinTradeRoom } from "@/lib/joinTradeRoom"
+import { roomRequiresJoinApproval } from "@/lib/tradeRoomConfiguration"
 import {
   fetchViewerTradeRoomJoinRequest,
   isUserBannedFromRoom,
@@ -8,17 +9,14 @@ import {
   type TradeRoomRow,
 } from "@/lib/tradeRoomClient"
 
+export { roomRequiresJoinApproval } from "@/lib/tradeRoomConfiguration"
+
 export type TradeRoomJoinAttemptResult =
   | { kind: "joined"; alreadyMember: boolean }
   | { kind: "requested"; status: string }
   | { kind: "pending"; status: string }
   | { kind: "banned" }
   | { kind: "error"; message: string }
-
-export function roomRequiresJoinApproval(room: Pick<TradeRoomRow, "join_policy" | "is_private">): boolean {
-  if (room.is_private) return false
-  return String(room.join_policy ?? "open").toLowerCase() === "approval"
-}
 
 export async function attemptTradeRoomJoin(
   supabase: SupabaseClient,

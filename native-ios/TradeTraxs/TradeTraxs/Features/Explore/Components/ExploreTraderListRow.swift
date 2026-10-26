@@ -37,7 +37,7 @@ struct ExploreTraderListRow: View {
                     ExploreProfileAvatarView(profile: profile, imagePipeline: imagePipeline, diameter: 40)
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
-                            Text(profile.displayName)
+                            Text(traderDisplayName(profile))
                                 .experienceStyle(.subheadline, color: colors.primaryText)
                                 .fontWeight(.semibold)
                                 .lineLimit(1)
@@ -77,5 +77,12 @@ struct ExploreTraderListRow: View {
             }
         }
         .accessibilityIdentifier("explore.trader.row.\(trader.id.rawValue)")
+    }
+
+    private func traderDisplayName(_ profile: Profile) -> String {
+        let name = profile.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { return name }
+        let username = profile.username.trimmingCharacters(in: .whitespacesAndNewlines)
+        return username.isEmpty ? "Trader" : username
     }
 }

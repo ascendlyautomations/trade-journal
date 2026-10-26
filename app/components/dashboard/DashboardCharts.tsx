@@ -95,6 +95,7 @@ function DashboardCharts({
   totalTrades,
   winRate,
   avgRR,
+  avgMaxRrReached = null,
   totalPnL,
   profitFactor,
   avgWin,
@@ -213,6 +214,7 @@ function DashboardCharts({
           totalTrades={totalTrades}
           winRate={winRate}
           avgRR={avgRR}
+          avgMaxRrReached={avgMaxRrReached}
           totalPnL={totalPnL}
           profitFactor={profitFactor}
           avgWin={avgWin}

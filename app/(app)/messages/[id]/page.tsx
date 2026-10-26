@@ -201,9 +201,9 @@ import { readConversationThreadHeaderSeed } from "@/lib/backendV2/conversationTh
 import { mapThreadBootstrapMessagesToWire } from "@/lib/backendV2/conversationThreadContracts"
 import DmMessageReactions from "@/app/components/messages/DmMessageReactions"
 import { toggleMessageReaction } from "@/lib/messageReactionToggle"
+import { handleMessageReactionDoubleClick } from "@/lib/messageReactionDoubleTap"
 import {
   MESSAGE_REACTION_DOUBLE_TAP_EMOJI,
-  MESSAGE_REACTIONS,
   patchRoomMessageReactions,
   type MessageReactionEmoji,
   type MessageReactionRow,
@@ -231,18 +231,6 @@ function canReactToDmMessage(
     return false
   }
   return true
-}
-
-function handleDmMessageDoubleClick(
-  event: MouseEvent,
-  canReact: boolean,
-  onToggleLike: () => void
-) {
-  if (!canReact) return
-  const target = event.target as HTMLElement
-  if (target.closest("button, a, [role='button'], input, textarea")) return
-  event.preventDefault()
-  onToggleLike()
 }
 
 function legacyShareCardCaption(content: string | null | undefined): string | null {
@@ -518,7 +506,7 @@ function TradeMessageBubble({
       <div
         className={`flex ${isMe ? "justify-end" : "justify-start"}`}
         onDoubleClick={(e) =>
-          handleDmMessageDoubleClick(e, canReact, () =>
+          handleMessageReactionDoubleClick(e, canReact, () =>
             onToggleReaction(MESSAGE_REACTION_DOUBLE_TAP_EMOJI)
           )
         }
@@ -814,7 +802,7 @@ function PostMessageBubble({
       <div
         className={`flex ${isMe ? "justify-end" : "justify-start"}`}
         onDoubleClick={(e) =>
-          handleDmMessageDoubleClick(e, canReact, () =>
+          handleMessageReactionDoubleClick(e, canReact, () =>
             onToggleReaction(MESSAGE_REACTION_DOUBLE_TAP_EMOJI)
           )
         }
@@ -994,7 +982,7 @@ function StoryShareMessageBubble({
       <div
         className={`flex ${isMe ? "justify-end" : "justify-start"}`}
         onDoubleClick={(e) =>
-          handleDmMessageDoubleClick(e, canReact, () =>
+          handleMessageReactionDoubleClick(e, canReact, () =>
             onToggleReaction(MESSAGE_REACTION_DOUBLE_TAP_EMOJI)
           )
         }
@@ -1093,7 +1081,7 @@ function StoryReplyMessageBubble({
       <div
         className={`flex ${isMe ? "justify-end" : "justify-start"}`}
         onDoubleClick={(e) =>
-          handleDmMessageDoubleClick(e, canReact, () =>
+          handleMessageReactionDoubleClick(e, canReact, () =>
             onToggleReaction(MESSAGE_REACTION_DOUBLE_TAP_EMOJI)
           )
         }
@@ -4177,7 +4165,7 @@ export default function DMPage() {
                           isMe ? "justify-end" : "justify-start"
                         }`}
                         onDoubleClick={(e) =>
-                          handleDmMessageDoubleClick(e, messageCanReact, () =>
+                          handleMessageReactionDoubleClick(e, messageCanReact, () =>
                             onToggleReaction(MESSAGE_REACTION_DOUBLE_TAP_EMOJI)
                           )
                         }

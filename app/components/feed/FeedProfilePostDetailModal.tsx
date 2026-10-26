@@ -25,7 +25,10 @@ import FeedPostHeader from "./FeedPostHeader"
 import FeedPostMetaRow from "./FeedPostMetaRow"
 import FeedRoomShareCard from "./FeedRoomShareCard"
 import { feedCommentTarget } from "./feedPostHelpers"
-import { detailModalEngagementInPanel } from "@/app/components/ui/detailModalEngagement"
+import {
+  detailModalEngagementInPanel,
+  DETAIL_MODAL_MEDIA_ACTIONS_WRAP_CLASS,
+} from "@/app/components/ui/detailModalEngagement"
 import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
 import type { FeedLikeMeta } from "./FeedPostCard"
 
@@ -156,6 +159,11 @@ export default function FeedProfilePostDetailModal({
   ) : null
 
   const hasMedia = splitMedia != null
+  const showEngagementInPanel = detailModalEngagementInPanel(
+    hasMedia,
+    commentsFocused,
+    isMobile
+  )
 
   const engagementRow = (
     <PostInteractionsEngagement
@@ -172,9 +180,22 @@ export default function FeedProfilePostDetailModal({
     />
   )
 
+  const engagementUnderMedia = !showEngagementInPanel ? (
+    <div className={DETAIL_MODAL_MEDIA_ACTIONS_WRAP_CLASS}>{engagementRow}</div>
+  ) : null
+
   const splitPanel = (
     <MobileCommentFocusLayout
       commentsFocused={commentsFocused}
+      mobileMediaBeforeHeader
+      mobileMedia={
+        hasMedia && !commentsFocused ? (
+          <div className="flex flex-col">
+            {splitMedia}
+            {engagementUnderMedia}
+          </div>
+        ) : undefined
+      }
       header={
         <FeedPostHeader
           userId={post.user_id}
@@ -206,16 +227,12 @@ export default function FeedProfilePostDetailModal({
           onExpand={() => setCommentsFocused(false)}
         />
       }
-      engagement={
-        detailModalEngagementInPanel(hasMedia, commentsFocused, isMobile)
-          ? engagementRow
-          : undefined
-      }
+      engagement={showEngagementInPanel ? engagementRow : undefined}
       collapsibleContent={
         isAchievement && achievement ? (
           <FeedAchievementDetailMeta achievement={achievement} />
         ) : (
-        <div className="space-y-3 border-b border-white/10 px-4 py-4 text-sm">
+        <div className="space-y-1 border-b border-white/10 px-4 py-1 text-sm">
           {modalPostDetails.content ? (
             <p className="whitespace-pre-wrap leading-relaxed text-white">
               {modalPostDetails.content}
@@ -250,9 +267,11 @@ export default function FeedProfilePostDetailModal({
         layout="split"
         onClose={onClose}
         splitMedia={splitMedia}
-        splitMediaActions={hasMedia ? engagementRow : undefined}
+        splitMediaActions={
+          hasMedia && !showEngagementInPanel ? engagementRow : undefined
+        }
         splitPanel={splitPanel}
-        suppressMobileSplitMedia={commentsFocused}
+        suppressMobileSplitMedia
       />
       <ImageLightbox
         imageUrl={lightboxUrl}

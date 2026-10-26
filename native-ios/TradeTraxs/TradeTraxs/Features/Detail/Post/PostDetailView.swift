@@ -5,6 +5,7 @@ struct PostDetailView: View {
     @State private var viewModel: PostDetailViewModel
     @State private var contentRevealed = false
     @State private var showsDeleteConfirm = false
+    @State private var showsShareSheet = false
     private let imagePipeline: any ImagePipeline
     private let data: DataEnvironment
 
@@ -88,7 +89,18 @@ struct PostDetailView: View {
         } message: {
             Text(viewModel.deleteErrorMessage ?? "")
         }
+        .sheet(isPresented: $showsShareSheet) {
+            if let post = viewModel.post, let url = DetailContentLink.post(post.id).url {
+                PostDetailShareSheet(items: [postShareText(post), url])
+            }
+        }
         .accessibilityIdentifier("detail.post.root")
+    }
+
+    private func postShareText(_ post: Post) -> String {
+        let body = post.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        if body.isEmpty { return "Post on TradeTraxs" }
+        return String(body.prefix(120))
     }
 
     @ViewBuilder
@@ -129,11 +141,14 @@ struct PostDetailView: View {
 
                         if !post.media.isEmpty {
                             mediaCarousel(post)
+                            postEngagementBar(post, scrollProxy: proxy)
+                                .padding(.horizontal, ExperienceSpacing.lg)
+                                .padding(.top, ExperienceSpacing.xxs)
                         }
 
-                        postBody(post, scrollProxy: proxy)
+                        postBody(post, scrollProxy: proxy, showsMediaEngagement: !post.media.isEmpty)
                             .padding(.horizontal, ExperienceSpacing.lg)
-                            .padding(.top, post.media.isEmpty ? ExperienceSpacing.sm : ExperienceSpacing.md)
+                            .padding(.top, post.media.isEmpty ? ExperienceSpacing.sm : ExperienceSpacing.xs)
                             .padding(.bottom, ExperienceSpacing.xl)
                     }
                 }
@@ -151,28 +166,19 @@ struct PostDetailView: View {
         }
     }
 
-    private func postBody(_ post: Post, scrollProxy: ScrollViewProxy) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+    private func postBody(
+        _ post: Post,
+        scrollProxy: ScrollViewProxy,
+        showsMediaEngagement: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             if post.media.isEmpty {
                 caption(post)
                 roomShareCard(post)
+                postEngagementBar(post, scrollProxy: scrollProxy)
             }
 
-            EngagementBar(
-                target: .profilePost(post.id),
-                store: data.engagementStore,
-                vaultStore: data.vaultStore,
-                onCommentTap: {
-                    withAnimation(
-                        ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion)
-                    ) {
-                        scrollProxy.scrollTo(Self.commentsAnchorID, anchor: .top)
-                    }
-                },
-                vaultRef: VaultContentRef(contentType: .profilePost, contentID: post.id.rawValue)
-            )
-
-            if !post.media.isEmpty {
+            if showsMediaEngagement {
                 caption(post)
                 roomShareCard(post)
             }
@@ -184,6 +190,23 @@ struct PostDetailView: View {
             )
                 .id(Self.commentsAnchorID)
         }
+    }
+
+    private func postEngagementBar(_ post: Post, scrollProxy: ScrollViewProxy) -> some View {
+        EngagementBar(
+            target: .profilePost(post.id),
+            store: data.engagementStore,
+            vaultStore: data.vaultStore,
+            onCommentTap: {
+                withAnimation(
+                    ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion)
+                ) {
+                    scrollProxy.scrollTo(Self.commentsAnchorID, anchor: .top)
+                }
+            },
+            onShareTap: { showsShareSheet = true },
+            vaultRef: VaultContentRef(contentType: .profilePost, contentID: post.id.rawValue)
+        )
     }
 
     @ViewBuilder
@@ -247,4 +270,14 @@ struct PostDetailView: View {
     }
 
     private static let commentsAnchorID = "detail.post.comments"
+}
+
+private struct PostDetailShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

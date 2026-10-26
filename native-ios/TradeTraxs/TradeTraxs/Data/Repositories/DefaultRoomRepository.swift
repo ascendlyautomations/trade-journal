@@ -29,7 +29,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
     }
 
     func room(id: RoomID) async throws -> TradeRoom {
-        // Push / community deep links may pass slug in the `room` query — resolve id then slug.
+        // Push / community deep links may pass slug in the `room` query — resolve id, slug, then invite RPC.
         let dto: RoomDTO.Room
         if let byID = try? await supabase.database.selectOne(
             RoomDTO.Room.self,
@@ -37,12 +37,16 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
             query: [SupabaseQuery.select("*"), SupabaseQuery.eq("id", id.rawValue)]
         ) {
             dto = byID
+        } else if let bySlug = try? await supabase.database.selectOne(
+            RoomDTO.Room.self,
+            from: "rooms",
+            query: [SupabaseQuery.select("*"), SupabaseQuery.eq("slug", id.rawValue)]
+        ) {
+            dto = bySlug
+        } else if let viaInvite = try await fetchTradeRoomInviteLookup(ref: id.rawValue) {
+            dto = viaInvite
         } else {
-            dto = try await supabase.database.selectOne(
-                RoomDTO.Room.self,
-                from: "rooms",
-                query: [SupabaseQuery.select("*"), SupabaseQuery.eq("slug", id.rawValue)]
-            )
+            throw AppError.domain(.notFound(entity: "rooms", id: id.rawValue))
         }
         var room = try mapRoom(dto)
         // Exact web `loadMemberStats` active count:
@@ -1390,5 +1394,18 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         return MediaReference(id: trimmed, kind: .image, altText: nil)
+    }
+
+    /// Invite/deep-link resolution when RLS blocks direct `rooms` SELECT (private rooms).
+    private func fetchTradeRoomInviteLookup(ref: String) async throws -> RoomDTO.Room? {
+        struct Params: Encodable, Sendable { var p_ref: String }
+        let trimmed = ref.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let data = try await supabase.database.rpcData(
+            functionName: "rpc_v1_trade_room_invite_lookup",
+            parametersJSON: try JSONEncoder().encode(Params(p_ref: trimmed))
+        )
+        if data.isEmpty || data == Data("null".utf8) { return nil }
+        return try JSONDecoder().decode(RoomDTO.Room.self, from: data)
     }
 }

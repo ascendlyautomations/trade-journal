@@ -488,15 +488,7 @@ struct ManageRoomView: View {
                 Button {
                     Task { await viewModel.toggleTag(tag, for: member) }
                 } label: {
-                    HStack {
-                        Text(tag.name)
-                            .experienceStyle(.body, color: colors.primaryText)
-                        Spacer()
-                        if assigned {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(colors.accent)
-                        }
-                    }
+                    RoomMemberTagAssignPickerRow(tag: tag, assigned: assigned)
                 }
                 .disabled(viewModel.isMutatingTag)
             }

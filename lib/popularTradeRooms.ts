@@ -204,26 +204,55 @@ export async function searchPublicTradeRooms(
   }
 
   const pattern = `%${trimmed}%`
+  const select =
+    "id, name, description, slug, image_url, avatar_url, show_on_profile, is_private, owner_user_id, room_kind"
 
-  const { data: rooms, error } = await supabase
-    .from("rooms")
-    .select(
-      "id, name, description, slug, image_url, show_on_profile, is_private, owner_user_id"
-    )
-    .not("owner_user_id", "is", null)
-    .or(`name.ilike.${pattern},slug.ilike.${pattern}`)
-    .order("name", { ascending: true })
-    .limit(capped * 3)
+  const [officialResult, communityResult] = await Promise.all([
+    supabase
+      .from("rooms")
+      .select(select)
+      .eq("room_kind", "official")
+      .or(`name.ilike.${pattern},slug.ilike.${pattern},description.ilike.${pattern}`)
+      .order("name", { ascending: true })
+      .limit(capped),
+    supabase
+      .from("rooms")
+      .select(select)
+      .not("owner_user_id", "is", null)
+      .or(`name.ilike.${pattern},slug.ilike.${pattern}`)
+      .order("name", { ascending: true })
+      .limit(capped * 3),
+  ])
 
-  if (error) {
-    console.error("[popularTradeRooms] search:", error)
-    return []
+  if (officialResult.error) {
+    console.error("[popularTradeRooms] search official:", officialResult.error)
+  }
+  if (communityResult.error) {
+    console.error("[popularTradeRooms] search community:", communityResult.error)
+    if (officialResult.error) {
+      return []
+    }
   }
 
-  const publicOwnerRooms = await filterRoomsWithPublicOwners(supabase, rooms ?? [])
+  const officialRooms = (officialResult.data ?? []).filter((room) =>
+    isPublicDiscoveryRoom(room)
+  )
+  const publicOwnerRooms = await filterRoomsWithPublicOwners(
+    supabase,
+    communityResult.data ?? []
+  )
+  const communityRooms = publicOwnerRooms.filter((room) =>
+    isPublicDiscoveryRoom(room)
+  )
 
-  return publicOwnerRooms
-    .filter((room) => isPublicDiscoveryRoom(room))
+  const seen = new Set<string>()
+  const merged = [...officialRooms, ...communityRooms].filter((room) => {
+    if (seen.has(room.id)) return false
+    seen.add(room.id)
+    return true
+  })
+
+  return merged
     .slice(0, capped)
     .map((room) => mapRoomRow(room as Parameters<typeof mapRoomRow>[0], 0))
     .filter((row): row is PopularTradeRoom => row != null)

@@ -48,7 +48,7 @@ function FeedPostBody({
   const resolvedPoints = resolveTradePoints(timingTrade)
   const showCopyBadge = isCopyTradedMode(timingTrade)
   return (
-    <div className="min-w-0 space-y-1.5 overflow-hidden px-4 pb-2.5 pt-0.5">
+    <div className="min-w-0 space-y-1.5 overflow-hidden px-4 pb-2.5 pt-0">
       <div className="flex min-w-0 flex-nowrap items-center justify-between gap-x-2">
         <div className="flex min-w-0 items-center gap-2 overflow-hidden md:gap-3">
           <div

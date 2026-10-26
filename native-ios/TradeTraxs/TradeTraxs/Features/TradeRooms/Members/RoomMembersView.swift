@@ -3,6 +3,7 @@ import SwiftUI
 struct RoomMembersView: View {
     @State private var viewModel: RoomMembersViewModel
     @State private var selectedMember: RoomMemberItem?
+    @State private var memberForTags: RoomMemberItem?
     private let imagePipeline: any ImagePipeline
 
     @Environment(\.themeColors) private var colors
@@ -58,7 +59,13 @@ struct RoomMembersView: View {
                             imagePipeline: imagePipeline,
                             showsManageButton: viewModel.canShowManageMember(item),
                             onManage: { selectedMember = item },
-                            onOpen: { viewModel.openProfile(item.id) }
+                            onOpen: {
+                                if viewModel.canShowManageMember(item) {
+                                    selectedMember = item
+                                } else {
+                                    viewModel.openProfile(item.id)
+                                }
+                            }
                         )
                         .experienceDashboardListRow()
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -99,6 +106,19 @@ struct RoomMembersView: View {
         .sheet(item: $selectedMember) { member in
             memberManagementSheet(member)
         }
+        .sheet(item: $memberForTags) { member in
+            NavigationStack {
+                memberTagsEditor(member)
+                    .experienceNavigationTitle("Manage Tags")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") { memberForTags = nil }
+                        }
+                    }
+            }
+            .experienceScreenBackground()
+            .presentationBackground(colors.sheetBackground)
+        }
         .roomMemberModerationConfirmations(
             showsRemoveConfirmation: $viewModel.showsMemberActionConfirmation,
             showsBanConfirmation: $viewModel.showsBanMemberConfirmation,
@@ -138,8 +158,33 @@ struct RoomMembersView: View {
                 selectedMember = nil
                 viewModel.requestMemberAction(.ban(member.id))
             },
-            onDismiss: { selectedMember = nil }
+            onDismiss: { selectedMember = nil },
+            onManageTags: viewModel.canModerateRoom
+                ? {
+                    let item = member
+                    selectedMember = nil
+                    memberForTags = item
+                }
+                : nil
         )
+    }
+
+    private func memberTagsEditor(_ member: RoomMemberItem) -> some View {
+        List {
+            ForEach(viewModel.roomTags.filter { viewModel.canAssignTag($0) }) { tag in
+                let assigned = (viewModel.members.first(where: { $0.id == member.id })?.tags ?? member.tags)
+                    .contains(where: { $0.id == tag.id })
+                Button {
+                    Task { await viewModel.toggleTag(tag, for: member) }
+                } label: {
+                    RoomMemberTagAssignPickerRow(tag: tag, assigned: assigned)
+                }
+                .disabled(viewModel.isMutatingTag)
+            }
+        }
+        .experienceInsetGroupedListStyle(pageBackground: true)
+        .scrollContentBackground(.hidden)
+        .task { await viewModel.refreshTags() }
     }
 
     private var memberActionDialogTitle: String {

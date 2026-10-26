@@ -45,6 +45,7 @@ export type DashboardDesktopTerminalProps = {
   lossCount: number
   profitFactor: number | null
   avgRR: number | null
+  avgMaxRrReached?: number | null
   expectancyData: ExpectancySummary
   bestDay: number
   bestTrade: number
@@ -310,6 +311,7 @@ export default function DashboardDesktopTerminal({
   lossCount,
   profitFactor,
   avgRR,
+  avgMaxRrReached = null,
   expectancyData,
   bestDay,
   bestTrade,
@@ -399,6 +401,10 @@ export default function DashboardDesktopTerminal({
               }
             />
             <MetricLine label="Avg RR" value={formatRR(avgRR)} />
+            <MetricLine
+              label="Avg Max R:R Reached"
+              value={formatRR(avgMaxRrReached)}
+            />
             <MetricLine label="Trades" value={totalTrades.toLocaleString()} />
           </div>
 

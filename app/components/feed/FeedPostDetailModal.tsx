@@ -35,7 +35,10 @@ import {
 } from "./feedPostHelpers"
 import type { ReelRow } from "@/lib/reels"
 import { formatPublicAccountTypeLabel } from "@/lib/publicAccountPrivacy"
-import { detailModalEngagementInPanel } from "@/app/components/ui/detailModalEngagement"
+import {
+  detailModalEngagementInPanel,
+  DETAIL_MODAL_MEDIA_ACTIONS_WRAP_CLASS,
+} from "@/app/components/ui/detailModalEngagement"
 import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
 import type { FeedLikeMeta } from "./FeedPostCard"
 
@@ -174,6 +177,11 @@ export default function FeedPostDetailModal({
     ) : null
 
   const hasMedia = splitMedia != null
+  const showEngagementInPanel = detailModalEngagementInPanel(
+    hasMedia,
+    commentsFocused,
+    isMobile
+  )
 
   const engagementRow = (
     <PostInteractionsEngagement
@@ -190,9 +198,22 @@ export default function FeedPostDetailModal({
     />
   )
 
+  const engagementUnderMedia = !showEngagementInPanel ? (
+    <div className={DETAIL_MODAL_MEDIA_ACTIONS_WRAP_CLASS}>{engagementRow}</div>
+  ) : null
+
   const splitPanel = (
     <MobileCommentFocusLayout
       commentsFocused={commentsFocused}
+      mobileMediaBeforeHeader
+      mobileMedia={
+        hasMedia && !commentsFocused ? (
+          <div className="flex flex-col">
+            {splitMedia}
+            {engagementUnderMedia}
+          </div>
+        ) : undefined
+      }
       header={
         <FeedPostHeader
           userId={post.user_id}
@@ -223,15 +244,11 @@ export default function FeedPostDetailModal({
           onExpand={() => setCommentsFocused(false)}
         />
       }
-      engagement={
-        detailModalEngagementInPanel(hasMedia, commentsFocused, isMobile)
-          ? engagementRow
-          : undefined
-      }
+      engagement={showEngagementInPanel ? engagementRow : undefined}
       collapsibleContent={
-        <div className="min-w-0 space-y-3 overflow-hidden border-b border-white/10 px-4 py-4 text-xs md:text-sm">
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 md:flex-nowrap">
-            <div className="flex min-w-0 items-center gap-3">
+        <div className="min-w-0 space-y-1 overflow-hidden border-b border-white/10 px-4 py-1 text-xs md:text-sm">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 md:flex-nowrap">
+            <div className="flex min-w-0 items-center gap-1.5">
               <div
                 className={`shrink-0 text-base font-semibold tabular-nums md:text-lg ${
                   modalPostDetails.pnlPositive
@@ -328,9 +345,11 @@ export default function FeedPostDetailModal({
         layout="split"
         onClose={onClose}
         splitMedia={splitMedia}
-        splitMediaActions={hasMedia ? engagementRow : undefined}
+        splitMediaActions={
+          hasMedia && !showEngagementInPanel ? engagementRow : undefined
+        }
         splitPanel={splitPanel}
-        suppressMobileSplitMedia={commentsFocused}
+        suppressMobileSplitMedia
       />
       <ImageLightbox imageUrl={lightboxUrl} onClose={() => setLightboxUrl(null)} />
     </>

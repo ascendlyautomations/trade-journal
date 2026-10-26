@@ -89,6 +89,9 @@ struct TradeRoomsHomeView: View {
             placement: .navigationBarDrawer(displayMode: .always),
             prompt: "Search rooms"
         )
+        .onChange(of: viewModel.searchText) { _, _ in
+            viewModel.searchChanged()
+        }
         .refreshable {
             await viewModel.refresh()
         }
@@ -200,9 +203,20 @@ struct TradeRoomsHomeView: View {
                     ExperienceEmptyState(
                         icon: .search,
                         title: "No matches",
-                        message: "Try a different room name or owner."
+                        message: "Try a different room name or keyword."
                     )
                     .padding(.top, ExperienceSpacing.xl)
+                }
+
+                if !viewModel.showsDiscoverySection {
+                    if viewModel.searchDiscoveryPhase == .loading,
+                       viewModel.searchDiscoveryDisplayRooms.isEmpty
+                    {
+                        discoverySkeleton
+                    }
+                    ForEach(viewModel.searchDiscoveryDisplayRooms) { room in
+                        discoveryRow(for: room, isYourRoomsContext: false)
+                    }
                 }
 
                 if !viewModel.filteredItems.isEmpty, !viewModel.showsDiscoverySection {

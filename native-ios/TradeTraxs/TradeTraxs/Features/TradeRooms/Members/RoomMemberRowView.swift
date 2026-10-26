@@ -58,32 +58,36 @@ struct RoomMemberRowView: View {
 
     private var memberTextBlock: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: ExperienceSpacing.xxs) {
+            HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
                 Text(item.profile.displayName)
                     .experienceStyle(.subheadline, color: colors.primaryText)
                     .lineLimit(1)
+                    .layoutPriority(1)
+                Spacer(minLength: ExperienceSpacing.xs)
+                if let joinedAt = item.joinedAt {
+                    Text("Joined \(MessagesInboxSupport.relativeTimestamp(joinedAt))")
+                        .experienceStyle(.caption2, color: colors.tertiaryText)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
             }
             Text("@\(item.profile.username)")
                 .experienceStyle(.footnote, color: colors.secondaryText)
                 .lineLimit(1)
-            HStack(spacing: ExperienceSpacing.xs) {
+            if item.role == .owner || !item.tags.isEmpty {
                 RoomMemberTagChipsView(
                     tags: item.tags,
                     showsOwnerBadge: item.role == .owner,
-                    limit: 3
+                    wraps: true
                 )
-                if item.role == .member && item.tags.isEmpty {
-                    Text("Member")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(colors.secondaryText)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(colors.fillSecondary, in: Capsule())
-                }
-                if let joinedAt = item.joinedAt {
-                    Text("Joined \(MessagesInboxSupport.relativeTimestamp(joinedAt))")
-                        .experienceStyle(.caption2, color: colors.tertiaryText)
-                }
+            }
+            if item.role == .member && item.tags.isEmpty {
+                Text("Member")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(colors.secondaryText)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(colors.fillSecondary, in: Capsule())
             }
         }
     }

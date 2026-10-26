@@ -13,12 +13,14 @@ struct RoomConversationHeaderView: View {
     let onJoinTap: () -> Void
     let onMembersTap: () -> Void
     let onInfoTap: () -> Void
+    var inviteShareURL: URL? = nil
     var onCopyInviteLink: (() -> Void)? = nil
     var onCreateFeedPost: (() -> Void)? = nil
     let imagePipeline: any ImagePipeline
 
     @Environment(\.themeColors) private var colors
     @State private var logoImage: Image?
+    @State private var showsInviteShareSheet = false
 
     var body: some View {
         HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
@@ -45,7 +47,7 @@ struct RoomConversationHeaderView: View {
             }
             Spacer(minLength: ExperienceSpacing.xs)
             HStack(spacing: ExperienceSpacing.xs) {
-                if onCopyInviteLink != nil || onCreateFeedPost != nil {
+                if inviteShareURL != nil || onCopyInviteLink != nil || onCreateFeedPost != nil {
                     shareMenu
                 }
                 headerIconButton(
@@ -95,6 +97,11 @@ struct RoomConversationHeaderView: View {
             await loadLogo()
         }
         .accessibilityIdentifier("tradeRooms.conversation.header")
+        .sheet(isPresented: $showsInviteShareSheet) {
+            if let inviteShareURL {
+                TradeRoomInviteActivityShareSheet(items: [inviteShareURL])
+            }
+        }
     }
 
     private func headerIconButton(
@@ -118,6 +125,11 @@ struct RoomConversationHeaderView: View {
 
     private var shareMenu: some View {
         Menu {
+            if inviteShareURL != nil {
+                Button("Share Link") {
+                    showsInviteShareSheet = true
+                }
+            }
             if let onCopyInviteLink {
                 Button("Copy Link", action: onCopyInviteLink)
             }

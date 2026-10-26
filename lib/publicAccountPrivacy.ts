@@ -93,6 +93,8 @@ export const PUBLIC_TRADE_SELECT = [
 /** Owner trade columns for app cache (dashboard, trades, calendar, analyst). */
 export const TRADES_APP_SELECT = [
   PUBLIC_TRADE_SELECT,
+  "max_rr_reached",
+  "realized_rr",
   "account_name",
   "account_id",
   "account_size",
@@ -124,6 +126,8 @@ export const TRADES_ANALYTICS_FIELDS = [
   "exit_time",
   "pnl",
   "rr",
+  "max_rr_reached",
+  "realized_rr",
   "direction",
   "ticker",
   "strategy",

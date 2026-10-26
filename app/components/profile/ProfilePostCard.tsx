@@ -14,7 +14,12 @@ import {
 } from "@/lib/commentReplyUx"
 import EngagementCountButton from "@/app/components/EngagementCountButton"
 import EngagementShareButton from "@/app/components/EngagementShareButton"
-import { detailModalEngagementInPanel } from "@/app/components/ui/detailModalEngagement"
+import {
+  DETAIL_MODAL_MEDIA_ACTIONS_WRAP_CLASS,
+  DETAIL_MODAL_MEDIA_COLUMN_STACK_CLASS,
+  DETAIL_MODAL_PANEL_ENGAGEMENT_CLASS,
+  detailModalEngagementInPanel,
+} from "@/app/components/ui/detailModalEngagement"
 import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
 import { VaultEngagementTrailing } from "@/app/components/vault/VaultEngagementButton"
 import { profileEngagementVaultRef } from "@/lib/vault/refs"
@@ -424,7 +429,7 @@ export default function ProfilePostCard({
 
   const postEngagementUnderMedia =
     postEngagementRow != null ? (
-      <div className="shrink-0 border-t border-white/10 px-3 py-2 md:px-4">
+      <div className={`${DETAIL_MODAL_MEDIA_ACTIONS_WRAP_CLASS} md:px-3`}>
         {postEngagementRow}
       </div>
     ) : null
@@ -462,7 +467,7 @@ export default function ProfilePostCard({
   )
 
   const postCollapsibleContent = (
-    <div className="shrink-0 space-y-2 px-3 py-2.5 md:space-y-3 md:p-4">
+    <div className="shrink-0 space-y-2 px-3 py-2 md:space-y-2 md:px-4 md:pb-3 md:pt-2">
       {post.content ? (
         <ExpandableText
           className="min-w-0 text-sm leading-snug text-white md:leading-relaxed"
@@ -560,7 +565,7 @@ export default function ProfilePostCard({
         <article className={cardShellClass}>
           {desktopMediaColumn ? (
             <div className="hidden md:min-h-0 md:flex-1 md:flex-col md:overflow-y-auto md:border-r md:border-white/10 md:flex">
-              <div className="flex shrink-0 flex-col gap-2 p-3">
+              <div className={DETAIL_MODAL_MEDIA_COLUMN_STACK_CLASS}>
                 {desktopMediaColumn}
                 {!showEngagementInPanel ? postEngagementUnderMedia : null}
               </div>
@@ -591,7 +596,7 @@ export default function ProfilePostCard({
                 ) : undefined
               }
               engagement={showEngagementInPanel ? postEngagementRow : undefined}
-              engagementClassName="shrink-0 border-b border-white/10 px-3 py-1.5 md:px-4 md:py-2"
+              engagementClassName={`${DETAIL_MODAL_PANEL_ENGAGEMENT_CLASS} md:px-4`}
               collapsibleContent={postCollapsibleContent}
               comments={postCommentsPanel}
             />

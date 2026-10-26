@@ -26,7 +26,7 @@ final class SessionOwnerTradesStore {
     /// Analytics window — Realtime / local mutations keep this coherent longer.
     private let freshTTL: TimeInterval = 10 * 60
     /// Matches `rpc_v1_trades_owner_rows` dashboard page. A shorter page is the full journal.
-    static let analyticsPageLimit = 500
+    nonisolated static let analyticsPageLimit = 500
     private var completeInFlight: [ProfileID: Task<[Trade], Error>] = [:]
 
     private init() {}

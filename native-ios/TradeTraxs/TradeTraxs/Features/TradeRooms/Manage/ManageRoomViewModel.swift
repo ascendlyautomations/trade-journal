@@ -375,17 +375,19 @@ final class ManageRoomViewModel {
         return RoomMessageModerationPolicy.canBanMember(
             viewerID: viewerID,
             targetProfileID: member.id,
-            roomOwnerProfileID: room.ownerProfileID
+            roomOwnerProfileID: room.ownerProfileID,
+            canManageRoom: canManageRoom,
+            canModerateRoom: canManageRoom,
+            targetMemberTags: member.tags
         )
     }
 
     func canRemoveMember(_ member: RoomManagedMember) -> Bool {
-        guard canManageRoom, let viewerID, let room else { return false }
-        return member.role != .owner && member.id != viewerID && member.id != room.ownerProfileID
+        canBanMember(member)
     }
 
     func canShowManageMember(_ member: RoomManagedMember) -> Bool {
-        isOwner && (canBanMember(member) || canRemoveMember(member))
+        canManageRoom && (canBanMember(member) || canRemoveMember(member))
     }
 
     func confirmMemberAction() async {
@@ -398,11 +400,8 @@ final class ManageRoomViewModel {
         }
         guard targetID != viewerID, targetID != room.ownerProfileID else { return }
         if case .ban = action {
-            guard RoomMessageModerationPolicy.canBanMember(
-                viewerID: viewerID,
-                targetProfileID: targetID,
-                roomOwnerProfileID: room.ownerProfileID
-            ) else { return }
+            guard let member = members.first(where: { $0.id == targetID }),
+                  canBanMember(member) else { return }
         }
         pendingMemberAction = nil
         showsMemberActionConfirmation = false

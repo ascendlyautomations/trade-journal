@@ -133,11 +133,10 @@ final class TradeHistoryViewModel {
                 from: ownerTrades,
                 query: currentQuery,
                 limit: .max,
-                context: matchContext
+                context: matchContext,
+                tradeFilter: localBrowseTradeFilter()
             )
             .items
-            .map(TradeSummaryMapper.ownerJournal(fromListTrade:))
-            .filter(matchesLocalBrowseConstraints)
             .count
         }
         return TradeHistoryOwnerSeed.matchingCount(
@@ -190,11 +189,11 @@ final class TradeHistoryViewModel {
     }
 
     var isEmptyJournal: Bool {
-        phase == .loaded && items.isEmpty && !hasActiveQuery
+        phase == .loaded && items.isEmpty && !hasActiveQuery && !hasLocalBrowseConstraints
     }
 
     var isEmptyFiltered: Bool {
-        phase == .loaded && items.isEmpty && hasActiveQuery
+        phase == .loaded && items.isEmpty && (hasActiveQuery || hasLocalBrowseConstraints)
     }
 
     var hasActiveQuery: Bool {
@@ -217,6 +216,18 @@ final class TradeHistoryViewModel {
     var canLoadMore: Bool { nextCursor != nil && !isLoadingMore }
 
     func loadIfNeeded() {
+        if TradeHistoryLaunchSeed.hasPending {
+            hasLoaded = false
+            coldLoadFinished = false
+            lastQueryKey = nil
+            loadTask?.cancel()
+            loadGeneration &+= 1
+            let generation = loadGeneration
+            loadTask = Task {
+                await performLoad(reason: "open", preserveScroll: false, generation: generation)
+            }
+            return
+        }
         if hasLoaded, loadTask == nil {
             #if DEBUG
             TradeHistoryLoadProbe.beginLoad()
@@ -348,6 +359,34 @@ final class TradeHistoryViewModel {
         lastQueryKey = nil
     }
 
+    private func localBrowseTradeFilter() -> ((Trade) -> Bool)? {
+        guard hasLocalBrowseConstraints else { return nil }
+        return { [self] trade in
+            matchesLocalBrowseTrade(trade)
+        }
+    }
+
+    private func matchesLocalBrowseTrade(_ trade: Trade) -> Bool {
+        if let weekday = localWeekday {
+            let value = Calendar.current.component(.weekday, from: trade.entryAt)
+            if value != weekday { return false }
+        }
+        if let hour = localHour {
+            let value = Calendar.current.component(.hour, from: trade.entryAt)
+            if value != hour { return false }
+        }
+        if let session = localSessionLabel {
+            let label = trade.sessionLabel ?? ""
+            if !label.localizedCaseInsensitiveContains(session) { return false }
+        }
+        if let range = localHoldRange {
+            guard let exit = trade.exitAt else { return false }
+            let seconds = exit.timeIntervalSince(trade.entryAt)
+            if !range.contains(seconds) { return false }
+        }
+        return true
+    }
+
     private func matchesLocalBrowseConstraints(_ item: TradeOwnerJournalSummary) -> Bool {
         let trade = TradeSummaryMapper.listMatchTrade(from: item)
         if let weekday = localWeekday {
@@ -382,8 +421,7 @@ final class TradeHistoryViewModel {
             TradeHistoryLoadProbe.markRequest()
             #endif
 
-            if !usesJournalSummaryV2,
-               !hasLocalBrowseConstraints,
+            if (!usesJournalSummaryV2 || hasLocalBrowseConstraints),
                OwnerTradeCacheCompleteness.canPaginateFromOwnerCache(
                    metadata: SessionOwnerTradesStore.shared.snapshotMetadata(for: profileID)
                ),
@@ -393,7 +431,8 @@ final class TradeHistoryViewModel {
                     from: ownerTrades,
                     query: currentQuery,
                     limit: items.count + 40,
-                    context: matchContext
+                    context: matchContext,
+                    tradeFilter: localBrowseTradeFilter()
                 )
                 let newItems = Array(seeded.items.dropFirst(items.count).map(TradeSummaryMapper.ownerJournal(fromListTrade:)))
                 if !newItems.isEmpty {
@@ -684,8 +723,7 @@ final class TradeHistoryViewModel {
             detailCache: detailCache
         )
 
-        if !usesJournalSummaryV2,
-           Self.canUseOwnerTradeSeed(reason: reason),
+        if Self.canUseOwnerTradeSeed(reason: reason),
            TradeHistoryOwnerSeed.canSeed(
                query: query,
                hasLocalBrowseConstraints: hasLocalBrowse
@@ -696,14 +734,18 @@ final class TradeHistoryViewModel {
                 from: ownerTrades,
                 query: query,
                 limit: 40,
-                context: matchContext
+                context: matchContext,
+                tradeFilter: localBrowseTradeFilter()
             )
             let metadata = SessionOwnerTradesStore.shared.snapshotMetadata(for: profileID)
             let complete = SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
-            if OwnerTradeCacheCompleteness.canSeedTradeHistoryFirstPage(
+            let canSeedFirstPage = OwnerTradeCacheCompleteness.canSeedTradeHistoryFirstPage(
                 metadata: metadata,
                 seededItemCount: seeded.items.count
-            ) {
+            ) || (hasLocalBrowse && complete)
+            if (!usesJournalSummaryV2 || hasLocalBrowse),
+               canSeedFirstPage
+            {
                 #if DEBUG
                 DataLoadStageProbe.trace(
                     correlation: stageCorrelation!,

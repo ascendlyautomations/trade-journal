@@ -86,7 +86,13 @@ final class ExploreViewModel {
     }
 
     var suggestedTraders: [ExploreTraderSuggestion] {
-        FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(store.suggestedTraders)
+        let base = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(store.suggestedTraders)
+        let discovery = base.filter { trader in
+            trader.id != viewerID && !store.viewerFollowingIDs.contains(trader.id)
+        }
+        return ExploreTraderRanking.preservingOrderPreferringProfilePictures(discovery) {
+            resolvedProfile(for: $0)
+        }
     }
     var suggestedRooms: [ExploreRoomSuggestion] { store.suggestedRooms }
     var popularRooms: [ExploreRoomSuggestion] { store.popularRooms }
@@ -783,40 +789,12 @@ final class ExploreViewModel {
     }
 
     private func loadFollowingIDs() async -> Set<ProfileID> {
-        if let cached = detailCache.viewerFollowingIDs() {
-            return cached
-        }
         guard let viewerID else { return [] }
-        // Prefer shared following set (Feed/Stories warm this) — zero extra SELECTs.
-        if let shared = await SessionFollowingStore.shared.cached(viewerID: viewerID.rawValue) {
-            let ids = Set(shared.map { ProfileID($0) })
-            detailCache.seedViewerFollowingIDs(ids)
-            return ids
-        }
-        if let disk = RelationshipFollowingPersistence.loadComplete(for: viewerID) {
-            let ids = Set(disk.map { ProfileID($0) })
-            await SessionFollowingStore.shared.seedComplete(viewerID: viewerID.rawValue, ids: Set(disk))
-            detailCache.seedViewerFollowingIDs(ids)
-            return ids
-        }
-        do {
-            let page = try await profiles.following(of: viewerID, page: PageRequest(limit: 200))
-            let ids = Set(page.items.map(\.id))
-            await SessionFollowingStore.shared.seedComplete(
-                viewerID: viewerID.rawValue,
-                ids: Set(ids.map(\.rawValue))
-            )
-            detailCache.seedViewerFollowingIDs(ids)
-            let generation = RelationshipWriteGeneration.bump(viewerID: viewerID)
-            RelationshipFollowingPersistence.saveComplete(
-                ids: ids.map(\.rawValue),
-                viewerID: viewerID,
-                generation: generation
-            )
-            return ids
-        } catch {
-            return []
-        }
+        return await ExploreFollowingSupport.loadFollowingIDs(
+            viewerID: viewerID,
+            detailCache: detailCache,
+            profiles: profiles
+        )
     }
 
     private func patchSearchRoomJoined(_ roomID: RoomID) {

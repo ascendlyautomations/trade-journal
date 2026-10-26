@@ -38,16 +38,19 @@ struct ExploreRoomCard: View {
                 )
 
                 VStack(alignment: .leading, spacing: textRowSpacing) {
-                    HStack(spacing: 4) {
-                        Text(room.name)
-                            .font(ExperienceTypography.subheadline.weight(.semibold))
-                            .foregroundStyle(colors.primaryText)
-                            .lineLimit(1)
-                        if room.isOfficial {
-                            TradeRoomOfficialBadge(style: .label)
-                        }
+                    Text(room.name)
+                        .font(ExperienceTypography.subheadline.weight(.semibold))
+                        .foregroundStyle(colors.primaryText)
+                        .lineLimit(1)
+                        .frame(
+                            maxWidth: .infinity,
+                            minHeight: usesCompactLayout ? nameRowHeight : nil,
+                            alignment: .leading
+                        )
+
+                    if room.isOfficial {
+                        TradeRoomOfficialBadge(style: .label)
                     }
-                    .frame(height: usesCompactLayout ? nameRowHeight : nil, alignment: .center)
 
                     if let descriptionPreview {
                         Text(descriptionPreview)

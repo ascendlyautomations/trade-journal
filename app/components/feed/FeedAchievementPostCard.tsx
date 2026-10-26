@@ -85,7 +85,7 @@ function FeedAchievementPostCard({
         }
       />
 
-      <div className="px-4 pt-3">
+      <div className="px-4 pt-3 pb-0">
         <AchievementCard
           achievement={achievement}
           showVisibility={false}

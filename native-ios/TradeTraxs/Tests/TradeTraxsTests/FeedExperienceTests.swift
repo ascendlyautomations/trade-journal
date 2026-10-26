@@ -3,6 +3,20 @@ import XCTest
 
 @MainActor
 final class FeedExperienceTests: XCTestCase {
+    func testFeedContentFilterSwipeNeighborsFollowStripOrder() {
+        XCTAssertEqual(FeedContentFilter.all.adjacentFilter(offset: 1), .trades)
+        XCTAssertEqual(FeedContentFilter.trades.adjacentFilter(offset: 1), .clips)
+        XCTAssertEqual(FeedContentFilter.clips.adjacentFilter(offset: 1), .posts)
+        XCTAssertEqual(FeedContentFilter.posts.adjacentFilter(offset: 1), .achievements)
+        XCTAssertNil(FeedContentFilter.achievements.adjacentFilter(offset: 1))
+
+        XCTAssertEqual(FeedContentFilter.achievements.adjacentFilter(offset: -1), .posts)
+        XCTAssertEqual(FeedContentFilter.posts.adjacentFilter(offset: -1), .clips)
+        XCTAssertEqual(FeedContentFilter.clips.adjacentFilter(offset: -1), .trades)
+        XCTAssertEqual(FeedContentFilter.trades.adjacentFilter(offset: -1), .all)
+        XCTAssertNil(FeedContentFilter.all.adjacentFilter(offset: -1))
+    }
+
     func testFixturesIncludeAllContentKindsSortedDescending() {
         let entries = FeedFixtures.timeline()
         XCTAssertFalse(entries.isEmpty)

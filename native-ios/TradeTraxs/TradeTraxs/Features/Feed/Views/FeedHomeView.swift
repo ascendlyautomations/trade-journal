@@ -184,6 +184,10 @@ struct FeedHomeView: View {
 
     private var feedHomeChromeDecorated: some View {
         feedPhaseContent
+            .feedContentFilterSwipe(
+                filter: viewModel.contentFilter,
+                isEnabled: navigationEnvironment.store.paths.feed.isEmpty
+            ) { viewModel.userSelectedContentFilter($0) }
             .experienceScreenBackground()
             .experienceFeedClipsChrome(isActive: viewModel.contentFilter == .clips)
             .experienceNavigationTitle("Feed")

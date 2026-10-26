@@ -85,7 +85,11 @@ final class SuggestedTradersViewModel {
             base = store.suggestedTraders
         }
         let unblocked = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(base)
-        return ExploreTraderRanking.preservingOrderPreferringProfilePictures(unblocked) { resolvedProfile(for: $0) }
+        return ExploreFollowingSupport.orderingSuggestedTraders(
+            unblocked,
+            followingIDs: store.viewerFollowingIDs,
+            profile: { resolvedProfile(for: $0) }
+        )
     }
 
     var displayedTraders: [ExploreTraderSuggestion] {
@@ -110,6 +114,7 @@ final class SuggestedTradersViewModel {
             await resolveViewerID()
             await DiscoveryBlockedPeersObserver.sync(messages: messages, force: false)
             applyBlockedPeersToVisibleResults()
+            await syncFollowingAndBackfill()
             if store.hasBootstrapped, !store.suggestedTraders.isEmpty {
                 phase = .loaded
                 await hydrateVisibleTraders(
@@ -134,6 +139,7 @@ final class SuggestedTradersViewModel {
         let generation = loadGeneration
         await resolveViewerID()
         await DiscoveryBlockedPeersObserver.sync(messages: messages, force: true)
+        await syncFollowingAndBackfill()
 
         let hadTraders = !traders.isEmpty
         if !hadTraders {
@@ -296,6 +302,18 @@ final class SuggestedTradersViewModel {
         var requestCount = 0
         guard let page = await fetchProfilesPage(cursor: nil, generation: generation) else {
             guard generation == loadGeneration else { return }
+            let followingRows = await loadFollowingSuggestions()
+            if !followingRows.isEmpty {
+                store.applyBootstrap(
+                    traders: followingRows,
+                    rooms: store.popularRooms,
+                    following: store.viewerFollowingIDs,
+                    tradersNextCursor: nil,
+                    clearFailures: true
+                )
+                phase = .loaded
+                return
+            }
             if traders.isEmpty {
                 phase = .failed(store.tradersFailedMessage ?? "Couldn't load suggested traders")
             } else {
@@ -324,9 +342,15 @@ final class SuggestedTradersViewModel {
         let presentation = preservingPresentation(hydrated)
         for trader in presentation { detailCache.seed(trader.profile) }
 
+        let followingRows = await loadFollowingSuggestions()
+        let merged = ExploreFollowingSupport.mergeDiscoverableFirst(
+            discoverable: presentation,
+            following: followingRows
+        )
+
         let following = store.viewerFollowingIDs
         store.applyBootstrap(
-            traders: presentation,
+            traders: merged,
             rooms: store.popularRooms,
             following: following,
             tradersNextCursor: page.nextCursor,
@@ -419,6 +443,38 @@ final class SuggestedTradersViewModel {
             requests: metrics.batchRequestCount,
             confirmedAbsent: confirmedAbsent
         )
+    }
+
+    private func syncFollowingAndBackfill() async {
+        guard let viewerID else { return }
+        let following = await ExploreFollowingSupport.loadFollowingIDs(
+            viewerID: viewerID,
+            detailCache: detailCache,
+            profiles: profiles
+        )
+        store.updateFollowing(following)
+        let followingRows = await loadFollowingSuggestions()
+        let discoverable = store.suggestedTraders.filter { !following.contains($0.id) }
+        let merged = ExploreFollowingSupport.mergeDiscoverableFirst(
+            discoverable: discoverable,
+            following: followingRows
+        )
+        store.replaceTraders(merged)
+        for trader in merged { detailCache.seed(trader.profile) }
+    }
+
+    private func loadFollowingSuggestions() async -> [ExploreTraderSuggestion] {
+        guard let viewerID else { return [] }
+        var confirmedAbsent = store.avatarConfirmedAbsentIDs
+        let rows = await ExploreFollowingSupport.suggestions(
+            for: store.viewerFollowingIDs,
+            viewerID: viewerID,
+            detailCache: detailCache,
+            profiles: profiles,
+            confirmedAbsent: &confirmedAbsent
+        )
+        store.updateAvatarConfirmedAbsent(confirmedAbsent)
+        return rows
     }
 
     private func rankProfiles(_ profiles: [Profile], limit: Int, minScore: Int) -> [ExploreTraderSuggestion] {

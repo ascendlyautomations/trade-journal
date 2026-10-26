@@ -161,11 +161,17 @@ export default function BacktestPage() {
       )
     }
 
-    const [{ rows }, accountRows] = await Promise.all([
+    const [{ rows, error: tradesError }, accountRows] = await Promise.all([
       rpcTradesOwnerRows(supabase),
       getCachedAccounts(user.id) ??
         ensureAccountsLoaded(supabase, user.id).catch(() => []),
     ])
+
+    if (tradesError) {
+      console.error("backtest trades load:", tradesError)
+      setLoading(false)
+      return
+    }
 
     const backtestRows = selectBacktestTrades(rows).sort(
       (a, b) => -compareDashboardTradesChronological(a, b)

@@ -5,6 +5,7 @@ import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
 import { vaultRefFromFeedItem } from "@/lib/vault/refs"
 import LinkedTradeBadge from "./LinkedTradeBadge"
 import type { FeedLikeMeta } from "./FeedPostCard"
+import { FEED_CARD_ENGAGEMENT_ROW_CLASS } from "@/app/components/ui/detailModalEngagement"
 
 type FeedReelCardActionsProps = {
   post: any
@@ -37,7 +38,7 @@ function FeedReelCardActions({
   )
 
   return (
-    <div className="border-t border-white/10 px-4 py-2">
+    <div className={FEED_CARD_ENGAGEMENT_ROW_CLASS}>
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <PostInteractionsEngagement

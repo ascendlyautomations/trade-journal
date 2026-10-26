@@ -82,7 +82,7 @@ function ProfileAchievementSocialCard({
         onImageClick={onImageClick}
       />
       <div
-        className="border-t border-white/10 px-3 py-2"
+        className="border-t border-white/10 px-3 py-1"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >

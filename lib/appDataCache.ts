@@ -735,7 +735,9 @@ export async function ensureFullTradesHistory(
   const promise = (async () => {
     const { rows: ownerRows, error } = await rpcTradesOwnerRows(supabase)
     if (error) {
-      return getCachedTrades(userId) ?? (EMPTY_TRADES as any[])
+      const cached = getCachedTrades(userId)
+      if (cached?.length) return cached
+      throw error
     }
     const fetched = ownerRows.length ? ownerRows : (EMPTY_TRADES as any[])
     const current = tradesByUser.get(userId)?.data ?? []
@@ -796,7 +798,9 @@ export async function ensureAnalyticsTradesHistory(
   const promise = (async () => {
     const { rows: ownerRows, error } = await rpcTradesOwnerRows(supabase)
     if (error) {
-      return getCachedTrades(userId) ?? (EMPTY_TRADES as any[])
+      const cached = getCachedTrades(userId)
+      if (cached?.length) return cached
+      throw error
     }
     const fetched = ownerRows.length
       ? ownerRows.map((row) => pickTradeAnalyticsProjection(row))
@@ -860,7 +864,12 @@ export async function ensureRichTradeRowsByIds(
     const richRows: any[] = []
     for (let i = 0; i < missing.length; i += chunkSize) {
       const chunk = missing.slice(i, i + chunkSize)
-      const { rows: chunkRows } = await rpcTradesOwnerRows(supabase, { tradeIds: chunk })
+      const { rows: chunkRows, error } = await rpcTradesOwnerRows(supabase, {
+        tradeIds: chunk,
+      })
+      if (error) {
+        throw error
+      }
       if (!chunkRows.length) continue
       richRows.push(...chunkRows)
     }

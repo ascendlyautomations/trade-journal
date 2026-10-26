@@ -33,26 +33,43 @@ struct RoomMemberTagChipsView: View {
     let tags: [RoomMemberTag]
     var showsOwnerBadge: Bool = false
     var limit: Int = 4
+    /// Member rows use a full-width wrapping row so tag names are not truncated beside join date.
+    var wraps: Bool = false
 
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        let visible = Array(tags.prefix(limit))
-        let overflow = max(tags.count - visible.count, 0)
-        HStack(spacing: ExperienceSpacing.xxs) {
-            if showsOwnerBadge {
-                tagCapsule(label: "Owner", color: colors.accent)
+        if wraps {
+            ExperienceFlowLayout(spacing: ExperienceSpacing.xxs, rowSpacing: ExperienceSpacing.xxs) {
+                if showsOwnerBadge {
+                    tagCapsule(label: "Owner", color: colors.accent)
+                }
+                ForEach(tags) { tag in
+                    tagCapsule(
+                        label: tag.name,
+                        color: RoomMemberTagSupport.color(for: tag.colorKey, colors: colors)
+                    )
+                }
             }
-            ForEach(visible) { tag in
-                tagCapsule(
-                    label: tag.name,
-                    color: RoomMemberTagSupport.color(for: tag.colorKey, colors: colors)
-                )
-            }
-            if overflow > 0 {
-                Text("+\(overflow)")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(colors.tertiaryText)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            let visible = Array(tags.prefix(limit))
+            let overflow = max(tags.count - visible.count, 0)
+            HStack(spacing: ExperienceSpacing.xxs) {
+                if showsOwnerBadge {
+                    tagCapsule(label: "Owner", color: colors.accent)
+                }
+                ForEach(visible) { tag in
+                    tagCapsule(
+                        label: tag.name,
+                        color: RoomMemberTagSupport.color(for: tag.colorKey, colors: colors)
+                    )
+                }
+                if overflow > 0 {
+                    Text("+\(overflow)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(colors.tertiaryText)
+                }
             }
         }
     }
@@ -64,6 +81,39 @@ struct RoomMemberTagChipsView: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(color.opacity(0.12), in: Capsule())
-            .lineLimit(1)
+            .lineLimit(wraps ? 2 : 1)
+            .fixedSize(horizontal: wraps, vertical: false)
+    }
+}
+
+/// Manage Tags assignment rows — color matches the tag chip on member lists.
+struct RoomMemberTagAssignPickerRow: View {
+    let tag: RoomMemberTag
+    var assigned: Bool
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        HStack(spacing: ExperienceSpacing.sm) {
+            tagSwatch
+            Spacer(minLength: ExperienceSpacing.sm)
+            if assigned {
+                Image(systemName: "checkmark")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(colors.accent)
+            }
+        }
+    }
+
+    private var tagSwatch: some View {
+        let tint = RoomMemberTagSupport.color(for: tag.colorKey, colors: colors)
+        return HStack(spacing: ExperienceSpacing.xs) {
+            Circle()
+                .fill(tint)
+                .frame(width: 10, height: 10)
+            Text(tag.name)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(tint)
+        }
     }
 }

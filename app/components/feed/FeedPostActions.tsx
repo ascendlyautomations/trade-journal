@@ -4,6 +4,7 @@ import { memo, useCallback } from "react"
 import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
 import { vaultRefFromFeedItem } from "@/lib/vault/refs"
 import type { FeedLikeMeta } from "./FeedPostCard"
+import { FEED_CARD_ENGAGEMENT_ROW_CLASS } from "@/app/components/ui/detailModalEngagement"
 
 type FeedPostActionsProps = {
   post: any
@@ -32,7 +33,7 @@ function FeedPostActions({
   )
 
   return (
-    <div className="border-t border-white/10 px-4 py-1.5">
+    <div className={FEED_CARD_ENGAGEMENT_ROW_CLASS}>
       <div className="min-w-0">
         <PostInteractionsEngagement
           post={post}

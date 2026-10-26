@@ -5,6 +5,10 @@ export const DASHBOARD_ALL_TIMEFRAME_LABEL = "All Time"
 export const DASHBOARD_TF_LABEL_FROM_VALUE: Record<string, string> = {
   all: DASHBOARD_ALL_TIMEFRAME_LABEL,
   daily: "Today",
+  "7d": "7D",
+  "30d": "30D",
+  "90d": "90D",
+  "1y": "1Y",
   weekly: "This Week",
   monthly: "This Month",
   yearly: "This Year",
@@ -13,18 +17,18 @@ export const DASHBOARD_TF_LABEL_FROM_VALUE: Record<string, string> = {
 
 export const DASHBOARD_PRESET_TIMEFRAME_LABELS = [
   DASHBOARD_ALL_TIMEFRAME_LABEL,
-  "Today",
-  "This Week",
-  "This Month",
-  "This Year",
+  "7D",
+  "30D",
+  "90D",
+  "1Y",
 ] as const
 
 export const DASHBOARD_PRESET_LABEL_TO_VALUE: Record<string, string> = {
   [DASHBOARD_ALL_TIMEFRAME_LABEL]: "all",
-  Today: "daily",
-  "This Week": "weekly",
-  "This Month": "monthly",
-  "This Year": "yearly",
+  "7D": "7d",
+  "30D": "30d",
+  "90D": "90d",
+  "1Y": "1y",
 }
 
 /** Capsule / compact label for the active timeframe filter. */

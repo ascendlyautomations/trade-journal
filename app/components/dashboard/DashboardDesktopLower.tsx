@@ -22,6 +22,8 @@ import {
 import { mondayOfEasternWeek } from "@/lib/psychology/reports/periods"
 import { checkInDateKey } from "@/lib/dailyCheckIn/dateKey"
 import type { TradingReportPeriodKey } from "@/lib/tradingReports/tradingReportTypes"
+import type { DashboardRrTargetAnalysis } from "@/lib/dashboardRrTargetAnalysis"
+import DashboardRrTargetAnalysisPanel from "@/app/components/dashboard/DashboardRrTargetAnalysisPanel"
 
 const SYMBOL_PREVIEW = 5
 
@@ -60,6 +62,7 @@ export type DashboardDesktopLowerProps = {
   onOpenReportPeriod: (key: TradingReportPeriodKey) => void
   onOpenPsychologyReport?: (reportId?: string) => void
   symbolPerformanceRows: SymbolRow[]
+  rrTargetAnalysis: DashboardRrTargetAnalysis
   hasAnyTrades: boolean
   longShortPerformance: LongShortPerformance
   holdTimeStats: HoldTimeStats
@@ -218,7 +221,7 @@ function SymbolPanel({ rows }: { rows: SymbolRow[] }) {
         return (
           <div
             key={row.ticker}
-            className="grid grid-cols-[5.5rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-white/10 py-2 last:border-b-0"
+            className="grid grid-cols-[4.25rem_minmax(0,1fr)_auto] items-center gap-2 border-b border-white/10 py-2 last:border-b-0"
           >
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-white">{row.ticker}</p>
@@ -296,7 +299,7 @@ function DirectionPanel({ performance }: { performance: LongShortPerformance }) 
       short: sideValue(performance.short, (side) => formatCurrency(side.avgPnL), (side) => pnlClass(side.avgPnL)),
     },
     {
-      label: "Avg RR",
+      label: "Avg R:R",
       long: sideValue(performance.long, (side) => formatRR(side.avgRR)),
       short: sideValue(performance.short, (side) => formatRR(side.avgRR)),
     },
@@ -499,11 +502,14 @@ export default function DashboardDesktopLower(props: DashboardDesktopLowerProps)
           Dig into the details behind your performance.
         </p>
         <div className="tt-dash-deeper">
+          <Panel title="R:R Targeting" className="tt-dash-deeper-rr">
+            <DashboardRrTargetAnalysisPanel analysis={props.rrTargetAnalysis} />
+          </Panel>
+          <Panel title="Direction Detail" className="tt-dash-deeper-direction">
+            <DirectionPanel performance={props.longShortPerformance} />
+          </Panel>
           <Panel title="Symbol Performance" className="tt-dash-deeper-symbol">
             <SymbolPanel rows={props.symbolPerformanceRows} />
-          </Panel>
-          <Panel title="Direction Detail">
-            <DirectionPanel performance={props.longShortPerformance} />
           </Panel>
           <Panel title="Hold Time Detail" className="tt-dash-deeper-hold">
             <HoldDetail stats={props.holdTimeStats} totalTrades={props.totalTrades} />

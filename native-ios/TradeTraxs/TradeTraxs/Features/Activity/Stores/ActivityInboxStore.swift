@@ -363,13 +363,6 @@ final class ActivityInboxStore {
                 session: session,
                 realtimeHub: realtimeHub
             )
-            await syncPresentedFeed(
-                viewerID: viewerID,
-                notifications: notifications,
-                followRequests: followRequests,
-                detailCache: detailCache,
-                rpc: rpc
-            )
             return
         }
 
@@ -416,15 +409,7 @@ final class ActivityInboxStore {
                 session: session,
                 realtimeHub: realtimeHub
             )
-            if feedPresentation {
-                await syncPresentedFeed(
-                    viewerID: viewerID,
-                    notifications: notifications,
-                    followRequests: followRequests,
-                    detailCache: detailCache,
-                    rpc: rpc
-                )
-            } else {
+            if !feedPresentation {
                 await catchUpActivityIfNeeded(
                     viewerID: viewerID,
                     detailCache: detailCache,

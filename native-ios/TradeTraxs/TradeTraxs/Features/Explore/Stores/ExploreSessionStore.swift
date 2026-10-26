@@ -43,9 +43,9 @@ final class ExploreSessionStore {
         hasBootstrapped = true
     }
 
+    /// Updates the viewer follow graph only — list rows stay intact for Suggested Traders.
     func updateFollowing(_ following: Set<ProfileID>) {
         viewerFollowingIDs = following
-        suggestedTraders = suggestedTraders.filter { !following.contains($0.id) }
     }
 
     func appendTraders(_ traders: [ExploreTraderSuggestion], nextCursor: String?) {

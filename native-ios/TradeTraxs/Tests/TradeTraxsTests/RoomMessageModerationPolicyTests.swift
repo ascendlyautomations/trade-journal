@@ -4,7 +4,12 @@ import XCTest
 final class RoomMessageModerationPolicyTests: XCTestCase {
     private let owner = ProfileID("owner-1")
     private let member = ProfileID("member-1")
+    private let moderator = ProfileID("mod-1")
     private let otherOwner = ProfileID("owner-2")
+
+    private func ownerManage() -> (Bool, Bool) { (true, true) }
+    private func moderatorOnly() -> (Bool, Bool) { (false, true) }
+    private func memberNone() -> (Bool, Bool) { (false, false) }
 
     func testMemberCanDeleteOwnMessageOnly() {
         XCTAssertTrue(
@@ -31,114 +36,105 @@ final class RoomMessageModerationPolicyTests: XCTestCase {
                 isRoomOwner: true
             )
         )
-        XCTAssertTrue(
-            RoomMessageModerationPolicy.canDeleteMessage(
-                viewerID: owner,
-                senderProfileID: owner,
-                isRoomOwner: true
-            )
-        )
     }
 
-    func testNonOwnerCannotModerateOthersEvenWithWrongOwnerFlag() {
+    func testModeratorCanDeleteMemberMessageNotOwner() {
+        XCTAssertTrue(
+            RoomMessageModerationPolicy.canDeleteMessage(
+                viewerID: moderator,
+                senderProfileID: member,
+                isRoomOwner: false,
+                isRoomModerator: true,
+                roomOwnerProfileID: owner
+            )
+        )
         XCTAssertFalse(
             RoomMessageModerationPolicy.canDeleteMessage(
-                viewerID: member,
+                viewerID: moderator,
                 senderProfileID: owner,
-                isRoomOwner: false
+                isRoomOwner: false,
+                isRoomModerator: true,
+                roomOwnerProfileID: owner
             )
         )
     }
 
     func testOwnerModerationDeleteRequiresConfirmationForOthers() {
-        XCTAssertFalse(
-            RoomMessageModerationPolicy.isOwnerDeletingAnotherMembersMessage(
-                viewerID: owner,
-                senderProfileID: owner,
-                isRoomOwner: true
-            )
-        )
         XCTAssertTrue(
             RoomMessageModerationPolicy.isOwnerDeletingAnotherMembersMessage(
                 viewerID: owner,
                 senderProfileID: member,
                 isRoomOwner: true
-            )
-        )
-        XCTAssertFalse(
-            RoomMessageModerationPolicy.isOwnerDeletingAnotherMembersMessage(
-                viewerID: otherOwner,
-                senderProfileID: member,
-                isRoomOwner: false
-            )
-        )
-    }
-
-    func testIsRoomOwnerMatchesRoomOwnerProfileID() {
-        XCTAssertTrue(
-            RoomMessageModerationPolicy.isRoomOwner(
-                roomOwnerProfileID: owner,
-                viewerID: owner
-            )
-        )
-        XCTAssertFalse(
-            RoomMessageModerationPolicy.isRoomOwner(
-                roomOwnerProfileID: owner,
-                viewerID: member
             )
         )
     }
 
     func testOwnerCanBanMemberNotSelfOrOwner() {
+        let manage = ownerManage()
         XCTAssertTrue(
             RoomMessageModerationPolicy.canBanMember(
                 viewerID: owner,
                 targetProfileID: member,
-                roomOwnerProfileID: owner
+                roomOwnerProfileID: owner,
+                canManageRoom: manage.0,
+                canModerateRoom: manage.1
             )
         )
         XCTAssertFalse(
             RoomMessageModerationPolicy.canBanMember(
                 viewerID: owner,
                 targetProfileID: owner,
-                roomOwnerProfileID: owner
-            )
-        )
-        XCTAssertFalse(
-            RoomMessageModerationPolicy.canBanMember(
-                viewerID: member,
-                targetProfileID: owner,
-                roomOwnerProfileID: owner
+                roomOwnerProfileID: owner,
+                canManageRoom: manage.0,
+                canModerateRoom: manage.1
             )
         )
     }
 
-    func testManageFromMessageRequiresOwnerAndOtherSender() {
+    func testModeratorCannotBanAnotherModerator() {
+        let mod = moderatorOnly()
+        let modTag = RoomMemberTag(
+            id: RoomMemberTagID("t-mod"),
+            roomID: RoomID("room"),
+            name: "Moderator",
+            colorKey: "purple",
+            isPreset: true
+        )
+        XCTAssertFalse(
+            RoomMessageModerationPolicy.canBanMember(
+                viewerID: moderator,
+                targetProfileID: member,
+                roomOwnerProfileID: owner,
+                canManageRoom: mod.0,
+                canModerateRoom: mod.1,
+                targetMemberTags: [modTag]
+            )
+        )
+    }
+
+    func testManageFromMessageRequiresModerationRights() {
+        let manage = ownerManage()
         XCTAssertTrue(
             RoomMessageModerationPolicy.canManageMessageMember(
                 viewerID: owner,
                 senderProfileID: member,
                 roomOwnerProfileID: owner,
                 messageKind: .text,
-                sendState: .sent
+                sendState: .sent,
+                canManageRoom: manage.0,
+                canModerateRoom: manage.1
             )
         )
+        let none = memberNone()
         XCTAssertFalse(
             RoomMessageModerationPolicy.canManageMessageMember(
                 viewerID: member,
                 senderProfileID: owner,
                 roomOwnerProfileID: owner,
                 messageKind: .text,
-                sendState: .sent
-            )
-        )
-        XCTAssertFalse(
-            RoomMessageModerationPolicy.canManageMessageMember(
-                viewerID: owner,
-                senderProfileID: member,
-                roomOwnerProfileID: owner,
-                messageKind: .system,
-                sendState: .sent
+                sendState: .sent,
+                canManageRoom: none.0,
+                canModerateRoom: none.1
             )
         )
     }

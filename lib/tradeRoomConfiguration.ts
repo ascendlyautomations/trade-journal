@@ -100,8 +100,16 @@ export function hasDuplicateChannelNames(channels: TradeRoomDraftChannel[]): boo
 }
 
 export function effectiveJoinPolicy(config: TradeRoomConfiguration): TradeRoomJoinPolicy {
-  if (config.visibility === "private") return "open"
+  if (config.visibility === "private") return "approval"
   return config.joinPolicy
+}
+
+export function roomRequiresJoinApproval(room: {
+  join_policy?: string | null
+  is_private?: boolean | null
+}): boolean {
+  if (room.is_private) return true
+  return String(room.join_policy ?? "open").toLowerCase() === "approval"
 }
 
 export function validateTradeRoomConfiguration(

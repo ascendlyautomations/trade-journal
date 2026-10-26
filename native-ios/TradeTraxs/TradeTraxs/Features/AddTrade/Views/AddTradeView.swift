@@ -476,7 +476,7 @@ struct AddTradeView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                     VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                        Text("Risk / Reward")
+                        Text("Targeted Risk/Reward *")
                             .experienceStyle(.caption, color: colors.secondaryText)
                         HStack(spacing: ExperienceSpacing.xs) {
                             Text("1 :")
@@ -496,6 +496,24 @@ struct AddTradeView: View {
                 .listRowInsets(AddTradeFormLayout.rowInsets)
             } header: {
                 addTradeSectionHeader("Risk & Result")
+            }
+
+            Section {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                    Text(viewModel.requiresMaxRrReached ? "Max R:R Reached *" : "Max R:R Reached")
+                        .experienceStyle(.caption, color: colors.secondaryText)
+                    TextField("2.5", text: $viewModel.maxRrReachedText.numericInput(.riskReward))
+                        .keyboardType(.decimalPad)
+                        .focused($focusedField, equals: .maxRrReached)
+                        .accessibilityLabel("Maximum risk reward reached")
+                        .accessibilityIdentifier("addTrade.maxRrReached")
+                    Text("Highest reward-to-risk ratio reached before the trade closed.")
+                        .experienceStyle(.caption2, color: colors.tertiaryText)
+                    if let error = viewModel.fieldErrors[.maxRrReached] {
+                        Text(error).foregroundStyle(colors.loss).font(.caption)
+                    }
+                }
+                .listRowInsets(AddTradeFormLayout.rowInsets)
             }
 
             Section {
@@ -526,7 +544,7 @@ struct AddTradeView: View {
                         style: .tradeQuantity
                     )
                     compactNumericField(
-                        "Points",
+                        "Points Targeted *",
                         text: $viewModel.pointsText,
                         field: .points,
                         error: viewModel.fieldErrors[.points],

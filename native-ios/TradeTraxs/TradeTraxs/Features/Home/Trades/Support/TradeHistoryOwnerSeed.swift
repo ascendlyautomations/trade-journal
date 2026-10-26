@@ -10,8 +10,10 @@ enum TradeHistoryOwnerSeed {
     }
 
     /// Owner cache can satisfy filtered/search queries locally when fresh.
+    /// Dashboard chart browse (weekday/hour/session/hold) adds client-side filters on top.
     static func canSeed(query: TradeHistoryQuery, hasLocalBrowseConstraints: Bool) -> Bool {
-        guard !hasLocalBrowseConstraints else { return false }
+        _ = query
+        _ = hasLocalBrowseConstraints
         return true
     }
 
@@ -19,10 +21,14 @@ enum TradeHistoryOwnerSeed {
         from ownerTrades: [Trade],
         query: TradeHistoryQuery,
         limit: Int,
-        context: TradeHistoryMatchContext = TradeHistoryMatchContext()
+        context: TradeHistoryMatchContext = TradeHistoryMatchContext(),
+        tradeFilter: ((Trade) -> Bool)? = nil
     ) -> Result {
         var rows = ownerTrades.filter { $0.mode != .backtest }
         rows = rows.filter { TradeHistoryLocalMatch.matches($0, query: query, context: context) }
+        if let tradeFilter {
+            rows = rows.filter(tradeFilter)
+        }
         rows = TradeHistorySortSupport.sorted(rows, sort: query.filters.sort)
 
         let page = Array(rows.prefix(limit))
