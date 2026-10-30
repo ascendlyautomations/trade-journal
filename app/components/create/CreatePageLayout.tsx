@@ -62,7 +62,7 @@ export default function CreatePageLayout({
       data-tt-create-page
       className="tt-add-trade tt-phase4-dark min-h-[calc(100dvh-var(--app-header-offset))] bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100"
     >
-      <div className="mx-auto flex w-full max-w-6xl flex-col px-4 pb-[max(1.5rem,var(--safe-area-bottom))] pt-4 sm:px-6 sm:pt-6">
+      <div className="mx-auto flex w-full max-w-6xl flex-col px-4 pb-[max(1.5rem,var(--safe-area-bottom))] pt-4 sm:px-6 sm:pt-6 max-md:pb-[max(1.5rem,var(--app-tab-bar-offset))]">
         <header className="flex shrink-0 flex-col gap-4 border-b border-white/10 pb-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 items-start gap-2">
             <button

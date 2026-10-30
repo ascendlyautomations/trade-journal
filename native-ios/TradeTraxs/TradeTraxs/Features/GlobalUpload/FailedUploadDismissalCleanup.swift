@@ -18,7 +18,7 @@ enum FailedUploadDismissalCleanup {
         story: StoryUploadCheckpoint? = nil
     ) -> [Object] {
         var objects: [Object] = []
-        if let post, post.uploadedImagePublicURL != nil {
+        if let post, post.savedPostID == nil, post.uploadedImagePublicURL != nil {
             append(
                 objects: &objects,
                 bucket: StorageBucket.profilePosts.rawValue,

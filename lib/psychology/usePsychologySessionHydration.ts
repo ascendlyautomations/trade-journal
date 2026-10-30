@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useUserProfile } from "@/lib/useUserProfile"
 import {
-  hydratePsychologySessionIfEmpty,
+  hydratePsychologySessionForAnalytics,
   type PsychologySessionSnapshot,
 } from "./hydratePsychologySession.ts"
 import {
@@ -13,6 +13,9 @@ import {
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 import type { PsychologyCoachSummary } from "./reports/coach.ts"
 import type { PsychologyAnalyticsReport, PsychologyCoachFacts } from "./reports/types.ts"
+import type { TraderDailyCheckIn } from "@/lib/dailyCheckIn/types"
+import type { PsychologyReportTrade } from "./reports/types.ts"
+import type { PsychologyAnalyticsScope } from "./psychologyScope.ts"
 
 export function usePsychologySessionHydration() {
   const { user } = useUserProfile()
@@ -22,6 +25,9 @@ export function usePsychologySessionHydration() {
   const [facts, setFacts] = useState<PsychologyCoachFacts | null>(null)
   const [summary, setSummary] = useState<PsychologyCoachSummary | null>(null)
   const [unlock, setUnlock] = useState<PsychologyInsightsUnlockProgress | null>(null)
+  const [checkIns, setCheckIns] = useState<TraderDailyCheckIn[]>([])
+  const [journalTrades, setJournalTrades] = useState<PsychologyReportTrade[]>([])
+  const [scope, setScope] = useState<PsychologyAnalyticsScope | null>(null)
 
   useEffect(() => {
     if (!user?.id) {
@@ -36,11 +42,14 @@ export function usePsychologySessionHydration() {
     void (async () => {
       try {
         const snapshot: PsychologySessionSnapshot =
-          await hydratePsychologySessionIfEmpty(user.id, [])
+          await hydratePsychologySessionForAnalytics(user.id)
         if (cancelled) return
         setReport(snapshot.report)
         setFacts(snapshot.facts)
         setSummary(snapshot.summary)
+        setCheckIns(snapshot.checkIns)
+        setJournalTrades(snapshot.journalTrades)
+        setScope(snapshot.scope)
         setUnlock(
           computePsychologyInsightsUnlockProgress(
             snapshot.journalTrades,
@@ -61,5 +70,15 @@ export function usePsychologySessionHydration() {
     }
   }, [user?.id])
 
-  return { ready, loadError, report, facts, summary, unlock }
+  return {
+    ready,
+    loadError,
+    report,
+    facts,
+    summary,
+    unlock,
+    checkIns,
+    journalTrades,
+    scope,
+  }
 }

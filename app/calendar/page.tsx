@@ -552,9 +552,9 @@ export default function CalendarPage() {
               </div>
             </PlatformCalendarFilters>
 
-            {/* WEEKDAY LABELS — Sun–Fri mobile, full week desktop */}
-            <div className="grid min-w-0 grid-cols-6 gap-1 mb-2 text-center text-gray-400 text-xs md:hidden">
-              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri"].map((d) => (
+            {/* WEEKDAY LABELS — full week on phone; desktop density unchanged */}
+            <div className="grid min-w-0 grid-cols-7 gap-1 mb-2 text-center text-gray-400 text-xs md:hidden">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
                 <div key={d}>{d}</div>
               ))}
             </div>
@@ -571,22 +571,11 @@ export default function CalendarPage() {
                 if (!weekHasDays) return null
 
                 const weekTotal = Number(getWeekTotal(week) ?? 0)
-                const mobileWeek = week.filter((day, dayIndex) => {
-                  if (day === null) {
-                    const weekday = (weekIndex * 7 + dayIndex) % 7
-                    return weekday !== 6
-                  }
-                  const d = new Date(year, month, day).getDay()
-                  return d !== 6
-                })
-                const hideMobileWeek = mobileWeek.every((d) => d === null)
 
                 return (
                   <div key={weekIndex} className="mb-2">
-                    <div
-                      className={`grid min-w-0 grid-cols-6 gap-1 md:hidden ${hideMobileWeek ? "hidden" : ""}`}
-                    >
-                      {mobileWeek.map((day, i) =>
+                    <div className="grid min-w-0 grid-cols-7 gap-1 md:hidden">
+                      {week.map((day, i) =>
                         renderCalendarDay(day, weekIndex, `m-${i}`)
                       )}
                     </div>
@@ -597,11 +586,7 @@ export default function CalendarPage() {
                       )}
                     </div>
 
-                    <div
-                      className={`relative z-0 mt-1 w-full justify-end md:mt-2 pointer-events-none ${
-                        hideMobileWeek ? "hidden md:flex" : "flex"
-                      }`}
-                    >
+                    <div className="relative z-0 mt-1 flex w-full justify-end md:mt-2 pointer-events-none">
                       <span
                         className={`rounded-full px-3 py-1 text-xs md:text-sm font-semibold ${
                           weekTotal >= 0

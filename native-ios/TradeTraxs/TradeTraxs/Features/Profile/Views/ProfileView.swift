@@ -16,7 +16,6 @@ struct ProfileView: View {
     @Environment(\.appEnvironment) private var appEnvironment
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.tabIsActive) private var tabIsActive
-
     /// Profile tab root — current user.
     init(
         store: CurrentUserProfileStore,
@@ -88,6 +87,12 @@ struct ProfileView: View {
                         sectionBody(shellViewModel)
                             .environment(\.appEnvironment, appEnvironment)
                     }
+                    .profileSectionSwipe(
+                        section: shellViewModel.selectedSection,
+                        isEnabled: true
+                    ) { section in
+                        shellViewModel.select(section)
+                    }
                 } else if screen.state.phase == .loading && screen.state.profile == nil {
                     VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                         ProfileSectionPicker(selection: .constant(.trades))
@@ -105,6 +110,7 @@ struct ProfileView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollDismissesKeyboard(.interactively)
+        .navigationInteractivePopFromLeadingEdgeOnly()
         .experienceScreenBackground()
         .experienceNavigationTitle(navigationTitle)
         .toolbar {

@@ -35,6 +35,15 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !loadtest/.env.example
+!loadtest/.env.production-perf.example
+loadtest/.env.production-perf
+loadtest/fixtures/realistic300-full-isolation.json
+loadtest/fixtures/realistic600-full-isolation.json
+loadtest/fixtures/realistic300-full-isolation.uuid-map.json
+loadtest/out/
+loadtest/.recovery/
+!supabase/staging/.env.local.example
+!supabase/staging/full-clone/.env.example
 
 # vercel
 .vercel

@@ -217,7 +217,6 @@ final class CreateStoryViewModel {
             formError = "Nothing to save yet."
             return
         }
-        isSavingDraft = true
         formError = nil
         let draftID = activeDraftID ?? UUID()
         let image = sourceImage
@@ -227,8 +226,12 @@ final class CreateStoryViewModel {
         let previousImage = retainedImagePath
         let previousVideo = retainedVideoPath
         let cleared = didClearDraftMedia
-        Task {
-            do {
+        let repository = contentDrafts
+        let session = session
+        isSavingDraft = true
+        ContentDraftSaveUpload.start(
+            jobTitle: "Story",
+            operation: { [weak self] jobID in
                 var state = StoryComposerDraftState()
                 state.fileName = fileName
                 state.imageScale = Double(canvas.imageScale)
@@ -238,21 +241,32 @@ final class CreateStoryViewModel {
                 if let image, let jpeg = MediaImagePreparation.storyJPEGData(from: image) {
                     state.mediaKind = "image"
                     state.contentType = "image/jpeg"
-                    state.imageStoragePath = try await contentDrafts.uploadDraftImage(draftID: draftID, data: jpeg)
+                    try await UploadProgressContext.$jobID.withValue(jobID) {
+                        state.imageStoragePath = try await repository.uploadDraftImage(
+                            draftID: draftID,
+                            data: jpeg
+                        )
+                    }
                     state.videoStoragePath = nil
-                    await contentDrafts.deleteDraftMedia(paths: [previousImage, previousVideo].compactMap { $0 }.filter { $0 != state.imageStoragePath })
+                    await repository.deleteDraftMedia(
+                        paths: [previousImage, previousVideo].compactMap { $0 }.filter { $0 != state.imageStoragePath }
+                    )
                 } else if let videoURL {
                     state.mediaKind = "video"
                     state.contentType = videoType.isEmpty ? "video/mp4" : videoType
-                    state.videoStoragePath = try await contentDrafts.uploadDraftVideo(
-                        draftID: draftID,
-                        fileURL: videoURL,
-                        contentType: state.contentType
-                    )
+                    try await UploadProgressContext.$jobID.withValue(jobID) {
+                        state.videoStoragePath = try await repository.uploadDraftVideo(
+                            draftID: draftID,
+                            fileURL: videoURL,
+                            contentType: state.contentType
+                        )
+                    }
                     state.imageStoragePath = nil
-                    await contentDrafts.deleteDraftMedia(paths: [previousImage, previousVideo].compactMap { $0 }.filter { $0 != state.videoStoragePath })
+                    await repository.deleteDraftMedia(
+                        paths: [previousImage, previousVideo].compactMap { $0 }.filter { $0 != state.videoStoragePath }
+                    )
                 } else if cleared {
-                    await contentDrafts.deleteDraftMedia(paths: [previousImage, previousVideo].compactMap { $0 })
+                    await repository.deleteDraftMedia(paths: [previousImage, previousVideo].compactMap { $0 })
                 } else {
                     state.imageStoragePath = previousImage
                     state.videoStoragePath = previousVideo
@@ -262,11 +276,10 @@ final class CreateStoryViewModel {
                 var payload = ContentDraftPayload()
                 payload.story = state
                 guard !payload.isMeaningfullyEmpty else {
-                    isSavingDraft = false
-                    formError = "Nothing to save yet."
-                    return
+                    throw AppError.unknown(message: "Nothing to save yet.")
                 }
-                let saved = try await contentDrafts.saveDraft(
+                ContentDraftSaveUpload.noteSavingRecord(jobID: jobID)
+                let saved = try await repository.saveDraft(
                     ContentDraft(
                         id: draftID,
                         userID: await session.currentUserID ?? UserID(""),
@@ -276,15 +289,20 @@ final class CreateStoryViewModel {
                         updatedAt: Date()
                     )
                 )
-                activeDraftID = saved.id
-                isSavingDraft = false
-                SaveSuccessConfirmationCenter.shared.present("Draft saved")
-                onDismiss()
-            } catch {
-                isSavingDraft = false
-                formError = UserFacingError.message(for: error)
+                self?.activeDraftID = saved.id
+            },
+            onEnqueued: { [weak self] in
+                self?.isSavingDraft = false
+                self?.onDismiss()
+            },
+            onFailure: { [weak self] error in
+                self?.isSavingDraft = false
+                let message = UserFacingError.message(for: error)
+                if message == "Nothing to save yet." {
+                    self?.formError = message
+                }
             }
-        }
+        )
     }
 
     func postVideoStory(textOverlays: [StoryTextOverlay]) {

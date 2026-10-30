@@ -20,6 +20,11 @@ import { buildDashboardPsychologyStats } from "@/lib/psychology/dashboardStats"
 import { focusPsychologySection } from "@/lib/psychology/psychologySessionStore"
 import { psychologySectionIdForCategory } from "@/lib/psychology/sectionId"
 import { hydratePsychologySession } from "@/lib/psychology/hydratePsychologySession"
+import { setPsychologyAnalyticsScope } from "@/lib/psychology/psychologySessionStore"
+import { createPsychologyAnalyticsScope } from "@/lib/psychology/psychologyScope"
+import PsychologyInsightGapPanel from "@/app/components/psychology/PsychologyInsightGapPanel"
+import { buildPostUnlockInsightGapMessages } from "@/lib/psychology/psychologyProgressMessaging"
+import { PSYCHOLOGY_UNLOCK_OVERVIEW_COPY } from "@/lib/psychology/psychologyProgressMessaging"
 import { reliabilityLabel } from "@/lib/psychology/reports/metrics"
 import type { PsychologyInsightCard } from "@/lib/psychology/reports/types"
 import {
@@ -40,6 +45,8 @@ type DashboardPsychologyInsightsProps = {
   trades: DashboardTradeRow[]
   /** False while Dashboard trades have not been hydrated — avoids a 0/5 flash. */
   tradesReady?: boolean
+  /** Matches dashboard filters — keeps analytics scope aligned with this widget. */
+  scopeLabel?: string
 }
 
 /** One instance is portaled into the slot for the active dashboard layout. */
@@ -202,6 +209,7 @@ export default function DashboardPsychologyInsights({
   userId,
   trades,
   tradesReady = true,
+  scopeLabel = "Dashboard filters",
 }: DashboardPsychologyInsightsProps) {
   const router = useRouter()
   const { profile } = useUserProfile()
@@ -212,6 +220,7 @@ export default function DashboardPsychologyInsights({
   )
   const [reportReady, setReportReady] = useState(true)
   const [cards, setCards] = useState<PsychologyInsightCard[]>([])
+  const [gapMessages, setGapMessages] = useState<string[]>([])
 
   const stats = useMemo(
     () => buildDashboardPsychologyStats(trades, checkIns),
@@ -230,12 +239,25 @@ export default function DashboardPsychologyInsights({
     let cancelled = false
     void (async () => {
       try {
-        const snapshot = await hydratePsychologySession(userId, tradeRecords)
+        setPsychologyAnalyticsScope(
+          createPsychologyAnalyticsScope(userId, scopeLabel, tradeRecords)
+        )
+        const snapshot = await hydratePsychologySession(userId, tradeRecords, {
+          scopeLabel,
+        })
         if (cancelled) return
         setCards(snapshot.report?.dashboardCards ?? [])
+        if (snapshot.report) {
+          setGapMessages(
+            buildPostUnlockInsightGapMessages(snapshot.report, snapshot.journalTrades)
+          )
+        } else {
+          setGapMessages([])
+        }
       } catch {
         if (!cancelled) {
           setCards([])
+          setGapMessages([])
         }
       } finally {
         if (!cancelled) setReportReady(true)
@@ -244,7 +266,15 @@ export default function DashboardPsychologyInsights({
     return () => {
       cancelled = true
     }
-  }, [checkIns, ready, proFeatureUnlocked, tradeRecords, tradesReady, userId])
+  }, [
+    checkIns,
+    ready,
+    proFeatureUnlocked,
+    scopeLabel,
+    tradeRecords,
+    tradesReady,
+    userId,
+  ])
 
   if (!ready || !tradesReady) {
     return <DashboardPsychologyInsightsSkeleton />
@@ -254,6 +284,9 @@ export default function DashboardPsychologyInsights({
   const showsRequirement = showsPsychologyInsightsRequirement(unlock)
 
   function openAnalytics(highlightSection: string | null) {
+    setPsychologyAnalyticsScope(
+      createPsychologyAnalyticsScope(userId, scopeLabel, tradeRecords)
+    )
     focusPsychologySection(highlightSection)
     const query = highlightSection
       ? `?section=${encodeURIComponent(highlightSection)}`
@@ -275,6 +308,11 @@ export default function DashboardPsychologyInsights({
             href="/psychology/analytics"
             className="shrink-0 text-xs font-semibold text-blue-400 hover:text-blue-300"
             data-testid="dashboard.psychologyInsights.seeAll"
+            onClick={() =>
+              setPsychologyAnalyticsScope(
+                createPsychologyAnalyticsScope(userId, scopeLabel, tradeRecords)
+              )
+            }
           >
             See all
           </Link>
@@ -296,11 +334,9 @@ export default function DashboardPsychologyInsights({
           data-testid="dashboard.psychologyInsights.requirements"
         >
           <h3 className="text-sm font-semibold text-white">
-            5 Daily Check-Ins &amp; 5 Trades Required
+            5 check-in days &amp; 5 trades to unlock overview
           </h3>
-          <p className="mt-0.5 text-xs text-gray-400">
-            Log check-ins and trade psychology to unlock insights.
-          </p>
+          <p className="mt-0.5 text-xs text-gray-400">{PSYCHOLOGY_UNLOCK_OVERVIEW_COPY}</p>
           <p className="mt-1.5 text-xs tabular-nums text-gray-300">
             Check-in days {displayCheckInDayCountForGate(unlock)}/
             {PSYCHOLOGY_INSIGHTS_REQUIRED_COUNT}
@@ -312,12 +348,11 @@ export default function DashboardPsychologyInsights({
       ) : !reportReady ? (
         <DashboardPsychologyInsightsSkeleton />
       ) : cards.length === 0 ? (
-        <div className="rounded-xl border border-white/10 bg-white/10 p-4">
-          <h3 className="text-sm font-semibold text-white">Not enough data yet</h3>
-          <p className="mt-0.5 text-xs text-gray-400">
-            Log check-ins and trade psychology to unlock insights.
-          </p>
-        </div>
+        <PsychologyInsightGapPanel
+          title="Overview unlocked"
+          messages={gapMessages}
+          testId="dashboard.psychologyInsights.gaps"
+        />
       ) : (
         <PsychologyInsightCardList cards={cards} onOpenAnalytics={openAnalytics} />
       )}
@@ -356,7 +391,9 @@ function PsychologyInsightCardList({
           className="w-full py-1 text-xs font-semibold text-blue-400"
           onClick={() => setExpanded((value) => !value)}
         >
-          {expanded ? "Show less" : "View more"}
+          {expanded
+            ? "Show fewer insights"
+            : `Show ${cards.length - INSIGHT_PREVIEW_COUNT} more insights`}
         </button>
       ) : null}
     </div>

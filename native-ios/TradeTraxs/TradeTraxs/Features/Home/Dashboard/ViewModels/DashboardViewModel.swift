@@ -52,6 +52,9 @@ final class DashboardViewModel {
     private var secondaryTask: Task<Void, Never>?
     private var hasLoaded = false
     private var coldLoadFinished = false
+    private(set) var coldLoadAttemptCount = 0
+    private static let maxColdLoadAttempts = 3
+    private(set) var lastDisplayedEquityHeroChartPoints: [ProfileStatisticsMetrics.EquityPoint] = []
     private var contractDecodeFailed = false
     private var loadGeneration: UInt64 = 0
     private var pendingHistoryBackfill = false
@@ -159,6 +162,8 @@ final class DashboardViewModel {
         loadGeneration &+= 1
         hasLoaded = false
         coldLoadFinished = false
+        coldLoadAttemptCount = 0
+        lastDisplayedEquityHeroChartPoints = []
         contractDecodeFailed = false
         isRefreshing = false
         summary = nil
@@ -195,25 +200,45 @@ final class DashboardViewModel {
     func setHomeTabActive(_ active: Bool) {
         guard isHomeTabActive != active else { return }
         isHomeTabActive = active
+        DashboardHomeSurfaceGate.setHomeTabActive(active)
         if !active {
-            accountChartHydrateTask?.cancel()
-            aggregateChartHydrateTask?.cancel()
-            accountChartHydrateTask = nil
-            aggregateChartHydrateTask = nil
-            equityChartOverlayRetryScheduled = false
             if needsEquityChartOverlayFetch(ignoreSettlement: true) {
                 pendingChartOverlayRefreshAfterInactive = true
             }
             return
         }
-        guard pendingChartOverlayRefreshAfterInactive else { return }
-        pendingChartOverlayRefreshAfterInactive = false
+        flushDeferredHomeSurfaceWork()
+        if pendingChartOverlayRefreshAfterInactive {
+            pendingChartOverlayRefreshAfterInactive = false
+        }
         ensureEquityChartOverlayIfNeeded()
     }
 
     func openPsychologyAnalytics(highlightSection: String? = nil) {
         PsychologyAnalyticsSessionStore.shared.focusSection(highlightSection)
         navigationCoordinator.pushHome(.psychologyAnalytics)
+    }
+
+    func ensurePsychologyAnalyticsReportForPresentation() async {
+        guard let profileID else { return }
+        await primePsychologyCheckInsForDashboard(profileID: profileID, forceNetwork: false)
+        recomputePsychology()
+    }
+
+    func isPsychologyAnalyticsDashboardSource(profileID: ProfileID) -> Bool {
+        self.profileID == profileID
+    }
+
+    var psychologyPostUnlockGapMessages: [String] {
+        guard let report = psychologyReport else { return [] }
+        guard !psychologyInsightsUnlockProgress.showsRequirementMessage else { return [] }
+        let trades = resolvedFilteredTradesForDashboard()
+        let checkIns = psychologyCheckInsForUnlockGate()
+        return PsychologyProgressMessaging.postUnlockInsightGapMessages(
+            report: report,
+            trades: trades,
+            checkIns: checkIns
+        )
     }
 
     func psychologySectionID(for category: PsychologyInsightCategory) -> String {
@@ -366,19 +391,37 @@ final class DashboardViewModel {
     }
 
     var equityHeroChartPoints: [ProfileStatisticsMetrics.EquityPoint] {
-        guard equityChartAccountFilter == accountFilter else { return [] }
+        guard equityChartAccountFilter == accountFilter else {
+            return lastDisplayedEquityHeroChartPoints
+        }
         if let points = resolvedEquityHeroChartPoints(), !points.isEmpty {
+            lastDisplayedEquityHeroChartPoints = points
             return points
         }
-        if isEquityChartOverlayLoading {
-            return []
-        }
         let chartSummary = equityChartSummary ?? summary
-        guard let chartSummary else { return [] }
-        return DashboardEquityHeroPresentation.chartPoints(
+        if isEquityChartOverlayLoading {
+            if !lastDisplayedEquityHeroChartPoints.isEmpty {
+                return lastDisplayedEquityHeroChartPoints
+            }
+            guard let chartSummary else { return [] }
+            let fallback = DashboardEquityHeroPresentation.chartPoints(
+                chartSummary.equityData,
+                propStartingBalance: equityHeroAccountStartingBalance
+            )
+            if !fallback.isEmpty {
+                lastDisplayedEquityHeroChartPoints = fallback
+            }
+            return fallback
+        }
+        guard let chartSummary else { return lastDisplayedEquityHeroChartPoints }
+        let points = DashboardEquityHeroPresentation.chartPoints(
             chartSummary.equityData,
             propStartingBalance: equityHeroAccountStartingBalance
         )
+        if !points.isEmpty {
+            lastDisplayedEquityHeroChartPoints = points
+        }
+        return points
     }
 
     /// True only while the chart overlay for this account has not resolved.
@@ -590,10 +633,14 @@ final class DashboardViewModel {
             if let profileID {
                 Task { await startRealtime(profileID: profileID) }
             }
+            flushDeferredHomeSurfaceWork()
             ensureEquityChartOverlayIfNeeded()
             return
         }
-        if coldLoadFinished {
+        if summary == nil,
+           coldLoadAttemptCount >= Self.maxColdLoadAttempts,
+           loadTask == nil
+        {
             return
         }
         guard loadTask == nil else { return }
@@ -626,6 +673,7 @@ final class DashboardViewModel {
         secondaryTask?.cancel()
         isRefreshing = true
         coldLoadFinished = false
+        coldLoadAttemptCount = 0
         contractDecodeFailed = false
         dashboardGRDBBackgroundReconcileScheduled = false
         loadGeneration &+= 1
@@ -1006,28 +1054,9 @@ final class DashboardViewModel {
         apply(trades: cached, accounts: accounts, profileID: profileID)
     }
 
-    /// Filtered trade count for psych gate — same scoped count as dashboard hero (`filteredTrades` on web).
+    /// Filtered trade row count for psych gate — matches web `filteredTrades.length`.
     private func filteredDashboardTradeCountForPsychologyGate(trades: [Trade]) -> Int {
-        let fromRows = trades.count
-        let scope = clientScopeFilter()
-        if scope.needsClientScopedTradeMetrics {
-            return max(summary?.tradeCount ?? 0, fromRows)
-        }
-        if let headline = summary?.tradeCount, headline > 0 {
-            return max(headline, fromRows)
-        }
-        if let bootstrap = analyticsV3Bootstrap {
-            let v3Count = DashboardAnalyticsMapper.tradeCount(
-                in: bootstrap,
-                accountFilter: accountFilter,
-                dateRange: dateRange
-            )
-            if v3Count > 0 { return max(v3Count, fromRows) }
-        }
-        if let authoritativeTotalTradeCount, authoritativeTotalTradeCount > 0 {
-            return max(authoritativeTotalTradeCount, fromRows)
-        }
-        return fromRows
+        trades.count
     }
 
     private func psychologyCheckInsForUnlockGate() -> [TraderDailyCheckIn] {
@@ -1272,7 +1301,12 @@ final class DashboardViewModel {
         defer {
             loadTask = nil
             if !blockColdFinish, !forceNetwork, !isAuthoritativeFollowUp {
-                coldLoadFinished = true
+                if hasLoaded {
+                    coldLoadFinished = true
+                    coldLoadAttemptCount = 0
+                } else {
+                    coldLoadAttemptCount += 1
+                }
             }
         }
 
@@ -1605,13 +1639,48 @@ final class DashboardViewModel {
     }
 
     private func scheduleAuthoritativeDashboardRefresh(generation: UInt64) {
+        let request = DashboardHomeSurfaceGate.DeferredViewModelRefresh(
+            generation: generation,
+            forceNetwork: true,
+            isAuthoritativeFollowUp: true,
+            refreshTrigger: .displayOnlyRevalidate
+        )
+        guard DashboardHomeSurfaceGate.isHomeTabActive else {
+            DashboardHomeSurfaceGate.enqueueViewModelRefresh(request)
+            return
+        }
+        launchDeferredViewModelRefresh(request)
+    }
+
+    private func launchDeferredViewModelRefresh(_ request: DashboardHomeSurfaceGate.DeferredViewModelRefresh) {
         Task { [weak self] in
             await SessionNetworkGate.shared.awaitReady()
             await self?.performLoad(
-                forceNetwork: true,
-                generation: generation,
-                isAuthoritativeFollowUp: true
+                forceNetwork: request.forceNetwork,
+                generation: request.generation,
+                isAuthoritativeFollowUp: request.isAuthoritativeFollowUp,
+                refreshTrigger: request.refreshTrigger
             )
+        }
+    }
+
+    private func flushDeferredHomeSurfaceWork() {
+        guard DashboardHomeSurfaceGate.isHomeTabActive else { return }
+        if let coordinator = DashboardHomeSurfaceGate.takeDeferredCoordinatorRefresh(),
+           coordinator.viewerID == profileID,
+           let rpc
+        {
+            DashboardAuthoritativeRefreshCoordinator.shared.scheduleAuthoritativeRefresh(
+                viewerID: coordinator.viewerID,
+                rpc: rpc,
+                detailCache: detailCache,
+                trigger: coordinator.trigger,
+                loadGeneration: coordinator.loadGeneration,
+                currentGeneration: { [weak self] in self?.loadGeneration ?? 0 }
+            )
+        }
+        if let request = DashboardHomeSurfaceGate.takeDeferredViewModelRefresh() {
+            launchDeferredViewModelRefresh(request)
         }
     }
 
@@ -2305,6 +2374,7 @@ final class DashboardViewModel {
 
     private func scheduleAccountChartHydration() {
         guard case .account = accountFilter else { return }
+        if case .loading = selectedAccountChartsAvailability { return }
         accountChartHydrateTask?.cancel()
         let token = accountChartSelectionToken
         accountChartHydrateTask = Task(priority: .userInitiated) { [weak self] in
@@ -2314,6 +2384,7 @@ final class DashboardViewModel {
 
     private func scheduleAggregateChartHydration() {
         guard accountFilter == .all else { return }
+        if case .loading = selectedAccountChartsAvailability { return }
         aggregateChartHydrateTask?.cancel()
         let token = aggregateChartSelectionToken
         aggregateChartHydrateTask = Task(priority: .userInitiated) { [weak self] in
@@ -2810,14 +2881,17 @@ final class DashboardViewModel {
     }
 
     private func scheduleAnalyticsV3AuthoritativeRefresh(generation: UInt64) {
-        Task { [weak self] in
-            await SessionNetworkGate.shared.awaitReady()
-            await self?.performLoad(
-                forceNetwork: true,
-                generation: generation,
-                isAuthoritativeFollowUp: true
-            )
+        let request = DashboardHomeSurfaceGate.DeferredViewModelRefresh(
+            generation: generation,
+            forceNetwork: true,
+            isAuthoritativeFollowUp: true,
+            refreshTrigger: .staleAuthoritative
+        )
+        guard DashboardHomeSurfaceGate.isHomeTabActive else {
+            DashboardHomeSurfaceGate.enqueueViewModelRefresh(request)
+            return
         }
+        launchDeferredViewModelRefresh(request)
     }
 
     private func scheduleAnalyticsV3RefreshAfterMutation() {
@@ -2825,16 +2899,26 @@ final class DashboardViewModel {
         resetChartOverlayFetchSettlement()
         DashboardAnalyticsAccountChartsStore.shared.invalidate()
         DashboardAnalyticsAggregateChartsStore.shared.invalidate()
+        loadTask?.cancel()
+        secondaryTask?.cancel()
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        let request = DashboardHomeSurfaceGate.DeferredViewModelRefresh(
+            generation: generation,
+            forceNetwork: true,
+            isAuthoritativeFollowUp: false,
+            refreshTrigger: .journalMutation
+        )
+        guard DashboardHomeSurfaceGate.isHomeTabActive else {
+            DashboardHomeSurfaceGate.enqueueViewModelRefresh(request)
+            return
+        }
         Task { [weak self] in
-            guard let self else { return }
-            loadTask?.cancel()
-            secondaryTask?.cancel()
-            loadGeneration &+= 1
-            let generation = loadGeneration
-            await performLoad(
-                forceNetwork: true,
-                generation: generation,
-                refreshTrigger: .journalMutation
+            await self?.performLoad(
+                forceNetwork: request.forceNetwork,
+                generation: request.generation,
+                isAuthoritativeFollowUp: request.isAuthoritativeFollowUp,
+                refreshTrigger: request.refreshTrigger
             )
         }
     }
@@ -2910,16 +2994,25 @@ final class DashboardViewModel {
     }
 
     private func shouldMarkChartOverlayFetchSettled(forAccountID accountID: TradingAccountID?) -> Bool {
-        guard selectedChartOverlayLoaded else { return false }
         if let accountID {
             guard case .account(let current) = accountFilter, current == accountID else { return false }
-            return DashboardAnalyticsAccountChartsStore.shared.availability(
+            switch DashboardAnalyticsAccountChartsStore.shared.availability(
                 accountID: accountID,
                 revision: analyticsV3Revision
-            ) == .loaded
+            ) {
+            case .loaded, .failed:
+                return true
+            case .loading, .notRequested:
+                return false
+            }
         }
         guard accountFilter == .all else { return false }
-        return DashboardAnalyticsAggregateChartsStore.shared.availability(revision: analyticsV3Revision) == .loaded
+        switch DashboardAnalyticsAggregateChartsStore.shared.availability(revision: analyticsV3Revision) {
+        case .loaded, .failed:
+            return true
+        case .loading, .notRequested:
+            return false
+        }
     }
 
     private func refreshEquityChartPresentation(bootstrap: AnalyticsDashboardBootstrapV3? = nil) {
@@ -3118,7 +3211,19 @@ final class DashboardViewModel {
             ),
             tradeCount: filteredDashboardTradeCountForPsychologyGate(trades: trades)
         )
-        PsychologyAnalyticsSessionStore.shared.update(report)
+        if let profileID {
+            let scope = PsychologyAnalyticsScopeResolver.resolve(
+                filter: clientScopeFilter(),
+                profileID: profileID
+            )
+            PsychologyAnalyticsReportComposer.publish(
+                report: report,
+                scopedTrades: trades,
+                checkIns: gateCheckIns,
+                profileID: profileID,
+                scope: scope
+            )
+        }
 
         let facts = PsychologyCoachFactsBuilder.build(
             report: report,

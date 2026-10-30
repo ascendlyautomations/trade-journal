@@ -1,0 +1,25 @@
+# Forward-only SQL after production baseline restore.
+# One repo-relative path per line. Lines starting with # or "skip:" are ignored by apply script.
+#
+# Snapshot (audit 2026-10-26): production migration ledger max version 20261024042226.
+# Baseline pg_dump already includes all DDL through that ledger plus legacy untracked migrations.
+#
+# SKIP — republished locally under new timestamps; production already has equivalent DDL:
+skip:supabase/migrations/20261024043000_delete_prop_payout_restore_balance.sql
+#   (production applied as version 20261024041235 delete_prop_payout_restore_balance)
+skip:supabase/migrations/20261024044500_achievement_payout_firm_assignment.sql
+#   (production applied as version 20261024042226 achievement_payout_firm_assignment)
+#
+# APPLY — not on production ledger as of snapshot; order matters (phase1 → phase3):
+supabase/migrations/20261024150000_message_reaction_heart.sql
+supabase/migrations/20261024163000_trade_room_moderator_permissions.sql
+supabase/migrations/20261025180000_phase1_security_accounts_and_rooms.sql
+supabase/migrations/20261026120000_phase1_security_followup.sql
+supabase/migrations/20261026140000_phase2_trading_data_integrity.sql
+supabase/migrations/20261026150000_trades_max_rr_reached.sql
+supabase/migrations/20261026160000_trades_realized_rr.sql
+supabase/migrations/20261026170000_phase3_room_ban_atomic.sql
+supabase/migrations/20261026180000_phase3_ledger_payout_delete_atomic.sql
+supabase/migrations/20261027120000_feed_bootstrap_block_peers_once.sql
+supabase/migrations/20261027140000_feed_following_cand_per_followee.sql
+supabase/migrations/20261027160000_feed_rls_block_peers_array.sql

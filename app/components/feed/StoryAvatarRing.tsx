@@ -34,9 +34,9 @@ export default function StoryAvatarRing({
   if (hasActiveStory) {
     return (
       <div
-        className={`${sizeClassName} rounded-full border-2 border-emerald-400 p-[2px] ring-2 ring-emerald-400/30`}
+        className={`${sizeClassName} rounded-full bg-gradient-to-tr from-sky-300 to-emerald-300 p-[2px] shadow-[0_0_0_2px_rgba(125,211,252,0.25)]`}
       >
-        {avatar}
+        <div className="h-full w-full overflow-hidden rounded-full">{avatar}</div>
       </div>
     )
   }

@@ -595,19 +595,25 @@ nonisolated struct ProfileWallPostInsertBody: Encodable, Sendable {
     var image_url: String?
     var image_crop: JSONValue?
     var includeImageCropKey: Bool
+    var client_publish_id: String?
     var room_id: String?
     var room_name: String?
     var room_logo: String?
     var room_description: String?
 
     enum CodingKeys: String, CodingKey {
-        case user_id, content, image_url, image_crop
+        case user_id, content, image_url, image_crop, client_publish_id
         case room_id, room_name, room_logo, room_description
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(user_id, forKey: .user_id)
+        if let client_publish_id,
+           !client_publish_id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            try container.encode(client_publish_id, forKey: .client_publish_id)
+        }
         if let content, !content.isEmpty {
             try container.encode(content, forKey: .content)
         } else {

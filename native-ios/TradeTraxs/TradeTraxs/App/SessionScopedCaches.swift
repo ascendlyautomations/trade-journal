@@ -90,7 +90,7 @@ enum SessionScopedCaches {
             await TradeImportReminderCoordinator.shared.cancelAll()
         }
         SessionDailyCheckInsStore.shared.invalidate()
-        PsychologyAnalyticsSessionStore.shared.update(nil)
+        PsychologyAnalyticsSessionStore.shared.clearSession()
         PsychologyCoachSessionStore.shared.invalidate()
         PsychologyGuardrailDismissStore.shared.resetSession()
         PsychologyReportSessionStore.shared.invalidate()

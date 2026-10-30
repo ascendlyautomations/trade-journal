@@ -692,7 +692,8 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             content: content,
             imageURL: imageURL,
             imageCrop: imageCrop,
-            roomShare: nil
+            roomShare: nil,
+            clientPublishID: nil
         )
     }
 
@@ -701,30 +702,32 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
         content: String,
         imageURL: String?,
         imageCrop: ContentImagePresentation?,
-        roomShare: RoomShareAttachment?
+        roomShare: RoomShareAttachment?,
+        clientPublishID: String? = nil
     ) async throws -> Post {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         let logo = roomShare?.logoURL?.trimmingCharacters(in: .whitespacesAndNewlines)
         let about = roomShare?.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let publishID = clientPublishID?.trimmingCharacters(in: .whitespacesAndNewlines)
         let body = ProfileWallPostInsertBody(
             user_id: authorID.rawValue,
             content: trimmed.isEmpty ? nil : trimmed,
             image_url: imageURL?.trimmingCharacters(in: .whitespacesAndNewlines),
             image_crop: ContentImagePresentationCodec.encodeJSONValue(imageCrop),
             includeImageCropKey: imageCrop != nil,
+            client_publish_id: (publishID?.isEmpty == false) ? publishID : nil,
             room_id: roomShare?.roomID.rawValue,
             room_name: roomShare?.name,
             room_logo: (logo?.isEmpty == false) ? logo : nil,
             room_description: (about?.isEmpty == false) ? about : nil
         )
-        let dto = try await ImageCropWireInsert.insertWallPost(
+        let postID = try await ImageCropWireInsert.insertWallPostReturningID(
             supabase: supabase,
             body: body
         )
-        guard let mapped = Self.mapWallPost(dto) else {
-            let error = AppError.unknown(message: "Created post but response was incomplete.")
-            PostPublishProbe.logFailed(stage: .responseDecode, error: error)
-            throw error
+        let mapped = try await wallPost(id: PostID(postID))
+        guard mapped.authorProfileID == authorID else {
+            throw AppError.unknown(message: "Published post could not be verified.")
         }
         RepositoryRequestFlight.shared.invalidate(
             prefix: "profiles.wallPosts:\(authorID.rawValue):"

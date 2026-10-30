@@ -209,8 +209,8 @@ export default function Calendar({
         </button>
       </div>
 
-      <div className="grid grid-cols-6 gap-2 text-center text-xs text-gray-400 md:hidden">
-        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri"].map((d) => (
+      <div className="grid grid-cols-7 gap-2 text-center text-xs text-gray-400 md:hidden">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
           <p key={d}>{d}</p>
         ))}
       </div>
@@ -225,16 +225,8 @@ export default function Calendar({
           const weekTotal = getWeekTotal(week)
           return (
             <div key={`week-${weekIndex}`}>
-              <div className="grid grid-cols-6 gap-2 md:hidden">
+              <div className="grid grid-cols-7 gap-2 md:hidden">
                 {week
-                  .filter((cell, idx) => {
-                    if (!cell.date) {
-                      const weekday = (weekIndex * 7 + idx) % 7
-                      return weekday !== 6
-                    }
-                    const d = new Date(cell.date).getDay()
-                    return d !== 6
-                  })
                   .map((cell, idx) => {
                     if (!cell.date) {
                       return (

@@ -1,35 +1,62 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import PsychologyCoachEntryLink from "./PsychologyCoachEntryLink"
 import PsychologySummarySection from "./PsychologySummarySection"
+import PsychologyAnalyticsOverview from "./PsychologyAnalyticsOverview"
+import PsychologyAnalyticsMetricsRow from "./PsychologyAnalyticsMetricsRow"
+import PsychologyInsightGapPanel from "./PsychologyInsightGapPanel"
 import type { PsychologyAnalyticsReport } from "@/lib/psychology/reports/types"
 import type { PsychologyCoachSummary } from "@/lib/psychology/reports/coach"
 import { reliabilityLabel } from "@/lib/psychology/reports/metrics"
-import {
-  formatPsychologyMoney,
-  formatPsychologyWinRate,
-} from "@/lib/psychology/reports/format"
+import type { TraderDailyCheckIn } from "@/lib/dailyCheckIn/types"
+import type { PsychologyReportTrade } from "@/lib/psychology/reports/types"
+import { buildPostUnlockInsightGapMessages } from "@/lib/psychology/psychologyProgressMessaging"
 
 type PsychologyAnalyticsDetailProps = {
   report: PsychologyAnalyticsReport
   summary: PsychologyCoachSummary | null
   highlightedSectionID?: string | null
+  journalTrades?: readonly PsychologyReportTrade[]
+  checkIns?: readonly TraderDailyCheckIn[]
+  scopeLabel?: string | null
 }
+
+const ADVANCED_SECTION_IDS = new Set([
+  "sleep",
+  "mentalState",
+  "conviction",
+  "discipline",
+  "emotion",
+  "afterLosses",
+  "tradeFrequency",
+  "combined",
+])
 
 export default function PsychologyAnalyticsDetail({
   report,
   summary,
   highlightedSectionID,
+  journalTrades = [],
+  checkIns = [],
+  scopeLabel,
 }: PsychologyAnalyticsDetailProps) {
   const highlightRef = useRef<string | null>(null)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const insightGaps = buildPostUnlockInsightGapMessages(report, journalTrades)
+  const advancedSections = report.sections.filter((section) =>
+    ADVANCED_SECTION_IDS.has(section.id)
+  )
 
   useEffect(() => {
     if (!highlightedSectionID || highlightRef.current === highlightedSectionID) {
       return
     }
     highlightRef.current = highlightedSectionID
+    if (ADVANCED_SECTION_IDS.has(highlightedSectionID)) {
+      setAdvancedOpen(true)
+    }
     const node = document.getElementById(`psych-section-${highlightedSectionID}`)
     node?.scrollIntoView({ behavior: "smooth", block: "start" })
   }, [highlightedSectionID])
@@ -37,6 +64,13 @@ export default function PsychologyAnalyticsDetail({
   return (
     <div className="tt-psych-analytics space-y-6" data-testid="psychologyAnalytics.detail">
       <PsychologyCoachEntryLink />
+
+      <PsychologyAnalyticsOverview
+        report={report}
+        journalTrades={journalTrades}
+        checkIns={checkIns}
+        scopeLabel={scopeLabel}
+      />
 
       {summary ? <PsychologySummarySection summary={summary} showCoachLink={false} /> : null}
 
@@ -49,7 +83,10 @@ export default function PsychologyAnalyticsDetail({
 
       {report.dashboardCards.length > 0 ? (
         <section className="space-y-3">
-          <h2 className="text-base font-semibold text-white">Your Patterns</h2>
+          <h2 className="text-base font-semibold text-white">Comparison insights</h2>
+          <p className="text-xs text-gray-500">
+            Statistically meaningful patterns — not proof of causation.
+          </p>
           <div className="space-y-2">
             {report.dashboardCards.map((card) => (
               <article
@@ -68,78 +105,63 @@ export default function PsychologyAnalyticsDetail({
             ))}
           </div>
         </section>
-      ) : null}
+      ) : (
+        <PsychologyInsightGapPanel messages={insightGaps} />
+      )}
 
-      {report.sections.map((section) => (
-        <section
-          key={section.id}
-          id={`psych-section-${section.id}`}
-          className="scroll-mt-24 space-y-3"
+      <section className="space-y-3">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left"
+          onClick={() => setAdvancedOpen((open) => !open)}
+          aria-expanded={advancedOpen}
+          data-testid="psychologyAnalytics.advancedToggle"
         >
-          <div>
-            <h2 className="text-base font-semibold text-white">{section.title}</h2>
-            {section.subtitle ? (
-              <p className="text-xs text-gray-500">{section.subtitle}</p>
-            ) : null}
-          </div>
+          <span>
+            <span className="block text-sm font-semibold text-white">Advanced analytics</span>
+            <span className="block text-xs text-gray-500">
+              Sleep, mental state, conviction, discipline, emotion, and more
+            </span>
+          </span>
+          <span className="text-sm text-blue-400">{advancedOpen ? "Hide" : "Show"}</span>
+        </button>
 
-          {section.groups.length === 0 && section.footnote ? (
-            <p className="text-sm text-gray-400">{section.footnote}</p>
-          ) : (
-            <div className="space-y-2">
-              {section.groups.map((row) => (
-                <article
-                  key={row.id}
-                  className={`rounded-xl border border-white/10 p-4 ${
-                    row.highlight ? "bg-blue-500/10" : "bg-white/5"
-                  }`}
-                >
-                  <p className="text-sm font-semibold text-white">{row.label}</p>
-                  {row.metrics.reliability === "insufficient" ? (
-                    <p className="mt-1 text-xs text-gray-400">
-                      Not enough data yet ({row.metrics.tradeCount} trades)
-                    </p>
-                  ) : (
-                    <>
-                      <div className="mt-2 flex flex-wrap gap-4 text-xs">
-                        <MetricPill label="Trades" value={String(row.metrics.tradeCount)} />
-                        <MetricPill
-                          label="Win"
-                          value={formatPsychologyWinRate(row.metrics.winRate)}
-                        />
-                        <MetricPill
-                          label="Avg"
-                          value={formatPsychologyMoney(row.metrics.averagePnL ?? 0)}
-                        />
-                        <MetricPill
-                          label="Exp"
-                          value={formatPsychologyMoney(row.metrics.expectancy ?? 0)}
-                        />
-                      </div>
-                      <p className="mt-2 text-[11px] text-gray-500">
-                        {reliabilityLabel(row.metrics.reliability)}
-                      </p>
-                    </>
-                  )}
-                </article>
-              ))}
-            </div>
-          )}
+        {advancedOpen
+          ? advancedSections.map((section) => (
+              <section
+                key={section.id}
+                id={`psych-section-${section.id}`}
+                className="scroll-mt-24 space-y-3"
+              >
+                <div>
+                  <h2 className="text-base font-semibold text-white">{section.title}</h2>
+                  {section.subtitle ? (
+                    <p className="text-xs text-gray-500">{section.subtitle}</p>
+                  ) : null}
+                </div>
 
-          {section.footnote && section.groups.length > 0 ? (
-            <p className="text-xs text-gray-500">{section.footnote}</p>
-          ) : null}
-        </section>
-      ))}
-    </div>
-  )
-}
+                {section.groups.length === 0 && section.footnote ? (
+                  <p className="text-sm text-gray-400">{section.footnote}</p>
+                ) : (
+                  <div className="space-y-2">
+                    {section.groups.map((row) => (
+                      <PsychologyAnalyticsMetricsRow
+                        key={row.id}
+                        label={row.label}
+                        metrics={row.metrics}
+                        highlight={row.highlight}
+                      />
+                    ))}
+                  </div>
+                )}
 
-function MetricPill({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-[10px] uppercase text-gray-500">{label}</p>
-      <p className="font-semibold tabular-nums text-white">{value}</p>
+                {section.footnote && section.groups.length > 0 ? (
+                  <p className="text-xs text-gray-500">{section.footnote}</p>
+                ) : null}
+              </section>
+            ))
+          : null}
+      </section>
     </div>
   )
 }

@@ -5,6 +5,7 @@ nonisolated enum ActiveScreenBootstrapPriorityGate {
     case messages
     case tradeRooms
     case feed
+    case home
 
     private static let lock = NSLock()
     nonisolated(unsafe) private static var active: Set<String> = []
@@ -30,6 +31,7 @@ nonisolated enum ActiveScreenBootstrapPriorityGate {
         case .messages: return "messages"
         case .tradeRooms: return "tradeRooms"
         case .feed: return "feed"
+        case .home: return "home"
         }
     }
 
@@ -41,6 +43,11 @@ nonisolated enum ActiveScreenBootstrapPriorityGate {
             return ActiveScreenBootstrapPriorityGate.tradeRooms.prefersVisibleBootstrap
         case BackendV2Versioning.RPCName.feed.rawValue:
             return ActiveScreenBootstrapPriorityGate.feed.prefersVisibleBootstrap
+        case BackendV2Versioning.RPCName.dashboard.rawValue,
+             BackendV2Versioning.RPCName.analyticsDashboardBootstrapV3.rawValue,
+             BackendV2Versioning.RPCName.analyticsDashboardAccountChartsV3.rawValue,
+             BackendV2Versioning.RPCName.analyticsDashboardAggregateChartsV3.rawValue:
+            return ActiveScreenBootstrapPriorityGate.home.prefersVisibleBootstrap
         default:
             return false
         }

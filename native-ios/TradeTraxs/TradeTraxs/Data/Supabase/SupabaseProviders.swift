@@ -138,32 +138,12 @@ nonisolated struct LiveSupabaseStorageProvider: SupabaseStorageProviding {
             uploadRequest.httpBody = nil
             uploadRequest.httpBodyStream = nil
 
-            var attempt = 1
-            let maxAttempts = 3
-            while true {
-                let (responseData, urlResponse) = try await StorageUploadProgressTransport.upload(
+            try await Self.uploadWithProgressRetries {
+                try await StorageUploadProgressTransport.upload(
                     request: uploadRequest,
                     body: data,
                     progressJobID: jobID
                 )
-                if let http = urlResponse as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) {
-                    break
-                }
-                let status = (urlResponse as? HTTPURLResponse)?.statusCode ?? -1
-                let supabaseCode = StorageUploadDiagnostics.parseSupabaseCode(from: responseData)
-                if attempt < maxAttempts, Self.isRetriableStorageUpload(status: status, supabaseCode: supabaseCode) {
-                    attempt += 1
-                    try await Task.sleep(nanoseconds: UInt64(min(attempt, 3)) * 500_000_000)
-                    continue
-                }
-                if let mapped = NetworkErrorMapper().map(
-                    data: responseData,
-                    response: urlResponse,
-                    error: nil
-                ) {
-                    throw SupabaseErrorMapping.mapNetwork(mapped)
-                }
-                throw AppError.unknown(message: "Upload failed.")
             }
         } else {
             _ = try await transport.send(
@@ -211,33 +191,13 @@ nonisolated struct LiveSupabaseStorageProvider: SupabaseStorageProviding {
             uploadRequest.httpBody = nil
             uploadRequest.httpBodyStream = nil
 
-            var attempt = 1
-            let maxAttempts = 3
-            while true {
-                let (responseData, urlResponse) = try await StorageUploadProgressTransport.upload(
+            try await Self.uploadWithProgressRetries {
+                try await StorageUploadProgressTransport.upload(
                     request: uploadRequest,
                     fileURL: fileURL,
                     uploadPayloadBytes: payloadBytes,
                     progressJobID: jobID
                 )
-                if let http = urlResponse as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) {
-                    break
-                }
-                let status = (urlResponse as? HTTPURLResponse)?.statusCode ?? -1
-                let supabaseCode = StorageUploadDiagnostics.parseSupabaseCode(from: responseData)
-                if attempt < maxAttempts, Self.isRetriableStorageUpload(status: status, supabaseCode: supabaseCode) {
-                    attempt += 1
-                    try await Task.sleep(nanoseconds: UInt64(min(attempt, 3)) * 500_000_000)
-                    continue
-                }
-                if let mapped = NetworkErrorMapper().map(
-                    data: responseData,
-                    response: urlResponse,
-                    error: nil
-                ) {
-                    throw SupabaseErrorMapping.mapNetwork(mapped)
-                }
-                throw AppError.unknown(message: "Upload failed.")
             }
         } else {
             let data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
@@ -250,6 +210,43 @@ nonisolated struct LiveSupabaseStorageProvider: SupabaseStorageProviding {
             )
         }
         return cleaned
+    }
+
+    private static func uploadWithProgressRetries(
+        upload: () async throws -> (Data, URLResponse)
+    ) async throws {
+        var attempt = 1
+        let maxAttempts = 3
+        while true {
+            do {
+                let (responseData, urlResponse) = try await upload()
+                if let http = urlResponse as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) {
+                    return
+                }
+                let status = (urlResponse as? HTTPURLResponse)?.statusCode ?? -1
+                let supabaseCode = StorageUploadDiagnostics.parseSupabaseCode(from: responseData)
+                if attempt < maxAttempts, isRetriableStorageUpload(status: status, supabaseCode: supabaseCode) {
+                    attempt += 1
+                    try await Task.sleep(nanoseconds: UInt64(min(attempt, 3)) * 500_000_000)
+                    continue
+                }
+                if let mapped = NetworkErrorMapper().map(
+                    data: responseData,
+                    response: urlResponse,
+                    error: nil
+                ) {
+                    throw SupabaseErrorMapping.mapNetwork(mapped)
+                }
+                throw AppError.unknown(message: "Upload failed.")
+            } catch {
+                if attempt < maxAttempts, UploadRetryRecovery.isAmbiguousTransportFailure(error) {
+                    attempt += 1
+                    try await Task.sleep(nanoseconds: UInt64(min(attempt, 3)) * 500_000_000)
+                    continue
+                }
+                throw error
+            }
+        }
     }
 
     private static func isRetriableStorageUpload(status: Int, supabaseCode: String?) -> Bool {

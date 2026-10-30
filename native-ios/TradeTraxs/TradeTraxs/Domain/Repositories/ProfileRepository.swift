@@ -34,7 +34,8 @@ nonisolated protocol ProfileRepository: Sendable {
         content: String,
         imageURL: String?,
         imageCrop: ContentImagePresentation?,
-        roomShare: RoomShareAttachment?
+        roomShare: RoomShareAttachment?,
+        clientPublishID: String?
     ) async throws -> Post
     /// Deletes a wall post the viewer owns (`profile_posts`).
     func deleteWallPost(id: PostID) async throws
@@ -77,7 +78,14 @@ nonisolated extension ProfileRepository {
         imageURL: String?,
         imageCrop: ContentImagePresentation?
     ) async throws -> Post {
-        throw AppError.notImplemented(feature: "createWallPost")
+        try await createWallPost(
+            authorID: authorID,
+            content: content,
+            imageURL: imageURL,
+            imageCrop: imageCrop,
+            roomShare: nil,
+            clientPublishID: nil
+        )
     }
 
     func createWallPost(
@@ -85,14 +93,10 @@ nonisolated extension ProfileRepository {
         content: String,
         imageURL: String?,
         imageCrop: ContentImagePresentation?,
-        roomShare: RoomShareAttachment?
+        roomShare: RoomShareAttachment?,
+        clientPublishID: String?
     ) async throws -> Post {
-        try await createWallPost(
-            authorID: authorID,
-            content: content,
-            imageURL: imageURL,
-            imageCrop: imageCrop
-        )
+        throw AppError.notImplemented(feature: "createWallPost")
     }
 
     func deleteWallPost(id: PostID) async throws {

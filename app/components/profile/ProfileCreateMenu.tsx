@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
+import { Camera, MessageSquareText, PlaySquare, Zap } from "lucide-react"
 import Button from "@/app/components/ui/Button"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 
@@ -59,9 +60,11 @@ function QuickTradeIcon({ className }: { className?: string }) {
 function MenuOptionsList({
   items,
   onItemAction,
+  touch = false,
 }: {
   items: CreateMenuEntry[]
   onItemAction: (item: CreateMenuEntry) => void
+  touch?: boolean
 }) {
   return (
     <ul className="p-1.5" role="menu">
@@ -73,6 +76,8 @@ function MenuOptionsList({
             disabled={item.disabled}
             onClick={() => onItemAction(item)}
             className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+              touch ? "min-h-11" : ""
+            } ${
               item.disabled
                 ? "cursor-not-allowed text-gray-400"
                 : "text-gray-100 hover:bg-emerald-500/15 hover:text-emerald-100"
@@ -114,25 +119,33 @@ export default function ProfileCreateMenu({
     {
       id: "story",
       label: "Story",
-      icon: <StoryIcon />,
+      icon: isMobile ? <Camera className="h-4 w-4" aria-hidden /> : <StoryIcon />,
       onSelect: onCreateStory,
     },
     {
       id: "post",
       label: "Post",
-      icon: <PostIcon />,
+      icon: isMobile ? (
+        <MessageSquareText className="h-4 w-4" aria-hidden />
+      ) : (
+        <PostIcon />
+      ),
       onSelect: onCreatePost,
     },
     {
       id: "reel",
       label: "Clip",
-      icon: <ReelIcon />,
+      icon: isMobile ? (
+        <PlaySquare className="h-4 w-4" aria-hidden />
+      ) : (
+        <ReelIcon />
+      ),
       onSelect: onCreateReel,
     },
     {
       id: "quick-trade",
       label: "Quick Trade",
-      icon: <QuickTradeIcon />,
+      icon: isMobile ? <Zap className="h-4 w-4" aria-hidden /> : <QuickTradeIcon />,
       onSelect: onCreateQuickTrade,
     },
   ]
@@ -246,12 +259,16 @@ export default function ProfileCreateMenu({
                 Share content with your followers
               </p>
             </div>
-            <MenuOptionsList items={menuItems} onItemAction={handleItemAction} />
+            <MenuOptionsList
+              items={menuItems}
+              onItemAction={handleItemAction}
+              touch
+            />
             <div className="border-t border-white/10 p-3">
               <button
                 type="button"
                 onClick={close}
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/10"
+                className="min-h-11 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/10"
               >
                 Cancel
               </button>

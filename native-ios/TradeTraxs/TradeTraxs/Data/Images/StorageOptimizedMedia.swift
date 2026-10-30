@@ -7,11 +7,20 @@ nonisolated enum StorageOptimizedMedia {
 
     static func objectPath(prefix: String, fileExtension: String = "jpg") -> String {
         let trimmed = prefix.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let ext = fileExtension.trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        let ext = fileExtension.trimmingCharacters(in: CharacterSet(charactersIn: "."))
         let safeExt = ext.isEmpty ? "jpg" : ext
         let stamp = Int(Date().timeIntervalSince1970 * 1000)
         return "\(trimmed)/opt/\(stamp).\(safeExt)"
+    }
+
+    /// Stable object key for a publish job so storage retries upsert the same object.
+    static func stableObjectPath(prefix: String, token: String, fileExtension: String = "jpg") -> String {
+        let trimmed = prefix.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let ext = fileExtension.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        let safeExt = ext.isEmpty ? "jpg" : ext
+        let safeToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "/", with: "-")
+        return "\(trimmed)/opt/\(safeToken).\(safeExt)"
     }
 
     static func storagePath(from url: URL) -> String? {

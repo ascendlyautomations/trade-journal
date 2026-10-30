@@ -143,7 +143,8 @@ nonisolated struct DevelopmentProfileRepository: ProfileRepository {
             content: content,
             imageURL: imageURL,
             imageCrop: imageCrop,
-            roomShare: nil
+            roomShare: nil,
+            clientPublishID: nil
         )
     }
 
@@ -152,14 +153,16 @@ nonisolated struct DevelopmentProfileRepository: ProfileRepository {
         content: String,
         imageURL: String?,
         imageCrop: ContentImagePresentation?,
-        roomShare: RoomShareAttachment?
+        roomShare: RoomShareAttachment?,
+        clientPublishID: String?
     ) async throws -> Post {
         try await base.createWallPost(
             authorID: authorID,
             content: content,
             imageURL: imageURL,
             imageCrop: imageCrop,
-            roomShare: roomShare
+            roomShare: roomShare,
+            clientPublishID: clientPublishID
         )
     }
 

@@ -31,6 +31,22 @@ struct ProfileCompactMediaThumbnail: View {
     @Environment(\.themeColors) private var colors
     @State private var displayImage: UIImage?
 
+    init(reference: MediaReference?, purpose: ImagePurpose, imagePipeline: any ImagePipeline) {
+        self.reference = reference
+        self.purpose = purpose
+        self.imagePipeline = imagePipeline
+        if let reference {
+            _displayImage = State(
+                initialValue: ProfileBrowseMediaDisplayCache.uiImage(
+                    reference: reference,
+                    purpose: purpose
+                )
+            )
+        } else {
+            _displayImage = State(initialValue: nil)
+        }
+    }
+
     private var containerSize: CGSize {
         if let displayImage {
             let aspect = MediaImageOrientation.aspectRatio(of: displayImage)
@@ -72,9 +88,14 @@ struct ProfileCompactMediaThumbnail: View {
         .frame(width: containerSize.width, height: containerSize.height)
         .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
         .animation(.easeOut(duration: 0.15), value: containerSize.height)
-        .task(id: "\(reference?.id ?? "")|\(purpose.rawValue)|\(displayScale)") {
+        .task(id: loadTaskID) {
             await loadDisplayImage()
         }
+    }
+
+    private var loadTaskID: String {
+        guard let reference else { return "" }
+        return ProfileBrowseMediaDisplayCache.cacheKey(reference: reference, purpose: purpose)
     }
 
     private func loadDisplayImage() async {
@@ -82,28 +103,17 @@ struct ProfileCompactMediaThumbnail: View {
             displayImage = nil
             return
         }
-        let pixelBudget = max(
-            128,
-            Int(ProfileCompactThumbnailLayout.width * displayScale * 2)
+        if displayImage != nil { return }
+        let pixelBudget = ProfileBrowseMediaLoader.listPixelBudget(displayScale: displayScale)
+        let loaded = await ProfileBrowseMediaLoader.loadUIImage(
+            reference: reference,
+            purpose: purpose,
+            maxPixelSize: pixelBudget,
+            displayScale: displayScale,
+            imagePipeline: imagePipeline,
+            existing: displayImage
         )
-        do {
-            let data = try await imagePipeline.data(
-                for: ImageRequest(
-                    reference: reference,
-                    purpose: purpose,
-                    maxPixelSize: pixelBudget,
-                    allowsProgressiveLoading: true,
-                    deliveryQuality: .profileGrid
-                )
-            )
-            let scale = displayScale
-            let decoded = await Task.detached(priority: .userInitiated) {
-                UIImage(data: data, scale: scale)
-            }.value
-            displayImage = decoded.map { MediaImageOrientation.normalized($0) }
-        } catch {
-            displayImage = nil
-        }
+        displayImage = loaded
     }
 }
 

@@ -54,9 +54,7 @@ import {
   type ContextualTourNavMenuDetail,
 } from "@/lib/contextualTour/navMenuBridge"
 import { useMobileAutoHideNavbar } from "@/app/components/useMobileAutoHideNavbar"
-import CreateHubMenu, {
-  CreateHubMobileLinks,
-} from "@/app/components/create/CreateHubMenu"
+import CreateHubMenu from "@/app/components/create/CreateHubMenu"
 import {
   NAV_ACCOUNT_DROPDOWN_PANEL,
   NAV_CHROME_BAR,
@@ -607,12 +605,14 @@ export default function Navbar() {
 
   function analyticsLinkClassName(
     item: AnalyticsLinkItem,
-    layout: "desktop" | "mobile"
+    layout: "desktop" | "mobile" | "phone"
   ) {
     const base =
       layout === "desktop"
         ? "flex w-full items-center justify-between gap-2 rounded px-3 py-2"
-        : "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5"
+        : layout === "phone"
+          ? "flex min-h-11 w-full items-center justify-between gap-2 rounded-lg px-3 py-2"
+          : "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5"
     const state = isActive(item.href)
       ? NAV_ITEM_ACTIVE
       : item.proOnly && !isProUser
@@ -623,14 +623,14 @@ export default function Navbar() {
 
   function renderAnalyticsNavLink(
     item: AnalyticsLinkItem,
-    layout: "desktop" | "mobile"
+    layout: "desktop" | "mobile" | "phone"
   ) {
     return (
       <IntentPrefetchLink
         key={item.label}
         href={item.href}
         className={analyticsLinkClassName(item, layout)}
-        onClick={layout === "mobile" ? closeMobile : undefined}
+        onClick={layout === "desktop" ? undefined : closeMobile}
       >
         {analyticsLinkLabel(item)}
         {item.proOnly && !isProUser ? proBadge : null}
@@ -638,13 +638,17 @@ export default function Navbar() {
     )
   }
 
-  function renderAnalyticsDropdown(layout: "desktop" | "mobile") {
+  function renderAnalyticsDropdown(
+    layout: "desktop" | "mobile" | "phone",
+    excludeHrefs: string[] = []
+  ) {
+    const links = analyticsLinks.filter((item) => !excludeHrefs.includes(item.href))
     if (isProUser) {
-      return analyticsLinks.map((item) => renderAnalyticsNavLink(item, layout))
+      return links.map((item) => renderAnalyticsNavLink(item, layout))
     }
 
-    const freeLinks = analyticsLinks.filter((item) => !item.proOnly)
-    const proLinks = analyticsLinks.filter((item) => item.proOnly)
+    const freeLinks = links.filter((item) => !item.proOnly)
+    const proLinks = links.filter((item) => item.proOnly)
 
     return (
       <>
@@ -1196,7 +1200,7 @@ export default function Navbar() {
                 : null}
               <button
                 type="button"
-                className="shrink-0 px-1 py-1 text-2xl leading-none text-chrome-foreground"
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center text-2xl leading-none text-chrome-foreground"
                 aria-expanded={isOpen}
                 aria-label={isOpen ? "Close menu" : "Open menu"}
                 onClick={() => {
@@ -1644,228 +1648,197 @@ export default function Navbar() {
             </button>
           ) : null}
           {user ? <GettingStartedMobileEntry placement="menu" /> : null}
-          <CreateHubMobileLinks
-            onNavigate={closeMobile}
-            linkClass={(active) =>
-              `rounded-lg px-3 py-1.5 transition ${
-                active ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE
-              }`
-            }
-          />
 
+          <p className="px-3 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Trading
+          </p>
           <IntentPrefetchLink
-            href="/dashboard"
-            className={`rounded-lg px-3 py-1.5 transition ${
-              isActive("/dashboard")
-                ? NAV_ITEM_ACTIVE
-                : NAV_ITEM_INACTIVE
+            href="/calendar"
+            className={`flex min-h-11 items-center rounded-lg px-3 py-2 transition ${
+              isActive("/calendar") ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE
             }`}
             onClick={closeMobile}
           >
-            Dashboard
+            Calendar
           </IntentPrefetchLink>
-
           <IntentPrefetchLink
             href="/trades"
             data-tt-tour-target="dashboardTrades"
-            className={`rounded-lg px-3 py-1.5 transition ${
-              isActive("/trades")
-                ? NAV_ITEM_ACTIVE
-                : NAV_ITEM_INACTIVE
+            className={`flex min-h-11 items-center rounded-lg px-3 py-2 transition ${
+              isActive("/trades") ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE
             }`}
             onClick={closeMobile}
           >
             Trades
           </IntentPrefetchLink>
-
+          {renderAnalyticsDropdown("phone", ["/calendar"])}
           <IntentPrefetchLink
-            href="/feed"
-            className={`rounded-lg px-3 py-1.5 transition ${
-              isActive("/feed")
+            href="/import"
+            className={`flex min-h-11 items-center rounded-lg px-3 py-2 transition ${
+              isActive("/import") ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE
+            }`}
+            onClick={closeMobile}
+          >
+            Import CSV
+          </IntentPrefetchLink>
+
+          <p className="px-3 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Community
+          </p>
+          {communityLinks.map((item) => (
+            <IntentPrefetchLink
+              key={item.href}
+              href={item.href}
+              data-tt-tour-target={
+                item.href === "/community"
+                  ? "feedTradeRooms"
+                  : item.href === "/explore"
+                    ? "feedExplore"
+                    : undefined
+              }
+              className={`flex min-h-11 items-center rounded-lg px-3 py-2 ${
+                isActive(item.href)
+                  ? NAV_ITEM_ACTIVE
+                  : NAV_ITEM_INACTIVE_HOVER_SURFACE
+              }`}
+              onClick={closeMobile}
+            >
+              {item.label}
+            </IntentPrefetchLink>
+          ))}
+
+          <p className="px-3 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Account
+          </p>
+          <button
+            type="button"
+            className={`flex min-h-11 w-full items-center justify-between rounded-lg px-3 py-2 text-left transition ${NAV_ITEM_INACTIVE}`}
+            onClick={() => {
+              void handleToggleNotifications()
+              closeMobile()
+              router.push("/notifications")
+            }}
+          >
+            <span>Notifications</span>
+            {unreadCount > 0 ? (
+              <span className={`px-2 py-0.5 text-xs tabular-nums ${NAV_UNREAD_BADGE}`}>
+                {badgeText(unreadCount)}
+              </span>
+            ) : null}
+          </button>
+          <IntentPrefetchLink
+            href="/settings#subscription"
+            className={`flex min-h-11 items-center rounded-lg px-3 py-2 transition ${NAV_ITEM_INACTIVE}`}
+            onClick={closeMobile}
+          >
+            Billing / Subscription
+          </IntentPrefetchLink>
+          <IntentPrefetchLink
+            href="/referrals"
+            className={`flex min-h-11 items-center rounded-lg px-3 py-2 transition ${
+              isActive("/referrals") ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE
+            }`}
+            onClick={closeMobile}
+          >
+            Referrals
+          </IntentPrefetchLink>
+          <IntentPrefetchLink
+            href="/settings#account"
+            className={`flex min-h-11 items-center rounded-lg px-3 py-2 transition ${NAV_ITEM_INACTIVE}`}
+            onClick={closeMobile}
+          >
+            Settings
+          </IntentPrefetchLink>
+          <IntentPrefetchLink
+            href={affiliateMenuItem.href}
+            className={`flex min-h-11 items-center rounded-lg px-3 py-2 transition ${
+              isGroupActive([
+                "/affiliate",
+                "/affiliate/dashboard",
+                "/affiliate/payout-setup",
+                "/payouts",
+              ])
                 ? NAV_ITEM_ACTIVE
                 : NAV_ITEM_INACTIVE
             }`}
             onClick={closeMobile}
           >
-            Feed
+            {affiliateMenuItem.label}
           </IntentPrefetchLink>
 
-          {profileHref ? (
-            <IntentPrefetchLink
-              href={profileHref}
-              className={`rounded-lg px-3 py-1.5 transition ${
-                isGroupActive(["/profile"])
-                  ? NAV_ITEM_ACTIVE
-                  : NAV_ITEM_INACTIVE
-              }`}
-              onClick={() => {
-                void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
-                  hapticLight("open-profile")
-                })
-                closeMobile()
-              }}
-            >
-              Profile
-            </IntentPrefetchLink>
-          ) : (
-            <span className="rounded-lg px-3 py-1.5 text-muted-foreground">Profile</span>
-          )}
-
-          <IntentPrefetchLink
-            href="/messages"
-            className={`flex items-center justify-between rounded-lg px-3 py-1.5 transition ${
-              isActive("/messages")
-                ? NAV_ITEM_ACTIVE
-                : NAV_ITEM_INACTIVE
-            }`}
+          <p className="px-3 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Support
+          </p>
+          <button
+            type="button"
+            className={`flex min-h-11 items-center rounded-lg px-3 py-2 text-left transition ${NAV_ITEM_INACTIVE}`}
             onClick={() => {
-              void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
-                hapticLight("open-messages")
-              })
-              void handleToggleMessages()
               closeMobile()
+              setReviewModalOpen(true)
             }}
           >
-            <span>Messages</span>
-            {unreadMessagesCount > 0 ? (
-              <span className={`text-xs px-2 py-0.5 rounded-full tabular-nums ${NAV_UNREAD_BADGE}`}>
-                {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
-              </span>
-            ) : null}
+            Leave a Review
+          </button>
+          <button
+            type="button"
+            className={`flex min-h-11 items-center rounded-lg px-3 py-2 text-left transition ${NAV_ITEM_INACTIVE}`}
+            onClick={() => {
+              closeMobile()
+              setBugReportModalOpen(true)
+            }}
+          >
+            Report Bug
+          </button>
+          <IntentPrefetchLink
+            href="/feature-requests"
+            className={`flex min-h-11 items-center rounded-lg px-3 py-2 transition ${
+              isActive("/feature-requests") ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE
+            }`}
+            onClick={closeMobile}
+          >
+            Feature Requests
+          </IntentPrefetchLink>
+          <IntentPrefetchLink
+            href="/help"
+            className={`flex min-h-11 items-center rounded-lg px-3 py-2 transition ${NAV_ITEM_INACTIVE}`}
+            onClick={closeMobile}
+          >
+            Help / Support
+          </IntentPrefetchLink>
+          <IntentPrefetchLink
+            href="/privacy"
+            className={`flex min-h-11 items-center rounded-lg px-3 py-2 transition ${NAV_ITEM_INACTIVE}`}
+            onClick={closeMobile}
+          >
+            Privacy Policy
+          </IntentPrefetchLink>
+          <IntentPrefetchLink
+            href="/terms"
+            className={`flex min-h-11 items-center rounded-lg px-3 py-2 transition ${NAV_ITEM_INACTIVE}`}
+            onClick={closeMobile}
+          >
+            Terms of Service
           </IntentPrefetchLink>
 
-          <div>
-            <button
-              type="button"
-              className={`flex w-full items-center justify-between rounded-lg px-3 py-1.5 transition ${
-                isGroupActive([
-                  "/analytics",
-                  "/backtest",
-                  "/calendar",
-                  "/streaks",
-                  "/achievements",
-                  "/analyst",
-                ])
-                  ? NAV_ITEM_ACTIVE
-                  : NAV_ITEM_INACTIVE
-              }`}
-              onClick={() => toggleSection("analytics")}
-            >
-              <span>Analytics</span>
-              <span className="text-muted-foreground tabular-nums">{openSection === "analytics" ? "−" : "+"}</span>
-            </button>
-            {openSection === "analytics" ? (
-              <div className="mt-1 space-y-0.5 pl-3 text-sm">
-                {renderAnalyticsDropdown("mobile")}
-              </div>
-            ) : null}
-          </div>
-
-          <div>
-            <button
-              type="button"
-              className={`flex w-full items-center justify-between rounded-lg px-3 py-1.5 transition ${
-                isGroupActive(["/community", "/trade-rooms", "/leaderboard", "/explore"])
-                  ? NAV_ITEM_ACTIVE
-                  : NAV_ITEM_INACTIVE
-              }`}
-              onClick={() => toggleSection("community")}
-            >
-              <span>Community</span>
-              <span className="text-muted-foreground tabular-nums">{openSection === "community" ? "−" : "+"}</span>
-            </button>
-            {openSection === "community" ? (
-              <div className="mt-1 space-y-0.5 pl-3 text-sm">
-                {communityLinks.map((item) => (
-                  <IntentPrefetchLink
-                    key={item.href}
-                    href={item.href}
-                    className={`block rounded-lg px-3 py-1.5 ${
-                      isActive(item.href)
-                        ? NAV_ITEM_ACTIVE
-                        : NAV_ITEM_INACTIVE_HOVER_SURFACE
-                    }`}
-                    onClick={closeMobile}
-                  >
-                    {item.label}
-                  </IntentPrefetchLink>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="flex flex-col gap-1 border-t border-border pt-1.5">
-            {isAdmin ? (
+          {isAdmin ? (
+            <>
+              <p className="px-3 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Developer
+              </p>
               <IntentPrefetchLink
                 href="/admin"
-                className="rounded-lg px-3 py-1.5 text-chrome-foreground hover:text-nav-link-hover"
+                className="flex min-h-11 items-center rounded-lg px-3 py-2 text-chrome-foreground hover:text-nav-link-hover"
                 onClick={closeMobile}
               >
                 Admin
               </IntentPrefetchLink>
-            ) : null}
+            </>
+          ) : null}
 
-            <IntentPrefetchLink
-              href="/settings#account"
-              className="rounded-lg px-3 py-1.5 text-chrome-foreground hover:text-nav-link-hover"
-              onClick={closeMobile}
-            >
-              Settings
-            </IntentPrefetchLink>
-            <IntentPrefetchLink
-              href={affiliateMenuItem.href}
-              className={`rounded-lg px-3 py-1.5 transition ${
-                isGroupActive([
-                  "/affiliate",
-                  "/affiliate/dashboard",
-                  "/affiliate/payout-setup",
-                  "/payouts",
-                ])
-                  ? NAV_ITEM_ACTIVE
-                  : "text-chrome-foreground hover:text-nav-link-hover"
-              }`}
-              onClick={closeMobile}
-            >
-              {affiliateMenuItem.label}
-            </IntentPrefetchLink>
-            <IntentPrefetchLink
-              href="/help"
-              className="rounded-lg px-3 py-1.5 text-chrome-foreground hover:text-nav-link-hover"
-              onClick={closeMobile}
-            >
-              Help Center
-            </IntentPrefetchLink>
+          <div className="mt-1 border-t border-border pt-1.5">
             <button
               type="button"
-              className="rounded-lg px-3 py-1.5 text-left text-chrome-foreground hover:text-nav-link-hover"
-              onClick={() => {
-                closeMobile()
-                setReviewModalOpen(true)
-              }}
-            >
-              Leave a Review
-            </button>
-
-            <button
-              type="button"
-              className="flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-chrome-foreground hover:text-nav-link-hover"
-              onClick={() => {
-                void handleToggleNotifications()
-                closeMobile()
-                router.push("/notifications")
-              }}
-            >
-              <span>Notifications</span>
-              {unreadCount > 0 ? (
-                <span className={`text-xs px-2 py-0.5 rounded-full tabular-nums ${NAV_UNREAD_BADGE}`}>
-                  {badgeText(unreadCount)}
-                </span>
-              ) : null}
-            </button>
-
-            <button
-              type="button"
-              className="w-full rounded-lg px-3 py-1.5 text-left text-sm text-red-400 hover:text-red-300"
+              className="flex min-h-11 w-full items-center rounded-lg px-3 py-2 text-left text-sm text-red-400 hover:text-red-300"
               onClick={() => {
                 void handleSignOut()
               }}

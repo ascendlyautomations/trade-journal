@@ -15,6 +15,18 @@ export function optimizedStorageObjectPath(
   return `${cleanPrefix}/opt/${Date.now()}.${ext}`
 }
 
+/** Stable storage path for a publish attempt (retries upsert the same object). */
+export function profilePostStorageObjectPath(
+  userId: string,
+  clientPublishId: string,
+  extension = "jpg"
+): string {
+  const cleanPrefix = userId.replace(/\/+$/, "")
+  const ext = extension.replace(/^\./, "") || "jpg"
+  const token = clientPublishId.trim().replace(/\//g, "-")
+  return `${cleanPrefix}/opt/${token}.${ext}`
+}
+
 /** Path segment from a public object or render URL (no query). */
 export function storagePublicPathFromUrl(url: string): string | null {
   const trimmed = url.trim()

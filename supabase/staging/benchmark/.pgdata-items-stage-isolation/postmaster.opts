@@ -1,0 +1,1 @@
+/Users/TradeTraxs/Developer/trade-journal/node_modules/@embedded-postgres/darwin-arm64/native/bin/postgres "-D" "/Users/TradeTraxs/Developer/trade-journal/supabase/staging/benchmark/.pgdata-items-stage-isolation" "-p" "55452"

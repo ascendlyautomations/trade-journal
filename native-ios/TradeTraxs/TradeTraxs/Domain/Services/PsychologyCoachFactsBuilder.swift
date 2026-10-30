@@ -144,6 +144,15 @@ nonisolated enum PsychologyCoachFactsBuilder {
         )
     }
 
+    static func dataGapMessages(
+        report: PsychologyAnalyticsReport,
+        trades: [Trade],
+        checkIns: [TraderDailyCheckIn]
+    ) -> [String] {
+        let enriched = TraderPsychologyAnalyticsEngine.enrich(trades: trades, checkIns: checkIns)
+        return dataGaps(report: report, enriched: enriched)
+    }
+
     private static func dataGaps(
         report: PsychologyAnalyticsReport,
         enriched: [PsychologyEnrichedTrade]

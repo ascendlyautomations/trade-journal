@@ -99,14 +99,24 @@ enum DashboardBootstrapLoader {
                 )
             }
             if cached.freshness == .displayOnly, !forceNetwork {
-                DashboardAuthoritativeRefreshCoordinator.shared.scheduleAuthoritativeRefresh(
-                    viewerID: viewerID,
-                    rpc: rpc,
-                    detailCache: detailCache,
-                    trigger: .displayOnlyRevalidate,
-                    loadGeneration: loadGeneration,
-                    currentGeneration: currentGeneration
-                )
+                if DashboardHomeSurfaceGate.isHomeTabActive {
+                    DashboardAuthoritativeRefreshCoordinator.shared.scheduleAuthoritativeRefresh(
+                        viewerID: viewerID,
+                        rpc: rpc,
+                        detailCache: detailCache,
+                        trigger: .displayOnlyRevalidate,
+                        loadGeneration: loadGeneration,
+                        currentGeneration: currentGeneration
+                    )
+                } else {
+                    DashboardHomeSurfaceGate.enqueueCoordinatorRefresh(
+                        DashboardHomeSurfaceGate.DeferredCoordinatorRefresh(
+                            viewerID: viewerID,
+                            trigger: .displayOnlyRevalidate,
+                            loadGeneration: loadGeneration
+                        )
+                    )
+                }
             }
             return DashboardBootstrapLoadResult(
                 applied: applied,

@@ -55,6 +55,19 @@ enum ProfileSection: String, CaseIterable, Identifiable, Sendable {
         "Show \(title.lowercased()) on your profile"
     }
 
+    /// Section strip order — matches ``ProfileSectionPicker`` left-to-right.
+    static let sectionStripOrder: [ProfileSection] = allCases
+
+    /// Neighbor in ``sectionStripOrder`` — positive offset is swipe-left (toward Achievements).
+    func adjacentSection(offset: Int) -> ProfileSection? {
+        guard offset != 0,
+              let index = Self.sectionStripOrder.firstIndex(of: self)
+        else { return nil }
+        let target = index + offset
+        guard Self.sectionStripOrder.indices.contains(target) else { return nil }
+        return Self.sectionStripOrder[target]
+    }
+
     /// Cross-type profile showcase pin bucket for this tab, if any.
     var pinnedContentType: ProfilePinnedContentType? {
         switch self {

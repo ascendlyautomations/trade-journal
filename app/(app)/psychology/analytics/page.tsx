@@ -18,7 +18,16 @@ function PsychologyAnalyticsPageContent() {
   useScrollPageTopOnMount()
   const searchParams = useSearchParams()
   const highlight = searchParams.get("section")?.trim() || null
-  const { ready, loadError, report, summary, unlock } = usePsychologySessionHydration()
+  const {
+    ready,
+    loadError,
+    report,
+    summary,
+    unlock,
+    journalTrades,
+    checkIns,
+    scope,
+  } = usePsychologySessionHydration()
 
   useEffect(() => {
     if (highlight) {
@@ -71,6 +80,9 @@ function PsychologyAnalyticsPageContent() {
         report={report}
         summary={summary}
         highlightedSectionID={sectionFocus}
+        journalTrades={journalTrades}
+        checkIns={checkIns}
+        scopeLabel={scope?.label ?? null}
       />
     </div>
   )

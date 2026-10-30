@@ -10,8 +10,14 @@ enum FeedContentFilterSwipeSupport {
         onSwipeLeft: @escaping () -> Void,
         onSwipeRight: @escaping () -> Void
     ) -> some Gesture {
-        DragGesture(minimumDistance: minimumDistance, coordinateSpace: .local)
+        DragGesture(minimumDistance: minimumDistance, coordinateSpace: .global)
             .onEnded { value in
+                if NavigationInteractivePopEdgeSupport.beginsInLeadingBackZone(
+                    globalX: value.startLocation.x
+                ) {
+                    return
+                }
+
                 let x = value.translation.width
                 let y = value.translation.height
                 let absX = abs(x)

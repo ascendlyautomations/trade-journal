@@ -6,6 +6,7 @@ struct PsychologyInsightsSection: View {
     let cards: [PsychologyInsightCard]
     var unlockProgress: PsychologyInsightsUnlockProgress = .zero
     var unlockMetricsReady: Bool = true
+    var postUnlockGapMessages: [String] = []
     var onSelect: (PsychologyInsightCard) -> Void
     var onViewAll: () -> Void
 
@@ -48,7 +49,7 @@ struct PsychologyInsightsSection: View {
                     } else if unlockProgress.showsRequirementMessage {
                         requirementEmptyState
                     } else {
-                        emptyState
+                        postUnlockGapState
                     }
                 } else {
                     VStack(spacing: ExperienceSpacing.xs) {
@@ -62,7 +63,10 @@ struct PsychologyInsightsSection: View {
                             .buttonStyle(.experiencePlain)
                         }
                         if showsViewMore {
-                            DashboardInsightViewMoreControl(isExpanded: showsAllCards) {
+                            DashboardInsightViewMoreControl(
+                                isExpanded: showsAllCards,
+                                collapsedTitle: "Show \(cards.count - DashboardInsightPresentation.previewCount) more insights"
+                            ) {
                                 ExperienceHaptics.play(.selection)
                                 withAnimation(
                                     ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion)
@@ -92,22 +96,49 @@ struct PsychologyInsightsSection: View {
         .accessibilityIdentifier("dashboard.psychologyInsights.loading")
     }
 
-    private var emptyState: some View {
-        ExperienceEmptyState(
-            icon: .chart,
-            title: "Not enough data yet",
-            message: "Log check-ins and trade psychology to unlock insights."
-        )
+    private var postUnlockGapState: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            Text("Overview unlocked")
+                .experienceStyle(.subheadline, color: colors.primaryText)
+                .fontWeight(.semibold)
+            Text(
+                "Your analytics overview is unlocked. Comparison cards appear when groups have enough matched, tagged trades."
+            )
+            .experienceStyle(.caption, color: colors.secondaryText)
+            if postUnlockGapMessages.isEmpty {
+                Text(PsychologyProgressMessaging.unlockOverviewCopy)
+                    .experienceStyle(.caption, color: colors.secondaryText)
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(postUnlockGapMessages, id: \.self) { message in
+                        HStack(alignment: .top, spacing: 6) {
+                            Text("•")
+                            Text(message)
+                                .experienceStyle(.caption, color: colors.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(ExperienceSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
+        .overlay {
+            RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                .stroke(colors.border, lineWidth: 1)
+        }
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.bottom, ExperienceSpacing.xs)
+        .accessibilityIdentifier("dashboard.psychologyInsights.gaps")
     }
 
     private var requirementEmptyState: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
             ExperienceEmptyState(
                 icon: .chart,
-                title: "5 Daily Check-Ins & 5 Trades Required",
-                message: "Log check-ins and trade psychology to unlock insights.",
+                title: "5 check-in days & 5 trades to unlock overview",
+                message: PsychologyProgressMessaging.unlockOverviewCopy,
                 accessibilityIdentifier: "dashboard.psychologyInsights.requirements"
             )
             Text(

@@ -6,6 +6,7 @@ import {
   PSYCHOLOGY_INSIGHTS_REQUIRED_COUNT,
   type PsychologyInsightsUnlockProgress,
 } from "@/lib/psychology/unlockProgress"
+import { PSYCHOLOGY_UNLOCK_OVERVIEW_COPY } from "@/lib/psychology/psychologyProgressMessaging"
 
 type PsychologyInsightsRequirementNoticeProps = {
   unlock: PsychologyInsightsUnlockProgress
@@ -20,13 +21,9 @@ export default function PsychologyInsightsRequirementNotice({
       data-testid="psychologyAnalytics.requirements"
     >
       <h2 className="text-sm font-semibold text-white">
-        5 Daily Check-Ins &amp; 5 Trades Required
+        5 check-in days &amp; 5 trades to unlock overview
       </h2>
-      <p className="mt-1 text-xs text-gray-400">
-        Log check-ins and trade psychology on trading days to unlock personalized
-        insight cards on your dashboard. Detailed sections below update as you log
-        more data.
-      </p>
+      <p className="mt-1 text-xs text-gray-400">{PSYCHOLOGY_UNLOCK_OVERVIEW_COPY}</p>
       <p className="mt-2 text-xs tabular-nums text-gray-300">
         Check-in days {displayCheckInDayCountForGate(unlock)}/
         {PSYCHOLOGY_INSIGHTS_REQUIRED_COUNT}

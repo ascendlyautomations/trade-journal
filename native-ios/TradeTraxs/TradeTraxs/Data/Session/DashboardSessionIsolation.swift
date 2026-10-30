@@ -65,6 +65,7 @@ final class SessionViewerGate {
 enum DashboardSessionBoundary {
     static func resetInMemoryPresentation() {
         SessionViewerGate.shared.endSession()
+        DashboardHomeSurfaceGate.resetForSessionBoundary()
         DashboardViewModel.resetAllForSessionBoundary()
         DashboardAnalyticsAggregateChartsStore.shared.invalidate()
         DashboardAnalyticsAccountChartsStore.shared.invalidate()

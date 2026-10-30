@@ -174,17 +174,30 @@ export class BackendV2RpcClient {
 import type { AppSupabaseClient } from "../supabaseTypes.ts"
 import type { Database, Json } from "../database.types.ts"
 
+type RpcBuilder = {
+  abortSignal?: (signal: AbortSignal) => RpcBuilder
+} & PromiseLike<{
+  data: unknown
+  error: { message?: string; code?: string } | null
+}>
+
 /** Dynamic public RPC dispatch — Postgres validates args; decoders validate Json responses. */
 async function callPublicRpc(
   client: AppSupabaseClient,
   name: string,
-  args: Record<string, unknown> | undefined
+  args: Record<string, unknown> | undefined,
+  signal?: AbortSignal
 ): Promise<{ data: Json; error: { message?: string; code?: string } | null }> {
   const fn = name as keyof Database["public"]["Functions"]
-  const response = await client.rpc(
+  const builder = client.rpc(
     fn,
     (args ?? {}) as Database["public"]["Functions"][typeof fn]["Args"]
-  )
+  ) as RpcBuilder
+  const request =
+    signal && typeof builder.abortSignal === "function"
+      ? builder.abortSignal(signal)
+      : builder
+  const response = await request
   return {
     data: response.data as Json,
     error: response.error
@@ -204,7 +217,7 @@ export function createSupabaseBackendV2Transport(
           error: { code: "cancelled", message: "Aborted" },
         }
       }
-      const result = await callPublicRpc(client, name, args)
+      const result = await callPublicRpc(client, name, args, signal)
       if (signal?.aborted) {
         return {
           data: null,

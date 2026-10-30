@@ -33,31 +33,27 @@ nonisolated enum ImageCropWireInsert {
         }
     }
 
-    @discardableResult
-    static func insertWallPost(
+    /// Inserts a profile wall post and returns its id (`RETURNING id` only — matches trades).
+    static func insertWallPostReturningID(
         supabase: SupabaseInfrastructure,
         body: ProfileWallPostInsertBody
-    ) async throws -> FeedDTO.ProfileWallPost {
+    ) async throws -> String {
         do {
-            PostPublishProbe.logDatabaseInsertStarted(
-                table: "profile_posts",
-                payloadKeys: wallPostPayloadKeys(body)
-            )
-            let dto: FeedDTO.ProfileWallPost = try await supabase.database.insert(
-                body,
-                into: "profile_posts",
-                returning: FeedDTO.ProfileWallPost.self
-            )
-            PostPublishProbe.logDatabaseInsertSucceeded(table: "profile_posts")
-            PostPublishProbe.logResponseDecodeSucceeded(table: "profile_posts")
-            return dto
+            return try await insertWallPostIDOnce(supabase: supabase, body: body)
         } catch {
-            if isResponseDecodeFailure(error) {
-                PostPublishProbe.logFailed(stage: .responseDecode, error: error)
+            if isProfilePostPublishRecoverable(error),
+               let publishID = body.client_publish_id?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !publishID.isEmpty,
+               let existing = try await resolveWallPostID(
+                   supabase: supabase,
+                   userID: body.user_id,
+                   clientPublishID: publishID
+               )
+            {
                 PostPublishProbe.logNote(
-                    "profile_posts insert may have succeeded server-side — avoid blind republish retries"
+                    "profile_posts insert recovered via client_publish_id=\(publishID) id=\(existing)"
                 )
-                throw error
+                return existing
             }
             guard body.includeImageCropKey,
                   body.image_crop != nil,
@@ -71,19 +67,82 @@ nonisolated enum ImageCropWireInsert {
             )
             var fallback = body
             fallback.includeImageCropKey = false
-            PostPublishProbe.logDatabaseInsertStarted(
-                table: "profile_posts",
-                payloadKeys: wallPostPayloadKeys(fallback)
-            )
-            let dto: FeedDTO.ProfileWallPost = try await supabase.database.insert(
-                fallback,
-                into: "profile_posts",
-                returning: FeedDTO.ProfileWallPost.self
-            )
-            PostPublishProbe.logDatabaseInsertSucceeded(table: "profile_posts")
-            PostPublishProbe.logResponseDecodeSucceeded(table: "profile_posts")
-            return dto
+            do {
+                return try await insertWallPostIDOnce(supabase: supabase, body: fallback)
+            } catch {
+                if isProfilePostPublishRecoverable(error),
+                   let publishID = body.client_publish_id?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !publishID.isEmpty,
+                   let existing = try await resolveWallPostID(
+                       supabase: supabase,
+                       userID: body.user_id,
+                       clientPublishID: publishID
+                   )
+                {
+                    return existing
+                }
+                PostPublishProbe.logFailed(stage: .databaseInsert, error: error)
+                throw error
+            }
         }
+    }
+
+    private static func insertWallPostIDOnce(
+        supabase: SupabaseInfrastructure,
+        body: ProfileWallPostInsertBody
+    ) async throws -> String {
+        struct IDRow: Decodable { var id: String }
+        PostPublishProbe.logDatabaseInsertStarted(
+            table: "profile_posts",
+            payloadKeys: wallPostPayloadKeys(body)
+        )
+        let query = [URLQueryItem(name: "select", value: "id")]
+        let row: IDRow = try await supabase.database.insert(
+            body,
+            into: "profile_posts",
+            query: query,
+            returning: IDRow.self
+        )
+        PostPublishProbe.logDatabaseInsertSucceeded(table: "profile_posts")
+        PostPublishProbe.logResponseDecodeSucceeded(table: "profile_posts")
+        guard !row.id.isEmpty else {
+            throw AppError.unknown(message: "Insert returned empty representation")
+        }
+        return row.id
+    }
+
+    private static func resolveWallPostID(
+        supabase: SupabaseInfrastructure,
+        userID: String,
+        clientPublishID: String
+    ) async throws -> String? {
+        struct IDRow: Decodable { var id: String? }
+        let rows: [IDRow] = try await supabase.database.select(
+            IDRow.self,
+            from: "profile_posts",
+            query: [
+                SupabaseQuery.select("id"),
+                SupabaseQuery.eq("user_id", userID),
+                SupabaseQuery.eq("client_publish_id", clientPublishID),
+                URLQueryItem(name: "limit", value: "1"),
+            ]
+        )
+        guard let id = rows.first?.id?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !id.isEmpty
+        else { return nil }
+        return id
+    }
+
+    private static func isProfilePostPublishRecoverable(_ error: Error) -> Bool {
+        if isResponseDecodeFailure(error) { return true }
+        if UploadRetryRecovery.isAmbiguousTransportFailure(error) { return true }
+        if isUniqueViolation(error) { return true }
+        return false
+    }
+
+    private static func isUniqueViolation(_ error: Error) -> Bool {
+        let text = String(describing: error).lowercased()
+        return text.contains("23505") || text.contains("duplicate") || text.contains("unique")
     }
 
     private static func isResponseDecodeFailure(_ error: Error) -> Bool {
@@ -100,6 +159,7 @@ nonisolated enum ImageCropWireInsert {
         var keys = ["user_id", "content"]
         if body.image_url != nil { keys.append("image_url") }
         if body.includeImageCropKey { keys.append("image_crop") }
+        if body.client_publish_id != nil { keys.append("client_publish_id") }
         if body.room_id != nil { keys.append("room_id") }
         return keys
     }

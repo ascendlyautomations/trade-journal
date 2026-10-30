@@ -1,7 +1,7 @@
 import Foundation
 
 /// Phase 1 retry/recovery — transport failures where the server may have committed work.
-enum UploadRetryRecovery {
+nonisolated enum UploadRetryRecovery {
     static func isAmbiguousTransportFailure(_ error: Error) -> Bool {
         if error is CancellationError {
             return true

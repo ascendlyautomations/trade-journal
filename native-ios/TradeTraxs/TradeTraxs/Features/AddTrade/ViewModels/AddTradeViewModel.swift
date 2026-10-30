@@ -1594,27 +1594,32 @@ final class AddTradeViewModel {
             }
             return
         }
-        isSavingDraft = true
         formError = nil
         let draftID = activeDraftID ?? UUID()
         let imageData = screenshotData
         let previousPath = retainedDraftImagePath
         let clearedImage = didClearDraftImage
         let state = makeTradeDraftState(imagePath: nil)
-        Task {
-            do {
+        let repository = contentDrafts
+        let session = session
+        isSavingDraft = true
+        ContentDraftSaveUpload.start(
+            jobTitle: "Trade",
+            operation: { [weak self] jobID in
                 var payloadState = state
                 if let imageData {
-                    payloadState.imageStoragePath = try await contentDrafts.uploadDraftImage(
-                        draftID: draftID,
-                        data: imageData
-                    )
+                    try await UploadProgressContext.$jobID.withValue(jobID) {
+                        payloadState.imageStoragePath = try await repository.uploadDraftImage(
+                            draftID: draftID,
+                            data: imageData
+                        )
+                    }
                     if let previousPath, previousPath != payloadState.imageStoragePath {
-                        await contentDrafts.deleteDraftMedia(paths: [previousPath])
+                        await repository.deleteDraftMedia(paths: [previousPath])
                     }
                 } else if clearedImage {
                     if let previousPath {
-                        await contentDrafts.deleteDraftMedia(paths: [previousPath])
+                        await repository.deleteDraftMedia(paths: [previousPath])
                     }
                     payloadState.imageStoragePath = nil
                 } else {
@@ -1623,30 +1628,33 @@ final class AddTradeViewModel {
                 var payload = ContentDraftPayload()
                 payload.trade = payloadState
                 guard !payload.isMeaningfullyEmpty else {
-                    isSavingDraft = false
-                    formError = "Nothing to save yet."
-                    return
+                    throw AppError.unknown(message: "Nothing to save yet.")
                 }
-                let userID = await session.currentUserID ?? UserID("")
-                let saved = try await contentDrafts.saveDraft(
+                ContentDraftSaveUpload.noteSavingRecord(jobID: jobID)
+                let saved = try await repository.saveDraft(
                     ContentDraft(
                         id: draftID,
-                        userID: userID,
+                        userID: await session.currentUserID ?? UserID(""),
                         type: .trade,
                         payload: payload,
                         createdAt: Date(),
                         updatedAt: Date()
                     )
                 )
-                activeDraftID = saved.id
-                isSavingDraft = false
-                SaveSuccessConfirmationCenter.shared.present("Draft saved")
-                onDismiss()
-            } catch {
-                isSavingDraft = false
-                formError = UserFacingError.message(for: error)
+                self?.activeDraftID = saved.id
+            },
+            onEnqueued: { [weak self] in
+                self?.isSavingDraft = false
+                self?.onDismiss()
+            },
+            onFailure: { [weak self] error in
+                self?.isSavingDraft = false
+                let message = UserFacingError.message(for: error)
+                if message == "Nothing to save yet." {
+                    self?.formError = message
+                }
             }
-        }
+        )
     }
 
     private func applyTradeDraft(_ draft: ContentDraft) {

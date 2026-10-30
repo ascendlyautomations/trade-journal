@@ -21,7 +21,7 @@ function factInsight(card: PsychologyInsightCard): PsychologyCoachFactInsight {
   }
 }
 
-function dataGaps(
+export function buildPsychologyDataGapMessages(
   report: PsychologyAnalyticsReport,
   trades: readonly PsychologyReportTrade[]
 ): string[] {
@@ -161,7 +161,7 @@ export function buildPsychologyCoachFacts(
       lateTradeAveragePnL,
       earlyTradeAveragePnL,
     },
-    dataGaps: dataGaps(report, trades),
+    dataGaps: buildPsychologyDataGapMessages(report, trades),
     hasMinimumData: report.baseline.tradeCount >= 5,
   }
   facts.factsHash = factsFingerprint(facts)

@@ -121,6 +121,7 @@ import ProfileTabs, {
 } from "../../components/profile/ProfileTabs"
 import ProfileTradesTab from "../../components/profile/ProfileTradesTab"
 import { useMobileTradeDetailSwipe } from "../../components/profile/useMobileTradeDetailSwipe"
+import { useProfileTabSwipe } from "../../components/profile/useProfileTabSwipe"
 import {
   PROFILE_TRADES_PAGE_SIZE_DESKTOP,
   PROFILE_TRADES_PAGE_SIZE_MOBILE,
@@ -3768,6 +3769,11 @@ function ProfilePageContent() {
   )
 
   const isMobileViewport = useMaxMdViewport()
+  const profileTabSwipe = useProfileTabSwipe({
+    enabled: isMobileViewport,
+    activeTab,
+    onTabChange: setActiveTab,
+  })
 
   // Mobile grid expects ~12 tiles initially; top up when cache/desktop fetch left fewer.
   useEffect(() => {
@@ -4103,6 +4109,10 @@ function ProfilePageContent() {
           />
           </div>
 
+          <div
+            onTouchStart={profileTabSwipe.onTouchStart}
+            onTouchEnd={profileTabSwipe.onTouchEnd}
+          >
           <ProfileTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
           <div className="mt-2 space-y-6 sm:mt-3 md:mt-4">
@@ -4286,6 +4296,7 @@ function ProfilePageContent() {
                 }
               />
             )}
+          </div>
           </div>
 
         </div>

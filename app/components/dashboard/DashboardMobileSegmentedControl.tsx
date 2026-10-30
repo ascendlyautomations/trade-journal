@@ -71,7 +71,7 @@ export default function DashboardMobileSegmentedControl({
             role="tab"
             aria-selected={selected}
             id={`dashboard-mobile-tab-${tab}`}
-            className={`relative z-10 min-h-[36px] rounded-lg px-2 text-[12px] font-semibold tracking-wide transition-colors duration-200 ${
+            className={`relative z-10 min-h-11 rounded-lg px-2 text-[12px] font-semibold tracking-wide transition-colors duration-200 ${
               selected ? "text-white" : "text-gray-300 hover:text-gray-100"
             }`}
             onMouseDown={(event) => {

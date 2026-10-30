@@ -6,6 +6,7 @@ enum UploadJobKind: String, Sendable, CaseIterable {
     case story
     case achievement
     case trade
+    case contentDraft
     case avatar
     case room
     case messageMedia
@@ -17,6 +18,7 @@ enum UploadJobKind: String, Sendable, CaseIterable {
         case .story: return "Story"
         case .achievement: return "Achievement"
         case .trade: return "Trade"
+        case .contentDraft: return "Draft"
         case .avatar: return "Profile photo"
         case .room: return "Room image"
         case .messageMedia: return "Attachment"
@@ -56,6 +58,25 @@ struct UploadJob: Identifiable, Sendable, Equatable {
                     return "Posting Clip…                       \(Self.percentString(progress))"
                 }
                 return "Posting Clip…"
+            }
+        }
+        if kind == .contentDraft {
+            switch phase {
+            case .completed:
+                return "Draft saved ✓"
+            case .failed:
+                return "Draft save failed"
+            case .publishing:
+                return "Saving draft…"
+            case .uploading:
+                if let progress {
+                    return "Uploading draft…                       \(Self.percentString(progress))"
+                }
+                return "Uploading draft…"
+            case .preparing:
+                return "Preparing draft…"
+            case .encoding:
+                return "Preparing draft…"
             }
         }
         switch phase {

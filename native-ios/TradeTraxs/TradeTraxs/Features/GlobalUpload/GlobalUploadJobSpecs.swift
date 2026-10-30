@@ -100,6 +100,7 @@ struct PostUploadSpec: Sendable {
 struct PostUploadCheckpoint: Sendable, Equatable {
     var imageStoragePath: String?
     var uploadedImagePublicURL: String?
+    var savedPostID: PostID?
 }
 
 struct StoryUploadSpec: Sendable {

@@ -15,7 +15,10 @@ import { invalidateUserStreaksCache } from "@/lib/userStreaksCache"
 import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import { useProGate } from "@/lib/useProGate"
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
-import { publishProfilePost } from "@/lib/publishProfilePost"
+import {
+  publishProfilePost,
+  type PublishProfilePostCheckpoint,
+} from "@/lib/publishProfilePost"
 import {
   pendingRoomShareFromRoom,
   type PendingRoomShareDraft,
@@ -67,6 +70,7 @@ export default function CreatePostComposer({
   const [creatingPost, setCreatingPost] = useState(false)
   const creatingPostRef = useRef(false)
   const uploadingPostRef = useRef(false)
+  const publishCheckpointRef = useRef<PublishProfilePostCheckpoint | null>(null)
 
   const postImageCrop = useImageCropUpload({
     preset: CONTENT_IMAGE_V2_PRESET,
@@ -122,6 +126,7 @@ export default function CreatePostComposer({
     }
 
     uploadingPostRef.current = true
+    publishCheckpointRef.current = null
 
     void import("@/lib/nativeHaptics").then(({ hapticMedium }) => {
       hapticMedium("submit-post")
@@ -146,8 +151,10 @@ export default function CreatePostComposer({
               imageFile: postImage,
               pendingRoomShare,
             },
-            report
+            report,
+            publishCheckpointRef.current
           )
+          publishCheckpointRef.current = result.checkpoint
 
           if (!result.ok) {
             if (result.message.includes("Add some text")) {
@@ -156,6 +163,7 @@ export default function CreatePostComposer({
             throw new Error(result.message)
           }
 
+          publishCheckpointRef.current = null
           invalidateUserStreaksCache(userId)
           showPopup(feedbackPresets.postPublished())
           notifyGettingStartedChecklistMaybeCompleted()

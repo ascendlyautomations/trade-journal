@@ -5,6 +5,7 @@ import {
   buildWeeklyTopPerformersPayload,
   type WeeklyTopPerformersPayload,
 } from "./weeklyTopPerformersBuild.ts"
+import { serviceRoleTableRead } from "./supabaseServiceTableRead.ts"
 
 async function hydrateProfilesForUserIds(
   userIds: string[],
@@ -14,17 +15,28 @@ async function hydrateProfilesForUserIds(
   const missing = userIds.filter((id) => !profiles[id])
   if (missing.length === 0) return profiles
 
-  const { data, error } = await getSupabaseServiceRole()
-    .from("profiles")
-    .select("id, username, name, avatar_url")
-    .in("id", missing)
-
-  if (error) {
+  let rows: { id: string; username: string | null; name: string | null; avatar_url: string | null }[] =
+    []
+  const db = getSupabaseServiceRole()
+  try {
+    rows = await serviceRoleTableRead(
+      db,
+      "weekly_top_performers_profile_hydrate",
+      async (signal) => {
+        const result = await db
+          .from("profiles")
+          .select("id, username, name, avatar_url")
+          .in("id", missing)
+          .abortSignal(signal)
+        return { data: result.data, error: result.error }
+      }
+    )
+  } catch (error) {
     console.error("[weekly-top-performers] profile hydrate:", error)
     return profiles
   }
 
-  for (const row of data ?? []) {
+  for (const row of rows ?? []) {
     profiles[String(row.id)] = row as LeaderboardProfileFields
   }
   return profiles

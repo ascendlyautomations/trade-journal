@@ -186,6 +186,11 @@ struct DashboardHomeView: View {
             guard isActive, brokerImportEligibilityStore.isReady else { return }
             brokerImportEligibilityStore.refreshIfStale(fromUserAction: false)
         }
+        .onChange(of: viewModel.summary, initial: true) { _, summary in
+            if summary != nil {
+                contentRevealed = true
+            }
+        }
         .onChange(of: viewModel.summary?.tradeCount) { _, _ in
             revealContentIfNeeded()
             viewModel.refreshPsychologyUnlockMetrics()
@@ -195,6 +200,7 @@ struct DashboardHomeView: View {
             ContextualTourCoordinator.shared.setDashboardAnalyticsReady(false)
         }
         .onAppear {
+            PsychologyAnalyticsPresentationBridge.bind(viewModel)
             ContextualTourCoordinator.shared.setDashboardAnalyticsReady(dashboardTourAnalyticsReady)
         }
         .onChange(of: dashboardTourAnalyticsReady) { _, ready in
@@ -439,6 +445,7 @@ struct DashboardHomeView: View {
                             cards: viewModel.dashboardPsychologyInsightCards,
                             unlockProgress: viewModel.psychologyInsightsUnlockProgress,
                             unlockMetricsReady: viewModel.psychologyUnlockMetricsReady,
+                            postUnlockGapMessages: viewModel.psychologyPostUnlockGapMessages,
                             onSelect: { card in
                                 viewModel.openPsychologyAnalytics(
                                     highlightSection: viewModel.psychologySectionID(for: card.category)

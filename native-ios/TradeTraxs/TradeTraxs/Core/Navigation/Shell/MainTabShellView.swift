@@ -370,7 +370,10 @@ struct HomeNavigationStack: View {
                 SettingsHomeView(authenticationCoordinator: authenticationCoordinator)
             }
         case .psychologyAnalytics:
-            PsychologyAnalyticsHomeRouteView(navigationCoordinator: coordinator)
+            PsychologyAnalyticsHomeRouteView(
+                navigationCoordinator: coordinator,
+                data: appEnvironment.data
+            )
         case .psychologyCoach:
             PsychologyCoachHomeRouteView(ai: appEnvironment.data.ai)
         case .settings(let settingsRoute):
@@ -1205,9 +1208,14 @@ private struct PropFirmHomeRouteView: View {
 /// Gates `HomeRoute.psychologyAnalytics` for confirmed Free users.
 private struct PsychologyAnalyticsHomeRouteView: View {
     let navigationCoordinator: NavigationCoordinator
+    let data: DataEnvironment
 
     @State private var entitlementGateRevision = 0
     @State private var didPresentUpgradeGate = false
+    @State private var presentationRevision = 0
+    @State private var loadOutcome: PsychologyAnalyticsLoadOutcome = .ready
+    @State private var isRefreshing = false
+    @State private var loadGeneration = 0
 
     private var restrictsPremiumPsychologyAndAI: Bool {
         _ = entitlementGateRevision
@@ -1218,15 +1226,32 @@ private struct PsychologyAnalyticsHomeRouteView: View {
         )
     }
 
+    private var activeProfileID: ProfileID? {
+        SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+    }
+
+    private var loadDependencies: PsychologyAnalyticsLoadDependencies {
+        PsychologyAnalyticsLoadDependencies(
+            detailCache: data.detailCache,
+            dailyCheckIns: data.dailyCheckIns,
+            tradesRepository: data.trades,
+            rpc: data.rpc
+        )
+    }
+
     var body: some View {
         Group {
             if restrictsPremiumPsychologyAndAI {
                 Color.clear
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .experienceScreenBackground()
-            } else if let report = PsychologyAnalyticsSessionStore.shared.report {
+            } else if let report = PsychologyAnalyticsSessionStore.shared.report,
+                      reportMatchesActiveViewer
+            {
                 PsychologyAnalyticsDetailView(
                     report: report,
+                    unlockProgress: PsychologyAnalyticsSessionStore.shared.unlockProgress,
+                    postUnlockGapMessages: PsychologyAnalyticsSessionStore.shared.postUnlockGapMessages,
                     highlightedSectionID: PsychologyAnalyticsSessionStore.shared.highlightedSectionID,
                     onOpenCoach: {
                         navigationCoordinator.pushHome(.psychologyCoach)
@@ -1235,13 +1260,33 @@ private struct PsychologyAnalyticsHomeRouteView: View {
                         navigationCoordinator.pushHome(.checkInHistory)
                     }
                 )
+                .id(presentationRevision)
+                .overlay(alignment: .top) {
+                    if isRefreshing {
+                        ProgressView()
+                            .padding(.top, ExperienceSpacing.md)
+                    }
+                }
+            } else if isRefreshing {
+                ProgressView("Loading psychology analytics…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if case .failed(let message) = loadOutcome {
+                ExperienceErrorState(
+                    title: "Couldn't load psychology analytics",
+                    message: message,
+                    onRetry: { Task { await refreshAnalytics(forceReveal: false) } }
+                )
             } else {
                 ExperienceEmptyState(
                     icon: .chart,
                     title: "No analytics yet",
-                    message: "Return to Dashboard after logging more trades and check-ins."
+                    message: "Log trades and daily check-ins on your trading days to build psychology analytics."
                 )
             }
+        }
+        .task(id: activeProfileID?.rawValue) {
+            guard !restrictsPremiumPsychologyAndAI else { return }
+            await refreshAnalytics(forceReveal: true)
         }
         .onAppear { presentUpgradeGateIfNeeded() }
         .onChange(of: restrictsPremiumPsychologyAndAI) { _, restricted in
@@ -1257,6 +1302,45 @@ private struct PsychologyAnalyticsHomeRouteView: View {
         .onReceive(NotificationCenter.default.publisher(for: .monetizationConfigurationDidChange)) { _ in
             entitlementGateRevision += 1
         }
+    }
+
+    private var reportMatchesActiveViewer: Bool {
+        guard let activeProfileID,
+              PsychologyAnalyticsSessionStore.shared.profileID == activeProfileID
+        else { return false }
+        return true
+    }
+
+    private func refreshAnalytics(forceReveal: Bool) async {
+        guard let profileID = activeProfileID else {
+            PsychologyAnalyticsSessionStore.shared.clearSession()
+            loadOutcome = .empty
+            return
+        }
+
+        loadGeneration += 1
+        let generation = loadGeneration
+
+        if forceReveal {
+            _ = PsychologyAnalyticsPresentationBridge.revealCachedReportIfPossible(
+                profileID: profileID,
+                detailCache: data.detailCache
+            )
+            if PsychologyAnalyticsSessionStore.shared.report != nil {
+                presentationRevision = PsychologyAnalyticsSessionStore.shared.contentRevision
+            }
+        }
+
+        let hadReport = PsychologyAnalyticsSessionStore.shared.report != nil
+        isRefreshing = !hadReport
+        defer { isRefreshing = false }
+
+        let outcome = await PsychologyAnalyticsPresentationBridge.refresh(
+            dependencies: loadDependencies
+        )
+        guard generation == loadGeneration else { return }
+        loadOutcome = outcome
+        presentationRevision = PsychologyAnalyticsSessionStore.shared.contentRevision
     }
 
     private func presentUpgradeGateIfNeeded() {

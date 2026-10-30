@@ -1,36 +1,30 @@
 /**
- * Phase A read-only load test for the current TradeTraxs web paths.
+ * Phase A read-only load test for TradeTraxs staging.
  *
- * Does not create trades, comments, likes, follows, messages, or notifications.
- * Refuses to start unless LOADTEST_ENV=staging, and refuses production hosts.
- *
- * First staging run (1 VU, then 10):
- *   set -a && source loadtest/.env && set +a
- *   k6 run loadtest/phase-a-read.js
+ * Refuses production. API contracts: loadtest/lib/read-workload-*.js
  */
-import http from "k6/http"
-import { check, sleep } from "k6"
+import { sleep } from "k6"
 import exec from "k6/execution"
+import { PRODUCTION_PROJECT_REF, STAGING_PROJECT_REF } from "./lib/constants.js"
+import { parseHttpsUrl, requiredEnv, requiredHttpsUrl } from "./lib/k6-shared.js"
+import {
+  loginPasswordGrant,
+  runStagingReadPreflight,
+  scenarioDashboard,
+  scenarioFeed,
+  scenarioLeaderboard,
+  scenarioMessages,
+  scenarioProfile,
+  scenarioTrades,
+} from "./lib/read-workload-staging.js"
 
 const PRODUCTION_HOSTS = {
   "tradetraxs.com": true,
   "www.tradetraxs.com": true,
   "app.tradetraxs.com": true,
 }
-const PRODUCTION_PROJECT_REF = "fobudrkniacatvilbofw"
 const SERVICE_ROLE_FRAGMENT = "c2VydmljZV9yb2xl"
 const ALLOWED_VUS = { 1: true, 10: true, 25: true, 50: true, 100: true }
-
-const ACCOUNTS_SELECT =
-  "id,account_number,name,account_size,mode,category,is_active,can_add_trades,note,consistency,max_drawdown,daily_drawdown,profit_target,winning_days,winning_day_threshold"
-const TRADES_ANALYTICS_SELECT =
-  "id,user_id,created_at,date,entry_time,exit_time,pnl,rr,direction,ticker,strategy,session,account_id,account_name,account_size,account_type,mode,is_public,public_description,duration_seconds,points,contracts,entry_price,exit_price"
-const TRADES_JOURNAL_SELECT =
-  "id,user_id,created_at,date,trade_date,pnl,rr,points,contracts,session,ticker,direction,strategy,trade_type,notes,public_description,is_public,is_pinned,image_url,entry_time,exit_time,entry_price,exit_price,duration_seconds,duration_text,account_type,mode,confidence,emotion,followed_plan,mistake_type,market_condition,timeframe,news_event,psychology_notes,reviewed,trade_mode,copied_account_ids,copy_trading_group_id,account_name,account_id,account_size,account_category,top_confluences,is_initial_import,source_account_id,import_source,broker_enrichment_status,broker_lifecycle_id,last_broker_sync_at"
-const SESSION_PROFILE_SELECT =
-  "id,name,username,onboarding_completed,is_pro,avatar_url"
-const PUBLIC_PROFILE_SELECT =
-  "id,username,name,bio,avatar_url,trading_style,trader_type,primary_market,started_trading,is_private,created_at"
 
 const config = readConfig()
 
@@ -59,57 +53,68 @@ export const options = {
   },
 }
 
+export function setup() {
+  const user = config.users[0]
+  const session = loginPasswordGrant(config.supabaseUrl, config.anonKey, user, "preflight_auth")
+  if (!session) {
+    throw new Error("Preflight failed: authentication")
+  }
+  runStagingReadPreflight(config.supabaseUrl, config.anonKey, session)
+  return { preflight: "ok" }
+}
+
 let session = null
 
 export default function () {
   const user = config.users[(exec.vu.idInTest - 1) % config.users.length]
   if (!session || session.email !== user.email) {
-    session = login(user)
+    session = loginPasswordGrant(config.supabaseUrl, config.anonKey, user, "auth")
   }
   if (!session) {
     sleep(5)
     return
   }
 
+  const base = config.supabaseUrl
+  const anonKey = config.anonKey
   const route = exec.vu.idInTest % 5
   if (route === 0) {
-    dashboard()
+    scenarioDashboard(base, anonKey, session, thinkShort)
     think()
-    feed(false)
+    scenarioFeed(base, anonKey, session, false)
     think()
-    profile()
+    scenarioProfile(base, anonKey, session)
     think()
-    trades()
+    scenarioTrades(base, anonKey, session)
   } else if (route === 1) {
-    const cursor = feed(true)
+    scenarioFeed(base, anonKey, session, true)
     think()
-    if (cursor) feedPage(cursor)
-    think()
-    profile()
+    scenarioProfile(base, anonKey, session)
   } else if (route === 2) {
-    dashboard()
+    scenarioDashboard(base, anonKey, session, thinkShort)
     think()
-    trades()
+    scenarioTrades(base, anonKey, session)
   } else if (route === 3) {
-    messages()
+    scenarioMessages(base, anonKey, session)
   } else {
-    dashboard()
+    scenarioDashboard(base, anonKey, session, thinkShort)
     think()
-    leaderboard()
+    scenarioLeaderboard(config.webUrl, session)
   }
   think()
 }
 
 function readConfig() {
   if (__ENV.LOADTEST_ENV !== "staging") {
-    throw new Error('Refusing to start: set LOADTEST_ENV=staging. Production is blocked.')
+    throw new Error("Refusing to start: set LOADTEST_ENV=staging. Production is blocked.")
   }
 
-  const supabaseUrl = requiredUrl("LOADTEST_SUPABASE_URL")
-  const webUrl = requiredUrl("LOADTEST_WEB_URL")
-  const anonKey = required("LOADTEST_SUPABASE_ANON_KEY")
+  const supabaseUrl = requiredHttpsUrl("LOADTEST_SUPABASE_URL")
+  const webUrl = requiredHttpsUrl("LOADTEST_WEB_URL")
+  const anonKey = requiredEnv("LOADTEST_SUPABASE_ANON_KEY")
   assertNotProduction(supabaseUrl)
   assertNotProduction(webUrl)
+  assertStagingProjectRef(supabaseUrl)
   if (anonKey.indexOf(SERVICE_ROLE_FRAGMENT) !== -1 || anonKey.indexOf("service_role") !== -1) {
     throw new Error("Refusing service-role credential.")
   }
@@ -119,7 +124,7 @@ function readConfig() {
     throw new Error("LOADTEST_MAX_VUS must be 1, 10, 25, 50, or 100.")
   }
 
-  const users = JSON.parse(required("LOADTEST_USERS_JSON"))
+  const users = JSON.parse(requiredEnv("LOADTEST_USERS_JSON"))
   if (!Array.isArray(users) || users.length === 0) {
     throw new Error("LOADTEST_USERS_JSON must be a non-empty JSON array.")
   }
@@ -130,8 +135,8 @@ function readConfig() {
   }
 
   return {
-    supabaseUrl: supabaseUrl.replace(/\/+$/, ""),
-    webUrl: webUrl.replace(/\/+$/, ""),
+    supabaseUrl: supabaseUrl,
+    webUrl: webUrl,
     anonKey: anonKey,
     maxVus: maxVus,
     users: users,
@@ -155,191 +160,38 @@ function stagesFor(maxVus) {
   ]
 }
 
-function required(name) {
-  const value = __ENV[name]
-  if (!value || !String(value).trim()) {
-    throw new Error("Missing " + name)
-  }
-  return String(value).trim()
-}
-
-function requiredUrl(name) {
-  const value = required(name)
-  let parsed
-  try {
-    parsed = new URL(value)
-  } catch (error) {
-    throw new Error(name + " is not a URL")
-  }
-  if (parsed.protocol !== "https:") {
-    throw new Error(name + " must use https")
-  }
-  return value
-}
-
 function assertNotProduction(rawUrl) {
-  const host = new URL(rawUrl).hostname.toLowerCase()
+  const parsed = parseHttpsUrl(rawUrl)
+  if (!parsed) {
+    throw new Error("URL is not https")
+  }
+  const host = parsed.hostname
   if (PRODUCTION_HOSTS[host] || rawUrl.indexOf(PRODUCTION_PROJECT_REF) !== -1) {
     throw new Error("Refusing production URL: " + host)
   }
 }
 
-function login(user) {
-  const res = http.post(
-    config.supabaseUrl + "/auth/v1/token?grant_type=password",
-    JSON.stringify({ email: user.email, password: user.password }),
-    {
-      headers: {
-        apikey: config.anonKey,
-        "Content-Type": "application/json",
-      },
-      tags: { page: "auth" },
-      responseType: "text",
-    }
-  )
-  const ok = check(res, { "auth 200": function (r) { return r.status === 200 } })
-  if (!ok) return null
-  const body = JSON.parse(res.body)
-  if (!body.access_token || !body.user || !body.user.id) return null
-  return {
-    email: user.email,
-    userId: body.user.id,
-    token: body.access_token,
+function assertStagingProjectRef(supabaseUrl) {
+  const expected = __ENV.TRADETRAXS_STAGING_PROJECT_REF
+  if (!expected || !String(expected).trim()) {
+    throw new Error(
+      "Refusing to start: set TRADETRAXS_STAGING_PROJECT_REF to your staging Supabase project ref."
+    )
   }
-}
-
-function headers(token, extra) {
-  const base = {
-    apikey: config.anonKey,
-    Authorization: "Bearer " + token,
-    Accept: "application/json",
+  const ref = String(expected).trim()
+  if (ref === PRODUCTION_PROJECT_REF) {
+    throw new Error("TRADETRAXS_STAGING_PROJECT_REF must not be the production project ref.")
   }
-  if (!extra) return base
-  for (const key in extra) base[key] = extra[key]
-  return base
-}
-
-function restGet(path, page) {
-  const res = http.get(config.supabaseUrl + "/rest/v1/" + path, {
-    headers: headers(session.token),
-    tags: { page: page },
-  })
-  check(res, { "read 2xx": function (r) { return r.status >= 200 && r.status < 300 } })
-  return res
-}
-
-function dashboard() {
-  const id = encodeURIComponent(session.userId)
-  restGet("profiles?id=eq." + id + "&select=" + SESSION_PROFILE_SELECT, "session_profile")
-  restGet("accounts?user_id=eq." + id + "&select=" + ACCOUNTS_SELECT, "dashboard_accounts")
-  restGet(
-    "trades?user_id=eq." + id + "&select=" + TRADES_JOURNAL_SELECT + "&order=created_at.desc&limit=120",
-    "dashboard_window"
-  )
-  thinkShort()
-  restGet(
-    "trades?user_id=eq." + id + "&select=" + TRADES_ANALYTICS_SELECT + "&order=created_at.desc",
-    "dashboard_history"
-  )
-}
-
-function trades() {
-  const id = encodeURIComponent(session.userId)
-  restGet(
-    "trades?user_id=eq." + id + "&select=" + TRADES_JOURNAL_SELECT + "&order=created_at.desc",
-    "trades"
-  )
-}
-
-function profile() {
-  const id = encodeURIComponent(session.userId)
-  restGet("profiles?id=eq." + id + "&select=" + PUBLIC_PROFILE_SELECT, "profile")
-  const countHeaders = headers(session.token, { Prefer: "count=exact" })
-  const followers = http.head(
-    config.supabaseUrl + "/rest/v1/followers?following_id=eq." + id + "&select=*",
-    { headers: countHeaders, tags: { page: "profile" } }
-  )
-  const following = http.head(
-    config.supabaseUrl + "/rest/v1/followers?follower_id=eq." + id + "&select=*",
-    { headers: countHeaders, tags: { page: "profile" } }
-  )
-  check(followers, { "followers count": function (r) { return r.status >= 200 && r.status < 300 } })
-  check(following, { "following count": function (r) { return r.status >= 200 && r.status < 300 } })
-  restGet(
-    "trades?user_id=eq." + id + "&select=id,created_at,pnl,rr,mode,account_type&is_public=eq.true&order=created_at.desc&limit=6",
-    "profile"
-  )
-}
-
-function feed(keepBody) {
-  const res = http.post(
-    config.supabaseUrl + "/rest/v1/rpc/rpc_v1_feed_bootstrap",
-    JSON.stringify({
-      p_scope: "global",
-      p_content_filter: "all",
-      p_limit: 8,
-    }),
-    {
-      headers: headers(session.token, { "Content-Type": "application/json" }),
-      tags: { page: "feed" },
-      responseType: keepBody ? "text" : "none",
-    }
-  )
-  check(res, { "feed 200": function (r) { return r.status === 200 } })
-  if (!keepBody || res.status !== 200 || !res.body) return null
-  try {
-    const payload = JSON.parse(res.body)
-    const cursor = payload && payload.data ? payload.data.next_cursor : null
-    return cursor || null
-  } catch (error) {
-    return null
+  if (ref !== STAGING_PROJECT_REF) {
+    throw new Error(
+      "TRADETRAXS_STAGING_PROJECT_REF must be " + STAGING_PROJECT_REF + " (got " + ref + ")."
+    )
   }
-}
-
-function feedPage(cursor) {
-  const res = http.post(
-    config.supabaseUrl + "/rest/v1/rpc/rpc_v1_feed_bootstrap",
-    JSON.stringify({
-      p_scope: "global",
-      p_content_filter: "all",
-      p_limit: 8,
-      p_cursor: cursor,
-    }),
-    {
-      headers: headers(session.token, { "Content-Type": "application/json" }),
-      tags: { page: "feed_page" },
-    }
-  )
-  check(res, { "feed page 200": function (r) { return r.status === 200 } })
-}
-
-function messages() {
-  const res = http.post(
-    config.supabaseUrl + "/rest/v1/rpc/rpc_v2_messaging_bootstrap",
-    JSON.stringify({
-      p_limit: 40,
-      p_cursor: null,
-      p_mark_message_notifications_read: false,
-    }),
-    {
-      headers: headers(session.token, { "Content-Type": "application/json" }),
-      tags: { page: "messages" },
-    }
-  )
-  check(res, { "messages 200": function (r) { return r.status === 200 } })
-}
-
-function leaderboard() {
-  const params = [
-    "view=7D",
-    "account=all",
-    "now=" + encodeURIComponent(new Date().toISOString()),
-    "viewer=" + encodeURIComponent(session.userId),
-  ].join("&")
-  const res = http.get(config.webUrl + "/api/leaderboard/trades?" + params, {
-    tags: { page: "leaderboard" },
-  })
-  check(res, { "leaderboard 200": function (r) { return r.status === 200 } })
+  if (supabaseUrl.indexOf(ref) === -1) {
+    throw new Error(
+      "LOADTEST_SUPABASE_URL must contain TRADETRAXS_STAGING_PROJECT_REF (" + ref + ")."
+    )
+  }
 }
 
 function think() {

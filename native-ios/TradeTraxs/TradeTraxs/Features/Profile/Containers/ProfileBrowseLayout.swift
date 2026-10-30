@@ -80,6 +80,22 @@ struct ProfileBrowseGridImage: View {
     @Environment(\.themeColors) private var colors
     @State private var displayImage: UIImage?
 
+    init(reference: MediaReference?, purpose: ImagePurpose, imagePipeline: any ImagePipeline) {
+        self.reference = reference
+        self.purpose = purpose
+        self.imagePipeline = imagePipeline
+        if let reference {
+            _displayImage = State(
+                initialValue: ProfileBrowseMediaDisplayCache.uiImage(
+                    reference: reference,
+                    purpose: purpose
+                )
+            )
+        } else {
+            _displayImage = State(initialValue: nil)
+        }
+    }
+
     var body: some View {
         Color.clear
             .aspectRatio(1, contentMode: .fit)
@@ -93,9 +109,14 @@ struct ProfileBrowseGridImage: View {
                 }
             }
             .clipped()
-            .task(id: reference?.id) {
+            .task(id: loadTaskID) {
                 await load()
             }
+    }
+
+    private var loadTaskID: String {
+        guard let reference else { return "" }
+        return ProfileBrowseMediaDisplayCache.cacheKey(reference: reference, purpose: purpose)
     }
 
     private func load() async {
@@ -103,25 +124,17 @@ struct ProfileBrowseGridImage: View {
             displayImage = nil
             return
         }
-        let pixelBudget = max(256, Int(180 * displayScale))
-        do {
-            let data = try await imagePipeline.data(
-                for: ImageRequest(
-                    reference: reference,
-                    purpose: purpose,
-                    maxPixelSize: pixelBudget,
-                    allowsProgressiveLoading: true,
-                    deliveryQuality: .profileGrid
-                )
-            )
-            let scale = displayScale
-            let decoded = await Task.detached(priority: .userInitiated) {
-                UIImage(data: data, scale: scale)
-            }.value
-            displayImage = decoded.map { MediaImageOrientation.normalized($0) }
-        } catch {
-            displayImage = nil
-        }
+        if displayImage != nil { return }
+        let pixelBudget = ProfileBrowseMediaLoader.gridPixelBudget(displayScale: displayScale)
+        let loaded = await ProfileBrowseMediaLoader.loadUIImage(
+            reference: reference,
+            purpose: purpose,
+            maxPixelSize: pixelBudget,
+            displayScale: displayScale,
+            imagePipeline: imagePipeline,
+            existing: displayImage
+        )
+        displayImage = loaded
     }
 }
 

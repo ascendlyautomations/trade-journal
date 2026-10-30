@@ -1,0 +1,12 @@
+{
+  "directConversations": {
+    "tradetraxsdemo@gmail.com|tradetraxsdemo+perfload02@gmail.com": "PASTE_CONVERSATION_UUID",
+    "tradetraxsdemo+perfload03@gmail.com|tradetraxsdemo+perfload04@gmail.com": "PASTE_CONVERSATION_UUID"
+  },
+  "tradeRooms": {
+    "loadtest-full-all-perf": "PASTE_ROOM_UUID"
+  },
+  "tradeRoomSections": {
+    "loadtest-full-all-perf": null
+  }
+}

@@ -221,6 +221,26 @@ final class TraderPsychologyAnalyticsEngineTests: XCTestCase {
         XCTAssertTrue(metTradesNoCheckIns.showsRequirementMessage)
     }
 
+    func testPostUnlockGapMessagesAreSpecificWhenCardsEmpty() {
+        let trades = (0..<5).map { makeTrade(id: "\($0)", pnl: 10, offsetHours: 0, dayOffset: $0) }
+        let checkIns = trades.map {
+            makeCheckIn(
+                date: TraderPsychologyAnalyticsFoundation.tradeDateKey(for: $0),
+                stress: 2,
+                sleepHours: 8
+            )
+        }
+        let report = TraderPsychologyAnalyticsEngine.buildReport(trades: trades, checkIns: checkIns)
+        XCTAssertTrue(report.dashboardCards.isEmpty)
+        let gaps = PsychologyProgressMessaging.postUnlockInsightGapMessages(
+            report: report,
+            trades: trades,
+            checkIns: checkIns
+        )
+        XCTAssertFalse(gaps.isEmpty)
+        XCTAssertFalse(gaps.contains("Not enough data yet"))
+    }
+
     func testPsychologyInsightsUnlockProgressHidesRequirementWhenBothMet() {
         let trades = (0..<5).map { makeTrade(id: "\($0)", pnl: 10, offsetHours: 0, dayOffset: $0) }
         let checkIns = trades.map {

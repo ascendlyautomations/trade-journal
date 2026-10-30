@@ -3,6 +3,32 @@ import XCTest
 
 @MainActor
 final class ProfileExperienceTests: XCTestCase {
+    func testProfileBrowseMediaDisplayCacheSharesListAndGrid() {
+        let reference = MediaReference(id: "https://cdn.example/trade.jpg", kind: .image, altText: nil)
+        let image = UIImage(systemName: "photo")!
+        ProfileBrowseMediaDisplayCache.store(image, reference: reference, purpose: .tradeScreenshot)
+        XCTAssertIdentical(
+            ProfileBrowseMediaDisplayCache.uiImage(reference: reference, purpose: .tradeScreenshot),
+            image
+        )
+        ProfileBrowseMediaDisplayCache.remove(reference: reference, purpose: .tradeScreenshot)
+        XCTAssertNil(ProfileBrowseMediaDisplayCache.uiImage(reference: reference, purpose: .tradeScreenshot))
+    }
+
+    func testProfileSectionSwipeNeighborsFollowStripOrder() {
+        XCTAssertEqual(ProfileSection.trades.adjacentSection(offset: 1), .posts)
+        XCTAssertEqual(ProfileSection.posts.adjacentSection(offset: 1), .clips)
+        XCTAssertEqual(ProfileSection.clips.adjacentSection(offset: 1), .stats)
+        XCTAssertEqual(ProfileSection.stats.adjacentSection(offset: 1), .achievements)
+        XCTAssertNil(ProfileSection.achievements.adjacentSection(offset: 1))
+
+        XCTAssertEqual(ProfileSection.achievements.adjacentSection(offset: -1), .stats)
+        XCTAssertEqual(ProfileSection.stats.adjacentSection(offset: -1), .clips)
+        XCTAssertEqual(ProfileSection.clips.adjacentSection(offset: -1), .posts)
+        XCTAssertEqual(ProfileSection.posts.adjacentSection(offset: -1), .trades)
+        XCTAssertNil(ProfileSection.trades.adjacentSection(offset: -1))
+    }
+
     func testMessagingListDisplayNameFallbacks() {
         let profileID = ProfileID("ab12cd34-0000-0000-0000-000000000000")
         let shell = ProfileUsernamePolicy.generatedShellUsername(for: profileID)

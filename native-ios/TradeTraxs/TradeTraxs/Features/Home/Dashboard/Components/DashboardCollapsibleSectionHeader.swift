@@ -57,13 +57,15 @@ struct DashboardCollapsibleSectionHeader: View {
 
 struct DashboardInsightViewMoreControl: View {
     let isExpanded: Bool
+    var collapsedTitle: String = "View More"
+    var expandedTitle: String = "Show fewer insights"
     let action: () -> Void
 
     @Environment(\.themeColors) private var colors
 
     var body: some View {
         Button(action: action) {
-            Text(isExpanded ? "View Less" : "View More")
+            Text(isExpanded ? expandedTitle : collapsedTitle)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(colors.accent)
                 .frame(maxWidth: .infinity, alignment: .leading)

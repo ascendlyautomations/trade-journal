@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "tag": "tradetraxs_loadtest_realistic300_full_v1",
+  "directConversations": [
+    {
+      "id": "REPLACE_WITH_UUID_CONVERSATION_01",
+      "participantEmails": [
+        "tradetraxsdemo@gmail.com",
+        "tradetraxsdemo+perfload02@gmail.com"
+      ]
+    },
+    {
+      "id": "REPLACE_WITH_UUID_CONVERSATION_02",
+      "participantEmails": [
+        "tradetraxsdemo+perfload03@gmail.com",
+        "tradetraxsdemo+perfload04@gmail.com"
+      ]
+    }
+  ],
+  "tradeRooms": [
+    {
+      "id": "REPLACE_WITH_UUID_ROOM_01",
+      "sectionId": null,
+      "memberEmails": [
+        "tradetraxsdemo@gmail.com",
+        "tradetraxsdemo+perfload02@gmail.com",
+        "tradetraxsdemo+perfload03@gmail.com"
+      ]
+    }
+  ],
+  "inboxRealtimeConversationIds": []
+}

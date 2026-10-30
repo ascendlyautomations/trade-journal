@@ -1,0 +1,1 @@
+/Users/TradeTraxs/Developer/trade-journal/node_modules/@embedded-postgres/darwin-arm64/native/bin/postgres "-D" "./supabase/staging/benchmark/.pgdata-mig-test" "-p" "55455"

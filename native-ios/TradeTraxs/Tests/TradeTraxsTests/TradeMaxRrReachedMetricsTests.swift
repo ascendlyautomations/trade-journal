@@ -11,7 +11,8 @@ final class TradeMaxRrReachedMetricsTests: XCTestCase {
                 DashboardChartMetrics.Input(trade: $0, accountType: nil)
             },
             accountFilter: .all,
-            dateRange: .all
+            dateRange: .all,
+            payoutTotal: nil
         )
         XCTAssertEqual(summary.averageMaxRrReached, 3)
     }
@@ -21,7 +22,8 @@ final class TradeMaxRrReachedMetricsTests: XCTestCase {
         let summary = DashboardChartMetrics.compute(
             from: [DashboardChartMetrics.Input(trade: trade, accountType: nil)],
             accountFilter: .all,
-            dateRange: .all
+            dateRange: .all,
+            payoutTotal: nil
         )
         XCTAssertNil(summary.averageMaxRrReached)
     }

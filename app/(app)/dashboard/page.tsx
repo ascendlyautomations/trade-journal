@@ -22,6 +22,7 @@ import DashboardPsychologyInsights, {
   DashboardPsychologyInsightsPlacement,
   DashboardPsychologyInsightsSlot,
 } from "../../components/dashboard/DashboardPsychologyInsights"
+import { formatPsychologyDashboardScopeLabel } from "@/lib/psychology/psychologyScopeLabel"
 import type {
   DashboardAccountRow,
   DashboardTradeRow,
@@ -785,6 +786,24 @@ export default function Dashboard() {
     accountById,
     copyGroupAccountIds,
   })
+
+  const psychologyScopeLabel = useMemo(
+    () =>
+      formatPsychologyDashboardScopeLabel({
+        timeFilter,
+        selectedDate,
+        customRangeStart,
+        customRangeEnd,
+        accountFilter,
+      }),
+    [
+      timeFilter,
+      selectedDate,
+      customRangeStart,
+      customRangeEnd,
+      accountFilter,
+    ]
+  )
 
   const { liveAccountValueState, liveEquityCurveState } =
     useDashboardLiveAccountBundle({
@@ -1598,6 +1617,7 @@ export default function Dashboard() {
         userId={user.id}
         trades={filteredTrades}
         tradesReady={!statsStillLoading || dashboardHasCachedData}
+        scopeLabel={psychologyScopeLabel}
       />
     </DashboardPsychologyInsightsPlacement>
   ) : null}

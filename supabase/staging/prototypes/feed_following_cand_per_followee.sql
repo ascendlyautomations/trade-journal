@@ -1,0 +1,41 @@
+-- STAGING / LOCAL ONLY — prototype Following-scope `cand` branch selection.
+-- Do NOT apply to production (fobudrkniacatvilbofw).
+--
+-- Goal: replace `user_id = ANY(v_following)` + global sort + LIMIT per branch with
+-- per-followee indexed top-(v_limit+1), then re-limit per branch — same semantics
+-- for each content kind, preserves block peers, before_cursor, guest filters, RLS (invoker).
+--
+-- Integrate into rpc_v1_feed_bootstrap only after:
+--   supabase/staging/verify/feed_following_cand_explain_analyze.sql
+--   supabase/staging/verify/feed_following_cand_equivalence.sql
+
+-- ---------------------------------------------------------------------------
+-- Semantics sketch (posts / trades branch — authenticated Following)
+-- ---------------------------------------------------------------------------
+-- Existing (per branch):
+--   SELECT ... FROM posts p
+--   WHERE ... AND p.user_id = ANY(v_following) ...
+--   ORDER BY p.created_at DESC, p.id DESC
+--   LIMIT v_limit + 1;
+--
+-- Proposed (Following only; Global unchanged):
+--   SELECT kind, id, author_id, created_at FROM (
+--     SELECT lat.* FROM unnest(v_following) AS fid
+--     CROSS JOIN LATERAL (
+--       SELECT 'post'::text AS kind, p.id, p.user_id AS author_id, p.created_at
+--       FROM public.posts p
+--       WHERE <same predicates as today, with p.user_id = fid>
+--       ORDER BY p.created_at DESC, p.id DESC
+--       LIMIT v_limit + 1
+--     ) lat
+--   ) per_author
+--   ORDER BY created_at DESC, id DESC
+--   LIMIT v_limit + 1;
+--
+-- Why re-ORDER + LIMIT: global top-(K) among followees equals top-(K) from the union
+-- of each followee's top-(K) rows (K = v_limit + 1). Proof: any row in global top-K
+-- from author A must be among A's K newest rows.
+
+-- Executable comparisons live in:
+--   supabase/staging/verify/feed_following_cand_explain_analyze.sql
+--   supabase/staging/verify/feed_following_cand_equivalence.sql

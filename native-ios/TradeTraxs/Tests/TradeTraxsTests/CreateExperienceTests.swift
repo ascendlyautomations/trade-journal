@@ -348,7 +348,9 @@ private struct CreateStubProfileRepository: ProfileRepository {
         authorID: ProfileID,
         content: String,
         imageURL: String?,
-        imageCrop: ContentImagePresentation?
+        imageCrop: ContentImagePresentation?,
+        roomShare: RoomShareAttachment?,
+        clientPublishID: String?
     ) async throws -> Post {
         Post(
             id: PostID("wall-1"),
@@ -391,7 +393,9 @@ private struct CreateFailingProfileRepository: ProfileRepository {
         authorID: ProfileID,
         content: String,
         imageURL: String?,
-        imageCrop: ContentImagePresentation?
+        imageCrop: ContentImagePresentation?,
+        roomShare: RoomShareAttachment?,
+        clientPublishID: String?
     ) async throws -> Post {
         throw AppError.unknown(message: "network down")
     }

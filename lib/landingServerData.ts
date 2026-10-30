@@ -1,7 +1,6 @@
 import { unstable_cache } from "next/cache"
 import { fetchFeaturedTradesWeekServer } from "@/lib/featuredTradesWeekServer"
-import type { PublicUserReview } from "@/lib/userReviewDisplay"
-import { getSupabaseServiceRole } from "@/lib/supabaseServiceRole"
+import { loadPublicUserReviews } from "@/lib/landingPublicReviews"
 import { fetchWeeklyTopPerformersServer } from "@/lib/weeklyTopPerformersServer"
 import {
   LANDING_FEATURED_TRADES_REVALIDATE_SECONDS,
@@ -13,17 +12,7 @@ export {
   LANDING_FEATURED_TRADES_REVALIDATE_SECONDS,
   LANDING_REVIEWS_REVALIDATE_SECONDS,
 } from "@/lib/marketingCacheConfig"
-
-async function loadPublicUserReviews(): Promise<PublicUserReview[]> {
-  const { data, error } = await getSupabaseServiceRole().rpc(
-    "list_public_user_reviews"
-  )
-  if (error) {
-    console.error("[landing] public reviews fetch failed", error.message)
-    return []
-  }
-  return (data as PublicUserReview[]) ?? []
-}
+export { loadPublicUserReviews } from "@/lib/landingPublicReviews"
 
 export const getCachedLandingReviews = unstable_cache(
   loadPublicUserReviews,

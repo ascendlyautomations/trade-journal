@@ -8,6 +8,14 @@ import { CREATE_ROUTE, isCreateHubPath } from "@/lib/createRoutes"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 import { isAppAddTradePath } from "@/lib/addTradePath"
 import {
+  Camera,
+  CirclePlus,
+  MessageSquareText,
+  PlaySquare,
+  Trophy,
+  ArrowDownCircle,
+} from "lucide-react"
+import {
   NAV_DROPDOWN_PANEL,
   NAV_ITEM_ACTIVE,
   NAV_ITEM_INACTIVE,
@@ -27,11 +35,13 @@ type CreateMenuEntry = {
 }
 
 type CreateHubMenuProps = {
-  /** Navbar text trigger vs profile primary button styling */
-  variant: "navbar" | "profile-button"
+  /** Navbar text trigger vs profile primary button styling vs tab-bar controller */
+  variant: "navbar" | "profile-button" | "controller"
   navTriggerClass?: (active: boolean) => string
   onNavigate?: () => void
   className?: string
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 function TradeIcon() {
@@ -53,12 +63,34 @@ function WithdrawalIcon() {
   return <span aria-hidden>💸</span>
 }
 
+function TradeLucideIcon() {
+  return <CirclePlus className="h-4 w-4" aria-hidden />
+}
+function PostLucideIcon() {
+  return <MessageSquareText className="h-4 w-4" aria-hidden />
+}
+function ClipLucideIcon() {
+  return <PlaySquare className="h-4 w-4" aria-hidden />
+}
+function AchievementLucideIcon() {
+  return <Trophy className="h-4 w-4" aria-hidden />
+}
+function StoryLucideIcon() {
+  return <Camera className="h-4 w-4" aria-hidden />
+}
+function WithdrawalLucideIcon() {
+  return <ArrowDownCircle className="h-4 w-4" aria-hidden />
+}
+
 function MenuOptionsList({
   items,
   onItemAction,
+  dense = true,
 }: {
   items: CreateMenuEntry[]
   onItemAction: (item: CreateMenuEntry) => void
+  /** Desktop dropdown keeps compact rows. Phone sheet uses 44px targets. */
+  dense?: boolean
 }) {
   return (
     <ul className="p-1.5" role="menu">
@@ -68,7 +100,9 @@ function MenuOptionsList({
             type="button"
             role="menuitem"
             onClick={() => onItemAction(item)}
-            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm ${NAV_ITEM_INACTIVE_HOVER_SURFACE}`}
+            className={`flex w-full items-center gap-3 rounded-lg px-3 text-left text-sm ${
+              dense ? "py-2" : "min-h-11 py-2.5"
+            } ${NAV_ITEM_INACTIVE_HOVER_SURFACE}`}
           >
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-elevated text-base">
               {item.icon}
@@ -91,15 +125,31 @@ export default function CreateHubMenu({
   navTriggerClass,
   onNavigate,
   className,
+  open: openProp,
+  onOpenChange,
 }: CreateHubMenuProps) {
   const router = useRouter()
   const pathname = usePathname() || "/"
-  const [open, setOpen] = useState(false)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [mounted, setMounted] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  const isController = variant === "controller"
+  const open = isController ? Boolean(openProp) : uncontrolledOpen
+  const setOpen = useCallback(
+    (next: boolean | ((prev: boolean) => boolean)) => {
+      const resolved = typeof next === "function" ? next(open) : next
+      if (isController) {
+        onOpenChange?.(resolved)
+        return
+      }
+      setUncontrolledOpen(resolved)
+    },
+    [isController, onOpenChange, open]
+  )
 
-  const close = useCallback(() => setOpen(false), [])
+  const close = useCallback(() => setOpen(false), [setOpen])
+  const useNativeIcons = isMobile || isController
 
   const menuItems: CreateMenuEntry[] = [
     {
@@ -107,42 +157,42 @@ export default function CreateHubMenu({
       label: "Add Trade",
       subtitle: "Log a completed trade",
       href: CREATE_ROUTE.addTrade,
-      icon: <TradeIcon />,
+      icon: useNativeIcons ? <TradeLucideIcon /> : <TradeIcon />,
     },
     {
       id: "post",
       label: "Post",
       subtitle: "Share with the community",
       href: CREATE_ROUTE.post,
-      icon: <PostIcon />,
+      icon: useNativeIcons ? <PostLucideIcon /> : <PostIcon />,
     },
     {
       id: "clip",
       label: "Clip",
       subtitle: "Upload a short video",
       href: CREATE_ROUTE.clip,
-      icon: <ClipIcon />,
+      icon: useNativeIcons ? <ClipLucideIcon /> : <ClipIcon />,
     },
     {
       id: "achievement",
       label: "Achievement",
       subtitle: "Share a milestone",
       href: CREATE_ROUTE.achievement,
-      icon: <AchievementIcon />,
+      icon: useNativeIcons ? <AchievementLucideIcon /> : <AchievementIcon />,
     },
     {
       id: "withdrawal",
       label: "Withdrawal",
       subtitle: "Record a Live or prop-firm payout",
       href: CREATE_ROUTE.withdrawal,
-      icon: <WithdrawalIcon />,
+      icon: useNativeIcons ? <WithdrawalLucideIcon /> : <WithdrawalIcon />,
     },
     {
       id: "story",
       label: "Story",
       subtitle: "Photo for 24 hours",
       href: CREATE_ROUTE.story,
-      icon: <StoryIcon />,
+      icon: useNativeIcons ? <StoryLucideIcon /> : <StoryIcon />,
     },
   ]
 
@@ -184,7 +234,7 @@ export default function CreateHubMenu({
     return () => window.removeEventListener("keydown", onKey)
   }, [open, close])
 
-  useModalScrollLock(open && isMobile)
+  useModalScrollLock(open && (isMobile || isController))
 
   useEffect(() => {
     if (!open || isMobile) return
@@ -219,7 +269,7 @@ export default function CreateHubMenu({
     ) : null
 
   const sheet =
-    open && isMobile && mounted
+    open && mounted && (isMobile || isController)
       ? createPortal(
           <div
             className="fixed inset-0 z-[10050] md:hidden"
@@ -243,9 +293,17 @@ export default function CreateHubMenu({
                   Trade journal & community content
                 </p>
               </div>
-              <MenuOptionsList items={menuItems} onItemAction={handleItemAction} />
+              <MenuOptionsList
+                items={menuItems}
+                onItemAction={handleItemAction}
+                dense={false}
+              />
               <div className="border-t border-divider p-3">
-                <button type="button" onClick={close} className={NAV_MENU_ROW}>
+                <button
+                  type="button"
+                  onClick={close}
+                  className={`${NAV_MENU_ROW} min-h-11`}
+                >
                   Cancel
                 </button>
               </div>
@@ -256,7 +314,11 @@ export default function CreateHubMenu({
         )
       : null
 
-  if (variant !== "navbar") return null
+  if (variant === "profile-button") return null
+
+  if (variant === "controller") {
+    return <>{sheet}</>
+  }
 
   return (
     <div ref={rootRef} className={`relative shrink-0 ${className ?? ""}`}>

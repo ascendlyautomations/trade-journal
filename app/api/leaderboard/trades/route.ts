@@ -3,6 +3,11 @@ import { unstable_cache } from "next/cache"
 import { supabaseServiceRole } from "../../_lib/getRouteUser"
 import type { TradeForLeaderboard } from "@/lib/leaderboardChart"
 import {
+  paginateLeaderboardTradeRows,
+  LEADERBOARD_TRADE_ROWS_MAX,
+} from "@/lib/leaderboardTradeRowsPaginate"
+import { SupabaseReadError } from "@/lib/serverReadRetry"
+import {
   buildLeaderboardPayloadFromTrades,
   leaderboardCacheNowBucket,
   leaderboardCustomInstants,
@@ -17,42 +22,28 @@ const PAGE_SIZE = 1000
 /** Soft TTL — rankings refresh on next miss; filter UX stays client-side. */
 const LEADERBOARD_TRADES_REVALIDATE_SECONDS = 60
 
+function isMissingLeaderboardPageRpc(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const code = String((error as { code?: string }).code ?? "").toUpperCase()
+  const msg = String((error as { message?: string }).message ?? "").toLowerCase()
+  if (code === "PGRST202") return true
+  if (msg.includes("leaderboard_trade_rows_page")) return true
+  if (error instanceof SupabaseReadError && error.code === "PGRST202") return true
+  return false
+}
+
 async function fetchViaKeysetRpc(): Promise<TradeForLeaderboard[] | null> {
-  const allTrades: TradeForLeaderboard[] = []
-  let afterCreatedAt: string | null = null
-  let afterUserId: string | null = null
-
-  while (true) {
-    const { data, error } = await supabaseServiceRole.rpc(
-      "leaderboard_trade_rows_page",
-      {
-        p_after_created_at: afterCreatedAt ?? undefined,
-        p_after_user_id: afterUserId ?? undefined,
-        p_limit: PAGE_SIZE,
-      }
-    )
-
-    if (error) {
-      if (
-        error.code === "PGRST202" ||
-        error.message?.includes("leaderboard_trade_rows_page")
-      ) {
-        return null
-      }
-      console.error("[api/leaderboard/trades] keyset rpc error:", error)
-      return null
-    }
-
-    const batch = (data || []) as TradeForLeaderboard[]
-    allTrades.push(...batch)
-    if (batch.length < PAGE_SIZE) break
-
-    const last = batch[batch.length - 1]
-    afterCreatedAt = last.created_at
-    afterUserId = last.user_id
+  try {
+    const { trades } = await paginateLeaderboardTradeRows(supabaseServiceRole, {
+      maxRows: LEADERBOARD_TRADE_ROWS_MAX,
+      operation: "api_leaderboard_trades_keyset",
+    })
+    return trades
+  } catch (error) {
+    if (isMissingLeaderboardPageRpc(error)) return null
+    console.error("[api/leaderboard/trades] keyset rpc error:", error)
+    return null
   }
-
-  return allTrades
 }
 
 async function fetchViaOffsetRpc(): Promise<TradeForLeaderboard[] | null> {

@@ -1,4 +1,5 @@
 import type { BrowserOptions, EdgeOptions, NodeOptions } from "@sentry/nextjs"
+import { sanitizeSentrySpanForSupabase } from "./supabaseHttpTelemetry.ts"
 
 export function getSentryDsn(): string | undefined {
   return process.env.SENTRY_DSN ?? process.env.NEXT_PUBLIC_SENTRY_DSN
@@ -19,5 +20,8 @@ export function getBaseSentryOptions():
     environment: getSentryEnvironment(),
     tracesSampleRate: process.env.NODE_ENV === "production" ? 0.1 : 0,
     debug: process.env.SENTRY_DEBUG === "true",
+    beforeSendSpan(span) {
+      return sanitizeSentrySpanForSupabase(span)
+    },
   }
 }

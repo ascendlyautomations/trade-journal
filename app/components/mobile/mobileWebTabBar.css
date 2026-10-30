@@ -1,0 +1,46 @@
+/*
+ * Phone-only web tab bar (max-width: 767px).
+ * Desktop, tablet, and Capacitor native iOS must not inherit these values.
+ * :root defaults in globals.css stay 0 on web ≥768px.
+ */
+@media (max-width: 767px) {
+  html.tt-mobile-web-tabs:not(.tt-native-ios) {
+    --app-tab-bar-height: 49px;
+    --app-tab-bar-offset: calc(
+      var(--app-tab-bar-height) + env(safe-area-inset-bottom, 0px)
+    );
+    --app-viewport-height: calc(100dvh - 4rem - var(--app-tab-bar-offset));
+  }
+
+  html:not(.tt-native-ios) [data-tt-mobile-web-tab-bar] {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9998;
+    margin: 0;
+    box-sizing: border-box;
+    border-top: 1px solid var(--chrome-border, rgb(255 255 255 / 0.1));
+    background-color: var(--chrome, #0b1f3a);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    color: var(--chrome-foreground, #f3f4f6);
+  }
+
+  html:not(.tt-native-ios) [data-tt-mobile-web-tab-bar] [data-tt-mobile-web-tab-items] {
+    box-sizing: border-box;
+    display: grid;
+    height: var(--app-tab-bar-height);
+    margin: 0;
+    padding: 0 2px;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: stretch;
+    overflow: hidden;
+    list-style: none;
+  }
+}
+
+@media (min-width: 768px) {
+  html:not(.tt-native-ios) [data-tt-mobile-web-tab-bar] {
+    display: none !important;
+  }
+}

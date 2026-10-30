@@ -13,6 +13,20 @@ final class UploadLifecycleGapTests: XCTestCase {
         super.tearDown()
     }
 
+    func testFailedPostDismissKeepsMediaWhenPostSaved() {
+        let imagePath = "user-lifecycle/opt/job-post.jpg"
+        let referenced = FailedUploadDismissalCleanup.orphanedObjects(
+            post: PostUploadCheckpoint(
+                imageStoragePath: imagePath,
+                uploadedImagePublicURL: "https://cdn.example/profile_posts/\(imagePath)",
+                savedPostID: PostID("wall-1")
+            ),
+            achievement: nil,
+            trade: nil
+        )
+        XCTAssertTrue(referenced.isEmpty)
+    }
+
     func testFailedPostDismissDeletesUploadedImageAndRetryKeepsIt() async {
         let profiles = LifecycleWallPostRepository()
         let storage = LifecycleObjectStorage()
@@ -464,12 +478,27 @@ private final class LifecycleWallPostRepository: ProfileRepository, @unchecked S
     func wallPosts(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Post> {
         CursorPage(items: [], nextCursor: nil)
     }
-    func wallPost(id: PostID) async throws -> Post { throw AppError.unknown(message: "stub") }
+    func wallPost(id: PostID) async throws -> Post {
+        Post(
+            id: id,
+            authorProfileID: ProfileID("user-lifecycle"),
+            body: "checkpoint",
+            media: [],
+            visibility: .public,
+            linkedTradeID: nil,
+            isPinned: false,
+            createdAt: .now,
+            updatedAt: .now
+        )
+    }
+
     func createWallPost(
         authorID: ProfileID,
         content: String,
         imageURL: String?,
-        imageCrop: ContentImagePresentation?
+        imageCrop: ContentImagePresentation?,
+        roomShare: RoomShareAttachment?,
+        clientPublishID: String?
     ) async throws -> Post {
         createCalls += 1
         if failCreates {

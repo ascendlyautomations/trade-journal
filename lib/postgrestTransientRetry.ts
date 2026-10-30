@@ -1,6 +1,8 @@
 /**
  * Transient PostgREST / schema-cache errors (e.g. PGRST002).
  * One bounded retry with jitter — not a poll loop.
+ * For server-side fetch/socket failures (UND_ERR_SOCKET, etc.), use
+ * `withServerReadRetry` in `serverReadRetry.ts`.
  */
 
 export type PostgrestLikeError = {

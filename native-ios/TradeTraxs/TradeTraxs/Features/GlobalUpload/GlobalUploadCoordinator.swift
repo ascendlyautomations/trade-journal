@@ -16,6 +16,8 @@ final class GlobalUploadCoordinator {
     private var retryStory: [String: (StoryUploadSpec, GlobalUploadServices, StoryUploadCheckpoint)] = [:]
     private var retryAchievement: [String: (AchievementUploadSpec, GlobalUploadServices, AchievementUploadCheckpoint)] = [:]
     private var retryTrade: [String: (TradeSaveUploadSpec, GlobalUploadServices, TradeSaveUploadCheckpoint)] = [:]
+    private var contentDraftSuccessHandlers: [String: () -> Void] = [:]
+    private var contentDraftFailureHandlers: [String: (Error) -> Void] = [:]
     private var storySuccessHandlers: [String: (Story) -> Void] = [:]
     /// Bumped on every new run / user cancellation so stale continuations cannot publish after terminal cleanup.
     private var jobRunGeneration: [String: UInt64] = [:]
@@ -113,12 +115,52 @@ final class GlobalUploadCoordinator {
     }
 
     @discardableResult
+    func enqueueContentDraftSave(
+        title: String = "Draft",
+        operation: @escaping @MainActor (String) async throws -> Void,
+        onSuccess: @escaping @MainActor () -> Void = {},
+        onFailure: @escaping @MainActor (Error) -> Void = { _ in }
+    ) -> String {
+        let jobID = UUID().uuidString
+        insertJob(
+            UploadJob(
+                id: jobID,
+                kind: .contentDraft,
+                title: title,
+                phase: .preparing,
+                progress: 0.05,
+                errorMessage: nil,
+                completedAt: nil,
+                showsSuccessFlash: false
+            )
+        )
+        contentDraftSuccessHandlers[jobID] = onSuccess
+        contentDraftFailureHandlers[jobID] = onFailure
+        startTask(jobID: jobID, kind: .contentDraft, intent: .enqueue) { [weak self] generation in
+            await self?.runContentDraftSave(
+                jobID: jobID,
+                operation: operation,
+                runGeneration: generation
+            )
+        }
+        return jobID
+    }
+
+    func noteContentDraftSavingRecord(jobID: String) {
+        updateJob(jobID) { job in
+            job.phase = .publishing
+            job.progress = 0.9
+        }
+    }
+
+    @discardableResult
     func enqueuePost(spec: PostUploadSpec, services: GlobalUploadServices) -> String {
         let jobID = UUID().uuidString
         var checkpoint = PostUploadCheckpoint()
         if spec.imageData != nil {
-            checkpoint.imageStoragePath = StorageOptimizedMedia.objectPath(
+            checkpoint.imageStoragePath = StorageOptimizedMedia.stableObjectPath(
                 prefix: spec.authorID.rawValue,
+                token: jobID,
                 fileExtension: "jpg"
             )
         }
@@ -649,6 +691,45 @@ final class GlobalUploadCoordinator {
         await UploadProgressRelay.shared.unregister(jobID: jobID)
     }
 
+    private func runContentDraftSave(
+        jobID: String,
+        operation: @MainActor (String) async throws -> Void,
+        runGeneration: UInt64
+    ) async {
+        guard jobRunIsLive(jobID: jobID, generation: runGeneration, stage: "runContentDraftSave.entry") else {
+            return
+        }
+        await registerProgress(jobID: jobID, phase: .uploading) { [weak self] fraction in
+            self?.updateJob(jobID) { job in
+                job.phase = .uploading
+                job.progress = 0.15 + fraction * 0.7
+            }
+        }
+
+        do {
+            updateJob(jobID) { $0.phase = .preparing; $0.progress = 0.05 }
+            try await operation(jobID)
+            await completeJob(jobID: jobID, kind: .contentDraft, runGeneration: runGeneration)
+            contentDraftSuccessHandlers[jobID]?()
+            contentDraftSuccessHandlers.removeValue(forKey: jobID)
+            contentDraftFailureHandlers.removeValue(forKey: jobID)
+        } catch {
+            if Task.isCancelled || error is CancellationError {
+                GlobalUploadJobDiagnostics.log(
+                    id: jobID,
+                    kind: .contentDraft,
+                    event: .cancelled,
+                    taskCancelled: Task.isCancelled
+                )
+            }
+            await failJob(jobID: jobID, error: error, runGeneration: runGeneration)
+            contentDraftFailureHandlers[jobID]?(error)
+            contentDraftSuccessHandlers.removeValue(forKey: jobID)
+            contentDraftFailureHandlers.removeValue(forKey: jobID)
+        }
+        await UploadProgressRelay.shared.unregister(jobID: jobID)
+    }
+
     private func runPost(
         jobID: String,
         spec: PostUploadSpec,
@@ -666,6 +747,20 @@ final class GlobalUploadCoordinator {
         }
 
         do {
+            if let savedID = checkpoint.savedPostID {
+                guard let profiles = services.profiles else {
+                    throw AppError.unknown(message: "Profiles service unavailable.")
+                }
+                let post = try await profiles.wallPost(id: savedID)
+                guard post.authorProfileID == spec.authorID else {
+                    throw AppError.unknown(message: "Published post could not be verified.")
+                }
+                OwnerProfileOptimisticStore.shared.notePostCreated(post)
+                await completeJob(jobID: jobID, kind: .post, runGeneration: runGeneration)
+                await UploadProgressRelay.shared.unregister(jobID: jobID)
+                return
+            }
+
             updateJob(jobID) { $0.phase = .preparing }
             let content = spec.bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
             let post: Post
@@ -729,8 +824,11 @@ final class GlobalUploadCoordinator {
                     content: content,
                     imageURL: imageURL,
                     imageCrop: nil,
-                    roomShare: spec.roomShare
+                    roomShare: spec.roomShare,
+                    clientPublishID: jobID
                 )
+                checkpoint.savedPostID = post.id
+                persistPostRetry(jobID: jobID, spec: spec, services: services, checkpoint: checkpoint)
                 GlobalUploadJobDiagnostics.log(
                     id: jobID,
                     kind: .post,
@@ -2003,6 +2101,8 @@ final class GlobalUploadCoordinator {
         retryAchievement.removeValue(forKey: jobID)
         retryTrade.removeValue(forKey: jobID)
         storySuccessHandlers.removeValue(forKey: jobID)
+        contentDraftSuccessHandlers.removeValue(forKey: jobID)
+        contentDraftFailureHandlers.removeValue(forKey: jobID)
     }
 
     /// Success-path cleanup — does not cancel the worker task that just finished.
