@@ -16,6 +16,7 @@ import ExploreMoreTradeRoomsCard from "../components/ExploreMoreTradeRoomsCard"
 import EmptyState from "../components/ui/EmptyState"
 import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
 import { useIsNativeIos } from "@/lib/useIsNativeIos"
+import { MOBILE_WEB_NEUTRAL_PAGE_BG } from "@/lib/mobileWebPageSurface"
 import {
   SkeletonCommunityPage,
   SkeletonLeaderboardRow,
@@ -169,6 +170,8 @@ import {
   resetRoomMessageReconciliation,
 } from "@/lib/roomMessageReconciliation"
 import { pickInitialTradeRoomId } from "@/lib/tradeRoomsEntry"
+import { trackMobileWebAppStoreClick } from "@/lib/mobileWebAppInstallAnalytics"
+import { isPhoneWebTouchTarget } from "@/lib/mobileWebTouch"
 import { nativeIosAppStoreURL } from "@/lib/nativeIosAppStore"
 import { tradeRoomSharePath, tradeRoomShareUrl } from "@/lib/tradeRoomShareUrl"
 
@@ -395,6 +398,7 @@ function CommunityContent() {
   const [selectTrade, setSelectTrade] = useState(false)
   const [userTrades, setUserTrades] = useState<any[]>([])
   const [mobileRoomsOpen, setMobileRoomsOpen] = useState(false)
+  const [mobileRoomQuery, setMobileRoomQuery] = useState("")
   const [mobileSectionsOpen, setMobileSectionsOpen] = useState(false)
   const [sections, setSections] = useState<any[]>([])
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
@@ -743,6 +747,14 @@ function CommunityContent() {
     if (ownedRooms.length === 0) return rooms
     return [...ownedRooms, ...otherRooms]
   }, [rooms, user?.id])
+
+  const phoneWebRoomList = useMemo(() => {
+    const query = mobileRoomQuery.trim().toLowerCase()
+    if (!query) return sortedSidebarRooms
+    return sortedSidebarRooms.filter((room) =>
+      String(room.name ?? "").toLowerCase().includes(query)
+    )
+  }, [mobileRoomQuery, sortedSidebarRooms])
 
   const needsJoin = useMemo(() => {
     if (!inviteTargetRoom || !selectedRoomId) return false
@@ -3936,15 +3948,21 @@ function CommunityContent() {
       <div
         data-tt-native-surface="community"
         data-tt-trade-rooms
-        className="tt-community flex h-[var(--app-viewport-height)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-2 text-white xl:px-8 2xl:px-12"
+        className={`tt-community flex h-[var(--app-viewport-height)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-2 text-white xl:px-8 2xl:px-12 ${MOBILE_WEB_NEUTRAL_PAGE_BG} max-md:px-0 max-md:py-0`}
       >
         <div
           data-tt-trade-rooms-shell
-          className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-white/10 bg-white/5 shadow-xl backdrop-blur-md md:flex-row md:overflow-hidden xl:max-w-[1500px]"
+          className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-white/10 bg-white/5 shadow-xl backdrop-blur-md md:flex-row md:overflow-hidden xl:max-w-[1500px] max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:shadow-none max-md:backdrop-blur-none"
         >
           <aside
             data-tt-trade-rooms-aside
-            className="shrink-0 border-b border-white/10 bg-white/[0.04] backdrop-blur-md md:w-72 md:border-b-0 md:border-r"
+            className={`shrink-0 border-b border-white/10 bg-white/[0.04] backdrop-blur-md md:w-72 md:border-b-0 md:border-r${
+              !nativeIos && (roomParam?.trim() || showCreateDiscoverView)
+                ? " max-md:hidden"
+                : !nativeIos
+                  ? " max-md:flex max-md:min-h-0 max-md:flex-1 max-md:flex-col max-md:border-b-0"
+                  : ""
+            }`}
           >
             <div
               data-tt-trade-rooms-controls
@@ -3955,7 +3973,9 @@ function CommunityContent() {
               <p className="hidden text-lg font-semibold text-blue-300 md:block" aria-hidden>
                 {rooms.length > 0 ? "My Trade Rooms" : "Trade Rooms"}
               </p>
-              <div className="flex items-center gap-1 md:hidden">
+              <div className={`flex items-center gap-1 md:hidden${
+                !nativeIos && !roomParam?.trim() ? " hidden" : ""
+              }`}>
                 <button
                   type="button"
                   className="flex min-h-[40px] min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-2 text-left transition hover:bg-white/5"
@@ -4041,10 +4061,32 @@ function CommunityContent() {
               id="trade-rooms-list"
               className={`grid overflow-hidden transition-[grid-template-rows] duration-200 ease-out ${
                 mobileRoomsOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-              } md:grid-rows-[1fr]`}
+              } md:grid-rows-[1fr]${
+                !nativeIos
+                  ? " max-md:min-h-0 max-md:flex-1 max-md:grid-rows-[1fr]"
+                  : ""
+              }`}
             >
               <div className="min-h-0 overflow-hidden">
-                <div className="max-h-[min(50svh,280px)] overflow-y-auto p-2 md:max-h-none">
+                <div
+                  className={`max-h-[min(50svh,280px)] overflow-y-auto p-2 md:max-h-none${
+                    !nativeIos ? " max-md:max-h-none max-md:h-full" : ""
+                  }`}
+                >
+                  {!nativeIos ? (
+                    <div className="mb-2 px-1 md:hidden">
+                      <input
+                        type="search"
+                        value={mobileRoomQuery}
+                        onChange={(event) =>
+                          setMobileRoomQuery(event.target.value)
+                        }
+                        placeholder="Search rooms"
+                        aria-label="Search rooms"
+                        className="h-11 w-full rounded-[10px] border border-white/10 bg-white/5 px-3 text-sm text-white placeholder:text-white/40"
+                      />
+                    </div>
+                  ) : null}
                   {loadingRooms ? (
                     <div className="space-y-1 px-1">
                       {Array.from({ length: 5 }).map((_, i) => (
@@ -4067,20 +4109,20 @@ function CommunityContent() {
                           }
                         />
                       ) : null}
-                      {sortedSidebarRooms.map((room) => {
+                      {phoneWebRoomList.map((room) => {
                       const selected =
                         room.id === selectedRoomId && !showCreateDiscoverView
                       const isOwnRoom =
                         user?.id != null && room.owner_user_id === user.id
                       const itemClass =
-                        `mb-1 flex min-h-[44px] w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition ` +
+                        `mb-1 flex min-h-[44px] w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition max-md:mb-2 max-md:min-h-[72px] max-md:rounded-[14px] max-md:px-3 max-md:py-3 ` +
                         (isOwnRoom
                           ? selected
                             ? `border border-blue-400/40 bg-blue-500/25 font-semibold text-blue-100`
                             : `border border-blue-400/30 bg-blue-500/10 font-semibold text-blue-300 hover:bg-blue-500/15`
                           : selected
                             ? `bg-blue-500/25 text-blue-100`
-                            : `text-gray-200 hover:bg-white/10`)
+                            : `text-gray-200 hover:bg-white/10 max-md:bg-white/[0.04]`)
                       const sidebarAvatarSrc =
                         [room.image_url, room.avatar_url]
                           .map((v) =>
@@ -4116,9 +4158,9 @@ function CommunityContent() {
                             alt="room avatar"
                             intrinsicWidth={32}
                             intrinsicHeight={32}
-                            className="h-8 w-8 shrink-0 rounded-full object-cover"
+                            className="h-8 w-8 shrink-0 rounded-full object-cover max-md:h-[52px] max-md:w-[52px]"
                           />
-                          <div className="flex min-w-0 flex-1 items-center">
+                          <div className="flex min-w-0 flex-1 items-center max-md:hidden">
                             <span className="min-w-0 flex-1 truncate">
                               {room.name || "Room"}
                             </span>
@@ -4128,6 +4170,22 @@ function CommunityContent() {
                                 aria-label="Unread messages"
                               />
                             ) : null}
+                          </div>
+                          <div className="hidden min-w-0 flex-1 flex-col md:hidden max-md:flex">
+                            <div className="flex items-center gap-2">
+                              <span className="min-w-0 flex-1 truncate text-[16px] font-semibold text-white">
+                                {room.name || "Room"}
+                              </span>
+                              {unreadByRoomId[room.id] ? (
+                                <span className="rounded-full bg-blue-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                                  New
+                                </span>
+                              ) : null}
+                            </div>
+                            <span className="mt-0.5 truncate text-[13px] text-white/55">
+                              {room.is_private ? "Private" : "Public"}
+                              {isOwnRoom ? " · Owner" : ""}
+                            </span>
                           </div>
                         </button>
                       )
@@ -4148,7 +4206,13 @@ function CommunityContent() {
             </div>
           </aside>
 
-          <section className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
+          <section
+            className={`flex min-h-0 w-full min-w-0 flex-1 flex-col${
+              !nativeIos && !roomParam?.trim() && !showCreateDiscoverView
+                ? " max-md:hidden"
+                : ""
+            }`}
+          >
             {showCreateDiscoverView ? (
               <TradeRoomsDiscoverView
                 showCreateSection={showCreateFirstRoomCard}
@@ -4171,6 +4235,86 @@ function CommunityContent() {
             ) : (
             <>
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className={`flex items-center gap-2 border-b border-white/10 px-3 py-2 md:hidden${
+              nativeIos || !roomParam?.trim() ? " hidden" : ""
+            }`}>
+              <StorageImage
+                src={
+                  resolveStoredRoomImageUrl(
+                    roomImage ??
+                      selectedRoom?.image_url ??
+                      inviteTargetRoom?.image_url
+                  ) || "/default-avatar.png"
+                }
+                preset="room-thumb"
+                localTransformWidth={80}
+                fallbackToOriginal={false}
+                intrinsicWidth={40}
+                intrinsicHeight={40}
+                alt=""
+                className="h-10 w-10 shrink-0 rounded-full object-cover"
+              />
+              <div className="min-w-0 flex-1">
+                <h2 className="truncate text-[16px] font-semibold text-white">
+                  {selectedRoom?.name ??
+                    inviteTargetRoom?.name ??
+                    "Trade Room"}
+                </h2>
+                {selectedRoomId && !needsJoin ? (
+                  <p className="truncate text-[12px] text-white/55">
+                    {activeMembers} members
+                    {leftMembers ? ` · ${leftMembers} left` : ""}
+                  </p>
+                ) : null}
+              </div>
+              {selectedRoomId && !needsJoin ? (
+                <button
+                  type="button"
+                  onClick={() => void openRoomNotificationSettings()}
+                  aria-label="Notification settings"
+                  className={`${ROOM_MOBILE_HEADER_ICON_CLASS} shrink-0`}
+                >
+                  <span aria-hidden>{roomBellEnabled ? "🔔" : "🔕"}</span>
+                </button>
+              ) : null}
+              {isOwner && selectedRoomId && !needsJoin ? (
+                <>
+                <button
+                  type="button"
+                  aria-label="Room settings"
+                  onClick={() => void openManageRoomPanel()}
+                  className={ROOM_MOBILE_HEADER_ICON_CLASS}
+                >
+                  <span aria-hidden>⚙️</span>
+                </button>
+                {selectedRoom && inviteLink ? (
+                  <ShareRoomMenu
+                    room={selectedRoom}
+                    inviteLink={inviteLink}
+                    user={
+                      user?.id
+                        ? { id: user.id, username: profile?.username }
+                        : null
+                    }
+                    onCopyLink={() =>
+                      showPopup(feedbackPresets.roomLinkCopied())
+                    }
+                    triggerClassName={ROOM_MOBILE_HEADER_ICON_CLASS}
+                    iconClassName="h-4 w-4 text-blue-300"
+                  />
+                ) : null}
+                </>
+              ) : null}
+              {!isOwner && selectedRoomId && !needsJoin ? (
+                <button
+                  type="button"
+                  onClick={() => void handleLeaveRoom()}
+                  className="shrink-0 rounded-md px-2 py-1.5 text-xs text-red-400 hover:bg-red-500/10"
+                >
+                  Leave
+                </button>
+              ) : null}
+            </div>
             <div className="hidden border-b border-white/10 px-4 py-3 md:block">
               <div className="flex items-center gap-3">
                 <StorageImage
@@ -4309,6 +4453,13 @@ function CommunityContent() {
                       className="text-blue-300 underline-offset-2 hover:underline"
                       rel="noopener noreferrer"
                       target="_blank"
+                      onClick={() => {
+                        if (isPhoneWebTouchTarget()) {
+                          trackMobileWebAppStoreClick({
+                            surface: "community_room_invite",
+                          })
+                        }
+                      }}
                     >
                       Get the iOS app
                     </a>
@@ -4470,7 +4621,7 @@ function CommunityContent() {
 
               <NativeIosPullToRefresh
                 scrollRef={messagesScrollRef}
-                className="tt-trade-rooms-chat min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-3"
+                className="tt-trade-rooms-chat min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-3 max-md:px-3"
                 onRefresh={async () => {
                   if (selectedRoomId) {
                     await refetchSections()
@@ -4488,7 +4639,9 @@ function CommunityContent() {
                 </p>
               ) : null}
               {!selectedRoomId ? (
-                <p className="text-sm text-gray-400">Pick a room to start chatting.</p>
+                <p className="hidden text-sm text-gray-400 md:block">
+                  Pick a room to start chatting.
+                </p>
               ) : roomMessagesLoadError ? (
                 <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-8 text-center">
                   <p className="text-sm font-medium text-red-200">
@@ -4513,7 +4666,7 @@ function CommunityContent() {
               ) : (
                 <>
                   {messages.length === 0 && pinnedMessages.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.03] px-4 py-8 text-center">
+                    <div className="px-4 py-8 text-center md:rounded-xl md:border md:border-dashed md:border-white/10 md:bg-white/[0.03]">
                       <p className="text-sm font-medium text-gray-300">
                         No messages yet
                       </p>
@@ -4541,7 +4694,11 @@ function CommunityContent() {
                             key={msg.id}
                             id={roomMessageElementId(msg.id)}
                             data-room-message-id={msg.id}
-                            className="group relative rounded-xl border border-white/10 bg-white/5 p-3"
+                            className={`group relative rounded-xl border border-white/10 bg-white/5 p-3 max-md:rounded-[18px] max-md:border-0 max-md:px-3 max-md:py-2 ${
+                              user?.id && msg.user_id === user.id
+                                ? "max-md:ml-10 max-md:bg-blue-500/25"
+                                : "max-md:mr-8 max-md:bg-white/10"
+                            }`}
                             onDoubleClick={(e) =>
                               handleMessageReactionDoubleClick(
                                 e,
@@ -4682,7 +4839,11 @@ function CommunityContent() {
                       key={msg.id}
                       id={roomMessageElementId(msg.id)}
                       data-room-message-id={msg.id}
-                      className={`group relative rounded-xl border border-white/10 bg-white/5 p-3 ${
+                      className={`group relative rounded-xl border border-white/10 bg-white/5 p-3 max-md:rounded-[18px] max-md:border-0 max-md:px-3 max-md:py-2 ${
+                        user?.id && msg.user_id === user.id
+                          ? "max-md:ml-10 max-md:bg-blue-500/25"
+                          : "max-md:mr-8 max-md:bg-white/10"
+                      } ${
                         msg.send_status === "sending" || msg.send_status === "failed"
                           ? MICRO.softEnter
                           : ""
@@ -4843,6 +5004,7 @@ function CommunityContent() {
                       </div>
                     </div>
                   ) : null}
+                  <div className="max-md:pb-[max(0.25rem,env(safe-area-inset-bottom))]">
                   <DmStyleComposer
                     value={draft}
                     onChange={(v) => {
@@ -4894,6 +5056,7 @@ function CommunityContent() {
                       ) : null
                     }
                   />
+                  </div>
                   </>
                 )}
               </>
@@ -5689,7 +5852,7 @@ export default function CommunityPage() {
     <Suspense
       fallback={
         <>
-          <div className="tt-community min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-4 text-white md:p-6">
+          <div className={`tt-community min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-4 text-white md:p-6 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
             <SkeletonCommunityPage />
           </div>
         </>

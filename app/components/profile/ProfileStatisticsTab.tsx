@@ -151,7 +151,7 @@ function ProfileStatisticsTab({
                   className={`tt-profile-stats-mode-btn rounded-lg border px-4 py-1.5 text-sm font-medium transition ${
                     selectedMode === id
                       ? "tt-profile-stats-mode-btn-active bg-blue-500 text-white border-transparent"
-                      : "tt-profile-stats-mode-btn-inactive border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+                      : "tt-profile-stats-mode-btn-inactive border-white/10 bg-white/5 text-white/70 hover:bg-white/10 max-md:border-border max-md:text-muted-foreground"
                   }`}
                 >
                   {label}

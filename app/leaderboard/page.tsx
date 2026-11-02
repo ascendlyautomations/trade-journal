@@ -42,6 +42,9 @@ import { profilePath } from "@/lib/profileRoutes"
 import EmptyState from "../components/ui/EmptyState"
 import { SkeletonLeaderboardPage } from "../components/ui/skeletons"
 import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
+import MobileWebLeaderboardSurface from "@/app/components/mobile/leaderboard/MobileWebLeaderboardSurface"
+import MobileWebLeaderboardFilters from "@/app/components/mobile/leaderboard/MobileWebLeaderboardFilters"
+import { MOBILE_WEB_NEUTRAL_PAGE_BG } from "@/lib/mobileWebPageSurface"
 import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import { chartAxisTick, chartCartesianGridProps } from "@/lib/chartTheme"
 import {
@@ -683,7 +686,7 @@ export default function Leaderboard() {
   if (tradesLoading) {
     return (
       <>
-        <div className="tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 px-4 py-6 md:px-8 md:py-8">
+        <div className={`tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 px-4 py-6 md:px-8 md:py-8 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
           <SkeletonLeaderboardPage />
         </div>
       </>
@@ -700,15 +703,28 @@ export default function Leaderboard() {
       >
       <div
         data-tt-native-surface="leaderboard"
-        className="tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 px-4 py-6 md:px-8 md:py-8"
+        className={`tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 px-4 py-6 md:px-8 md:py-8 max-md:px-3 max-md:py-3 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}
       >
         <div className="mx-auto max-w-7xl min-w-0 space-y-4">
-          <h1 className="text-2xl font-semibold text-blue-300 md:text-3xl">
+          <h1 className="text-2xl font-semibold text-blue-300 md:text-3xl max-md:hidden">
             Leaderboard
           </h1>
 
           <div className="tt-leaderboard-filter-bar w-full min-w-0 space-y-3">
-            <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(0,1fr)] lg:gap-4">
+            <div className="md:hidden">
+              <MobileWebLeaderboardFilters
+                audience={audience}
+                onAudienceChange={setAudience}
+                pageTimeframe={pageTimeframe}
+                onPageTimeframeChange={setPageTimeframe}
+                category={category}
+                onCategoryChange={setCategory}
+                accountTypeFilter={accountTypeFilter}
+                onAccountTypeFilterChange={setAccountTypeFilter}
+                usesRpcRankings={usesRpcRankings}
+              />
+            </div>
+            <div className="hidden w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 md:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(0,1fr)] lg:gap-4">
               <CustomSelect
                 value={leaderboardTimeframeSelectValue(pageTimeframe)}
                 onChange={(val) => {
@@ -753,7 +769,7 @@ export default function Leaderboard() {
             </div>
 
             <div
-              className="tt-leaderboard-filters flex w-full min-w-0 flex-wrap gap-2"
+              className="tt-leaderboard-filters hidden w-full min-w-0 flex-wrap gap-2 md:flex"
               role="group"
               aria-label="Audience"
             >
@@ -813,7 +829,7 @@ export default function Leaderboard() {
           ) : null}
 
           {chartSidecarEligible || !usesRpcRankingsEffective ? (
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-md md:p-5">
+          <div className="hidden rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-md md:block md:p-5">
             {customRangeInvalid ? (
               <EmptyState
                 title="Invalid Date Range"
@@ -941,7 +957,7 @@ export default function Leaderboard() {
           ) : null}
 
           {chartSidecarEligible ? (
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-md md:p-6">
+          <div className="hidden rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-md md:block md:p-6">
             <h2 className="text-lg font-semibold text-blue-300">
               Community Leaderboard
             </h2>
@@ -1042,11 +1058,11 @@ export default function Leaderboard() {
           </div>
           ) : null}
 
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-md md:p-6">
-            <h2 className="mb-1 text-lg font-semibold text-blue-300">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-md md:p-6 max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:p-0">
+            <h2 className="mb-1 text-lg font-semibold text-blue-300 max-md:hidden">
               Top Traders — {leaderboardCategoryLabel(displayCategory)}
             </h2>
-            <p className="mb-3 text-sm text-gray-400">
+            <p className="mb-3 text-sm text-gray-400 max-md:hidden">
               {timeframeLabel}
               {usesRpcRankingsEffective
                 ? ` · ${audience === "all" ? "All traders" : audience === "friends" ? "Friends" : "Following"}`
@@ -1090,7 +1106,20 @@ export default function Leaderboard() {
               />
             ) : (
               <>
-                <div className="overflow-x-auto">
+                <div className="md:hidden">
+                  <MobileWebLeaderboardSurface
+                    rows={tableRows}
+                    profilesById={profilesById}
+                    currentUserId={userId}
+                    categoryLabel={`Top Traders — ${leaderboardCategoryLabel(displayCategory)}`}
+                    onLoadMore={() => void loadMoreBootstrap()}
+                    loadingMore={bootstrapLoadingMore}
+                    showLoadMore={Boolean(
+                      usesRpcRankingsEffective && bootstrapNextCursor
+                    )}
+                  />
+                </div>
+                <div className="hidden overflow-x-auto md:block">
                   <table className="w-full min-w-[32rem] text-left text-sm">
                     <thead>
                       <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-gray-400">
@@ -1140,7 +1169,7 @@ export default function Leaderboard() {
                   </table>
                 </div>
                 {usesRpcRankingsEffective && bootstrapNextCursor ? (
-                  <div className="mt-4 flex justify-center">
+                  <div className="mt-4 hidden justify-center md:flex">
                     <button
                       type="button"
                       disabled={bootstrapLoadingMore}

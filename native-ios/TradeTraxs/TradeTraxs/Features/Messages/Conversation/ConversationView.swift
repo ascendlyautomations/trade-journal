@@ -348,11 +348,24 @@ struct ConversationView: View {
                                     )
                                 },
                                 onSharedContentTap: { reference in
-                                    SharedContentNavigation.open(
-                                        reference: reference,
-                                        cache: detailCache,
-                                        coordinator: navigationCoordinator
-                                    )
+                                    guard let navigationCoordinator else { return }
+                                    let data = appEnvironment.data
+                                    Task {
+                                        let viewerID = await data.session.currentUserID.map {
+                                            ProfileID($0.rawValue)
+                                        }
+                                        let context = SharedContentHydrator.Context.make(
+                                            data: data,
+                                            viewerID: viewerID
+                                        )
+                                        await SharedContentNavigation.openAsync(
+                                            reference: reference,
+                                            cache: detailCache,
+                                            coordinator: navigationCoordinator,
+                                            hydrationContext: context,
+                                            hydrationSurface: .dm
+                                        )
+                                    }
                                 },
                                 onSharedStoryTap: { payload in
                                     StoryShareNavigation.open(

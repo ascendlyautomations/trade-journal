@@ -6,6 +6,7 @@ import {
 } from "@/lib/psychology/reports/format"
 import { reliabilityLabel } from "@/lib/psychology/reports/metrics"
 import type { PsychologyGroupMetrics } from "@/lib/psychology/reports/types"
+import { countNoun } from "@/lib/countNoun"
 
 type PsychologyAnalyticsMetricsRowProps = {
   label: string
@@ -22,7 +23,7 @@ export default function PsychologyAnalyticsMetricsRow({
 
   return (
     <article
-      className={`rounded-xl border border-white/10 p-4 ${
+      className={`rounded-xl border border-white/10 p-4 max-md:p-3 ${
         highlight ? "bg-blue-500/10" : "bg-white/5"
       }`}
     >
@@ -32,9 +33,9 @@ export default function PsychologyAnalyticsMetricsRow({
       ) : isPreview ? (
         <>
           <p className="mt-1 text-xs font-medium text-amber-200/90">
-            Preview · {metrics.tradeCount} trade{metrics.tradeCount === 1 ? "" : "s"}
+            Preview · {countNoun(metrics.tradeCount, "trade")}
           </p>
-          <div className="mt-2 flex flex-wrap gap-4 text-xs">
+          <div className="mt-2 flex flex-wrap gap-4 text-xs max-md:grid max-md:grid-cols-2 max-md:gap-2">
             <MetricPill label="Win rate" value={formatPsychologyWinRate(metrics.winRate)} />
             <MetricPill
               label="Avg P&L / trade"
@@ -47,7 +48,7 @@ export default function PsychologyAnalyticsMetricsRow({
         </>
       ) : (
         <>
-          <div className="mt-2 flex flex-wrap gap-4 text-xs">
+          <div className="mt-2 flex flex-wrap gap-4 text-xs max-md:grid max-md:grid-cols-2 max-md:gap-2">
             <MetricPill label="Trades" value={String(metrics.tradeCount)} />
             <MetricPill label="Win rate" value={formatPsychologyWinRate(metrics.winRate)} />
             <MetricPill

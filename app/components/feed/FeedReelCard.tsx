@@ -8,6 +8,8 @@ import FeedPostModerationMenu from "./FeedPostModerationMenu"
 import FeedReelOwnerMenu from "./FeedReelOwnerMenu"
 import type { FeedLikeMeta } from "./FeedPostCard"
 import { resolveReelCaption, isTradeAttachedReel } from "@/lib/reels"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
+import { MOBILE_WEB_FEED_CARD_FLUSH } from "@/lib/mobileWebPageSurface"
 
 type FeedReelCardProps = {
   post: any
@@ -51,6 +53,7 @@ function FeedReelCard({
   onToggleLike,
   onSharePost,
 }: FeedReelCardProps) {
+  const phoneWeb = !useIsNativeIos()
   const handleOpenComments = useCallback(() => {
     onOpenComments(post)
   }, [onOpenComments, post])
@@ -106,7 +109,9 @@ function FeedReelCard({
       tabIndex={0}
       onClick={handleArticleClick}
       onKeyDown={handleArticleKeyDown}
-      className="cursor-pointer overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-xl"
+      className={`cursor-pointer overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-xl${
+        phoneWeb ? ` ${MOBILE_WEB_FEED_CARD_FLUSH}` : ""
+      }`}
     >
       <div className="flex items-center">
         <div className="min-w-0 flex-1">
@@ -135,14 +140,14 @@ function FeedReelCard({
         </div>
       </div>
 
-      <div className="px-4 pt-3 pb-0">
+      <div className={`px-4 pt-3 pb-0${phoneWeb ? " max-md:px-3" : ""}`}>
         <ReelThumbnailPreview
           reel={post}
           onClick={handleArticleClick}
           priority={mediaPriority}
         />
         {caption ? (
-          <p className="mt-3 line-clamp-3 whitespace-pre-wrap text-sm text-gray-200">
+          <p className="mt-3 line-clamp-3 overflow-hidden break-words [overflow-wrap:anywhere] whitespace-pre-wrap text-sm text-gray-200">
             {caption}
           </p>
         ) : null}

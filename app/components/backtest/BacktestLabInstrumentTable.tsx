@@ -85,8 +85,11 @@ export default function BacktestLabInstrumentTable({
   return (
     <section className="mb-6 space-y-2">
       <div>
-        <h2 className="text-xl font-semibold text-white">Instrument performance</h2>
-        <p className="text-sm text-gray-400">
+        <h2 className="text-xl font-semibold text-white max-md:text-[15px]">
+          <span className="md:hidden">Instruments</span>
+          <span className="hidden md:inline">Instrument performance</span>
+        </h2>
+        <p className="text-sm text-gray-400 max-md:text-xs">
           Futures symbols normalized (e.g. NQ vs MNQ stay separate).
         </p>
       </div>

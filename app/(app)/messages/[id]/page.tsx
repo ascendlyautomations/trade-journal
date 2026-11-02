@@ -17,7 +17,7 @@ import {
   type ChangeEvent,
   type MouseEvent,
 } from "react"
-import { ChevronLeft } from "lucide-react"
+import { ChevronLeft, MoreHorizontal } from "lucide-react"
 import {
   formatConversationDateDividerLabel,
   formatDmClusterTime,
@@ -3745,13 +3745,15 @@ export default function DMPage() {
         className={`flex min-h-0 w-full flex-col overflow-hidden text-white ${
           nativeIos
             ? "h-dvh bg-[var(--tt-surface)]"
-            : "h-[var(--app-viewport-height)] px-4 pb-4 pt-2 xl:h-full xl:min-h-0"
+            : "tt-mobile-web-keyboard-shell h-[var(--app-viewport-height)] px-4 pb-4 pt-2 max-md:px-0 max-md:pb-0 max-md:pt-0 xl:h-full xl:min-h-0"
         }`}
       >
 
         <div
           className={`mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col overflow-hidden xl:max-w-none ${
-            nativeIos ? "" : "rounded-xl border border-white/10 bg-white/5 backdrop-blur-md"
+            nativeIos
+              ? ""
+              : "rounded-xl border border-white/10 bg-white/5 backdrop-blur-md max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:backdrop-blur-none"
           }`}
         >
 
@@ -3808,7 +3810,53 @@ export default function DMPage() {
               </button>
             </div>
           ) : (
-            <div className="shrink-0 flex items-center justify-between px-3 py-2 border-b border-white/10 md:p-4 md:justify-start md:gap-3">
+            <>
+            <div className="relative flex h-11 shrink-0 items-center justify-between border-b border-white/10 px-1 md:hidden">
+              <button
+                type="button"
+                aria-label="Back to messages"
+                onClick={() => router.push("/messages")}
+                className="inline-flex h-11 w-11 items-center justify-center text-[#4EC4E0]"
+              >
+                <ChevronLeft className="h-7 w-7" strokeWidth={2.25} />
+              </button>
+              <div className="pointer-events-none absolute inset-x-14 inset-y-0 flex items-center justify-center gap-2">
+                {conversation?.is_group ? (
+                  <img
+                    src={conversation.avatar_url || "/group-default.png"}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    onError={(e) => {
+                      e.currentTarget.src = "/group-default.png"
+                    }}
+                    className="h-8 w-8 shrink-0 rounded-full object-cover"
+                  />
+                ) : (
+                  <ProfileAvatarImg
+                    src={otherUser?.avatar_url}
+                    alt=""
+                    className="h-8 w-8 shrink-0 rounded-full object-cover"
+                  />
+                )}
+                <span className="truncate text-[17px] font-semibold leading-tight">
+                  {title}
+                </span>
+              </div>
+              <button
+                type="button"
+                aria-label="Conversation settings"
+                title="Conversation settings"
+                onClick={() => {
+                  setGroupName(conversation?.name || "")
+                  setShowConversationSettings(true)
+                }}
+                className="inline-flex h-11 w-11 items-center justify-center text-white"
+              >
+                <MoreHorizontal className="h-6 w-6" strokeWidth={2} />
+              </button>
+            </div>
+            <div className="hidden shrink-0 items-center justify-between border-b border-white/10 md:flex md:p-4 md:justify-start md:gap-3">
 
               <button
                 onClick={() => router.push("/messages")}
@@ -3873,6 +3921,7 @@ export default function DMPage() {
               </div>
 
             </div>
+            </>
           )}
 
           {/* MESSAGES */}
@@ -4191,6 +4240,8 @@ export default function DMPage() {
                               isVoice
                                 ? ""
                                 : `p-3 rounded-xl ${
+                                    nativeIos ? "" : "max-md:rounded-[18px]"
+                                  } ${
                                     isMe ? "bg-blue-500 text-white" : "border border-white/10 bg-white/10 text-white"
                                   }`
                             } ${
@@ -4238,7 +4289,7 @@ export default function DMPage() {
                                     e.stopPropagation()
                                     setLightboxImageUrl(message.image_url)
                                   }}
-                                  className="block max-w-full cursor-zoom-in"
+                                  className="tt-mobile-web-message-media block max-w-full cursor-zoom-in"
                                   aria-label="View image full screen"
                                 >
                                   <StorageImage
@@ -4246,7 +4297,7 @@ export default function DMPage() {
                                     originalSrc={message.image_url}
                                     preset="message-preview"
                                     fallbackToOriginal={false}
-                                    className="max-h-64 rounded-lg"
+                                    className="max-h-64 max-w-full rounded-lg object-contain"
                                     alt=""
                                     onLoad={bumpMessageLayout}
                                     onError={bumpMessageLayout}
@@ -4400,6 +4451,7 @@ export default function DMPage() {
             </div>
           ) : (
             <DmStyleComposer
+              mobileWebPresentation
               value={input}
               onChange={(v) => {
                 setInput(v)

@@ -49,11 +49,11 @@ export default function PsychologyAnalyticsOverview({
       </div>
 
       {showMetrics ? (
-        <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+        <div className="rounded-xl border border-white/10 bg-white/5 p-4 max-md:p-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
             Your trades in this scope
           </p>
-          <div className="mt-3 flex flex-wrap gap-6 text-sm">
+          <div className="mt-3 flex flex-wrap gap-6 text-sm max-md:grid max-md:grid-cols-3 max-md:gap-2">
             <div>
               <p className="text-[10px] uppercase text-gray-500">Win rate</p>
               <p className="font-semibold tabular-nums text-white">
@@ -77,7 +77,7 @@ export default function PsychologyAnalyticsOverview({
       ) : null}
 
       {showMetrics && summary.checkInCount > 0 ? (
-        <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+        <div className="rounded-xl border border-white/10 bg-white/5 p-4 max-md:p-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
             Check-in trends (matched trading days · {summary.checkInCount})
           </p>
@@ -109,7 +109,7 @@ export default function PsychologyAnalyticsOverview({
 
 function CountTile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-white/5 px-2 py-3 text-center">
+    <div className="rounded-lg border border-white/10 bg-white/5 px-2 py-3 text-center max-md:py-2">
       <p className="text-lg font-semibold tabular-nums text-white">{value}</p>
       <p className="mt-0.5 text-[10px] leading-tight text-gray-500">{label}</p>
     </div>

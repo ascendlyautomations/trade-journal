@@ -154,10 +154,31 @@ export function buildProfileMetadata(profile: ProfileSeoData | null): Metadata {
     }
   }
 
-  const displayName = profileSeoDisplayName(profile)
   const indexable = isPublicProfileForIndexing(profile)
   const canonicalPath = profileCanonicalPath(profile)
 
+  if (!indexable) {
+    return {
+      title: { absolute: `Private Profile | ${SITE_NAME}` },
+      description: `This profile is private on ${SITE_NAME}.`,
+      robots: { index: false, follow: false },
+      openGraph: {
+        type: "profile",
+        title: SITE_NAME,
+        description: `Sign in to view profiles on ${SITE_NAME}.`,
+        siteName: SITE_NAME,
+        images: [{ url: DEFAULT_OG_IMAGE_PATH, alt: DEFAULT_OG_IMAGE_ALT }],
+      },
+      twitter: {
+        card: DEFAULT_TWITTER_CARD,
+        title: SITE_NAME,
+        description: `Sign in to view profiles on ${SITE_NAME}.`,
+        images: [DEFAULT_OG_IMAGE_PATH],
+      },
+    }
+  }
+
+  const displayName = profileSeoDisplayName(profile)
   const title = `${displayName} | Trader Profile | ${SITE_NAME}`
   const description = `View ${displayName}'s public trading profile, statistics, and trade history on ${SITE_NAME}.`
   const ogTitle = `${displayName} | ${SITE_NAME}`
@@ -180,12 +201,11 @@ export function buildProfileMetadata(profile: ProfileSeoData | null): Metadata {
       description: ogDescription,
       images: [DEFAULT_OG_IMAGE_PATH],
     },
+    robots: { index: true, follow: true },
   }
 
-  if (indexable && canonicalPath) {
+  if (canonicalPath) {
     metadata.alternates = { canonical: canonicalPath }
-  } else {
-    metadata.robots = { index: false, follow: false }
   }
 
   return metadata

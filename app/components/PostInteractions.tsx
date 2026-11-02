@@ -186,7 +186,7 @@ export function PostInteractionsComments({
               if (stopPropagation) e.stopPropagation()
               onSubmitComment(post)
             }}
-            className="bg-blue-500 px-3 rounded-lg text-white text-sm font-medium disabled:opacity-40 shrink-0"
+            className="tt-mobile-web-hit-y bg-blue-500 px-3 rounded-lg text-white text-sm font-medium disabled:opacity-40 shrink-0"
           >
             Post
           </ActionButton>

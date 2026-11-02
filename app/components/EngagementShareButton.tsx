@@ -3,7 +3,7 @@
 import type { MouseEvent } from "react"
 
 export const ENGAGEMENT_SHARE_BUTTON_CLASS =
-  "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/5 text-gray-300 transition hover:bg-white/10 hover:text-white"
+  "tt-mobile-web-hit flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/5 text-gray-300 transition hover:bg-white/10 hover:text-white"
 
 type EngagementShareButtonProps = {
   onClick: (e: MouseEvent<HTMLButtonElement>) => void

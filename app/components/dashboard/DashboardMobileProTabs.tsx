@@ -1,74 +1,70 @@
 "use client"
 
-import { useCallback, type ComponentProps, type ReactNode } from "react"
-import DashboardAnalytics from "./DashboardAnalytics"
+import type { ComponentProps, ReactNode } from "react"
 import { DashboardPsychologyInsightsSlot } from "./DashboardPsychologyInsights"
 import DashboardInsights from "./DashboardInsights"
-import DashboardMobileSegmentedControl from "./DashboardMobileSegmentedControl"
-import DashboardMobileTabPanels from "./DashboardMobileTabPanels"
+import MobileWebDashboardChartBlock, {
+  MobileWebDashboardSectionHeader,
+} from "@/app/components/mobile/dashboard/MobileWebDashboardChartBlock"
+import MobileWebDashboardHoldTime from "@/app/components/mobile/dashboard/MobileWebDashboardHoldTime"
+import MobileWebDashboardHourTimeline from "@/app/components/mobile/dashboard/MobileWebDashboardHourTimeline"
+import MobileWebDashboardInsights from "@/app/components/mobile/dashboard/MobileWebDashboardInsights"
+import MobileWebDashboardLongShort from "@/app/components/mobile/dashboard/MobileWebDashboardLongShort"
+import MobileWebDashboardPerformanceGrid from "@/app/components/mobile/dashboard/MobileWebDashboardPerformanceGrid"
+import MobileWebDashboardRrTarget from "@/app/components/mobile/dashboard/MobileWebDashboardRrTarget"
+import MobileWebDashboardSymbols from "@/app/components/mobile/dashboard/MobileWebDashboardSymbols"
+import MobileWebDashboardWinLoss from "@/app/components/mobile/dashboard/MobileWebDashboardWinLoss"
 import {
-  DashboardRecordsStatsGrid,
-  DashboardStreaksCard,
-  DashboardTradingHoursCard,
-} from "./DashboardStatsGrid"
-import { useDashboardMobileTab } from "./useDashboardMobileTab"
-import type { DashboardMobileTab } from "./useDashboardMobileTab"
+  buildMobileWebDashboardPerformanceCards,
+  mobileWebDashboardHourBars,
+  mobileWebDashboardHourBarsHaveSignal,
+} from "@/lib/mobileWebDashboard"
+import type { DashboardRrTargetAnalysis } from "@/lib/dashboardRrTargetAnalysis"
+import type { HoldTimeStats } from "@/lib/dashboardHoldTimeStats"
+import type { LongShortPerformance } from "@/lib/dashboardLongShortStats"
+
+type HourData = {
+  hourlyMap: Record<number, number>
+  hasValidTradingHoursData: boolean
+  bestHour: number | null
+  worstHour: number | null
+} | null
 
 type DashboardMobileProTabsProps = {
   deferredSectionsReady: boolean
   weekdaySlot: ReactNode
   sessionsSlot: ReactNode
   showSessions: boolean
-  hourData: ComponentProps<typeof DashboardTradingHoursCard>["hourData"]
-  streakData: ComponentProps<typeof DashboardStreaksCard>["streakData"]
-  bestWinStreak: number
-  maxDrawdownSlot: ReactNode
-  recentTrades: ReactNode
+  hourData: HourData
+  maxDrawdown: number
   avgWin: number
-  bestTrade: number
   avgLoss: number
+  bestTrade: number
   biggestLoss: number
-  bestDay: number
-  worstDay: number
-  periodTradingDayCount: number
-  symbolPerformanceRows: ComponentProps<
-    typeof DashboardAnalytics
-  >["symbolPerformanceRows"]
+  payoutsTotal?: number | null
+  winRate: number
+  winCount: number
+  lossCount: number
+  rrTargetAnalysis: DashboardRrTargetAnalysis
+  symbolPerformanceRows: Array<{
+    ticker: string
+    totalTrades: number
+    wins: number
+    winRate: number
+    totalPnL: number
+    avgRR: number | null
+  }>
   hasAnyTrades: boolean
-  weekdayData: ComponentProps<typeof DashboardAnalytics>["weekdayData"]
-  longShortPerformance: ComponentProps<
-    typeof DashboardAnalytics
-  >["longShortPerformance"]
-  holdTimeStats: ComponentProps<typeof DashboardAnalytics>["holdTimeStats"]
+  longShortPerformance: LongShortPerformance
+  holdTimeStats: HoldTimeStats
   totalTrades: number
   insightsProps: ComponentProps<typeof DashboardInsights>
 }
 
-function getScrollRoot(): HTMLElement | Window {
-  if (typeof document === "undefined") return window
-  const el = document.querySelector("[data-tt-app-scroll]")
-  if (el instanceof HTMLElement) return el
-  return window
-}
-
-function readScrollTop(root: HTMLElement | Window): number {
-  if (root === window) {
-    return window.scrollY || document.documentElement.scrollTop || 0
-  }
-  return (root as HTMLElement).scrollTop
-}
-
-function writeScrollTop(root: HTMLElement | Window, top: number) {
-  if (root === window) {
-    document.documentElement.scrollTop = top
-    document.body.scrollTop = top
-    return
-  }
-  ;(root as HTMLElement).scrollTop = top
-}
-
 /**
- * Mobile-only Pro dashboard mode switcher. Desktop must not render this.
+ * Phone-only Pro dashboard body. Mirrors native DashboardHomeView:
+ * Performance cards → Win/Loss → Behavior charts → Execution → Insights.
+ * Desktop must not render this.
  */
 export default function DashboardMobileProTabs({
   deferredSectionsReady,
@@ -76,96 +72,135 @@ export default function DashboardMobileProTabs({
   sessionsSlot,
   showSessions,
   hourData,
-  streakData,
-  bestWinStreak,
-  maxDrawdownSlot,
-  recentTrades,
+  maxDrawdown,
   avgWin,
-  bestTrade,
   avgLoss,
+  bestTrade,
   biggestLoss,
-  bestDay,
-  worstDay,
-  periodTradingDayCount,
+  payoutsTotal = null,
+  winRate,
+  winCount,
+  lossCount,
+  rrTargetAnalysis,
   symbolPerformanceRows,
-  hasAnyTrades,
-  weekdayData,
   longShortPerformance,
   holdTimeStats,
   totalTrades,
   insightsProps,
 }: DashboardMobileProTabsProps) {
-  const { tab, setTab } = useDashboardMobileTab()
-
-  const handleTabChange = useCallback(
-    (next: DashboardMobileTab) => {
-      if (next === tab) return
-      const root = getScrollRoot()
-      // Preserve scroll offset — do not re-anchor the control in the viewport
-      // (that created empty space above the first card on shorter tabs).
-      const scrollTop = readScrollTop(root)
-      setTab(next)
-      window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => {
-          writeScrollTop(root, scrollTop)
-        })
-      })
-    },
-    [setTab, tab]
-  )
+  const performanceCards = buildMobileWebDashboardPerformanceCards({
+    avgWin,
+    avgLoss,
+    bestTrade,
+    biggestLoss,
+    maxDrawdown,
+    payoutsTotal,
+  })
+  const hourBars = mobileWebDashboardHourBars(hourData?.hourlyMap)
+  const showHourTimeline =
+    Boolean(hourData?.hasValidTradingHoursData) &&
+    mobileWebDashboardHourBarsHaveSignal(hourBars)
 
   return (
-    <div className="flex flex-col gap-2 md:hidden">
-      <div className="tt-dashboard-tab-sticky sticky z-30 -mx-0 bg-[var(--tt-surface,#0b1f3a)]/95 py-0 backdrop-blur-md">
-        <DashboardMobileSegmentedControl value={tab} onChange={handleTabChange} />
+    <div
+      className="flex flex-col gap-5 md:hidden"
+      data-testid="dashboard-mobile-one-scroll"
+    >
+      <div className="flex flex-col gap-3">
+        <MobileWebDashboardSectionHeader
+          title="Performance"
+          subtitle="Outcome quality for this period"
+        />
+        <MobileWebDashboardPerformanceGrid cards={performanceCards} />
       </div>
 
-      <DashboardMobileTabPanels
-        activeTab={tab}
-        overview={
-          <>
-            <DashboardInsights {...insightsProps} sections="performance" />
-            <DashboardPsychologyInsightsSlot slot="mobile" />
-            {maxDrawdownSlot}
-            <DashboardStreaksCard
-              streakData={streakData}
-              bestWinStreak={bestWinStreak}
-            />
-            {recentTrades}
-          </>
-        }
-        analytics={
-          <>
-            {weekdaySlot}
-            {showSessions ? sessionsSlot : null}
-            <DashboardTradingHoursCard hourData={hourData} />
-            <DashboardAnalytics
-              symbolPerformanceRows={symbolPerformanceRows}
-              hasAnyTrades={hasAnyTrades}
-              deferredSectionsReady={deferredSectionsReady}
-              weekdayData={weekdayData}
-              longShortPerformance={longShortPerformance}
-              holdTimeStats={holdTimeStats}
-              totalTrades={totalTrades}
-              longShortLayout="compare"
-            />
-          </>
-        }
-        records={
-          <>
-            <DashboardRecordsStatsGrid
-              avgWin={avgWin}
-              bestTrade={bestTrade}
-              avgLoss={avgLoss}
-              biggestLoss={biggestLoss}
-              bestDay={bestDay}
-              worstDay={worstDay}
-              periodTradingDayCount={periodTradingDayCount}
-            />
-            <DashboardInsights {...insightsProps} sections="records" />
-          </>
-        }
-      />
+      <MobileWebDashboardChartBlock
+        title="Win / Loss"
+        subtitle="Wins versus losses in this period"
+      >
+        <MobileWebDashboardWinLoss
+          winRate={winRate}
+          winCount={winCount}
+          lossCount={lossCount}
+        />
+      </MobileWebDashboardChartBlock>
+
+      <MobileWebDashboardSectionHeader title="Behavior" />
+
+      {showSessions ? (
+        <MobileWebDashboardChartBlock
+          title="Trading Sessions"
+          subtitle="Where your trades clustered this period"
+        >
+          {sessionsSlot}
+        </MobileWebDashboardChartBlock>
+      ) : null}
+
+      <MobileWebDashboardChartBlock
+        title="Weekdays"
+        subtitle="P&L across the trading week"
+      >
+        {weekdaySlot}
+      </MobileWebDashboardChartBlock>
+
+      <MobileWebDashboardChartBlock
+        title="Long vs Short"
+        subtitle="Direction mix for this period"
+      >
+        {deferredSectionsReady ? (
+          <MobileWebDashboardLongShort
+            performance={longShortPerformance}
+            totalTrades={totalTrades}
+          />
+        ) : (
+          <div className="h-44 animate-pulse rounded-[10px] bg-[color:var(--tt-surface-nested,#1a222c)]" />
+        )}
+      </MobileWebDashboardChartBlock>
+
+      {showHourTimeline ? (
+        <MobileWebDashboardChartBlock
+          title="Trading Hours"
+          subtitle="Hourly P&L across the session day"
+        >
+          <MobileWebDashboardHourTimeline
+            hourlyMap={hourData?.hourlyMap ?? {}}
+            bestHour={hourData?.bestHour ?? null}
+            worstHour={hourData?.worstHour ?? null}
+          />
+        </MobileWebDashboardChartBlock>
+      ) : null}
+
+      <MobileWebDashboardChartBlock
+        title="R:R Targeting"
+        subtitle="Target R:R vs how far trades ran before exit"
+      >
+        <MobileWebDashboardRrTarget analysis={rrTargetAnalysis} />
+      </MobileWebDashboardChartBlock>
+
+      {symbolPerformanceRows.length > 0 ? (
+        <MobileWebDashboardChartBlock
+          title="Symbol Performance"
+          subtitle="Strongest and weakest instruments in this period"
+        >
+          <MobileWebDashboardSymbols rows={symbolPerformanceRows} />
+        </MobileWebDashboardChartBlock>
+      ) : null}
+
+      <MobileWebDashboardSectionHeader title="Execution" />
+
+      <MobileWebDashboardChartBlock title="Hold Time">
+        {deferredSectionsReady ? (
+          <MobileWebDashboardHoldTime
+            stats={holdTimeStats}
+            totalTrades={totalTrades}
+          />
+        ) : (
+          <div className="h-44 animate-pulse rounded-[10px] bg-[color:var(--tt-surface-nested,#1a222c)]" />
+        )}
+      </MobileWebDashboardChartBlock>
+
+      <MobileWebDashboardInsights {...insightsProps} />
+      <DashboardPsychologyInsightsSlot slot="mobile" />
     </div>
   )
 }

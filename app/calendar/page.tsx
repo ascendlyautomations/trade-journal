@@ -39,6 +39,11 @@ import { computePeriodTradeStats } from "@/lib/periodTradeStats"
 import PlatformCalendarHeader, {
   PlatformCalendarFilters,
 } from "@/app/components/platform/PlatformCalendarHeader"
+import { ChevronLeft, ChevronRight } from "lucide-react"
+import MobileWebCalendarMonthSummary from "@/app/components/mobile/calendar/MobileWebCalendarMonthSummary"
+import MobileWebCalendarYearView from "@/app/components/mobile/calendar/MobileWebCalendarYearView"
+import { buildMobileWebCalendarYearOverview } from "@/lib/mobileWebCalendarYear"
+import { MOBILE_WEB_NEUTRAL_PAGE_BG } from "@/lib/mobileWebPageSurface"
 export default function CalendarPage() {
   useScrollPageTopOnMount()
   const router = useRouter()
@@ -59,6 +64,7 @@ export default function CalendarPage() {
   const [accountFilter, setAccountFilter] = useState("all")
   const [selectedMode, setSelectedMode] = useState("all")
   const [currentDate, setCurrentDate] = useState(new Date())
+  const [calendarScope, setCalendarScope] = useState<"month" | "year">("month")
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [selectedTrades, setSelectedTrades] = useState<any[]>([])
   const [tradeReelsByTradeId, setTradeReelsByTradeId] = useState<
@@ -301,6 +307,25 @@ export default function CalendarPage() {
     setSelectedTrades([])
   }
 
+  function changeYear(offset: number) {
+    const newDate = new Date(currentDate)
+    newDate.setFullYear(newDate.getFullYear() + offset)
+    setCurrentDate(newDate)
+    setSelectedDate(null)
+    setSelectedTrades([])
+  }
+
+  function goToCurrentPeriod() {
+    setCurrentDate(new Date())
+    setSelectedDate(null)
+    setSelectedTrades([])
+  }
+
+  const yearOverview = useMemo(
+    () => buildMobileWebCalendarYearOverview(filteredTrades, year),
+    [filteredTrades, year]
+  )
+
   function handleDaySelect(dayNum: number) {
     const key = toDateKey(year, month, dayNum)
     if (selectedDate === key) {
@@ -458,7 +483,7 @@ export default function CalendarPage() {
       >
       <div
         data-tt-native-surface="calendar"
-        className="tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white pt-3 pb-6"
+        className={`tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white pt-3 pb-6 max-md:pt-1 max-md:pb-4 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}
       >
         <PlatformCalendarHeader
           accountFilter={accountFilter}
@@ -476,7 +501,7 @@ export default function CalendarPage() {
           }}
         />
 
-        <div className="max-w-7xl mx-auto w-full px-4 xl:w-[calc(100%-4rem)] xl:max-w-[1900px] xl:px-0 2xl:w-[calc(100%-6rem)]">
+        <div className="max-w-7xl mx-auto w-full px-4 max-md:px-3 xl:w-[calc(100%-4rem)] xl:max-w-[1900px] xl:px-0 2xl:w-[calc(100%-6rem)]">
 
           {!tradesLoaded ? (
             <SkeletonCalendarPage />
@@ -487,8 +512,81 @@ export default function CalendarPage() {
           {/* LEFT SIDE (CALENDAR) */}
           <div className="w-full min-w-0 overflow-x-hidden">
 
-            {/* HEADER — arrows + month (same row mobile & desktop) */}
-            <div className="flex items-center justify-between mb-3 md:mb-6">
+            <div className="mb-3 md:hidden">
+              <div
+                className="grid grid-cols-2 rounded-[10px] bg-white/10 p-0.5"
+                role="tablist"
+                aria-label="Calendar view"
+              >
+                {(["month", "year"] as const).map((scope) => (
+                  <button
+                    key={scope}
+                    type="button"
+                    role="tab"
+                    aria-selected={calendarScope === scope}
+                    onClick={() => {
+                      setCalendarScope(scope)
+                      setSelectedDate(null)
+                      setSelectedTrades([])
+                    }}
+                    className={`h-9 rounded-[8px] text-[13px] font-semibold capitalize ${
+                      calendarScope === scope
+                        ? "bg-white/15 text-[color:var(--tt-text,#1f2328)]"
+                        : "text-[color:var(--tt-text-muted,#57606a)]"
+                    }`}
+                  >
+                    {scope}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-3 flex items-center justify-between md:hidden">
+              <button
+                type="button"
+                onClick={() =>
+                  calendarScope === "year" ? changeYear(-1) : changeMonth(-1)
+                }
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center"
+                aria-label={
+                  calendarScope === "year" ? "Previous year" : "Previous month"
+                }
+              >
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-[color:var(--tt-text,#1f2328)]">
+                  <ChevronLeft className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+                </span>
+              </button>
+              <div className="flex min-w-0 flex-1 flex-col items-center px-2">
+                <h2 className="text-center text-[17px] font-semibold text-[color:var(--tt-text,#1f2328)]">
+                  {calendarScope === "year"
+                    ? String(year)
+                    : `${currentDate.toLocaleString("default", { month: "long" })} ${year}`}
+                </h2>
+                <button
+                  type="button"
+                  onClick={goToCurrentPeriod}
+                  className="mt-0.5 text-[12px] font-semibold text-[#4EC4E0]"
+                >
+                  {calendarScope === "year" ? "This Year" : "Today"}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  calendarScope === "year" ? changeYear(1) : changeMonth(1)
+                }
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center"
+                aria-label={
+                  calendarScope === "year" ? "Next year" : "Next month"
+                }
+              >
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-[color:var(--tt-text,#1f2328)]">
+                  <ChevronRight className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+                </span>
+              </button>
+            </div>
+
+            <div className="mb-6 hidden items-center justify-between md:flex">
               <button
                 type="button"
                 onClick={() => changeMonth(-1)}
@@ -497,7 +595,7 @@ export default function CalendarPage() {
                 &lt;
               </button>
 
-              <h2 className="flex-1 text-center text-lg md:text-2xl font-semibold md:font-bold text-blue-300 px-2">
+              <h2 className="flex-1 px-2 text-center text-2xl font-bold text-blue-300">
                 {currentDate.toLocaleString("default", { month: "long" })} {year}
               </h2>
 
@@ -552,20 +650,42 @@ export default function CalendarPage() {
               </div>
             </PlatformCalendarFilters>
 
+            {calendarScope === "year" ? (
+              <div className="md:hidden">
+                <MobileWebCalendarYearView
+                  overview={yearOverview}
+                  onSelectMonth={(selectedMonth) => {
+                    const next = new Date(currentDate)
+                    next.setMonth(selectedMonth - 1)
+                    setCurrentDate(next)
+                    setCalendarScope("month")
+                    setSelectedDate(null)
+                    setSelectedTrades([])
+                  }}
+                />
+              </div>
+            ) : null}
+
             {/* WEEKDAY LABELS — full week on phone; desktop density unchanged */}
-            <div className="grid min-w-0 grid-cols-7 gap-1 mb-2 text-center text-gray-400 text-xs md:hidden">
+            {calendarScope === "year" ? null : (
+            <div className="mb-2 grid min-w-0 grid-cols-7 gap-1 text-center text-xs text-[color:var(--tt-text-muted,#57606a)] md:hidden">
               {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
                 <div key={d}>{d}</div>
               ))}
             </div>
-            <div className="hidden md:grid min-w-0 grid-cols-7 gap-2 mb-2 text-center text-gray-400 text-sm">
+            )}
+            <div className="mb-2 hidden min-w-0 grid-cols-7 gap-2 text-center text-sm text-gray-400 md:grid">
               {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
                 <div key={d}>{d}</div>
               ))}
             </div>
 
             {/* CALENDAR GRID */}
-            <div className="space-y-2">
+            <div
+              className={`space-y-2 ${
+                calendarScope === "year" ? "max-md:hidden" : ""
+              }`}
+            >
               {weeks.map((week, weekIndex) => {
                 const weekHasDays = week.some((day) => day != null)
                 if (!weekHasDays) return null
@@ -602,10 +722,18 @@ export default function CalendarPage() {
               })}
             </div>
 
+            {calendarScope === "month" ? (
+              <MobileWebCalendarMonthSummary stats={monthlyStats} />
+            ) : null}
+
           </div>
 
           {/* RIGHT SIDE PANEL — NOW ALIGNED TO TOP */}
-          <div className="w-full min-w-0 max-w-none space-y-4 mt-4 md:mt-[52px]">
+          <div
+            className={`mt-4 w-full min-w-0 max-w-none space-y-4 md:mt-[52px] ${
+              calendarScope === "year" || !selectedDate ? "max-md:hidden" : ""
+            }`}
+          >
 
             {/* STATS */}
             <div className="bg-white/5 p-5 rounded-xl border border-white/10">

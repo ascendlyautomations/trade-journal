@@ -2,6 +2,7 @@
 
 import "../utilityDesktopTheme.css"
 import "../addTradeContrast.css"
+import "../components/mobile/create/mobileWebCreate.css"
 import InputTradeForm from "../components/InputTradeForm"
 import QuickTradeModal from "../components/QuickTradeModal"
 import CsvImportFailureModal from "../components/CsvImportFailureModal"
@@ -32,6 +33,7 @@ import type { QuickTradeCsvFormPatch } from "@/lib/parseQuickCsvPaste"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { useUserProfile } from "@/lib/useUserProfile"
+import { MOBILE_WEB_NEUTRAL_PAGE_BG } from "@/lib/mobileWebPageSurface"
 import { ensureInitialImportReviewCountLoaded } from "@/lib/initialImportReviewCount"
 
 const INPUT_TRADE_CSV_INPUT_ID = "input-trade-csv-upload"
@@ -299,11 +301,13 @@ export default function Home() {
 
       <div
         data-tt-native-surface="add-trade"
-        className="tt-add-trade tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100"
+        data-tt-create-flow
+        data-tt-add-trade-shell
+        className={`tt-add-trade tt-phase4-dark min-h-[calc(100dvh-var(--app-header-offset))] bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}
       >
         <div
-          className={`px-4 pb-4 md:px-6 md:pb-5 max-w-8xl mx-auto ${
-            isNativeIos ? "pt-0" : "pt-2"
+          className={`mx-auto max-w-8xl px-3 pb-[calc(var(--app-tab-bar-offset,0px)+0.75rem)] pt-2 md:px-6 md:pb-5 ${
+            isNativeIos ? "max-md:pt-0" : ""
           }`}
         >
           <input

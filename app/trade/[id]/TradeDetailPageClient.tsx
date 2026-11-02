@@ -1,7 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import dynamic from "next/dynamic"
+import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import FeedPostHeader from "@/app/components/feed/FeedPostHeader"
 import FeedPostMetaRow from "@/app/components/feed/FeedPostMetaRow"
@@ -44,6 +45,33 @@ import TradeCardTimingBlock from "@/app/components/TradeCardTimingBlock"
 import ExpandableText from "@/app/components/ui/ExpandableText"
 import ReelViewer from "@/app/components/profile/ReelViewer"
 import { fetchTradeReel, type ReelRow } from "@/lib/reels"
+import {
+  DesktopWebViewport,
+  MobileWebViewport,
+} from "@/app/components/mobile/MobileWebViewport"
+import MobileWebTradeDetailSurface from "@/app/components/mobile/trade/MobileWebTradeDetailSurface"
+import {
+  MOBILE_WEB_NEUTRAL_PAGE_BG,
+  MOBILE_WEB_PAGE_PAD,
+} from "@/lib/mobileWebPageSurface"
+import { ConfirmModal, useDeleteTradeConfirmation } from "@/app/components/ui"
+import { deleteUserTrade } from "@/lib/deleteTrade"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
+import { DEMO_USER_ID } from "@/lib/demo/constants"
+import { DEMO_ACCOUNTS, DEMO_PROFILE, DEMO_TRADES } from "@/lib/demo/fixtures"
+import { tradeAnalysisHref } from "@/lib/tradeAnalysisNavigation"
+import { setMobileWebTradeTitle } from "@/lib/mobileWebTradeTitle"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
+
+const InputTradeForm = dynamic(
+  () => import("@/app/components/InputTradeForm"),
+  { ssr: false }
+)
+const ShareToConversationsModal = dynamic(
+  () => import("@/app/components/ShareToConversationsModal"),
+  { ssr: false }
+)
 
 function tradeScreenshotSrc(url: string | null | undefined): string | null {
   const raw = url != null ? String(url).trim() : ""
@@ -62,6 +90,7 @@ export default function TradeDetailPageClient({
   tradeId,
 }: TradeDetailPageClientProps) {
   const router = useRouter()
+  const isNativeIos = useIsNativeIos()
 
   const cached = readTradeDetail(tradeId)
   const [trade, setTrade] = useState<any>(cached?.trade ?? null)
@@ -73,6 +102,9 @@ export default function TradeDetailPageClient({
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [selectedReplay, setSelectedReplay] = useState<ReelRow | null>(null)
   const [ownerAccounts, setOwnerAccounts] = useState<any[]>([])
+  const [editingTrade, setEditingTrade] = useState<any | null>(null)
+  const [sendTradeId, setSendTradeId] = useState<string | null>(null)
+  const [reloadNonce, setReloadNonce] = useState(0)
 
   useEffect(() => {
     if (!tradeId) {
@@ -80,8 +112,8 @@ export default function TradeDetailPageClient({
       return
     }
 
-    const warm = readTradeDetail(tradeId)
-    if (warm) {
+    const warm = reloadNonce === 0 ? readTradeDetail(tradeId) : null
+    if (warm?.trade) {
       setTrade(warm.trade)
       setOwnerProfile(warm.ownerProfile)
       setUserId(warm.sessionUserId)
@@ -134,9 +166,20 @@ export default function TradeDetailPageClient({
       }
 
       if (cancelled) return
-      const resolvedTrade = tradeRow
+      let resolvedTrade = tradeRow
         ? sanitizeTradeForViewer(tradeRow, { isOwner })
         : null
+      let demoOwner = false
+      if (!resolvedTrade && isDemoModeActive()) {
+        const demoTrade = DEMO_TRADES.find(
+          (row) => String(row.id) === String(tradeId)
+        )
+        if (demoTrade) {
+          resolvedTrade = demoTrade
+          demoOwner = true
+          setUserId(DEMO_USER_ID)
+        }
+      }
 
       let owner: typeof ownerProfile = null
       if (loadError && !resolvedTrade) {
@@ -144,7 +187,10 @@ export default function TradeDetailPageClient({
         setOwnerProfile(null)
       } else {
         setTrade(resolvedTrade)
-        if (resolvedTrade?.user_id) {
+        if (demoOwner) {
+          owner = DEMO_PROFILE
+          if (!cancelled) setOwnerProfile(DEMO_PROFILE)
+        } else if (resolvedTrade?.user_id) {
           const ownerId = String(resolvedTrade.user_id)
           const { data: ownerRow } = await supabase
             .from("profiles")
@@ -158,7 +204,16 @@ export default function TradeDetailPageClient({
         }
       }
 
-      if (isOwner && sessionUserId) {
+      if (demoOwner) {
+        if (!cancelled) {
+          setOwnerAccounts(
+            DEMO_ACCOUNTS.map((row) => ({
+              ...row,
+              size: row.account_size,
+            }))
+          )
+        }
+      } else if (isOwner && sessionUserId) {
         const { data: accountRows } = await supabase
           .from("accounts")
           .select(ACCOUNTS_SELECT)
@@ -173,15 +228,21 @@ export default function TradeDetailPageClient({
         }
       }
 
-      writeTradeDetail(tradeId, {
-        trade: resolvedTrade,
-        ownerProfile: owner,
-        sessionUserId,
-      })
+      if (resolvedTrade) {
+        writeTradeDetail(tradeId, {
+          trade: resolvedTrade,
+          ownerProfile: owner ?? (demoOwner ? DEMO_PROFILE : null),
+          sessionUserId: demoOwner ? DEMO_USER_ID : sessionUserId,
+        })
+      }
 
-      if (resolvedTrade?.id) {
-        const reel = await fetchTradeReel(supabase, String(resolvedTrade.id))
-        if (!cancelled) setAttachedReel(reel)
+      if (resolvedTrade?.id && !demoOwner) {
+        try {
+          const reel = await fetchTradeReel(supabase, String(resolvedTrade.id))
+          if (!cancelled) setAttachedReel(reel)
+        } catch {
+          if (!cancelled) setAttachedReel(null)
+        }
       } else if (!cancelled) {
         setAttachedReel(null)
       }
@@ -192,7 +253,32 @@ export default function TradeDetailPageClient({
     return () => {
       cancelled = true
     }
-  }, [tradeId])
+  }, [tradeId, reloadNonce])
+
+  const isOwner = Boolean(
+    userId && trade?.user_id && String(trade.user_id) === userId
+  )
+
+  useEffect(() => {
+    if (isNativeIos) return
+    const ticker = String(trade?.ticker ?? "").trim()
+    setMobileWebTradeTitle(ticker || "Trade")
+    return () => setMobileWebTradeTitle(null)
+  }, [isNativeIos, trade?.ticker])
+
+  const performDeleteTrade = useCallback(
+    async (id: string) => {
+      if (isDemoModeActive()) {
+        requestDemoSignup("delete")
+        return
+      }
+      await deleteUserTrade(supabase, id, { userId })
+      router.push("/trades")
+    },
+    [router, userId]
+  )
+  const { requestDelete: handleDeleteTrade, confirmModalProps } =
+    useDeleteTradeConfirmation(performDeleteTrade)
 
   const imgSrc = trade ? tradeScreenshotSrc(trade.image_url) : null
   const pnl = trade != null ? Number(trade.pnl) : NaN
@@ -312,10 +398,12 @@ export default function TradeDetailPageClient({
     </div>
   ) : null
 
+  const pageShellClass = `min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white ${MOBILE_WEB_NEUTRAL_PAGE_BG}`
+
   if (!tradeId) {
     return (
       <>
-        <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-6 text-white">
+        <div className={`${pageShellClass} p-6 ${MOBILE_WEB_PAGE_PAD}`}>
           <p className="text-center text-gray-400">Invalid trade link.</p>
         </div>
       </>
@@ -325,8 +413,8 @@ export default function TradeDetailPageClient({
   if (loading) {
     return (
       <>
-        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
-          <div>Loading...</div>
+        <div className={`flex items-center justify-center ${pageShellClass}`}>
+          <div>Loading trade…</div>
         </div>
       </>
     )
@@ -335,13 +423,13 @@ export default function TradeDetailPageClient({
   if (!trade) {
     return (
       <>
-        <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-6 text-white">
+        <div className={`${pageShellClass} p-6 ${MOBILE_WEB_PAGE_PAD}`}>
           <div className="mx-auto max-w-xl space-y-4 text-center">
             <p className="text-gray-400">This trade is unavailable.</p>
             <button
               type="button"
               onClick={() => router.push("/trades")}
-              className="text-blue-400 hover:underline"
+              className="text-blue-400 hover:underline max-md:hidden"
             >
               Back to trades
             </button>
@@ -353,12 +441,70 @@ export default function TradeDetailPageClient({
 
   return (
     <>
+      <MobileWebViewport>
+        <div className={`${pageShellClass} ${MOBILE_WEB_PAGE_PAD}`}>
+          <MobileWebTradeDetailSurface
+            trade={trade}
+            tradeId={tradeId}
+            userId={userId}
+            ownerProfile={ownerProfile}
+            ownerAccounts={ownerAccounts}
+            imgSrc={imgSrc}
+            attachedReel={attachedReel}
+            onOpenLightbox={setLightboxUrl}
+            onViewReel={() => {
+              if (attachedReel) setSelectedReplay(attachedReel)
+            }}
+            onEdit={
+              isOwner
+                ? () => {
+                    if (isDemoModeActive()) {
+                      requestDemoSignup("edit")
+                      return
+                    }
+                    setEditingTrade({ ...trade })
+                  }
+                : undefined
+            }
+            onDelete={
+              isOwner ? () => handleDeleteTrade(tradeId) : undefined
+            }
+            onShare={
+              isOwner
+                ? () => {
+                    if (isDemoModeActive()) {
+                      requestDemoSignup("trade")
+                      return
+                    }
+                    setSendTradeId(tradeId)
+                  }
+                : undefined
+            }
+            onCopyLink={() => {
+              const url = `${window.location.origin}/trade/${tradeId}`
+              void navigator.clipboard?.writeText(url)
+            }}
+            onAnalyze={
+              isOwner
+                ? () => {
+                    if (isDemoModeActive()) {
+                      requestDemoSignup("ai")
+                      return
+                    }
+                    router.push(tradeAnalysisHref(tradeId))
+                  }
+                : undefined
+            }
+          />
+        </div>
+      </MobileWebViewport>
+      <DesktopWebViewport>
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-6 text-white">
         <div className="mx-auto max-w-xl space-y-4">
           <button
             type="button"
             onClick={() => router.back()}
-            className="text-sm text-gray-400 hover:text-white"
+            className="text-sm text-gray-400 hover:text-white max-md:hidden"
           >
             ← Back
           </button>
@@ -428,6 +574,30 @@ export default function TradeDetailPageClient({
           </div>
         </div>
       </div>
+      </DesktopWebViewport>
+
+      {editingTrade ? (
+        <InputTradeForm
+          key={String(editingTrade.id)}
+          existingTrade={editingTrade}
+          onClose={() => setEditingTrade(null)}
+          onSave={() => {
+            setEditingTrade(null)
+            setReloadNonce((n) => n + 1)
+            router.refresh()
+          }}
+        />
+      ) : null}
+      {sendTradeId ? (
+        <ShareToConversationsModal
+          key={sendTradeId}
+          open
+          onClose={() => setSendTradeId(null)}
+          title="Send trade"
+          tradeId={sendTradeId}
+        />
+      ) : null}
+      <ConfirmModal {...confirmModalProps} />
 
       <ReelViewer
         reel={selectedReplay}

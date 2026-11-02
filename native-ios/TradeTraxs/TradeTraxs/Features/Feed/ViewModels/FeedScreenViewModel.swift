@@ -423,7 +423,7 @@ final class FeedScreenViewModel {
             navigationCoordinator.pushFeed(.trade(summary.id))
         case .post(_, let post):
             detailCache.seed(post)
-            navigationCoordinator.pushFeed(.post(post.id))
+            navigationCoordinator.pushFeedProfilePost(post.id)
         case .clip(_, let reel):
             detailCache.seed(reel)
             navigationCoordinator.pushFeed(.reel(reel.id))

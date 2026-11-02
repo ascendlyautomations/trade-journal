@@ -16,6 +16,7 @@ import {
   withTransientPostgrestRetry,
 } from "@/lib/postgrestTransientRetry"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
+import { isUuidLike } from "@/lib/tradeAccountDisplay"
 import { devLog, devWarn } from "@/lib/devLog"
 import { invalidateUserStreaksCache } from "@/lib/userStreaksCache"
 import {
@@ -745,6 +746,7 @@ export async function fetchTradeReel(
   supabase: SupabaseClient,
   tradeId: string
 ): Promise<ReelRow | null> {
+  if (!isUuidLike(tradeId)) return null
   const { data, error } = await supabase
     .from("reels")
     .select(PROFILE_REELS_SELECT)
@@ -849,7 +851,7 @@ async function queryReelsByTradeIds(
     ...new Set(
       tradeIds
         .map((id) => (id != null ? String(id).trim() : ""))
-        .filter((id) => id !== "")
+        .filter((id) => isUuidLike(id))
     ),
   ]
   if (ids.length === 0) return new Map()

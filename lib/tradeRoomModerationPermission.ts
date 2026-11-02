@@ -1,5 +1,5 @@
-import type { TradeRoomKind } from "@/lib/tradeRoomManagementPermission"
-import { canManageTradeRoom } from "@/lib/tradeRoomManagementPermission"
+import type { TradeRoomKind } from "./tradeRoomManagementPermission.ts"
+import { canManageTradeRoom } from "./tradeRoomManagementPermission.ts"
 
 export const TRADE_ROOM_MODERATOR_TAG_NAME = "Moderator"
 

@@ -6,12 +6,18 @@ import {
   DASHBOARD_MOBILE_CARD_PAD_CLASS,
   DASHBOARD_MOBILE_STAT_PAD_CLASS,
 } from "@/app/components/dashboard/dashboardMobileUi"
+import MobileWebDashboardHero from "@/app/components/mobile/dashboard/MobileWebDashboardHero"
+import MobileWebDashboardMetricStrip from "@/app/components/mobile/dashboard/MobileWebDashboardMetricStrip"
 import { formatCurrency } from "@/lib/formatCurrency"
 import {
   dashboardSignedPnlPositiveFlag,
   formatDashboardWorstDayDisplay,
 } from "@/lib/dashboardDailyRecordsDisplay"
 import { formatProfitFactor, formatRR } from "@/lib/formatDisplay"
+import {
+  buildMobileWebDashboardMetricChips,
+  mobileWebDashboardHeroTitle,
+} from "@/lib/mobileWebDashboard"
 
 function formatNumber(value: number) {
   if (value === null || value === undefined) return "-"
@@ -69,18 +75,21 @@ export type DashboardStatsGridProps = {
   periodTradingDayCount: number
   showEquity: boolean
   mobileEquitySlot: ReactNode
-  /** @deprecated Mobile weekday lives in Analytics tab; ignored on mobile. */
+  /** @deprecated Phone weekday lives in the one-scroll charts; ignored here. */
   mobileWeekdayPnlSlot?: ReactNode
   expectancyData: ExpectancySummary | null
   streakData: StreakSummary | null
   hourData: TradingHoursSummary | null
   showSessions: boolean
-  /** @deprecated Mobile sessions live in Analytics tab; ignored on mobile. */
+  /** @deprecated Phone sessions live in the one-scroll charts; ignored here. */
   mobileSessionsSlot?: ReactNode
   maxDrawdownSlot?: ReactNode
   /** Longest consecutive winning streak (from streakData.maxWinStreak). */
   bestWinStreak: number
   liveAccountValue?: ReactNode
+  timeframeLabel?: string
+  heroDisplayValue?: number | null
+  equityCurveUsesAccountBalance?: boolean
 }
 
 function Stat({
@@ -111,14 +120,14 @@ function Stat({
 
   return (
     <div
-      className={`tt-dash-chip flex h-full min-h-[44px] w-full flex-col items-center justify-center gap-0 p-2.5 text-center ${DASHBOARD_MOBILE_STAT_PAD_CLASS} md:min-h-[72px] md:gap-0 md:p-3 ${className}`.trim()}
+      className={`tt-dash-chip flex h-full min-h-[44px] w-full flex-col items-center justify-center gap-0 p-2.5 text-center ${DASHBOARD_MOBILE_STAT_PAD_CLASS} max-md:items-start max-md:px-3 max-md:text-left md:min-h-[72px] md:gap-0 md:p-3 ${className}`.trim()}
     >
-      <p className="tt-dash-label max-md:mb-0 max-md:whitespace-nowrap max-md:leading-none">
+      <p className="tt-dash-label max-md:mb-0 max-md:whitespace-nowrap max-md:text-left max-md:leading-none">
         {title}
       </p>
-      <div className="w-full text-center max-md:leading-none">
+      <div className="w-full text-center max-md:text-left max-md:leading-none">
         <span
-          className={`block text-center text-sm font-semibold leading-tight whitespace-nowrap md:text-base ${color}`}
+          className={`block text-center text-sm font-semibold leading-tight whitespace-nowrap max-md:text-left md:text-base ${color}`}
           title={valueTitle}
         >
           {displayValue}
@@ -482,7 +491,7 @@ function FreeDashboardKpis({
         title="Best Win Streak"
         value={bestWinStreak}
         subtitle={bestWinStreakSubtitle(bestWinStreak)}
-        className="tt-dash-hide-desktop-v1"
+        className="tt-dash-hide-desktop-v1 max-md:hidden"
       />
       {showEquity ? <div className="md:hidden">{mobileEquitySlot}</div> : null}
     </div>
@@ -512,6 +521,9 @@ export default function DashboardStatsGrid({
   maxDrawdownSlot,
   bestWinStreak,
   liveAccountValue = null,
+  timeframeLabel = "",
+  heroDisplayValue = null,
+  equityCurveUsesAccountBalance = false,
 }: DashboardStatsGridProps) {
   if (!isPro) {
     return (
@@ -532,34 +544,28 @@ export default function DashboardStatsGrid({
     )
   }
 
+  const metricChips = buildMobileWebDashboardMetricChips({
+    winRate,
+    profitFactor,
+    avgRR,
+    avgMaxRrReached,
+    totalTrades,
+    expectancy: expectancyData?.expectancy ?? null,
+  })
+
   return (
     <div className="flex flex-col gap-2 md:block md:space-y-3">
-      {/* Mobile: hero metrics + equity only (tabbed sections render below). */}
-      <div className="flex flex-col gap-2 md:hidden">
-        <div className="grid grid-cols-3 gap-2">
-          <Stat title="Trades" value={formatNumber(totalTrades)} />
-          <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
-          <Stat
-            title="P&L"
-            value={formatCurrency(totalPnL)}
-            positive={totalPnL >= 0}
-          />
-          <ExpectancyStat expectancyData={expectancyData} dense />
-          {/*
-            No subtitle on mobile — a second line made this cell taller and
-            stretched Expectancy / Avg RR via h-full, looking like extra padding.
-          */}
-          <Stat title="Best Win Streak" value={bestWinStreak} />
-          <Stat title="Avg RR" value={formatRR(avgRR)} />
-          <Stat
-            title="Avg Max R:R"
-            value={formatRR(avgMaxRrReached)}
-          />
-        </div>
-
-        {liveAccountValue}
-
+      {/* Phone: native-style hero + equity curve + 6-chip strip. */}
+      <div className="flex flex-col gap-3 md:hidden">
+        <MobileWebDashboardHero
+          title={mobileWebDashboardHeroTitle(equityCurveUsesAccountBalance)}
+          periodTitle={timeframeLabel}
+          tradeCount={totalTrades}
+          displayValue={heroDisplayValue}
+          netPnL={totalPnL}
+        />
         {showEquity ? mobileEquitySlot : null}
+        <MobileWebDashboardMetricStrip chips={metricChips} />
       </div>
 
       <div className="tt-dash-strip tt-dash-hide-desktop-v1 hidden md:flex">

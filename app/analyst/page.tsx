@@ -29,6 +29,7 @@ import AnalyzeTradeProgressModal from "../components/analyst/AnalyzeTradeProgres
 import { createAnalyzeProgressController } from "@/lib/analyzeTradeProgress"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
+import { MOBILE_WEB_NEUTRAL_PAGE_BG } from "@/lib/mobileWebPageSurface"
 
 type AnalyzeTradeApiPayload = {
   reply?: string
@@ -526,9 +527,9 @@ export default function AnalystPage() {
   return (
     <Suspense
       fallback={
-        <div className="tt-analyst tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-6 pt-0 text-gray-100 md:px-6 md:pb-10">
+        <div className={`tt-analyst tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-6 pt-0 text-gray-100 md:px-6 md:pb-10 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
           <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-[1600px] flex-col gap-3 md:gap-3">
-            <h1 className="shrink-0 text-lg font-semibold uppercase tracking-wide text-blue-300 md:text-xl">
+            <h1 className="hidden shrink-0 text-lg font-semibold uppercase tracking-wide text-blue-300 md:block md:text-xl">
               AI Analyst
             </h1>
             <SkeletonAnalystPanel count={4} />
@@ -813,9 +814,9 @@ function AnalystPageContent() {
         status={progressLabel}
       />
 
-      <div className="tt-analyst tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-6 pt-0 text-gray-100 md:px-6 md:pb-10">
+      <div className={`tt-analyst tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-6 pt-0 text-gray-100 md:px-6 md:pb-10 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
         <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-[1600px] flex-col gap-3 md:gap-3">
-          <h1 className="shrink-0 text-lg font-semibold uppercase tracking-wide text-blue-300 md:text-xl">
+          <h1 className="hidden shrink-0 text-lg font-semibold uppercase tracking-wide text-blue-300 md:block md:text-xl">
             AI Analyst
           </h1>
 

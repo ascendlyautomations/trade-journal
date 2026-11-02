@@ -1,8 +1,12 @@
 "use client"
 
 import { useCallback, useRef, type TouchEvent } from "react"
-import { adjacentProfileTab } from "@/lib/profileTabStrip"
+import {
+  adjacentMobileWebProfileTab,
+  adjacentProfileTab,
+} from "@/lib/profileTabStrip"
 import { isLeadingBackGestureZone } from "@/lib/leadingBackGestureZone"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
 import type { ProfileTab } from "./ProfileTabs"
 import { hapticLight } from "@/lib/nativeHaptics"
 
@@ -17,6 +21,7 @@ export function useProfileTabSwipe(options: {
   onTabChange: (tab: ProfileTab) => void
 }) {
   const { enabled, activeTab, onTabChange } = options
+  const isNativeIos = useIsNativeIos()
   const startX = useRef<number | null>(null)
   const startY = useRef<number | null>(null)
 
@@ -53,20 +58,24 @@ export function useProfileTabSwipe(options: {
       if (Math.max(absX, absY) < DIRECTION_THRESHOLD_PX) return
       if (absX <= absY * HORIZONTAL_DOMINANCE_RATIO) return
 
+      const neighbor = isNativeIos
+        ? adjacentProfileTab
+        : adjacentMobileWebProfileTab
+
       if (deltaX < 0) {
-        const next = adjacentProfileTab(activeTab, 1)
+        const next = neighbor(activeTab, 1)
         if (!next) return
         void hapticLight("profile-tab-swipe")
         onTabChange(next)
         return
       }
 
-      const previous = adjacentProfileTab(activeTab, -1)
+      const previous = neighbor(activeTab, -1)
       if (!previous) return
       void hapticLight("profile-tab-swipe")
       onTabChange(previous)
     },
-    [activeTab, enabled, onTabChange]
+    [activeTab, enabled, isNativeIos, onTabChange]
   )
 
   return { onTouchStart, onTouchEnd }

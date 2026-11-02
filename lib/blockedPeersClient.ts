@@ -1,5 +1,6 @@
 import { blockedPeerIds } from "@/lib/feedSuggestedTraders"
 import { supabase } from "@/lib/supabaseClient"
+import { isUuidLike } from "@/lib/tradeAccountDisplay"
 
 export const USER_BLOCK_LIST_CHANGED_EVENT = "tt:user-block-list-changed"
 
@@ -46,7 +47,7 @@ export async function loadBlockedPeerIdsForViewer(
   viewerId: string
 ): Promise<string[]> {
   const id = String(viewerId ?? "").trim()
-  if (!id) return []
+  if (!id || !isUuidLike(id)) return []
   const { data, error } = await supabase
     .from("user_blocks")
     .select("blocker_id, blocked_id")

@@ -54,6 +54,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { getLocalTodayDateInputValue } from "@/lib/tradeDateValidation"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 import { useUserProfile } from "@/lib/useUserProfile"
+import { MOBILE_WEB_NEUTRAL_PAGE_BG } from "@/lib/mobileWebPageSurface"
 import { useWithdrawalsHistory } from "@/lib/useWithdrawalsHistory"
 import {
   createTrackerIncome,
@@ -355,14 +356,14 @@ export default function PropFirmExpensesPage() {
   const mostProfitable = overview.firms.find((firmRow) => firmRow.key === overview.mostProfitableFirmKey)
 
   return (
-    <div className="tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:py-8">
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+    <div className={`tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:py-8 max-md:px-3 max-md:py-3">
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3 max-md:mb-3">
           <div className="min-w-0">
-            <Link href="/settings" className="text-sm text-blue-300 hover:text-blue-200">
+            <Link href="/settings" className="text-sm text-blue-300 hover:text-blue-200 max-md:hidden">
               ← Settings
             </Link>
-            <h1 className="mt-2 text-2xl font-bold text-blue-300 sm:text-3xl">
+            <h1 className="mt-2 text-2xl font-bold text-blue-300 sm:text-3xl max-md:hidden">
               Expense Tracker
             </h1>
             <p className="mt-1 max-w-xl text-sm text-gray-400">

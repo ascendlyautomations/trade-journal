@@ -1,6 +1,7 @@
 "use client"
 
-import { memo, useMemo, useRef, useState } from "react"
+import { memo, useMemo, useRef, useState, useSyncExternalStore } from "react"
+import { isPhoneWebTouchTarget } from "@/lib/mobileWebTouch"
 import ConfirmModal from "@/app/components/ui/ConfirmModal"
 import { NAVBAR_HEIGHT_CLASS } from "@/app/components/ui/DetailModalShell"
 import type { StoryBarProfile } from "./FeedStoriesBar"
@@ -37,6 +38,15 @@ type FeedStoryViewerProps = {
 }
 
 const SWIPE_THRESHOLD_PX = 48
+
+function subscribePhoneWebMedia(onChange: () => void) {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return () => {}
+  }
+  const media = window.matchMedia("(max-width: 767px)")
+  media.addEventListener("change", onChange)
+  return () => media.removeEventListener("change", onChange)
+}
 
 const STORY_FRAME_HEIGHT =
   "h-[calc(100dvh-var(--navbar-height,4rem)-2rem)] max-h-[calc(100dvh-var(--navbar-height,4rem)-2rem)] sm:h-[min(700px,calc(100dvh-var(--navbar-height,4rem)-2rem))]"
@@ -176,6 +186,11 @@ function FeedStoryViewer({
   onStoryReplyError,
   onDeleteStory,
 }: FeedStoryViewerProps) {
+  const phoneWeb = useSyncExternalStore(
+    subscribePhoneWebMedia,
+    isPhoneWebTouchTarget,
+    () => false
+  )
   const touchStartX = useRef<number | null>(null)
   const touchStartY = useRef<number | null>(null)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -312,6 +327,7 @@ function FeedStoryViewer({
             key={activeStoryUser}
             profile={activeProfile}
             imageUrl={currentStory.image_url}
+            priority={phoneWeb}
             imageKey={currentStory.id}
             timestamp={currentStory.created_at}
             hasFooter={showStoryReply}

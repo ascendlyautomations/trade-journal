@@ -19,6 +19,7 @@ enum AdminContentInspectViews {
         case .inspectPost(let postID):
             PostDetailView(
                 postID: postID,
+                loadSource: navigationCoordinator.postDetailLoadSource(for: postID),
                 data: data,
                 navigationCoordinator: navigationCoordinator
             )

@@ -9,6 +9,7 @@ import {
 } from "@/lib/psychology/usePsychologyJournalInputs"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
+import { MOBILE_WEB_NEUTRAL_PAGE_BG } from "@/lib/mobileWebPageSurface"
 
 export default function CheckInDayPage() {
   useScrollPageTopOnMount()
@@ -21,8 +22,8 @@ export default function CheckInDayPage() {
   )
 
   return (
-    <main className="tt-psych-experience mx-auto max-w-2xl px-4 py-8 md:py-10">
-      <div className="mb-6">
+    <main className={`tt-psych-experience mx-auto max-w-2xl px-4 py-8 md:py-10 max-md:px-3 max-md:py-3 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
+      <div className="mb-6 max-md:hidden">
         <Link
           href="/check-in-history"
           className="text-sm text-blue-400 hover:text-blue-300"

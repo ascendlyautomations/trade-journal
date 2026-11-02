@@ -54,7 +54,7 @@ export default function CheckInHistoryHome({
 
   if (summaries.length === 0) {
     return (
-      <div className="rounded-xl border border-white/10 bg-white/5 p-8 text-center">
+      <div className="rounded-xl border border-white/10 bg-white/5 p-8 text-center max-md:p-5">
         <p className="font-medium text-white">No history yet</p>
         <p className="mt-1 text-sm text-gray-500">
           Log daily check-ins and trades to build your history.
@@ -65,13 +65,13 @@ export default function CheckInHistoryHome({
 
   return (
     <div className="space-y-4" data-testid="checkInHistory.list">
-      <div className="flex rounded-lg border border-white/10 bg-white/5 p-0.5">
+      <div className="flex rounded-lg border border-white/10 bg-white/5 p-0.5 max-md:min-h-11">
         {FILTERS.map((value) => (
           <button
             key={value}
             type="button"
             onClick={() => setFilter(value)}
-            className={`flex-1 rounded-md px-2 py-1.5 text-xs font-semibold capitalize ${
+            className={`flex-1 rounded-md px-2 py-1.5 text-xs font-semibold capitalize max-md:min-h-10 ${
               filter === value ? "bg-blue-500/25 text-white" : "text-gray-400"
             }`}
           >
@@ -81,7 +81,7 @@ export default function CheckInHistoryHome({
       </div>
 
       {filtered.length === 0 ? (
-        <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-sm text-gray-400">
+        <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-sm text-gray-400 max-md:p-5">
           No days match this filter.
         </div>
       ) : (
@@ -90,7 +90,7 @@ export default function CheckInHistoryHome({
             <li key={day.dateKey}>
               <Link
                 href={`/check-in-history/${day.dateKey}`}
-                className="block rounded-xl border border-white/10 bg-white/5 p-4 hover:border-white/20 hover:bg-white/[0.07]"
+                className="block rounded-xl border border-white/10 bg-white/5 p-4 hover:border-white/20 hover:bg-white/[0.07] max-md:rounded-[14px] max-md:px-3.5 max-md:py-2.5"
               >
                 <p className="font-semibold text-white">
                   {formatCheckInHistoryDateLabel(day.dateKey)}

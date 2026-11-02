@@ -32,6 +32,8 @@ type DropdownMenuProps = {
   stopPropagation?: boolean
   className?: string
   menuClassName?: string
+  /** Names an icon-only trigger. Visible label text is left unchanged. */
+  ariaLabel?: string
 }
 
 type MenuPosition = {
@@ -48,6 +50,7 @@ export default function DropdownMenu({
   stopPropagation = false,
   className = "",
   menuClassName = "",
+  ariaLabel,
 }: DropdownMenuProps) {
   const [open, setOpen] = useState(false)
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null)
@@ -161,6 +164,7 @@ export default function DropdownMenu({
         disabled={disabled}
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-label={ariaLabel}
         className="inline-flex items-center disabled:opacity-50"
       >
         {trigger}

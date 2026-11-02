@@ -6,6 +6,8 @@ import { usePathname, useRouter } from "next/navigation"
 import IntentPrefetchLink from "@/lib/IntentPrefetchLink"
 import { CREATE_ROUTE, isCreateHubPath } from "@/lib/createRoutes"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
+import { useMobileWebSheetDismiss } from "@/lib/useMobileWebSheetDismiss"
+import { usePhoneWebDialogFocus } from "@/lib/usePhoneWebDialogFocus"
 import { isAppAddTradePath } from "@/lib/addTradePath"
 import {
   Camera,
@@ -64,22 +66,22 @@ function WithdrawalIcon() {
 }
 
 function TradeLucideIcon() {
-  return <CirclePlus className="h-4 w-4" aria-hidden />
+  return <CirclePlus className="h-5 w-5" aria-hidden />
 }
 function PostLucideIcon() {
-  return <MessageSquareText className="h-4 w-4" aria-hidden />
+  return <MessageSquareText className="h-5 w-5" aria-hidden />
 }
 function ClipLucideIcon() {
-  return <PlaySquare className="h-4 w-4" aria-hidden />
+  return <PlaySquare className="h-5 w-5" aria-hidden />
 }
 function AchievementLucideIcon() {
-  return <Trophy className="h-4 w-4" aria-hidden />
+  return <Trophy className="h-5 w-5" aria-hidden />
 }
 function StoryLucideIcon() {
-  return <Camera className="h-4 w-4" aria-hidden />
+  return <Camera className="h-5 w-5" aria-hidden />
 }
 function WithdrawalLucideIcon() {
-  return <ArrowDownCircle className="h-4 w-4" aria-hidden />
+  return <ArrowDownCircle className="h-5 w-5" aria-hidden />
 }
 
 function MenuOptionsList({
@@ -104,7 +106,11 @@ function MenuOptionsList({
               dense ? "py-2" : "min-h-11 py-2.5"
             } ${NAV_ITEM_INACTIVE_HOVER_SURFACE}`}
           >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-elevated text-base">
+            <span
+              className={`flex shrink-0 items-center justify-center rounded-lg border border-border bg-surface-elevated text-base ${
+                dense ? "h-8 w-8" : "h-10 w-10"
+              }`}
+            >
               {item.icon}
             </span>
             <span className="min-w-0 flex-1">
@@ -149,52 +155,102 @@ export default function CreateHubMenu({
   )
 
   const close = useCallback(() => setOpen(false), [setOpen])
+  const sheetDismiss = useMobileWebSheetDismiss(close)
+  const sheetRef = useRef<HTMLDivElement>(null)
+  usePhoneWebDialogFocus(open && (isMobile || isController), sheetRef)
   const useNativeIcons = isMobile || isController
 
-  const menuItems: CreateMenuEntry[] = [
+  const desktopMenuItems: CreateMenuEntry[] = [
     {
       id: "add-trade",
       label: "Add Trade",
       subtitle: "Log a completed trade",
       href: CREATE_ROUTE.addTrade,
-      icon: useNativeIcons ? <TradeLucideIcon /> : <TradeIcon />,
+      icon: <TradeIcon />,
     },
     {
       id: "post",
       label: "Post",
       subtitle: "Share with the community",
       href: CREATE_ROUTE.post,
-      icon: useNativeIcons ? <PostLucideIcon /> : <PostIcon />,
+      icon: <PostIcon />,
     },
     {
       id: "clip",
       label: "Clip",
       subtitle: "Upload a short video",
       href: CREATE_ROUTE.clip,
-      icon: useNativeIcons ? <ClipLucideIcon /> : <ClipIcon />,
+      icon: <ClipIcon />,
     },
     {
       id: "achievement",
       label: "Achievement",
       subtitle: "Share a milestone",
       href: CREATE_ROUTE.achievement,
-      icon: useNativeIcons ? <AchievementLucideIcon /> : <AchievementIcon />,
+      icon: <AchievementIcon />,
     },
     {
       id: "withdrawal",
       label: "Withdrawal",
       subtitle: "Record a Live or prop-firm payout",
       href: CREATE_ROUTE.withdrawal,
-      icon: useNativeIcons ? <WithdrawalLucideIcon /> : <WithdrawalIcon />,
+      icon: <WithdrawalIcon />,
     },
     {
       id: "story",
       label: "Story",
       subtitle: "Photo for 24 hours",
       href: CREATE_ROUTE.story,
-      icon: useNativeIcons ? <StoryLucideIcon /> : <StoryIcon />,
+      icon: <StoryIcon />,
     },
   ]
+
+  const phoneMenuItems: CreateMenuEntry[] = [
+    {
+      id: "add-trade",
+      label: "Add Trade",
+      subtitle: "Log a completed trade",
+      href: CREATE_ROUTE.addTrade,
+      icon: <TradeLucideIcon />,
+    },
+    {
+      id: "post",
+      label: "Post",
+      subtitle: "Share with the community",
+      href: CREATE_ROUTE.post,
+      icon: <PostLucideIcon />,
+    },
+    {
+      id: "clip",
+      label: "Clip",
+      subtitle: "Share a short trading video",
+      href: CREATE_ROUTE.clip,
+      icon: <ClipLucideIcon />,
+    },
+    {
+      id: "achievement",
+      label: "Achievement",
+      subtitle: "Share a milestone",
+      href: CREATE_ROUTE.achievement,
+      icon: <AchievementLucideIcon />,
+    },
+    {
+      id: "story",
+      label: "Story",
+      subtitle: "Share a photo for 24 hours",
+      href: CREATE_ROUTE.story,
+      icon: <StoryLucideIcon />,
+    },
+    {
+      id: "withdrawal",
+      label: "Withdrawal",
+      subtitle: "Record money withdrawn from a Live account",
+      href: CREATE_ROUTE.withdrawal,
+      icon: <WithdrawalLucideIcon />,
+    },
+  ]
+
+  const menuItems = useNativeIcons ? phoneMenuItems : desktopMenuItems
 
   const menuActive =
     isCreateHubPath(pathname) || isAppAddTradePath(pathname)
@@ -278,12 +334,14 @@ export default function CreateHubMenu({
           >
             <div className={UI_MODAL_BACKDROP} aria-hidden />
             <div
+              ref={sheetRef}
               role="dialog"
               aria-modal="true"
               aria-label="Create"
               className="absolute inset-x-0 bottom-0 rounded-t-2xl border border-border bg-card text-card-foreground shadow-modal ui-theme-backdrop"
               onClick={(e) => e.stopPropagation()}
             >
+              <div {...sheetDismiss}>
               <div className="flex justify-center pt-3 pb-1">
                 <div className="h-1 w-10 rounded-full bg-border" aria-hidden />
               </div>
@@ -292,6 +350,7 @@ export default function CreateHubMenu({
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   Trade journal & community content
                 </p>
+              </div>
               </div>
               <MenuOptionsList
                 items={menuItems}

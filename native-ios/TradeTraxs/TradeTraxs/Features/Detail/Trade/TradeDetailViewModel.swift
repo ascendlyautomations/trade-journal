@@ -8,7 +8,7 @@ final class TradeDetailViewModel {
     enum Phase: Equatable {
         case loading
         case loaded
-        case failed(String)
+        case failed(DetailLoadFailurePresentation)
     }
 
     private(set) var phase: Phase = .loading
@@ -362,7 +362,9 @@ final class TradeDetailViewModel {
             )
             #endif
             if trade == nil {
-                phase = .failed(ProfileSectionSupport.message(for: error))
+                phase = .failed(
+                    DetailLoadFailureSupport.presentation(for: error, content: .trade)
+                )
             }
         }
     }

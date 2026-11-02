@@ -39,11 +39,11 @@ struct ClipDetailView: View {
             case .loading where viewModel.reel == nil:
                 ExperienceLoadingSpinner(label: "Loading clip")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .failed(let message) where viewModel.reel == nil:
+            case .failed(let failure) where viewModel.reel == nil:
                 ExperienceErrorState(
-                    title: "Couldn't load clip",
-                    message: message,
-                    onRetry: { Task { await viewModel.refresh() } }
+                    title: failure.title,
+                    message: failure.message,
+                    onRetry: failure.isRetryable ? { Task { await viewModel.refresh() } } : nil
                 )
             default:
                 content

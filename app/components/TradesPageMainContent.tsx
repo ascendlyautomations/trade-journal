@@ -7,7 +7,9 @@ import Button from "./ui/Button"
 import TradeFilterBar from "./TradeFilterBar"
 import PerformanceShareButton from "./PerformanceShareButton"
 import TradesPageTradeCard from "./TradesPageTradeCard"
+import MobileWebTradesSurface from "./mobile/trades/MobileWebTradesSurface"
 import type { TradesPageListItem } from "@/lib/copyTradePresentation"
+import type { TradesSortKey } from "@/lib/tradesSort"
 import {
   SkeletonStatsCard,
   SkeletonTradesPageTradeCard,
@@ -64,6 +66,12 @@ type TradesPageMainContentProps = {
   onOpenTradeReplay?: (trade: any) => void
   editingTradeId?: string | null
   selectedTradeId?: string | null
+  sortBy?: TradesSortKey
+  onSortByChange?: (value: TradesSortKey) => void
+  onOpenTrade?: (trade: any) => void
+  tradesLoadError?: string | null
+  onRetryTradesLoad?: () => void
+  tradesRetrying?: boolean
 }
 
 function Stat({ title, value, positive }: any) {
@@ -120,6 +128,12 @@ function TradesPageMainContent({
   onOpenTradeReplay,
   editingTradeId = null,
   selectedTradeId = null,
+  sortBy = "newest",
+  onSortByChange,
+  onOpenTrade,
+  tradesLoadError = null,
+  onRetryTradesLoad,
+  tradesRetrying = false,
 }: TradesPageMainContentProps) {
   const { isNativeIos } = usePlatformPresentation()
 
@@ -127,9 +141,11 @@ function TradesPageMainContent({
 
   return (
     <>
-      {isNativeIos ? null : <h1 className="sr-only">Trades</h1>}
       {isNativeIos ? null : (
-      <div className="w-full mt-2.5 space-y-2.5">
+        <h1 className="sr-only max-md:hidden">Trades</h1>
+      )}
+      {isNativeIos ? null : (
+      <div className="hidden md:block w-full mt-2.5 space-y-2.5">
         <div className="flex flex-wrap items-center justify-center gap-2 md:justify-start md:gap-3">
           <button
             type="button"
@@ -294,13 +310,59 @@ function TradesPageMainContent({
       </div>
       )}
 
+      {isNativeIos || !onOpenTrade || !onSortByChange ? null : (
+        <MobileWebTradesSurface
+          loading={loading}
+          accounts={accounts}
+          accountFilter={accountFilter}
+          onAccountChange={onAccountChange}
+          isPro={isPro}
+          copyGroups={copyGroups}
+          onAccountPickerOpen={onAccountPickerOpen}
+          accountTypeFilter={accountTypeFilter}
+          onAccountTypeChange={onAccountTypeChange}
+          timeframe={timeframe}
+          onTimeframeChange={onTimeframeChange}
+          customRangeStart={customRangeStart}
+          customRangeEnd={customRangeEnd}
+          onCustomRangeApply={onCustomRangeApply}
+          selectedDate={selectedDate}
+          onSelectedDateChange={onSelectedDateChange}
+          resultFilter={resultFilter}
+          onResultFilterChange={onResultFilterChange}
+          onOpenQuickInput={onOpenQuickInput}
+          showPublicOnly={showPublicOnly}
+          onTogglePublicOnly={onTogglePublicOnly}
+          onOpenPerformanceShare={onOpenPerformanceShare}
+          sortBy={sortBy}
+          onSortByChange={onSortByChange}
+          displayedTradeItems={displayedTradeItems}
+          visibleTradesLength={visibleTradesLength}
+          hasAnyTrades={hasAnyTrades}
+          visibleCount={visibleCount}
+          accountById={accountById}
+          onOpenTrade={onOpenTrade}
+          onEditTrade={onEditTrade}
+          onDeleteTrade={onDeleteTrade}
+          onSendTrade={onSendTrade}
+          onAnalyzeTrade={onAnalyzeTrade}
+          onImageClick={onImageClick}
+          onLoadMore={onLoadMore}
+          onImportCsv={onImportCsv}
+          selectedTradeId={selectedTradeId}
+          loadError={tradesLoadError}
+          onRetryLoad={onRetryTradesLoad}
+          retryingLoad={tradesRetrying}
+        />
+      )}
+
       {loading ? (
         <>
           {isNativeIos ? null : (
           <div
             aria-busy="true"
             aria-label="Loading trade statistics"
-            className="mt-2.5 w-full grid grid-cols-2 md:grid-cols-4 gap-2"
+            className="hidden md:grid mt-2.5 w-full grid-cols-2 md:grid-cols-4 gap-2"
           >
             {Array.from({ length: 4 }).map((_, i) => (
               <SkeletonStatsCard key={i} />
@@ -311,7 +373,7 @@ function TradesPageMainContent({
             aria-busy="true"
             aria-label="Loading trades"
             className={`w-full grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5 ${
-              isNativeIos ? "mt-2" : "mt-2.5"
+              isNativeIos ? "mt-2" : "hidden md:grid mt-2.5"
             }`}
           >
             {Array.from({ length: 6 }).map((_, i) => (
@@ -322,7 +384,7 @@ function TradesPageMainContent({
       ) : (
         <>
           {isNativeIos ? null : (
-          <div className="mt-2.5 w-full grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="hidden md:grid mt-2.5 w-full grid-cols-2 md:grid-cols-4 gap-2">
             <Stat
               title="Trades"
               value={tradeStats.totalTrades.toLocaleString(undefined, {
@@ -341,7 +403,7 @@ function TradesPageMainContent({
 
           <div
             className={`w-full grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5 ${
-              isNativeIos ? "mt-2" : "mt-2.5"
+              isNativeIos ? "mt-2" : "hidden md:grid mt-2.5"
             }`}
           >
             {displayedTradeItems.length === 0 ? (
@@ -434,7 +496,7 @@ function TradesPageMainContent({
           </div>
 
           {visibleCount < visibleTradesLength ? (
-            <div className="mt-2.5 flex justify-center">
+            <div className={`mt-2.5 flex justify-center ${isNativeIos ? "" : "hidden md:flex"}`}>
               <button
                 type="button"
                 onClick={onLoadMore}

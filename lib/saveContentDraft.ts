@@ -63,7 +63,7 @@ export async function saveContentDraft(
   input: SaveContentDraftInput,
   report: UploadProgressReporter
 ): Promise<SaveContentDraftResult> {
-  const payload = { version: 1, ...input.payload }
+  const payload: Record<string, unknown> = { version: 1, ...input.payload }
 
   if (input.imageFile) {
     const contentType = input.imageContentType ?? "image/jpeg"
@@ -91,7 +91,7 @@ export async function saveContentDraft(
               : "story"
       const section = (payload[key] as Record<string, unknown> | undefined) ?? {}
       section.imageStoragePath = uploaded.path
-      ;(payload as Record<string, unknown>)[key] = section
+      payload[key] = section
     }
   }
 

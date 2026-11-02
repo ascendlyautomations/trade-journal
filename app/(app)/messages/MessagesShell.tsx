@@ -48,6 +48,10 @@ import {
 import { markConversationOpenFromInbox } from "@/lib/conversationOpenIntent"
 import { usePathname, useRouter } from "next/navigation"
 import MessagesConversationList from "../../components/messages/MessagesConversationList"
+import { MobileWebViewport } from "@/app/components/mobile/MobileWebViewport"
+import MobileWebMessagesInbox from "@/app/components/mobile/messages/MobileWebMessagesInbox"
+import MobileWebMessagesInboxChrome from "@/app/components/mobile/messages/MobileWebMessagesInboxChrome"
+import { MOBILE_WEB_OPEN_COMPOSE_EVENT } from "@/lib/mobileWebTabBar"
 import PlatformMessagesHeader, {
   PlatformMessagesWebInboxActions,
 } from "@/app/components/platform/PlatformMessagesHeader"
@@ -70,6 +74,7 @@ import {
 } from "@/lib/demo/demoMessages"
 import { isDemoUserId } from "@/lib/demo/constants"
 import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
 import {
   readMessagesInboxSession,
   writeMessagesInboxSession,
@@ -158,6 +163,7 @@ function sortConversationsDesc(list: any[]) {
 }
 
 export default function MessagesShell({ children }: { children: ReactNode }) {
+  const nativeIosWebview = useIsNativeIos()
   const { user: authUser, loading: profileLoading } = useUserProfile()
   const pathname = usePathname()
   const [conversations, setConversations] = useState<any[]>([])
@@ -211,6 +217,19 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
     setDmResults([])
     setShowDMModal(true)
   }
+
+  useEffect(() => {
+    function onCompose() {
+      setDmSelectedUsers([])
+      setDmSearchQuery("")
+      setDmResults([])
+      setShowDMModal(true)
+    }
+    window.addEventListener(MOBILE_WEB_OPEN_COMPOSE_EVENT, onCompose)
+    return () => {
+      window.removeEventListener(MOBILE_WEB_OPEN_COMPOSE_EVENT, onCompose)
+    }
+  }, [])
 
   useEffect(() => {
     if (!showGroupModal || !user?.id) return
@@ -1114,25 +1133,37 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
         <div
           data-tt-native-surface="messages"
           data-tt-messages-inbox
-          className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden px-6 pb-6 pt-0"
+          className={`mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden px-6 pb-6 pt-0${
+            nativeIosWebview ? "" : " max-md:px-0 max-md:pb-0"
+          }`}
         >
           <PlatformMessagesHeader
             onPersonalChat={openDMModal}
             onGroupChat={() => setShowGroupModal(true)}
           />
 
+          <MobileWebViewport>
+            <MobileWebMessagesInboxChrome
+              search={search}
+              onSearchChange={setSearch}
+              onCompose={openDMModal}
+            />
+          </MobileWebViewport>
+
           <input
             data-tt-messages-inbox-search
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search conversations..."
-            className="tt-messages-search mb-3 mt-4 w-full shrink-0 rounded-xl border border-white/10 bg-white/5 p-3 text-white placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
+            className={`tt-messages-search mb-3 mt-4 w-full shrink-0 rounded-xl border border-white/10 bg-white/5 p-3 text-white placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/40${
+              nativeIosWebview ? "" : " hidden md:block"
+            }`}
           />
 
           <PlatformMessagesWebInboxActions>
             <div
               data-tt-messages-inbox-actions
-              className="mb-4 flex shrink-0 flex-wrap items-center justify-start gap-2"
+              className="mb-4 hidden shrink-0 flex-wrap items-center justify-start gap-2 md:flex"
             >
               <button
                 type="button"
@@ -1185,38 +1216,59 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
                   ) : undefined
                 }
               />
-            ) : showEmptyNoConversations ? (
-              <EmptyState
-                title="No Conversations Yet"
-                description="Start chatting with traders in the community."
-                action={
-                  <Link
-                    href="/explore"
-                    prefetch={false}
-                    className="text-sm font-medium text-blue-300 hover:text-blue-200"
-                  >
-                    Explore Traders →
-                  </Link>
-                }
-                className="py-10"
-              />
-            ) : showEmptySearch ? (
-              <EmptyState
-                title="No Conversations Found"
-                description="Try adjusting your search."
-                className="py-10"
-              />
             ) : (
-              <MessagesConversationList
-                conversations={filteredConversations}
-                selectedConversationId={selectedConversationId}
-                openConvoMenuId={openConvoMenuId}
-                onOpen={handleOpenConversation}
-                onToggleMenu={handleToggleConvoMenu}
-                onPin={handlePinConversation}
-                onMarkUnread={handleMarkConversationUnread}
-                onDelete={handleRequestDeleteConversation}
-              />
+              <>
+                {!nativeIosWebview ? (
+                  <MobileWebViewport>
+                    <MobileWebMessagesInbox
+                      conversations={filteredConversations}
+                      search={search}
+                      selectedConversationId={selectedConversationId}
+                      openConvoMenuId={openConvoMenuId}
+                      onOpen={handleOpenConversation}
+                      onToggleMenu={handleToggleConvoMenu}
+                      onPin={handlePinConversation}
+                      onMarkUnread={handleMarkConversationUnread}
+                      onDelete={handleRequestDeleteConversation}
+                    />
+                  </MobileWebViewport>
+                ) : null}
+                <div className={nativeIosWebview ? undefined : "hidden md:block"}>
+                  {showEmptyNoConversations ? (
+                    <EmptyState
+                      title="No Conversations Yet"
+                      description="Start chatting with traders in the community."
+                      action={
+                        <Link
+                          href="/explore"
+                          prefetch={false}
+                          className="text-sm font-medium text-blue-300 hover:text-blue-200"
+                        >
+                          Explore Traders →
+                        </Link>
+                      }
+                      className="py-10"
+                    />
+                  ) : showEmptySearch ? (
+                    <EmptyState
+                      title="No Conversations Found"
+                      description="Try adjusting your search."
+                      className="py-10"
+                    />
+                  ) : (
+                    <MessagesConversationList
+                      conversations={filteredConversations}
+                      selectedConversationId={selectedConversationId}
+                      openConvoMenuId={openConvoMenuId}
+                      onOpen={handleOpenConversation}
+                      onToggleMenu={handleToggleConvoMenu}
+                      onPin={handlePinConversation}
+                      onMarkUnread={handleMarkConversationUnread}
+                      onDelete={handleRequestDeleteConversation}
+                    />
+                  )}
+                </div>
+              </>
             )}
           </NativeIosPullToRefresh>
 

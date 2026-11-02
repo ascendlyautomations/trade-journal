@@ -14,6 +14,8 @@ import {
   ACCOUNT_DROPDOWN_OPTION_SELECTED_CLASS,
   ACCOUNT_DROPDOWN_PORTAL_MENU_CLASS,
 } from "@/lib/accountDropdownStyles"
+import { placePhoneWebAnchoredMenu } from "@/lib/mobileWebKeyboard"
+import { isPhoneWebTouchTarget } from "@/lib/mobileWebTouch"
 import {
   formatHhmmForDisplay,
   HOUR12_OPTIONS,
@@ -149,6 +151,24 @@ export default function NativeTimeInput({
     if (!trigger) return
 
     const rect = trigger.getBoundingClientRect()
+    const phonePlacement = placePhoneWebAnchoredMenu({
+      triggerTop: rect.top,
+      triggerBottom: rect.bottom,
+      triggerLeft: rect.left,
+      triggerWidth: rect.width,
+      preferredMaxHeight: MENU_PREFERRED_MAX_HEIGHT_PX,
+      minUsableBelow: MENU_MIN_USABLE_BELOW_PX,
+      minWidth: 260,
+    })
+    if (phonePlacement) {
+      setMenuPosition({
+        top: phonePlacement.top,
+        left: phonePlacement.left,
+        width: phonePlacement.width,
+        maxHeight: phonePlacement.maxHeight,
+      })
+      return
+    }
     const spaceBelow =
       window.innerHeight - rect.bottom - MENU_GAP_PX - VIEWPORT_PAD_PX
     const spaceAbove = rect.top - MENU_GAP_PX - VIEWPORT_PAD_PX
@@ -193,9 +213,14 @@ export default function NativeTimeInput({
     updateMenuPosition()
     window.addEventListener("resize", updateMenuPosition)
     window.addEventListener("scroll", updateMenuPosition, true)
+    const vv = isPhoneWebTouchTarget() ? window.visualViewport : null
+    vv?.addEventListener("resize", updateMenuPosition)
+    vv?.addEventListener("scroll", updateMenuPosition)
     return () => {
       window.removeEventListener("resize", updateMenuPosition)
       window.removeEventListener("scroll", updateMenuPosition, true)
+      vv?.removeEventListener("resize", updateMenuPosition)
+      vv?.removeEventListener("scroll", updateMenuPosition)
     }
   }, [open, disabled])
 

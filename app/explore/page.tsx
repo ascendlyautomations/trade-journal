@@ -6,6 +6,8 @@ import ExploreSearchResultsPanel from "../components/explore/ExploreSearchResult
 import ExploreSuggestedRoomsSection from "../components/explore/ExploreSuggestedRoomsSection"
 import ExploreTopPerformersSection from "../components/explore/ExploreTopPerformersSection"
 import ExploreTraderCard from "../components/explore/ExploreTraderCard"
+import MobileWebExploreDiscovery from "../components/mobile/explore/MobileWebExploreDiscovery"
+import { countNoun } from "@/lib/countNoun"
 import EmptyState from "../components/ui/EmptyState"
 import { SkeletonExplorePage, SkeletonTraderCard } from "../components/ui/skeletons"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -72,7 +74,7 @@ const PANEL_CLASS =
   "rounded-xl border border-white/10 bg-white/5 p-2.5 backdrop-blur-md md:p-3"
 
 const SEARCH_INPUT_CLASS =
-  "min-w-0 flex-1 rounded-xl border border-white/15 bg-black/40 p-3 text-sm text-white placeholder:text-gray-400 focus:border-blue-400/50 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+  "min-w-0 flex-1 rounded-xl border border-white/15 bg-black/40 p-3 text-sm text-white placeholder:text-gray-400 focus:border-blue-400/50 focus:outline-none focus:ring-2 focus:ring-blue-500/40 max-md:h-11 max-md:rounded-[14px]"
 
 const FILTER_TOGGLE_CLASS =
   "inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm font-medium text-white transition hover:bg-white/10"
@@ -614,8 +616,8 @@ export default function ExplorePage() {
   const hasSearchResults = results.length > 0 || roomResults.length > 0
 
   return (
-    <div className="tt-phase1-dark w-full px-2 pb-3 pt-0 text-white md:px-4 md:pb-10">
-      <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-7xl flex-col gap-3 px-1 md:gap-4 md:px-6">
+    <div className="tt-phase1-dark w-full px-2 pb-3 pt-0 text-white md:px-4 md:pb-10 max-md:px-3">
+      <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-7xl flex-col gap-3 px-1 md:gap-4 md:px-6 max-md:mt-1 max-md:px-0">
         <header className="hidden md:block">
           <h1 className="text-lg font-semibold text-white md:text-xl">
             Explore
@@ -624,7 +626,7 @@ export default function ExplorePage() {
 
         <section
           data-tt-tour-target="feedExplore"
-          className={`${PANEL_CLASS} relative z-20`}
+          className={`${PANEL_CLASS} relative z-20 max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:backdrop-blur-none`}
         >
           <div className="flex items-stretch gap-2">
             <label htmlFor="explore-search" className="sr-only">
@@ -632,6 +634,12 @@ export default function ExplorePage() {
             </label>
             <input
               id="explore-search"
+              type="text"
+              inputMode="search"
+              enterKeyHint="search"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search people or Trade Rooms…"
@@ -724,15 +732,17 @@ export default function ExplorePage() {
         </section>
 
         {!loading ? (
-          <ExploreTopPerformersSection
-            performers={weeklyTopPayload.performers}
-            periodTitle={weeklyTopPayload.periodTitle}
-            periodSubtitle={weeklyTopPayload.periodSubtitle}
-            hasLeaderboardPeriod={weeklyTopPayload.period != null}
-            loading={weeklyTopLoading}
-            error={weeklyTopError}
-            onRetry={() => void loadWeeklyTopPerformers()}
-          />
+          <div className="hidden md:block">
+            <ExploreTopPerformersSection
+              performers={weeklyTopPayload.performers}
+              periodTitle={weeklyTopPayload.periodTitle}
+              periodSubtitle={weeklyTopPayload.periodSubtitle}
+              hasLeaderboardPeriod={weeklyTopPayload.period != null}
+              loading={weeklyTopLoading}
+              error={weeklyTopError}
+              onRetry={() => void loadWeeklyTopPerformers()}
+            />
+          </div>
         ) : null}
 
         {filtersOpen && !loading ? (
@@ -778,14 +788,30 @@ export default function ExplorePage() {
           />
         ) : (
           <>
-            {displayedTraders.length === 0 ? (
-              <EmptyState
-                title="No traders match these filters"
-                description="Try a broader category or clear your filters."
-                className="py-12"
+            <div className="md:hidden">
+              <MobileWebExploreDiscovery
+                traders={visibleTraders}
+                currentUserId={currentUserId}
+                followingIds={followingIds}
+                requestedIds={requestedIds}
+                followsYouIds={followsYouIds}
+                onFollowingChange={handleFollowingChange}
+                onRequestedChange={handleRequestedChange}
+                onLoadMore={() => void handleLoadMore()}
+                loadingMore={loadingMore}
+                showLoadMore={showLoadMore}
               />
+            </div>
+            {displayedTraders.length === 0 ? (
+              <div className="hidden md:block">
+                <EmptyState
+                  title="No traders match these filters"
+                  description="Try a broader category or clear your filters."
+                  className="py-12"
+                />
+              </div>
             ) : (
-              <section className={PANEL_CLASS}>
+              <section className={`${PANEL_CLASS} hidden md:block`}>
                 <div className="mb-3">
                   <h2 className="text-sm font-semibold text-white md:text-base">
                     Suggested Traders
@@ -796,8 +822,7 @@ export default function ExplorePage() {
                 </div>
                 <p className="mb-3 text-xs text-gray-300">
                   Showing {visibleTraders.length.toLocaleString()} of{" "}
-                  {displayedTraders.length.toLocaleString()} trader
-                  {displayedTraders.length === 1 ? "" : "s"}
+                  {countNoun(displayedTraders.length, "trader")}
                   {hasMoreProfiles ? "+" : ""}
                 </p>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">

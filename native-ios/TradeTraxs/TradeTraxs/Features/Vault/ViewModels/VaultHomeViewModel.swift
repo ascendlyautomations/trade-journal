@@ -16,6 +16,8 @@ final class VaultHomeViewModel {
     private let repository: any VaultRepository
     private let navigationCoordinator: NavigationCoordinator
     private let detailCache: DetailPresentationCache
+    private let sharedContentContext: SharedContentHydrator.Context
+    private let achievements: any AchievementRepository
 
     enum Phase: Equatable {
         case idle
@@ -27,11 +29,15 @@ final class VaultHomeViewModel {
     init(
         repository: any VaultRepository,
         navigationCoordinator: NavigationCoordinator,
-        detailCache: DetailPresentationCache
+        detailCache: DetailPresentationCache,
+        sharedContentContext: SharedContentHydrator.Context,
+        achievements: any AchievementRepository
     ) {
         self.repository = repository
         self.navigationCoordinator = navigationCoordinator
         self.detailCache = detailCache
+        self.sharedContentContext = sharedContentContext
+        self.achievements = achievements
     }
 
     func onAppear(store: VaultStore) {
@@ -151,9 +157,19 @@ final class VaultHomeViewModel {
 
     func open(_ item: VaultItem) {
         ExperienceHaptics.play(.selection)
+        Task { await openAsync(item) }
+    }
+
+    private func openAsync(_ item: VaultItem) async {
         switch item.ref.contentType {
         case .trade:
             let tradeID = TradeID(item.ref.contentID)
+            let reference = SharedContentReference.trade(tradeID)
+            _ = await SharedContentHydrator.hydrateForOpen(
+                reference: reference,
+                context: sharedContentContext,
+                surface: .vault
+            )
             if let summary = detailCache.tradeSummary(id: tradeID) {
                 detailCache.seedPresentationSeed(summary)
             } else if let preview = detailCache.previewTrade(id: tradeID) {
@@ -164,11 +180,31 @@ final class VaultHomeViewModel {
             #endif
             navigationCoordinator.pushSocialTrade(tradeID, cache: detailCache)
         case .profilePost, .feedPost:
-            navigationCoordinator.pushPostDetail(PostID(item.ref.contentID))
+            guard let reference = item.ref.sharedContentReference else { return }
+            await SharedContentNavigation.openAsync(
+                reference: reference,
+                cache: detailCache,
+                coordinator: navigationCoordinator,
+                hydrationContext: sharedContentContext,
+                hydrationSurface: .vault
+            )
         case .reel:
-            navigationCoordinator.pushReelDetail(ReelID(item.ref.contentID))
+            let reference = SharedContentReference.reel(ReelID(item.ref.contentID))
+            await SharedContentNavigation.openAsync(
+                reference: reference,
+                cache: detailCache,
+                coordinator: navigationCoordinator,
+                hydrationContext: sharedContentContext,
+                hydrationSurface: .vault
+            )
         case .achievement:
-            navigationCoordinator.pushAchievementDetail(AchievementID(item.ref.contentID))
+            let achievementID = AchievementID(item.ref.contentID)
+            if detailCache.achievement(id: achievementID) == nil {
+                if let loaded = try? await achievements.achievement(id: achievementID) {
+                    detailCache.seed(loaded)
+                }
+            }
+            navigationCoordinator.pushAchievementDetail(achievementID)
         }
     }
 

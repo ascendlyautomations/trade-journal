@@ -13,6 +13,10 @@ export type ProfileRoomRow = {
 export type ProfileBootstrapSectionCounts = {
   has_active_story?: boolean
   has_room?: boolean
+  profile_posts?: number | null
+  public_trades?: number | null
+  reels?: number | null
+  achievements?: number | null
 }
 
 export function profileRoomKeyFromRow(

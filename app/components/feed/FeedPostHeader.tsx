@@ -5,6 +5,7 @@ import Link from "next/link"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { profilePath } from "@/lib/profileRoutes"
 import FeedPostMetaRow from "./FeedPostMetaRow"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
 
 type FeedPostHeaderProps = {
   userId: string
@@ -35,6 +36,7 @@ function FeedPostHeader({
   preview = false,
   trailing,
 }: FeedPostHeaderProps) {
+  const phoneWeb = !useIsNativeIos()
   const metaRow =
     meta ??
     (metaLabel ? (
@@ -48,13 +50,16 @@ function FeedPostHeader({
 
   const linkClassName =
     "flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors" +
-    (preview ? "" : " hover:bg-white/5")
+    (preview ? "" : " hover:bg-white/5") +
+    (phoneWeb ? " max-md:px-3 max-md:py-2" : "")
 
   const inner = (
     <>
       <ProfileAvatarImg
         src={avatarUrl}
-        className="h-10 w-10 shrink-0 ring-2 ring-white/10"
+        className={`h-10 w-10 shrink-0 ring-2 ring-white/10${
+          phoneWeb ? " max-md:h-11 max-md:w-11" : ""
+        }`}
       />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-white md:text-base">

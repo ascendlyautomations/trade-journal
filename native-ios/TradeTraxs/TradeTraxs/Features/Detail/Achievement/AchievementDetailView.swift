@@ -39,11 +39,11 @@ struct AchievementDetailView: View {
             case .loading where viewModel.achievement == nil:
                 ExperienceLoadingSpinner(label: "Loading achievement")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .failed(let message) where viewModel.achievement == nil:
+            case .failed(let failure) where viewModel.achievement == nil:
                 ExperienceErrorState(
-                    title: "Couldn't load achievement",
-                    message: message,
-                    onRetry: { Task { await viewModel.refresh() } }
+                    title: failure.title,
+                    message: failure.message,
+                    onRetry: failure.isRetryable ? { Task { await viewModel.refresh() } } : nil
                 )
             default:
                 content

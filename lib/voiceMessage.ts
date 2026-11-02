@@ -1,6 +1,6 @@
 /** Voice message contract — mirrors native iOS (`message-audio` bucket, type `voice`). */
 
-import { voiceWebLog } from "./voiceWebLog"
+import { voiceWebLog } from "./voiceWebLog.ts"
 
 export const VOICE_MESSAGE_MAX_MS = 120_000
 export const VOICE_MESSAGE_BUCKET = "message-audio"

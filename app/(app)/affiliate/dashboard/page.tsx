@@ -287,7 +287,7 @@ export default function AffiliateDashboard() {
             <>
               <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <h1 className="text-2xl font-bold text-blue-300 sm:text-3xl">
+                  <h1 className="text-2xl font-bold text-blue-300 sm:text-3xl max-md:hidden">
                     Affiliate Dashboard
                   </h1>
                   <p className="mt-1 text-xs text-gray-400">
@@ -495,7 +495,7 @@ export default function AffiliateDashboard() {
           ) : (
             <>
               <div className="mb-8">
-                <h1 className="text-2xl font-bold text-blue-300 sm:text-3xl">
+                <h1 className="text-2xl font-bold text-blue-300 sm:text-3xl max-md:hidden">
                   Become an Affiliate
                 </h1>
                 <p className="mt-2 max-w-2xl text-sm text-gray-300">

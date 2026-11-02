@@ -1,6 +1,11 @@
 import { describe, it } from "node:test"
 import assert from "node:assert/strict"
-import { adjacentProfileTab, PROFILE_TAB_STRIP_ORDER } from "./profileTabStrip.ts"
+import {
+  adjacentMobileWebProfileTab,
+  adjacentProfileTab,
+  MOBILE_WEB_PROFILE_TAB_ORDER,
+  PROFILE_TAB_STRIP_ORDER,
+} from "./profileTabStrip.ts"
 
 describe("profileTabStrip", () => {
   it("follows ProfileTabs left-to-right order", () => {
@@ -24,6 +29,34 @@ describe("profileTabStrip", () => {
     assert.equal(adjacentProfileTab("achievements", -1), "stats")
     assert.equal(adjacentProfileTab("reels", -1), "trades")
     assert.equal(adjacentProfileTab("trades", -1), null)
+  })
+
+  it("keeps desktop strip order unchanged", () => {
+    assert.deepEqual(PROFILE_TAB_STRIP_ORDER, [
+      "trades",
+      "reels",
+      "posts",
+      "calendar",
+      "stats",
+      "achievements",
+    ])
+  })
+
+  it("uses native section order on phone without Calendar", () => {
+    assert.deepEqual(MOBILE_WEB_PROFILE_TAB_ORDER, [
+      "trades",
+      "posts",
+      "reels",
+      "stats",
+      "achievements",
+    ])
+    assert.equal(adjacentMobileWebProfileTab("trades", 1), "posts")
+    assert.equal(adjacentMobileWebProfileTab("posts", 1), "reels")
+    assert.equal(adjacentMobileWebProfileTab("reels", 1), "stats")
+    assert.equal(adjacentMobileWebProfileTab("stats", 1), "achievements")
+    assert.equal(adjacentMobileWebProfileTab("achievements", 1), null)
+    assert.equal(adjacentMobileWebProfileTab("achievements", -1), "stats")
+    assert.equal(adjacentMobileWebProfileTab("calendar", 1), null)
   })
 })
 

@@ -61,7 +61,7 @@ function FeedPostList({
   )
 
   return (
-    <>
+    <div className="contents">
       {posts.map((post) => {
         const pid = String(post.id)
 
@@ -145,7 +145,7 @@ function FeedPostList({
           />
         )
       })}
-    </>
+    </div>
   )
 }
 

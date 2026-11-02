@@ -28,7 +28,36 @@ export default function PlatformProfileTradesToolbar({
   const { isNativeIos } = usePlatformPresentation()
 
   if (!isNativeIos) {
-    return <div className="mb-2 flex justify-end">{children}</div>
+    return (
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div
+          className="flex min-h-11 items-center gap-1"
+          role="group"
+          aria-label="Filter trades by outcome"
+        >
+          {(["all", "wins", "losses"] as const).map((option) => {
+            const selected = outcomeFilter === option
+            const label =
+              option === "all" ? "All" : option === "wins" ? "Wins" : "Losses"
+            return (
+              <button
+                key={option}
+                type="button"
+                onClick={() => onOutcomeFilterChange(option)}
+                className={`inline-flex h-8 min-w-[3.25rem] items-center justify-center rounded-full px-3 text-[12px] font-semibold ${
+                  selected
+                    ? "bg-white/15 text-white max-md:bg-surface-elevated max-md:text-foreground"
+                    : "bg-transparent text-white/55 max-md:text-muted-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
+        <div className="shrink-0">{children}</div>
+      </div>
+    )
   }
 
   return (

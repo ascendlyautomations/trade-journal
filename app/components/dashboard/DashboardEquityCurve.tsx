@@ -22,6 +22,10 @@ import { formatDashboardChartTooltipLabel } from "@/lib/formatEST"
 import { formatCurrency } from "@/lib/formatCurrency"
 import { formatProfitFactor } from "@/lib/formatDisplay"
 import ChartWhenSized from "@/app/components/dashboard/ChartWhenSized"
+import {
+  formatMobileWebChartAxisUsd,
+  MOBILE_WEB_CHART,
+} from "@/lib/mobileWebAnalytics"
 
 export type EquityChartPoint = {
   date: string
@@ -123,9 +127,8 @@ export default function DashboardEquityCurve({
     )
 
   if (variant === "mobile") {
-    // Chart-first: no title. Keep chart height; tighten card chrome only.
     return (
-      <div className="w-full block overflow-visible rounded-xl border border-white/10 bg-white/10 px-2 pb-1 pt-1.5 backdrop-blur-md md:hidden">
+      <div className="w-full overflow-visible md:hidden">
         <div
           data-tt-tour-target="dashboardPerformance"
           data-tt-tour-spotlight="large"
@@ -134,45 +137,36 @@ export default function DashboardEquityCurve({
         {showEmpty ? (
           <ChartEmptyState />
         ) : (
-        <ChartWhenSized height={268} className="w-full">
-          <ResponsiveContainer width="100%" height={268}>
+        <ChartWhenSized height={MOBILE_WEB_CHART.equityHeight} className="w-full">
+          <ResponsiveContainer width="100%" height={MOBILE_WEB_CHART.equityHeight}>
             <LineChart
               data={data}
-              margin={{ top: 8, right: 8, left: 4, bottom: 4 }}
+              margin={MOBILE_WEB_CHART.equityMargin}
             >
               <CartesianGrid {...chartCartesianGridProps} />
               <XAxis
                 dataKey="date"
-                {...chartAxisTick(11)}
+                {...chartAxisTick(MOBILE_WEB_CHART.tickSize)}
                 tickFormatter={(value) => {
                   const d = new Date(String(value))
                   if (Number.isNaN(d.getTime())) return String(value).slice(0, 10)
                   return `${d.getMonth() + 1}/${d.getDate()}`
                 }}
                 interval="preserveStartEnd"
-                minTickGap={24}
-                angle={-25}
-                textAnchor="end"
-                height={48}
+                minTickGap={28}
+                height={22}
               />
               <YAxis
-                {...chartAxisTick(11)}
-                tickFormatter={(value) =>
-                  Number(value) < 0
-                    ? `-$${Math.abs(Number(value)).toLocaleString(undefined, {
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: 0,
-                      })}`
-                    : `$${Number(value).toLocaleString(undefined, {
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: 0,
-                      })}`
-                }
+                {...chartAxisTick(MOBILE_WEB_CHART.tickSize)}
+                width={MOBILE_WEB_CHART.yAxisWidth}
+                tickFormatter={(value) => formatMobileWebChartAxisUsd(Number(value))}
               />
               <Tooltip
                 formatter={equityTooltipFormatter}
                 labelFormatter={(label) => formatDashboardChartTooltipLabel(label)}
                 {...chartTooltipStyles}
+                wrapperStyle={{ maxWidth: 200, zIndex: 20 }}
+                allowEscapeViewBox={{ x: true, y: true }}
               />
               <Line
                 type="monotone"

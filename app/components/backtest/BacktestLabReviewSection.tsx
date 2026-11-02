@@ -131,7 +131,7 @@ export default function BacktestLabReviewSection({
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="backtest-lab-review-title text-xl font-semibold">
+        <h2 className="backtest-lab-review-title text-xl font-semibold max-md:text-[15px]">
           Backtest trades
         </h2>
         <CustomSelect
@@ -173,9 +173,14 @@ export default function BacktestLabReviewSection({
             />
           ))}
           {trades.length === 0 ? (
-            <p className="backtest-lab-review-muted text-center lg:col-span-2">
-              No backtest trades match these filters.
-            </p>
+            <div className="rounded-[14px] border border-[var(--tt-bl-card-border)] bg-[var(--tt-bl-card-bg)] px-4 py-8 text-center lg:col-span-2 max-md:px-3 max-md:py-6">
+              <p className="backtest-lab-review-title text-sm font-semibold">
+                No backtest trades
+              </p>
+              <p className="backtest-lab-review-muted mt-1 text-sm">
+                Log trades on a Backtest account, or widen your filters.
+              </p>
+            </div>
           ) : null}
         </div>
       )}

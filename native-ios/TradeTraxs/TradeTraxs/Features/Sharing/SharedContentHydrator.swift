@@ -385,6 +385,262 @@ enum SharedContentHydrator {
         )
     }
 
+    /// Hydrates a single structured reference for navigation (Vault, deep links, DM cards).
+    /// Seeds ``DetailPresentationCache``; returns false when content cannot be resolved.
+    static func hydrateForOpen(
+        reference: SharedContentReference,
+        context: Context,
+        surface: SharedContentHydrationProbe.Surface
+    ) async -> Bool {
+        var sharedTrades: [TradeID: Trade] = [:]
+        var sharedPosts: [PostID: Post] = [:]
+        var sharedReels: [ReelID: Reel] = [:]
+        var sharedAchievements: [AchievementID: Achievement] = [:]
+        var unavailableSharedContentKeys: Set<String> = []
+        let probe = SharedContentHydrationProbe.Session(surface: surface)
+
+        if applyDetailCache(
+            reference: reference,
+            sharedTrades: &sharedTrades,
+            sharedPosts: &sharedPosts,
+            sharedReels: &sharedReels,
+            sharedAchievements: &sharedAchievements,
+            detailCache: context.detailCache
+        ) {
+            await hydrateLinkedTradesIfNeeded(
+                reference: reference,
+                sharedTrades: &sharedTrades,
+                sharedPosts: sharedPosts,
+                unavailableSharedContentKeys: &unavailableSharedContentKeys,
+                context: context,
+                probe: probe
+            )
+            return isReferenceRenderable(
+                reference,
+                sharedTrades: sharedTrades,
+                sharedPosts: sharedPosts,
+                sharedReels: sharedReels,
+                sharedAchievements: sharedAchievements,
+                unavailableSharedContentKeys: unavailableSharedContentKeys,
+                detailCache: context.detailCache
+            )
+        }
+
+        if let viewerID = context.viewerID,
+           applyDiskCache(
+               reference: reference,
+               viewerID: viewerID,
+               sharedTrades: &sharedTrades,
+               sharedPosts: &sharedPosts,
+               sharedReels: &sharedReels,
+               sharedAchievements: &sharedAchievements,
+               detailCache: context.detailCache
+           )
+        {
+            await hydrateLinkedTradesIfNeeded(
+                reference: reference,
+                sharedTrades: &sharedTrades,
+                sharedPosts: sharedPosts,
+                unavailableSharedContentKeys: &unavailableSharedContentKeys,
+                context: context,
+                probe: probe
+            )
+            return isReferenceRenderable(
+                reference,
+                sharedTrades: sharedTrades,
+                sharedPosts: sharedPosts,
+                sharedReels: sharedReels,
+                sharedAchievements: sharedAchievements,
+                unavailableSharedContentKeys: unavailableSharedContentKeys,
+                detailCache: context.detailCache
+            )
+        }
+
+        if let viewerID = context.viewerID,
+           let seed = context.feedSessionStore.lookup(reference: reference, viewerID: viewerID)
+        {
+            applyFeedSeed(
+                seed,
+                reference: reference,
+                sharedTrades: &sharedTrades,
+                sharedPosts: &sharedPosts,
+                sharedReels: &sharedReels,
+                sharedAchievements: &sharedAchievements,
+                detailCache: context.detailCache
+            )
+            await hydrateLinkedTradesIfNeeded(
+                reference: reference,
+                sharedTrades: &sharedTrades,
+                sharedPosts: sharedPosts,
+                unavailableSharedContentKeys: &unavailableSharedContentKeys,
+                context: context,
+                probe: probe
+            )
+            return isReferenceRenderable(
+                reference,
+                sharedTrades: sharedTrades,
+                sharedPosts: sharedPosts,
+                sharedReels: sharedReels,
+                sharedAchievements: sharedAchievements,
+                unavailableSharedContentKeys: unavailableSharedContentKeys,
+                detailCache: context.detailCache
+            )
+        }
+
+        guard !unavailableSharedContentKeys.contains(reference.stableKey) else { return false }
+
+        switch reference {
+        case .feedPost(let id):
+            guard let result = await loadFeedPost(id: id, context: context, probe: probe) else { return false }
+            switch result {
+            case .post(let postID, let post):
+                sharedPosts[postID] = post
+                context.detailCache.seed(post)
+            case .unavailable:
+                unavailableSharedContentKeys.insert(reference.stableKey)
+                return false
+            default:
+                return false
+            }
+        case .profilePost(let id):
+            guard let result = await loadProfilePost(id: id, context: context, probe: probe) else { return false }
+            switch result {
+            case .post(let postID, let post):
+                sharedPosts[postID] = post
+                context.detailCache.seed(post)
+            case .unavailable:
+                unavailableSharedContentKeys.insert(reference.stableKey)
+                return false
+            default:
+                return false
+            }
+        case .reel(let id):
+            guard let result = await loadReel(id: id, context: context, probe: probe) else { return false }
+            switch result {
+            case .reel(let reelID, let reel, let embeddedTrade):
+                sharedReels[reelID] = reel
+                context.detailCache.seed(reel)
+                if let embeddedTrade {
+                    context.detailCache.seed(embeddedTrade)
+                    sharedTrades[embeddedTrade.id] = embeddedTrade
+                }
+            case .unavailable:
+                unavailableSharedContentKeys.insert(reference.stableKey)
+                return false
+            default:
+                return false
+            }
+        case .achievementPost(let postReference):
+            guard let result = await loadAchievement(postReference: postReference, context: context, probe: probe)
+            else { return false }
+            switch result {
+            case .achievement(_, let achievement):
+                SharedContentEntityPresentation.storeAchievement(
+                    achievement,
+                    messagePostReference: postReference,
+                    detailCache: context.detailCache,
+                    sharedAchievements: &sharedAchievements
+                )
+            case .unavailable:
+                unavailableSharedContentKeys.insert(reference.stableKey)
+                return false
+            default:
+                return false
+            }
+        case .trade:
+            break
+        }
+
+        await hydrateLinkedTradesIfNeeded(
+            reference: reference,
+            sharedTrades: &sharedTrades,
+            sharedPosts: sharedPosts,
+            unavailableSharedContentKeys: &unavailableSharedContentKeys,
+            context: context,
+            probe: probe
+        )
+
+        if case .trade(let tradeID) = reference {
+            await fetchTrades(
+                ids: [tradeID],
+                sharedTrades: &sharedTrades,
+                unavailableSharedContentKeys: &unavailableSharedContentKeys,
+                context: context,
+                probe: probe
+            )
+        }
+
+        return isReferenceRenderable(
+            reference,
+            sharedTrades: sharedTrades,
+            sharedPosts: sharedPosts,
+            sharedReels: sharedReels,
+            sharedAchievements: sharedAchievements,
+            unavailableSharedContentKeys: unavailableSharedContentKeys,
+            detailCache: context.detailCache
+        )
+    }
+
+    private static func hydrateLinkedTradesIfNeeded(
+        reference: SharedContentReference,
+        sharedTrades: inout [TradeID: Trade],
+        sharedPosts: [PostID: Post],
+        unavailableSharedContentKeys: inout Set<String>,
+        context: Context,
+        probe: SharedContentHydrationProbe.Session
+    ) async {
+        var tradeIDs: [TradeID] = []
+        switch reference {
+        case .feedPost(let postID):
+            if let tradeID = sharedPosts[postID]?.linkedTradeID
+                ?? context.detailCache.post(id: postID)?.linkedTradeID
+            {
+                tradeIDs.append(tradeID)
+            }
+        case .trade(let tradeID):
+            tradeIDs.append(tradeID)
+        default:
+            break
+        }
+        guard !tradeIDs.isEmpty else { return }
+        await fetchTrades(
+            ids: tradeIDs,
+            sharedTrades: &sharedTrades,
+            unavailableSharedContentKeys: &unavailableSharedContentKeys,
+            context: context,
+            probe: probe
+        )
+    }
+
+    private static func isReferenceRenderable(
+        _ reference: SharedContentReference,
+        sharedTrades: [TradeID: Trade],
+        sharedPosts: [PostID: Post],
+        sharedReels: [ReelID: Reel],
+        sharedAchievements: [AchievementID: Achievement],
+        unavailableSharedContentKeys: Set<String>,
+        detailCache: DetailPresentationCache
+    ) -> Bool {
+        guard !unavailableSharedContentKeys.contains(reference.stableKey) else { return false }
+        switch reference {
+        case .feedPost(let id), .profilePost(let id):
+            return sharedPosts[id] != nil || detailCache.post(id: id) != nil
+        case .reel(let id):
+            return sharedReels[id] != nil || detailCache.reel(id: id) != nil
+        case .achievementPost(let postReference):
+            return SharedContentEntityPresentation.isAchievementResolved(
+                forPostReference: postReference,
+                detailCache: detailCache,
+                sharedAchievements: sharedAchievements
+            )
+        case .trade(let id):
+            return sharedTrades[id] != nil
+                || detailCache.previewTrade(id: id) != nil
+                || detailCache.tradeSummary(id: id) != nil
+                || detailCache.authoritativeDetail(id: id) != nil
+        }
+    }
+
     // MARK: - Reference collection
 
     private static func unresolvedReferences(

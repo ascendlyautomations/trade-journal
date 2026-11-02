@@ -49,8 +49,9 @@ export default function ContentOverflowMenu({
       align={align}
       stopPropagation
       menuClassName="z-[9100]"
+      ariaLabel="More options"
       trigger={
-        <span className="inline-flex h-9 w-9 items-center justify-center text-lg text-gray-400 hover:text-white">
+        <span className="tt-mobile-web-hit inline-flex h-9 w-9 items-center justify-center text-lg text-gray-400 hover:text-white">
           ⋯
         </span>
       }

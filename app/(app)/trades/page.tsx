@@ -20,7 +20,8 @@ import ReelViewer from "../../components/profile/ReelViewer"
 import { ConfirmModal, useDeleteTradeConfirmation } from "../../components/ui"
 import { fetchReelsByTradeIds, type ReelRow } from "@/lib/reels"
 import { useUserProfile } from "@/lib/UserProfileProvider"
-import { useCachedAccounts, useCachedTrades } from "@/lib/useAppDataCache"
+import { useCachedAccounts, useCachedTrades, useTradesLoadError } from "@/lib/useAppDataCache"
+import { mobileWebTradesLoadErrorMessage } from "@/lib/mobileWebNetworkRecovery"
 import { getCachedAccounts, getCachedTrades } from "@/lib/appDataCache"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
@@ -43,6 +44,7 @@ import {
   type TradesSortKey,
 } from "@/lib/tradesSort"
 import { useIsNativeIos } from "@/lib/useIsNativeIos"
+import { writeTradeDetail } from "@/lib/tradeDetailCache"
 
 const QuickTradeModal = dynamic(
   () => import("../../components/QuickTradeModal"),
@@ -54,6 +56,12 @@ export default function TradesPage() {
   const nativeIos = useIsNativeIos()
   const { trades: cachedTrades, loading: tradesLoading, refresh: refreshTrades } =
     useCachedTrades(user?.id, { fullHistory: true })
+  const tradesLoadErrorRaw = useTradesLoadError(user?.id)
+  const tradesLoadError = useMemo(
+    () => mobileWebTradesLoadErrorMessage(tradesLoadErrorRaw),
+    [tradesLoadErrorRaw]
+  )
+  const [tradesRetrying, setTradesRetrying] = useState(false)
   const {
     accounts: accountRows,
     loading: accountsLoading,
@@ -70,8 +78,20 @@ export default function TradesPage() {
 
   const loading =
     (profileLoading && !gateProfile) ||
-    (tradesLoading && cachedTrades.length === 0 && !tradesHasCachedData) ||
+    (tradesLoading &&
+      cachedTrades.length === 0 &&
+      !tradesHasCachedData &&
+      !tradesLoadError) ||
     (accountsLoading && accountRows.length === 0 && !accountsHasCachedData)
+
+  const handleRetryTradesLoad = useCallback(async () => {
+    setTradesRetrying(true)
+    try {
+      await Promise.all([refreshTrades(), refreshAccounts()])
+    } finally {
+      setTradesRetrying(false)
+    }
+  }, [refreshAccounts, refreshTrades])
 
   const { presentFeature, access, proFeatureUnlocked } = useProGate(gateProfile)
   const isPro = access !== "free"
@@ -177,6 +197,25 @@ export default function TradesPage() {
     if (!trade) return
 
     selectedTradeParamHandledRef.current = tradeId
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px)").matches
+    ) {
+      writeTradeDetail(tradeId, {
+        trade: { ...trade },
+        ownerProfile: gateProfile
+          ? {
+              id: String(gateProfile.id),
+              username: gateProfile.username ?? null,
+              name: gateProfile.name ?? null,
+              avatar_url: gateProfile.avatar_url ?? null,
+            }
+          : null,
+        sessionUserId: user?.id,
+      })
+      router.replace(`/trade/${tradeId}`)
+      return
+    }
     setSelectedTrade((prev: any | null) =>
       prev && String(prev.id) === tradeId ? prev : { ...trade }
     )
@@ -206,15 +245,18 @@ export default function TradesPage() {
     accountById,
     accountFilter,
     accountTypeFilter,
+    gateProfile,
     customRangeEnd,
     customRangeStart,
     loading,
     resultFilter,
+    router,
     searchParams,
     selectedDate,
     showPublicOnly,
     timeframe,
     trades,
+    user?.id,
   ])
 
   const handleImportCsv = useCallback(() => {
@@ -275,6 +317,32 @@ export default function TradesPage() {
     },
     [router]
   )
+
+  const handleOpenTrade = useCallback((trade: any) => {
+    const tradeId = String(trade?.id ?? "")
+    if (
+      tradeId &&
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px)").matches
+    ) {
+      writeTradeDetail(tradeId, {
+        trade: { ...trade },
+        ownerProfile: gateProfile
+          ? {
+              id: String(gateProfile.id),
+              username: gateProfile.username ?? null,
+              name: gateProfile.name ?? null,
+              avatar_url: gateProfile.avatar_url ?? null,
+            }
+          : null,
+        sessionUserId: user?.id,
+      })
+      router.push(`/trade/${tradeId}`)
+      return
+    }
+    setEditingTrade(null)
+    setSelectedTrade({ ...trade })
+  }, [gateProfile, router, user?.id])
 
   const handleImageClick = useCallback((url: string) => {
     setSelectedImage(url)
@@ -588,6 +656,9 @@ export default function TradesPage() {
             onImageClick={handleImageClick}
             onLoadMore={handleLoadMore}
             onImportCsv={handleImportCsv}
+            tradesLoadError={tradesLoadError}
+            onRetryTradesLoad={() => void handleRetryTradesLoad()}
+            tradesRetrying={tradesRetrying}
             tradeReelsByTradeId={tradeReelsByTradeId}
             onOpenTradeReplay={handleOpenTradeReplay}
             editingTradeId={
@@ -596,6 +667,9 @@ export default function TradesPage() {
             selectedTradeId={
               selectedTrade?.id != null ? String(selectedTrade.id) : null
             }
+            sortBy={sortBy}
+            onSortByChange={setSortBy}
+            onOpenTrade={handleOpenTrade}
           />
         </div>
       </div>

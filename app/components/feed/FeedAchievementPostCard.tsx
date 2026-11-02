@@ -7,6 +7,8 @@ import FeedPostActions from "./FeedPostActions"
 import FeedPostHeader from "./FeedPostHeader"
 import FeedPostModerationMenu from "./FeedPostModerationMenu"
 import type { FeedLikeMeta } from "./FeedPostCard"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
+import { MOBILE_WEB_FEED_CARD_FLUSH } from "@/lib/mobileWebPageSurface"
 
 type FeedAchievementPostCardProps = {
   post: any
@@ -36,6 +38,7 @@ function FeedAchievementPostCard({
   onToggleLike,
   onSharePost,
 }: FeedAchievementPostCardProps) {
+  const phoneWeb = !useIsNativeIos()
   const achievement = useMemo(() => achievementFromPost(post), [post])
 
   const handleOpenComments = useCallback(() => {
@@ -71,7 +74,9 @@ function FeedAchievementPostCard({
       tabIndex={0}
       onClick={handleArticleClick}
       onKeyDown={handleArticleKeyDown}
-      className="cursor-pointer overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-xl"
+      className={`cursor-pointer overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-xl${
+        phoneWeb ? ` ${MOBILE_WEB_FEED_CARD_FLUSH}` : ""
+      }`}
     >
       <FeedPostHeader
         userId={post.user_id}
@@ -85,7 +90,7 @@ function FeedAchievementPostCard({
         }
       />
 
-      <div className="px-4 pt-3 pb-0">
+      <div className={`px-4 pt-3 pb-0${phoneWeb ? " max-md:px-3" : ""}`}>
         <AchievementCard
           achievement={achievement}
           showVisibility={false}

@@ -16,7 +16,9 @@ struct VaultHomeView: View {
             initialValue: VaultHomeViewModel(
                 repository: data.vault,
                 navigationCoordinator: navigationCoordinator,
-                detailCache: data.detailCache
+                detailCache: data.detailCache,
+                sharedContentContext: SharedContentHydrator.Context.make(data: data, viewerID: nil),
+                achievements: data.achievements
             )
         )
         _vaultStore = Bindable(wrappedValue: data.vaultStore)

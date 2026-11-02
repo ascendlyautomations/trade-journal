@@ -266,8 +266,10 @@ export default function ReelComposerModal({
               type="button"
               disabled={validating}
               onClick={() => fileInputRef.current?.click()}
-              className={`flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-white/5 text-center transition hover:border-emerald-400/40 hover:bg-emerald-500/10 disabled:opacity-60 ${
-                layout === "page" ? "min-h-[220px] px-6 py-14 sm:min-h-[280px]" : "px-4 py-10"
+              className={`tt-create-media-picker flex w-full flex-col items-center justify-center gap-2 border border-dashed text-center transition disabled:opacity-60 max-md:min-h-[11rem] md:rounded-xl md:border-white/20 md:bg-white/5 md:hover:border-emerald-400/40 md:hover:bg-emerald-500/10 ${
+                layout === "page"
+                  ? "px-6 py-14 md:min-h-[220px] sm:min-h-[280px]"
+                  : "px-4 py-10 md:border-white/20 md:bg-white/5"
               }`}
             >
               <span className="text-2xl" aria-hidden>
@@ -295,7 +297,7 @@ export default function ReelComposerModal({
                   type="button"
                   disabled={publishing}
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-gray-200 transition hover:bg-white/10 disabled:opacity-50"
+                  className="tt-create-secondary-button disabled:opacity-50 md:rounded-lg md:border md:border-white/10 md:bg-white/5 md:px-3 md:py-2 md:text-sm md:text-gray-200 md:transition md:hover:bg-white/10"
                 >
                   Change video
                 </button>

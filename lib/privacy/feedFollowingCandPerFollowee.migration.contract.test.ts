@@ -10,7 +10,7 @@ const migrationPath = path.join(
   "supabase/migrations/20261027140000_feed_following_cand_per_followee.sql"
 )
 
-function extractDollarBlock(migrationSql, tag) {
+function extractDollarBlock(migrationSql: string, tag: string): string[] {
   const re = new RegExp(`\\$${tag}\\$([\\s\\S]*?)\\$${tag}\\$`, "g")
   return [...migrationSql.matchAll(re)].map((m) => m[1])
 }
@@ -73,7 +73,7 @@ function simulateProductionRpcBody() {
   return body
 }
 
-function applyCandMigration(body, migrationSql) {
+function applyCandMigration(body: string, migrationSql: string): string {
   const tags = ["old_post", "new_post", "old_pp", "new_pp", "old_ap", "new_ap", "old_rl", "new_rl"]
   const blocks = Object.fromEntries(tags.map((t) => [t, extractDollarBlock(migrationSql, t)[0]]))
   let updated = body

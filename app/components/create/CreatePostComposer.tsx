@@ -1,12 +1,13 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import FeedRoomShareCard from "@/app/components/feed/FeedRoomShareCard"
 import ImageCropModal from "@/app/components/ImageCropModal"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { CONTENT_IMAGE_V2_PRESET } from "@/lib/contentImageV2"
 import { CONTENT_IMAGE_DISPLAY_PRESET } from "@/lib/contentImagePipeline"
 import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
+import { isPhoneWebTouchTarget } from "@/lib/mobileWebTouch"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { feedbackPresets } from "@/lib/feedbackPresets"
@@ -48,6 +49,15 @@ export type CreatePostComposerProps = {
   onDraftChange?: (draft: CreatePostDraftSnapshot) => void
 }
 
+function subscribePhoneWeb(onChange: () => void) {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return () => {}
+  }
+  const media = window.matchMedia("(max-width: 767px)")
+  media.addEventListener("change", onChange)
+  return () => media.removeEventListener("change", onChange)
+}
+
 export default function CreatePostComposer({
   layout,
   open = true,
@@ -62,6 +72,11 @@ export default function CreatePostComposer({
   const { fromError } = useProGate(profile)
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const { runUpload } = useUploadProgress()
+  const phoneWeb = useSyncExternalStore(
+    subscribePhoneWeb,
+    isPhoneWebTouchTarget,
+    () => false
+  )
 
   const [postContent, setPostContent] = useState("")
   const [postImage, setPostImage] = useState<File | null>(null)
@@ -213,13 +228,14 @@ export default function CreatePostComposer({
       <textarea
         value={postContent}
         onChange={(e) => setPostContent(e.target.value)}
+        aria-label={phoneWeb ? "Post" : undefined}
         placeholder={
           pendingRoomShare
             ? "Add a caption for your room share (optional)"
             : "What's on your mind?"
         }
-        rows={layout === "page" ? 8 : 4}
-        className="mb-4 w-full resize-none rounded-lg border border-white/10 bg-[#020617] p-3 text-sm text-white placeholder:text-gray-400 focus:border-blue-400/50 focus:outline-none focus:ring-1 focus:ring-blue-400/30"
+        rows={layout === "page" ? (phoneWeb ? 6 : 8) : 4}
+        className="mb-4 w-full resize-none rounded-[12px] border border-white/10 bg-[#020617] p-3 text-base text-white placeholder:text-gray-400 focus:border-blue-400/50 focus:outline-none focus:ring-1 focus:ring-blue-400/30 max-md:min-h-[8rem] max-md:bg-[var(--tt-surface-raised)] max-md:text-[var(--tt-text)] md:text-sm"
       />
 
       {pendingRoomShare ? (
@@ -253,14 +269,37 @@ export default function CreatePostComposer({
         </div>
       ) : null}
 
-      <input
-        type="file"
-        accept="image/*"
-        onChange={(e) =>
-          postImageCrop.handleFileSelected(e.target.files?.[0])
-        }
-        className="tt-create-post-file block w-full text-sm text-gray-300 file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:text-gray-100"
-      />
+      {phoneWeb && layout === "page" ? (
+        <>
+          <input
+            ref={postImageCrop.fileInputRef}
+            type="file"
+            accept="image/*"
+            aria-label="Add a photo"
+            onChange={(e) =>
+              postImageCrop.handleFileSelected(e.target.files?.[0])
+            }
+            className="tt-create-post-file-input"
+          />
+          <button
+            type="button"
+            onClick={() => postImageCrop.fileInputRef.current?.click()}
+            className="tt-create-media-picker flex w-full min-h-[3rem] items-center justify-center gap-2 border border-dashed px-4 py-3 text-sm font-semibold text-[var(--tt-accent,#4ec4e0)]"
+          >
+            {postImagePreviewUrl ? "Change photo" : "Add photo"}
+          </button>
+        </>
+      ) : (
+        <input
+          type="file"
+          accept="image/*"
+          aria-label={phoneWeb ? "Add a photo" : undefined}
+          onChange={(e) =>
+            postImageCrop.handleFileSelected(e.target.files?.[0])
+          }
+          className="tt-create-post-file block w-full text-sm text-gray-300 file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:text-gray-100"
+        />
+      )}
 
       <ImageCropModal
         open={postImageCrop.cropSourceFile != null}

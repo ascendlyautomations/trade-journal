@@ -113,6 +113,10 @@ export function ProfileAvatarLink({
       username={username}
       preview={mergedPreview}
       className={className}
+      aria-label={
+        linkProps["aria-label"] ??
+        (alt.trim() ? undefined : `View ${username?.trim() || "profile"}`)
+      }
     >
       <SafeProfileAvatar
         src={src}

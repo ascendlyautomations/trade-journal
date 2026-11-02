@@ -48,7 +48,7 @@ function PsychologyCoachPageContent() {
 export default function PsychologyCoachPage() {
   return (
     <main className="tt-psych-experience mx-auto max-w-2xl px-4 py-8 md:py-10">
-      <div className="mb-6">
+      <div className="mb-6 max-md:hidden">
         <Link
           href="/psychology/analytics"
           className="text-sm text-blue-400 hover:text-blue-300"
@@ -56,7 +56,7 @@ export default function PsychologyCoachPage() {
           ← Psychology Analytics
         </Link>
       </div>
-      <h1 className="mb-6 text-2xl font-semibold text-blue-200">Psychology Coach</h1>
+      <h1 className="mb-6 text-2xl font-semibold text-blue-200 max-md:hidden">Psychology Coach</h1>
       <PsychologyProGate>
         <PsychologyCoachPageContent />
       </PsychologyProGate>

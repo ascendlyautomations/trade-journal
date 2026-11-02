@@ -17,7 +17,7 @@ export default function PsychologyCoachEntryLink({
       href={href}
       className={
         className ??
-        "flex w-full items-center justify-center rounded-lg bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-600"
+        "flex w-full items-center justify-center rounded-lg bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-600 max-md:min-h-11"
       }
       data-testid="psychologyCoach.open"
     >

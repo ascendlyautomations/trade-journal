@@ -398,7 +398,7 @@ export default function CreateWithdrawalFlow({
         ) : null}
 
         {formError ? (
-          <p className="text-sm text-red-300" role="alert">
+          <p className="tt-mobile-web-field-error text-sm text-red-300" role="alert">
             {formError}
           </p>
         ) : null}

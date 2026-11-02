@@ -412,3 +412,42 @@ html[data-tt-appearance="light"] .tt-backtest-lab {
 html[data-tt-appearance="light"] .tt-backtest-lab .backtest-lab-filter-control:hover:not(:disabled) {
   background-color: #ffffff;
 }
+
+@media (max-width: 767px) {
+  .tt-backtest-lab .backtest-lab-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tt-backtest-lab .backtest-lab-stat-tile {
+    min-height: 4.25rem;
+    padding: 0.625rem 0.75rem;
+  }
+
+  .tt-backtest-lab .backtest-lab-stat-value {
+    font-size: 0.9375rem;
+  }
+
+  .tt-backtest-lab .backtest-lab-tabs {
+    border-radius: 0.875rem;
+    padding: 0.2rem;
+  }
+
+  .tt-backtest-lab .backtest-lab-tab {
+    min-height: 2.5rem;
+    padding: 0.375rem 0.2rem;
+    font-size: 0.75rem;
+  }
+
+  .tt-backtest-lab .backtest-lab-tab[aria-selected="true"]::after {
+    left: 0.45rem;
+    right: 0.45rem;
+  }
+
+  .tt-backtest-lab .backtest-lab-section-card {
+    padding: 0.75rem;
+  }
+
+  .tt-backtest-lab .backtest-lab-equity-shell {
+    margin-bottom: 0.75rem;
+  }
+}

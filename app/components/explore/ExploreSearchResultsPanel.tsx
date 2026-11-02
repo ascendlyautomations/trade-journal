@@ -10,6 +10,7 @@ import {
   roomDisplayInitials,
 } from "@/lib/popularTradeRooms"
 import { profilePath } from "@/lib/profileRoutes"
+import { countNoun } from "@/lib/countNoun"
 import { tradeRoomSharePath } from "@/lib/tradeRoomShareUrl"
 
 export type ExploreSearchProfileResult = {
@@ -158,8 +159,7 @@ export default function ExploreSearchResultsPanel({
                       </p>
                     ) : (
                       <p className="truncate text-xs text-gray-400">
-                        {room.memberCount.toLocaleString()} member
-                        {room.memberCount === 1 ? "" : "s"}
+                        {countNoun(room.memberCount, "member")}
                       </p>
                     )}
                   </div>

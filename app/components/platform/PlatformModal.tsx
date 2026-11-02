@@ -54,6 +54,8 @@ export type PlatformModalProps = {
   suppressMobileSplitMedia?: boolean
   zIndexClass?: string
   backdropClassName?: string
+  /** Web modal header only. Native fullscreen chrome ignores this. */
+  headerAccessory?: ReactNode
 }
 
 function buildDetailBody({
@@ -140,6 +142,7 @@ function WebDetailModalShell({
   suppressMobileSplitMedia = false,
   zIndexClass = DETAIL_MODAL_Z_INDEX_CLASS,
   backdropClassName = "bg-black/70",
+  headerAccessory,
 }: PlatformModalProps) {
   useModalScrollLock(true)
   useStackedModalEscape(true, onClose)
@@ -182,6 +185,7 @@ function WebDetailModalShell({
           <p className="min-w-0 truncate text-sm font-semibold text-white">
             {title || "\u00a0"}
           </p>
+          {headerAccessory}
           <ModalCloseButton onClick={onClose} />
         </header>
 

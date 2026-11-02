@@ -52,6 +52,7 @@ import PlatformFeedHeader, {
 } from "@/app/components/platform/PlatformFeedHeader"
 import FeedPostList from "../../components/feed/FeedPostList"
 import FeedStoriesBar from "../../components/feed/FeedStoriesBar"
+import MobileWebClipsPager from "../../components/mobile/feed/MobileWebClipsPager"
 import {
   EMPTY_COMMENTS,
   EMPTY_LIKE_META,
@@ -110,6 +111,15 @@ import { readExploreSession } from "@/lib/exploreSessionCache"
 import { useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 import EmptyState from "@/app/components/ui/EmptyState"
+import MobileWebNetworkNotice from "@/app/components/mobile/MobileWebNetworkNotice"
+import {
+  DesktopWebViewport,
+  MobileWebViewport,
+} from "@/app/components/mobile/MobileWebViewport"
+import {
+  MOBILE_WEB_FEED_LOAD_FAILED,
+  mobileWebNetworkErrorMessage,
+} from "@/lib/mobileWebNetworkRecovery"
 import { SkeletonFeedPage } from "@/app/components/ui/skeletons"
 import { publishStory } from "@/lib/publishStory"
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
@@ -130,16 +140,21 @@ import {
   withInsertedReelParentCommentId,
 } from "@/lib/reelEngagement"
 import { toggleContentLike } from "@/lib/toggleContentLike"
+import { followOrRequest } from "@/lib/followActions"
+import { setMobileWebClipsImmersive } from "@/lib/mobileWebClips"
+import { setMobileWebSocialDetail } from "@/lib/mobileWebTabBar"
 import { asJsonObject } from "@/lib/supabaseProjectedQuery"
 import type { TableInsert } from "@/lib/supabaseTypes"
 import { createOptimisticTempId } from "@/lib/optimisticMutation"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { deleteReel, isTradeAttachedReel, replaceTradeReelVideo, type ReelRow } from "@/lib/reels"
 import {
+  buildFeedDeepLinkHref,
   feedDeepLinkSessionKey,
   fetchFeedDeepLinkContent,
   parseFeedDeepLinkTarget,
 } from "@/lib/feedDeepLink"
+import { loginPathWithNext } from "@/lib/universalLinks"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { isDemoUserId } from "@/lib/demo/constants"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
@@ -214,7 +229,21 @@ function FeedPageContent() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const { user, profile, loading: profileLoading } = useUserProfile()
   const { isNativeIos } = usePlatformPresentation()
-  const authChecked = !!user?.id
+  const authResolved = !profileLoading
+  const feedDeepLinkTarget = useMemo(
+    () => parseFeedDeepLinkTarget(searchParams),
+    [searchParams]
+  )
+  const guestLoginHref = useMemo(() => {
+    if (feedDeepLinkTarget) {
+      return loginPathWithNext(buildFeedDeepLinkHref(feedDeepLinkTarget))
+    }
+    return loginPathWithNext("/feed")
+  }, [feedDeepLinkTarget])
+  const [guestDeepLinkSettled, setGuestDeepLinkSettled] = useState(
+    () => feedDeepLinkTarget == null
+  )
+  const [guestDeepLinkNeedsSignIn, setGuestDeepLinkNeedsSignIn] = useState(false)
   const [posts, setPosts] = useState<any[]>([])
   const [blockedListRevision, setBlockedListRevision] = useState(0)
   const [page, setPage] = useState(0)
@@ -1583,7 +1612,9 @@ function FeedPageContent() {
           console.error("[feed] loadPosts FULL ERROR", error)
         }
         if (isActive() && currentPage === 0) {
-          setFeedLoadError("Couldn't load the feed. Please try again.")
+          setFeedLoadError(
+            mobileWebNetworkErrorMessage(error, MOBILE_WEB_FEED_LOAD_FAILED)
+          )
           hasLoadedFeedRef.current = true
           setFeedReady(true)
         }
@@ -2976,25 +3007,52 @@ function FeedPageContent() {
   }, [selectedPostId, commentSubmitting])
 
   useEffect(() => {
-    const target = parseFeedDeepLinkTarget(searchParams)
-    if (!target || !user?.id) return
+    if (!feedDeepLinkTarget) {
+      setGuestDeepLinkSettled(true)
+      setGuestDeepLinkNeedsSignIn(false)
+      return
+    }
+    if (!authResolved) return
 
+    const target = feedDeepLinkTarget
     const key = feedDeepLinkSessionKey(target)
-    if (feedDeepLinkHandledRef.current === key) return
+    if (feedDeepLinkHandledRef.current === key) {
+      setGuestDeepLinkSettled(true)
+      return
+    }
+
+    if (!user?.id) {
+      setGuestDeepLinkSettled(false)
+      setGuestDeepLinkNeedsSignIn(false)
+    }
+
+    const viewer = user?.id ? { id: user.id } : null
 
     void (async () => {
       const row = await fetchFeedDeepLinkContent(supabase, target)
-      if (!row) return
+      feedDeepLinkHandledRef.current = key
+
+      if (!row) {
+        if (!viewer) {
+          setGuestDeepLinkNeedsSignIn(true)
+          setFeedReady(true)
+        }
+        setGuestDeepLinkSettled(true)
+        return
+      }
 
       const { enriched, likesMap, commentCountsMap } =
-        await loadEngagementForPosts(
-        [row],
-        { id: user.id }
-      )
+        await loadEngagementForPosts([row], viewer)
       const post = enriched[0]
-      if (!post) return
+      if (!post) {
+        if (!viewer) {
+          setGuestDeepLinkNeedsSignIn(true)
+          setFeedReady(true)
+        }
+        setGuestDeepLinkSettled(true)
+        return
+      }
 
-      feedDeepLinkHandledRef.current = key
       setFeedModalPost(post)
       setSelectedPostId(String(post.id))
       setLikesByPost((prev) => ({ ...prev, ...likesMap }))
@@ -3007,13 +3065,24 @@ function FeedPageContent() {
       if (target.openComments) {
         openCommentsRef.current[String(post.id)] = true
       }
+      if (!viewer) {
+        setGuestDeepLinkNeedsSignIn(false)
+        setFeedReady(true)
+      }
+      setGuestDeepLinkSettled(true)
     })()
   }, [
-    searchParams,
+    authResolved,
+    feedDeepLinkTarget,
     user?.id,
     loadEngagementForPosts,
     loadCommentsForPost,
   ])
+
+  useEffect(() => {
+    if (!authResolved || user?.id || feedDeepLinkTarget) return
+    setFeedReady(true)
+  }, [authResolved, feedDeepLinkTarget, user?.id])
 
   const handleNativePullToRefresh = useCallback(async () => {
     bumpFeedRequestGeneration()
@@ -3025,6 +3094,26 @@ function FeedPageContent() {
     setFeedLoadError(null)
     await loadPosts(0)
   }, [bumpFeedRequestGeneration, loadPosts])
+
+  const followingIdsForUi = useMemo(() => {
+    void followingRealtimeKey
+    return followingIdsRef.current
+  }, [followingRealtimeKey])
+
+  const phoneClipsImmersive = !isNativeIos && contentType === "reels"
+  const phoneSocialDetail =
+    !isNativeIos &&
+    Boolean(selectedPostId || stackedAttachedReel || sharePostId)
+
+  useEffect(() => {
+    setMobileWebClipsImmersive(phoneClipsImmersive)
+    return () => setMobileWebClipsImmersive(false)
+  }, [phoneClipsImmersive])
+
+  useEffect(() => {
+    setMobileWebSocialDetail(phoneSocialDetail && !phoneClipsImmersive)
+    return () => setMobileWebSocialDetail(false)
+  }, [phoneSocialDetail, phoneClipsImmersive])
 
   const handleSuggestedFollowingChange = useCallback(
     (targetUserId: string, following: boolean) => {
@@ -3040,6 +3129,21 @@ function FeedPageContent() {
     [setFollowingIds]
   )
 
+  const handleFollowFromClip = useCallback(
+    async (userId: string) => {
+      if (!user?.id) return
+      const result = await followOrRequest(supabase, user.id, { id: userId })
+      if (!result.ok) {
+        showPopup({ type: "error", message: result.message })
+        return
+      }
+      if (result.state === "following") {
+        handleSuggestedFollowingChange(userId, true)
+      }
+    },
+    [handleSuggestedFollowingChange, showPopup, user?.id]
+  )
+
   return (
     <NativeIosPullToRefresh onRefresh={handleNativePullToRefresh}>
     <div data-tt-native-surface="feed" className="tt-phase1-dark w-full text-white">
@@ -3052,14 +3156,22 @@ function FeedPageContent() {
       ) : null}
       <div
         data-tt-feed-column
-        className="flex justify-center px-4 py-6 sm:py-8 pb-10"
+        className={`flex justify-center px-4 py-6 sm:py-8 pb-10${
+          isNativeIos
+            ? ""
+            : phoneClipsImmersive
+              ? " max-md:h-[var(--app-viewport-height)] max-md:px-0 max-md:py-0 max-md:pb-0"
+              : " max-md:px-0 max-md:py-3 max-md:pb-4"
+        }`}
       >
         <div
           data-tt-feed-workspace
           className={
             isNativeIos
               ? "w-full max-w-xl"
-              : "flex w-full max-w-xl flex-col min-[1200px]:max-w-[720px]"
+              : `flex w-full max-w-xl flex-col min-[1200px]:max-w-[720px]${
+                  phoneClipsImmersive ? " max-md:h-full max-md:max-w-none" : ""
+                }`
           }
         >
         <div
@@ -3067,9 +3179,20 @@ function FeedPageContent() {
           className={
             isNativeIos
               ? "w-full space-y-6"
-              : "min-w-0 w-full space-y-6 xl:w-[720px] xl:max-w-[720px] xl:shrink-0"
+              : `min-w-0 w-full space-y-6 max-md:space-y-0 xl:w-[720px] xl:max-w-[720px] xl:shrink-0${
+                  phoneClipsImmersive
+                    ? " max-md:flex max-md:h-full max-md:flex-col max-md:space-y-0"
+                    : ""
+                }`
           }
         >
+          <div
+            className={
+              phoneClipsImmersive
+                ? "max-md:hidden md:contents"
+                : "max-md:px-3 md:contents"
+            }
+          >
           <PlatformFeedModeToggle
             mode={mode}
             onModeChange={handleFeedModeChange}
@@ -3082,39 +3205,105 @@ function FeedPageContent() {
           </div>
 
           {mode === "following" && user ? (
-            <FeedStoriesBar
-              currentUser={currentUserProfile}
-              currentUserHasStory={currentUserHasStory}
-              users={users}
-              onStoryUpload={handleStoryFileSelect}
-              onOpenStory={openStory}
-            />
+            <div className={phoneClipsImmersive ? "max-md:hidden" : undefined}>
+              <FeedStoriesBar
+                currentUser={currentUserProfile}
+                currentUserHasStory={currentUserHasStory}
+                users={users}
+                onStoryUpload={handleStoryFileSelect}
+                onOpenStory={openStory}
+              />
+            </div>
           ) : null}
+          </div>
 
-          {!authChecked || (!feedReady && uniquePosts.length === 0) ? (
+          {!authResolved ||
+          (feedDeepLinkTarget &&
+            !user?.id &&
+            !guestDeepLinkSettled) ||
+          (user?.id && !feedReady && uniquePosts.length === 0) ? (
+            <div className="max-md:px-3">
             <SkeletonFeedPage count={3} />
-          ) : feedLoadError && uniquePosts.length === 0 ? (
+            </div>
+          ) : !user?.id &&
+            authResolved &&
+            guestDeepLinkNeedsSignIn &&
+            uniquePosts.length === 0 ? (
             <EmptyState
-              title="Couldn't Load Feed"
-              description={feedLoadError}
-              className="py-10"
+              title="Sign in to view this post"
+              description="This content may be private, or you need an account to open shared links on TradeTraxs."
+              className="py-10 max-md:px-3"
               action={
-                <button
-                  type="button"
-                  onClick={() => {
+                <Link
+                  href={guestLoginHref}
+                  prefetch={false}
+                  className="text-sm font-medium text-blue-300 hover:text-blue-200"
+                >
+                  Sign in →
+                </Link>
+              }
+            />
+          ) : !user?.id &&
+            authResolved &&
+            uniquePosts.length === 0 &&
+            !feedDeepLinkTarget &&
+            !selectedPostId &&
+            !feedModalPost ? (
+            <EmptyState
+              title="Sign in to see your feed"
+              description="Follow traders, react to posts, and share your own trades after you sign in."
+              className="py-10 max-md:px-3"
+              action={
+                <Link
+                  href={guestLoginHref}
+                  prefetch={false}
+                  className="text-sm font-medium text-blue-300 hover:text-blue-200"
+                >
+                  Sign in →
+                </Link>
+              }
+            />
+          ) : feedLoadError && uniquePosts.length === 0 ? (
+            <>
+              <MobileWebViewport>
+                <MobileWebNetworkNotice
+                  variant="panel"
+                  title="Couldn't load feed"
+                  message={feedLoadError}
+                  onRetry={() => {
                     bumpFeedRequestGeneration()
                     resetFeedState()
                     setFeedLoadError(null)
                     setLoading(true)
                     void loadPosts(0)
                   }}
-                  className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
-                >
-                  Retry
-                </button>
-              }
-            />
-          ) : feedReady && !loading && uniquePosts.length === 0 ? (
+                  retrying={loading}
+                />
+              </MobileWebViewport>
+              <DesktopWebViewport>
+                <EmptyState
+                  title="Couldn't Load Feed"
+                  description={feedLoadError}
+                  className="py-10"
+                  action={
+                    <button
+                      type="button"
+                      onClick={() => {
+                        bumpFeedRequestGeneration()
+                        resetFeedState()
+                        setFeedLoadError(null)
+                        setLoading(true)
+                        void loadPosts(0)
+                      }}
+                      className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+                    >
+                      Retry
+                    </button>
+                  }
+                />
+              </DesktopWebViewport>
+            </>
+          ) : feedReady && !loading && uniquePosts.length === 0 && user?.id ? (
             <EmptyState
               title={
                 feedEmptyState === "following_nobody"
@@ -3147,41 +3336,110 @@ function FeedPageContent() {
                   </Link>
                 ) : undefined
               }
-              className="py-10"
+              className="py-10 max-md:px-3"
             />
           ) : uniquePosts.length > 0 ? (
-            <FeedPostList
-              posts={uniquePosts}
-              user={user}
-              likesByPost={likesByPost}
-              likeBusyByPost={likeBusyByPost}
-              commentCountsByPost={commentCountsByPost}
-              onSelectPost={handleSelectPost}
-              onOpenComments={handleOpenPostComments}
-              onOpenLinkedTrade={handleOpenLinkedTrade}
-              onOpenAttachedReel={handleOpenAttachedReel}
-              onToggleLike={toggleLike}
-              onSharePost={handleSharePost}
-              openReelMenuId={openReelMenuId}
-              onReelMenuToggle={handleReelMenuToggle}
-              onEditReel={handleStartEditReel}
-              onDeleteReel={requestDeleteReel}
-              onReplaceReelVideo={handleReplaceReelVideo}
-            />
+            phoneClipsImmersive ? (
+              <>
+                <div className="contents md:hidden">
+                  <div className="relative min-h-0 flex-1 overflow-hidden">
+                    <div className="pointer-events-none absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/55 to-transparent pt-[max(8px,env(safe-area-inset-top,0px))]">
+                      <div className="pointer-events-auto px-2">
+                        <FeedContentToggle
+                          contentType={contentType}
+                          onContentTypeChange={setContentType}
+                        />
+                      </div>
+                    </div>
+                    <MobileWebClipsPager
+                      posts={uniquePosts}
+                      user={user}
+                      likesByPost={likesByPost}
+                      likeBusyByPost={likeBusyByPost}
+                      commentCountsByPost={commentCountsByPost}
+                      followingIds={followingIdsForUi}
+                      onToggleLike={toggleLike}
+                      onOpenComments={handleOpenPostComments}
+                      onSharePost={handleSharePost}
+                      onOpenLinkedTrade={handleOpenLinkedTrade}
+                      onFollow={handleFollowFromClip}
+                      onLoadMore={loadPosts}
+                      hasMore={hasMore}
+                      loadingMore={loading}
+                      canManageReel={(post) =>
+                        Boolean(
+                          user?.id != null &&
+                            String(user.id) === String(post.user_id)
+                        )
+                      }
+                      openReelMenuId={openReelMenuId}
+                      onReelMenuToggle={handleReelMenuToggle}
+                      onEditReel={handleStartEditReel}
+                      onDeleteReel={requestDeleteReel}
+                      onReplaceReelVideo={handleReplaceReelVideo}
+                      initialReelId={searchParams.get("reel")}
+                    />
+                  </div>
+                </div>
+                <div className="hidden md:contents">
+                  <FeedPostList
+                    posts={uniquePosts}
+                    user={user}
+                    likesByPost={likesByPost}
+                    likeBusyByPost={likeBusyByPost}
+                    commentCountsByPost={commentCountsByPost}
+                    onSelectPost={handleSelectPost}
+                    onOpenComments={handleOpenPostComments}
+                    onOpenLinkedTrade={handleOpenLinkedTrade}
+                    onOpenAttachedReel={handleOpenAttachedReel}
+                    onToggleLike={toggleLike}
+                    onSharePost={handleSharePost}
+                    openReelMenuId={openReelMenuId}
+                    onReelMenuToggle={handleReelMenuToggle}
+                    onEditReel={handleStartEditReel}
+                    onDeleteReel={requestDeleteReel}
+                    onReplaceReelVideo={handleReplaceReelVideo}
+                  />
+                </div>
+              </>
+            ) : (
+              <FeedPostList
+                posts={uniquePosts}
+                user={user}
+                likesByPost={likesByPost}
+                likeBusyByPost={likeBusyByPost}
+                commentCountsByPost={commentCountsByPost}
+                onSelectPost={handleSelectPost}
+                onOpenComments={handleOpenPostComments}
+                onOpenLinkedTrade={handleOpenLinkedTrade}
+                onOpenAttachedReel={handleOpenAttachedReel}
+                onToggleLike={toggleLike}
+                onSharePost={handleSharePost}
+                openReelMenuId={openReelMenuId}
+                onReelMenuToggle={handleReelMenuToggle}
+                onEditReel={handleStartEditReel}
+                onDeleteReel={requestDeleteReel}
+                onReplaceReelVideo={handleReplaceReelVideo}
+              />
+            )
           ) : null}
 
-          <FeedLoadMoreFooter
-            loading={loading}
-            hasMore={hasMore}
-            onLoadMore={loadPosts}
-          />
+          <div className={phoneClipsImmersive ? "max-md:hidden" : undefined}>
+            <FeedLoadMoreFooter
+              loading={loading}
+              hasMore={hasMore}
+              onLoadMore={loadPosts}
+            />
+          </div>
         </div>
         {isNativeIos || !user?.id ? null : (
-          <FeedRightRail
-            viewerId={user.id}
-            followingIds={followingIdsRef.current}
-            onFollowingChange={handleSuggestedFollowingChange}
-          />
+          <div className="max-md:hidden">
+            <FeedRightRail
+              viewerId={user.id}
+              followingIds={followingIdsRef.current}
+              onFollowingChange={handleSuggestedFollowingChange}
+            />
+          </div>
         )}
         </div>
       </div>

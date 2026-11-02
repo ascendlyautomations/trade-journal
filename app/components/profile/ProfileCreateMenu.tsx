@@ -5,6 +5,7 @@ import { createPortal } from "react-dom"
 import { Camera, MessageSquareText, PlaySquare, Zap } from "lucide-react"
 import Button from "@/app/components/ui/Button"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
+import { useMobileWebSheetDismiss } from "@/lib/useMobileWebSheetDismiss"
 
 type CreateMenuEntry = {
   id: string
@@ -113,6 +114,7 @@ export default function ProfileCreateMenu({
   const rootRef = useRef<HTMLDivElement>(null)
 
   const close = useCallback(() => setOpen(false), [])
+  const sheetDismiss = useMobileWebSheetDismiss(close)
 
   // Extend this array to add future content types (Journal, Achievement, Live Stream, etc.)
   const menuItems: CreateMenuEntry[] = [
@@ -250,6 +252,7 @@ export default function ProfileCreateMenu({
             className="absolute inset-x-0 bottom-0 rounded-t-2xl border border-white/10 bg-[#0b1f3a] shadow-2xl shadow-black/50"
             onClick={(e) => e.stopPropagation()}
           >
+            <div {...sheetDismiss}>
             <div className="flex justify-center pt-3 pb-1">
               <div className="h-1 w-10 rounded-full bg-white/20" aria-hidden />
             </div>
@@ -258,6 +261,7 @@ export default function ProfileCreateMenu({
               <p className="mt-0.5 text-xs text-gray-400">
                 Share content with your followers
               </p>
+            </div>
             </div>
             <MenuOptionsList
               items={menuItems}

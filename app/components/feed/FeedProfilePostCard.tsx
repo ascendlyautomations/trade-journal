@@ -9,6 +9,8 @@ import FeedPostModerationMenu from "./FeedPostModerationMenu"
 import FeedPostScreenshot from "./FeedPostScreenshot"
 import FeedRoomShareCard from "./FeedRoomShareCard"
 import type { FeedLikeMeta } from "./FeedPostCard"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
+import { MOBILE_WEB_FEED_CARD_FLUSH } from "@/lib/mobileWebPageSurface"
 
 type FeedProfilePostCardProps = {
   post: any
@@ -43,6 +45,7 @@ function FeedProfilePostCard({
   onToggleLike,
   onSharePost,
 }: FeedProfilePostCardProps) {
+  const phoneWeb = !useIsNativeIos()
   const handleOpenComments = useCallback(() => {
     onOpenComments?.(post)
   }, [onOpenComments, post])
@@ -83,9 +86,11 @@ function FeedProfilePostCard({
       onClick={preview ? undefined : handleArticleClick}
       onKeyDown={preview ? undefined : handleArticleKeyDown}
       className={
-        preview
-          ? "overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20"
-          : "cursor-pointer overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-xl"
+        `${
+          preview
+            ? "overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20"
+            : "cursor-pointer overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-xl"
+        }${phoneWeb ? ` ${MOBILE_WEB_FEED_CARD_FLUSH}` : ""}`
       }
     >
       <FeedPostHeader
@@ -103,7 +108,7 @@ function FeedProfilePostCard({
       />
 
       {isRoomSharePost(post) ? (
-        <div className="px-4 pt-3">
+        <div className={`px-4 pt-3${phoneWeb ? " max-md:px-3" : ""}`}>
           <FeedRoomShareCard
             post={post}
             viewerUserId={user?.id ?? null}
@@ -130,8 +135,8 @@ function FeedProfilePostCard({
       />
 
       {content ? (
-        <div className="px-4 pb-3">
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-white">
+        <div className={`px-4 pb-3${phoneWeb ? " max-md:px-3" : ""}`}>
+          <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-relaxed text-white">
             {content}
           </p>
         </div>

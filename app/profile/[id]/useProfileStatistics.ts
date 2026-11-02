@@ -40,6 +40,8 @@ type UseProfileStatisticsOptions = {
   summaryReady: boolean
   achievements: Achievement[]
   achievementsReady: boolean
+  /** REST payout aggregate when bootstrap `payout_total` is absent. */
+  fetchedOverviewPayoutTotal?: number | null
   /** Chronological equity from statistics mode `all`. Used when summary trades are not loaded. */
   streakEquity?: Array<{ equity: number }> | null
 }
@@ -56,6 +58,7 @@ export function useProfileStatistics({
   summaryReady,
   achievements,
   achievementsReady,
+  fetchedOverviewPayoutTotal = undefined,
   streakEquity = null,
 }: UseProfileStatisticsOptions) {
   return useMemo(() => {
@@ -176,7 +179,9 @@ export function useProfileStatistics({
     const overviewPayoutTotal =
       bootstrapOverviewStats?.payoutTotal != null
         ? bootstrapOverviewStats.payoutTotal
-        : achievementPayout
+        : typeof fetchedOverviewPayoutTotal === "number"
+          ? fetchedOverviewPayoutTotal
+          : achievementPayout
     const overviewProfitFactor = overviewStatsVisible
       ? useBootstrapOverview
         ? bootstrapOverviewStats.profitFactor
@@ -286,6 +291,7 @@ export function useProfileStatistics({
   }, [
     achievements,
     achievementsReady,
+    fetchedOverviewPayoutTotal,
     analyticsTradeRows,
     analyticsTradesLoading,
     analyticsTradesReady,

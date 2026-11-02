@@ -87,7 +87,11 @@ final class SessionViewerIdentityTests: XCTestCase {
             return false
         }
         XCTAssertNil(viewModel.achievement)
-        XCTAssertEqual(viewModel.phase, .failed(SessionViewerIdentity.sessionUnavailableMessage))
+        if case .failed(let failure) = viewModel.phase {
+            XCTAssertEqual(failure.message, SessionViewerIdentity.sessionUnavailableMessage)
+        } else {
+            XCTFail("Expected failed phase")
+        }
     }
 
     func testStaleScreenshotIdentityDoesNotPaintAchievementFixtures() async {

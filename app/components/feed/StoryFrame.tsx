@@ -21,6 +21,8 @@ type StoryFrameProps = {
   footer?: ReactNode
   /** When true, reserve space at the bottom for footer content (e.g. story reply input). */
   hasFooter?: boolean
+  /** Load the visible slide immediately. Off by default so desktop stays lazy. */
+  priority?: boolean
   children?: ReactNode
 }
 
@@ -33,6 +35,7 @@ export default function StoryFrame({
   headerRight,
   footer,
   hasFooter = Boolean(footer),
+  priority = false,
   children,
 }: StoryFrameProps) {
   const username = profile.username?.trim() || "User"
@@ -70,6 +73,7 @@ export default function StoryFrame({
           originalSrc={imageUrl}
           preset="story"
           alt=""
+          priority={priority}
           className="block max-h-full max-w-full animate-[storyFadeIn_0.28s_ease-out] object-contain"
           draggable={false}
         />

@@ -38,6 +38,9 @@ type DashboardAnalyticsProps = {
   totalTrades: number
   /** Force Long vs Short comparison table (mobile Analytics tab). */
   longShortLayout?: ComponentProps<typeof DashboardLongShort>["layout"]
+  sections?: "all" | "symbol"
+  /** Drop outer card chrome when wrapped in a phone chart block. */
+  embedded?: boolean
 }
 
 function formatNumber(value: number) {
@@ -54,12 +57,30 @@ function DashboardAnalytics({
   holdTimeStats,
   totalTrades,
   longShortLayout = "auto",
+  sections = "all",
+  embedded = false,
 }: DashboardAnalyticsProps) {
+  const symbolOnly = sections === "symbol"
+
   return (
     <div className="flex flex-col gap-2 max-md:gap-2 md:gap-3">
-      <div className="grid grid-cols-1 gap-2 max-md:gap-2 md:gap-3 lg:grid-cols-3 lg:items-stretch">
-        <div className="h-full overflow-x-auto rounded-xl border border-white/10 bg-white/10 p-2.5 max-md:px-2 max-md:pb-1.5 max-md:pt-1.5 md:p-4 lg:col-span-2">
-          <h3 className={dashboardInsightTitleClass}>Symbol Performance</h3>
+      <div
+        className={
+          symbolOnly
+            ? "grid grid-cols-1"
+            : "grid grid-cols-1 gap-2 max-md:gap-2 md:gap-3 lg:grid-cols-3 lg:items-stretch"
+        }
+      >
+        <div
+          className={
+            embedded
+              ? "w-full"
+              : "h-full overflow-x-auto rounded-xl border border-white/10 bg-white/10 p-2.5 max-md:overflow-x-hidden max-md:px-2 max-md:pb-1.5 max-md:pt-1.5 md:p-4 lg:col-span-2"
+          }
+        >
+          {embedded ? null : (
+            <h3 className={dashboardInsightTitleClass}>Symbol Performance</h3>
+          )}
 
           {symbolPerformanceRows.length === 0 ? (
             <DashboardWidgetEmptyState
@@ -68,7 +89,38 @@ function DashboardAnalytics({
               className="py-8"
             />
           ) : (
-            <table className="w-full min-w-[520px] text-[11px] md:text-sm">
+            <>
+              <ul className="space-y-1.5 md:hidden">
+                {symbolPerformanceRows.map((row) => (
+                  <li
+                    key={row.ticker}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/5 px-2.5 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-white">
+                        {row.ticker}
+                      </p>
+                      <p className="text-[11px] text-gray-400">
+                        {formatNumber(row.totalTrades)} trades ·{" "}
+                        {row.winRate.toFixed(1)}%
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p
+                        className={`text-sm font-semibold tabular-nums ${
+                          row.totalPnL >= 0 ? "text-green-400" : "text-red-400"
+                        }`}
+                      >
+                        {formatCurrency(row.totalPnL)}
+                      </p>
+                      <p className="text-[11px] text-gray-400">
+                        RR {formatRR(row.avgRR)}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <table className="hidden w-full min-w-[520px] text-sm md:table">
               <thead>
                 <tr className="border-b border-white/10 text-gray-200 md:text-gray-400">
                   <th className="py-1.5 text-center md:py-2">Ticker</th>
@@ -105,28 +157,33 @@ function DashboardAnalytics({
                 ))}
               </tbody>
             </table>
+            </>
           )}
         </div>
 
-        <div className="hidden md:block tt-dash-hide-desktop-v1">
-          {deferredSectionsReady ? (
-            <DashboardWeekdayChart data={weekdayData} totalTrades={totalTrades} />
-          ) : (
-            <div className="h-48 animate-pulse rounded-xl border border-white/10 bg-white/5" />
-          )}
-        </div>
+        {symbolOnly ? null : (
+          <div className="hidden md:block tt-dash-hide-desktop-v1">
+            {deferredSectionsReady ? (
+              <DashboardWeekdayChart data={weekdayData} totalTrades={totalTrades} />
+            ) : (
+              <div className="h-48 animate-pulse rounded-xl border border-white/10 bg-white/5" />
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 gap-2 max-md:gap-2 md:gap-3 lg:grid-cols-3 lg:items-stretch">
-        <DashboardLongShort
-          performance={longShortPerformance}
-          totalTrades={totalTrades}
-          layout={longShortLayout}
-        />
-        <div className="lg:col-span-2">
-          <DashboardHoldTime stats={holdTimeStats} totalTrades={totalTrades} />
+      {symbolOnly ? null : (
+        <div className="grid grid-cols-1 gap-2 max-md:gap-2 md:gap-3 lg:grid-cols-3 lg:items-stretch">
+          <DashboardLongShort
+            performance={longShortPerformance}
+            totalTrades={totalTrades}
+            layout={longShortLayout}
+          />
+          <div className="lg:col-span-2">
+            <DashboardHoldTime stats={holdTimeStats} totalTrades={totalTrades} />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

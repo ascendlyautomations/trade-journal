@@ -37,6 +37,7 @@ import BacktestLabToolbar, {
   buildBacktestAccountFilterOptions,
 } from "@/app/components/backtest/BacktestLabToolbar"
 import BacktestLabEquityCurve from "@/app/components/backtest/BacktestLabEquityCurve"
+import { MOBILE_WEB_NEUTRAL_PAGE_BG } from "@/lib/mobileWebPageSurface"
 import {
   applyBacktestLabFilters,
   BACKTEST_LAB_FILTER_ALL,
@@ -358,8 +359,8 @@ export default function BacktestPage() {
 
   if (access === "unknown") {
     return (
-      <div className="tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
-        <div className="mx-auto max-w-lg px-6 py-10">
+      <div className={`tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
+        <div className="mx-auto max-w-lg px-6 py-10 max-md:px-3 max-md:py-4">
           <EntitlementStatusNotice
             status={entitlementStatus}
             onRetry={() => void refreshEntitlement()}
@@ -372,8 +373,8 @@ export default function BacktestPage() {
   if (proLocked) {
     return (
       <>
-        <div className="tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
-          <div className="mx-auto max-w-7xl px-6 pb-6 pt-6 xl:max-w-[1560px]">
+        <div className={`tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
+          <div className="mx-auto max-w-7xl px-6 pb-6 pt-6 xl:max-w-[1560px] max-md:px-3 max-md:pt-3">
             <LockedFeature
               title="Backtest Lab"
               feature="backtest_lab"
@@ -388,12 +389,12 @@ export default function BacktestPage() {
 
   return (
     <>
-      <div className="tt-phase3-dark tt-backtest-lab min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
-        <div className="mx-auto max-w-7xl px-4 pb-6 pt-3 sm:px-6 xl:max-w-[1560px]">
-          <h1 className="mb-1 mt-0 text-center text-xl font-semibold text-blue-300 md:text-2xl">
+      <div className={`tt-phase3-dark tt-backtest-lab min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
+        <div className="mx-auto max-w-7xl px-4 pb-6 pt-3 sm:px-6 xl:max-w-[1560px] max-md:px-3 max-md:pt-2">
+          <h1 className="mb-1 mt-0 hidden text-center text-xl font-semibold text-blue-300 md:mt-0 md:block md:text-2xl">
             Backtest Lab
           </h1>
-          <p className="mb-4 text-center text-sm text-[var(--tt-bl-control-muted,#9ca3af)]">
+          <p className="mb-4 text-center text-sm text-[var(--tt-bl-control-muted,#9ca3af)] max-md:mb-3 max-md:text-left max-md:text-xs">
             Isolated backtests — does not affect dashboard or live trade history.
           </p>
 
@@ -421,7 +422,7 @@ export default function BacktestPage() {
                 <div
                   id={backtestLabTabPanelId("overview")}
                   role="tabpanel"
-                  className="space-y-5"
+                  className="space-y-5 max-md:space-y-3"
                 >
                   <BacktestLabStatsGrid
                     periodStats={periodStats}

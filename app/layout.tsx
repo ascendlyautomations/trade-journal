@@ -2,6 +2,7 @@ import { Suspense } from "react"
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import "./components/mobile/mobileWebTouch.css";
 import "./authenticatedAppearance.css";
 import BannedAccountShell from "./components/BannedAccountShell"
 import OnboardingGateShell from "./components/OnboardingGateShell"
@@ -15,6 +16,8 @@ import MarketingNavbarRoot from "./components/MarketingNavbarRoot"
 import CookieConsentBanner from "./components/CookieConsentBanner"
 import MobileWebOpenAppBanner from "./components/MobileWebOpenAppBanner"
 import ScrollLockRouteReset from "./components/ScrollLockRouteReset"
+import MobileWebOfflineIndicator from "./components/mobile/MobileWebOfflineIndicator"
+import MobileWebTouchRoot from "./components/mobile/MobileWebTouchRoot"
 import SubscriptionGateShell from "./components/SubscriptionGateShell"
 import FreePlanAccountSlotShell from "./components/FreePlanAccountSlotShell"
 import { UserProfileProvider } from "@/lib/UserProfileProvider"
@@ -159,9 +162,12 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: webAppearanceBootScript() }} />
       </head>
       <body className="flex flex-col">
+        <MobileWebOpenAppBanner />
         <WebAppearanceController />
         <JsonLd data={[organizationJsonLd(), websiteJsonLd()]} />
         <ScrollLockRouteReset />
+        <MobileWebTouchRoot />
+        <MobileWebOfflineIndicator />
         <ToastRoot>
           <UploadProgressProvider>
           <ReferralPersistence />
@@ -191,7 +197,6 @@ export default async function RootLayout({
                     <MarketingNavbarRoot />
                     <AppChrome>{children}</AppChrome>
                     <CookieConsentBanner />
-                    <MobileWebOpenAppBanner />
                     </FreePlanAccountSlotShell>
                   </SubscriptionGateShell>
                 </DemoAppShell>

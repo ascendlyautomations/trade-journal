@@ -3,6 +3,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { useRouter } from "next/navigation"
+import { placePhoneWebAnchoredMenu } from "@/lib/mobileWebKeyboard"
+import { isPhoneWebTouchTarget } from "@/lib/mobileWebTouch"
 import {
   navigateToManageAccounts,
 } from "./TradeFilterBar"
@@ -44,6 +46,7 @@ type MenuPosition = {
   top: number
   left: number
   width: number
+  maxHeight?: number
 }
 
 /** Mirrors `InputTradeForm` account row shape after `accounts` fetch. */
@@ -279,6 +282,18 @@ export default function TradeAccountPicker({
     const trigger = triggerRef.current
     if (!trigger) return
     const rect = trigger.getBoundingClientRect()
+    const phonePlacement = placePhoneWebAnchoredMenu({
+      triggerTop: rect.top,
+      triggerBottom: rect.bottom,
+      triggerLeft: rect.left,
+      triggerWidth: rect.width,
+      preferredMaxHeight: 320,
+      minUsableBelow: 120,
+    })
+    if (phonePlacement) {
+      setMenuPosition(phonePlacement)
+      return
+    }
     const viewportPad = 8
     setMenuPosition({
       top: rect.bottom + 4,
@@ -358,9 +373,14 @@ export default function TradeAccountPicker({
     updateMenuPosition()
     window.addEventListener("resize", updateMenuPosition)
     window.addEventListener("scroll", updateMenuPosition, true)
+    const vv = isPhoneWebTouchTarget() ? window.visualViewport : null
+    vv?.addEventListener("resize", updateMenuPosition)
+    vv?.addEventListener("scroll", updateMenuPosition)
     return () => {
       window.removeEventListener("resize", updateMenuPosition)
       window.removeEventListener("scroll", updateMenuPosition, true)
+      vv?.removeEventListener("resize", updateMenuPosition)
+      vv?.removeEventListener("scroll", updateMenuPosition)
     }
   }, [open, menuView, accountsExpanded])
 
@@ -689,6 +709,8 @@ export default function TradeAccountPicker({
                   top: menuPosition.top,
                   left: menuPosition.left,
                   width: menuPosition.width,
+                  maxHeight: menuPosition.maxHeight,
+                  overflowY: menuPosition.maxHeight ? "auto" : undefined,
                 }}
               >
                 {showCopyTrading ? (

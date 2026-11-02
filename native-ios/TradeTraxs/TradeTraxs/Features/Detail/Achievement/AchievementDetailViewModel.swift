@@ -8,7 +8,7 @@ final class AchievementDetailViewModel {
     enum Phase: Equatable {
         case loading
         case loaded
-        case failed(String)
+        case failed(DetailLoadFailurePresentation)
     }
 
     private(set) var phase: Phase = .loading
@@ -119,7 +119,13 @@ final class AchievementDetailViewModel {
                     if let latestUserID, ProfileID(latestUserID.rawValue) != owner {
                         await performLoad(forceNetwork: forceNetwork)
                     } else {
-                        phase = .failed(SessionViewerIdentity.sessionUnavailableMessage)
+                        phase = .failed(
+                            DetailLoadFailurePresentation(
+                                title: "Couldn't load achievement",
+                                message: SessionViewerIdentity.sessionUnavailableMessage,
+                                isRetryable: false
+                            )
+                        )
                     }
                     loadTask = nil
                     return
@@ -135,7 +141,13 @@ final class AchievementDetailViewModel {
                     return
                 }
             } else {
-                phase = .failed(SessionViewerIdentity.sessionUnavailableMessage)
+                phase = .failed(
+                    DetailLoadFailurePresentation(
+                        title: "Couldn't load achievement",
+                        message: SessionViewerIdentity.sessionUnavailableMessage,
+                        isRetryable: false
+                    )
+                )
                 loadTask = nil
                 return
             }
@@ -155,7 +167,9 @@ final class AchievementDetailViewModel {
         } catch {
             guard !Task.isCancelled else { return }
             if achievement == nil {
-                phase = .failed(ProfileSectionSupport.message(for: error))
+                phase = .failed(
+                    DetailLoadFailureSupport.presentation(for: error, content: .achievement)
+                )
             }
         }
         loadTask = nil

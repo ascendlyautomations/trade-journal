@@ -1,0 +1,488 @@
+/*
+ * Phone web touch behavior (≤767px, not Capacitor / native iOS).
+ * Desktop and html.tt-native-ios are excluded.
+ *
+ * Do not set touch-action: pan-y or overscroll-behavior-x: none on the
+ * document. Those block Safari's edge swipe back and pinch zoom.
+ */
+
+.tt-mobile-web-app-banner,
+.tt-mobile-web-open-in-app {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  /*
+   * Stop a slightly-wide child from shifting the whole page sideways.
+   * clip on the root does not turn the tab bar or portaled sheets into
+   * a nested scrollport the way overflow on body does.
+   */
+  html:not(.tt-native-ios) {
+    overflow-x: clip;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  html:not(.tt-native-ios) body {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Landscape phones: keep controls clear of the rounded corners. */
+  html:not(.tt-native-ios) [data-tt-app] {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  html:not(.tt-native-ios) [data-tt-mobile-web-tab-bar] {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  /*
+   * 16px stops iOS Safari from zooming the viewport on focus.
+   * scroll-margin keeps the field clear of the navbar and tab bar.
+   */
+  html:not(.tt-native-ios)
+    :is(input, textarea, select):not([type="checkbox"]):not([type="radio"]):not(
+      [type="range"]
+    ):not([type="button"]):not([type="submit"]):not([type="file"]):not(
+      [type="hidden"]
+    ):not([type="image"]) {
+    font-size: 16px !important;
+    min-height: 44px;
+    scroll-margin-top: calc(var(--app-header-offset, 0px) + 12px);
+    scroll-margin-bottom: calc(
+      var(--app-tab-bar-offset, 0px) + var(--keyboard-height, 0px) + 56px
+    );
+  }
+
+  html:not(.tt-native-ios)
+    :is(button, a, [role="button"], [role="tab"], summary) {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html:not(.tt-native-ios)
+    :is(button, [role="button"], [role="tab"], [data-tt-mobile-web-tab-bar] a, .tt-mobile-web-press):active:not(
+      :disabled
+    ) {
+    opacity: 0.72;
+  }
+
+  /* Horizontal chip / story rows: scroll on X, do not trap vertical page scroll. */
+  html:not(.tt-native-ios) .tt-mobile-web-hscroll {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: manipulation;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-hscroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-hit {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-hit-y {
+    min-height: 44px;
+  }
+
+  /* Enlarge the hit target without changing the drawn control. */
+  html:not(.tt-native-ios) .tt-mobile-web-hit-slop::before {
+    content: "";
+    position: absolute;
+    inset: -12px;
+  }
+
+  /* Sheet and modal bodies should not chain into the page behind them. */
+  html:not(.tt-native-ios) [role="dialog"] :is(.overflow-y-auto, .overflow-y-scroll) {
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-bottom: calc(var(--keyboard-height, 0px) + 16px);
+  }
+
+  html:not(.tt-native-ios).tt-mobile-web-keyboard-open
+    [role="dialog"]
+    :is(.overflow-y-auto, .overflow-y-scroll) {
+    padding-bottom: calc(var(--keyboard-height, 0px) + 16px);
+  }
+
+  /* Fixed-height shells (message thread) keep the composer above the keyboard. */
+  html:not(.tt-native-ios) .tt-mobile-web-keyboard-shell {
+    box-sizing: border-box;
+    padding-bottom: var(--keyboard-height, 0px);
+  }
+
+  html:not(.tt-native-ios).tt-mobile-web-keyboard-open .tt-mobile-web-form-submit {
+    position: fixed;
+    left: max(0.75rem, env(safe-area-inset-left, 0px));
+    right: max(0.75rem, env(safe-area-inset-right, 0px));
+    bottom: calc(var(--keyboard-height, 0px) + 0.5rem);
+    z-index: 40;
+    width: auto;
+    margin-top: 0;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-form-stack {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  html:not(.tt-native-ios) .tt-date-field {
+    height: auto;
+    min-height: 44px;
+  }
+
+  html:not(.tt-native-ios) .tt-date-field-input,
+  html:not(.tt-native-ios) .tt-date-field.tt-date-field--compact .tt-date-field-input {
+    min-height: 44px;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-field-error {
+    scroll-margin-bottom: calc(var(--keyboard-height, 0px) + 16px);
+  }
+
+  /* Reserve feed photo space so the card does not collapse, then jump. */
+  html:not(.tt-native-ios) .tt-content-media-frame--feed {
+    min-height: 10rem;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-message-media {
+    min-height: 6rem;
+    max-width: 100%;
+    overflow: hidden;
+    border-radius: 0.5rem;
+    background: rgb(255 255 255 / 0.06);
+  }
+
+  html:not(.tt-native-ios) .tt-messages-pane {
+    overscroll-behavior: contain;
+  }
+
+  html:not(.tt-native-ios) .tt-messages-pane .overflow-y-auto {
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  html.tt-mobile-web-clips-immersive:not(.tt-native-ios),
+  html.tt-mobile-web-clips-immersive:not(.tt-native-ios) body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior-y: none;
+  }
+
+  html.tt-mobile-web-clips-immersive:not(.tt-native-ios)
+    [data-tt-mobile-web-clips-pager] {
+    height: 100%;
+    max-height: 100%;
+    overflow-x: hidden;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  html.tt-mobile-web-clips-immersive:not(.tt-native-ios)
+    [data-tt-mobile-web-clips-pager]
+    > section {
+    height: 100%;
+    min-height: 100%;
+  }
+
+  html:not(.tt-native-ios) .tt-create-post-file {
+    min-height: 44px;
+  }
+
+  html:not(.tt-native-ios) .tt-app-navbar h1 {
+    font-size: 1.0625rem;
+  }
+
+  /*
+   * Get the App promo. In flow above the fixed navbar; the navbar's top
+   * tracks --tt-app-banner-shift so the banner can scroll away.
+   */
+  html:not(.tt-native-ios) .tt-mobile-web-app-banner {
+    display: block;
+    position: relative;
+    z-index: 10000;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    width: 100%;
+    padding-top: env(safe-area-inset-top, 0px);
+    background: var(--tt-navbar, #0b1f3a);
+    color: var(--tt-text, #f3f4f6);
+    border-bottom: 0.5px solid var(--tt-border, rgb(255 255 255 / 0.12));
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-app-banner__row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 52px;
+    padding: 6px 4px 6px 12px;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-app-banner__icon {
+    width: 40px;
+    height: 40px;
+    flex: none;
+    border-radius: 10px;
+    object-fit: cover;
+    object-position: left center;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-app-banner__copy {
+    min-width: 0;
+    flex: 1;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-app-banner__name {
+    margin: 0;
+    overflow: hidden;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-app-banner__desc {
+    margin: 1px 0 0;
+    overflow: hidden;
+    color: var(--tt-text-muted, #a8b3c2);
+    font-size: 0.75rem;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-app-banner__cta {
+    display: inline-flex;
+    min-height: 32px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: #007aff;
+    padding: 0 14px;
+    color: #ffffff;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1;
+    text-decoration: none;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-app-banner__cta:active {
+    opacity: 0.72;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-app-banner__close {
+    display: inline-flex;
+    width: 44px;
+    height: 44px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--tt-text-muted, #a8b3c2);
+    padding: 0;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-app-banner__close:active {
+    opacity: 0.72;
+  }
+
+  html.tt-mobile-web-clips-immersive:not(.tt-native-ios) .tt-mobile-web-app-banner,
+  html:not(.tt-native-ios):has([aria-label="Stories"]) .tt-mobile-web-app-banner,
+  html:not(.tt-native-ios):has([aria-label="Image viewer"]) .tt-mobile-web-app-banner,
+  html:not(.tt-native-ios):has([aria-label="Clip viewer"]) .tt-mobile-web-app-banner {
+    display: none;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-open-in-app {
+    align-items: center;
+    gap: 12px;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-open-in-app a {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    color: var(--tt-accent, #4ec4e0);
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1;
+    text-decoration: none;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-open-in-app a:active {
+    opacity: 0.72;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-open-in-app--bar {
+    display: flex;
+    box-sizing: border-box;
+    width: 100%;
+    flex-shrink: 0;
+    padding: 0 12px;
+    border-bottom: 0.5px solid var(--tt-border, rgb(255 255 255 / 0.12));
+    background: var(--tt-navbar, #0b1f3a);
+    color: var(--tt-text, #f3f4f6);
+  }
+
+  html.tt-mobile-web-clips-immersive:not(.tt-native-ios) .tt-mobile-web-open-in-app--bar {
+    display: none;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-open-in-app--inline {
+    display: inline-flex;
+    flex: none;
+    margin-left: auto;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-open-in-app--overlay {
+    display: inline-flex;
+    border-radius: 999px;
+    background: rgb(0 0 0 / 0.45);
+    padding: 0 12px;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-open-in-app--overlay a {
+    color: #ffffff;
+  }
+
+  html:not(.tt-native-ios).tt-mobile-web-app-banner-on:not(.tt-mobile-web-clips-immersive):not(.tt-mobile-web-app-banner-away)
+    .tt-app-navbar {
+    top: var(--tt-app-banner-shift, 0px);
+    padding-top: 0;
+  }
+
+  html:not(.tt-native-ios).tt-mobile-web-app-banner-on:not(.tt-mobile-web-app-banner-away):not(.tt-mobile-web-clips-immersive) {
+    --app-header-offset: calc(var(--navbar-height) + var(--demo-banner-height, 0px));
+  }
+
+  html:not(.tt-native-ios).tt-mobile-web-app-banner-on:not(.tt-mobile-web-app-banner-away):not(.tt-mobile-web-clips-immersive)
+    [class*="top-[calc(var(--navbar-height)+var(--safe-area-top))]"] {
+    top: calc(var(--tt-app-banner-shift, 0px) + var(--navbar-height));
+  }
+
+  /* Keyboard users need a ring after outline-none on shared controls. */
+  html:not(.tt-native-ios)
+    :is(
+      a,
+      button,
+      input,
+      textarea,
+      select,
+      summary,
+      [role="button"],
+      [role="tab"],
+      [tabindex]
+    ):focus-visible {
+    outline: 2px solid #38bdf8 !important;
+    outline-offset: 2px;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-offline-indicator {
+    display: flex;
+    box-sizing: border-box;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: var(--app-header-offset, calc(var(--navbar-height) + var(--safe-area-top)));
+    z-index: 9990;
+    min-height: 28px;
+    padding: 4px 12px;
+    background: rgb(180 83 9 / 0.92);
+    color: #fff7ed;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    pointer-events: none;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-network-notice {
+    border-radius: 14px;
+    border: 0.5px solid rgb(255 255 255 / 0.14);
+    background: rgb(255 255 255 / 0.06);
+    color: var(--tt-text, #f0f3f6);
+    text-align: center;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-network-notice--panel {
+    margin: 0.75rem 0.75rem 0;
+    padding: 1rem 0.875rem;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-network-notice--inline {
+    margin: 0 0 0.5rem;
+    padding: 0.625rem 0.75rem;
+    text-align: left;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-network-notice__title {
+    margin: 0 0 0.25rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-network-notice__message {
+    margin: 0;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    color: var(--tt-text-muted, #c0cad6);
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-network-notice__retry {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0.75rem;
+    border-radius: 12px;
+    padding: 0 1rem;
+    background: #0a6e8a;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-network-notice__retry:disabled {
+    opacity: 0.65;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-network-notice--inline .tt-mobile-web-network-notice__retry {
+    margin-top: 0.5rem;
+  }
+
+  html:not(.tt-native-ios) .tt-mobile-web-media-unavailable {
+    display: flex;
+  }
+}
+
+.tt-mobile-web-offline-indicator,
+.tt-mobile-web-media-unavailable {
+  display: none;
+}
+
+@media (max-width: 767px) and (prefers-reduced-motion: reduce) {
+  html:not(.tt-native-ios) :is(*, *::before, *::after) {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

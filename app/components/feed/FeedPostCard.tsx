@@ -17,6 +17,7 @@ import FeedPostScreenshot from "./FeedPostScreenshot"
 import { postAttachedReel } from "./feedPostHelpers"
 import type { ReelRow } from "@/lib/reels"
 import { isCopyTradedMode } from "@/lib/tradeMode"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
 
 export type FeedLikeMeta = { count: number; liked: boolean }
 
@@ -61,6 +62,8 @@ function FeedPostCard({
   onOpenAttachedReel,
   screenshotFixedFrameClassName,
 }: FeedPostCardProps) {
+  const isNativeIos = useIsNativeIos()
+  const phoneWeb = !isNativeIos
   const handleOpenComments = useCallback(() => {
     onOpenComments(post)
   }, [onOpenComments, post])
@@ -118,9 +121,15 @@ function FeedPostCard({
       onClick={preview ? undefined : handleArticleClick}
       onKeyDown={preview ? undefined : handleArticleKeyDown}
       className={
-        preview
-          ? "bg-white/5 border border-white/10 rounded-xl overflow-hidden shadow-lg shadow-black/20"
-          : "bg-white/5 border border-white/10 rounded-xl overflow-hidden shadow-lg shadow-black/20 cursor-pointer transition-all duration-200 hover:border-white/20 hover:shadow-xl hover:bg-white/[0.07]"
+        `${
+          preview
+            ? "bg-white/5 border border-white/10 rounded-xl overflow-hidden shadow-lg shadow-black/20"
+            : "bg-white/5 border border-white/10 rounded-xl overflow-hidden shadow-lg shadow-black/20 cursor-pointer transition-all duration-200 hover:border-white/20 hover:shadow-xl hover:bg-white/[0.07]"
+        }${
+          phoneWeb
+            ? " max-md:rounded-none max-md:border-x-0 max-md:shadow-none"
+            : ""
+        }`
       }
     >
       <FeedPostHeader

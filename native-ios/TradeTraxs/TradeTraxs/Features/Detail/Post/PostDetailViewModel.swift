@@ -8,7 +8,7 @@ final class PostDetailViewModel {
     enum Phase: Equatable {
         case loading
         case loaded
-        case failed(String)
+        case failed(DetailLoadFailurePresentation)
     }
 
     private(set) var phase: Phase = .loading
@@ -20,8 +20,10 @@ final class PostDetailViewModel {
     private(set) var deleteErrorMessage: String?
 
     let postID: PostID
+    let loadSource: PostDetailLoadSource
 
     private let profiles: any ProfileRepository
+    private let feed: (any FeedRepository)?
     private let session: any SessionProviding
     private let imagePipeline: any ImagePipeline
     private let cache: DetailPresentationCache
@@ -30,14 +32,18 @@ final class PostDetailViewModel {
 
     init(
         postID: PostID,
+        loadSource: PostDetailLoadSource = .profilePost,
         profiles: any ProfileRepository,
+        feed: (any FeedRepository)? = nil,
         session: any SessionProviding,
         imagePipeline: any ImagePipeline,
         cache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator
     ) {
         self.postID = postID
+        self.loadSource = loadSource
         self.profiles = profiles
+        self.feed = feed
         self.session = session
         self.imagePipeline = imagePipeline
         self.cache = cache
@@ -112,7 +118,7 @@ final class PostDetailViewModel {
         }
 
         do {
-            let loaded = try await profiles.wallPost(id: postID)
+            let loaded = try await loadPost(forceNetwork: forceNetwork)
             guard !Task.isCancelled else { return }
             cache.seed(loaded)
             post = loaded
@@ -121,10 +127,24 @@ final class PostDetailViewModel {
         } catch {
             guard !Task.isCancelled else { return }
             if post == nil {
-                phase = .failed(ProfileSectionSupport.message(for: error))
+                phase = .failed(
+                    DetailLoadFailureSupport.presentation(for: error, content: .post)
+                )
             }
         }
         loadTask = nil
+    }
+
+    private func loadPost(forceNetwork: Bool) async throws -> Post {
+        switch loadSource {
+        case .profilePost:
+            return try await profiles.wallPost(id: postID)
+        case .feedPost:
+            guard let feed else {
+                throw AppError.notImplemented(feature: "Feed post detail")
+            }
+            return try await feed.post(id: postID)
+        }
     }
 
     private func loadAuthor(for profileID: ProfileID) async {

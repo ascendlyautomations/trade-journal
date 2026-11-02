@@ -125,13 +125,56 @@ enum SharedContentNavigation {
         reference: SharedContentReference,
         cache: DetailPresentationCache,
         coordinator: NavigationCoordinator?,
-        host: TradeRoomNavigationHost? = nil
+        host: TradeRoomNavigationHost? = nil,
+        hydrationContext: SharedContentHydrator.Context? = nil,
+        hydrationSurface: SharedContentHydrationProbe.Surface = .dm
     ) {
+        Task {
+            await openAsync(
+                reference: reference,
+                cache: cache,
+                coordinator: coordinator,
+                host: host,
+                hydrationContext: hydrationContext,
+                hydrationSurface: hydrationSurface
+            )
+        }
+    }
+
+    @MainActor
+    static func openAsync(
+        reference: SharedContentReference,
+        cache: DetailPresentationCache,
+        coordinator: NavigationCoordinator?,
+        host: TradeRoomNavigationHost? = nil,
+        hydrationContext: SharedContentHydrator.Context? = nil,
+        hydrationSurface: SharedContentHydrationProbe.Surface = .dm
+    ) async {
         guard let coordinator else { return }
+        if let hydrationContext {
+            _ = await SharedContentHydrator.hydrateForOpen(
+                reference: reference,
+                context: hydrationContext,
+                surface: hydrationSurface
+            )
+        }
         if let host {
             coordinator.pushSharedContent(reference, cache: cache, host: host)
             return
         }
+        navigate(
+            reference: reference,
+            cache: cache,
+            coordinator: coordinator
+        )
+    }
+
+    @MainActor
+    private static func navigate(
+        reference: SharedContentReference,
+        cache: DetailPresentationCache,
+        coordinator: NavigationCoordinator
+    ) {
         switch reference {
         case .feedPost(let postID):
             if let post = cache.post(id: postID), let tradeID = post.linkedTradeID {
@@ -140,10 +183,10 @@ enum SharedContentNavigation {
                     ?? cache.previewTrade(id: tradeID)
                 coordinator.pushSocialTrade(tradeID, cache: cache, preview: preview)
             } else {
-                coordinator.pushPostDetail(postID)
+                coordinator.pushPostDetail(postID, loadSource: .feedPost)
             }
         case .profilePost(let postID):
-            coordinator.pushPostDetail(postID)
+            coordinator.pushPostDetail(postID, loadSource: .profilePost)
         case .achievementPost(let postID):
             coordinator.pushAchievementDetail(AchievementID(postID.rawValue))
         case .reel(let reelID):

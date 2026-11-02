@@ -14,6 +14,8 @@ import {
   SELECT_MENU_CLASS,
   SELECT_TRIGGER_CLASS,
 } from "@/lib/accountDropdownStyles"
+import { placePhoneWebAnchoredMenu } from "@/lib/mobileWebKeyboard"
+import { isPhoneWebTouchTarget } from "@/lib/mobileWebTouch"
 import {
   READABLE_DISABLED_TEXT_CLASS,
   READABLE_PLACEHOLDER_TEXT_CLASS,
@@ -94,6 +96,18 @@ export default function CustomSelect({
     if (!trigger) return
 
     const rect = trigger.getBoundingClientRect()
+    const phonePlacement = placePhoneWebAnchoredMenu({
+      triggerTop: rect.top,
+      triggerBottom: rect.bottom,
+      triggerLeft: rect.left,
+      triggerWidth: rect.width,
+      preferredMaxHeight: MENU_PREFERRED_MAX_HEIGHT_PX,
+      minUsableBelow: MENU_MIN_USABLE_BELOW_PX,
+    })
+    if (phonePlacement) {
+      setMenuPosition(phonePlacement)
+      return
+    }
     const spaceBelow =
       window.innerHeight - rect.bottom - MENU_GAP_PX - VIEWPORT_PAD_PX
     const spaceAbove = rect.top - MENU_GAP_PX - VIEWPORT_PAD_PX
@@ -143,10 +157,15 @@ export default function CustomSelect({
 
     window.addEventListener("resize", updateMenuPosition)
     window.addEventListener("scroll", updateMenuPosition, true)
+    const vv = isPhoneWebTouchTarget() ? window.visualViewport : null
+    vv?.addEventListener("resize", updateMenuPosition)
+    vv?.addEventListener("scroll", updateMenuPosition)
 
     return () => {
       window.removeEventListener("resize", updateMenuPosition)
       window.removeEventListener("scroll", updateMenuPosition, true)
+      vv?.removeEventListener("resize", updateMenuPosition)
+      vv?.removeEventListener("scroll", updateMenuPosition)
     }
   }, [open, disabled])
 

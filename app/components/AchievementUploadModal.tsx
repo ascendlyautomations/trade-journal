@@ -902,12 +902,17 @@ export default function AchievementUploadModal({
             <label className="text-xs text-gray-300">
               Payout Amount (USD)
               <input
-                type="number"
-                min="0"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
                 value={form.payout_amount}
                 onChange={(e) =>
-                  setForm((prev) => ({ ...prev, payout_amount: e.target.value }))
+                  setForm((prev) => ({
+                    ...prev,
+                    payout_amount: e.target.value
+                      .replace(/[^\d.]/g, "")
+                      .replace(/(\..*)\./g, "$1"),
+                  }))
                 }
                 placeholder="3500"
                 className="mt-1.5 h-11 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 text-sm text-white placeholder:text-gray-400 outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20"

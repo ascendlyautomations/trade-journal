@@ -93,6 +93,22 @@ nonisolated struct VaultListPage: Sendable {
 }
 
 extension VaultContentRef {
+    /// Maps persisted Vault keys to structured-share references (nil for achievement rows).
+    var sharedContentReference: SharedContentReference? {
+        switch contentType {
+        case .trade:
+            return .trade(TradeID(contentID))
+        case .profilePost:
+            return .profilePost(PostID(contentID))
+        case .feedPost:
+            return .feedPost(PostID(contentID))
+        case .reel:
+            return .reel(ReelID(contentID))
+        case .achievement:
+            return nil
+        }
+    }
+
     static func from(_ target: InteractionTarget) -> VaultContentRef? {
         switch target.kind {
         case .trade:

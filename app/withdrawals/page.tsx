@@ -18,6 +18,7 @@ import {
 } from "@/lib/payoutHistory"
 import { useWithdrawalsHistory } from "@/lib/useWithdrawalsHistory"
 import { useUserProfile } from "@/lib/useUserProfile"
+import { MOBILE_WEB_NEUTRAL_PAGE_BG } from "@/lib/mobileWebPageSurface"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 import {
   buildCumulativeWithdrawalChartPoints,
@@ -85,11 +86,11 @@ export default function WithdrawalsPage() {
     (profileLoading || loading) && items.length === 0 && !error
 
   return (
-    <div className="tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
-      <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+    <div className={`tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
+      <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10 max-md:px-3 max-md:py-3">
         <Link
           href="/prop-firm-expenses#prop-firm"
-          className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-emerald-700/35 bg-emerald-500/15 px-4 py-4 text-left transition hover:bg-emerald-500/25"
+          className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-emerald-700/35 bg-emerald-500/15 px-4 py-4 text-left transition hover:bg-emerald-500/25 max-md:mb-4 max-md:rounded-[14px] max-md:px-3.5 max-md:py-3.5"
         >
           <span>
             <span className="block text-base font-semibold text-emerald-400">
@@ -107,17 +108,17 @@ export default function WithdrawalsPage() {
           <div>
             <Link
               href="/app"
-              className="text-sm text-blue-300 hover:text-blue-200"
+              className="text-sm text-blue-300 hover:text-blue-200 max-md:hidden"
             >
               ← Dashboard
             </Link>
             <h1
-              className="mt-2 text-2xl font-bold text-blue-300 sm:text-3xl"
+              className="mt-2 text-2xl font-bold text-blue-300 sm:text-3xl max-md:hidden"
               data-tt-tour-target="payoutsHistory"
             >
               Withdrawals
             </h1>
-            <p className="mt-1 text-sm text-gray-400">
+            <p className="mt-1 text-sm text-gray-400 max-md:hidden">
               Live ledger withdrawals and funded prop-firm payout cycles. Affiliate
               payouts are on{" "}
               <Link href="/payouts" className="text-blue-300 hover:underline">
@@ -128,7 +129,7 @@ export default function WithdrawalsPage() {
           </div>
           <Link
             href={CREATE_ROUTE.withdrawal}
-            className="shrink-0 rounded-xl bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600"
+            className="shrink-0 rounded-xl bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 max-md:min-h-11 max-md:rounded-[14px]"
           >
             Record withdrawal
           </Link>
@@ -184,8 +185,11 @@ export default function WithdrawalsPage() {
             <p className="text-sm text-gray-400">Loading withdrawals…</p>
           ) : filteredByAccount.length === 0 && !error ? (
             <>
-              <div className="rounded-xl border border-white/10 bg-white/5 px-5 py-4">
-                <p className="text-sm text-gray-400">Total withdrawn</p>
+              <div className="rounded-xl border border-white/10 bg-white/5 px-5 py-4 max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:px-0 max-md:py-1">
+                <p className="text-sm text-gray-400">
+                  <span className="md:hidden">Total Withdrawals</span>
+                  <span className="hidden md:inline">Total withdrawn</span>
+                </p>
                 <p className="mt-1 text-2xl font-semibold tabular-nums text-white">
                   {formatCurrency(summary.total)}
                 </p>
@@ -198,8 +202,11 @@ export default function WithdrawalsPage() {
           ) : (
             <>
               <div className="grid items-start gap-6 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]">
-                <div className="rounded-xl border border-white/10 bg-white/5 px-5 py-4">
-                  <p className="text-sm text-gray-400">Total withdrawn</p>
+                <div className="rounded-xl border border-white/10 bg-white/5 px-5 py-4 max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:px-0 max-md:py-1">
+                  <p className="text-sm text-gray-400">
+                    <span className="md:hidden">Total Withdrawals</span>
+                    <span className="hidden md:inline">Total withdrawn</span>
+                  </p>
                   <p className="mt-1 text-2xl font-semibold tabular-nums text-white">
                     {formatCurrency(summary.total)}
                   </p>
@@ -215,11 +222,13 @@ export default function WithdrawalsPage() {
                   totalWithdrawn={summary.total}
                 />
               </div>
-              <WithdrawalsCalendar
-                byDate={byDate}
-                selectedDateKey={selectedDateKey}
-                onSelectDateKey={setSelectedDateKey}
-              />
+              <div className="hidden md:block">
+                <WithdrawalsCalendar
+                  byDate={byDate}
+                  selectedDateKey={selectedDateKey}
+                  onSelectDateKey={setSelectedDateKey}
+                />
+              </div>
             </>
           )}
         </div>
@@ -228,8 +237,9 @@ export default function WithdrawalsPage() {
           <div className={liveItems.length > 0 && propItems.length > 0 ? "grid items-start gap-8 lg:grid-cols-2" : "space-y-8"}>
             {liveItems.length > 0 ? (
               <section>
-                <h2 className="mb-2 px-1 text-sm font-semibold uppercase tracking-wide text-gray-400">
-                  Live withdrawals
+                <h2 className="mb-2 px-1 text-sm font-semibold uppercase tracking-wide text-gray-400 max-md:text-[15px] max-md:normal-case max-md:tracking-normal max-md:text-[color:var(--tt-text,#f0f3f6)]">
+                  <span className="md:hidden">Live Withdrawals</span>
+                  <span className="hidden md:inline">Live withdrawals</span>
                 </h2>
                 <ul className="divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-white/5">
                   {liveItems.map((item) => (
@@ -246,8 +256,9 @@ export default function WithdrawalsPage() {
 
             {propItems.length > 0 ? (
               <section>
-                <h2 className="mb-2 px-1 text-sm font-semibold uppercase tracking-wide text-gray-400">
-                  Prop payouts
+                <h2 className="mb-2 px-1 text-sm font-semibold uppercase tracking-wide text-gray-400 max-md:text-[15px] max-md:normal-case max-md:tracking-normal max-md:text-[color:var(--tt-text,#f0f3f6)]">
+                  <span className="md:hidden">Prop Payouts</span>
+                  <span className="hidden md:inline">Prop payouts</span>
                 </h2>
                 <ul className="divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-white/5">
                   {propItems.map((item) => (

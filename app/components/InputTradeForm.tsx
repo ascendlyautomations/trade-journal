@@ -2565,7 +2565,7 @@ export default function InputTradeForm({
             />
           </div>
           {decimalError && (
-            <p className="text-red-400 text-xs mt-1">
+            <p className="tt-mobile-web-field-error text-red-400 text-xs mt-1" role="alert">
               {decimalError}
             </p>
           )}
@@ -2598,11 +2598,16 @@ export default function InputTradeForm({
           </div>
 
           {/* Mobile: Symbol + Strategy share a row; sm+ keeps the stacked layout. */}
-          <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-1">
+          <div className="tt-mobile-web-form-stack grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-1">
             <div>
               <label className={fieldLabelClass}>Symbol / Ticker</label>
               <input
                 type="text"
+                inputMode="text"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                autoComplete="off"
                 placeholder="e.g. MNQ, ES, AAPL"
                 tabIndex={2}
                 value={ticker}
@@ -2677,6 +2682,8 @@ export default function InputTradeForm({
               <input
                 placeholder="e.g. 2.5"
                 type="text"
+                inputMode="decimal"
+                autoComplete="off"
                 tabIndex={6}
                 value={rr}
                 onChange={(e) =>
@@ -2695,6 +2702,8 @@ export default function InputTradeForm({
               <input
                 placeholder="e.g. 15.5"
                 type="text"
+                inputMode="decimal"
+                autoComplete="off"
                 tabIndex={7}
                 value={getTradeFormCurrencyInputDisplayValue(points)}
                 onChange={(e) =>
@@ -2714,6 +2723,8 @@ export default function InputTradeForm({
             <input
               placeholder="e.g. 4"
               type="text"
+              inputMode="numeric"
+              autoComplete="off"
               tabIndex={8}
               value={formatWithCommas(contracts)}
               onChange={(e) =>
@@ -2744,7 +2755,7 @@ export default function InputTradeForm({
           <div className="space-y-2">
           <div className="space-y-2 mb-4">
             {/* Mobile: prices share a row; sm+ keeps the stacked layout. */}
-            <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-1">
+            <div className="tt-mobile-web-form-stack grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-1">
               <div>
                 <label className={fieldLabelClass}>Entry Price</label>
                 <TradeFormCurrencyInput
@@ -2766,7 +2777,7 @@ export default function InputTradeForm({
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+            <div className="tt-mobile-web-form-stack grid grid-cols-2 gap-x-3 gap-y-2">
               <div>
                 <label className={fieldLabelClass} htmlFor="entry-date">
                   Entry Date
@@ -2792,7 +2803,7 @@ export default function InputTradeForm({
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+            <div className="tt-mobile-web-form-stack grid grid-cols-2 gap-x-3 gap-y-2">
               <div>
                 <label className={fieldLabelClass} htmlFor="exit-date">
                   Exit Date
@@ -2824,7 +2835,7 @@ export default function InputTradeForm({
               </p>
             )}
             {invalidTimeRange && (
-              <p className="text-xs text-red-400">
+              <p className="tt-mobile-web-field-error text-xs text-red-400" role="alert">
                 Exit date and time must be after entry date and time
               </p>
             )}
@@ -3131,7 +3142,7 @@ export default function InputTradeForm({
               }
               setCommunityPreviewOpen(true)
             }}
-            className="w-full py-3 text-lg font-semibold rounded bg-blue-500 hover:bg-blue-600 text-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500"
+            className="tt-mobile-web-form-submit w-full py-3 text-lg font-semibold rounded bg-blue-500 hover:bg-blue-600 text-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500"
           >
             {isEditMode
               ? "Save changes"

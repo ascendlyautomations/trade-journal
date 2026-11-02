@@ -231,11 +231,11 @@ export default function WithdrawalDetailClient({
       <div>
         <Link
           href="/withdrawals"
-          className="text-sm text-blue-300 hover:text-blue-200"
+          className="text-sm text-blue-300 hover:text-blue-200 max-md:hidden"
         >
           ← Withdrawals
         </Link>
-        <h1 className="mt-3 text-2xl font-bold text-white">{title}</h1>
+        <h1 className="mt-3 text-2xl font-bold text-white max-md:hidden">{title}</h1>
       </div>
 
       <div className="rounded-xl border border-white/10 bg-white/5 p-5">

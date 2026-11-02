@@ -1,9 +1,11 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react"
+import MobileWebOpenInAppLink from "@/app/components/mobile/MobileWebOpenInAppLink"
 import DetailModalShell, {
   scrollModalCommentsPane,
 } from "@/app/components/ui/DetailModalShell"
+import { mobileWebOpenInAppContentLink } from "@/lib/mobileWebOpenInApp"
 import DetailModalImage from "@/app/components/ui/DetailModalImage"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
@@ -342,6 +344,12 @@ export default function FeedPostDetailModal({
       <DetailModalShell
         ariaLabel="Post details"
         title="Post"
+        headerAccessory={
+          <MobileWebOpenInAppLink
+            link={mobileWebOpenInAppContentLink("post", pid)}
+            variant="inline"
+          />
+        }
         layout="split"
         onClose={onClose}
         splitMedia={splitMedia}

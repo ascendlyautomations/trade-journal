@@ -37,7 +37,7 @@ function FeedModeToggle({ mode, onModeChange }: FeedModeToggleProps) {
   }, [open])
 
   return (
-    <div className="mb-4">
+    <div className="mb-4 max-md:mb-1">
       <div ref={rootRef} className="relative flex justify-start md:hidden">
         <button
           type="button"
@@ -50,7 +50,7 @@ function FeedModeToggle({ mode, onModeChange }: FeedModeToggleProps) {
         >
           <span>{MODE_LABEL[mode]}</span>
           <ChevronDown
-            className={`h-3 w-3 text-white/70 ${open ? "rotate-180" : ""}`}
+            className={`h-3 w-3 text-[color:var(--tt-text-muted,#c0cad6)] ${open ? "rotate-180" : ""}`}
             strokeWidth={2.5}
             aria-hidden
           />
@@ -69,7 +69,9 @@ function FeedModeToggle({ mode, onModeChange }: FeedModeToggleProps) {
                   <button
                     type="button"
                     className={`flex min-h-11 w-full items-center px-3 text-left text-sm font-medium ${
-                      selected ? "bg-white/15 text-white" : "text-white/75"
+                      selected
+                        ? "bg-white/15 text-white"
+                        : "text-[color:var(--tt-text-muted,#c0cad6)]"
                     }`}
                     onClick={() => {
                       if (!selected) onModeChange(value)

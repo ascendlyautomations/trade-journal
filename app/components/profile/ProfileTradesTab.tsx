@@ -41,7 +41,7 @@ function TradesViewToggle({
 }) {
   return (
     <div role="tablist" aria-label="Trades view">
-      <div className="inline-flex rounded-lg border border-white/10 bg-white/5 p-0.5">
+      <div className="inline-flex rounded-lg border border-white/10 bg-white/5 p-0.5 max-md:border-border max-md:bg-surface-elevated">
         {(["grid", "list"] as const).map((mode) => {
           const selected = value === mode
           return (
@@ -53,8 +53,8 @@ function TradesViewToggle({
               onClick={() => onChange(mode)}
               className={`rounded-md px-2.5 py-1 text-[11px] font-semibold tracking-wide transition-colors ${
                 selected
-                  ? "bg-white/15 text-white"
-                  : "text-gray-400 hover:text-gray-200"
+                  ? "bg-white/15 text-white max-md:bg-card max-md:text-foreground"
+                  : "text-gray-400 hover:text-gray-200 max-md:text-muted-foreground"
               }`}
             >
               {mode === "grid" ? "Grid" : "List"}
@@ -132,11 +132,11 @@ export default function ProfileTradesTab({
   hasMoreRef.current = hasMore
 
   const displayedTrades = useMemo(() => {
-    if (!isNativeIos || outcomeFilter === "all") return trades
+    if ((!isNativeIos && !isMobile) || outcomeFilter === "all") return trades
     return trades.filter((trade) =>
       tradeMatchesOutcomeFilter(trade, outcomeFilter)
     )
-  }, [trades, outcomeFilter, isNativeIos])
+  }, [trades, outcomeFilter, isMobile, isNativeIos])
 
   // Mobile: infinite scroll via IntersectionObserver (no Load More button).
   useEffect(() => {

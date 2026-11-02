@@ -29,6 +29,6 @@ export default function DashboardHeader({
   showFreePlanAccountBanner,
 }: DashboardHeaderProps) {
   return (
-    <h1 className="sr-only">Dashboard</h1>
+    <h1 className="sr-only max-md:hidden">Dashboard</h1>
   )
 }

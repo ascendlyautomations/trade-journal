@@ -7,6 +7,7 @@ import {
   type ExploreProfile,
   type TraderTradeMeta,
 } from "@/lib/exploreDiscover"
+import { countNoun } from "@/lib/countNoun"
 import { profilePath } from "@/lib/profileRoutes"
 import { normalizeTraderType } from "@/lib/traderType"
 
@@ -58,9 +59,7 @@ export default function ExploreTraderCard({
 
   const followers =
     typeof profile.followers_count === "number" && profile.followers_count > 0
-      ? `${profile.followers_count.toLocaleString()} follower${
-          profile.followers_count === 1 ? "" : "s"
-        }`
+      ? countNoun(profile.followers_count, "follower")
       : null
 
   return (

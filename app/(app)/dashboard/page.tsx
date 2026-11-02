@@ -120,7 +120,11 @@ import {
 } from "@/lib/livePersonalDrawdown"
 import { saveLivePersonalDrawdownConfig } from "@/lib/livePersonalDrawdownSave"
 import { upsertAccountInCache } from "@/lib/appDataCache"
-import { invalidateDashboardBootstrap } from "@/lib/backendV2/dashboardBootstrapCache"
+import {
+  invalidateDashboardBootstrap,
+  readDashboardBootstrapCache,
+} from "@/lib/backendV2/dashboardBootstrapCache"
+import { fetchProfilePayoutTotal } from "@/lib/profileOverviewExtras.ts"
 import "./dashboardCanvas.css"
 
 function DashboardPremiumPreviewSkeleton() {
@@ -242,11 +246,36 @@ export default function Dashboard() {
   } = useProGate(profile)
   const isPro = proFeatureUnlocked
   const [deferredSectionsReady, setDeferredSectionsReady] = useState(false)
+  const [dashboardPayoutsTotal, setDashboardPayoutsTotal] = useState<
+    number | null | undefined
+  >(undefined)
   const [accountFilter, setAccountFilter] = useState("all")
   const [copyGroupsRequested, setCopyGroupsRequested] = useState(false)
   const requestCopyGroups = useCallback(() => {
     setCopyGroupsRequested(true)
   }, [])
+
+  useEffect(() => {
+    if (!user?.id || isDemoModeActive()) {
+      setDashboardPayoutsTotal(undefined)
+      return
+    }
+    const uid = user.id
+    const cached = readDashboardBootstrapCache(uid)
+    if (cached?.data?.payout_total !== undefined) {
+      const n = Number(cached.data.payout_total)
+      setDashboardPayoutsTotal(Number.isFinite(n) ? n : null)
+      return
+    }
+    let cancelled = false
+    void fetchProfilePayoutTotal(supabase, uid).then((total) => {
+      if (!cancelled) setDashboardPayoutsTotal(total)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id])
+
   useEffect(() => {
     if (!proFeatureUnlocked) return
     const prefs = loadDashboardGearPrefs()
@@ -1348,7 +1377,7 @@ export default function Dashboard() {
           <div className="tt-dash-workspace tt-dash-stack relative z-0 mx-auto flex w-full min-w-0 max-w-[1600px] flex-col gap-2 overflow-x-hidden px-0 max-md:gap-2 md:gap-3 md:px-6 xl:max-w-[1900px] xl:px-0">
 
   {user?.id ? (
-    <div className="grid grid-cols-2 items-stretch gap-2 md:gap-3">
+    <div className="grid grid-cols-2 items-stretch gap-2 max-md:grid-cols-1 md:gap-3">
       <DailyCheckInDashboardSlot userId={user.id} />
       <DashboardBrokerIntegrationCard
         userId={user.id}
@@ -1448,10 +1477,16 @@ export default function Dashboard() {
     liveAccountValue={dashboardRiskMetricSlots.liveAccountValue}
     drawdownLimitLineY={drawdownLimitLineY}
     showPersonalDrawdownFloor={showPersonalDrawdownFloor}
+    timeframeLabel={timeframeLabel}
+    winCount={winCount}
+    lossCount={lossCount}
+    rrTargetAnalysis={rrTargetAnalysis}
+    payoutsTotal={
+      dashboardPayoutsTotal === undefined ? null : dashboardPayoutsTotal
+    }
     mobileProTabs={{
       symbolPerformanceRows,
       hasAnyTrades: tradesExcludingBacktest.length > 0,
-      weekdayData,
       longShortPerformance,
       holdTimeStats,
       insightsProps: {
@@ -1585,6 +1620,9 @@ export default function Dashboard() {
             liveAccountValue={dashboardRiskMetricSlots.liveAccountValue}
             drawdownLimitLineY={drawdownLimitLineY}
             showPersonalDrawdownFloor={showPersonalDrawdownFloor}
+            payoutsTotal={
+              dashboardPayoutsTotal === undefined ? null : dashboardPayoutsTotal
+            }
           />
           <div className="tt-dash-hide-desktop-v1">{recentTradesSection}</div>
           {recentTradesJournal}

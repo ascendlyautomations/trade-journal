@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation"
 import WithdrawalDetailClient from "@/app/components/withdrawals/WithdrawalDetailClient"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
+import { MOBILE_WEB_NEUTRAL_PAGE_BG } from "@/lib/mobileWebPageSurface"
 
 export default function WithdrawalDetailPage() {
   useScrollPageTopOnMount()
@@ -22,8 +23,8 @@ export default function WithdrawalDetailPage() {
   }
 
   return (
-    <div className="tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
-      <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6 lg:py-10">
+    <div className={`tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
+      <div className="mx-auto max-w-2xl px-4 py-8 sm:px-6 lg:py-10 max-md:px-3 max-md:py-3">
         <WithdrawalDetailClient historyItemId={historyItemId} />
       </div>
     </div>

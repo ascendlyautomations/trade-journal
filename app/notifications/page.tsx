@@ -68,6 +68,7 @@ import {
   readNotificationsSession,
   writeNotificationsSession,
 } from "@/lib/notificationsSessionCache"
+import MobileWebActivityRow from "@/app/components/mobile/activity/MobileWebActivityRow"
 
 const NOTIFICATIONS_TABLE = "notifications"
 
@@ -88,15 +89,15 @@ function sortNotificationsDesc(rows: NotificationRecord[]): NotificationRecord[]
 }
 
 const PAGE_SHELL_CLASS =
-  "tt-phase1-dark w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10"
+  "tt-phase1-dark w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10 max-md:px-0"
 
 const PAGE_CONTAINER_CLASS =
-  "relative z-0 mx-auto mt-2.5 w-full max-w-7xl px-1 md:px-6"
+  "relative z-0 mx-auto mt-2.5 w-full max-w-7xl px-1 md:px-6 max-md:mt-0 max-md:px-0"
 
 const PAGE_WORKSPACE_CLASS =
   "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] lg:items-start xl:gap-8"
 
-const PAGE_MAIN_CLASS = "flex min-w-0 flex-col gap-3 md:gap-4"
+const PAGE_MAIN_CLASS = "flex min-w-0 flex-col gap-3 md:gap-4 max-md:gap-2"
 
 const TABS: { id: NotificationCenterTab; label: string }[] = [
   { id: "all", label: "All" },
@@ -387,8 +388,24 @@ function GroupedNotificationCardView({
         : null
 
   return (
+    <>
+    <div className="md:hidden">
+      <MobileWebActivityRow
+        title={title}
+        subtitle={subtitle}
+        timestamp={formatSocialTimestamp(timestamp)}
+        unread={unread}
+        avatarUrl={avatarUrl}
+        onNavigate={onNavigate}
+        onDismiss={onDismiss}
+        dismissing={dismissing}
+        expandedContent={
+          expandable && expanded ? expandedContent : null
+        }
+      />
+    </div>
     <div
-      className={`rounded-xl border p-3 transition ${
+      className={`hidden rounded-xl border p-3 transition md:block ${
         unread
           ? "border-blue-400/40 bg-white/10 ring-1 ring-blue-400/30"
           : "border-white/10 bg-white/5"
@@ -513,6 +530,7 @@ function GroupedNotificationCardView({
         </button>
       </div>
     </div>
+    </>
   )
 }
 
@@ -1106,7 +1124,7 @@ export default function NotificationsPage() {
         <div className={PAGE_CONTAINER_CLASS}>
           <div className={PAGE_WORKSPACE_CLASS}>
             <div className={PAGE_MAIN_CLASS}>
-          <div>
+          <div className="max-md:hidden">
             <p className="text-md font-semibold uppercase tracking-wide text-blue-300">
               Activity
             </p>
@@ -1116,9 +1134,9 @@ export default function NotificationsPage() {
             </p>
           </div>
 
-          <div className="-mx-1 overflow-x-auto px-1 scrollbar-thin">
+          <div className="tt-mobile-web-hscroll -mx-1 overflow-x-auto px-1 scrollbar-thin max-md:mx-0 max-md:px-3">
             <div
-              className="flex min-w-max gap-2 border-b border-white/10 pb-2"
+              className="flex min-w-max gap-2 border-b border-white/10 pb-2 max-md:gap-1.5"
               role="tablist"
               aria-label="Notification categories"
             >
@@ -1132,7 +1150,7 @@ export default function NotificationsPage() {
                     role="tab"
                     aria-selected={selected}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
+                    className={`tt-mobile-web-hit-y shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
                       selected
                         ? "bg-blue-500/25 text-white ring-1 ring-blue-400/40"
                         : "bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white"
@@ -1159,12 +1177,12 @@ export default function NotificationsPage() {
           ) : null}
 
           {hasAnyItems ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 max-md:px-3">
               {unreadCount > 0 ? (
                 <button
                   type="button"
                   onClick={() => void markAllAsRead()}
-                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-gray-200 transition hover:bg-white/10"
+                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-gray-200 transition hover:bg-white/10 max-md:min-h-11 max-md:rounded-[14px]"
                 >
                   Mark all as read
                 </button>
@@ -1172,7 +1190,7 @@ export default function NotificationsPage() {
               <button
                 type="button"
                 onClick={() => setShowClearConfirm(true)}
-                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-gray-200 transition hover:bg-white/10"
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-gray-200 transition hover:bg-white/10 max-md:min-h-11 max-md:rounded-[14px]"
               >
                 Clear all notifications
               </button>
@@ -1208,11 +1226,11 @@ export default function NotificationsPage() {
             <>
               {NOTIFICATION_TIME_SECTION_ORDER.map((section) =>
                 sections[section].length > 0 ? (
-                  <section key={section} className="space-y-2">
-                    <h2 className="text-sm font-semibold text-blue-300">
+                  <section key={section} className="space-y-2 max-md:space-y-0">
+                    <h2 className="text-sm font-semibold text-blue-300 max-md:px-3 max-md:pt-3 max-md:text-[13px] max-md:font-semibold max-md:text-[color:var(--tt-text-muted,#c0cad6)]">
                       {NOTIFICATION_TIME_SECTION_LABELS[section]}
                     </h2>
-                    <div className="space-y-2">
+                    <div className="space-y-2 max-md:space-y-0 max-md:divide-y max-md:divide-white/10">
                       {sections[section].map((card) => renderCard(card))}
                     </div>
                   </section>

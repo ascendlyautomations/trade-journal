@@ -1,0 +1,124 @@
+/*
+ * Mobile-web create flows (≤767px). Desktop/tablet unchanged.
+ * Scoped to [data-tt-create-flow] on CreatePageLayout and Add Trade shell.
+ */
+
+@media (max-width: 767px) {
+  html:not(.tt-native-ios) [data-tt-create-flow] {
+    color: var(--tt-text, #f3f4f6);
+  }
+
+  html:not(.tt-native-ios) [data-tt-create-flow].tt-phase4-dark {
+    background-image: none;
+    background-color: var(--tt-surface, #0d1117);
+  }
+
+  html:not(.tt-native-ios) [data-tt-create-flow] .tt-create-page-panel {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    padding: 0;
+  }
+
+  html:not(.tt-native-ios) [data-tt-create-flow] .tt-create-page-footer-link {
+    display: none;
+  }
+
+  html:not(.tt-native-ios) [data-tt-create-flow] .tt-create-page-preview {
+    display: none;
+  }
+
+  html:not(.tt-native-ios) [data-tt-create-flow] .tt-create-mobile-publish-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    z-index: 35;
+    bottom: var(--app-tab-bar-offset, 0px);
+    box-sizing: border-box;
+    border-top: 1px solid var(--tt-border, rgb(255 255 255 / 0.12));
+    background: color-mix(in srgb, var(--tt-surface, #0d1117) 96%, transparent);
+    padding: 0.625rem 0.75rem;
+    padding-bottom: max(0.625rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  html:not(.tt-native-ios).tt-mobile-web-keyboard-open
+    [data-tt-create-flow]
+    .tt-create-mobile-publish-bar {
+    bottom: var(--keyboard-height, 0px);
+  }
+
+  html:not(.tt-native-ios) [data-tt-create-flow] .tt-create-mobile-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-bottom: calc(
+      var(--app-tab-bar-offset, 0px) + var(--keyboard-height, 0px) + 5.5rem
+    );
+  }
+
+  html:not(.tt-native-ios) [data-tt-create-flow] textarea,
+  html:not(.tt-native-ios) [data-tt-create-flow] select,
+  html:not(.tt-native-ios)
+    [data-tt-create-flow]
+    input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not(
+      [type="file"]
+    ):not([type="range"]):not([type="color"]) {
+    border-color: var(--tt-border, rgb(255 255 255 / 0.12));
+    background-color: var(--tt-surface-raised, #2a3440);
+    color: var(--tt-text, #f3f4f6);
+  }
+
+  html:not(.tt-native-ios) [data-tt-create-flow] textarea::placeholder,
+  html:not(.tt-native-ios) [data-tt-create-flow] input::placeholder {
+    color: var(--tt-text-placeholder, #9ca3af);
+  }
+
+  html:not(.tt-native-ios) [data-tt-create-flow] .tt-create-media-picker {
+    min-height: 11rem;
+    border-color: var(--tt-border-strong, rgb(255 255 255 / 0.18));
+    background: var(--tt-surface-raised, #2a3440);
+    border-radius: 14px;
+  }
+
+  html:not(.tt-native-ios) [data-tt-create-flow] .tt-create-media-picker:hover {
+    border-color: var(--tt-accent, #4ec4e0);
+    background: var(--tt-surface-hover, #303a48);
+  }
+
+  html:not(.tt-native-ios) [data-tt-create-flow] .tt-create-secondary-button {
+    width: 100%;
+    min-height: 44px;
+    border-radius: 12px;
+    border: 1px solid var(--tt-border, rgb(255 255 255 / 0.12));
+    background: var(--tt-surface-raised, #2a3440);
+    color: var(--tt-text, #f3f4f6);
+    font-size: 0.875rem;
+    font-weight: 500;
+    padding: 0.625rem 0.75rem;
+  }
+
+  html:not(.tt-native-ios) [data-tt-create-flow] .tt-create-post-file-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  html:not(.tt-native-ios) [data-tt-add-trade-shell] .grid > div.rounded-xl.border {
+    border-radius: 14px;
+    border-color: var(--tt-border, rgb(255 255 255 / 0.12));
+    background: var(--tt-surface-raised, #2a3440);
+    box-shadow: none;
+  }
+
+  html:not(.tt-native-ios) [data-tt-add-trade-shell].tt-phase4-dark {
+    background-image: none;
+    background-color: var(--tt-surface, #0d1117);
+  }
+}

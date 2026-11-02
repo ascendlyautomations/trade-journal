@@ -4,15 +4,28 @@ import dynamic from "next/dynamic"
 import { memo, type ComponentProps, type ReactNode } from "react"
 import DashboardMobileProTabs from "./DashboardMobileProTabs"
 import DashboardStatsGrid from "./DashboardStatsGrid"
+import type { WeekdayChartPoint } from "./DashboardWeekdayChart"
+import MobileWebDashboardSessions from "@/app/components/mobile/dashboard/MobileWebDashboardSessions"
+import MobileWebDashboardWeekdays from "@/app/components/mobile/dashboard/MobileWebDashboardWeekdays"
+import { lastEquityPointValue } from "@/lib/mobileWebDashboard"
+import type { DashboardRrTargetAnalysis } from "@/lib/dashboardRrTargetAnalysis"
+
+const EMPTY_RR_TARGET: DashboardRrTargetAnalysis = {
+  tradeCount: 0,
+  pairedCount: 0,
+  pairedNonPositiveCount: 0,
+  pairedPositiveCount: 0,
+  avgTargetRr: null,
+  avgMaxRrReached: null,
+  avgTargetAttainmentRatio: null,
+  sampleSummary: null,
+  headline: null,
+  bullets: [],
+}
 
 const DashboardEquityCurve = dynamic(() => import("./DashboardEquityCurve"), {
   loading: () => (
-    <div className="h-[268px] animate-pulse rounded-xl border border-white/10 bg-white/5 md:h-[300px]" />
-  ),
-})
-const DashboardWeekdayChart = dynamic(() => import("./DashboardWeekdayChart"), {
-  loading: () => (
-    <div className="min-h-[260px] animate-pulse rounded-xl border border-white/10 bg-white/5 md:min-h-[300px]" />
+    <div className="h-[256px] animate-pulse bg-white/5 md:h-[300px] md:rounded-xl md:border md:border-white/10" />
   ),
 })
 const DashboardSessionChart = dynamic(() => import("./DashboardSessionChart"), {
@@ -26,19 +39,18 @@ type MobileProTabsProps = Omit<
   ComponentProps<typeof DashboardMobileProTabs>,
   | "weekdaySlot"
   | "sessionsSlot"
-  | "maxDrawdownSlot"
-  | "recentTrades"
-  | "streakData"
   | "hourData"
-  | "bestWinStreak"
   | "showSessions"
   | "avgWin"
   | "bestTrade"
   | "avgLoss"
   | "biggestLoss"
-  | "bestDay"
-  | "worstDay"
-  | "periodTradingDayCount"
+  | "maxDrawdown"
+  | "winRate"
+  | "winCount"
+  | "lossCount"
+  | "rrTargetAnalysis"
+  | "payoutsTotal"
   | "totalTrades"
   | "deferredSectionsReady"
 >
@@ -54,7 +66,7 @@ type DashboardChartsProps = Omit<
   isPro: boolean
   deferredSectionsReady: boolean
   equityData: ComponentProps<typeof DashboardEquityCurve>["data"]
-  weekdayData: ComponentProps<typeof DashboardWeekdayChart>["data"]
+  weekdayData: WeekdayChartPoint[]
   sessionPieData: ComponentProps<typeof DashboardSessionChart>["sessionPieData"]
   sessionBuckets: ComponentProps<typeof DashboardSessionChart>["sessionBuckets"]
   maxDrawdown: ComponentProps<typeof DashboardMaxDrawdown>["maxDrawdown"]
@@ -63,12 +75,17 @@ type DashboardChartsProps = Omit<
   avgDay: number
   consistency: number
   recentTrades: ReactNode
-  /** When set, Pro mobile renders Overview / Analytics / Records tabs. */
+  /** When set, Pro phone renders the native-style one-scroll dashboard. */
   mobileProTabs?: MobileProTabsProps
   liveAccountValue?: ReactNode
   drawdownLimitLineY?: number | null
   equityCurveUsesAccountBalance?: boolean
   showPersonalDrawdownFloor?: boolean
+  timeframeLabel?: string
+  winCount?: number
+  lossCount?: number
+  rrTargetAnalysis?: DashboardRrTargetAnalysis
+  payoutsTotal?: number | null
 }
 
 function ChartSkeleton({ className }: { className: string }) {
@@ -116,9 +133,14 @@ function DashboardCharts({
   drawdownLimitLineY = null,
   equityCurveUsesAccountBalance = false,
   showPersonalDrawdownFloor = false,
+  timeframeLabel = "",
+  winCount = 0,
+  lossCount = 0,
+  rrTargetAnalysis,
+  payoutsTotal = null,
 }: DashboardChartsProps) {
   const weekdayChart = deferredSectionsReady ? (
-    <DashboardWeekdayChart data={weekdayData} totalTrades={totalTrades} />
+    <MobileWebDashboardWeekdays data={weekdayData} totalTrades={totalTrades} />
   ) : (
     <ChartSkeleton className="h-48" />
   )
@@ -135,9 +157,7 @@ function DashboardCharts({
   )
 
   const sessionChartMobile = deferredSectionsReady ? (
-    <DashboardSessionChart
-      variant="mobile"
-      sessionPieData={sessionPieData}
+    <MobileWebDashboardSessions
       sessionBuckets={sessionBuckets}
       totalTrades={totalTrades}
     />
@@ -200,7 +220,7 @@ function DashboardCharts({
   ) : null
 
   return (
-    <div className="flex flex-col gap-2 max-md:gap-2 md:gap-3">
+    <div className="flex flex-col gap-2 max-md:gap-5 md:gap-3">
       {desktopEquity ? (
         <div className="tt-dash-hide-desktop-v1 hidden md:block">{desktopEquity}</div>
       ) : null}
@@ -233,6 +253,9 @@ function DashboardCharts({
           bestWinStreak={bestWinStreak}
           maxDrawdownSlot={maxDrawdownSlot}
           liveAccountValue={liveAccountValue}
+          timeframeLabel={timeframeLabel}
+          heroDisplayValue={lastEquityPointValue(equityData)}
+          equityCurveUsesAccountBalance={equityCurveUsesAccountBalance}
         />
 
         {desktopSide ? (
@@ -250,17 +273,16 @@ function DashboardCharts({
           sessionsSlot={sessionChartMobile}
           showSessions={showSessions}
           hourData={hourData}
-          streakData={streakData}
-          bestWinStreak={bestWinStreak}
-          maxDrawdownSlot={maxDrawdownSlot}
-          recentTrades={recentTrades}
+          maxDrawdown={maxDrawdown}
           avgWin={avgWin}
           bestTrade={bestTrade}
           avgLoss={avgLoss}
           biggestLoss={biggestLoss}
-          bestDay={bestDay}
-          worstDay={worstDay}
-          periodTradingDayCount={periodTradingDayCount}
+          payoutsTotal={payoutsTotal}
+          winRate={winRate}
+          winCount={winCount}
+          lossCount={lossCount}
+          rrTargetAnalysis={rrTargetAnalysis ?? EMPTY_RR_TARGET}
           totalTrades={totalTrades}
         />
       ) : null}

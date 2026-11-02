@@ -247,6 +247,10 @@ export default function TradeFilterBar({
                 </div>
                 <div className="shrink-0 md:hidden">{accountSelectAccessory}</div>
               </div>
+            ) : mobileThreeRowLayout ? (
+              <div className="w-full min-w-0 md:contents">
+                {renderAccountSelect()}
+              </div>
             ) : (
               renderAccountSelect()
             )}
@@ -289,6 +293,16 @@ export default function TradeFilterBar({
                   </div>
                 ) : null}
               </div>
+            ) : mobileThreeRowLayout ? (
+              <div className="w-full min-w-0 md:w-auto">
+                <CustomSelect
+                  value={accountTypeFilter}
+                  onChange={onAccountTypeChange}
+                  className="w-full md:w-auto"
+                  triggerClassName={SELECT_FILTER_TRIGGER_CLASS}
+                  options={[...MODE_OPTIONS]}
+                />
+              </div>
             ) : (
               <CustomSelect
                 value={accountTypeFilter}
@@ -300,22 +314,23 @@ export default function TradeFilterBar({
             )}
 
             {mobileThreeRowLayout ? (
-              <div className="flex w-full items-stretch gap-2 md:contents">
+              <div className="flex w-full min-w-0 flex-nowrap items-center gap-1.5 md:contents">
                 {beforeTimeframe ? (
-                  <div className="flex shrink-0 items-stretch md:hidden">
+                  <div className="flex shrink-0 items-center md:hidden">
                     {beforeTimeframe}
                   </div>
                 ) : null}
-                <div className="min-w-0 flex-1 md:w-auto md:flex-none">
+                <div className="w-[5.25rem] shrink-0 overflow-hidden md:w-auto md:flex-none">
                   <button
                     type="button"
                     onClick={() => setTimeframeOpen(true)}
-                    className={`${DASHBOARD_MOBILE_TIMEFRAME_BTN_CLASS} md:w-auto md:rounded-lg md:px-4`}
+                    title={timeframeButtonLabel}
+                    className={`${DASHBOARD_MOBILE_TIMEFRAME_BTN_CLASS} max-md:px-2 md:w-auto md:rounded-lg md:px-4`}
                   >
-                    {timeframeButtonLabel}
+                    <span className="block truncate">{timeframeButtonLabel}</span>
                   </button>
                 </div>
-                <div className="flex min-w-0 flex-1 items-stretch gap-2 md:contents">
+                <div className="flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-1 md:contents">
                   {trailing}
                 </div>
               </div>

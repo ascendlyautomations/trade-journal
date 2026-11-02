@@ -3,6 +3,7 @@
 import type { ComponentProps } from "react"
 import AchievementCard from "@/app/components/AchievementCard"
 import ProfileAchievementSocialCard from "@/app/components/ProfileAchievementSocialCard"
+import MobileWebProfileAchievementGrid from "@/app/components/mobile/profile/MobileWebProfileAchievementGrid"
 import type { FeedLikeMeta } from "@/app/components/feed/FeedPostCard"
 import type { Achievement } from "@/lib/achievements"
 
@@ -97,7 +98,7 @@ export default function ProfileAchievementsTab({
         </div>
       ) : achievements.length === 0 ? (
         <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
-          <p className="text-sm text-gray-300">
+          <p className="text-sm text-gray-300 max-md:text-[color:var(--tt-text-muted,#57606a)]">
             {currentUserId === profileUserId
               ? "No achievements yet."
               : "No public achievements yet."}
@@ -105,20 +106,31 @@ export default function ProfileAchievementsTab({
         </div>
       ) : (
         <>
-          {achievements.some((achievement) => achievement.is_featured) ? (
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-white">Featured</h3>
-              <div className="tt-profile-browse-grid tt-profile-achievement-grid grid gap-3 sm:grid-cols-2">
-                {achievements
-                  .filter((achievement) => achievement.is_featured)
-                  .map((achievement) => renderAchievement(achievement, true))}
+          <div className="md:hidden">
+            <MobileWebProfileAchievementGrid
+              achievements={[
+                ...achievements.filter((achievement) => achievement.is_featured),
+                ...achievements.filter((achievement) => !achievement.is_featured),
+              ]}
+              onOpenDetail={onOpenDetail}
+            />
+          </div>
+          <div className="hidden space-y-4 md:block">
+            {achievements.some((achievement) => achievement.is_featured) ? (
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-white">Featured</h3>
+                <div className="tt-profile-browse-grid tt-profile-achievement-grid grid gap-3 sm:grid-cols-2">
+                  {achievements
+                    .filter((achievement) => achievement.is_featured)
+                    .map((achievement) => renderAchievement(achievement, true))}
+                </div>
               </div>
+            ) : null}
+            <div className="tt-profile-browse-grid tt-profile-achievement-grid grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {achievements
+                .filter((achievement) => !achievement.is_featured)
+                .map((achievement) => renderAchievement(achievement, false))}
             </div>
-          ) : null}
-          <div className="tt-profile-browse-grid tt-profile-achievement-grid grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {achievements
-              .filter((achievement) => !achievement.is_featured)
-              .map((achievement) => renderAchievement(achievement, false))}
           </div>
         </>
       )}

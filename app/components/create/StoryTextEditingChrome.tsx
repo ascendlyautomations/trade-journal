@@ -231,7 +231,7 @@ export default function StoryTextEditingChrome({
       <button
         type="button"
         onClick={onDone}
-        className="w-full rounded-lg bg-emerald-500/20 py-2.5 text-sm font-semibold text-emerald-100 ring-1 ring-emerald-400/40 transition hover:bg-emerald-500/30"
+        className="tt-mobile-web-form-submit w-full rounded-lg bg-emerald-500/20 py-2.5 text-sm font-semibold text-emerald-100 ring-1 ring-emerald-400/40 transition hover:bg-emerald-500/30"
       >
         Done editing text
       </button>

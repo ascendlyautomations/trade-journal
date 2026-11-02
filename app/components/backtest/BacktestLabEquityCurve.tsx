@@ -23,7 +23,7 @@ export default function BacktestLabEquityCurve({
     return (
       <div className="backtest-lab-section-card mb-5">
         <h2 className="backtest-lab-section-title mb-2">Backtest equity curve</h2>
-        <div className="flex flex-col items-center px-2 py-6 text-center sm:py-8">
+        <div className="flex flex-col items-center px-2 py-6 text-center sm:py-8 max-md:py-5">
           <p className="max-w-md text-sm leading-relaxed text-[var(--tt-bl-control-muted)]">
             Log backtest trades to chart cumulative P&amp;L for your current
             filters. Backtest data stays separate from live dashboard history.

@@ -14,6 +14,7 @@ import {
 } from "@/lib/achievementPostEngagement"
 import { FEED_REELS_SELECT } from "@/lib/reelEngagement"
 import { fetchReelsByTradeIds } from "@/lib/reels"
+import { isUuidLike } from "@/lib/tradeAccountDisplay"
 import { hydrateCopyTradeFeedPosts } from "./feedCopyTradeHydration"
 import {
   FEED_POSTS_SELECT,
@@ -88,7 +89,7 @@ async function hydrateTradeFeedItemsWithReels(
     .map((item) =>
       item.trade_id != null ? String(item.trade_id) : String(item.id)
     )
-    .filter((id) => id.trim() !== "")
+    .filter((id) => isUuidLike(id))
 
   if (tradeIds.length === 0) return items
 

@@ -59,11 +59,11 @@ struct TradeDetailView: View {
             case .loading where viewModel.trade == nil:
                 ExperienceLoadingSpinner(label: "Loading trade")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .failed(let message) where viewModel.trade == nil:
+            case .failed(let failure) where viewModel.trade == nil:
                 ExperienceErrorState(
-                    title: "Couldn't load trade",
-                    message: message,
-                    onRetry: { Task { await viewModel.refresh() } }
+                    title: failure.title,
+                    message: failure.message,
+                    onRetry: failure.isRetryable ? { Task { await viewModel.refresh() } } : nil
                 )
             default:
                 content

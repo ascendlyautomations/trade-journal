@@ -7,7 +7,7 @@ export const NAV_CHROME_FIXED_ROOT =
   "fixed left-0 top-0 z-[9999] w-full bg-chrome pt-[var(--safe-area-top)] text-chrome-foreground"
 
 export const NAV_CHROME_BAR =
-  "flex h-16 w-full shrink-0 items-center border-b border-chrome-border bg-chrome"
+  "flex h-16 w-full shrink-0 items-center border-b border-chrome-border bg-chrome max-md:h-11"
 
 /** Marketing public nav uses a subtler header rule (was border-white/5). */
 export const NAV_CHROME_BAR_SUBTLE_BORDER =

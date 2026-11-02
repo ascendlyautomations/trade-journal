@@ -20,9 +20,17 @@ import {
   parseMoneyToCents,
   summarizePropFirmExpenses,
   totalCostCents,
+  emptyPropFirmExpenseDraft,
   validatePropFirmExpenseDraft,
+  type PropFirmExpenseDraft,
   type PropFirmExpenseRecord,
 } from "./propFirmExpenses.ts"
+
+function expenseDraft(
+  overrides: Partial<PropFirmExpenseDraft>
+): PropFirmExpenseDraft {
+  return { ...emptyPropFirmExpenseDraft("2026-10-23"), ...overrides }
+}
 
 function expense(overrides: Partial<PropFirmExpenseRecord> = {}): PropFirmExpenseRecord {
   return {
@@ -111,32 +119,23 @@ describe("prop firm expense analytics", () => {
   it("rejects future dates and blank costs", () => {
     assert.match(
       validatePropFirmExpenseDraft(
-        {
+        expenseDraft({
           propFirmName: "Apex",
           expenseType: "other",
           costDigits: "",
-          quantityDigits: "1",
-          datePaid: "2026-10-23",
-          paymentLabel: "",
-          notes: "",
-          accountId: null,
-        },
+        }),
         { today: "2026-10-23" }
       ) ?? "",
       /cost/i
     )
     assert.match(
       validatePropFirmExpenseDraft(
-        {
+        expenseDraft({
           propFirmName: "Apex",
           expenseType: "other",
           costDigits: "10",
-          quantityDigits: "1",
           datePaid: "2026-10-24",
-          paymentLabel: "",
-          notes: "",
-          accountId: null,
-        },
+        }),
         { today: "2026-10-23" }
       ) ?? "",
       /future/i

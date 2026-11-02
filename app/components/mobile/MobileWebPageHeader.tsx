@@ -18,12 +18,14 @@ export default function MobileWebPageHeader() {
 
   if (isNativeIos || !spec) return null
 
+  const backHref = spec.backHref
+
   function handleBack() {
     if (typeof window !== "undefined" && window.history.length > 1) {
       router.back()
       return
     }
-    router.push(spec.backHref)
+    router.push(backHref)
   }
 
   return (
@@ -36,7 +38,7 @@ export default function MobileWebPageHeader() {
       >
         <ChevronLeft className="h-6 w-6" strokeWidth={2.25} aria-hidden />
       </button>
-      <h1 className="min-w-0 truncate text-[17px] font-semibold tracking-tight">
+      <h1 className="min-w-0 truncate text-[1.0625rem] font-semibold tracking-tight">
         {spec.title}
       </h1>
     </header>

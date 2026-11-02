@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest"
+import assert from "node:assert/strict"
+import { describe, it } from "node:test"
 import {
   canAssignRoomMemberTag,
   canModerateRoomMemberTarget,
   canModerateTradeRoom,
   memberHasModeratorTag,
-} from "./tradeRoomModerationPermission"
+} from "./tradeRoomModerationPermission.ts"
 
 describe("tradeRoomModerationPermission", () => {
   const tags = [
@@ -13,57 +14,64 @@ describe("tradeRoomModerationPermission", () => {
   ]
 
   it("detects moderator tag on member", () => {
-    expect(
-      memberHasModeratorTag({ tagIds: ["t-mod"], tags })
-    ).toBe(true)
-    expect(
-      memberHasModeratorTag({ tagIds: ["t-mentor"], tags })
-    ).toBe(false)
+    assert.equal(
+      memberHasModeratorTag({ tagIds: ["t-mod"], tags }),
+      true
+    )
+    assert.equal(
+      memberHasModeratorTag({ tagIds: ["t-mentor"], tags }),
+      false
+    )
   })
 
   it("grants moderate room when viewer has moderator tag", () => {
-    expect(
+    assert.equal(
       canModerateTradeRoom({
         viewerId: "u1",
         ownerUserId: "owner",
         hasModeratorTag: true,
-      })
-    ).toBe(true)
-    expect(
+      }),
+      true
+    )
+    assert.equal(
       canModerateTradeRoom({
         viewerId: "u1",
         ownerUserId: "owner",
         hasModeratorTag: false,
-      })
-    ).toBe(false)
+      }),
+      false
+    )
   })
 
   it("owner can manage elevated tags; moderator cannot", () => {
-    expect(
+    assert.equal(
       canAssignRoomMemberTag({
         tagName: "Moderator",
         canManageRoom: true,
         canModerateRoom: true,
-      })
-    ).toBe(true)
-    expect(
+      }),
+      true
+    )
+    assert.equal(
       canAssignRoomMemberTag({
         tagName: "Moderator",
         canManageRoom: false,
         canModerateRoom: true,
-      })
-    ).toBe(false)
-    expect(
+      }),
+      false
+    )
+    assert.equal(
       canAssignRoomMemberTag({
         tagName: "Mentor",
         canManageRoom: false,
         canModerateRoom: true,
-      })
-    ).toBe(true)
+      }),
+      true
+    )
   })
 
   it("moderator cannot ban another moderator", () => {
-    expect(
+    assert.equal(
       canModerateRoomMemberTarget({
         viewerId: "mod-a",
         ownerUserId: "owner",
@@ -72,7 +80,8 @@ describe("tradeRoomModerationPermission", () => {
         tags,
         canManageRoom: false,
         canModerateRoom: true,
-      })
-    ).toBe(false)
+      }),
+      false
+    )
   })
 })

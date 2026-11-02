@@ -7,17 +7,13 @@ import TradeFilterBar, {
 } from "@/app/components/TradeFilterBar"
 import PerformanceShareButton from "@/app/components/PerformanceShareButton"
 import DashboardGearSettings from "./DashboardGearSettings"
-import {
-  DASHBOARD_MOBILE_ACTION_BTN_CLASS,
-  DASHBOARD_MOBILE_PUBLIC_BTN_BASE,
-} from "./dashboardHeaderMobileUi"
 import { DASHBOARD_MOBILE_FILTER_MARGIN_CLASS } from "./dashboardMobileUi"
 import type { GearDraftState } from "./dashboardGearTypes"
-import PlatformDashboardCalendarButton from "@/app/components/platform/PlatformDashboardCalendarButton"
 import PlatformDashboardTradesButton from "@/app/components/platform/PlatformDashboardTradesButton"
 import { usePlatformPresentation } from "@/app/components/platform/usePlatformPresentation"
 import NativeIosDashboardActionBar from "@/app/components/platform/native/NativeIosDashboardActionBar"
 import NativeIosDashboardFilterSheet from "@/app/components/platform/native/NativeIosDashboardFilterSheet"
+import MobileWebDashboardTools from "@/app/components/mobile/dashboard/MobileWebDashboardTools"
 
 export type DashboardFiltersProps = {
   isPro: boolean
@@ -188,17 +184,6 @@ export default function DashboardFilters({
     </button>
   )
 
-  const addTradeMobileAccessory = (
-    <button
-      type="button"
-      onClick={onOpenQuickInput}
-      aria-label="Add trade"
-      className={`${DASHBOARD_MOBILE_ACTION_BTN_CLASS} min-w-0 flex-1 px-0 md:hidden`}
-    >
-      <span aria-hidden>+</span>
-    </button>
-  )
-
   const gearSettings = (
     <DashboardGearSettings
       showControls={showControls}
@@ -228,7 +213,6 @@ export default function DashboardFilters({
         copyGroups={copyGroups}
         onAccountPickerOpen={onRequestCopyGroups}
         beforeAccountSelect={addTradeDesktop}
-        accountSelectAccessory={addTradeMobileAccessory}
         accountTypeFilter={accountTypeFilter}
         onAccountTypeChange={onAccountTypeChange}
         timeframe={timeframe}
@@ -238,27 +222,6 @@ export default function DashboardFilters({
         onCustomRangeApply={onCustomRangeApply}
         selectedDate={selectedDate}
         onSelectedDateChange={onSelectedDateChange}
-        publicNextToModes={
-          showShareControls ? (
-            <button
-              type="button"
-              onClick={onTogglePublicOnly}
-              className={`${DASHBOARD_MOBILE_PUBLIC_BTN_BASE} md:hidden ${
-                showPublicOnly
-                  ? "border-blue-400 bg-blue-500 text-white hover:bg-blue-600"
-                  : "border-white/10 bg-[#0f172a] text-white hover:bg-[#1e293b]"
-              }`}
-            >
-              Public
-            </button>
-          ) : null
-        }
-        settingsNextToModes={
-          <div className="flex items-stretch justify-center gap-2 md:hidden">
-            <PlatformDashboardCalendarButton />
-            {gearSettings}
-          </div>
-        }
         beforeTimeframe={<PlatformDashboardTradesButton />}
         trailing={
           <>
@@ -292,33 +255,19 @@ export default function DashboardFilters({
                 Reports
               </button>
             ) : null}
-            {showTradingReportButton && onOpenTradingReport ? (
-              <button
-                type="button"
-                onClick={onOpenTradingReport}
-                disabled={tradingReportDisabled}
-                title={
-                  tradingReportDisabled
-                    ? "Reports unlock after you log your first trade"
-                    : undefined
+            <div className="contents md:hidden">
+              <MobileWebDashboardTools
+                onOpenReports={
+                  showTradingReportButton ? onOpenTradingReport : undefined
                 }
-                data-tt-tour-target="dashboardReports"
-                className={`${DASHBOARD_MOBILE_ACTION_BTN_CLASS} min-w-0 flex-1 md:hidden disabled:cursor-not-allowed disabled:opacity-50`}
-              >
-                Report
-              </button>
-            ) : null}
-            <Link
-              href="/withdrawals"
-              data-tt-tour-target="dashboardWithdrawals"
-              className={`${DASHBOARD_MOBILE_ACTION_BTN_CLASS} min-w-0 flex-1 md:hidden`}
-            >
-              Withdrawals
-            </Link>
+                reportsDisabled={tradingReportDisabled}
+              />
+            </div>
             {showShareControls ? (
               <PerformanceShareButton
                 onClick={onOpenPerformanceShare}
                 size="dashboard"
+                className="max-md:h-11 max-md:w-11 max-md:rounded-full"
                 disabled={performanceShareDisabled}
                 title={
                   performanceShareDisabled

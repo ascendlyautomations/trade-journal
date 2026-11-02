@@ -17,10 +17,11 @@ import {
 import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import { countNoun } from "@/lib/countNoun"
 import { tradeRoomSharePath } from "@/lib/tradeRoomShareUrl"
 
 const PANEL_CLASS =
-  "rounded-xl border border-white/10 bg-white/5 p-2.5 backdrop-blur-md md:p-4"
+  "rounded-xl border border-white/10 bg-white/5 p-2.5 backdrop-blur-md md:p-4 max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:backdrop-blur-none"
 
 function roomHref(room: PopularTradeRoom): string {
   const key = room.slug?.trim() || room.id
@@ -140,14 +141,24 @@ export default function ExploreSuggestedRoomsSection({ memberRoomIds }: Props) {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: EXPLORE_COMMUNITY_ROOMS_PAGE_SIZE }).map((_, i) => (
-            <div
-              key={i}
-              className="h-36 animate-pulse rounded-xl border border-white/10 bg-white/5"
-            />
-          ))}
-        </div>
+        <>
+          <div className="-mx-1 mt-1 flex gap-2.5 overflow-hidden px-1 md:hidden">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-40 w-[160px] shrink-0 animate-pulse rounded-[10px] bg-white/5"
+              />
+            ))}
+          </div>
+          <div className="hidden grid-cols-1 gap-2 sm:grid-cols-2 md:grid lg:grid-cols-3">
+            {Array.from({ length: EXPLORE_COMMUNITY_ROOMS_PAGE_SIZE }).map((_, i) => (
+              <div
+                key={i}
+                className="h-36 animate-pulse rounded-xl border border-white/10 bg-white/5"
+              />
+            ))}
+          </div>
+        </>
       ) : error && visibleRooms.length === 0 ? (
         <EmptyState
           title="Couldn't load Trade Rooms"
@@ -171,7 +182,33 @@ export default function ExploreSuggestedRoomsSection({ memberRoomIds }: Props) {
         />
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="tt-mobile-web-hscroll -mx-1 mt-1 flex gap-2.5 overflow-x-auto px-1 pb-1 md:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {visibleRooms.map((room) => (
+              <article
+                key={`rail-${room.id}`}
+                className="flex w-[160px] shrink-0 flex-col rounded-[10px] bg-[color:var(--tt-surface-nested,#1a222c)] p-2.5"
+              >
+                <Link href={roomHref(room)} className="min-w-0">
+                  <RoomAvatar room={room} />
+                  <p className="mt-2 line-clamp-2 text-[13px] font-semibold text-white">
+                    {room.name}
+                  </p>
+                  <p className="mt-1 truncate text-[11px] text-gray-400">
+                    {countNoun(room.memberCount, "member")}
+                  </p>
+                </Link>
+                <button
+                  type="button"
+                  disabled={!user?.id || joiningId === room.id}
+                  onClick={() => void handleJoin(room)}
+                  className="tt-mobile-web-hit-y mt-2 min-h-8 rounded-md bg-blue-500 px-2 text-[12px] font-semibold text-white disabled:opacity-60"
+                >
+                  {joiningId === room.id ? "Joining…" : "Join"}
+                </button>
+              </article>
+            ))}
+          </div>
+          <div className="hidden grid-cols-1 gap-2 sm:grid-cols-2 md:grid lg:grid-cols-3">
             {visibleRooms.map((room) => (
               <article
                 key={room.id}
@@ -187,8 +224,7 @@ export default function ExploreSuggestedRoomsSection({ memberRoomIds }: Props) {
                       {room.name}
                     </Link>
                     <p className="mt-1 text-xs text-gray-400">
-                      {room.memberCount.toLocaleString()} active member
-                      {room.memberCount === 1 ? "" : "s"}
+                      {countNoun(room.memberCount, "active member")}
                     </p>
                   </div>
                 </div>

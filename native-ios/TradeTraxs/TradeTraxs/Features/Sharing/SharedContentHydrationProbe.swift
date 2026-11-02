@@ -8,6 +8,8 @@ enum SharedContentHydrationProbe {
     enum Surface: String, Sendable {
         case dm
         case tradeRoom
+        case vault
+        case deepLink
     }
 
     final class Session {
@@ -105,6 +107,8 @@ enum SharedContentHydrationProbe {
     enum Surface: String, Sendable {
         case dm
         case tradeRoom
+        case vault
+        case deepLink
     }
 
     final class Session {

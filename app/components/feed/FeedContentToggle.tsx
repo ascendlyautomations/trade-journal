@@ -56,7 +56,7 @@ function FeedContentToggle({
   }, [contentType])
 
   return (
-    <div className="mb-4 flex w-full min-w-0 justify-center px-1">
+    <div className="mb-4 flex w-full min-w-0 justify-center px-1 max-md:mb-2 max-md:justify-start max-md:px-0">
       {/*
         Keep options in one row. When the row is wider than the viewport,
         justify-center + ancestor overflow-x-hidden clipped the leftmost
@@ -64,7 +64,7 @@ function FeedContentToggle({
       */}
       <div
         ref={scrollerRef}
-        className="flex max-w-full flex-nowrap justify-start gap-1 overflow-x-auto overscroll-x-contain bg-white/5 p-1 rounded-xl border border-white/10 sm:gap-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden max-md:gap-2 max-md:border-transparent max-md:bg-transparent max-md:p-0"
+        className="tt-mobile-web-hscroll flex max-w-full flex-nowrap justify-start gap-1 overflow-x-auto overscroll-x-contain bg-white/5 p-1 rounded-xl border border-white/10 sm:gap-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden max-md:gap-1 max-md:border-transparent max-md:bg-transparent max-md:p-0 max-md:px-1"
       >
         {options.map(({ id, label }) => {
           const Icon = FILTER_ICONS[id]
@@ -74,12 +74,12 @@ function FeedContentToggle({
             type="button"
             data-feed-content-filter={id}
             onClick={() => onContentTypeChange(id)}
-            aria-label={id === "achievements" ? "Achievements" : undefined}
-            title={id === "achievements" ? "Achievements" : undefined}
-            className={`inline-flex shrink-0 items-center justify-center rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-4 sm:text-sm max-md:min-h-11 max-md:min-w-12 max-md:flex-col max-md:gap-0.5 max-md:rounded-[10px] max-md:px-1 max-md:py-1 ${
+            aria-label={label}
+            title={label}
+            className={`inline-flex shrink-0 items-center justify-center rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-4 sm:text-sm max-md:min-h-11 max-md:min-w-[52px] max-md:max-w-[4.75rem] max-md:flex-col max-md:gap-0.5 max-md:rounded-[10px] max-md:px-1 max-md:py-1 ${
               contentType === id
-                ? "bg-blue-500 text-white shadow-sm max-md:bg-white/10 max-md:text-white max-md:shadow-none"
-                : "text-gray-400 hover:text-gray-200"
+                ? "bg-blue-500 text-white shadow-sm max-md:bg-white/10 max-md:text-[color:var(--tt-text,#f0f3f6)] max-md:shadow-none"
+                : "text-gray-400 hover:text-gray-200 max-md:text-[color:var(--tt-text-muted,#c0cad6)]"
             }`}
           >
             <Icon
@@ -87,14 +87,9 @@ function FeedContentToggle({
               strokeWidth={contentType === id ? 2.1 : 1.75}
               aria-hidden
             />
-            {id === "achievements" ? (
-              <>
-                <span className="sm:hidden">Achievements</span>
-                <span className="hidden sm:inline">Achievements</span>
-              </>
-            ) : (
-              label
-            )}
+            <span className="max-md:max-w-full max-md:truncate max-md:text-center max-md:text-[10px] max-md:leading-tight max-md:tracking-tight">
+              {label}
+            </span>
           </button>
           )
         })}

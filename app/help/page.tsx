@@ -143,7 +143,7 @@ export default function HelpCenterPage() {
       <div className={`tt-phase4-dark ${submissionPageShell}`}>
         <div className="mx-auto w-full max-w-5xl space-y-8">
           <header className="text-center">
-            <h1 className={submissionTitle}>Need Help?</h1>
+            <h1 className={`${submissionTitle} max-md:hidden`}>Need Help?</h1>
             <p className={submissionSubtitle}>
               Choose how you&apos;d like to reach the TradeTraxs team.
             </p>

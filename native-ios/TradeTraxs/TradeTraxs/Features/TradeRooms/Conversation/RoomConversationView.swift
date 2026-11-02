@@ -480,12 +480,23 @@ struct RoomConversationView: View {
                                 },
                                 onSharedContentTap: { reference in
                                     guard let data else { return }
-                                    SharedContentNavigation.open(
-                                        reference: reference,
-                                        cache: data.detailCache,
-                                        coordinator: navigationCoordinator,
-                                        host: navigationHost
-                                    )
+                                    Task {
+                                        let viewerID = await data.session.currentUserID.map {
+                                            ProfileID($0.rawValue)
+                                        }
+                                        let context = SharedContentHydrator.Context.make(
+                                            data: data,
+                                            viewerID: viewerID
+                                        )
+                                        await SharedContentNavigation.openAsync(
+                                            reference: reference,
+                                            cache: data.detailCache,
+                                            coordinator: navigationCoordinator,
+                                            host: navigationHost,
+                                            hydrationContext: context,
+                                            hydrationSurface: .tradeRoom
+                                        )
+                                    }
                                 },
                                 onSharedStoryTap: { payload in
                                     guard let data else { return }

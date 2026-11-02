@@ -41,6 +41,8 @@ export type DmStyleComposerProps = {
   afterRow?: ReactNode
   /** Optional ref on the hidden file input (Messages clears this after send) */
   fileInputRef?: RefObject<HTMLInputElement | null>
+  /** Phone-web Messages only. Never set from Rooms or Capacitor. */
+  mobileWebPresentation?: boolean
 }
 
 const desktopActionBtnClass =
@@ -94,6 +96,7 @@ export default function DmStyleComposer({
   beforeRow,
   afterRow,
   fileInputRef,
+  mobileWebPresentation = false,
 }: DmStyleComposerProps) {
   const [mobileAttachOpen, setMobileAttachOpen] = useState(false)
   const fileInputId = useId()
@@ -162,7 +165,13 @@ export default function DmStyleComposer({
   }
 
   return (
-    <div className="relative mt-auto shrink-0 border-t border-white/10 bg-[#0B1220] p-2 md:bg-[#020617] md:p-4">
+    <div
+      className={`relative mt-auto shrink-0 border-t border-white/10 bg-[#0B1220] p-2 md:bg-[#020617] md:p-4${
+        mobileWebPresentation
+          ? " max-md:bg-[#0B1220] max-md:p-2.5 max-md:pb-[max(0.625rem,env(safe-area-inset-bottom))]"
+          : ""
+      }`}
+    >
       {beforeRow ? <div className="mb-1">{beforeRow}</div> : null}
       <input
         ref={resolvedFileInputRef}
@@ -208,7 +217,13 @@ export default function DmStyleComposer({
             disabled={textDisabled}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleTextareaKeyDown}
-            className={messageFieldClass}
+            enterKeyHint={mobileWebPresentation ? "send" : undefined}
+            autoCorrect="on"
+            className={
+              mobileWebPresentation
+                ? `${messageFieldClass} max-md:min-h-11 max-md:rounded-[14px] max-md:px-3.5 max-md:py-2.5 max-md:text-[16px]`
+                : messageFieldClass
+            }
           />
           {showShare ? (
             <button
@@ -216,7 +231,9 @@ export default function DmStyleComposer({
               aria-label="Share photo or trade"
               title="Share photo or trade"
               onClick={() => setMobileAttachOpen(true)}
-              className="flex h-10 w-10 min-h-[40px] min-w-[40px] shrink-0 items-center justify-center rounded-full bg-blue-500 text-white shadow-md transition active:scale-95 md:hidden hover:bg-blue-600"
+              className={`flex h-10 w-10 min-h-[40px] min-w-[40px] shrink-0 items-center justify-center rounded-full bg-blue-500 text-white shadow-md transition active:scale-95 md:hidden hover:bg-blue-600${
+                mobileWebPresentation ? " max-md:h-11 max-md:w-11 max-md:min-h-11 max-md:min-w-11" : ""
+              }`}
             >
               <SharePlusIcon className="h-5 w-5" />
             </button>
@@ -256,7 +273,11 @@ export default function DmStyleComposer({
               type="button"
               onClick={onSend}
               disabled={sendDisabled}
-              className="shrink-0 whitespace-nowrap rounded bg-blue-500 px-3 py-2 text-sm hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+              className={`shrink-0 whitespace-nowrap rounded bg-blue-500 px-3 py-2 text-sm hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50${
+                mobileWebPresentation
+                  ? " max-md:min-h-11 max-md:rounded-[14px] max-md:px-4 max-md:text-[15px] max-md:font-semibold"
+                  : ""
+              }`}
             >
               Send
             </button>

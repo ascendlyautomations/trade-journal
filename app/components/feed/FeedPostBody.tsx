@@ -48,8 +48,8 @@ function FeedPostBody({
   const resolvedPoints = resolveTradePoints(timingTrade)
   const showCopyBadge = isCopyTradedMode(timingTrade)
   return (
-    <div className="min-w-0 space-y-1.5 overflow-hidden px-4 pb-2.5 pt-0">
-      <div className="flex min-w-0 flex-nowrap items-center justify-between gap-x-2">
+    <div className="min-w-0 space-y-1.5 overflow-hidden px-4 pb-2.5 pt-0 max-md:px-3">
+      <div className="flex min-w-0 items-start justify-between gap-x-2 max-md:flex-wrap max-md:gap-y-1">
         <div className="flex min-w-0 items-center gap-2 overflow-hidden md:gap-3">
           <div
             className={`shrink-0 text-base font-semibold tabular-nums md:text-lg ${
@@ -74,7 +74,7 @@ function FeedPostBody({
         </div>
 
         {!showCopyBadge ? (
-          <div className="flex shrink-0 items-center gap-2 text-xs text-gray-300 md:text-sm">
+          <div className="flex min-w-0 shrink-0 items-center gap-2 text-xs text-gray-300 max-md:max-w-[46%] max-md:flex-wrap max-md:justify-end md:text-sm">
             {rr != null && rr !== "" ? (
               <span className="tabular-nums">RR {formatRR(rr)}</span>
             ) : null}
@@ -89,8 +89,8 @@ function FeedPostBody({
 
       {publicDesc ? (
         <ExpandableText
-          className="min-w-0 text-xs leading-snug text-white md:text-sm md:leading-relaxed"
-          textClassName="break-words text-white"
+          className="min-w-0 overflow-hidden text-xs leading-snug text-white md:text-sm md:leading-relaxed"
+          textClassName="break-words [overflow-wrap:anywhere] text-white"
         >
           {publicDesc}
         </ExpandableText>
@@ -110,7 +110,7 @@ function FeedPostBody({
       ) : null}
 
       {showCopyBadge ? (
-        <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-gray-300 md:text-sm">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-gray-300 max-md:overflow-hidden md:text-sm">
           <CopyTradedBadge trade={timingTrade} className="shrink-0" />
           {rr != null && rr !== "" ? (
             <span className="tabular-nums">RR {formatRR(rr)}</span>

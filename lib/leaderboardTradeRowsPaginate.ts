@@ -40,15 +40,16 @@ async function fetchLeaderboardTradeRowsPage(
 ): Promise<TradeForLeaderboard[]> {
   const timeout = createReadTimeoutSignal(params.pageTimeoutMs, params.signal)
   try {
-    const { data, error } = await client.rpc(
-      "leaderboard_trade_rows_page",
-      {
-        p_after_created_at: params.afterCreatedAt ?? undefined,
-        p_after_user_id: params.afterUserId ?? undefined,
-        p_limit: params.limit,
-      },
-      { signal: timeout.signal }
-    )
+    const rpcBuilder = client.rpc("leaderboard_trade_rows_page", {
+      p_after_created_at: params.afterCreatedAt ?? undefined,
+      p_after_user_id: params.afterUserId ?? undefined,
+      p_limit: params.limit,
+    })
+    const rpcRequest =
+      typeof rpcBuilder.abortSignal === "function"
+        ? rpcBuilder.abortSignal(timeout.signal)
+        : rpcBuilder
+    const { data, error } = await rpcRequest
     const readError = supabaseResultToError(error, "leaderboard_trade_rows_page")
     if (readError) throw readError
     return (data ?? []) as TradeForLeaderboard[]

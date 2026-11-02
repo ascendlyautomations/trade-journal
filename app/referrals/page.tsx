@@ -167,7 +167,7 @@ export default function ReferralsPage() {
       <div className="tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-white sm:px-6 lg:px-8">
         <div className="mx-auto max-w-5xl">
           <div className="mb-8">
-            <h1 className="text-2xl font-bold text-blue-300 sm:text-3xl">
+            <h1 className="text-2xl font-bold text-blue-300 sm:text-3xl max-md:hidden">
               Referral stats
             </h1>
             <p className="mt-2 text-sm text-gray-400">{LOADING_COPY.referrals}</p>
@@ -185,7 +185,7 @@ export default function ReferralsPage() {
         <div className="mx-auto max-w-5xl">
           <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-blue-300 sm:text-3xl">
+              <h1 className="text-2xl font-bold text-blue-300 sm:text-3xl max-md:hidden">
                 Referral stats
               </h1>
               <p className="mt-1 text-sm text-gray-400">

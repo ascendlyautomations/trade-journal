@@ -4,12 +4,22 @@
  * :root defaults in globals.css stay 0 on web ≥768px.
  */
 @media (max-width: 767px) {
+  html:not(.tt-native-ios):has(.tt-app-navbar) {
+    --navbar-height: 2.75rem;
+  }
+
+  html.tt-mobile-web-hide-navbar:not(.tt-native-ios) {
+    --navbar-height: 0px;
+  }
+
   html.tt-mobile-web-tabs:not(.tt-native-ios) {
     --app-tab-bar-height: 49px;
     --app-tab-bar-offset: calc(
       var(--app-tab-bar-height) + env(safe-area-inset-bottom, 0px)
     );
-    --app-viewport-height: calc(100dvh - 4rem - var(--app-tab-bar-offset));
+    --app-viewport-height: calc(
+      100dvh - var(--app-header-offset) - var(--app-tab-bar-offset)
+    );
   }
 
   html:not(.tt-native-ios) [data-tt-mobile-web-tab-bar] {
@@ -36,6 +46,43 @@
     align-items: stretch;
     overflow: hidden;
     list-style: none;
+  }
+
+  /*
+   * Immersive Clips pager and pushed social details hide the phone tab bar
+   * (native hides it on conversation/detail pushes; Clips metadata lifts via
+   * safe-area, but mobile web needs the extra viewport).
+   */
+  html.tt-mobile-web-clips-immersive:not(.tt-native-ios) {
+    --navbar-height: 0px;
+    --app-tab-bar-height: 0px;
+    --app-tab-bar-offset: 0px;
+    --app-viewport-height: 100dvh;
+  }
+
+  html.tt-mobile-web-social-detail:not(.tt-native-ios) {
+    --app-tab-bar-height: 0px;
+    --app-tab-bar-offset: 0px;
+    --app-viewport-height: calc(100dvh - var(--app-header-offset));
+  }
+
+  /* Pushed details hide the tab bar but keep the home-indicator inset. */
+  html.tt-mobile-web-pushed-detail:not(.tt-native-ios) {
+    --app-tab-bar-height: 0px;
+    --app-tab-bar-offset: env(safe-area-inset-bottom, 0px);
+    --app-viewport-height: calc(
+      100dvh - var(--app-header-offset) - var(--app-tab-bar-offset)
+    );
+  }
+
+  html.tt-mobile-web-clips-immersive:not(.tt-native-ios) [data-tt-mobile-web-tab-bar],
+  html.tt-mobile-web-social-detail:not(.tt-native-ios) [data-tt-mobile-web-tab-bar],
+  html.tt-mobile-web-pushed-detail:not(.tt-native-ios) [data-tt-mobile-web-tab-bar] {
+    display: none !important;
+  }
+
+  html.tt-mobile-web-clips-immersive:not(.tt-native-ios) {
+    overflow: hidden;
   }
 }
 

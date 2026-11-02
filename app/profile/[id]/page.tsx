@@ -115,6 +115,14 @@ import { dmThreadPath } from "@/lib/messageRoutes"
 import { ConfirmModal, FeedbackModal, useDeleteTradeConfirmation, useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 import { PlatformProfileHeader } from "../../components/platform"
+import {
+  DesktopWebViewport,
+  MobileWebViewport,
+} from "../../components/mobile/MobileWebViewport"
+import MobileWebNetworkNotice from "../../components/mobile/MobileWebNetworkNotice"
+import MobileWebProfileHeader from "../../components/mobile/profile/MobileWebProfileHeader"
+import { MOBILE_WEB_PROFILE_LOAD_FAILED } from "@/lib/mobileWebNetworkRecovery"
+import MobileWebProfileSectionPicker from "../../components/mobile/profile/MobileWebProfileSectionPicker"
 import ProfileOverviewStats from "../../components/profile/ProfileOverviewStats"
 import ProfileTabs, {
   type ProfileTab,
@@ -143,6 +151,7 @@ import {
 } from "@/lib/profileWallPosts"
 import TradeCard from "../../components/profile/ProfileTradeCard"
 import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
 import PostCard from "../../components/profile/ProfilePostCard"
 import QuickTradeModal from "../../components/QuickTradeModal"
 import CreatePostComposer from "../../components/create/CreatePostComposer"
@@ -206,6 +215,12 @@ import {
   type ProfileBootstrapPublicStatsV1,
   type ProfileStatisticsModeView,
 } from "@/lib/profilePublicStatistics"
+import {
+  fetchProfilePayoutTotal,
+  fetchProfilePostsCount,
+  profilePostsCountFromSectionCounts,
+} from "@/lib/profileOverviewExtras.ts"
+import { canViewPrivateProfileContent } from "@/lib/profileVisibility.ts"
 import { useProfileStatistics } from "./useProfileStatistics"
 import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
 import { isBackendV2Enabled } from "@/lib/backendV2/flags.ts"
@@ -389,12 +404,18 @@ function ProfilePageContent() {
 
   const canViewTrades = useMemo(
     () =>
-      !!profile &&
-      (profile.is_private !== true ||
-        currentUserId === profile.id ||
-        isFollowing),
+      canViewPrivateProfileContent(profile, currentUserId, isFollowing),
     [profile, currentUserId, isFollowing]
   )
+
+  const canViewProfilePosts = canViewTrades
+
+  const [fetchedOverviewPayoutTotal, setFetchedOverviewPayoutTotal] = useState<
+    number | null | undefined
+  >(undefined)
+  const [profilePostsCount, setProfilePostsCount] = useState<
+    number | null | undefined
+  >(undefined)
 
   const applyBootstrapLoadResult = useCallback(
     (boot: ProfileBootstrapLoadResult, segment: string) => {
@@ -1703,6 +1724,62 @@ function ProfilePageContent() {
     currentUserId,
     profile?.id,
     profileId,
+  ])
+
+  useEffect(() => {
+    if (!profile?.id) {
+      setFetchedOverviewPayoutTotal(undefined)
+      setProfilePostsCount(undefined)
+      return
+    }
+
+    const profileUserId = String(profile.id)
+    let cancelled = false
+
+    if (isDemoModeActive()) {
+      setFetchedOverviewPayoutTotal(undefined)
+      if (!canViewProfilePosts) {
+        setProfilePostsCount(null)
+      } else if (isDemoProfileId(profileUserId)) {
+        setProfilePostsCount(getDemoProfileWallPosts(profileUserId).length)
+      }
+      return
+    }
+
+    const bootstrapPosts = profilePostsCountFromSectionCounts(
+      bootstrapSectionCounts
+    )
+    const bootstrapHasPayout =
+      bootstrapPublicStats != null &&
+      bootstrapPublicStats.payout_total !== undefined
+
+    if (bootstrapHasPayout) {
+      setFetchedOverviewPayoutTotal(undefined)
+    } else {
+      void fetchProfilePayoutTotal(supabase, profileUserId).then((total) => {
+        if (!cancelled) setFetchedOverviewPayoutTotal(total)
+      })
+    }
+
+    if (bootstrapPosts != null) {
+      setProfilePostsCount(bootstrapPosts)
+    } else if (!canViewProfilePosts) {
+      setProfilePostsCount(null)
+    } else {
+      setProfilePostsCount(undefined)
+      void fetchProfilePostsCount(supabase, profileUserId).then((count) => {
+        if (!cancelled) setProfilePostsCount(count)
+      })
+    }
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    bootstrapPublicStats,
+    bootstrapSectionCounts,
+    canViewProfilePosts,
+    profile?.id,
   ])
 
   useEffect(() => {
@@ -3750,8 +3827,26 @@ function ProfilePageContent() {
     summaryReady,
     achievements,
     achievementsReady,
+    fetchedOverviewPayoutTotal,
     streakEquity,
   })
+
+  const overviewPostsCount = useMemo(() => {
+    if (!canViewProfilePosts) return null
+    const fromBootstrap = profilePostsCountFromSectionCounts(
+      bootstrapSectionCounts
+    )
+    if (fromBootstrap != null) return fromBootstrap
+    if (profilePostsCount !== undefined) return profilePostsCount
+    if (wallPostsReady) return wallPosts.length
+    return null
+  }, [
+    bootstrapSectionCounts,
+    canViewProfilePosts,
+    profilePostsCount,
+    wallPosts.length,
+    wallPostsReady,
+  ])
 
   const calendarTrades = useMemo(
     () =>
@@ -3769,11 +3864,18 @@ function ProfilePageContent() {
   )
 
   const isMobileViewport = useMaxMdViewport()
+  const isNativeIos = useIsNativeIos()
   const profileTabSwipe = useProfileTabSwipe({
     enabled: isMobileViewport,
     activeTab,
     onTabChange: setActiveTab,
   })
+
+  useEffect(() => {
+    if (isNativeIos || !isMobileViewport) return
+    if (activeTab !== "calendar") return
+    setActiveTab("trades")
+  }, [activeTab, isMobileViewport, isNativeIos])
 
   // Mobile grid expects ~12 tiles initially; top up when cache/desktop fetch left fewer.
   useEffect(() => {
@@ -3855,19 +3957,32 @@ function ProfilePageContent() {
     if (bootstrapTransientError) {
       return (
         <>
-          <div className="tt-phase1-dark mx-auto max-w-lg px-4 py-12 text-center">
-            <p className="text-sm text-gray-300">
-              Profile is temporarily unavailable. The database may be reloading.
-            </p>
-            <button
-              type="button"
-              onClick={() => void retryProfileBootstrap()}
-              disabled={bootstrapRefreshing}
-              className="mt-4 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 disabled:opacity-50"
-            >
-              {bootstrapRefreshing ? "Retrying…" : "Retry"}
-            </button>
-          </div>
+          <MobileWebViewport>
+            <div className="tt-phase1-dark px-3 py-10">
+              <MobileWebNetworkNotice
+                variant="panel"
+                title="Couldn't load profile"
+                message={MOBILE_WEB_PROFILE_LOAD_FAILED}
+                onRetry={() => void retryProfileBootstrap()}
+                retrying={bootstrapRefreshing}
+              />
+            </div>
+          </MobileWebViewport>
+          <DesktopWebViewport>
+            <div className="tt-phase1-dark mx-auto max-w-lg px-4 py-12 text-center">
+              <p className="text-sm text-gray-300">
+                Profile is temporarily unavailable. The database may be reloading.
+              </p>
+              <button
+                type="button"
+                onClick={() => void retryProfileBootstrap()}
+                disabled={bootstrapRefreshing}
+                className="mt-4 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20 disabled:opacity-50"
+              >
+                {bootstrapRefreshing ? "Retrying…" : "Retry"}
+              </button>
+            </div>
+          </DesktopWebViewport>
         </>
       )
     }
@@ -4032,26 +4147,48 @@ function ProfilePageContent() {
         >
         <div className="mx-auto max-w-5xl space-y-2 pt-3 pb-6 pl-[max(0.5rem,env(safe-area-inset-left,0px))] pr-[max(0.5rem,env(safe-area-inset-right,0px))] sm:space-y-4 sm:px-6 sm:pt-4 lg:px-8 xl:max-w-[1480px]">
           {bootstrapTransientError || (bootstrapRefreshing && headerPreviewOnly) ? (
-            <div
-              role="status"
-              className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-100/90"
-            >
-              {bootstrapTransientError ? (
-                <>
-                  Profile data may be outdated.{" "}
-                  <button
-                    type="button"
-                    onClick={() => void retryProfileBootstrap()}
-                    className="font-semibold underline underline-offset-2 hover:text-white"
+            <>
+              <MobileWebViewport>
+                {bootstrapTransientError ? (
+                  <MobileWebNetworkNotice
+                    variant="inline"
+                    message="Profile data may be outdated."
+                    onRetry={() => void retryProfileBootstrap()}
+                    retrying={bootstrapRefreshing}
+                  />
+                ) : (
+                  <p
+                    role="status"
+                    className="mb-2 rounded-[14px] border border-white/10 bg-white/5 px-3 py-2 text-center text-xs text-[color:var(--tt-text-muted,#c0cad6)]"
                   >
-                    Retry
-                  </button>
-                </>
-              ) : (
-                "Refreshing profile…"
-              )}
-            </div>
+                    Refreshing profile…
+                  </p>
+                )}
+              </MobileWebViewport>
+              <DesktopWebViewport>
+                <div
+                  role="status"
+                  className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-100/90"
+                >
+                  {bootstrapTransientError ? (
+                    <>
+                      Profile data may be outdated.{" "}
+                      <button
+                        type="button"
+                        onClick={() => void retryProfileBootstrap()}
+                        className="font-semibold underline underline-offset-2 hover:text-white"
+                      >
+                        Retry
+                      </button>
+                    </>
+                  ) : (
+                    "Refreshing profile…"
+                  )}
+                </div>
+              </DesktopWebViewport>
+            </>
           ) : null}
+          <DesktopWebViewport>
           <PlatformProfileHeader
             profile={profile}
             currentUserId={currentUserId}
@@ -4094,7 +4231,60 @@ function ProfilePageContent() {
               })()
             }}
           />
+          </DesktopWebViewport>
+          <MobileWebViewport>
+          <MobileWebProfileHeader
+            profile={profile}
+            currentUserId={currentUserId}
+            storyTriggerRef={profileStoryTriggerRef}
+            hasActiveStory={profileHasActiveStory}
+            followersCount={followersCount}
+            followingCount={followingCount}
+            metaLoading={metaLoading}
+            followingIds={profileFollowingIds}
+            requestedIds={profileRequestedIds}
+            followsYouIds={profileFollowsYouIds}
+            messageBusy={messageBusy}
+            hasRoom={hasRoom}
+            canShowVisitorRoomCta={canShowVisitorRoomCta}
+            onStoryFileSelect={(event) => void handleStoryFileSelect(event)}
+            onOpenStory={() => void handleOpenProfileStory()}
+            onFollowingChange={handleProfileFollowingChange}
+            onRequestedChange={handleProfileRequestedChange}
+            onMessage={handleMessage}
+            onOpenFollowers={() => void openFollowersModal()}
+            onOpenFollowing={() => void openFollowingModal()}
+            onEditProfile={() => router.push("/settings#profile")}
+            onCreateStory={openCreateStory}
+            onCreatePost={openCreatePostModal}
+            onCreateReel={openCreateReelModal}
+            onCreateQuickTrade={openQuickTradeModal}
+            onCreateRoom={() => router.push("/community?create=true")}
+            onViewRoom={() => {
+              void (async () => {
+                const row = ownedRoom ?? (await ensureProfileRoomLoaded())
+                if (
+                  !isOwnProfile &&
+                  row?.show_on_profile === false
+                ) {
+                  return
+                }
+                const key = profileRoomKeyFromRow(row)
+                if (!key) return
+                router.push(`/community?room=${encodeURIComponent(key)}`)
+              })()
+            }}
+            overviewVisible={overviewStatsVisible}
+            overviewIsPrivate={profile.is_private === true}
+            overviewTotalTrades={overviewTotalTrades}
+            overviewPostsCount={overviewPostsCount}
+            overviewWinRate={overviewWinRate}
+            overviewPayoutTotal={overviewPayoutTotal}
+            overviewProfitFactor={overviewProfitFactor}
+          />
+          </MobileWebViewport>
 
+          <DesktopWebViewport>
           <div className="min-w-0">
           <ProfileOverviewStats
             visible={overviewStatsVisible}
@@ -4108,12 +4298,21 @@ function ProfilePageContent() {
             streakLabel={currentStreakLabel}
           />
           </div>
+          </DesktopWebViewport>
 
           <div
             onTouchStart={profileTabSwipe.onTouchStart}
             onTouchEnd={profileTabSwipe.onTouchEnd}
           >
+          <DesktopWebViewport>
           <ProfileTabs activeTab={activeTab} onTabChange={setActiveTab} />
+          </DesktopWebViewport>
+          <MobileWebViewport>
+          <MobileWebProfileSectionPicker
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+          />
+          </MobileWebViewport>
 
           <div className="mt-2 space-y-6 sm:mt-3 md:mt-4">
             {activeTab === "trades" && (
@@ -4169,7 +4368,7 @@ function ProfilePageContent() {
                 posts={sortedPosts}
                 ready={wallPostsReady}
                 isOwnProfile={isOwnProfile}
-                canView={canViewTrades}
+                canView={canViewProfilePosts}
                 hasMore={wallPostsHasMore}
                 loadingMore={wallPostsLoadingMore}
                 onLoadMore={() => {
@@ -4237,6 +4436,7 @@ function ProfilePageContent() {
             )}
 
             {activeTab === "calendar" && (
+              <DesktopWebViewport>
               <ProfileCalendarTab
                 canView={canViewTrades}
                 loading={
@@ -4245,6 +4445,7 @@ function ProfilePageContent() {
                 trades={calendarTrades}
                 isOwnProfile={isOwnProfile}
               />
+              </DesktopWebViewport>
             )}
 
             {activeTab === "stats" && (

@@ -7,6 +7,7 @@ import {
 } from "@/app/components/ProfileLink"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { formatConversationListTime } from "@/lib/formatRelativeTime"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
 
 export type MessagesConversationRowProps = {
   conversationId: string
@@ -49,6 +50,8 @@ function MessagesConversationRow({
   onMarkUnread,
   onDelete,
 }: MessagesConversationRowProps) {
+  const isNativeIos = useIsNativeIos()
+  const phoneWeb = !isNativeIos
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
@@ -68,6 +71,10 @@ function MessagesConversationRow({
         selected
           ? "border-blue-400/40 bg-blue-500/20"
           : "border-white/10 bg-white/5 hover:bg-white/10"
+      }${
+          phoneWeb
+          ? " tt-mobile-web-press max-md:rounded-none max-md:border-0 max-md:border-b max-md:border-white/10 max-md:bg-transparent max-md:px-3 max-md:py-2 max-md:hover:bg-white/5"
+          : ""
       }`}
     >
       <button
@@ -77,7 +84,11 @@ function MessagesConversationRow({
           e.stopPropagation()
           onToggleMenu(conversationId)
         }}
-        className="absolute right-3 top-3 z-10 cursor-pointer rounded-lg border border-white/10 bg-white/10 px-2 py-1 text-sm text-white hover:bg-white/20"
+        className={`absolute right-3 top-3 z-10 cursor-pointer rounded-lg border border-white/10 bg-white/10 px-2 py-1 text-sm text-white hover:bg-white/20${
+          phoneWeb
+            ? " max-md:right-1.5 max-md:top-1/2 max-md:min-h-11 max-md:min-w-11 max-md:-translate-y-1/2 max-md:border-0 max-md:bg-transparent max-md:px-2 max-md:py-2 max-md:text-[color:var(--tt-text-muted,#57606a)]"
+            : ""
+        }`}
       >
         ⋯
       </button>
@@ -118,26 +129,39 @@ function MessagesConversationRow({
           </button>
         </div>
       ) : null}
-      <div className="flex items-center gap-3 pr-10">
+      <div className={`flex items-center gap-3 pr-10${phoneWeb ? " max-md:min-h-11 max-md:pr-9" : ""}`}>
         {!isGroup && profileUserId ? (
           <ProfileAvatarLink
             userId={profileUserId}
             username={username}
             src={avatarUrl}
             stopPropagation
-            imgClassName="h-10 w-10 shrink-0 rounded-full object-cover transition hover:scale-105"
+            imgClassName={`h-10 w-10 shrink-0 rounded-full object-cover transition hover:scale-105${
+              phoneWeb ? " max-md:h-[52px] max-md:w-[52px]" : ""
+            }`}
           />
         ) : (
           <ProfileAvatarImg
             src={avatarUrl}
-            className="h-10 w-10 shrink-0 transition hover:scale-105"
+            className={`h-10 w-10 shrink-0 transition hover:scale-105${
+              phoneWeb ? " max-md:h-[52px] max-md:w-[52px]" : ""
+            }`}
           />
         )}
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 min-w-0">
             <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-              <p className="min-w-0 truncate font-semibold text-white">
+              <p className="min-w-0 truncate font-semibold text-white max-md:text-[color:var(--tt-text,#f0f3f6)]">
+                {phoneWeb ? (
+                  <span className="md:hidden">
+                    {isGroup ? groupName || displayName : displayName || `@${username}`}
+                    {isPinned ? (
+                      <span className="ml-2 text-xs text-yellow-400">📌</span>
+                    ) : null}
+                  </span>
+                ) : null}
+                <span className={phoneWeb ? "hidden md:inline" : undefined}>
                 {isGroup ? (
                   <>
                     {groupName || displayName}
@@ -167,9 +191,16 @@ function MessagesConversationRow({
                     ) : null}
                   </>
                 )}
+                </span>
               </p>
               {unreadCount > 0 ? (
-                <span className="shrink-0 bg-red-500 text-white text-xs px-2 py-1 rounded-full tabular-nums">
+                <span
+                  className={`shrink-0 bg-red-500 text-white text-xs px-2 py-1 rounded-full tabular-nums${
+                    phoneWeb
+                      ? " max-md:bg-[#4EC4E0] max-md:px-1.5 max-md:py-0.5 max-md:text-[11px] max-md:font-semibold"
+                      : ""
+                  }`}
+                >
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </span>
               ) : null}
@@ -177,14 +208,35 @@ function MessagesConversationRow({
             {timeLabel ? (
               <time
                 dateTime={lastMessageAt ?? undefined}
-                className="shrink-0 text-xs tabular-nums whitespace-nowrap text-gray-400"
+                className={`shrink-0 text-xs tabular-nums whitespace-nowrap text-gray-400${
+                  phoneWeb
+                    ? unreadCount > 0
+                      ? " max-md:text-[#4EC4E0]"
+                      : " max-md:text-[color:var(--tt-text-muted,#57606a)]"
+                    : ""
+                }`}
               >
                 {timeLabel}
               </time>
             ) : null}
           </div>
 
-          <p className="text-sm text-gray-400 truncate">{lastMessage}</p>
+          {!isGroup && phoneWeb && username ? (
+            <p className="truncate text-[13px] text-[color:var(--tt-text-muted,#57606a)] md:hidden">
+              @{username}
+            </p>
+          ) : null}
+          <p
+            className={`text-sm text-gray-400 truncate${
+              phoneWeb
+                ? unreadCount > 0
+                  ? " max-md:line-clamp-2 max-md:whitespace-normal max-md:text-[15px] max-md:leading-snug max-md:text-[color:var(--tt-text,#f0f3f6)]"
+                  : " max-md:line-clamp-2 max-md:whitespace-normal max-md:text-[15px] max-md:leading-snug max-md:text-[color:var(--tt-text-muted,#57606a)]"
+                : ""
+            }`}
+          >
+            {lastMessage}
+          </p>
         </div>
       </div>
     </div>

@@ -11,6 +11,8 @@ final class NavigationCoordinator {
     private var eventHandler: ((NavigationEvent) -> Void)?
     /// True after a real authenticated shell entry. Deep-link repair must not run before that.
     private var didEnterAuthenticatedShell = false
+    /// Per-post loader table (`posts` vs `profile_posts`) keyed by destination id.
+    private var postDetailLoadSources: [PostID: PostDetailLoadSource] = [:]
 
     init(store: NavigationStore, eventHandler: ((NavigationEvent) -> Void)? = nil) {
         self.store = store
@@ -205,6 +207,9 @@ final class NavigationCoordinator {
     func pushHome(_ route: HomeRoute) {
         ensureAuthenticatedOrStash(.home(route))
         guard allowsContentNavigation else { return }
+        if case .post(let postID) = route, postDetailLoadSources[postID] == nil {
+            postDetailLoadSources[postID] = .profilePost
+        }
         let pathBefore = store.paths.home.count
         store.paths.home.append(route)
         logNavigationEvent(
@@ -218,11 +223,18 @@ final class NavigationCoordinator {
         emit(.pushed(tab: .home, description: String(describing: route)))
     }
 
+    func postDetailLoadSource(for postID: PostID) -> PostDetailLoadSource {
+        postDetailLoadSources[postID] ?? .profilePost
+    }
+
     func pushFeed(_ route: FeedRoute) {
         ensureAuthenticatedOrStash(.feed(route))
         guard allowsContentNavigation else { return }
         if case .room(let roomID) = route {
             InboxMarkReadCoordinator.shared.prepareOpenRoom(roomID)
+        }
+        if case .post(let postID) = route, postDetailLoadSources[postID] == nil {
+            postDetailLoadSources[postID] = .feedPost
         }
         let pathBefore = store.paths.feed.count
         store.paths.feed.append(route)
@@ -240,6 +252,9 @@ final class NavigationCoordinator {
     func pushMessages(_ route: MessagesRoute) {
         ensureAuthenticatedOrStash(.messages(route))
         guard allowsContentNavigation else { return }
+        if case .sharedPost(let postID) = route, postDetailLoadSources[postID] == nil {
+            postDetailLoadSources[postID] = .profilePost
+        }
         switch route {
         case .thread(let conversationID):
 #if DEBUG
@@ -267,6 +282,9 @@ final class NavigationCoordinator {
     func pushProfile(_ route: ProfileRoute) {
         ensureAuthenticatedOrStash(.profile(route))
         guard allowsContentNavigation else { return }
+        if case .post(let postID) = route, postDetailLoadSources[postID] == nil {
+            postDetailLoadSources[postID] = .profilePost
+        }
         if case .room(let roomID) = route {
             InboxMarkReadCoordinator.shared.prepareOpenRoom(roomID)
         }
@@ -373,7 +391,14 @@ final class NavigationCoordinator {
         }
     }
 
-    func pushPostDetail(_ postID: PostID) {
+    /// Profile wall post opened from the Feed timeline (still `profile_posts`).
+    func pushFeedProfilePost(_ postID: PostID) {
+        postDetailLoadSources[postID] = .profilePost
+        pushFeed(.post(postID))
+    }
+
+    func pushPostDetail(_ postID: PostID, loadSource: PostDetailLoadSource = .profilePost) {
+        postDetailLoadSources[postID] = loadSource
         ExperienceHaptics.play(.selection)
         switch store.selectedTab {
         case .home:
@@ -555,10 +580,10 @@ final class NavigationCoordinator {
                 )
                 pushMessages(.sharedTrade(tradeID))
             } else {
-                pushMessages(.sharedPost(postID))
+                pushPostDetail(postID, loadSource: .feedPost)
             }
         case .profilePost(let postID):
-            pushMessages(.sharedPost(postID))
+            pushPostDetail(postID, loadSource: .profilePost)
         case .achievementPost(let postID):
             pushMessages(.sharedAchievement(AchievementID(postID.rawValue)))
         case .reel(let reelID):
@@ -584,10 +609,10 @@ final class NavigationCoordinator {
                 )
                 pushFeed(.trade(tradeID))
             } else {
-                pushFeed(.post(postID))
+                pushPostDetail(postID, loadSource: .feedPost)
             }
         case .profilePost(let postID):
-            pushFeed(.post(postID))
+            pushFeedProfilePost(postID)
         case .achievementPost(let postID):
             pushFeed(.achievement(AchievementID(postID.rawValue)))
         case .reel(let reelID):
@@ -613,10 +638,10 @@ final class NavigationCoordinator {
                 )
                 pushProfile(.trade(tradeID))
             } else {
-                pushProfile(.post(postID))
+                pushPostDetail(postID, loadSource: .feedPost)
             }
         case .profilePost(let postID):
-            pushProfile(.post(postID))
+            pushPostDetail(postID, loadSource: .profilePost)
         case .achievementPost(let postID):
             pushProfile(.achievement(AchievementID(postID.rawValue)))
         case .reel(let reelID):
@@ -642,10 +667,10 @@ final class NavigationCoordinator {
                 )
                 pushHome(.socialTrade(tradeID))
             } else {
-                pushHome(.post(postID))
+                pushPostDetail(postID, loadSource: .feedPost)
             }
         case .profilePost(let postID):
-            pushHome(.post(postID))
+            pushPostDetail(postID, loadSource: .profilePost)
         case .achievementPost(let postID):
             pushHome(.achievementDetail(AchievementID(postID.rawValue)))
         case .reel(let reelID):

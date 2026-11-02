@@ -8,9 +8,11 @@ import {
   Plus,
   User,
 } from "lucide-react"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
-import { profilePath } from "@/lib/profileRoutes"
+import { DEMO_PROFILE_PATH } from "@/lib/demo/constants"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { signedInProfileHref } from "@/lib/profileRoutes"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { useIsNativeIos } from "@/lib/useIsNativeIos"
 import { fetchTotalUnreadMessageCount } from "@/lib/messageUnread"
@@ -26,6 +28,7 @@ import {
 import CreateHubMenu from "@/app/components/create/CreateHubMenu"
 import {
   resolveMobileWebActiveTab,
+  shouldHideMobileWebTabBar,
   shouldMountMobileWebTabBar,
 } from "@/lib/mobileWebTabBar"
 import "./mobileWebTabBar.css"
@@ -38,16 +41,16 @@ const PROFILE_TAB_AVATAR_PX = 48
 export default function MobileWebTabBar() {
   const isNativeIos = useIsNativeIos()
   const pathname = usePathname() || "/"
+  const searchParams = useSearchParams()
+  const search = searchParams?.toString() ? `?${searchParams.toString()}` : ""
   const { user, profile } = useUserProfile()
   const [unreadMessages, setUnreadMessages] = useState(0)
   const [createOpen, setCreateOpen] = useState(false)
 
   const profileHref =
-    profile != null
-      ? profilePath(profile)
-      : user?.id
-        ? profilePath({ id: user.id })
-        : "/profile"
+    isDemoModeActive() && !profile
+      ? DEMO_PROFILE_PATH
+      : signedInProfileHref(profile, user?.id)
   const profileAvatarUrl = profile?.avatar_url ?? null
   const hasSession = Boolean(user) || pathname.startsWith("/demo")
 
@@ -125,20 +128,28 @@ export default function MobileWebTabBar() {
   }, [isNativeIos, user?.id])
 
   useEffect(() => {
-    if (isNativeIos || !shouldMountMobileWebTabBar(pathname, hasSession)) return
-    document.documentElement.classList.add("tt-mobile-web-tabs")
-    return () => {
-      document.documentElement.classList.remove("tt-mobile-web-tabs")
+    if (isNativeIos || !hasSession || pathname === "/") return
+    const root = document.documentElement
+    if (shouldHideMobileWebTabBar(pathname, search)) {
+      root.classList.add("tt-mobile-web-pushed-detail")
+      return () => {
+        root.classList.remove("tt-mobile-web-pushed-detail")
+      }
     }
-  }, [isNativeIos, pathname, hasSession])
+    if (!shouldMountMobileWebTabBar(pathname, hasSession, search)) return
+    root.classList.add("tt-mobile-web-tabs")
+    return () => {
+      root.classList.remove("tt-mobile-web-tabs")
+    }
+  }, [isNativeIos, pathname, hasSession, search])
 
   if (isNativeIos) return null
-  if (!shouldMountMobileWebTabBar(pathname, hasSession)) return null
+  if (!shouldMountMobileWebTabBar(pathname, hasSession, search)) return null
 
   const active = resolveMobileWebActiveTab(pathname, profileHref, createOpen)
 
   const tabClass = (id: typeof active) =>
-    `relative flex h-full w-full flex-col items-center justify-center gap-0.5 text-[10px] font-medium ${
+    `relative flex h-full w-full flex-col items-center justify-center gap-0.5 text-[0.6875rem] font-medium ${
       active === id ? "text-info" : "text-chrome-foreground/70"
     }`
 
@@ -201,6 +212,11 @@ export default function MobileWebTabBar() {
               href="/messages"
               className={tabClass("messages")}
               aria-current={active === "messages" ? "page" : undefined}
+              aria-label={
+                unreadMessages > 0
+                  ? `Messages, ${unreadMessages > 9 ? "9+" : unreadMessages} unread`
+                  : "Messages"
+              }
             >
               <span className="relative">
                 <MessageCircle
@@ -209,7 +225,10 @@ export default function MobileWebTabBar() {
                   aria-hidden
                 />
                 {unreadMessages > 0 ? (
-                  <span className="absolute -right-2 -top-1 min-w-[1rem] rounded-full bg-destructive px-1 text-center text-[9px] font-semibold leading-4 text-destructive-foreground tabular-nums">
+                  <span
+                    className="absolute -right-2 -top-1 min-w-[1rem] rounded-full bg-destructive px-1 text-center text-[9px] font-semibold leading-4 text-destructive-foreground tabular-nums"
+                    aria-hidden
+                  >
                     {unreadMessages > 9 ? "9+" : unreadMessages}
                   </span>
                 ) : null}

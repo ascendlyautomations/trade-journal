@@ -23,6 +23,9 @@ import {
   getWithdrawalsLedgerGeneration,
   subscribeWithdrawalsLedger,
 } from "@/lib/withdrawalsLedgerInvalidate"
+import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
+import { isDemoUserId } from "@/lib/demo/constants"
+import { buildDemoWithdrawalsHistory } from "@/lib/demoWithdrawalsHistory"
 
 export type WithdrawalsHistoryState = {
   loading: boolean
@@ -72,6 +75,14 @@ export function useWithdrawalsHistory(
     setError(null)
     setLoadWarnings([])
     try {
+      if (isDemoSupabaseBlocked() || isDemoUserId(userId)) {
+        const demo = buildDemoWithdrawalsHistory()
+        setAccounts(demo.accounts)
+        setItems(demo.items)
+        setLoadWarnings([])
+        return
+      }
+
       const loadedAccounts = await ensureAccountsLoaded(supabase, userId, {
         force: true,
       })

@@ -1,6 +1,8 @@
 "use client"
 
 import { useCallback, useRef, type TouchEvent } from "react"
+import { isLeadingBackGestureZone } from "@/lib/leadingBackGestureZone"
+import { isNativeIos } from "@/lib/nativePlatform"
 
 const SWIPE_THRESHOLD_PX = 48
 
@@ -34,6 +36,7 @@ export function useMobileTradeDetailSwipe(options: {
       startX.current = null
       startY.current = null
       if (x0 == null || y0 == null) return
+      if (!isNativeIos() && isLeadingBackGestureZone(x0)) return
 
       const x1 = e.changedTouches[0]?.clientX ?? x0
       const y1 = e.changedTouches[0]?.clientY ?? y0

@@ -38,6 +38,10 @@ import {
   type PropfirmTrade,
   type TrailingDrawdownResult,
 } from "@/lib/propfirmMetrics"
+import {
+  formatMobileWebChartAxisUsd,
+  MOBILE_WEB_CHART,
+} from "@/lib/mobileWebAnalytics"
 import LockedFeature from "@/app/components/LockedFeature"
 import CustomSelect from "@/app/components/CustomSelect"
 import EmptyState from "@/app/components/ui/EmptyState"
@@ -74,6 +78,7 @@ import PayoutSetupModal, {
 } from "@/app/components/PayoutSetupModal"
 import PropFirmPayoutHistoryModal from "@/app/components/propfirm/PropFirmPayoutHistoryModal"
 import PropfirmProfitTargetProgressBar from "@/app/components/propfirm/PropfirmProfitTargetProgressBar"
+import MobileWebPropFirmSurface from "@/app/components/mobile/analytics/MobileWebPropFirmSurface"
 import PropFirmDesktopView, {
   PropFirmDesktopHeader,
   PropFirmDesktopSkeleton,
@@ -141,7 +146,7 @@ import {
 } from "@/lib/demo/demoPropfirm"
 
 const SECTION_PANEL =
-  "rounded-xl border border-white/10 bg-white/5 p-2.5 backdrop-blur-md md:p-4"
+  "rounded-xl border border-white/10 bg-white/5 p-2.5 backdrop-blur-md max-md:overflow-x-hidden md:p-4"
 
 /** Explore / dashboard hierarchy: labels quieter, copy readable, values bright. */
 const PROPFIRM_LABEL_CLASS = "text-gray-400"
@@ -180,7 +185,7 @@ function PropfirmStat({
   if (positive === true) color = "text-emerald-400"
   if (positive === false) color = "text-red-400"
 
-  const className = `flex min-h-[76px] w-full flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 p-2.5 text-center backdrop-blur-md md:min-h-[90px] md:p-4${
+  const className = `flex min-h-[76px] w-full flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 p-2.5 text-center backdrop-blur-md max-md:min-h-[68px] max-md:items-start max-md:px-3 max-md:text-left md:min-h-[90px] md:p-4${
     onClick
       ? " cursor-pointer transition hover:border-white/20 hover:bg-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
       : ""
@@ -188,11 +193,11 @@ function PropfirmStat({
 
   const content = (
     <>
-      <p className={`mb-1 text-[11px] md:text-sm ${PROPFIRM_LABEL_CLASS}`}>
+      <p className={`mb-1 text-[11px] max-md:text-left md:text-sm ${PROPFIRM_LABEL_CLASS}`}>
         {title}
       </p>
       <span
-        className={`block whitespace-nowrap text-sm font-semibold leading-tight tabular-nums md:text-lg lg:text-xl ${color}`}
+        className={`block whitespace-nowrap text-sm font-semibold leading-tight tabular-nums max-md:text-left md:text-lg lg:text-xl ${color}`}
       >
         {value}
       </span>
@@ -233,15 +238,29 @@ const PROPFIRM_EQUITY_CURVE_SCOPE: PropfirmEquityCurveScope = "lifetime"
 
 function PropfirmPageShell({ children }: { children: ReactNode }) {
   return (
-    <div className="tt-propfirm-mode tt-phase3-dark w-full px-3 pb-3 pt-0 text-white md:px-4 md:pb-10">
-      <div className="relative z-0 mx-auto mt-4 flex w-full max-w-[1600px] flex-col gap-4 px-1 md:px-6">
+    <div className="tt-propfirm-mode tt-phase3-dark w-full px-3 pb-3 pt-0 text-white md:px-4 md:pb-10 max-md:px-3 max-md:pb-3">
+      <div className="relative z-0 mx-auto mt-4 flex w-full max-w-[1600px] flex-col gap-4 px-1 md:px-6 max-md:mt-1 max-md:gap-3 max-md:px-0">
         {children}
       </div>
     </div>
   )
 }
 
-function PropfirmEquityCurve({ data }: { data: PropfirmEquityCurvePoint[] }) {
+function PropfirmEquityPlot({
+  data,
+  className,
+  yAxisWidth,
+  tickSize,
+  compactAxis,
+  margin,
+}: {
+  data: PropfirmEquityCurvePoint[]
+  className: string
+  yAxisWidth: number
+  tickSize: number
+  compactAxis: boolean
+  margin: { top: number; right: number; left: number; bottom: number }
+}) {
   const plotRef = useRef<HTMLDivElement>(null)
   const [plotReady, setPlotReady] = useState(false)
   const values = data.map((point) => point.balance)
@@ -261,8 +280,76 @@ function PropfirmEquityCurve({ data }: { data: PropfirmEquityCurvePoint[] }) {
   }, [data.length])
 
   return (
+    <div ref={plotRef} className={className}>
+      {plotReady ? (
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={margin}>
+            <CartesianGrid {...chartCartesianGridProps} strokeDasharray="3 3" />
+            <XAxis
+              dataKey="date"
+              {...chartAxisTick(tickSize)}
+              tickFormatter={(value) => {
+                const label = String(value)
+                if (label === "Start") return label
+                const d = new Date(`${label}T12:00:00Z`)
+                if (Number.isNaN(d.getTime())) return label
+                return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`
+              }}
+              interval="preserveStartEnd"
+              minTickGap={compactAxis ? 28 : 20}
+            />
+            <YAxis
+              {...chartAxisTick(tickSize)}
+              tickFormatter={(value) =>
+                compactAxis
+                  ? formatMobileWebChartAxisUsd(Number(value))
+                  : formatPropfirmUsd(Number(value))
+              }
+              width={yAxisWidth}
+              domain={yAxisDomain}
+              ticks={yAxisTicks}
+              allowDataOverflow
+            />
+            <Tooltip
+              formatter={(value, name) => {
+                if (name === "Balance") {
+                  return [formatPropfirmUsd(Number(value)), "Balance"]
+                }
+                return [formatPropfirmUsd(Number(value)), "Day P&L"]
+              }}
+              labelFormatter={(label) => `Day: ${String(label)}`}
+              {...chartTooltipStyles}
+              contentStyle={{
+                ...chartTooltipStyles.contentStyle,
+                borderRadius: "10px",
+              }}
+              {...(compactAxis
+                ? {
+                    wrapperStyle: { maxWidth: 200, zIndex: 20 },
+                    allowEscapeViewBox: { x: true, y: true },
+                  }
+                : {})}
+            />
+            <Line
+              type="monotone"
+              dataKey="balance"
+              name="Balance"
+              stroke="#22c55e"
+              strokeWidth={2.5}
+              dot={data.length <= 12 ? { r: 3, fill: "#22c55e" } : false}
+              activeDot={{ r: 5 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      ) : null}
+    </div>
+  )
+}
+
+function PropfirmEquityCurve({ data }: { data: PropfirmEquityCurvePoint[] }) {
+  return (
     <div className={SECTION_PANEL}>
-      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+      <div className="mb-3 flex flex-col gap-1 max-md:mb-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className={PROPFIRM_SECTION_TITLE_CLASS}>
             Equity Curve
@@ -274,65 +361,24 @@ function PropfirmEquityCurve({ data }: { data: PropfirmEquityCurvePoint[] }) {
       </div>
 
       {data.length > 1 ? (
-        <div
-          ref={plotRef}
-          className="h-[240px] w-full overflow-hidden sm:h-[280px] md:h-[300px]"
-        >
-          {plotReady ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={data}
-              margin={{ top: 4, right: 12, left: 8, bottom: 10 }}
-            >
-              <CartesianGrid {...chartCartesianGridProps} strokeDasharray="3 3" />
-              <XAxis
-                dataKey="date"
-                {...chartAxisTick(11)}
-                tickFormatter={(value) => {
-                  const label = String(value)
-                  if (label === "Start") return label
-                  const d = new Date(`${label}T12:00:00Z`)
-                  if (Number.isNaN(d.getTime())) return label
-                  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`
-                }}
-                interval="preserveStartEnd"
-                minTickGap={20}
-              />
-              <YAxis
-                {...chartAxisTick(11)}
-                tickFormatter={(value) => formatPropfirmUsd(Number(value))}
-                width={72}
-                domain={yAxisDomain}
-                ticks={yAxisTicks}
-                allowDataOverflow
-              />
-              <Tooltip
-                formatter={(value, name) => {
-                  if (name === "Balance") {
-                    return [formatPropfirmUsd(Number(value)), "Balance"]
-                  }
-                  return [formatPropfirmUsd(Number(value)), "Day P&L"]
-                }}
-                labelFormatter={(label) => `Day: ${String(label)}`}
-                {...chartTooltipStyles}
-                contentStyle={{
-                  ...chartTooltipStyles.contentStyle,
-                  borderRadius: "10px",
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="balance"
-                name="Balance"
-                stroke="#22c55e"
-                strokeWidth={2.5}
-                dot={data.length <= 12 ? { r: 3, fill: "#22c55e" } : false}
-                activeDot={{ r: 5 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-          ) : null}
-        </div>
+        <>
+          <PropfirmEquityPlot
+            data={data}
+            className="h-[200px] w-full overflow-hidden md:hidden"
+            yAxisWidth={MOBILE_WEB_CHART.yAxisWidth}
+            tickSize={MOBILE_WEB_CHART.tickSize}
+            compactAxis
+            margin={MOBILE_WEB_CHART.equityMargin}
+          />
+          <PropfirmEquityPlot
+            data={data}
+            className="hidden h-[240px] w-full overflow-hidden sm:h-[280px] md:block md:h-[300px]"
+            yAxisWidth={72}
+            tickSize={11}
+            compactAxis={false}
+            margin={{ top: 4, right: 12, left: 8, bottom: 10 }}
+          />
+        </>
       ) : (
         <EmptyState
           title="Not Enough Data Yet"
@@ -1346,7 +1392,7 @@ export default function PropFirmPage() {
       }}
       placeholder="Select Account"
       options={accountSelectOptions}
-      triggerClassName={ACCOUNT_DROPDOWN_TRIGGER_COMPACT_CLASS}
+      triggerClassName={`${ACCOUNT_DROPDOWN_TRIGGER_COMPACT_CLASS} max-md:h-11 max-md:min-h-11`}
       menuClassName={`${SELECT_MENU_CLASS} tt-propfirm-account-menu`}
     />
   )
@@ -1387,7 +1433,7 @@ export default function PropFirmPage() {
     <PropfirmPageShell>
       <FeedbackModal {...feedbackModalProps} />
         <div className="tt-propfirm-legacy">
-        <div className={SECTION_PANEL}>
+        <div className={`${SECTION_PANEL} max-md:hidden`}>
             <div
               className={
                 isEvalAccountSelected
@@ -1418,7 +1464,7 @@ export default function PropFirmPage() {
                   }}
                   placeholder="Select Account"
                   options={accountSelectOptions}
-                  triggerClassName={ACCOUNT_DROPDOWN_TRIGGER_COMPACT_CLASS}
+                  triggerClassName={`${ACCOUNT_DROPDOWN_TRIGGER_COMPACT_CLASS} max-md:h-11 max-md:min-h-11`}
                   menuClassName={`${SELECT_MENU_CLASS} tt-propfirm-account-menu`}
                 />
               </div>
@@ -1643,10 +1689,61 @@ export default function PropFirmPage() {
           </>
         ) : (
           <>
-          <div className="tt-propfirm-legacy flex flex-col gap-4">
+          <div className="md:hidden">
+            <MobileWebPropFirmSurface
+              model={desktopModel}
+              selector={renderAccountSelector()}
+              actions={renderDesktopActions()}
+              equity={
+                showAccountDashboard ? (
+                  <PropfirmEquityCurve data={equityCurveData} />
+                ) : null
+              }
+              trailing={cycleTrailingMetrics}
+              startingBalance={startingBalance}
+              dailyRows={lifetimeDailyRows}
+              empty={
+                showAccountsLoadError ? (
+                  <EmptyState
+                    title="Unable to Load Accounts"
+                    description={accountsLoadError ?? undefined}
+                    action={
+                      <button
+                        type="button"
+                        onClick={() => void loadAccounts()}
+                        className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+                      >
+                        Retry
+                      </button>
+                    }
+                  />
+                ) : isEmptyAccounts ? (
+                  <EmptyState
+                    title="No Prop Firm Accounts"
+                    description="You don't have any Prop Firm accounts yet. Create one in Settings to start tracking rule progress."
+                    action={
+                      <Link
+                        href="/settings#trading-accounts"
+                        className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:hover:bg-blue-500"
+                      >
+                        Create Prop Firm Account
+                      </Link>
+                    }
+                  />
+                ) : !showAccountDashboard && !isAllAccountsView ? (
+                  <EmptyState
+                    title="Select an Account"
+                    description="Choose a prop firm account above to view drawdown room, rule status, and daily performance."
+                    className="py-8"
+                  />
+                ) : null
+              }
+            />
+          </div>
+          <div className="tt-propfirm-legacy hidden flex-col gap-4 md:flex">
         {showAccountDashboard && (
           <div
-            className={`grid gap-3 ${
+            className={`grid gap-3 max-md:gap-2 ${
               showPayoutControls
                 ? "grid-cols-2 lg:grid-cols-4"
                 : "grid-cols-2 lg:grid-cols-3"

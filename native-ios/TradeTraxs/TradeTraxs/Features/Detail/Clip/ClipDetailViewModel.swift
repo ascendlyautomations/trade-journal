@@ -9,7 +9,7 @@ final class ClipDetailViewModel {
     enum Phase: Equatable {
         case loading
         case loaded
-        case failed(String)
+        case failed(DetailLoadFailurePresentation)
     }
 
     private(set) var phase: Phase = .loading
@@ -173,7 +173,9 @@ final class ClipDetailViewModel {
         } catch {
             guard !Task.isCancelled else { return }
             if reel == nil {
-                phase = .failed(ProfileSectionSupport.message(for: error))
+                phase = .failed(
+                    DetailLoadFailureSupport.presentation(for: error, content: .clip)
+                )
             }
         }
         loadTask = nil

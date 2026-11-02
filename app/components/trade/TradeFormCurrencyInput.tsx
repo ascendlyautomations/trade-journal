@@ -40,6 +40,8 @@ export default function TradeFormCurrencyInput({
       <input
         id={id}
         type="text"
+        inputMode="decimal"
+        autoComplete="off"
         tabIndex={tabIndex}
         value={getTradeFormCurrencyInputDisplayValue(value)}
         onChange={(e) =>

@@ -320,6 +320,7 @@ struct HomeNavigationStack: View {
         case .post(let postID):
             PostDetailView(
                 postID: postID,
+                loadSource: coordinator.postDetailLoadSource(for: postID),
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
@@ -478,6 +479,7 @@ struct FeedNavigationStack: View {
         case .post(let postID):
             PostDetailView(
                 postID: postID,
+                loadSource: coordinator.postDetailLoadSource(for: postID),
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
@@ -716,6 +718,7 @@ struct MessagesNavigationStack: View {
         case .sharedPost(let postID):
             PostDetailView(
                 postID: postID,
+                loadSource: coordinator.postDetailLoadSource(for: postID),
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
@@ -805,6 +808,7 @@ struct ProfileNavigationStack: View {
         case .post(let postID):
             PostDetailView(
                 postID: postID,
+                loadSource: coordinator.postDetailLoadSource(for: postID),
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )

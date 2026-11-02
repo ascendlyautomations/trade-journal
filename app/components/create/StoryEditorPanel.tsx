@@ -125,7 +125,10 @@ export default function StoryEditorPanel({
     >
       <div className="min-w-0">
         <p className="text-sm font-semibold text-white">Edit your story</p>
-        <p className="text-xs text-gray-300">
+        <p className="hidden text-xs text-muted-foreground max-md:block">
+          Pinch to zoom and drag to reposition the photo.
+        </p>
+        <p className="text-xs text-gray-300 max-md:hidden">
           Drag the photo to reposition; pinch or Ctrl+scroll to zoom.
         </p>
       </div>
@@ -133,7 +136,7 @@ export default function StoryEditorPanel({
         type="button"
         variant="secondary"
         size="md"
-        className="shrink-0 border-emerald-400/40 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/25"
+        className="h-11 w-full shrink-0 border-emerald-400/40 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/25 sm:w-auto"
         onClick={handleAddText}
         disabled={editor.isEditingText}
         data-testid="story-editor-add-text-button"
@@ -149,7 +152,12 @@ export default function StoryEditorPanel({
         role="status"
         className="rounded-lg border border-emerald-400/35 bg-emerald-500/15 px-3 py-2.5 text-sm text-emerald-100"
       >
-        Adjust your photo in the frame (drag / pinch / Ctrl+scroll), then tap{" "}
+        <span className="max-md:hidden">
+          Adjust your photo in the frame (drag / pinch / Ctrl+scroll), then tap{" "}
+        </span>
+        <span className="hidden max-md:inline">
+          Pinch and drag to frame your photo, then tap{" "}
+        </span>
         <span className="font-semibold text-white">Add text</span> or{" "}
         <span className="font-semibold text-white">Aa</span> for captions.
       </div>
@@ -176,11 +184,17 @@ export default function StoryEditorPanel({
       textAreaRef={textAreaFocusRef}
     />
   ) : (
-    <p className="text-xs text-gray-300">
-      Tap the canvas to adjust the photo when no text is selected. While
-      editing text, use Text size or drag the overlay; pinch or Ctrl+scroll also
-      resize.
-    </p>
+    <>
+      <p className="hidden text-xs text-muted-foreground max-md:block">
+        Tap the canvas to move the photo. Drag text overlays to reposition; use
+        Text size to scale.
+      </p>
+      <p className="text-xs text-gray-300 max-md:hidden">
+        Tap the canvas to adjust the photo when no text is selected. While
+        editing text, use Text size or drag the overlay; pinch or Ctrl+scroll
+        also resize.
+      </p>
+    </>
   )
 
   const editorColumn = (
@@ -206,7 +220,7 @@ export default function StoryEditorPanel({
     >
       {editorColumn}
       {showFeedPreview && profile && previewObjectUrl ? (
-        <div className="space-y-2">
+        <div className="hidden space-y-2 md:block">
           <p className="text-sm text-gray-300">Feed preview</p>
           <StoryFrame
             profile={profile}

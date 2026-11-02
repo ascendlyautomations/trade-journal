@@ -5,6 +5,7 @@ import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
 import { vaultRefFromFeedItem } from "@/lib/vault/refs"
 import type { FeedLikeMeta } from "./FeedPostCard"
 import { FEED_CARD_ENGAGEMENT_ROW_CLASS } from "@/app/components/ui/detailModalEngagement"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
 
 type FeedPostActionsProps = {
   post: any
@@ -27,13 +28,18 @@ function FeedPostActions({
   onOpenComments,
   onSharePost,
 }: FeedPostActionsProps) {
+  const phoneWeb = !useIsNativeIos()
   const handleOpenComments = useCallback(
     () => onOpenComments(),
     [onOpenComments]
   )
 
   return (
-    <div className={FEED_CARD_ENGAGEMENT_ROW_CLASS}>
+    <div
+      className={`${FEED_CARD_ENGAGEMENT_ROW_CLASS}${
+        phoneWeb ? " max-md:px-3" : ""
+      }`}
+    >
       <div className="min-w-0">
         <PostInteractionsEngagement
           post={post}

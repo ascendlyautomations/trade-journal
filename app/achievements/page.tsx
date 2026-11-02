@@ -27,6 +27,8 @@ import { useUserAchievements } from "@/lib/useUserAchievements"
 import { patchUserAchievementsCache } from "@/lib/userAchievementsCache"
 import { SkeletonAchievementsGrid } from "../components/ui/skeletons"
 import EmptyState from "../components/ui/EmptyState"
+import MobileWebProfileAchievementGrid from "@/app/components/mobile/profile/MobileWebProfileAchievementGrid"
+import { MOBILE_WEB_NEUTRAL_PAGE_BG } from "@/lib/mobileWebPageSurface"
 
 export default function AchievementsPage() {
   const { user, profile, loading: profileLoading } = useUserProfile()
@@ -128,10 +130,10 @@ export default function AchievementsPage() {
 
   return (
     <>
-      <div className="tt-ach-page tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-gray-100 sm:px-6 xl:px-8 2xl:px-12">
-        <div className="tt-ach-workspace mx-auto max-w-6xl space-y-5">
-          <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
+      <div className={`tt-ach-page tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-gray-100 sm:px-6 xl:px-8 2xl:px-12 max-md:px-3 max-md:py-3 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
+        <div className="tt-ach-workspace mx-auto max-w-6xl space-y-5 max-md:space-y-3">
+          <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 p-5 sm:flex-row sm:items-center sm:justify-between max-md:flex-row max-md:items-center max-md:rounded-[14px] max-md:border-0 max-md:bg-transparent max-md:p-0">
+            <div className="max-md:hidden">
               <h1 className="text-2xl font-semibold text-blue-300">
                 Achievements
               </h1>
@@ -142,7 +144,7 @@ export default function AchievementsPage() {
             <button
               type="button"
               onClick={openCreate}
-              className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600"
+              className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 max-md:min-h-11 max-md:w-full max-md:rounded-[14px]"
             >
               + Add Achievement
             </button>
@@ -168,10 +170,10 @@ export default function AchievementsPage() {
                 key={option.value}
                 type="button"
                 onClick={() => setFilter(option.value)}
-                className={`min-w-0 flex-1 basis-0 rounded-lg border px-2 py-1.5 text-center text-xs whitespace-nowrap md:hidden ${
+                className={`tt-mobile-web-hit-y min-w-0 flex-1 basis-0 rounded-lg border px-2 py-1.5 text-center text-xs whitespace-nowrap md:hidden ${
                   achievementPageMobileFilterActive(filter, option.value)
-                    ? "border-blue-400/60 bg-blue-500/20 text-white"
-                    : "border-white/10 bg-white/5 text-gray-200 hover:bg-white/10"
+                    ? "border-blue-400/60 bg-blue-500/20 text-[color:var(--tt-text,#1f2328)]"
+                    : "border-white/10 bg-white/5 text-[color:var(--tt-text-muted,#57606a)] hover:bg-white/10"
                 }`}
               >
                 {option.label}
@@ -210,7 +212,7 @@ export default function AchievementsPage() {
           ) : null}
 
           {!showMilestonesTab && !pageLoading && featured.length > 0 ? (
-            <section className="space-y-3">
+            <section className="space-y-3 max-md:hidden">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-white">Featured</h2>
                 <span className="text-xs text-gray-400">{unreadFeatured} highlighted</span>
@@ -263,6 +265,14 @@ export default function AchievementsPage() {
               className="py-10"
             />
           ) : (
+            <>
+            <div className="md:hidden">
+              <MobileWebProfileAchievementGrid
+                achievements={visible}
+                onOpenDetail={setSelectedAchievementDetail}
+              />
+            </div>
+            <div className="hidden md:block">
             <section className="tt-ach-grid">
               {visible.map((a) => (
                 <AchievementCard
@@ -275,6 +285,8 @@ export default function AchievementsPage() {
                 />
               ))}
             </section>
+            </div>
+            </>
           )}
         </div>
       </div>

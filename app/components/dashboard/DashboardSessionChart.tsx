@@ -50,6 +50,8 @@ export type DashboardSessionChartProps = {
    * never mounts the fixed mobile pie.
    */
   variant?: "mobile" | "desktop"
+  /** Drop outer card chrome when wrapped in a phone chart block. */
+  embedded?: boolean
 }
 
 function sessionTitleColor(name: DashboardSessionBucket) {
@@ -507,6 +509,7 @@ export default function DashboardSessionChart({
   sessionBuckets,
   totalTrades = 0,
   variant = "desktop",
+  embedded = false,
 }: DashboardSessionChartProps) {
   const showEmpty = totalTrades === 0
   const isMobile = variant === "mobile"
@@ -516,19 +519,23 @@ export default function DashboardSessionChart({
 
   return (
     <div
-      className={`flex h-full min-h-[260px] flex-col rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:min-h-[300px] md:p-4 ${
-        isMobile
-          ? "h-auto min-h-0 px-2 pb-1.5 pt-1.5"
-          : ""
-      }`}
+      className={
+        embedded
+          ? "w-full"
+          : `flex h-full min-h-[260px] flex-col rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:min-h-[300px] md:p-4 ${
+              isMobile ? "h-auto min-h-0 px-2 pb-1.5 pt-1.5" : ""
+            }`
+      }
     >
-      <h2
-        className={`mb-2 text-xs font-semibold text-blue-300 md:mb-3 md:text-base ${
-          isMobile ? "mb-1" : ""
-        }`}
-      >
-        Session Performance
-      </h2>
+      {embedded ? null : (
+        <h2
+          className={`mb-2 text-xs font-semibold text-blue-300 md:mb-3 md:text-base ${
+            isMobile ? "mb-1" : ""
+          }`}
+        >
+          Session Performance
+        </h2>
+      )}
       {showEmpty ? (
         <DashboardWidgetEmptyState
           variant="no-trades"

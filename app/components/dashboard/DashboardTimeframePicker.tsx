@@ -1,10 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
+import { useMobileWebSheetDismiss } from "@/lib/useMobileWebSheetDismiss"
+import { usePhoneWebDialogFocus } from "@/lib/usePhoneWebDialogFocus"
 import {
   DASHBOARD_ALL_TIMEFRAME_LABEL,
   DASHBOARD_PRESET_LABEL_TO_VALUE,
@@ -46,6 +48,9 @@ export default function DashboardTimeframePicker({
   const [endDate, setEndDate] = useState("")
 
   useModalScrollLock(open && presentation === "sheet")
+  const sheetDismiss = useMobileWebSheetDismiss(onClose)
+  const panelRef = useRef<HTMLDivElement>(null)
+  usePhoneWebDialogFocus(open, panelRef)
 
   useEffect(() => {
     if (!open) return
@@ -183,12 +188,14 @@ export default function DashboardTimeframePicker({
       >
         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" aria-hidden />
         <div
+          ref={panelRef}
           role="dialog"
           aria-modal="true"
           aria-labelledby="dashboard-timeframe-sheet-title"
           className="relative z-10 flex max-h-[min(88svh,640px)] w-full flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-[#0b1f3a] text-white shadow-xl pb-[var(--safe-area-bottom)]"
           onClick={(e) => e.stopPropagation()}
         >
+          <div {...sheetDismiss}>
           <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-white/25" aria-hidden />
           <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
             <h2
@@ -199,6 +206,7 @@ export default function DashboardTimeframePicker({
             </h2>
             <ModalCloseButton onClick={onClose} />
           </div>
+          </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{body}</div>
         </div>
       </div>,
@@ -208,7 +216,10 @@ export default function DashboardTimeframePicker({
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="relative w-full max-w-md bg-[#0b1f3a] rounded-2xl p-6 border border-white/10 shadow-xl">
+      <div
+        ref={panelRef}
+        className="relative w-full max-w-md bg-[#0b1f3a] rounded-2xl p-6 border border-white/10 shadow-xl"
+      >
         <ModalCloseButton
           onClick={onClose}
           className="absolute right-4 top-4 z-10"

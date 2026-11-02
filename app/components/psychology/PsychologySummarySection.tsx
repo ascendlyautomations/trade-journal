@@ -16,7 +16,7 @@ export default function PsychologySummarySection({
 }: PsychologySummarySectionProps) {
   return (
     <section
-      className="rounded-xl border border-white/10 bg-white/5 p-4"
+      className="rounded-xl border border-white/10 bg-white/5 p-4 max-md:p-3"
       data-testid="psychologyCoach.summary"
     >
       <h2 className="text-lg font-bold text-white">{summary.title}</h2>

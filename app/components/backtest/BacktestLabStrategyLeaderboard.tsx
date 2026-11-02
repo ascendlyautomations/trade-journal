@@ -113,9 +113,15 @@ export default function BacktestLabStrategyLeaderboard({
   return (
     <section className="mb-6 space-y-2">
       <div>
-        <h2 className="text-xl font-semibold text-white">Strategy leaderboard</h2>
-        <p className="text-sm text-gray-400">
-          Grouped by strategy name (case-insensitive). Click a row to filter trades.
+        <h2 className="text-xl font-semibold text-white max-md:text-[15px]">
+          <span className="md:hidden">Strategy Breakdown</span>
+          <span className="hidden md:inline">Strategy leaderboard</span>
+        </h2>
+        <p className="text-sm text-gray-400 max-md:text-xs">
+          <span className="md:hidden">Tap a card to filter trades.</span>
+          <span className="hidden md:inline">
+            Grouped by strategy name (case-insensitive). Click a row to filter trades.
+          </span>
         </p>
       </div>
       <BacktestLabSortableTable

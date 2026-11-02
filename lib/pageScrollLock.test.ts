@@ -6,10 +6,23 @@ import {
   unlockPageScroll,
 } from "./pageScrollLock.ts"
 
-type OverflowElement = { style: { overflow: string } }
+type OverflowElement = {
+  style: {
+    overflow: string
+    position: string
+    top: string
+    left: string
+    right: string
+    width: string
+  }
+  classList?: { contains: (name: string) => boolean }
+  scrollTop?: number
+}
 
 function createOverflowElement(): OverflowElement {
-  return { style: { overflow: "" } }
+  return {
+    style: { overflow: "", position: "", top: "", left: "", right: "", width: "" },
+  }
 }
 
 describe("page scroll lock", () => {
@@ -75,6 +88,62 @@ describe("page scroll lock", () => {
     lockPageScroll()
     unlockPageScroll()
     assert.equal(body.style.overflow, "")
+  })
+
+  it("pins the body on phone web and restores scroll when the sheet closes", () => {
+    html.classList = { contains: () => false }
+    let scrolled = { x: -1, y: -1 }
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        scrollY: 240,
+        matchMedia: () => ({ matches: true }),
+        scrollTo: (x: number, y: number) => {
+          scrolled = { x, y }
+        },
+      },
+    })
+
+    lockPageScroll()
+    assert.equal(body.style.position, "fixed")
+    assert.equal(body.style.top, "-240px")
+    assert.equal(html.style.overflow, "hidden")
+
+    unlockPageScroll()
+    assert.equal(body.style.position, "")
+    assert.equal(body.style.top, "")
+    assert.equal(html.style.overflow, "")
+    assert.deepEqual(scrolled, { x: 0, y: 240 })
+  })
+
+  it("does not pin the body on native iOS or desktop widths", () => {
+    html.classList = { contains: (name) => name === "tt-native-ios" }
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        scrollY: 80,
+        matchMedia: () => ({ matches: true }),
+        scrollTo: () => {},
+      },
+    })
+
+    lockPageScroll()
+    assert.equal(body.style.position, "")
+    assert.equal(body.style.overflow, "hidden")
+    unlockPageScroll()
+
+    html.classList = { contains: () => false }
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        scrollY: 80,
+        matchMedia: () => ({ matches: false }),
+        scrollTo: () => {},
+      },
+    })
+    lockPageScroll()
+    assert.equal(body.style.position, "")
+    unlockPageScroll()
   })
 })
 export {}

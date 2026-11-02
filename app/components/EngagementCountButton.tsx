@@ -42,7 +42,7 @@ export default function EngagementCountButton({
 
   const variantClass =
     variant === "boxed"
-      ? "inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg bg-white/5 px-2.5 text-sm text-gray-300 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
+      ? "tt-mobile-web-hit inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg bg-white/5 px-2.5 text-sm text-gray-300 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
       : "inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-sm text-gray-400 hover:text-gray-200 disabled:opacity-50"
 
   const syncClass = syncing ? MICRO.syncPulse : ""

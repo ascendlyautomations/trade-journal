@@ -21,9 +21,14 @@ function mockClient(
 ): SupabaseClient<Database> {
   let attempt = 0
   return {
-    rpc: async (_name, args, _opts) => {
+    rpc(_name: string, args: Record<string, unknown>) {
       attempt += 1
-      return handler(args as Record<string, unknown>, attempt)
+      const pending = handler(args, attempt)
+      return Object.assign(pending, {
+        abortSignal(_signal: AbortSignal) {
+          return pending
+        },
+      })
     },
   } as unknown as SupabaseClient<Database>
 }

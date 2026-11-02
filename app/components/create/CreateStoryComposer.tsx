@@ -1,7 +1,13 @@
 "use client"
 
 import type { ChangeEvent } from "react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react"
 import StoryEditorPanel from "@/app/components/create/StoryEditorPanel"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
@@ -19,6 +25,16 @@ import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { useRegisterCreatePagePrimary } from "@/app/components/create/registerCreatePagePrimary"
 import type { CreatePagePrimaryRegistration } from "@/app/components/create/useCreatePagePrimaryAction"
+import { isPhoneWebTouchTarget } from "@/lib/mobileWebTouch"
+
+function subscribePhoneWeb(onChange: () => void) {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return () => {}
+  }
+  const media = window.matchMedia("(max-width: 767px)")
+  media.addEventListener("change", onChange)
+  return () => media.removeEventListener("change", onChange)
+}
 
 export type CreateStoryComposerProps = {
   layout: "page" | "modal"
@@ -37,6 +53,11 @@ export default function CreateStoryComposer({
 }: CreateStoryComposerProps) {
   const { user, profile } = useUserProfile()
   const userId = user?.id ?? null
+  const phoneWeb = useSyncExternalStore(
+    subscribePhoneWeb,
+    isPhoneWebTouchTarget,
+    () => false
+  )
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const { runUpload } = useUploadProgress()
   const storyEditor = useStoryEditorState()
@@ -200,17 +221,22 @@ export default function CreateStoryComposer({
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className={`flex w-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/20 bg-white/5 text-center transition hover:border-emerald-400/40 hover:bg-emerald-500/10 ${
-            layout === "page" ? "min-h-[240px] px-6 py-16 sm:min-h-[320px]" : "px-4 py-10"
+          className={`tt-create-media-picker flex w-full flex-col items-center justify-center gap-2 border border-dashed text-center transition ${
+            layout === "page"
+              ? phoneWeb
+                ? "min-h-[11rem] px-4 py-10"
+                : "min-h-[240px] px-6 py-16 sm:min-h-[320px] border-white/20 bg-white/5 hover:border-emerald-400/40 hover:bg-emerald-500/10"
+              : "px-4 py-10 border-white/20 bg-white/5 hover:border-emerald-400/40 hover:bg-emerald-500/10"
           }`}
         >
           <span className="text-3xl" aria-hidden>
             📷
           </span>
-          <span className="text-base font-medium text-white">Add a photo</span>
+          <span className="text-base font-medium text-white">Add photo or video</span>
           <span className="max-w-sm text-sm text-gray-400">
-            Drag to reposition, pinch or Ctrl+scroll to zoom, then add text
-            before posting.
+            {phoneWeb
+              ? "Tap to choose from your library. Add text in the editor before posting."
+              : "Drag to reposition, pinch or Ctrl+scroll to zoom, then add text before posting."}
           </span>
         </button>
       ) : (
@@ -229,9 +255,9 @@ export default function CreateStoryComposer({
             type="button"
             disabled={postingStory}
             onClick={() => fileInputRef.current?.click()}
-            className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-200 transition hover:bg-white/10 disabled:opacity-50"
+            className="tt-create-secondary-button disabled:opacity-50 md:rounded-lg md:border md:border-white/10 md:bg-white/5 md:px-3 md:py-2.5 md:text-sm md:text-gray-200 md:transition md:hover:bg-white/10"
           >
-            Change image
+            Change media
           </button>
         </div>
       )}

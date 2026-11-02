@@ -2,9 +2,11 @@
 
 import dynamic from "next/dynamic"
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react"
+import MobileWebOpenInAppLink from "@/app/components/mobile/MobileWebOpenInAppLink"
 import DetailModalShell, {
   scrollModalCommentsPane,
 } from "@/app/components/ui/DetailModalShell"
+import { mobileWebOpenInAppContentLink } from "@/lib/mobileWebOpenInApp"
 import DetailModalVideo from "@/app/components/ui/DetailModalVideo"
 import type { ReelClipPlaybackHandle } from "@/app/components/ReelClipPlayback"
 import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
@@ -343,6 +345,12 @@ export default function FeedReelDetailModal({
       <DetailModalShell
         ariaLabel="Clip details"
         title="Clip"
+        headerAccessory={
+          <MobileWebOpenInAppLink
+            link={mobileWebOpenInAppContentLink("clip", pid)}
+            variant="inline"
+          />
+        }
         layout="split"
         onClose={onClose}
         splitMedia={splitMedia}

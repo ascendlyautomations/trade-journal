@@ -12,11 +12,18 @@ struct PostDetailView: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(postID: PostID, data: DataEnvironment, navigationCoordinator: NavigationCoordinator) {
+    init(
+        postID: PostID,
+        loadSource: PostDetailLoadSource,
+        data: DataEnvironment,
+        navigationCoordinator: NavigationCoordinator
+    ) {
         _viewModel = State(
             initialValue: PostDetailViewModel(
                 postID: postID,
+                loadSource: loadSource,
                 profiles: data.profiles,
+                feed: data.feed,
                 session: data.session,
                 imagePipeline: data.imagePipeline,
                 cache: data.detailCache,
@@ -33,11 +40,11 @@ struct PostDetailView: View {
             case .loading where viewModel.post == nil:
                 ExperienceLoadingSpinner(label: "Loading post")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .failed(let message) where viewModel.post == nil:
+            case .failed(let failure) where viewModel.post == nil:
                 ExperienceErrorState(
-                    title: "Couldn't load post",
-                    message: message,
-                    onRetry: { Task { await viewModel.refresh() } }
+                    title: failure.title,
+                    message: failure.message,
+                    onRetry: failure.isRetryable ? { Task { await viewModel.refresh() } } : nil
                 )
             default:
                 content
@@ -48,11 +55,14 @@ struct PostDetailView: View {
         .toolbar(.hidden, for: .tabBar)
         .task {
             viewModel.loadIfNeeded()
-            let target = InteractionTarget.profilePost(viewModel.postID)
+            let target: InteractionTarget = switch viewModel.loadSource {
+            case .feedPost: .feedPost(viewModel.postID)
+            case .profilePost: .profilePost(viewModel.postID)
+            }
             data.engagementStore.prefetch([target])
-            data.vaultStore.prefetch([
-                VaultContentRef(contentType: .profilePost, contentID: viewModel.postID.rawValue),
-            ])
+            if let vaultRef = VaultContentRef.from(target) {
+                data.vaultStore.prefetch([vaultRef])
+            }
         }
         .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
         .onAppear {
@@ -129,10 +139,7 @@ struct PostDetailView: View {
                                 showsDeleteConfirm = true
                             } : nil,
                             onOpenAuthor: { viewModel.openAuthor() },
-                            vaultRef: VaultContentRef(
-                                contentType: .profilePost,
-                                contentID: post.id.rawValue
-                            ),
+                            vaultRef: vaultContentRef(for: post),
                             accessibilityIdentifier: "detail.post.identity"
                         )
                         .padding(.horizontal, ExperienceSpacing.lg)
@@ -184,7 +191,7 @@ struct PostDetailView: View {
             }
 
             CommentsSectionView(
-                target: .profilePost(post.id),
+                target: interactionTarget(for: post),
                 contentOwnerUserID: post.authorProfileID.rawValue,
                 data: data
             )
@@ -194,7 +201,7 @@ struct PostDetailView: View {
 
     private func postEngagementBar(_ post: Post, scrollProxy: ScrollViewProxy) -> some View {
         EngagementBar(
-            target: .profilePost(post.id),
+            target: interactionTarget(for: post),
             store: data.engagementStore,
             vaultStore: data.vaultStore,
             onCommentTap: {
@@ -205,8 +212,24 @@ struct PostDetailView: View {
                 }
             },
             onShareTap: { showsShareSheet = true },
-            vaultRef: VaultContentRef(contentType: .profilePost, contentID: post.id.rawValue)
+            vaultRef: vaultContentRef(for: post)
         )
+    }
+
+    private func interactionTarget(for post: Post) -> InteractionTarget {
+        switch viewModel.loadSource {
+        case .feedPost: return .feedPost(post.id)
+        case .profilePost: return .profilePost(post.id)
+        }
+    }
+
+    private func vaultContentRef(for post: Post) -> VaultContentRef {
+        switch viewModel.loadSource {
+        case .feedPost:
+            return VaultContentRef(contentType: .feedPost, contentID: post.id.rawValue)
+        case .profilePost:
+            return VaultContentRef(contentType: .profilePost, contentID: post.id.rawValue)
+        }
     }
 
     @ViewBuilder
@@ -222,7 +245,7 @@ struct PostDetailView: View {
                 deliveryQuality: .feedDetail,
                 auditSurface: "detail",
                 onDoubleTapLike: {
-                    Task { await data.engagementStore.ensureLiked(on: .profilePost(post.id)) }
+                    Task { await data.engagementStore.ensureLiked(on: interactionTarget(for: post)) }
                 }
             )
         } else {
@@ -238,7 +261,7 @@ struct PostDetailView: View {
                         deliveryQuality: .feedDetail,
                         auditSurface: "detail",
                         onDoubleTapLike: {
-                            Task { await data.engagementStore.ensureLiked(on: .profilePost(post.id)) }
+                            Task { await data.engagementStore.ensureLiked(on: interactionTarget(for: post)) }
                         }
                     )
                 }

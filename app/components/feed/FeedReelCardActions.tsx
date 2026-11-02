@@ -6,6 +6,7 @@ import { vaultRefFromFeedItem } from "@/lib/vault/refs"
 import LinkedTradeBadge from "./LinkedTradeBadge"
 import type { FeedLikeMeta } from "./FeedPostCard"
 import { FEED_CARD_ENGAGEMENT_ROW_CLASS } from "@/app/components/ui/detailModalEngagement"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
 
 type FeedReelCardActionsProps = {
   post: any
@@ -32,13 +33,18 @@ function FeedReelCardActions({
   onSharePost,
   onOpenLinkedTrade,
 }: FeedReelCardActionsProps) {
+  const phoneWeb = !useIsNativeIos()
   const handleOpenComments = useCallback(
     () => onOpenComments(),
     [onOpenComments]
   )
 
   return (
-    <div className={FEED_CARD_ENGAGEMENT_ROW_CLASS}>
+    <div
+      className={`${FEED_CARD_ENGAGEMENT_ROW_CLASS}${
+        phoneWeb ? " max-md:px-3" : ""
+      }`}
+    >
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <PostInteractionsEngagement

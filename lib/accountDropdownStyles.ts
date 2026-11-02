@@ -5,7 +5,8 @@ import {
   READABLE_PRIMARY_CLASS,
 } from "@/lib/readableTextStyles"
 
-export const ACCOUNT_DROPDOWN_ROW_HEIGHT_CLASS = "flex min-h-9 items-center"
+export const ACCOUNT_DROPDOWN_ROW_HEIGHT_CLASS =
+  "tt-mobile-web-hit-y flex min-h-9 items-center"
 
 export const ACCOUNT_DROPDOWN_ROW_TEXT_CLASS =
   "min-w-0 flex-1 truncate whitespace-nowrap"
@@ -40,14 +41,14 @@ export const ACCOUNT_DROPDOWN_TRIGGER_CLASS =
 
 /** Filter-bar trigger — dashboard / trades. */
 export const ACCOUNT_DROPDOWN_FILTER_TRIGGER_CLASS =
-  `flex w-full min-w-0 cursor-pointer items-center justify-between h-[34px] rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-left text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 ${ACCOUNT_DROPDOWN_DESKTOP_WIDTH_CLASS}`
+  `tt-mobile-web-hit-y flex w-full min-w-0 cursor-pointer items-center justify-between h-[34px] rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-left text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 ${ACCOUNT_DROPDOWN_DESKTOP_WIDTH_CLASS}`
 
 /** Outer wrapper for filter-mode picker in TradeFilterBar. */
 export const ACCOUNT_DROPDOWN_FILTER_WRAPPER_CLASS =
   `w-full md:w-auto ${ACCOUNT_DROPDOWN_DESKTOP_WIDTH_CLASS}`
 
 export const ACCOUNT_DROPDOWN_DASHBOARD_FILTER_TRIGGER_CLASS =
-  `flex w-full min-w-0 cursor-pointer items-center justify-between h-[34px] rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-left text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 ${ACCOUNT_DROPDOWN_DASHBOARD_DESKTOP_WIDTH_CLASS}`
+  `tt-mobile-web-hit-y flex w-full min-w-0 cursor-pointer items-center justify-between h-[34px] rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-left text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 ${ACCOUNT_DROPDOWN_DASHBOARD_DESKTOP_WIDTH_CLASS}`
 
 export const ACCOUNT_DROPDOWN_DASHBOARD_FILTER_WRAPPER_CLASS =
   `w-full md:w-auto ${ACCOUNT_DROPDOWN_DASHBOARD_DESKTOP_WIDTH_CLASS}`
@@ -87,7 +88,7 @@ export const SELECT_TRIGGER_COMPACT_CLASS =
 
 /** Filter-bar / toolbar selects — fixed 34px height, no forced desktop width. */
 export const SELECT_FILTER_TRIGGER_CLASS =
-  "flex h-[34px] w-full min-w-0 cursor-pointer items-center justify-between rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-left text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0"
+  "tt-mobile-web-hit-y flex h-[34px] w-full min-w-0 cursor-pointer items-center justify-between rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-left text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0"
 
 /** Admin / toolbar inline filters. */
 export const SELECT_INLINE_TRIGGER_CLASS =

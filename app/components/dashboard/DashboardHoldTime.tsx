@@ -131,23 +131,32 @@ function MobileHoldTimeCompact({ stats }: { stats: HoldTimeStats }) {
 export type DashboardHoldTimeProps = {
   stats: HoldTimeStats
   totalTrades?: number
+  /** Drop outer card chrome when wrapped in a phone chart block. */
+  embedded?: boolean
 }
 
 export default function DashboardHoldTime({
   stats,
   totalTrades = 0,
+  embedded = false,
 }: DashboardHoldTimeProps) {
   const showEmpty = totalTrades === 0
 
   return (
     <div
-      className={`flex h-full min-h-[180px] flex-col rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md max-md:h-auto max-md:min-h-0 md:min-h-[200px] md:p-4 ${DASHBOARD_MOBILE_CARD_PAD_CLASS}`}
+      className={
+        embedded
+          ? "w-full"
+          : `flex h-full min-h-[180px] flex-col rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md max-md:h-auto max-md:min-h-0 md:min-h-[200px] md:p-4 ${DASHBOARD_MOBILE_CARD_PAD_CLASS}`
+      }
     >
-      <h2
-        className={`mb-2 text-xs font-semibold text-blue-300 md:mb-3 md:text-base ${DASHBOARD_MOBILE_CARD_TITLE_CLASS}`}
-      >
-        Hold Time
-      </h2>
+      {embedded ? null : (
+        <h2
+          className={`mb-2 text-xs font-semibold text-blue-300 md:mb-3 md:text-base ${DASHBOARD_MOBILE_CARD_TITLE_CLASS}`}
+        >
+          Hold Time
+        </h2>
+      )}
 
       {showEmpty ? (
         <DashboardWidgetEmptyState

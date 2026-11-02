@@ -105,6 +105,14 @@ import {
 } from "@/lib/settingsProfileSync"
 import { recordedAffiliateEarnings } from "@/lib/affiliateEarnings"
 import AppearanceSettingsSection from "../components/AppearanceSettingsSection"
+import {
+  DesktopWebViewport,
+  MobileWebViewport,
+} from "@/app/components/mobile/MobileWebViewport"
+import MobileWebSettingsHome from "@/app/components/mobile/settings/MobileWebSettingsHome"
+import MobileWebSettingsSectionHeader from "@/app/components/mobile/settings/MobileWebSettingsSectionHeader"
+import { useContextualTourOptional } from "@/lib/contextualTour/ContextualTourProvider"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
 import SettingsPrivacySection from "@/app/components/settings/SettingsPrivacySection"
 import VaultHome from "../components/vault/VaultHome"
 import { readSettingsProfileCache } from "@/lib/settingsProfileCache"
@@ -410,7 +418,13 @@ export default function SettingsPage() {
   const router = useRouter()
   useScrollPageTopOnMount()
   const [activeTab, setActiveTab] = useState<TabId>("account")
+  const [mobileSectionOpen, setMobileSectionOpen] = useState(() =>
+    typeof window !== "undefined" &&
+    resolveSettingsTabFromHash(window.location.hash) != null
+  )
   const skipScrollOnInitialTab = useRef(true)
+  const tour = useContextualTourOptional()
+  const isNativeIos = useIsNativeIos()
 
   useEffect(() => {
     function onTourTab(event: Event) {
@@ -418,6 +432,7 @@ export default function SettingsPage() {
         .detail?.tab
       if (tab === "appearance" || tab === "broker-integrations") {
         setActiveTab(tab)
+        setMobileSectionOpen(true)
       }
     }
     window.addEventListener(CONTEXTUAL_TOUR_SETTINGS_TAB_EVENT, onTourTab)
@@ -603,6 +618,7 @@ export default function SettingsPage() {
     function syncTabFromHash() {
       const tab = resolveSettingsTabFromHash(window.location.hash)
       setActiveTab(tab ?? "account")
+      setMobileSectionOpen(tab != null)
     }
 
     syncTabFromHash()
@@ -636,6 +652,7 @@ export default function SettingsPage() {
 
   function selectSettingsPanel(id: TabId) {
     setActiveTab(id)
+    setMobileSectionOpen(true)
     if (typeof window === "undefined") return
     const nextHash = `#${id}`
     if (window.location.hash === nextHash) return
@@ -643,6 +660,16 @@ export default function SettingsPage() {
       null,
       "",
       `${window.location.pathname}${window.location.search}${nextHash}`
+    )
+  }
+
+  function closeMobileSettingsSection() {
+    setMobileSectionOpen(false)
+    if (typeof window === "undefined") return
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}`
     )
   }
 
@@ -1212,9 +1239,18 @@ export default function SettingsPage() {
   return (
     <>
 
-      <div className="tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-6">
-        <div className="mx-auto flex max-w-6xl flex-col gap-6 md:flex-row md:items-start">
-          {/* LEFT — tabs */}
+      <div
+        className={`tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-6${
+          isNativeIos ? "" : " max-md:p-0"
+        }`}
+      >
+        <div
+          className={`mx-auto flex max-w-6xl flex-col gap-6 md:flex-row md:items-start${
+            isNativeIos ? "" : " max-md:gap-0"
+          }`}
+        >
+          {/* LEFT — tabs (desktop/tablet + Capacitor) */}
+          <DesktopWebViewport>
           <aside className="w-full shrink-0 md:w-64">
             <h1 className="mb-2 text-xl font-semibold text-blue-300 md:text-2xl">
               Settings
@@ -1309,10 +1345,48 @@ export default function SettingsPage() {
               </button>
             </nav>
           </aside>
+          </DesktopWebViewport>
+
+          <MobileWebViewport>
+            {!mobileSectionOpen ? (
+              <MobileWebSettingsHome
+                sections={SETTINGS_SECTIONS}
+                isAdmin={isAdmin}
+                isDemo={isDemoModeActive()}
+                onSelectPanel={(id) => selectSettingsPanel(id as TabId)}
+                onReview={() => setReviewModalOpen(true)}
+                onWalkthrough={tour ? () => tour.beginReplay() : undefined}
+                onCreateAccount={() => requestDemoSignup()}
+                onExitDemo={() => {
+                  disableDemoMode()
+                  router.replace("/")
+                }}
+                onSignOut={() => void handleSignOut()}
+              />
+            ) : null}
+          </MobileWebViewport>
 
           {/* RIGHT — content */}
-          <div className="min-w-0 flex-1">
-            <div className="mb-6">
+          <div
+            className={`min-w-0 flex-1${
+              isNativeIos ? "" : " max-md:px-3 max-md:pb-6"
+            }${
+              !isNativeIos && !mobileSectionOpen ? " max-md:hidden" : ""
+            }`}
+          >
+            {mobileSectionOpen ? (
+              <MobileWebViewport>
+                <MobileWebSettingsSectionHeader
+                  title={
+                    activeTab === "notifications"
+                      ? "Notification Preferences"
+                      : activeMeta.label
+                  }
+                  onBack={closeMobileSettingsSection}
+                />
+              </MobileWebViewport>
+            ) : null}
+            <div className={isNativeIos ? "mb-6" : "mb-6 max-md:hidden"}>
               <h2 className="text-lg font-semibold text-blue-200">
                 {activeTab === "notifications"
                   ? "Notification Preferences"
@@ -1429,6 +1503,10 @@ export default function SettingsPage() {
                     }
                     placeholder="username"
                     autoComplete="username"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    inputMode="text"
                     disabled={atUsernameChangeLimit}
                     className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-400 disabled:cursor-not-allowed disabled:opacity-50"
                   />
@@ -1539,7 +1617,7 @@ export default function SettingsPage() {
                   disabled={invalidStartedTradingDate}
                   syncing={savingProfile}
                   syncingLabel="Saving…"
-                  className="w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
+                  className="tt-mobile-web-form-submit w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
                 >
                   Save Profile
                 </ActionButton>
@@ -1715,7 +1793,7 @@ export default function SettingsPage() {
                       <button
                         type="button"
                         onClick={() => setShowCreatePasswordModal(true)}
-                        className="mt-4 w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
+                        className="tt-mobile-web-form-submit mt-4 w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
                       >
                         Create password
                       </button>
@@ -1762,7 +1840,7 @@ export default function SettingsPage() {
                         type="button"
                         onClick={() => void updatePassword()}
                         disabled={savingPassword}
-                        className="mt-4 w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
+                        className="tt-mobile-web-form-submit mt-4 w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
                       >
                         {savingPassword ? "Updating…" : "Update password"}
                       </button>
@@ -1808,7 +1886,7 @@ export default function SettingsPage() {
                         type="button"
                         onClick={() => void updatePassword()}
                         disabled={savingPassword}
-                        className="mt-4 w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
+                        className="tt-mobile-web-form-submit mt-4 w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
                       >
                         {savingPassword ? "Updating…" : "Update password"}
                       </button>
