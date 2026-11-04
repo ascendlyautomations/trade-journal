@@ -10,7 +10,7 @@ export function filterMessagesForUser(
   deletedMessageIds: Set<string>
 ): any[] {
   return messages.filter((msg) => {
-    if (msg.deleted_for_everyone) return true
+    if (msg.deleted_for_everyone) return false
     return !deletedMessageIds.has(String(msg.id))
   })
 }

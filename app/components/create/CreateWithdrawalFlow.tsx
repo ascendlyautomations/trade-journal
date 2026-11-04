@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import { useRouter } from "next/navigation"
 import IntentPrefetchLink from "@/lib/IntentPrefetchLink"
 import NativeDateInput from "@/app/components/ui/NativeDateInput"
@@ -235,7 +236,7 @@ export default function CreateWithdrawalFlow({
 
   const handleSave = useCallback(async () => {
     if (step !== "form" || !selectedAccountId || !selectedAccount) return
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("save")
       return
     }

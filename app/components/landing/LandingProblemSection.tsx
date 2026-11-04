@@ -16,12 +16,12 @@ import {
 } from "@/lib/landingPageUi"
 
 const DISCONNECTED_PLATFORMS = [
-  { icon: "💬", label: "Discord" },
-  { icon: "📊", label: "Journal Apps" },
-  { icon: "📱", label: "Social Media" },
-  { icon: "📈", label: "Prop Firms" },
+  { icon: "📊", label: "Trading journals" },
+  { icon: "📱", label: "Social media" },
+  { icon: "💬", label: "Group chats" },
   { icon: "📑", label: "Spreadsheets" },
   { icon: "📝", label: "Notes" },
+  { icon: "📈", label: "Stat trackers" },
 ] as const
 
 export default function LandingProblemSection() {
@@ -39,11 +39,12 @@ export default function LandingProblemSection() {
           className={`mx-auto max-w-3xl text-center ${LANDING_REVEAL_TRANSITION} transition-all duration-500 ${visible ? LANDING_REVEAL_TO : LANDING_REVEAL_FROM}`}
         >
           <h2 id="problem-heading" className={LANDING_HEADLINE_SM}>
-            Trading has never had a true home.
+            Your Trading Doesn&apos;t Happen in One App. Until Now.
           </h2>
           <p className={`${LANDING_LEAD} mx-auto ${LANDING_LEAD_GAP}`}>
-            Traders bounce between journals, charts, social medias, and spreadsheets - with no single
-            place to learn, share, and grow.
+            Most traders journal in one app, post on social media, and coordinate in group chats,
+            copying screenshots and stats between tools. TradeTraxs brings journaling, analytics,
+            feed, Trade Rooms, messaging, and profiles together so your data stays connected.
           </p>
         </div>
 
@@ -77,7 +78,7 @@ export default function LandingProblemSection() {
               TradeTraxs
             </p>
             <h3 className="mt-1.5 text-sm text-white md:mt-2 md:text-xl">
-              One connected home for traders.
+              One platform for how you trade, review, and connect.
             </h3>
           </div>
         </div>

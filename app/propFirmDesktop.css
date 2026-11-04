@@ -58,30 +58,31 @@ html:not(.tt-native-ios) .tt-propfirm-account-menu [role="option"] {
     gap: 0.75rem;
   }
 
-  html:not(.tt-native-ios) .tt-propfirm-lower {
+  html:not(.tt-native-ios) .tt-propfirm-body {
     display: grid;
     grid-template-columns: minmax(0, 0.42fr) minmax(0, 0.58fr);
     gap: 1rem;
     align-items: start;
   }
 
-  html:not(.tt-native-ios) .tt-propfirm-lower-stack {
+  html:not(.tt-native-ios) .tt-propfirm-body-stack {
     display: flex;
     min-width: 0;
     flex-direction: column;
-    gap: 1.25rem;
+    gap: 1rem;
   }
 
-  html:not(.tt-native-ios) .tt-propfirm-analytics {
-    display: grid;
-    grid-template-columns: minmax(0, 0.62fr) minmax(0, 0.38fr);
-    gap: 1rem;
-    align-items: start;
+  html:not(.tt-native-ios) .tt-propfirm-body-equity {
+    min-width: 0;
   }
 }
 
 @media (min-width: 1440px) {
   html:not(.tt-native-ios) .tt-propfirm-hero {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  }
+
+  html:not(.tt-native-ios) .tt-propfirm-body {
     grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
   }
 }

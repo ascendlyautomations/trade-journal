@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import { supabase } from "@/lib/supabaseClient"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
@@ -418,7 +419,7 @@ export default function AchievementUploadModal({
     purchaseCost?: string | null
     purchaseDate?: string | null
   }) {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("save")
       return
     }
@@ -793,7 +794,7 @@ export default function AchievementUploadModal({
   }
 
   async function saveAchievement() {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("upload")
       return
     }

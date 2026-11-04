@@ -196,8 +196,19 @@ export const DEMO_TRADES = TRADE_SEEDS.map((seed) => {
     ai_feedback: null as string | null,
   }
   if (seed.id === "dt-24") {
+    /** Fixed timestamps so marketing SSR matches the client (no rolling `daysAgo: 0`). */
+    const entryTimeFixed = "2026-11-03T15:15:00.000Z"
+    const exitTimeFixed = "2026-11-03T15:25:00.000Z"
+    const tradeDateFixed = "2026-11-03"
     return {
       ...base,
+      entry_time: entryTimeFixed,
+      exit_time: exitTimeFixed,
+      trade_date: tradeDateFixed,
+      date: tradeDateFixed,
+      created_at: exitTimeFixed,
+      duration_seconds: 10 * 60,
+      duration_text: "10m",
       is_public: true,
       public_description:
         "Clean opening drive long. Waited for liquidity sweep, entered on 1m BOS.",

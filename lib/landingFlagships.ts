@@ -1,5 +1,6 @@
 /** Primary brand positioning — use consistently across the homepage. */
-export const LANDING_BRAND_TAGLINE = "The First Social Platform Built for Traders."
+export const LANDING_BRAND_TAGLINE =
+  "More than a journal, a connected trading platform for web and iOS."
 
 export type LandingFlagship = {
   id: string

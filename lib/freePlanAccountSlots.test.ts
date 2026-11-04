@@ -12,8 +12,8 @@ import {
 } from "./freePlanAccountSlots.ts"
 
 describe("freePlanAccountSlots", () => {
-  it("defaults missing can_add_trades to enabled for trade entry", () => {
-    assert.equal(accountCanAddTrades({ id: "1" }), true)
+  it("requires explicit can_add_trades true for trade entry", () => {
+    assert.equal(accountCanAddTrades({ id: "1" }), false)
     assert.equal(accountCanAddTrades({ id: "1", can_add_trades: true }), true)
     assert.equal(accountCanAddTrades({ id: "1", can_add_trades: false }), false)
   })
@@ -57,9 +57,20 @@ describe("freePlanAccountSlots", () => {
       { id: "3", can_add_trades: true },
       { id: "4", can_add_trades: true },
     ]
+    const staleEpoch = { required: 2, confirmed: 1 }
     assert.equal(freePlanSlotSelectionRequired(null, accounts), false)
     assert.equal(freePlanSlotSelectionRequired(true, accounts), false)
-    assert.equal(freePlanSlotSelectionRequired(false, accounts), true)
+    assert.equal(freePlanSlotSelectionRequired(false, accounts, staleEpoch), true)
+    const settled = [
+      { id: "1", can_add_trades: true },
+      { id: "2", can_add_trades: true },
+      { id: "3", can_add_trades: true },
+      { id: "4", can_add_trades: false },
+    ]
+    assert.equal(
+      freePlanSlotSelectionRequired(false, settled, { required: 1, confirmed: 1 }),
+      false
+    )
   })
 
   it("restores a saved 1–3 selection and ignores an unchosen set", () => {
@@ -94,7 +105,7 @@ describe("freePlanAccountSlots", () => {
     )
   })
 
-  it("hides dropdown-off accounts from pickers without blocking trade entry", () => {
+  it("hides filter-hidden accounts from trade entry pickers", () => {
     const rows = [
       {
         id: "on",
@@ -111,7 +122,7 @@ describe("freePlanAccountSlots", () => {
     ]
     assert.deepEqual(
       filterAccountsForTradeEntry(rows).map((row) => row.id),
-      ["on", "off"]
+      ["on"]
     )
     assert.deepEqual(
       filterAccountsForDropdown(rows).map((row) => row.id),

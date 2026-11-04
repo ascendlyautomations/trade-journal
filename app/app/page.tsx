@@ -1,6 +1,7 @@
 "use client"
 
 import "../utilityDesktopTheme.css"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import "../addTradeContrast.css"
 import "../components/mobile/create/mobileWebCreate.css"
 import InputTradeForm from "../components/InputTradeForm"
@@ -306,7 +307,7 @@ export default function Home() {
         className={`tt-add-trade tt-phase4-dark min-h-[calc(100dvh-var(--app-header-offset))] bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}
       >
         <div
-          className={`mx-auto max-w-8xl px-3 pb-[calc(var(--app-tab-bar-offset,0px)+0.75rem)] pt-2 md:px-6 md:pb-5 ${
+          className={`mx-auto w-full min-w-0 max-w-[1600px] px-3 pb-[calc(var(--app-tab-bar-offset,0px)+0.75rem)] pt-2 md:px-6 md:pb-5 xl:px-8 2xl:px-12 ${
             isNativeIos ? "max-md:pt-0" : ""
           }`}
         >
@@ -323,7 +324,7 @@ export default function Home() {
 
           <InputTradeForm
             onQuickInputClick={() => {
-              if (isDemoModeActive()) {
+              if (isExploreWriteBlocked()) {
                 requestDemoSignup("trade")
                 return
               }

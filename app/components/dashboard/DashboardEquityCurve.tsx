@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import {
   LineChart,
   Line,
@@ -95,6 +96,34 @@ function ChartEmptyState() {
       showImportCsv
       className="py-8"
     />
+  )
+}
+
+/** Hero equity plot fills the performance column height (ResizeObserver-driven). */
+function HeroEquityPlot({ children }: { children: (height: number) => ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [height, setHeight] = useState(0)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const measure = () => {
+      const next = Math.floor(el.getBoundingClientRect().height)
+      if (next > 0) setHeight(next)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  return (
+    <div
+      ref={ref}
+      className="tt-dash-equity-plot tt-dash-equity-plot--hero w-full rounded-lg bg-black/20"
+    >
+      {height > 0 ? children(height) : null}
+    </div>
   )
 }
 
@@ -214,16 +243,14 @@ export default function DashboardEquityCurve({
         <div
           data-tt-tour-target="dashboardPerformance"
           data-tt-tour-spotlight="large"
-          className="min-h-[200px] w-full flex-1"
+          className="flex min-h-0 w-full flex-1 flex-col"
         >
         {showEmpty ? (
           <ChartEmptyState />
         ) : (
-          <ChartWhenSized
-            height={360}
-            className="tt-dash-equity-plot rounded-lg bg-black/20"
-          >
-            <ResponsiveContainer width="100%" height={360}>
+          <HeroEquityPlot>
+            {(plotHeight) => (
+            <ResponsiveContainer width="100%" height={plotHeight}>
               <LineChart
                 data={data}
                 margin={{ top: 16, right: 12, left: 4, bottom: 8 }}
@@ -290,7 +317,8 @@ export default function DashboardEquityCurve({
                 ) : null}
               </LineChart>
             </ResponsiveContainer>
-          </ChartWhenSized>
+            )}
+          </HeroEquityPlot>
         )}
         </div>
       </div>

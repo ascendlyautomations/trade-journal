@@ -5,10 +5,9 @@ export async function enableAllAccountsForTradeEntry(
   client: SupabaseClient,
   userId: string
 ): Promise<void> {
-  const { error } = await client
-    .from("accounts")
-    .update({ can_add_trades: true })
-    .eq("user_id", userId)
+  const { error } = await client.rpc("restore_pro_trade_account_slots", {
+    p_user_id: userId,
+  })
 
   if (error) {
     console.error("[enableAllAccountsForTradeEntry]", error)

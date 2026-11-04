@@ -125,6 +125,7 @@ function pickWeeklyTopPerformersFromAggregates(
   users: WeeklyUserAgg[]
 ): ExploreWeeklyTopPerformerPick[] {
   const picks: ExploreWeeklyTopPerformerPick[] = []
+  const usedUserIds = new Set<string>()
 
   const pnlWinner = pickMax(
     users,
@@ -133,6 +134,7 @@ function pickWeeklyTopPerformersFromAggregates(
     (u) => u.userId
   )
   if (pnlWinner) {
+    usedUserIds.add(pnlWinner.userId)
     picks.push({
       category: "pnl",
       userId: pnlWinner.userId,
@@ -144,10 +146,14 @@ function pickWeeklyTopPerformersFromAggregates(
   const rrWinner = pickMax(
     users,
     (u) => avgRR(u),
-    (u) => avgRR(u) !== null && u.rrCount > 0,
+    (u) =>
+      !usedUserIds.has(u.userId) &&
+      avgRR(u) !== null &&
+      u.rrCount > 0,
     (u) => u.userId
   )
   if (rrWinner) {
+    usedUserIds.add(rrWinner.userId)
     picks.push({
       category: "rr",
       userId: rrWinner.userId,
@@ -159,7 +165,7 @@ function pickWeeklyTopPerformersFromAggregates(
   const winWinner = pickMax(
     users,
     (u) => winRatePct(u),
-    (u) => u.tradeCount > 0,
+    (u) => u.tradeCount > 0 && !usedUserIds.has(u.userId),
     (u) => u.userId
   )
   if (winWinner) {

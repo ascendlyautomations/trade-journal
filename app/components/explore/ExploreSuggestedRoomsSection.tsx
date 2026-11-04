@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import EmptyState from "@/app/components/ui/EmptyState"
 import { supabase } from "@/lib/supabaseClient"
@@ -110,7 +111,7 @@ export default function ExploreSuggestedRoomsSection({ memberRoomIds }: Props) {
   const showLoadMore = visibleCount < eligibleRooms.length
 
   async function handleJoin(room: PopularTradeRoom) {
-    if (isDemoSupabaseBlocked()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("room")
       return
     }

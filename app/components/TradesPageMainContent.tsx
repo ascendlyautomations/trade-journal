@@ -1,9 +1,16 @@
 "use client"
 
 import Link from "next/link"
-import { memo, type Dispatch, type SetStateAction } from "react"
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react"
 import EmptyState from "./ui/EmptyState"
-import Button from "./ui/Button"
 import TradeFilterBar from "./TradeFilterBar"
 import PerformanceShareButton from "./PerformanceShareButton"
 import TradesPageTradeCard from "./TradesPageTradeCard"
@@ -16,6 +23,17 @@ import {
 } from "./ui/skeletons"
 import { formatMoneyUnknown, formatRR } from "@/lib/formatDisplay"
 import { usePlatformPresentation } from "@/app/components/platform/usePlatformPresentation"
+import TradesPageLayoutToggle, {
+  type TradesPageLayoutView,
+} from "@/app/components/trades/TradesPageLayoutToggle"
+import TradesPagePhotosGrid, {
+  TradesPagePhotosGridSkeleton,
+} from "@/app/components/trades/TradesPagePhotosGrid"
+import {
+  TRADES_PAGE_PHOTOS_INITIAL_VISIBLE,
+  TRADES_PAGE_PHOTOS_LOAD_MORE_STEP,
+  tradesPagePhotoGridEntries,
+} from "@/lib/tradesPagePhotosGrid"
 
 type TradeStats = {
   totalTrades: number
@@ -50,6 +68,8 @@ type TradesPageMainContentProps = {
   onOpenPerformanceShare: () => void
   tradeStats: TradeStats
   displayedTradeItems: TradesPageListItem[]
+  /** All filtered trades (grouped) — used for Photos pagination across screenshots. */
+  groupedTradeItemsForPhotos: TradesPageListItem[]
   visibleTradesLength: number
   hasAnyTrades: boolean
   visibleCount: number
@@ -112,6 +132,7 @@ function TradesPageMainContent({
   onOpenPerformanceShare,
   tradeStats,
   displayedTradeItems,
+  groupedTradeItemsForPhotos,
   visibleTradesLength,
   hasAnyTrades,
   visibleCount,
@@ -136,38 +157,53 @@ function TradesPageMainContent({
   tradesRetrying = false,
 }: TradesPageMainContentProps) {
   const { isNativeIos } = usePlatformPresentation()
+  const [layoutView, setLayoutView] = useState<TradesPageLayoutView>("list")
+  const [photosVisibleCount, setPhotosVisibleCount] = useState(
+    TRADES_PAGE_PHOTOS_INITIAL_VISIBLE
+  )
+  const showPhotosLayout =
+    !isNativeIos && layoutView === "photos" && onOpenTrade != null
+
+  const allPhotoGridEntries = useMemo(
+    () => tradesPagePhotoGridEntries(groupedTradeItemsForPhotos),
+    [groupedTradeItemsForPhotos]
+  )
+
+  const photoGridEntries = useMemo(
+    () =>
+      showPhotosLayout
+        ? allPhotoGridEntries.slice(0, photosVisibleCount)
+        : [],
+    [allPhotoGridEntries, photosVisibleCount, showPhotosLayout]
+  )
+
+  useEffect(() => {
+    if (layoutView !== "photos") return
+    setPhotosVisibleCount(TRADES_PAGE_PHOTOS_INITIAL_VISIBLE)
+  }, [
+    layoutView,
+    groupedTradeItemsForPhotos,
+    accountFilter,
+    accountTypeFilter,
+    timeframe,
+    resultFilter,
+    showPublicOnly,
+    selectedDate,
+    customRangeStart,
+    customRangeEnd,
+  ])
+
+  const handleLoadMorePhotos = useCallback(() => {
+    setPhotosVisibleCount((prev) => prev + TRADES_PAGE_PHOTOS_LOAD_MORE_STEP)
+  }, [])
 
   const performanceShareDisabled = !hasAnyTrades
 
   return (
     <>
       {isNativeIos ? null : (
-        <h1 className="sr-only max-md:hidden">Trades</h1>
-      )}
-      {isNativeIos ? null : (
       <div className="hidden md:block w-full mt-2.5 space-y-2.5">
-        <div className="flex flex-wrap items-center justify-center gap-2 md:justify-start md:gap-3">
-          <button
-            type="button"
-            onClick={onOpenQuickInput}
-            className="inline-flex h-[34px] items-center whitespace-nowrap rounded-lg bg-blue-500 px-4 text-sm font-semibold text-white transition hover:bg-blue-600"
-          >
-            Add Trade
-          </button>
-          <button
-            type="button"
-            onClick={onImportCsv}
-            className="inline-flex h-[34px] items-center whitespace-nowrap rounded-lg border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/15"
-          >
-            Import CSV
-          </button>
-          <Link
-            href="/settings#broker-integrations"
-            className="inline-flex h-[34px] items-center whitespace-nowrap rounded-lg border border-white/15 bg-white/5 px-4 text-sm font-semibold text-gray-100 transition hover:bg-white/10"
-          >
-            Connect Broker
-          </Link>
-        </div>
+        <h1 className="sr-only">Trades</h1>
         <TradeFilterBar
           variant="trades"
           fullWidth
@@ -186,29 +222,8 @@ function TradesPageMainContent({
           onCustomRangeApply={onCustomRangeApply}
           selectedDate={selectedDate}
           onSelectedDateChange={onSelectedDateChange}
-          accountSelectAccessory={
-            <Button
-              type="button"
-              variant="primary"
-              size="md"
-              onClick={onOpenQuickInput}
-              aria-label="Quick Trade"
-              className="h-9 w-9 shrink-0 p-0 text-base leading-none"
-            >
-              <span aria-hidden>+</span>
-            </Button>
-          }
           leading={
             <div className="flex w-full shrink-0 flex-nowrap items-center justify-center gap-2 md:w-auto">
-              {/* Desktop-only Quick Trade button — styled like the Timeframe filter control. */}
-              <button
-                type="button"
-                onClick={onOpenQuickInput}
-                className="hidden h-[34px] shrink-0 items-center whitespace-nowrap rounded-lg bg-white/10 px-4 text-sm font-medium text-white transition hover:bg-white/20 md:inline-flex"
-              >
-                Quick Trade
-              </button>
-
               <button
                 type="button"
                 onClick={() => onResultFilterChange("all")}
@@ -282,7 +297,7 @@ function TradesPageMainContent({
             </div>
           }
           trailing={
-            <div className="flex items-center gap-2 w-full md:w-auto">
+            <div className="flex items-center gap-2 w-full md:w-auto md:justify-center">
               <button
                 type="button"
                 onClick={onTogglePublicOnly}
@@ -305,6 +320,11 @@ function TradesPageMainContent({
                 }
               />
             </div>
+          }
+          trailingEnd={
+            onOpenTrade ? (
+              <TradesPageLayoutToggle value={layoutView} onChange={setLayoutView} />
+            ) : undefined
           }
         />
       </div>
@@ -369,17 +389,23 @@ function TradesPageMainContent({
             ))}
           </div>
           )}
-          <div
-            aria-busy="true"
-            aria-label="Loading trades"
-            className={`w-full grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5 ${
-              isNativeIos ? "mt-2" : "hidden md:grid mt-2.5"
-            }`}
-          >
-            {Array.from({ length: 6 }).map((_, i) => (
-              <SkeletonTradesPageTradeCard key={i} />
-            ))}
-          </div>
+          {showPhotosLayout ? (
+            <div className="hidden md:block mt-2.5 w-full">
+              <TradesPagePhotosGridSkeleton />
+            </div>
+          ) : (
+            <div
+              aria-busy="true"
+              aria-label="Loading trades"
+              className={`w-full grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5 ${
+                isNativeIos ? "mt-2" : "hidden md:grid mt-2.5"
+              }`}
+            >
+              {Array.from({ length: 6 }).map((_, i) => (
+                <SkeletonTradesPageTradeCard key={i} />
+              ))}
+            </div>
+          )}
         </>
       ) : (
         <>
@@ -401,13 +427,9 @@ function TradesPageMainContent({
           </div>
           )}
 
-          <div
-            className={`w-full grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5 ${
-              isNativeIos ? "mt-2" : "hidden md:grid mt-2.5"
-            }`}
-          >
-            {displayedTradeItems.length === 0 ? (
-              <div className="md:col-span-2">
+          {showPhotosLayout ? (
+            <div className="hidden md:block mt-2.5 w-full">
+              {visibleTradesLength === 0 ? (
                 <EmptyState
                   title={
                     hasAnyTrades
@@ -419,83 +441,134 @@ function TradesPageMainContent({
                       ? "Try adjusting your account, date range, or result filters to see more trades."
                       : "Start tracking your performance by logging your first trade."
                   }
-                  action={
-                    hasAnyTrades ? undefined : (
-                      <div className="flex flex-wrap items-center justify-center gap-3">
-                        <button
-                          type="button"
-                          onClick={onOpenQuickInput}
-                          className="tt-trades-action rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
-                        >
-                          Add Trade
-                        </button>
-                        <button
-                          type="button"
-                          onClick={onImportCsv}
-                          className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
-                        >
-                          Import CSV
-                        </button>
-                        <Link
-                          href="/settings#broker-integrations"
-                          className="rounded-lg border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-gray-100 transition hover:bg-white/10"
-                        >
-                          Connect Broker
-                        </Link>
-                      </div>
-                    )
-                  }
+                  action={undefined}
                   className="py-10"
                 />
-              </div>
-            ) : (
-              displayedTradeItems.map((item) => {
-                const trade =
-                  item.kind === "copyGroup" ? item.representative : item.trade
-                const tradeId = String(trade.id ?? "")
-                const isSelected = selectedTradeId === tradeId
-                return (
-                  <div
-                    key={
-                      item.kind === "copyGroup" ? item.batchKey : tradeId
+              ) : allPhotoGridEntries.length === 0 ? (
+                <EmptyState
+                  title="No Trades With Screenshots"
+                  description="Trades in this view need an attached screenshot. Switch to List or load more trades, or add screenshots when logging trades."
+                  className="py-10"
+                />
+              ) : (
+                <TradesPagePhotosGrid
+                  entries={photoGridEntries}
+                  selectedTradeId={selectedTradeId}
+                  onOpenTrade={onOpenTrade}
+                />
+              )}
+            </div>
+          ) : (
+            <div
+              className={`w-full grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5 ${
+                isNativeIos ? "mt-2" : "hidden md:grid mt-2.5"
+              }`}
+            >
+              {displayedTradeItems.length === 0 ? (
+                <div className="md:col-span-2">
+                  <EmptyState
+                    title={
+                      hasAnyTrades
+                        ? "No Trades Match Your Filters"
+                        : "No Trades Yet"
                     }
-                    id={tradeId ? `trade-${tradeId}` : undefined}
-                    className={
-                      isSelected
-                        ? "rounded-xl ring-2 ring-blue-400/80"
-                        : undefined
+                    description={
+                      hasAnyTrades
+                        ? "Try adjusting your account, date range, or result filters to see more trades."
+                        : "Start tracking your performance by logging your first trade."
                     }
-                  >
-                    <TradesPageTradeCard
-                      trade={trade}
-                      copyGroupMembers={
-                        item.kind === "copyGroup" ? item.members : undefined
+                    action={
+                      hasAnyTrades || !isNativeIos
+                        ? undefined
+                        : (
+                        <div className="flex flex-wrap items-center justify-center gap-3">
+                          <button
+                            type="button"
+                            onClick={onOpenQuickInput}
+                            className="tt-trades-action rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+                          >
+                            Add Trade
+                          </button>
+                          <button
+                            type="button"
+                            onClick={onImportCsv}
+                            className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+                          >
+                            Import CSV
+                          </button>
+                          <Link
+                            href="/settings#broker-integrations"
+                            className="rounded-lg border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-gray-100 transition hover:bg-white/10"
+                          >
+                            Connect Broker
+                          </Link>
+                        </div>
+                      )
+                    }
+                    className="py-10"
+                  />
+                </div>
+              ) : (
+                displayedTradeItems.map((item) => {
+                  const trade =
+                    item.kind === "copyGroup" ? item.representative : item.trade
+                  const tradeId = String(trade.id ?? "")
+                  const isSelected = selectedTradeId === tradeId
+                  return (
+                    <div
+                      key={
+                        item.kind === "copyGroup" ? item.batchKey : tradeId
                       }
-                      accountRow={accountById[String(trade.account_id ?? "")]}
-                      accounts={Object.values(accountById)}
-                      shareProfile={gateProfile}
-                      attachedReel={tradeReelsByTradeId[tradeId] ?? null}
-                      onOpenReplay={
-                        onOpenTradeReplay
-                          ? () => onOpenTradeReplay(trade)
+                      id={tradeId ? `trade-${tradeId}` : undefined}
+                      className={
+                        isSelected
+                          ? "rounded-xl ring-2 ring-blue-400/80"
                           : undefined
                       }
-                      onEdit={onEditTrade}
-                      onDelete={onDeleteTrade}
-                      onSendClick={onSendTrade}
-                      onAnalyze={onAnalyzeTrade}
-                      onImageClick={onImageClick}
-                      suppressScreenshot={
-                        editingTradeId === tradeId || isSelected
-                      }
-                    />
-                  </div>
-                )
-              })
-            )}
-          </div>
+                    >
+                      <TradesPageTradeCard
+                        trade={trade}
+                        copyGroupMembers={
+                          item.kind === "copyGroup" ? item.members : undefined
+                        }
+                        accountRow={accountById[String(trade.account_id ?? "")]}
+                        accounts={Object.values(accountById)}
+                        shareProfile={gateProfile}
+                        attachedReel={tradeReelsByTradeId[tradeId] ?? null}
+                        onOpenReplay={
+                          onOpenTradeReplay
+                            ? () => onOpenTradeReplay(trade)
+                            : undefined
+                        }
+                        onEdit={onEditTrade}
+                        onDelete={onDeleteTrade}
+                        onSendClick={onSendTrade}
+                        onAnalyze={onAnalyzeTrade}
+                        onImageClick={onImageClick}
+                        suppressScreenshot={
+                          editingTradeId === tradeId || isSelected
+                        }
+                      />
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          )}
 
-          {visibleCount < visibleTradesLength ? (
+          {showPhotosLayout ? (
+            photosVisibleCount < allPhotoGridEntries.length ? (
+              <div className="mt-2.5 hidden justify-center md:flex">
+                <button
+                  type="button"
+                  onClick={handleLoadMorePhotos}
+                  className="tt-trades-action rounded-lg bg-blue-500 px-4 py-2 transition hover:bg-blue-600"
+                >
+                  Load More
+                </button>
+              </div>
+            ) : null
+          ) : visibleCount < visibleTradesLength ? (
             <div className={`mt-2.5 flex justify-center ${isNativeIos ? "" : "hidden md:flex"}`}>
               <button
                 type="button"

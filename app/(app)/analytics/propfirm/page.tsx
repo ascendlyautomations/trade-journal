@@ -1,6 +1,7 @@
 "use client"
 
 import "../../../analyticsDesktopTheme.css"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import "../../../propFirmDesktop.css"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -238,8 +239,8 @@ const PROPFIRM_EQUITY_CURVE_SCOPE: PropfirmEquityCurveScope = "lifetime"
 
 function PropfirmPageShell({ children }: { children: ReactNode }) {
   return (
-    <div className="tt-propfirm-mode tt-phase3-dark w-full px-3 pb-3 pt-0 text-white md:px-4 md:pb-10 max-md:px-3 max-md:pb-3">
-      <div className="relative z-0 mx-auto mt-4 flex w-full max-w-[1600px] flex-col gap-4 px-1 md:px-6 max-md:mt-1 max-md:gap-3 max-md:px-0">
+    <div className="tt-propfirm-mode tt-phase3-dark w-full px-3 pb-3 pt-0 text-white md:pb-10 max-md:px-3 max-md:pb-3">
+      <div className="relative z-0 mx-auto mt-4 flex w-full min-w-0 max-w-[1600px] flex-col gap-4 px-1 md:px-6 xl:px-8 2xl:px-12 max-md:mt-1 max-md:gap-3 max-md:px-0">
         {children}
       </div>
     </div>
@@ -921,7 +922,7 @@ export default function PropFirmPage() {
   ])
 
   async function handlePayoutSetupSubmit(values: PayoutSetupValues) {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("save")
       return
     }
@@ -964,7 +965,7 @@ export default function PropFirmPage() {
   }
 
   function openPassEvalWorkflow() {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("save")
       return
     }
@@ -1089,7 +1090,7 @@ export default function PropFirmPage() {
   }
 
   async function handleConvertRulesSave(account: CreateTradingAccountPayload) {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("save")
       return
     }
@@ -1146,7 +1147,7 @@ export default function PropFirmPage() {
   }
 
   async function handleCreateFundedAccountSave(account: CreateTradingAccountPayload) {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("save")
       return
     }
@@ -1380,7 +1381,7 @@ export default function PropFirmPage() {
       value={accountFilter}
       onChange={(value) => {
         if (value === MANAGE_ACCOUNTS_VALUE) {
-          if (isDemoModeActive()) {
+          if (isExploreWriteBlocked()) {
             requestDemoSignup("save")
             return
           }
@@ -1452,7 +1453,7 @@ export default function PropFirmPage() {
                   value={accountFilter}
                   onChange={(value) => {
                     if (value === MANAGE_ACCOUNTS_VALUE) {
-                      if (isDemoModeActive()) {
+                      if (isExploreWriteBlocked()) {
                         requestDemoSignup("save")
                         return
                       }

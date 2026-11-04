@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import { createFollowNotification } from "@/lib/createFollowNotification"
 import { createFollowRequestNotification } from "@/lib/createFollowRequestNotification"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
@@ -113,7 +114,7 @@ export async function followOrRequest(
     return { ok: false, message: "Invalid follow target" }
   }
 
-  if (isDemoModeActive()) {
+  if (isExploreWriteBlocked()) {
     requestDemoSignup("follow")
     return { ok: false, message: "Sign up to follow traders" }
   }
@@ -171,7 +172,7 @@ export async function unfollowOrCancelRequest(
     return { ok: false, message: "Invalid unfollow target" }
   }
 
-  if (isDemoModeActive()) {
+  if (isExploreWriteBlocked()) {
     requestDemoSignup("follow")
     return { ok: false, message: "Sign up to manage follows" }
   }

@@ -52,6 +52,8 @@ export function mergeConversationInboxFields<
 }
 
 /** Same preview rules as `app/(app)/messages/page.tsx` realtime handler. */
+export const DELETED_DM_MESSAGE_PREVIEW = "Message deleted"
+
 export function previewFromMessage(row: {
   content?: string | null
   image_url?: string | null
@@ -60,7 +62,7 @@ export function previewFromMessage(row: {
   deleted_for_everyone?: boolean | null
   is_system?: boolean | null
 }): string {
-  if (row.deleted_for_everyone) return "Message deleted"
+  if (row.deleted_for_everyone) return ""
   if (row.type === "story_reply") {
     return storyReplyPreviewText(row.content)
   }
@@ -74,6 +76,30 @@ export function previewFromMessage(row: {
   if (row.type === "trade") return "Shared a trade"
   if (row.type === "post" || row.type === "profile_post") return "Shared a post"
   return "New message"
+}
+
+/** Last non-deleted, non-system message for inbox preview after a delete. */
+export function latestConversationPreviewFromMessages(
+  messages: readonly {
+    deleted_for_everyone?: boolean | null
+    is_system?: boolean | null
+    created_at?: string | null
+    content?: string | null
+    image_url?: string | null
+    audio_url?: string | null
+    type?: string | null
+  }[]
+): { text: string; at: string } | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (!msg || msg.deleted_for_everyone || msg.is_system) continue
+    const text = previewFromMessage(msg)
+    if (!text.trim()) continue
+    const at = String(msg.created_at ?? "").trim()
+    if (!at) continue
+    return { text, at }
+  }
+  return null
 }
 
 export async function updateConversationPreview(

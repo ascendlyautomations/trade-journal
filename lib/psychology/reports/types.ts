@@ -91,6 +91,7 @@ export type PsychologyReportTrade = {
   created_at?: string | null
   pnl: number
   rr: number | null
+  realizedRr?: number | null
   mode?: string | null
   account_type?: string | null
   emotion: string | null

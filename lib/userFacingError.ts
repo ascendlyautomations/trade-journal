@@ -15,6 +15,8 @@ export const USER_FACING_ERROR_MESSAGES = {
     "Free plan allows up to 3 trading accounts total. Upgrade to TraxPro for unlimited accounts.",
   ACCOUNT_READ_ONLY:
     "This account is read-only on the Free plan. Choose it as one of your 3 active accounts or upgrade to TraxPro to add trades.",
+  COPY_TRADING_ACCOUNT_NOT_ELIGIBLE:
+    "Accounts linked to Copy Trading stay view-only on the Free plan. Choose other accounts for new trades, or upgrade to TraxPro.",
   ACCOUNT_SLOT_SELECTION_REQUIRED:
     "Choose up to 3 accounts to keep active for new trades. Your other accounts stay available in read-only mode.",
   ACCOUNT_OWNERSHIP_MISMATCH: "That trading account does not belong to you.",

@@ -25,7 +25,7 @@ export const LANDING_CARD_PADDING = "p-4 md:p-7"
 export const LANDING_TITLE_GRADIENT =
   "bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent"
 
-export const LANDING_SECTION_SHELL = "mx-auto w-full max-w-6xl px-4 md:px-6"
+export const LANDING_SECTION_SHELL = "mx-auto w-full max-w-7xl px-4 md:px-6"
 
 export const LANDING_SECTION_SPACING = "py-12 md:py-28"
 
@@ -73,6 +73,16 @@ export const LANDING_REVEAL_TO = "opacity-100 translate-y-0"
 export const LANDING_REVEAL_TRANSITION =
   "motion-reduce:!translate-y-0 motion-reduce:!opacity-100 motion-reduce:transition-none"
 
+function shouldForceLandingRevealVisible(el: Element): boolean {
+  const rect = el.getBoundingClientRect()
+  const vh = window.innerHeight
+  // Already scrolled past — do not leave content stuck at opacity 0.
+  if (rect.bottom <= 0) return true
+  // Any overlap with the viewport (generous top inset for fixed nav).
+  if (rect.top < vh && rect.bottom > 0) return true
+  return false
+}
+
 export function useLandingReveal() {
   const ref = useRef<HTMLElement | null>(null)
   const [visible, setVisible] = useState(false)
@@ -85,17 +95,48 @@ export function useLandingReveal() {
     }
     const el = ref.current
     if (!el) return
+
+    const reveal = () => {
+      setVisible(true)
+    }
+
+    if (shouldForceLandingRevealVisible(el)) {
+      reveal()
+      return
+    }
+
+    let revealed = false
+    const tryReveal = () => {
+      if (revealed) return
+      if (shouldForceLandingRevealVisible(el)) {
+        revealed = true
+        reveal()
+        io.disconnect()
+        window.removeEventListener("scroll", tryReveal)
+        window.removeEventListener("resize", tryReveal)
+      }
+    }
+
     const io = new IntersectionObserver(
-      ([e]) => {
-        if (e.isIntersecting) {
-          setVisible(true)
-          io.unobserve(el)
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          revealed = true
+          reveal()
+          io.disconnect()
+          window.removeEventListener("scroll", tryReveal)
+          window.removeEventListener("resize", tryReveal)
         }
       },
-      { threshold: 0.06, rootMargin: "0px 0px -8% 0px" }
+      { threshold: 0.01, rootMargin: "0px 0px 10% 0px" }
     )
     io.observe(el)
-    return () => io.disconnect()
+    window.addEventListener("scroll", tryReveal, { passive: true })
+    window.addEventListener("resize", tryReveal, { passive: true })
+    return () => {
+      io.disconnect()
+      window.removeEventListener("scroll", tryReveal)
+      window.removeEventListener("resize", tryReveal)
+    }
   }, [])
 
   return { ref, visible }

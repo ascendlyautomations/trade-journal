@@ -91,14 +91,9 @@ export function readRoomSession(userId: string): RoomSessionSnapshot | null {
   const entry = sessions.get(key) ?? readStoredSnapshot(key)
   if (!entry) return null
   if (Date.now() - entry.fetchedAt > DEFAULT_STALE_MS) {
-    // Native: still paint soft-stale rooms (SWR). Web: miss.
-    if (!(typeof window !== "undefined" && isNativeIos())) {
-      sessions.delete(key)
-      if (typeof window !== "undefined") {
-        window.sessionStorage.removeItem(storageKey(key))
-      }
-      return null
-    }
+    // Soft-stale: paint immediately; callers revalidate in the background (web + native).
+    sessions.set(key, entry)
+    return entry
   }
   sessions.set(key, entry)
   return entry
@@ -115,7 +110,7 @@ export function writeRoomSession(
 ) {
   const key = userId.trim()
   if (!key) return
-  const prev = sessions.get(key) ?? emptySnapshot(key)
+  const prev = sessions.get(key) ?? readStoredSnapshot(key) ?? emptySnapshot(key)
   const next = {
     ...prev,
     ...patch,

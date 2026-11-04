@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import { useRouter } from "next/navigation"
 import BrokerImportModalShell from "@/app/components/brokerImport/BrokerImportModalShell"
 import { invalidateTradesCache } from "@/lib/appDataCache"
@@ -122,7 +123,7 @@ export default function DashboardBrokerIntegrationCard({
   }, [loadEligibility, open])
 
   function requireAccount() {
-    if (isDemoModeActive() || isDemoUserId(userId)) {
+    if (isExploreWriteBlocked() || isDemoUserId(userId)) {
       requestDemoSignup("save")
       return false
     }

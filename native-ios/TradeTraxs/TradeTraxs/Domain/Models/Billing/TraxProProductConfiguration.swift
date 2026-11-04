@@ -12,11 +12,9 @@ nonisolated enum TraxProProductConfiguration {
     static let sixMonthInfoPlistKey = "TRAXPRO_IAP_PRODUCT_ID_SIX_MONTH"
     static let yearlyInfoPlistKey = "TRAXPRO_IAP_PRODUCT_ID_YEARLY"
 
-    static let defaultMonthlyProductID = "com.tradetraxs.traxspro.monthly"
-    /// Matches six-month/yearly naming in App Store Connect (`traxpro.*`).
-    static let alternateMonthlyProductID = "com.tradetraxs.traxpro.monthly"
-    static let defaultSixMonthProductID = "com.tradetraxs.traxpro.sixmonth"
-    static let defaultYearlyProductID = "com.tradetraxs.traxpro.yearly"
+    static let defaultMonthlyProductID = "com.tradetraxs.pro.monthly.v2"
+    static let defaultSixMonthProductID = "com.tradetraxs.pro.sixmonth.v2"
+    static let defaultYearlyProductID = "com.tradetraxs.pro.annual.v2"
 
     static var allProductIDs: [String] {
         [monthlyProductID, sixMonthProductID, yearlyProductID]
@@ -36,7 +34,7 @@ nonisolated enum TraxProProductConfiguration {
 
     static func billingInterval(for productID: String) -> BillingInterval? {
         switch productID {
-        case monthlyProductID, alternateMonthlyProductID:
+        case monthlyProductID:
             return .monthly
         case sixMonthProductID:
             return .sixMonth

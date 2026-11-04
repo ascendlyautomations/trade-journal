@@ -1,5 +1,11 @@
 import { describe, it } from "node:test"
-import { getFeaturedWeekStartIso, isPublicDiscoverableTradeRow, pickBestPnlPost, pickHighestRrPost, } from "./featuredTradesWeekLogic.ts"
+import {
+  getFeaturedWeekStartIso,
+  hasFeaturedPostImage,
+  isPublicDiscoverableTradeRow,
+  pickBestPnlPost,
+  pickHighestRrPost,
+} from "./featuredTradesWeekLogic.ts"
 import assert from "node:assert/strict"
 
 describe("featuredTradesWeek", () => {
@@ -8,6 +14,13 @@ describe("featuredTradesWeek", () => {
     const start = new Date(getFeaturedWeekStartIso(now))
     const diffDays = (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
     assert.ok(Math.abs(diffDays - 7) < 0.01)
+  })
+
+  it("hasFeaturedPostImage requires a non-empty post image_url", () => {
+    assert.equal(hasFeaturedPostImage({ image_url: "screenshots/abc.png" }), true)
+    assert.equal(hasFeaturedPostImage({ image_url: "  " }), false)
+    assert.equal(hasFeaturedPostImage({ image_url: null }), false)
+    assert.equal(hasFeaturedPostImage({}), false)
   })
 
   it("isPublicDiscoverableTradeRow requires public trade and public profile", () => {

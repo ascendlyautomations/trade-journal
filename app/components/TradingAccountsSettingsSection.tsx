@@ -21,7 +21,7 @@ import {
   FREE_PLAN_ACCOUNT_LIMIT_MESSAGE,
   insertTradingAccount,
   mapTradingAccountRow,
-  setTradingAccountActive,
+  setTradingAccountFilterVisibility,
   tradingAccountDisplayTitle,
   tradingAccountToFormValues,
   updateTradingAccount,
@@ -47,7 +47,9 @@ function sortAccountsForDisplay(
   accounts: TradingAccountListItem[]
 ): TradingAccountListItem[] {
   return [...accounts].sort((a, b) => {
-    if (a.is_active !== b.is_active) return a.is_active ? -1 : 1
+    if (a.show_in_account_dropdowns !== b.show_in_account_dropdowns) {
+      return a.show_in_account_dropdowns ? -1 : 1
+    }
     return a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
   })
 }
@@ -198,14 +200,14 @@ export default function TradingAccountsSettingsSection({
     })
   }, [userId, refreshAccounts])
 
-  async function handleToggleActive(account: TradingAccountListItem) {
+  async function handleToggleFilterVisibility(account: TradingAccountListItem) {
     if (!userId || togglingId) return
-    const nextActive = !account.is_active
+    const nextVisible = !account.show_in_account_dropdowns
     setTogglingId(account.id)
-    const { error } = await setTradingAccountActive(
+    const { error } = await setTradingAccountFilterVisibility(
       supabase,
       account.id,
-      nextActive
+      nextVisible
     )
     setTogglingId(null)
 
@@ -217,14 +219,18 @@ export default function TradingAccountsSettingsSection({
 
     setAccounts((prev) =>
       prev.map((a) =>
-        a.id === account.id ? { ...a, is_active: nextActive } : a
+        a.id === account.id
+          ? { ...a, show_in_account_dropdowns: nextVisible }
+          : a
       )
     )
     invalidateAccountCaches()
     void refreshAccounts({ force: true })
     showPopup({
       type: "success",
-      message: nextActive ? "Account is visible again" : "Account hidden",
+      message: nextVisible
+        ? "Account will appear in dashboard and trade filters"
+        : "Account hidden from filters (history preserved)",
     })
   }
 
@@ -358,8 +364,9 @@ export default function TradingAccountsSettingsSection({
           Trading Accounts
         </h3>
         <p className="mt-1 text-sm text-gray-400">
-          Manage which accounts appear in trade logging. Hidden accounts stay
-          linked to existing trades but are hidden from the account picker.
+          Choose up to 3 active accounts for new trades on Free. View-only
+          accounts keep full history; use show/hide to control dashboard and
+          filter visibility without changing active slots.
         </p>
 
         {freePlanSlots?.canReconfigureActiveAccounts ? (
@@ -398,17 +405,17 @@ export default function TradingAccountsSettingsSection({
                 <ul className="mt-4 space-y-3">
                   {paginatedAccounts.map((account) => {
                     const modeLabel = formatTradingAccountMode(account.mode)
-                    const isActive = account.is_active
+                    const visibleInFilters = account.show_in_account_dropdowns
                     const confirmedFree =
                       freePlanSlots?.viewerIsConfirmedFree === true
                     const tradeEnabled = account.can_add_trades
-                    const statusLabel = confirmedFree
-                      ? tradeEnabled
-                        ? "Active"
-                        : "Read-Only"
-                      : isActive
-                        ? "Active"
-                        : "Hidden"
+                    const statusLabel = !visibleInFilters
+                      ? "Hidden"
+                      : confirmedFree
+                        ? tradeEnabled
+                          ? "Active"
+                          : "View Only"
+                        : "Active"
                     const busy = togglingId === account.id
                     const isEditingNote =
                       noteEditingAccount?.id === account.id
@@ -445,8 +452,8 @@ export default function TradingAccountsSettingsSection({
                               className={
                                 statusLabel === "Active"
                                   ? "text-emerald-300"
-                                  : statusLabel === "Read-Only"
-                                    ? "text-gray-300"
+                                  : statusLabel === "View Only"
+                                    ? "text-amber-200/90"
                                     : "text-red-300/90"
                               }
                             >
@@ -515,18 +522,20 @@ export default function TradingAccountsSettingsSection({
                               <button
                                 type="button"
                                 disabled={busy}
-                                onClick={() => void handleToggleActive(account)}
+                                onClick={() =>
+                                  void handleToggleFilterVisibility(account)
+                                }
                                 className={`rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
-                                  isActive
+                                  visibleInFilters
                                     ? "bg-red-500/15 text-red-200 hover:bg-red-500/25"
                                     : "bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
                                 }`}
                               >
                                 {busy
                                   ? "Updating…"
-                                  : isActive
-                                    ? "Hide Account"
-                                    : "Show Account"}
+                                  : visibleInFilters
+                                    ? "Hide from filters"
+                                    : "Show in filters"}
                               </button>
                             </div>
                           </>

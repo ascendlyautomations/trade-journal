@@ -6,6 +6,7 @@ struct PsychologyInsightsSection: View {
     let cards: [PsychologyInsightCard]
     var unlockProgress: PsychologyInsightsUnlockProgress = .zero
     var unlockMetricsReady: Bool = true
+    var hasMatchedCheckInDays: Bool = false
     var postUnlockGapMessages: [String] = []
     var onSelect: (PsychologyInsightCard) -> Void
     var onViewAll: () -> Void
@@ -46,12 +47,17 @@ struct PsychologyInsightsSection: View {
                 if cards.isEmpty {
                     if !unlockMetricsReady {
                         loadingState
-                    } else if unlockProgress.showsRequirementMessage {
-                        requirementEmptyState
-                    } else {
+                    } else if !hasMatchedCheckInDays {
+                        noMatchedDaysEmptyState
+                    } else if !unlockProgress.showsRequirementMessage {
                         postUnlockGapState
+                    } else {
+                        noMatchedDaysEmptyState
                     }
                 } else {
+                    if unlockProgress.showsRequirementMessage {
+                        unlockProgressCaption
+                    }
                     VStack(spacing: ExperienceSpacing.xs) {
                         ForEach(visibleCards) { card in
                             Button {
@@ -133,22 +139,37 @@ struct PsychologyInsightsSection: View {
         .accessibilityIdentifier("dashboard.psychologyInsights.gaps")
     }
 
-    private var requirementEmptyState: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            ExperienceEmptyState(
-                icon: .chart,
-                title: "5 check-in days & 5 trades to unlock overview",
-                message: PsychologyProgressMessaging.unlockOverviewCopy,
-                accessibilityIdentifier: "dashboard.psychologyInsights.requirements"
-            )
+    private var noMatchedDaysEmptyState: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            Text("No matched days yet")
+                .experienceStyle(.subheadline, color: colors.primaryText)
+                .fontWeight(.semibold)
             Text(
-                "Check-in days \(unlockProgress.displayCheckInDayCountForGate)/\(PsychologyInsightsUnlockProgress.requiredCount) · Trades \(unlockProgress.displayTradeCountForGate)/\(PsychologyInsightsUnlockProgress.requiredCount)"
+                "Log a daily check-in on the same Eastern calendar day as a trade in this filter scope to see sleep, mood, and performance relationships."
             )
             .experienceStyle(.caption, color: colors.secondaryText)
-            .monospacedDigit()
-            .padding(.horizontal, ExperienceSpacing.md)
         }
+        .padding(ExperienceSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
+        .overlay {
+            RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                .stroke(colors.border, lineWidth: 1)
+        }
+        .padding(.horizontal, ExperienceSpacing.md)
         .padding(.bottom, ExperienceSpacing.xs)
+        .accessibilityIdentifier("dashboard.psychologyInsights.empty")
+    }
+
+    private var unlockProgressCaption: some View {
+        Text(
+            "Full analytics depth: check-in days \(unlockProgress.displayCheckInDayCountForGate)/\(PsychologyInsightsUnlockProgress.requiredCount) · trades \(unlockProgress.displayTradeCountForGate)/\(PsychologyInsightsUnlockProgress.requiredCount)"
+        )
+        .experienceStyle(.caption2, color: colors.tertiaryText)
+        .monospacedDigit()
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.bottom, ExperienceSpacing.xs)
+        .accessibilityIdentifier("dashboard.psychologyInsights.progress")
     }
 
     private func psychologyCard(_ card: PsychologyInsightCard) -> some View {

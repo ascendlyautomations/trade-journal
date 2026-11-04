@@ -78,6 +78,7 @@ Deno.serve(async (req: Request) => {
   if (!verifyResponse.ok) return json({ error: "issue_failed" }, 500)
   const verified = await verifyResponse.json()
   const accessToken = verified.access_token
+  const refreshToken = verified.refresh_token
   if (typeof accessToken !== "string" || !accessToken) return json({ error: "issue_failed" }, 500)
 
   const claims = payload(accessToken)
@@ -94,10 +95,14 @@ Deno.serve(async (req: Request) => {
   if (!releaseResponse.ok) return json({ error: "issue_failed" }, 500)
 
   const expiresAt = typeof claims?.exp === "number" ? claims.exp : null
-  return json({
+  const body: Record<string, unknown> = {
     access_token: accessToken,
     token_type: "bearer",
     expires_at: expiresAt,
     user_id: showcaseUserId,
-  })
+  }
+  if (typeof refreshToken === "string" && refreshToken) {
+    body.refresh_token = refreshToken
+  }
+  return json(body)
 })

@@ -6,6 +6,33 @@
  * For unified TraxPro (including verified Apple App Store subscriptions), use
  * `isTraxProActive` in `lib/traxProEntitlement.ts`.
  */
+export type TradeSlotsProfile = {
+  is_pro?: boolean | null
+  creator_access?: boolean | null
+  subscription_status?: string | null
+  trial_end?: string | null
+  early_access_enrolled_at?: string | null
+  early_access_started_at?: string | null
+  early_access_status?: string | null
+  early_access_ends_at?: string | null
+  early_access_campaign_id?: string | null
+  early_access_enrollment_source?: string | null
+  free_plan_trade_slots_epoch?: number | string | null
+  free_plan_trade_slots_confirmed_epoch?: number | string | null
+}
+
+/**
+ * Pro for trade-entry slots. Explicit `is_pro = false` forces Free slots
+ * (admin/testing) even when Stripe subscription fields still look active.
+ */
+export function isProActiveForTradeSlots(
+  profile: TradeSlotsProfile | null | undefined
+): boolean {
+  if (profile?.is_pro === false) return false
+  if (profile?.is_pro === true) return true
+  return isProActive(profile)
+}
+
 export function isProActive(
   profile: {
     is_pro?: boolean | null

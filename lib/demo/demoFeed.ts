@@ -63,32 +63,42 @@ function profileFor(userId: string) {
   }
 }
 
+function showcaseNqEntryTime(): string {
+  return isoTradeTime(0, 10)
+}
+
+function showcaseNqExitTime(): string {
+  const exit = new Date(showcaseNqEntryTime())
+  exit.setMinutes(exit.getMinutes() + 10)
+  return exit.toISOString()
+}
+
 const RAW_FEED_ROWS: Record<string, unknown>[] = [
   {
     id: "demo-post-1",
     user_id: DEMO_USER_ID,
     trade_id: "dt-24",
-    created_at: isoTradeTime(0, 10),
+    created_at: showcaseNqExitTime(),
     pnl: 1050,
     rr: 2.7,
     image_url: demoTradeScreenshotUrl("dt-24", { direction: "Long", pnl: 1050 }),
     profiles: profileFor(DEMO_USER_ID),
     trades: {
       user_id: DEMO_USER_ID,
-      created_at: isoTradeTime(0, 10),
+      created_at: showcaseNqExitTime(),
       ticker: "NQ",
       direction: "Long",
       account_type: "prop",
       points: 52,
-      entry_time: isoTradeTime(0, 10),
-      exit_time: isoTradeTime(0, 10),
+      entry_time: showcaseNqEntryTime(),
+      exit_time: showcaseNqExitTime(),
       entry_price: 19010,
       exit_price: 19062,
-      trade_date: isoTradeTime(0, 10).slice(0, 10),
-      duration_seconds: 1080,
-      duration_text: "18m",
+      trade_date: showcaseNqEntryTime().slice(0, 10),
+      duration_seconds: 10 * 60,
+      duration_text: "10m",
       public_description:
-        "Clean opening drive long. Waited for liquidity sweep, entered on 1m BOS. Took partials at VWAP extension.",
+        "Clean opening drive long. Waited for liquidity sweep, entered on 1m BOS.",
       reels: {
         id: "demo-reel-1",
         user_id: DEMO_USER_ID,

@@ -31,6 +31,8 @@ type MobileWebTradeJournalCardProps = {
   onSendClick: (trade: any) => void
   onAnalyze?: (trade: any) => void
   onImageClick: (imageUrl: string) => void
+  /** Marketing journal→feed: show entry/exit timestamps instead of account line. */
+  marketingEntryExitTimes?: boolean
 }
 
 const LABEL = "text-[color:var(--tt-text-tertiary,#a8b3c2)]"
@@ -61,6 +63,7 @@ function MobileWebTradeJournalCard({
   onSendClick,
   onAnalyze,
   onImageClick,
+  marketingEntryExitTimes = false,
 }: MobileWebTradeJournalCardProps) {
   const ticker = String(trade.ticker ?? "").trim() || "—"
   const side = resolveSide(trade)
@@ -87,6 +90,10 @@ function MobileWebTradeJournalCard({
     () => formatTradeAccountNameSizeLine(trade, accountRow),
     [accountRow, trade]
   )
+  const entryTimeLine =
+    formatShortDateTimeEST(trade.entry_time || trade.trade_date) || "—"
+  const exitTimeLine =
+    formatShortDateTimeEST(trade.exit_time || trade.created_at) || "—"
   const dateLine =
     formatShortDateTimeEST(trade.entry_time || trade.created_at || trade.trade_date) ||
     "—"
@@ -155,14 +162,27 @@ function MobileWebTradeJournalCard({
                   </p>
                 ) : null}
               </>
+            ) : marketingEntryExitTimes ? (
+              <>
+                <p className={`truncate text-[12px] leading-snug ${MUTED}`}>
+                  <span className={`font-semibold ${VALUE}`}>Entry · </span>
+                  {entryTimeLine}
+                </p>
+                <p className={`truncate text-[12px] leading-snug ${MUTED}`}>
+                  <span className={`font-semibold ${VALUE}`}>Exit · </span>
+                  {exitTimeLine}
+                </p>
+              </>
             ) : (
-              <p className={`truncate text-[12px] leading-snug ${MUTED}`}>
-                {accountLine || "—"}
-              </p>
+              <>
+                <p className={`truncate text-[12px] leading-snug ${MUTED}`}>
+                  {accountLine || "—"}
+                </p>
+                <p className={`truncate text-[12px] leading-snug ${MUTED}`}>
+                  {dateLine}
+                </p>
+              </>
             )}
-            <p className={`truncate text-[12px] leading-snug ${MUTED}`}>
-              {dateLine}
-            </p>
           </div>
           {showThumb && screenshotUrl ? (
             <div

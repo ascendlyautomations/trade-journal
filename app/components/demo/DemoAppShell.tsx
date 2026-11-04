@@ -11,6 +11,10 @@ import {
   isDemoModeActive,
   subscribeDemoModeChanges,
 } from "@/lib/demo/demoMode"
+import {
+  GUEST_EXPLORE_CHANGE_EVENT,
+  isGuestExploreViewer,
+} from "@/lib/guestExplore"
 import { syncDemoBannerLayout } from "@/lib/demo/demoLayout"
 
 function DemoBannerInset({ children }: { children: ReactNode }) {
@@ -18,19 +22,26 @@ function DemoBannerInset({ children }: { children: ReactNode }) {
   const standaloneFlow = isStandaloneFlowRoute(pathname)
   const { user, profile, loading } = useUserProfile()
   const [demoMode, setDemoMode] = useState(false)
+  const [guestExplore, setGuestExplore] = useState(false)
 
   const bannerVisible =
-    demoMode &&
+    (demoMode || guestExplore) &&
     !standaloneFlow &&
     !shouldShowCustomerHomeChrome(user, profile, loading)
 
   useEffect(() => {
     const sync = () => {
       setDemoMode(isDemoModeActive())
+      setGuestExplore(isGuestExploreViewer(user))
     }
     sync()
-    return subscribeDemoModeChanges(sync)
-  }, [])
+    const unsubDemo = subscribeDemoModeChanges(sync)
+    window.addEventListener(GUEST_EXPLORE_CHANGE_EVENT, sync)
+    return () => {
+      unsubDemo()
+      window.removeEventListener(GUEST_EXPLORE_CHANGE_EVENT, sync)
+    }
+  }, [user])
 
   useEffect(() => {
     syncDemoBannerLayout(bannerVisible)

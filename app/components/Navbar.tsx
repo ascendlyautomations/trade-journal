@@ -34,6 +34,12 @@ import UserReviewModal from "./beta/UserReviewModal"
 import BugReportModal from "./BugReportModal"
 import GettingStartedMobileEntry from "./GettingStartedMobileEntry"
 import { isDemoUserId } from "@/lib/demo/constants"
+import { isAuthenticatedAppUser } from "@/lib/marketingAccess"
+import {
+  exitGuestExplore,
+  isGuestExploreViewer,
+  showcaseProfilePath,
+} from "@/lib/guestExplore"
 import { getDemoUnreadNotificationCount } from "@/lib/demo/demoNotifications"
 import { exitDemoMode, isDemoModeActive, disableDemoMode, subscribeDemoModeChanges } from "@/lib/demo/demoMode"
 import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
@@ -131,7 +137,8 @@ export default function Navbar() {
 
   const router = useRouter()
   const isHomePage = pathname === "/"
-  const isAuthenticatedUser = !!user && !isDemoUserId(user.id)
+  const isAuthenticatedUser = isAuthenticatedAppUser(user)
+  const isExploreViewer = isGuestExploreViewer(user)
   const [demoActive, setDemoActive] = useState(false)
   const showMobileNav = !!user || demoActive
   const showReturnToApp = isAuthenticatedUser && isHomePage
@@ -150,6 +157,13 @@ export default function Navbar() {
     setActiveMenu(null)
     setMoreSubmenu(null)
     setAccountMenuOpen(false)
+    if (isExploreViewer) {
+      void exitGuestExplore()
+      setUnreadCount(0)
+      setUnreadMessagesCount(0)
+      router.push("/")
+      return
+    }
     if (isDemoModeActive()) {
       exitDemoMode()
       setUnreadCount(0)
@@ -165,12 +179,16 @@ export default function Navbar() {
       setActiveMenu(null)
       setMoreSubmenu(null)
       setAccountMenuOpen(false)
+      if (isExploreViewer) {
+        router.push(showcaseProfilePath())
+        return
+      }
       if (isDemoModeActive()) {
         exitDemoMode()
       }
       router.push("/dashboard")
     },
-    [router]
+    [router, isExploreViewer]
   )
 
   const handleSignOut = useCallback(async () => {
@@ -178,6 +196,12 @@ export default function Navbar() {
     setActiveMenu(null)
     setMoreSubmenu(null)
     setAccountMenuOpen(false)
+    if (isGuestExploreViewer(user)) {
+      clearSignupFlow()
+      await exitGuestExplore()
+      router.replace("/")
+      return
+    }
     disableDemoMode()
     clearSignupFlow()
     try {
@@ -197,7 +221,7 @@ export default function Navbar() {
     // replace avoids keeping authenticated pages in history; PublicNavbar must
     // paint immediately for logged-out marketing routes (see shouldShowMarketingNavbar).
     router.replace("/")
-  }, [router])
+  }, [router, user])
 
   useEffect(() => {
     const syncDemo = () => setDemoActive(isDemoModeActive())

@@ -46,6 +46,10 @@ export type MobileWebAppStorePromoSurface =
   | "get_app_banner"
   | "open_in_app"
   | "community_room_invite"
+  | "hero"
+  | "nav"
+  | "ios_section"
+  | "final_cta"
 
 type AllowedTrackValue = string | number | boolean | null | undefined
 

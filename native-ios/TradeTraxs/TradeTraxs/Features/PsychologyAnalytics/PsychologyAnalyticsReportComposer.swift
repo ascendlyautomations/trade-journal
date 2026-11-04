@@ -15,15 +15,23 @@ enum PsychologyAnalyticsReportComposer {
             ),
             tradeCount: scopedTrades.count
         )
-        let gapMessages = PsychologyProgressMessaging.postUnlockInsightGapMessages(
-            report: report,
-            trades: scopedTrades,
-            checkIns: checkIns
+        let early = EarlyPsychologyInsightsBuilder.build(trades: scopedTrades, checkIns: checkIns)
+        let displayInsightCards = EarlyPsychologyInsightsBuilder.merge(
+            early: early,
+            reportCards: report.dashboardCards
         )
+        let gapMessages = displayInsightCards.isEmpty
+            ? PsychologyProgressMessaging.postUnlockInsightGapMessages(
+                report: report,
+                trades: scopedTrades,
+                checkIns: checkIns
+            )
+            : []
         PsychologyAnalyticsSessionStore.shared.update(
             report: report,
             unlockProgress: unlock,
             postUnlockGapMessages: gapMessages,
+            displayInsightCards: displayInsightCards,
             profileID: profileID,
             scopeFingerprint: scope.fingerprint,
             scopeLabel: scope.label

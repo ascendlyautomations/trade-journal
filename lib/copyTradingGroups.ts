@@ -138,6 +138,11 @@ export function invalidateCopyTradingGroupsCache(userId?: string | null) {
   copyTradingGroupsByUser.delete(userId.trim())
 }
 
+export {
+  copyTradingLinkedAccountIdSet,
+  COPY_TRADING_ACCOUNT_FREE_VIEW_ONLY_NOTE,
+} from "./copyTradingAccountIds.ts"
+
 export function resolveCopyGroupAccounts(
   group: CopyTradingGroup,
   accounts: TradingAccountListItem[]

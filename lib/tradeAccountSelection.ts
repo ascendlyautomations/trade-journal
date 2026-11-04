@@ -21,6 +21,14 @@ export function isCopyGroupFilterValue(value: string | null | undefined): boolea
   return parseCopyGroupFilterValue(value) != null
 }
 
+/** Lazy-load copy groups for dashboard/trades filter pickers (Free view-only + Pro). */
+export function shouldFetchCopyTradingGroupsForFilter(
+  copyGroupsRequested: boolean,
+  accountFilter: string
+): boolean {
+  return copyGroupsRequested || isCopyGroupFilterValue(accountFilter)
+}
+
 export function resolveCopyGroupAccountIdsForFilter(
   accountFilter: string,
   copyGroups: readonly CopyTradingGroup[]

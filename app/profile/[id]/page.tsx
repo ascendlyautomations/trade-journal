@@ -97,6 +97,9 @@ import {
 } from "@/lib/userAchievementsCache"
 import { loadFollowUiSnapshot } from "@/lib/followActions"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { isGuestExploreActive } from "@/lib/guestExplore"
+import { isShowcaseUserId } from "@/lib/guestShowcaseAccount"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import {
   getDemoProfileMetadata,
@@ -569,8 +572,8 @@ function ProfilePageContent() {
   }, [])
 
   const openQuickTradeModal = useCallback(() => {
-    if (isDemoModeActive()) {
-      requestDemoSignup("trade")
+    if (isExploreWriteBlocked(currentUserId)) {
+      requestDemoSignup("trade", currentUserId)
       return
     }
     setShowQuickTrade(true)
@@ -651,6 +654,10 @@ function ProfilePageContent() {
   const handleDeleteProfileStory = useCallback(
     async (storyId: string) => {
       if (!profile?.id || !currentUserId || currentUserId !== profile.id) {
+        return false
+      }
+      if (isExploreWriteBlocked(currentUserId)) {
+        requestDemoSignup("delete", currentUserId)
         return false
       }
 
@@ -1616,7 +1623,7 @@ function ProfilePageContent() {
 
   useEffect(() => {
     if (activeTab !== "reels" || !profile?.id || !profileReelIdsKey) return
-    if (isDemoModeActive()) return
+    if (isExploreWriteBlocked(currentUserId)) return
 
     const reelIds = profileReelIdsKey.split(",").filter(Boolean)
     const likeFilters = buildRealtimeInFilterChunks("reel_id", reelIds)
@@ -2026,7 +2033,11 @@ function ProfilePageContent() {
     const uid = viewerUser?.id ?? null
     setCurrentUserId(uid)
 
-    if (isDemoModeActive()) {
+    if (
+      isDemoModeActive() &&
+      !isGuestExploreActive() &&
+      !isShowcaseUserId(uid)
+    ) {
       const demoProf = resolveDemoProfileBySegment(segment)
       if (!demoProf) {
         setProfile(null)
@@ -2508,6 +2519,10 @@ function ProfilePageContent() {
     async (post: any) => {
       if (!currentUserId || !profile || currentUserId !== profile.id) return
       if (String(post.user_id) !== profile.id) return
+      if (isExploreWriteBlocked(currentUserId)) {
+        requestDemoSignup("delete", currentUserId)
+        return
+      }
 
       const reelId = String(post.id)
       const result = await deleteReel(supabase, {
@@ -2621,6 +2636,10 @@ function ProfilePageContent() {
 
   async function handleLike(id: string, type: "post" | "trade") {
     if (!currentUserId || type !== "post") return
+    if (isExploreWriteBlocked(currentUserId)) {
+      requestDemoSignup("like", currentUserId)
+      return
+    }
     const key = String(id)
     if (likeBusyRef.current.has(key) || likeBusyByPost[key]) return
 
@@ -2653,6 +2672,10 @@ function ProfilePageContent() {
     parentCommentId?: string | null
   ) {
     if (!currentUserId || type !== "post") return
+    if (isExploreWriteBlocked(currentUserId)) {
+      requestDemoSignup("comment", currentUserId)
+      return
+    }
     const key = String(id)
     const text = (commentDraft[key] || "").trim()
     if (!text) return
@@ -2767,6 +2790,10 @@ function ProfilePageContent() {
     parentCommentId?: string | null
   ) {
     if (!currentUserId) return false
+    if (isExploreWriteBlocked(currentUserId)) {
+      requestDemoSignup("comment", currentUserId)
+      return false
+    }
     const key = String(post.id)
     const trimmed = (text || "").trim()
     if (!trimmed) return false
@@ -2858,6 +2885,10 @@ function ProfilePageContent() {
     parentCommentId?: string | null
   ) {
     if (!currentUserId) return false
+    if (isExploreWriteBlocked(currentUserId)) {
+      requestDemoSignup("comment", currentUserId)
+      return false
+    }
     const key = String(post.id)
     const trimmed = (text || "").trim()
     if (!trimmed) return false
@@ -2923,6 +2954,10 @@ function ProfilePageContent() {
   async function deleteComment(comment: any) {
     if (!currentUserId) {
       devWarn("[comment-delete] aborted: no user")
+      return false
+    }
+    if (isExploreWriteBlocked(currentUserId)) {
+      requestDemoSignup("delete", currentUserId)
       return false
     }
     if (String(comment.user_id) !== String(currentUserId)) {
@@ -3034,6 +3069,10 @@ function ProfilePageContent() {
 
   async function togglePinComment(comment: any, pinned: boolean) {
     if (!currentUserId) return false
+    if (isExploreWriteBlocked(currentUserId)) {
+      requestDemoSignup("edit", currentUserId)
+      return false
+    }
     if (comment.parent_comment_id) return false
 
     const target = resolveCommentPinTarget(comment)
@@ -3090,6 +3129,10 @@ function ProfilePageContent() {
   }
 
   async function handleDeletePost(postId: string) {
+    if (isExploreWriteBlocked(currentUserId)) {
+      requestDemoSignup("delete", currentUserId)
+      return
+    }
     const confirmDelete = window.confirm("Delete this post?")
     if (!confirmDelete) return
 
@@ -3172,6 +3215,10 @@ function ProfilePageContent() {
 
   async function handleSavePost(postId: string) {
     if (!currentUserId) return
+    if (isExploreWriteBlocked(currentUserId)) {
+      requestDemoSignup("save", currentUserId)
+      return
+    }
     setOpenMenuId(null)
     const { error } = await supabase.from("saved_posts").insert({
       user_id: currentUserId,
@@ -3188,6 +3235,10 @@ function ProfilePageContent() {
   }
 
   async function handlePinTrade(trade: any) {
+    if (isExploreWriteBlocked(currentUserId)) {
+      requestDemoSignup("edit", currentUserId)
+      return
+    }
     const nextPinned = !trade.is_pinned
     const prevPinned = trade.is_pinned
     setAllTrades((prev) =>
@@ -3222,8 +3273,8 @@ function ProfilePageContent() {
   }
 
   const performDeleteTrade = useCallback(async (tradeId: string) => {
-    if (isDemoModeActive()) {
-      requestDemoSignup("delete")
+    if (isExploreWriteBlocked(currentUserId)) {
+      requestDemoSignup("delete", currentUserId)
       return
     }
     const snapshotAll = allTrades
@@ -4145,7 +4196,7 @@ function ProfilePageContent() {
             ])
           }}
         >
-        <div className="mx-auto max-w-5xl space-y-2 pt-3 pb-6 pl-[max(0.5rem,env(safe-area-inset-left,0px))] pr-[max(0.5rem,env(safe-area-inset-right,0px))] sm:space-y-4 sm:px-6 sm:pt-4 lg:px-8 xl:max-w-[1480px]">
+        <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-2 pt-3 pb-6 pl-[max(0.5rem,env(safe-area-inset-left,0px))] pr-[max(0.5rem,env(safe-area-inset-right,0px))] sm:space-y-4 sm:pt-4 md:px-6 xl:px-8 2xl:px-12">
           {bootstrapTransientError || (bootstrapRefreshing && headerPreviewOnly) ? (
             <>
               <MobileWebViewport>

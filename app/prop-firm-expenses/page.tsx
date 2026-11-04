@@ -357,7 +357,7 @@ export default function PropFirmExpensesPage() {
 
   return (
     <div className={`tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:py-8 max-md:px-3 max-md:py-3">
+      <div className="mx-auto w-full min-w-0 max-w-[1600px] px-4 py-6 sm:px-6 md:px-6 lg:py-8 xl:px-8 2xl:px-12 max-md:px-3 max-md:py-3">
         <div className="mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3 max-md:mb-3">
           <div className="min-w-0">
             <Link href="/settings" className="text-sm text-blue-300 hover:text-blue-200 max-md:hidden">

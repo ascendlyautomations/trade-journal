@@ -27,7 +27,7 @@ export async function fetchFeaturedTradesWeek(): Promise<FeaturedTradesWeekRespo
         highestRrPost: null,
         sectionTitle: "Featured Trades of the Week",
         sectionLead:
-          "Discover some of the community's best trades from this calendar week.",
+          "Public trades logged on TradeTraxs—shared from the journal with real P&L, not staged marketing picks.",
         isHistoricalPeriod: false,
       }
     }
@@ -39,7 +39,7 @@ export async function fetchFeaturedTradesWeek(): Promise<FeaturedTradesWeekRespo
         data.sectionTitle ?? "Featured Trades of the Week",
       sectionLead:
         data.sectionLead ??
-        "Discover some of the community's best trades from this calendar week.",
+        "Public trades logged on TradeTraxs—shared from the journal with real P&L, not staged marketing picks.",
       isHistoricalPeriod: data.isHistoricalPeriod ?? false,
     }
   } catch (error) {
@@ -49,7 +49,7 @@ export async function fetchFeaturedTradesWeek(): Promise<FeaturedTradesWeekRespo
       highestRrPost: null,
       sectionTitle: "Featured Trades of the Week",
       sectionLead:
-        "Discover some of the community's best trades from this calendar week.",
+        "Public trades logged on TradeTraxs—shared from the journal with real P&L, not staged marketing picks.",
       isHistoricalPeriod: false,
     }
   }

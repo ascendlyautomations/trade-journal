@@ -174,6 +174,7 @@ export function milestoneAccountToTradingListItem(
     category,
     is_active: true,
     can_add_trades: true,
+    show_in_account_dropdowns: true,
     note: "",
     rules: {
       consistency: parseOptionalNumber(account.consistency),

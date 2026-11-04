@@ -1,5 +1,37 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { isProActive } from "./subscription.ts"
+import { isProActive, isProActiveForTradeSlots } from "./subscription.ts"
+
+export type FreePlanTradeSlotsEpoch = {
+  required: number
+  confirmed: number
+}
+
+export function parseFreePlanTradeSlotsEpoch(
+  profile:
+    | {
+        free_plan_trade_slots_epoch?: number | string | null
+        free_plan_trade_slots_confirmed_epoch?: number | string | null
+        [key: string]: unknown
+      }
+    | null
+    | undefined
+): FreePlanTradeSlotsEpoch {
+  const required = Number(profile?.free_plan_trade_slots_epoch ?? 0)
+  const confirmed = Number(profile?.free_plan_trade_slots_confirmed_epoch ?? 0)
+  return {
+    required: Number.isFinite(required) ? required : 0,
+    confirmed: Number.isFinite(confirmed) ? confirmed : 0,
+  }
+}
+
+/** True when a new downgrade requires the 3-account picker (>3 accounts owned). */
+export function freePlanTradeSlotsPending(
+  totalAccounts: number,
+  epochs: FreePlanTradeSlotsEpoch
+): boolean {
+  if (totalAccounts <= FREE_PLAN_TRADE_ENTRY_SLOT_LIMIT) return false
+  return epochs.confirmed < epochs.required
+}
 
 /** Keep aligned with ``FREE_PLAN_ACCOUNT_LIMIT`` in ``tradingAccounts.ts``. */
 export const FREE_PLAN_TRADE_ENTRY_SLOT_LIMIT = 3
@@ -9,12 +41,12 @@ export type AccountTradeEntryRow = {
   can_add_trades?: boolean | null
 }
 
-/** True when the account may receive new trades on Free (default true for legacy rows). */
+/** True when the account is an active Free trade-entry slot (explicit true only). */
 export function accountCanAddTrades(
   account: AccountTradeEntryRow | null | undefined
 ): boolean {
   if (!account) return false
-  return account.can_add_trades !== false
+  return account.can_add_trades === true
 }
 
 export function countTradeEntryEnabledAccounts(
@@ -35,10 +67,13 @@ export function countTotalTradingAccounts(
  * when they currently have more than that limit with can_add_trades = true.
  */
 export function needsFreePlanAccountSlotSelection(
-  profile: Parameters<typeof isProActive>[0],
-  accounts: readonly AccountTradeEntryRow[]
+  profile: Parameters<typeof isProActiveForTradeSlots>[0],
+  accounts: readonly AccountTradeEntryRow[],
+  epochs?: FreePlanTradeSlotsEpoch
 ): boolean {
-  if (isProActive(profile)) return false
+  if (isProActiveForTradeSlots(profile)) return false
+  const total = countTotalTradingAccounts(accounts)
+  if (epochs && freePlanTradeSlotsPending(total, epochs)) return true
   return countTradeEntryEnabledAccounts(accounts) > FREE_PLAN_TRADE_ENTRY_SLOT_LIMIT
 }
 
@@ -48,9 +83,13 @@ export function needsFreePlanAccountSlotSelection(
  */
 export function freePlanSlotSelectionRequired(
   traxProActive: boolean | null,
-  accounts: readonly AccountTradeEntryRow[]
+  accounts: readonly AccountTradeEntryRow[],
+  epochs?: FreePlanTradeSlotsEpoch
 ): boolean {
   if (traxProActive !== false) return false
+  const total = countTotalTradingAccounts(accounts)
+  if (total <= FREE_PLAN_TRADE_ENTRY_SLOT_LIMIT) return false
+  if (epochs && freePlanTradeSlotsPending(total, epochs)) return true
   return countTradeEntryEnabledAccounts(accounts) > FREE_PLAN_TRADE_ENTRY_SLOT_LIMIT
 }
 
@@ -67,10 +106,16 @@ export function persistedTradeEntrySelectionIds(
 
 /** Accounts allowed in Manual / Quick / CSV / sync pickers. */
 export function filterAccountsForTradeEntry<
-  T extends AccountTradeEntryRow & { is_active?: boolean | null },
+  T extends AccountTradeEntryRow & {
+    is_active?: boolean | null
+    show_in_account_dropdowns?: boolean | null
+  },
 >(accounts: readonly T[]): T[] {
   return accounts.filter(
-    (row) => accountCanAddTrades(row) && row.is_active !== false
+    (row) =>
+      accountCanAddTrades(row) &&
+      row.is_active !== false &&
+      row.show_in_account_dropdowns !== false
   )
 }
 
@@ -86,20 +131,26 @@ export function filterAccountsForDropdown<
   )
 }
 
-export const ACCOUNT_READ_ONLY_BADGE = "Read Only"
+export const ACCOUNT_VIEW_ONLY_BADGE = "View Only"
+
+/** @deprecated Use ACCOUNT_VIEW_ONLY_BADGE */
+export const ACCOUNT_READ_ONLY_BADGE = ACCOUNT_VIEW_ONLY_BADGE
 
 export const ACCOUNT_SLOT_SELECTION_REQUIRED_MESSAGE =
-  "Choose up to 3 accounts to keep active for new trades. Your other accounts stay available in read-only mode."
+  "Choose up to 3 accounts to keep active for new trades. Your other accounts stay available in view-only mode."
 
 export const ACCOUNT_READ_ONLY_TRADE_MESSAGE =
-  "This account is read-only on the Free plan. Choose it as one of your 3 active accounts or upgrade to TraxPro to add trades."
+  "This account is view-only on the Free plan. Choose it as one of your 3 active accounts or upgrade to TraxPro to add or edit trades."
 
-/** Server-side gate before inserting a trade against an accounts row. */
-export async function assertAccountAllowsNewTrades(
+export const COPY_TRADING_ACCOUNT_READ_ONLY_TRADE_MESSAGE =
+  "This account is linked to Copy Trading and stays view-only on the Free plan. Upgrade to TraxPro to journal new trades here."
+
+/** Client-side gate before any trade write (insert, update, delete) on an account. */
+export async function assertAccountAllowsTradeWrites(
   client: SupabaseClient,
   userId: string,
   accountId: string | null | undefined,
-  profile: Parameters<typeof isProActive>[0],
+  profile: Parameters<typeof isProActiveForTradeSlots>[0],
   knownTraxProActive?: boolean | null
 ): Promise<
   | { ok: true }
@@ -109,7 +160,34 @@ export async function assertAccountAllowsNewTrades(
       message: string
     }
 > {
-  if (knownTraxProActive === true || (knownTraxProActive == null && isProActive(profile))) {
+  return assertAccountAllowsNewTrades(
+    client,
+    userId,
+    accountId,
+    profile,
+    knownTraxProActive
+  )
+}
+
+/** Server-side gate before inserting a trade against an accounts row. */
+export async function assertAccountAllowsNewTrades(
+  client: SupabaseClient,
+  userId: string,
+  accountId: string | null | undefined,
+  profile: Parameters<typeof isProActiveForTradeSlots>[0],
+  knownTraxProActive?: boolean | null
+): Promise<
+  | { ok: true }
+  | {
+      ok: false
+      code: "read_only" | "selection_required" | "ownership" | "missing_account"
+      message: string
+    }
+> {
+  if (
+    knownTraxProActive === true ||
+    (knownTraxProActive == null && isProActiveForTradeSlots(profile))
+  ) {
     return { ok: true }
   }
 
@@ -122,10 +200,19 @@ export async function assertAccountAllowsNewTrades(
     }
   }
 
-  const { data: rows, error } = await client
-    .from("accounts")
-    .select("id, user_id, can_add_trades")
-    .eq("user_id", userId)
+  const [{ data: rows, error }, { data: profileRow }] = await Promise.all([
+    client
+      .from("accounts")
+      .select("id, user_id, can_add_trades")
+      .eq("user_id", userId),
+    client
+      .from("profiles")
+      .select(
+        "free_plan_trade_slots_epoch, free_plan_trade_slots_confirmed_epoch, is_pro, creator_access, subscription_status, trial_end, early_access_enrolled_at, early_access_started_at, early_access_status, early_access_ends_at, early_access_campaign_id, early_access_enrollment_source"
+      )
+      .eq("id", userId)
+      .maybeSingle(),
+  ])
 
   if (error) {
     console.error("[assertAccountAllowsNewTrades]", error)
@@ -137,7 +224,9 @@ export async function assertAccountAllowsNewTrades(
   }
 
   const accounts = rows ?? []
-  if (needsFreePlanAccountSlotSelection(profile, accounts)) {
+  const epochs = parseFreePlanTradeSlotsEpoch(profileRow ?? profile)
+  const gateProfile = profileRow ?? profile
+  if (needsFreePlanAccountSlotSelection(gateProfile, accounts, epochs)) {
     return {
       ok: false,
       code: "selection_required",
@@ -158,7 +247,7 @@ export async function assertAccountAllowsNewTrades(
     }
   }
 
-  if (!accountCanAddTrades(target)) {
+  if (target.can_add_trades !== true) {
     return {
       ok: false,
       code: "read_only",

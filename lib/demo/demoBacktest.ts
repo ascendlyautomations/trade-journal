@@ -8,7 +8,9 @@ type BacktestSeed = {
   hour: number
   ticker: string
   pnl: number
+  /** Target / planned R:R (paired with maxRrReached for dashboard R:R Targeting). */
   rr: number
+  maxRrReached: number
   direction: "Long" | "Short"
   entry: number
   exit: number
@@ -25,6 +27,7 @@ const BACKTEST_SEEDS: BacktestSeed[] = [
     ticker: "NQ",
     pnl: 620,
     rr: 2.4,
+    maxRrReached: 3.1,
     direction: "Long",
     entry: 18720,
     exit: 18751,
@@ -39,6 +42,7 @@ const BACKTEST_SEEDS: BacktestSeed[] = [
     ticker: "ES",
     pnl: -240,
     rr: 0.8,
+    maxRrReached: 1.15,
     direction: "Short",
     entry: 5412,
     exit: 5418,
@@ -53,6 +57,7 @@ const BACKTEST_SEEDS: BacktestSeed[] = [
     ticker: "NQ",
     pnl: 880,
     rr: 2.9,
+    maxRrReached: 3.4,
     direction: "Long",
     entry: 18810,
     exit: 18854,
@@ -67,6 +72,7 @@ const BACKTEST_SEEDS: BacktestSeed[] = [
     ticker: "NQ",
     pnl: 410,
     rr: 1.7,
+    maxRrReached: 2.2,
     direction: "Short",
     entry: 18905,
     exit: 18884,
@@ -81,6 +87,7 @@ const BACKTEST_SEEDS: BacktestSeed[] = [
     ticker: "ES",
     pnl: -180,
     rr: 0.6,
+    maxRrReached: 0.95,
     direction: "Long",
     entry: 5438,
     exit: 5435,
@@ -95,6 +102,7 @@ const BACKTEST_SEEDS: BacktestSeed[] = [
     ticker: "NQ",
     pnl: 1120,
     rr: 3.2,
+    maxRrReached: 3.8,
     direction: "Long",
     entry: 19020,
     exit: 19076,
@@ -109,6 +117,7 @@ const BACKTEST_SEEDS: BacktestSeed[] = [
     ticker: "ES",
     pnl: 520,
     rr: 2.0,
+    maxRrReached: 2.6,
     direction: "Short",
     entry: 5460,
     exit: 5450,
@@ -123,6 +132,7 @@ const BACKTEST_SEEDS: BacktestSeed[] = [
     ticker: "NQ",
     pnl: 760,
     rr: 2.5,
+    maxRrReached: 2.9,
     direction: "Long",
     entry: 19110,
     exit: 19148,
@@ -137,6 +147,7 @@ const BACKTEST_SEEDS: BacktestSeed[] = [
     ticker: "NQ",
     pnl: -310,
     rr: 0.75,
+    maxRrReached: 1.05,
     direction: "Short",
     entry: 19202,
     exit: 19218,
@@ -151,6 +162,7 @@ const BACKTEST_SEEDS: BacktestSeed[] = [
     ticker: "ES",
     pnl: 690,
     rr: 2.2,
+    maxRrReached: 2.85,
     direction: "Long",
     entry: 5472,
     exit: 5483,
@@ -180,6 +192,7 @@ export function getDemoBacktestTrades(): Record<string, unknown>[] {
       ticker: seed.ticker,
       pnl: seed.pnl,
       rr: seed.rr,
+      max_rr_reached: seed.maxRrReached,
       direction: seed.direction,
       entry_price: seed.entry,
       exit_price: seed.exit,

@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import { supabase } from "@/lib/supabaseClient"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
@@ -149,7 +150,7 @@ export function useCommentLikes(args: {
 
   const toggleCommentLikeFor = useCallback(
     async (comment: any) => {
-      if (isDemoModeActive()) {
+      if (isExploreWriteBlocked()) {
         requestDemoSignup("like")
         return
       }

@@ -1,6 +1,7 @@
 "use client"
 
 import "../analyticsDesktopTheme.css"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import "./backtestLabTheme.css"
 import dynamic from "next/dynamic"
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -127,7 +128,7 @@ export default function BacktestPage() {
   const [reviewBusyId, setReviewBusyId] = useState<string | null>(null)
 
   const loadBacktests = useCallback(async () => {
-    if (isDemoModeActive() && user?.id) {
+    if (isDemoSupabaseBlocked() && user?.id) {
       setShareProfile({ referral_code: DEMO_PROFILE.referral_code })
       setAllBacktestTrades(getDemoBacktestTrades() as BacktestTrade[])
       setAccounts([])
@@ -192,7 +193,7 @@ export default function BacktestPage() {
   ])
 
   useEffect(() => {
-    if (isDemoModeActive() && !user?.id) return
+    if (isDemoSupabaseBlocked() && !user?.id) return
     if (access === "unknown") return
     void loadBacktests()
   }, [user?.id, access, proFeatureUnlocked, loadBacktests])
@@ -313,7 +314,7 @@ export default function BacktestPage() {
   )
 
   const performDeleteTrade = useCallback(async (id: string) => {
-    if (isDemoSupabaseBlocked()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("delete")
       return
     }
@@ -322,7 +323,7 @@ export default function BacktestPage() {
   }, [])
 
   const handleEditTrade = useCallback((trade: Record<string, unknown>) => {
-    if (isDemoSupabaseBlocked()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("edit")
       return
     }
@@ -330,14 +331,14 @@ export default function BacktestPage() {
   }, [])
 
   const handleSendTrade = useCallback((_trade: Record<string, unknown>) => {
-    if (isDemoSupabaseBlocked()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("trade")
     }
   }, [])
 
   const handleAnalyzeTrade = useCallback(
     (trade: Record<string, unknown>) => {
-      if (isDemoModeActive()) {
+      if (isExploreWriteBlocked()) {
         requestDemoSignup("ai")
         return
       }
@@ -350,7 +351,7 @@ export default function BacktestPage() {
     useDeleteTradeConfirmation(performDeleteTrade)
 
   const openLogBacktestTrade = useCallback(() => {
-    if (isDemoSupabaseBlocked()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("save")
       return
     }
@@ -374,7 +375,7 @@ export default function BacktestPage() {
     return (
       <>
         <div className={`tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
-          <div className="mx-auto max-w-7xl px-6 pb-6 pt-6 xl:max-w-[1560px] max-md:px-3 max-md:pt-3">
+          <div className="mx-auto w-full min-w-0 max-w-[1600px] px-6 pb-6 pt-6 md:px-6 xl:px-8 2xl:px-12 max-md:px-3 max-md:pt-3">
             <LockedFeature
               title="Backtest Lab"
               feature="backtest_lab"
@@ -390,7 +391,7 @@ export default function BacktestPage() {
   return (
     <>
       <div className={`tt-phase3-dark tt-backtest-lab min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
-        <div className="mx-auto max-w-7xl px-4 pb-6 pt-3 sm:px-6 xl:max-w-[1560px] max-md:px-3 max-md:pt-2">
+        <div className="mx-auto w-full min-w-0 max-w-[1600px] px-4 pb-6 pt-3 sm:px-6 md:px-6 xl:px-8 2xl:px-12 max-md:px-3 max-md:pt-2">
           <h1 className="mb-1 mt-0 hidden text-center text-xl font-semibold text-blue-300 md:mt-0 md:block md:text-2xl">
             Backtest Lab
           </h1>
@@ -526,7 +527,7 @@ export default function BacktestPage() {
           accountPickerScope="backtest_only"
           onClose={() => setShowLogTrade(false)}
           onSave={() => {
-            if (isDemoSupabaseBlocked()) {
+            if (isExploreWriteBlocked()) {
               requestDemoSignup("save")
               setShowLogTrade(false)
               return
@@ -546,7 +547,7 @@ export default function BacktestPage() {
           accountPickerScope="backtest_only"
           onClose={() => setEditingTrade(null)}
           onSave={() => {
-            if (isDemoSupabaseBlocked()) {
+            if (isExploreWriteBlocked()) {
               requestDemoSignup("save")
               setEditingTrade(null)
               return

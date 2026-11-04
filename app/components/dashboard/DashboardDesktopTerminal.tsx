@@ -70,6 +70,8 @@ export type DashboardDesktopTerminalProps = {
   drawdownLimitLineY?: number | null
   equityCurveUsesAccountBalance?: boolean
   showPersonalDrawdownFloor?: boolean
+  /** All-time total withdrawn (live ledger + prop payouts); null while loading. */
+  totalWithdrawalsAmount?: number | null
 }
 
 function pnlClass(value: number) {
@@ -336,6 +338,7 @@ export default function DashboardDesktopTerminal({
   drawdownLimitLineY = null,
   equityCurveUsesAccountBalance = false,
   showPersonalDrawdownFloor = false,
+  totalWithdrawalsAmount = null,
 }: DashboardDesktopTerminalProps) {
   const worstDayDisplay = formatDashboardWorstDayDisplay(
     periodTradingDayCount,
@@ -428,15 +431,69 @@ export default function DashboardDesktopTerminal({
                   value={formatCurrency(bestTrade)}
                   valueClassName={pnlClass(bestTrade)}
                 />
+                <MetricLine
+                  label="Withdrawals"
+                  value={
+                    totalWithdrawalsAmount == null
+                      ? "—"
+                      : formatCurrency(totalWithdrawalsAmount)
+                  }
+                  valueTitle="Total withdrawn (all accounts)"
+                />
               </>
             ) : (
-              <MetricLine label="Best Win Streak" value={bestWinStreak} />
+              <>
+                <MetricLine
+                  label="Average Winning Trade"
+                  value={formatCurrency(avgWin)}
+                  valueClassName={avgWin > 0 ? "text-green-400" : "text-white"}
+                />
+                <MetricLine
+                  label="Average Losing Trade"
+                  value={formatCurrency(avgLoss)}
+                  valueClassName={avgLoss < 0 ? "text-red-400" : "text-white"}
+                />
+                <MetricLine
+                  label="Best Trade"
+                  value={formatCurrency(bestTrade)}
+                  valueClassName={pnlClass(bestTrade)}
+                />
+                <MetricLine
+                  label="Worst Trade"
+                  value={formatCurrency(biggestLoss)}
+                  valueClassName={pnlClass(biggestLoss)}
+                />
+                <MetricLine
+                  label="Current Win/Loss Streak"
+                  value={
+                    streakData
+                      ? `${streakData.currentStreak} ${streakData.currentType ?? ""}`.trim() ||
+                        "—"
+                      : "—"
+                  }
+                  valueClassName={
+                    streakData?.currentType === "win"
+                      ? "text-green-400"
+                      : streakData?.currentType === "loss"
+                        ? "text-red-400"
+                        : "text-white"
+                  }
+                />
+                <MetricLine
+                  label="Average Hold Time"
+                  value={
+                    holdTimeStats.hasDurationData
+                      ? holdLabel(holdTimeStats.avgHoldSeconds)
+                      : "—"
+                  }
+                />
+              </>
             )}
           </div>
 
         </Panel>
 
-        <Panel className="min-w-0">
+        <Panel className="tt-dash-hero-equity min-h-0 min-w-0">
           {showEquity && deferredSectionsReady ? (
             <DashboardEquityCurve
               variant="hero"
@@ -448,7 +505,7 @@ export default function DashboardDesktopTerminal({
               showPersonalDrawdownFloor={showPersonalDrawdownFloor}
             />
           ) : showEquity ? (
-            <div className="tt-dash-equity-plot animate-pulse rounded-lg bg-black/20" />
+            <div className="tt-dash-equity-plot tt-dash-equity-plot--hero animate-pulse rounded-lg bg-black/20" />
           ) : (
             <p className="text-sm text-gray-400">Equity curve is hidden in dashboard settings.</p>
           )}
@@ -510,6 +567,76 @@ export default function DashboardDesktopTerminal({
               }
             />
           ) : null}
+        </div>
+      ) : null}
+
+      {!isPro ? (
+        <div>
+          <SectionTitle>Trading Insights</SectionTitle>
+          <div className="tt-dash-2">
+            <Panel>
+              <p className="mb-3 text-sm font-semibold text-white">Long vs. Short Performance</p>
+              <div className="space-y-4">
+                <HBar
+                  label="Long"
+                  detail={
+                    longShortPerformance.long
+                      ? `${longShortPerformance.long.winRate.toFixed(0)}% win`
+                      : "No trades"
+                  }
+                  amount={longPnL}
+                  max={sideMax}
+                  valueLabel={
+                    longShortPerformance.long ? formatCurrency(longPnL) : "—"
+                  }
+                />
+                <HBar
+                  label="Short"
+                  detail={
+                    longShortPerformance.short
+                      ? `${longShortPerformance.short.winRate.toFixed(0)}% win`
+                      : "No trades"
+                  }
+                  amount={shortPnL}
+                  max={sideMax}
+                  valueLabel={
+                    longShortPerformance.short ? formatCurrency(shortPnL) : "—"
+                  }
+                />
+              </div>
+            </Panel>
+            <Panel>
+              <p className="mb-3 text-sm font-semibold text-white">
+                Trading Session Performance
+              </p>
+              {showSessions ? (
+                <div className="space-y-3">
+                  {DASHBOARD_SESSION_DISPLAY_ORDER.map((name) => {
+                    const stats = sessionBuckets[name]
+                    const pnl = stats?.totalPnL ?? 0
+                    return (
+                      <HBar
+                        key={name}
+                        label={sessionLabel(name)}
+                        detail={
+                          stats?.totalTrades
+                            ? `${stats.totalTrades} trades`
+                            : "No trades"
+                        }
+                        amount={pnl}
+                        max={sessionMax}
+                        valueLabel={stats ? formatCurrency(pnl) : "—"}
+                      />
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400">
+                  Session breakdown is hidden in dashboard settings.
+                </p>
+              )}
+            </Panel>
+          </div>
         </div>
       ) : null}
 

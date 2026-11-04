@@ -66,7 +66,7 @@ export default function CreatePageLayout({
       data-tt-create-flow
       className={`tt-add-trade tt-phase4-dark flex min-h-[calc(100dvh-var(--app-header-offset))] flex-col bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}
     >
-      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col max-md:max-w-none max-md:px-0 md:px-4 md:pb-[max(1.5rem,var(--safe-area-bottom))] md:pt-4 sm:px-6 sm:pt-6">
+      <div className="mx-auto flex min-h-0 w-full min-w-0 max-w-[1600px] flex-1 flex-col max-md:max-w-none max-md:px-0 md:px-6 md:pb-[max(1.5rem,var(--safe-area-bottom))] md:pt-4 xl:px-8 2xl:px-12 sm:pt-6">
         {/* Desktop / tablet header */}
         <header className="hidden shrink-0 flex-col gap-4 border-b border-white/10 pb-4 sm:flex-row sm:items-start sm:justify-between md:flex md:gap-4 md:pb-4">
           <div className="flex min-w-0 items-start gap-2">

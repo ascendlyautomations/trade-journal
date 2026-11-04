@@ -11,6 +11,12 @@ import {
 import {
   formatTradingAccountSelectorParts,
 } from "@/lib/tradeAccountDisplay"
+import {
+  READABLE_ACCOUNT_DROPDOWN_META_CLASS,
+  READABLE_PRIMARY_CLASS,
+  READABLE_VIEW_ONLY_BADGE_CLASS,
+} from "@/lib/readableTextStyles"
+import { ACCOUNT_VIEW_ONLY_BADGE } from "@/lib/freePlanAccountSlots"
 import type { CopyTradingGroup } from "@/lib/copyTradingGroups"
 import {
   copyGroupFilterValue,
@@ -27,6 +33,7 @@ import {
   ACCOUNT_DROPDOWN_DASHBOARD_FILTER_WRAPPER_CLASS,
   ACCOUNT_DROPDOWN_FILTER_WRAPPER_CLASS,
   ACCOUNT_DROPDOWN_ITEM_CLASS,
+  ACCOUNT_DROPDOWN_VIEW_ONLY_ITEM_CLASS,
   ACCOUNT_DROPDOWN_MANAGE_CLASS,
   ACCOUNT_DROPDOWN_PORTAL_MENU_CLASS,
   ACCOUNT_DROPDOWN_ROW_HEIGHT_CLASS,
@@ -72,23 +79,58 @@ type FilterOption = {
   label: string
   labelName?: string
   labelSuffix?: string
+  readOnly?: boolean
 }
 
 type MenuView = "accounts" | "copy-groups"
+
+function splitViewOnlySuffix(suffix: string): {
+  meta: string
+  badge: string | null
+} {
+  const badgeNeedle = ` • ${ACCOUNT_VIEW_ONLY_BADGE}`
+  const idx = suffix.indexOf(badgeNeedle)
+  if (idx === -1) return { meta: suffix, badge: null }
+  return {
+    meta: suffix.slice(0, idx),
+    badge: suffix.slice(idx),
+  }
+}
 
 function AccountSelectorLabelText({
   name,
   suffix,
   className,
+  viewOnly = false,
 }: {
   name: string
   suffix: string
   className?: string
+  viewOnly?: boolean
 }) {
+  const { meta, badge } = viewOnly
+    ? splitViewOnlySuffix(suffix)
+    : { meta: suffix, badge: null as string | null }
+
   return (
-    <span className={cn("flex min-w-0 flex-1 items-center", className)}>
-      <span className="min-w-0 truncate">{name}</span>
-      {suffix ? <span className="shrink-0">{suffix}</span> : null}
+    <span
+      className={cn(
+        "flex min-w-0 flex-1 items-center",
+        READABLE_PRIMARY_CLASS,
+        className
+      )}
+    >
+      <span className="min-w-0 truncate font-normal">{name}</span>
+      {meta ? (
+        <span className={cn("shrink-0", READABLE_ACCOUNT_DROPDOWN_META_CLASS)}>
+          {meta}
+        </span>
+      ) : null}
+      {badge ? (
+        <span className={cn("shrink-0", READABLE_VIEW_ONLY_BADGE_CLASS)}>
+          {badge}
+        </span>
+      ) : null}
     </span>
   )
 }
@@ -261,7 +303,13 @@ export default function TradeAccountPicker({
 }: TradeAccountPickerProps) {
   const router = useRouter()
   const isFilterMode = onFilterChange != null
-  const showCopyTrading = isPro && accountScope !== "backtest_only"
+  /** Filter bars: view historical trades by copy group on Free (view-only). */
+  const showCopyTradingInFilter =
+    isFilterMode && accountScope !== "backtest_only"
+  /** Add trade / quick trade: Pro-only copy group journaling. */
+  const showCopyTradingForEntry =
+    !isFilterMode && isPro && accountScope !== "backtest_only"
+  const showCopyTrading = showCopyTradingInFilter || showCopyTradingForEntry
   const resolvedTriggerClassName =
     triggerClassName ??
     (isFilterMode
@@ -337,6 +385,7 @@ export default function TradeAccountPicker({
           kind: "parts" as const,
           name: option.labelName,
           suffix: option.labelSuffix ?? "",
+          viewOnly: option.readOnly === true,
         }
       }
       return {
@@ -512,9 +561,14 @@ export default function TradeAccountPicker({
         </ItemRow>
       ) : null}
 
-      {showCopyTrading ? (
+      {showCopyTradingInFilter || showCopyTradingForEntry ? (
         <ActionRow onClick={() => setMenuView("copy-groups")}>
           Copy Trading
+          {showCopyTradingInFilter && !isPro ? (
+            <span className="ml-1.5 text-xs font-normal text-gray-400">
+              (view only)
+            </span>
+          ) : null}
         </ActionRow>
       ) : null}
 
@@ -531,14 +585,26 @@ export default function TradeAccountPicker({
       >
         {isFilterMode ? (
           <>
-            {visibleFilterAccountRows.map((row) => (
-              <ItemRow key={row.key} onClick={row.onClick}>
-                <AccountSelectorLabelText
-                  name={row.labelName}
-                  suffix={row.labelSuffix}
-                />
-              </ItemRow>
-            ))}
+            {visibleFilterAccountRows.map((row) => {
+              const opt = filterOptions.find((o) => o.value === row.key)
+              return (
+                <ItemRow
+                  key={row.key}
+                  onClick={row.onClick}
+                  className={
+                    opt?.readOnly
+                      ? ACCOUNT_DROPDOWN_VIEW_ONLY_ITEM_CLASS
+                      : ACCOUNT_DROPDOWN_ITEM_CLASS
+                  }
+                >
+                  <AccountSelectorLabelText
+                    name={row.labelName}
+                    suffix={row.labelSuffix}
+                    viewOnly={opt?.readOnly}
+                  />
+                </ItemRow>
+              )
+            })}
             {showViewMoreFilterAccounts ? (
               <ActionRow onClick={() => setAccountsExpanded(true)}>
                 View More Accounts
@@ -634,8 +700,20 @@ export default function TradeAccountPicker({
             <ItemRow
               key={group.id}
               onClick={() => handleSelectCopyGroup(group)}
+              className={
+                isFilterMode && !isPro
+                  ? ACCOUNT_DROPDOWN_VIEW_ONLY_ITEM_CLASS
+                  : ACCOUNT_DROPDOWN_ITEM_CLASS
+              }
             >
-              {group.name}
+              <span
+                className={cn(
+                  ACCOUNT_DROPDOWN_ROW_TEXT_CLASS,
+                  isFilterMode && !isPro && READABLE_PRIMARY_CLASS
+                )}
+              >
+                {group.name}
+              </span>
             </ItemRow>
           ))
         )}
@@ -684,6 +762,7 @@ export default function TradeAccountPicker({
               <AccountSelectorLabelText
                 name={triggerLabel.name}
                 suffix={triggerLabel.suffix}
+                viewOnly={"viewOnly" in triggerLabel && triggerLabel.viewOnly}
               />
             ) : (
               <span className={cn(ACCOUNT_DROPDOWN_ROW_TEXT_CLASS, "text-left")}>

@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import { supabase } from "@/lib/supabaseClient"
 import {
   fetchShareConversations,
@@ -200,7 +201,7 @@ export default function ShareToConversationsModal({
   }, [deepLinkTarget])
 
   const handleSend = useCallback(async () => {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("default")
       return
     }

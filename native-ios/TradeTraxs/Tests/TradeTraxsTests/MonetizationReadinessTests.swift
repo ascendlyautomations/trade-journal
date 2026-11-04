@@ -157,24 +157,23 @@ final class MonetizationReadinessTests: XCTestCase {
         XCTAssertFalse(status.hasTraxProAccess)
     }
 
-    func testMonthlyStoreKitIdentifierUsesReplacementProductID() {
-        let monthly = "com.tradetraxs.traxspro.monthly"
+    func testStoreKitProductIdentifiersMatchAppStoreConnectV2Group() {
+        let monthly = "com.tradetraxs.pro.monthly.v2"
         XCTAssertEqual(TraxProProductConfiguration.defaultMonthlyProductID, monthly)
         XCTAssertEqual(TraxProProductConfiguration.billingInterval(for: monthly), .monthly)
-        XCTAssertEqual(
-            TraxProProductConfiguration.billingInterval(for: "com.tradetraxs.traxpro.monthly"),
-            .monthly
-        )
         XCTAssertEqual(TraxProProductConfiguration.allProductIDs, [
             TraxProProductConfiguration.monthlyProductID,
             TraxProProductConfiguration.sixMonthProductID,
             TraxProProductConfiguration.yearlyProductID,
         ])
         XCTAssertTrue(TraxProProductConfiguration.allProductIDs.contains(monthly))
-        XCTAssertFalse(
-            TraxProProductConfiguration.allProductIDs.contains("com.tradetraxs.traxpro.monthly")
+        XCTAssertEqual(
+            TraxProProductConfiguration.sixMonthProductID,
+            "com.tradetraxs.pro.sixmonth.v2"
         )
-        XCTAssertEqual(TraxProProductConfiguration.sixMonthProductID, "com.tradetraxs.traxpro.sixmonth")
-        XCTAssertEqual(TraxProProductConfiguration.yearlyProductID, "com.tradetraxs.traxpro.yearly")
+        XCTAssertEqual(
+            TraxProProductConfiguration.yearlyProductID,
+            "com.tradetraxs.pro.annual.v2"
+        )
     }
 }

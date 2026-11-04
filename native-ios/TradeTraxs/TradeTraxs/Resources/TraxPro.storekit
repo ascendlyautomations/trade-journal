@@ -43,7 +43,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.tradetraxs.traxspro.monthly",
+          "productID" : "com.tradetraxs.pro.monthly.v2",
           "recurringSubscriptionPeriod" : "P1M",
           "referenceName" : "TraxPro Monthly",
           "subscriptionGroupID" : "traxpro",
@@ -68,7 +68,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.tradetraxs.traxpro.sixmonth",
+          "productID" : "com.tradetraxs.pro.sixmonth.v2",
           "recurringSubscriptionPeriod" : "P6M",
           "referenceName" : "TraxPro 6-Month",
           "subscriptionGroupID" : "traxpro",
@@ -93,7 +93,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.tradetraxs.traxpro.yearly",
+          "productID" : "com.tradetraxs.pro.annual.v2",
           "recurringSubscriptionPeriod" : "P1Y",
           "referenceName" : "TraxPro Yearly",
           "subscriptionGroupID" : "traxpro",

@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "./database.types.ts"
-import { isPublicDiscoverableTradeRow } from "./featuredTradesWeekLogic.ts"
+import {
+  hasFeaturedPostImage,
+  isPublicDiscoverableTradeRow,
+} from "./featuredTradesWeekLogic.ts"
 import { getMondayOfWeek, startOfDay } from "./tradingReports/tradingReportPeriods.ts"
 import { getSupabaseServiceRole } from "./supabaseServiceRole.ts"
 import { serviceRoleTableRead } from "./supabaseServiceTableRead.ts"
@@ -51,7 +54,9 @@ export async function fetchFeaturedPostCandidates(options?: {
       },
       { timeoutMs: options?.timeoutMs }
     )
-    return (data ?? []).filter(isPublicDiscoverableTradeRow) as FeaturedPostCandidate[]
+    return (data ?? []).filter(
+      (row) => isPublicDiscoverableTradeRow(row) && hasFeaturedPostImage(row)
+    ) as FeaturedPostCandidate[]
   } catch (error) {
     console.error("[featured-trades] candidate query failed", error)
     return []

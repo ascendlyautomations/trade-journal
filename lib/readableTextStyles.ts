@@ -24,6 +24,13 @@ export const READABLE_PLACEHOLDER_TEXT_CLASS = "text-gray-400"
 /** Disabled / inactive option text — muted but visible. */
 export const READABLE_DISABLED_TEXT_CLASS = "text-gray-400"
 
+/** Account # / mode tail on picker rows (active + view-only). */
+export const READABLE_ACCOUNT_DROPDOWN_META_CLASS =
+  "font-normal text-gray-500"
+
+/** “View Only” badge on filter dropdown rows. */
+export const READABLE_VIEW_ONLY_BADGE_CLASS = "font-normal text-yellow-600"
+
 /** Empty states and tertiary actions (prefer over faint white/opacity). */
 export const READABLE_EMPTY_CLASS = "text-gray-400"
 

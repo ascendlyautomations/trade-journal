@@ -7,6 +7,9 @@ import { tradeMatchesDashboardTimeFilter } from "./dashboardTradeDate.ts"
 /** Default dashboard timeframe on first load (matches native Home). */
 export const DASHBOARD_DEFAULT_TIME_FILTER = "30d"
 
+/** Demo / explore preview — show a full year of sample trades on load. */
+export const DASHBOARD_DEMO_DEFAULT_TIME_FILTER = "1y"
+
 /** Automatic expansion order when the default window has no trades. */
 export const DASHBOARD_INITIAL_TIMEFRAME_FALLBACK_ORDER = [
   "30d",

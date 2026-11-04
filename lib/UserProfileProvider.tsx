@@ -62,6 +62,8 @@ import {
   shouldReconcileStripeMembership,
 } from "./stripeReconciliation"
 import { isDemoModeActive, disableDemoMode, subscribeDemoModeChanges } from "./demo/demoMode"
+import { clearGuestExploreActive } from "./guestExplore"
+import { isShowcaseUserId } from "./guestShowcaseAccount"
 import {
   getDemoAuthUser,
   getDemoProfileSlice,
@@ -95,7 +97,7 @@ import { shouldWarmAppDataCachesForPath } from "./appWarmPaths"
  * Avoids duplicate `profiles` reads across Navbar, checklist, and key pages.
  */
 export const USER_PROFILE_SELECT =
-  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, is_pro, creator_access, creator_code, creator_granted_at, subscription_status, cancel_at_period_end, cancel_at, trial_end, current_period_end, is_banned, banned_reason, is_beta_tester, use_free_tier, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, max_drawdown_limit, has_email_password, signup_flow_source, early_access_enrolled_at, early_access_started_at, early_access_ends_at, early_access_status, early_access_campaign_id, early_access_enrollment_source, lifetime_access_source, lifetime_access_granted_at" as const
+  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, is_pro, creator_access, creator_code, creator_granted_at, subscription_status, cancel_at_period_end, cancel_at, trial_end, current_period_end, is_banned, banned_reason, is_beta_tester, use_free_tier, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, max_drawdown_limit, has_email_password, signup_flow_source, early_access_enrolled_at, early_access_started_at, early_access_ends_at, early_access_status, early_access_campaign_id, early_access_enrollment_source, lifetime_access_source, lifetime_access_granted_at, free_plan_trade_slots_epoch, free_plan_trade_slots_confirmed_epoch" as const
 
 export type UserProfileSlice = {
   id: string
@@ -132,6 +134,8 @@ export type UserProfileSlice = {
   max_drawdown_limit: number | null
   is_private: boolean | null
   has_email_password: boolean | null
+  free_plan_trade_slots_epoch: number | null
+  free_plan_trade_slots_confirmed_epoch: number | null
 }
 
 export function pickUserProfileFields(row: unknown): UserProfileSlice | null {
@@ -211,6 +215,18 @@ export function pickUserProfileFields(row: unknown): UserProfileSlice | null {
     is_private: typeof o.is_private === "boolean" ? o.is_private : null,
     has_email_password:
       typeof o.has_email_password === "boolean" ? o.has_email_password : null,
+    free_plan_trade_slots_epoch: (() => {
+      const v = o.free_plan_trade_slots_epoch
+      if (v == null || v === "") return null
+      const n = typeof v === "number" ? v : Number(v)
+      return Number.isFinite(n) ? n : null
+    })(),
+    free_plan_trade_slots_confirmed_epoch: (() => {
+      const v = o.free_plan_trade_slots_confirmed_epoch
+      if (v == null || v === "") return null
+      const n = typeof v === "number" ? v : Number(v)
+      return Number.isFinite(n) ? n : null
+    })(),
   }
 }
 
@@ -518,6 +534,10 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       sessionUserIdRef.current = sessionUser?.id ?? null
       setUser(sessionUser)
 
+      if (sessionUser && !isDemoUserId(sessionUser.id)) {
+        disableDemoMode()
+      }
+
       if (!sessionUser) {
         if (isDemoModeActive()) {
           await applyDemoAuthSession(generation)
@@ -724,10 +744,12 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      if (event === "SIGNED_IN") {
-        // Fresh sign-in (logged out → logged in) exits preview.
-        if (nextUserId && !sessionUserIdRef.current) {
-          disableDemoMode()
+      if (nextUserId && !isDemoUserId(nextUserId)) {
+        disableDemoMode()
+        if (event === "SIGNED_IN" && !sessionUserIdRef.current) {
+          if (!isShowcaseUserId(nextUserId)) {
+            clearGuestExploreActive()
+          }
         }
       }
 
@@ -749,9 +771,20 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       }
     })
 
-    if (isDemoModeActive() && !sessionUserIdRef.current) {
-      void applyDemoAuthSession(++loadGeneration)
-    }
+    void supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      if (!mounted) return
+      const initialUserId = initialSession?.user?.id ?? null
+      if (initialUserId && !isDemoUserId(initialUserId)) {
+        disableDemoMode()
+        if (!sessionUserIdRef.current) {
+          void applyAuthSession(initialSession, "INITIAL_SESSION")
+        }
+        return
+      }
+      if (isDemoModeActive() && !sessionUserIdRef.current) {
+        void applyDemoAuthSession(++loadGeneration)
+      }
+    })
 
     return () => {
       mounted = false

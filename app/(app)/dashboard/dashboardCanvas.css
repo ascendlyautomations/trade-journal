@@ -670,10 +670,6 @@ html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-section-subt
 }
 
 @media (min-width: 1200px) {
-  [data-tt-dashboard-canvas] .tt-dash-workspace {
-    max-width: 1600px;
-  }
-
   [data-tt-dashboard-canvas] .tt-dash-stack {
     gap: 0.625rem;
   }
@@ -751,8 +747,20 @@ html[data-tt-appearance="dark"] [data-tt-dashboard-canvas] .tt-dash-section-subt
     grid-column: 1 / -1;
   }
 
-  [data-tt-dashboard-canvas] .tt-dash-equity-plot {
+  [data-tt-dashboard-canvas] .tt-dash-equity-plot:not(.tt-dash-equity-plot--hero) {
     height: 360px;
+  }
+
+  [data-tt-dashboard-canvas] .tt-dash-hero-equity {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+  }
+
+  [data-tt-dashboard-canvas] .tt-dash-equity-plot--hero {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 360px;
   }
 
   [data-tt-dashboard-canvas] .tt-dash-kpi.tt-dash-strip {

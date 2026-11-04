@@ -1,6 +1,7 @@
 "use client"
 
 import "./messagesGlassTheme.css"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import {
   useCallback,
   useEffect,
@@ -832,7 +833,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
   )
 
   async function createGroupChat() {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("default")
       return
     }
@@ -915,7 +916,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
     const selectedDmUserId = dmSelectedUsers[0]?.id
     if (!user || !selectedDmUserId) return
 
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       const username = dmSelectedUsers[0]?.username
       if (username) {
         router.push(buildDmThreadPath(username))
@@ -1119,7 +1120,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <div className="tt-messages flex min-h-0 w-full flex-col xl:mx-auto xl:h-[var(--app-viewport-height)] xl:max-w-[1560px] xl:flex-row xl:gap-4 xl:px-6 xl:py-3">
+      <div className="tt-messages mx-auto flex min-h-0 w-full min-w-0 max-w-[1600px] flex-col md:px-6 xl:h-[var(--app-viewport-height)] xl:flex-row xl:gap-4 xl:px-8 xl:py-3 2xl:px-12">
       <div
         className={
           onThread

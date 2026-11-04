@@ -28,11 +28,26 @@ describe("resolveWeeklyLeaderboardPeriod", () => {
     const now = new Date("2026-03-18T15:00:00.000Z")
     const prev = weekBounds(now, 1)
     const trades: TradeForLeaderboard[] = [
-      tradeAt("prev-only", new Date(prev.start.getTime() + 60_000)),
+      tradeAt("prev-a", new Date(prev.start.getTime() + 60_000)),
+      tradeAt("prev-b", new Date(prev.start.getTime() + 120_000), 250),
     ]
 
     const resolved = resolveWeeklyLeaderboardPeriod(trades, now)
     assert.equal(resolved?.kind, "previous_week")
+  })
+
+  it("skips a week with only one qualifying trader card", () => {
+    const now = new Date("2026-03-18T15:00:00.000Z")
+    const prev = weekBounds(now, 1)
+    const monthStart = new Date(now.getFullYear(), now.getMonth() - 1, 5)
+    const trades: TradeForLeaderboard[] = [
+      tradeAt("solo", new Date(prev.start.getTime() + 60_000)),
+      tradeAt("month-a", monthStart, 400),
+      tradeAt("month-b", new Date(monthStart.getTime() + 86_400_000), 120),
+    ]
+
+    const resolved = resolveWeeklyLeaderboardPeriod(trades, now)
+    assert.equal(resolved?.kind, "monthly")
   })
 
   it("returns null when no qualifying trades exist", () => {

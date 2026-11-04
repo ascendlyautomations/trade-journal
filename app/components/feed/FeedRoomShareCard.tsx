@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import { useRouter } from "next/navigation"
 import { joinTradeRoom } from "@/lib/joinTradeRoom"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
@@ -115,7 +116,7 @@ export default function FeedRoomShareCard({
         return
       }
 
-      if (isDemoModeActive()) {
+      if (isExploreWriteBlocked()) {
         requestDemoSignup("room")
         return
       }

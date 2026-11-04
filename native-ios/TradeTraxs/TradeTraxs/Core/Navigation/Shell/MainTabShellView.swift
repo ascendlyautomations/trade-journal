@@ -1254,6 +1254,7 @@ private struct PsychologyAnalyticsHomeRouteView: View {
             {
                 PsychologyAnalyticsDetailView(
                     report: report,
+                    insightCards: PsychologyAnalyticsSessionStore.shared.displayInsightCards,
                     unlockProgress: PsychologyAnalyticsSessionStore.shared.unlockProgress,
                     postUnlockGapMessages: PsychologyAnalyticsSessionStore.shared.postUnlockGapMessages,
                     highlightedSectionID: PsychologyAnalyticsSessionStore.shared.highlightedSectionID,

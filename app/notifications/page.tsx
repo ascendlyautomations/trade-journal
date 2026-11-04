@@ -1,6 +1,7 @@
 "use client"
 
 import "../socialDesktopTheme.css"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -89,10 +90,10 @@ function sortNotificationsDesc(rows: NotificationRecord[]): NotificationRecord[]
 }
 
 const PAGE_SHELL_CLASS =
-  "tt-phase1-dark w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10 max-md:px-0"
+  "tt-phase1-dark w-full text-white px-2 pb-3 pt-0 md:pb-10 max-md:px-0"
 
 const PAGE_CONTAINER_CLASS =
-  "relative z-0 mx-auto mt-2.5 w-full max-w-7xl px-1 md:px-6 max-md:mt-0 max-md:px-0"
+  "relative z-0 mx-auto mt-2.5 w-full min-w-0 max-w-[1600px] px-1 md:px-6 xl:px-8 2xl:px-12 max-md:mt-0 max-md:px-0"
 
 const PAGE_WORKSPACE_CLASS =
   "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] lg:items-start xl:gap-8"
@@ -805,7 +806,7 @@ export default function NotificationsPage() {
 
   async function respondToJoinRequest(action: "approve" | "decline") {
     if (!joinRequestId || joinAction) return
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("save")
       return
     }

@@ -1,6 +1,7 @@
 "use client"
 
 import "../analyticsDesktopTheme.css"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import Link from "next/link"
 import LockedFeature from "../components/LockedFeature"
 import { useCallback, useEffect, useRef, useState, Suspense, type Dispatch, type ReactNode, type SetStateAction } from "react"
@@ -527,8 +528,8 @@ export default function AnalystPage() {
   return (
     <Suspense
       fallback={
-        <div className={`tt-analyst tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-6 pt-0 text-gray-100 md:px-6 md:pb-10 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
-          <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-[1600px] flex-col gap-3 md:gap-3">
+        <div className={`tt-analyst tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-6 pt-0 text-gray-100 md:pb-10 max-md:px-4 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
+          <div className="relative z-0 mx-auto mt-2.5 flex w-full min-w-0 max-w-[1600px] flex-col gap-3 md:px-6 xl:px-8 2xl:px-12 md:gap-3">
             <h1 className="hidden shrink-0 text-lg font-semibold uppercase tracking-wide text-blue-300 md:block md:text-xl">
               AI Analyst
             </h1>
@@ -653,7 +654,7 @@ function AnalystPageContent() {
     if (!selectedTrade || !canUseAnalyst) return
     if (selectedTrade.ai_feedback) return
     if (analysisRunningRef.current || analysisInProgress || loading) return
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("ai")
       return
     }
@@ -728,7 +729,7 @@ function AnalystPageContent() {
       presentFeature("ai_analyst")
       return
     }
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("ai")
       return
     }
@@ -814,8 +815,8 @@ function AnalystPageContent() {
         status={progressLabel}
       />
 
-      <div className={`tt-analyst tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-6 pt-0 text-gray-100 md:px-6 md:pb-10 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
-        <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-[1600px] flex-col gap-3 md:gap-3">
+      <div className={`tt-analyst tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-6 pt-0 text-gray-100 md:pb-10 max-md:px-4 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
+        <div className="relative z-0 mx-auto mt-2.5 flex w-full min-w-0 max-w-[1600px] flex-col gap-3 md:px-6 xl:px-8 2xl:px-12 md:gap-3">
           <h1 className="hidden shrink-0 text-lg font-semibold uppercase tracking-wide text-blue-300 md:block md:text-xl">
             AI Analyst
           </h1>

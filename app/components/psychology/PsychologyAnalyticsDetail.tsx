@@ -1,18 +1,20 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import PsychologyCoachEntryLink from "./PsychologyCoachEntryLink"
 import PsychologySummarySection from "./PsychologySummarySection"
 import PsychologyAnalyticsOverview from "./PsychologyAnalyticsOverview"
 import PsychologyAnalyticsMetricsRow from "./PsychologyAnalyticsMetricsRow"
-import PsychologyInsightGapPanel from "./PsychologyInsightGapPanel"
 import type { PsychologyAnalyticsReport } from "@/lib/psychology/reports/types"
 import type { PsychologyCoachSummary } from "@/lib/psychology/reports/coach"
 import { reliabilityLabel } from "@/lib/psychology/reports/metrics"
 import type { TraderDailyCheckIn } from "@/lib/dailyCheckIn/types"
 import type { PsychologyReportTrade } from "@/lib/psychology/reports/types"
-import { buildPostUnlockInsightGapMessages } from "@/lib/psychology/psychologyProgressMessaging"
+import {
+  buildEarlyPsychologyInsightCards,
+  mergePsychologyInsightCards,
+} from "@/lib/psychology/dailyPsychologyInsights"
 import { countNoun } from "@/lib/countNoun"
 
 type PsychologyAnalyticsDetailProps = {
@@ -45,7 +47,11 @@ export default function PsychologyAnalyticsDetail({
 }: PsychologyAnalyticsDetailProps) {
   const highlightRef = useRef<string | null>(null)
   const [advancedOpen, setAdvancedOpen] = useState(false)
-  const insightGaps = buildPostUnlockInsightGapMessages(report, journalTrades)
+  const insightCards = useMemo(() => {
+    const early = buildEarlyPsychologyInsightCards(journalTrades, checkIns)
+    return mergePsychologyInsightCards(early, report.dashboardCards)
+  }, [journalTrades, checkIns, report.dashboardCards])
+
   const advancedSections = report.sections.filter((section) =>
     ADVANCED_SECTION_IDS.has(section.id)
   )
@@ -94,14 +100,15 @@ export default function PsychologyAnalyticsDetail({
       </Link>
 
       <div className="max-md:order-5">
-      {report.dashboardCards.length > 0 ? (
+      {insightCards.length > 0 ? (
         <section className="space-y-3">
-          <h2 className="text-base font-semibold text-white">Comparison insights</h2>
+          <h2 className="text-base font-semibold text-white">Insights</h2>
           <p className="text-xs text-gray-500">
-            Statistically meaningful patterns — not proof of causation.
+            Patterns from matched check-in days and trade psychology tags — association
+            only, not causation.
           </p>
           <div className="space-y-2">
-            {report.dashboardCards.map((card) => (
+            {insightCards.map((card) => (
               <article
                 key={card.id}
                 className="rounded-xl border border-white/10 bg-white/5 p-4 max-md:p-3"
@@ -119,7 +126,13 @@ export default function PsychologyAnalyticsDetail({
           </div>
         </section>
       ) : (
-        <PsychologyInsightGapPanel messages={insightGaps} />
+        <div className="rounded-xl border border-white/10 bg-white/5 p-4 max-md:p-3">
+          <p className="text-sm font-medium text-white">No matched days yet</p>
+          <p className="mt-1 text-xs text-gray-400">
+            Complete a daily check-in on the same Eastern calendar day as a trade in this
+            scope to unlock sleep, mood, and performance insights.
+          </p>
+        </div>
       )}
       </div>
 

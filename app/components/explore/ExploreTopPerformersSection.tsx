@@ -22,6 +22,8 @@ type Props = {
   /** When false after load, show empty only if performers is also empty. */
   hasLeaderboardPeriod?: boolean
   showSectionHeader?: boolean
+  /** Marketing homepage — larger cards with rank badges. */
+  presentation?: "default" | "home"
   loading: boolean
   error: string | null
   onRetry: () => void
@@ -33,10 +35,12 @@ export default function ExploreTopPerformersSection({
   periodSubtitle = "Calendar week rankings from public trades (all accounts)",
   hasLeaderboardPeriod = true,
   showSectionHeader = true,
+  presentation = "default",
   loading,
   error,
   onRetry,
 }: Props) {
+  const isHome = presentation === "home"
   const body = (
     <>
 
@@ -75,8 +79,14 @@ export default function ExploreTopPerformersSection({
           className="py-6"
         />
       ) : (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          {performers.map((performer) => {
+        <div
+          className={
+            isHome
+              ? "tt-home-leaderboard-grid"
+              : "grid grid-cols-1 gap-2 sm:grid-cols-3"
+          }
+        >
+          {performers.map((performer, index) => {
             const displayName =
               performer.name?.trim() ||
               performer.username?.trim() ||
@@ -88,17 +98,36 @@ export default function ExploreTopPerformersSection({
 
             return (
               <Link
-                key={performer.category}
+                key={`${performer.category}-${performer.userId}`}
                 href={href}
-                className="group flex flex-col gap-3 rounded-xl border border-white/10 bg-gradient-to-br from-white/10 to-white/[0.03] p-3 transition hover:border-blue-400/30 hover:bg-white/10"
+                className={
+                  isHome
+                    ? "tt-home-leaderboard-card group"
+                    : "group flex flex-col gap-3 rounded-xl border border-white/10 bg-gradient-to-br from-white/10 to-white/[0.03] p-3 transition hover:border-blue-400/30 hover:bg-white/10"
+                }
               >
-                <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">
+                {isHome ? (
+                  <span className="tt-home-leaderboard-rank" aria-hidden>
+                    #{index + 1}
+                  </span>
+                ) : null}
+                <p
+                  className={
+                    isHome
+                      ? "tt-home-leaderboard-category"
+                      : "text-xs font-semibold uppercase tracking-wide text-blue-300"
+                  }
+                >
                   {CATEGORY_TITLE[performer.category]}
                 </p>
                 <div className="flex items-center gap-3">
                   <ProfileAvatarImg
                     src={performer.avatar_url}
-                    className="h-11 w-11 shrink-0 border border-white/10"
+                    className={
+                      isHome
+                        ? "tt-home-leaderboard-avatar"
+                        : "h-11 w-11 shrink-0 border border-white/10"
+                    }
                   />
                   <div className="min-w-0">
                     <p className="truncate font-semibold text-white group-hover:text-blue-100">

@@ -74,6 +74,7 @@ export function sanitizeConversationListPreview(
 ): string {
   const trimmed = lastMessage?.trim()
   if (!trimmed) return lastMessage ?? ""
+  if (trimmed === "Message deleted") return ""
   const payload = decodeStoryShareContent(trimmed)
   if (!payload) return trimmed
   const username = payload.story_owner_username?.trim()

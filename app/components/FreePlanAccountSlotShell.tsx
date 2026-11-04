@@ -20,13 +20,21 @@ import {
 } from "@/lib/appDataCache"
 import {
   freePlanSlotSelectionRequired,
+  parseFreePlanTradeSlotsEpoch,
   persistedTradeEntrySelectionIds,
 } from "@/lib/freePlanAccountSlots"
 import { useBillingEntitlement } from "@/app/components/monetization/BillingEntitlementProvider"
+import { pickUserProfileFields } from "@/lib/UserProfileProvider"
 import { useUserProfile } from "@/lib/useUserProfile"
+import { isProActiveForTradeSlots } from "@/lib/subscription"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 import { invalidateSessionBootstrap } from "@/lib/backendV2/sessionBootstrapCache.ts"
+import { fetchSettingsProfileRow } from "@/lib/settingsProfileSync"
 import { FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
+import {
+  copyTradingLinkedAccountIdSet,
+  fetchCopyTradingGroups,
+} from "@/lib/copyTradingGroups"
 
 type TradeStatRow = {
   account_id: string | null
@@ -110,15 +118,17 @@ export default function FreePlanAccountSlotShell({
 }: {
   children: React.ReactNode
 }) {
-  const { user, loading } = useUserProfile()
+  const { user, profile, loading, setProfile } = useUserProfile()
   const billing = useBillingEntitlement()
-  const traxProActive =
-    billing.access === "pro"
-      ? true
-      : billing.status === "ready"
-        ? false
-        : null
   const entitlementReady = billing.access === "pro" || billing.status === "ready"
+
+  const traxProForTradeSlots = useMemo(() => {
+    if (profile) return isProActiveForTradeSlots(profile)
+    if (billing.access === "pro") return true
+    if (billing.status === "ready") return billing.snapshot?.traxProActive ?? false
+    return null
+  }, [profile, billing.access, billing.status, billing.snapshot?.traxProActive])
+
   const [accounts, setAccounts] = useState<FreePlanSlotAccountOption[]>([])
   const [rawCanAddFlags, setRawCanAddFlags] = useState<
     { id: string; can_add_trades?: boolean | null }[]
@@ -127,15 +137,24 @@ export default function FreePlanAccountSlotShell({
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [manualOpen, setManualOpen] = useState(false)
+  const [copyTradingLinkedIds, setCopyTradingLinkedIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set())
   const savingRef = useRef(false)
+
+  const slotEpochs = useMemo(
+    () => parseFreePlanTradeSlotsEpoch(profile),
+    [profile]
+  )
 
   const load = useCallback(async () => {
     if (!user?.id || !entitlementReady) {
       return
     }
-    if (traxProActive !== false) {
+    if (traxProForTradeSlots !== false) {
       setAccounts([])
       setRawCanAddFlags([])
+      setCopyTradingLinkedIds(new Set())
       return
     }
     if (savingRef.current) return
@@ -147,15 +166,25 @@ export default function FreePlanAccountSlotShell({
       console.error("[FreePlanAccountSlotShell] trades", loadErr)
     }
 
-    const { data, error: accountsError } = await supabase
-      .from("accounts")
-      .select(ACCOUNTS_SELECT)
-      .eq("user_id", user.id)
+    const [{ data, error: accountsError }, copyGroupsResult] = await Promise.all([
+      supabase.from("accounts").select(ACCOUNTS_SELECT).eq("user_id", user.id),
+      fetchCopyTradingGroups(supabase, user.id),
+    ])
 
     if (accountsError || !data) {
       console.error("[FreePlanAccountSlotShell] accounts", accountsError)
       return
     }
+
+    if (copyGroupsResult.error) {
+      console.error(
+        "[FreePlanAccountSlotShell] copy groups",
+        copyGroupsResult.error
+      )
+    }
+    setCopyTradingLinkedIds(
+      copyTradingLinkedAccountIdSet(copyGroupsResult.groups)
+    )
 
     const rows = data as Record<string, unknown>[]
     setRawCanAddFlags(
@@ -171,18 +200,39 @@ export default function FreePlanAccountSlotShell({
     )
     setAccounts(buildSlotAccounts(rows, tradeRows as TradeStatRow[]))
     setAccountsCache(user.id, rows)
-  }, [user?.id, entitlementReady, traxProActive])
+
+    const profileRow = await fetchSettingsProfileRow(supabase, user.id, {
+      force: true,
+      skipCacheWrite: false,
+    })
+    const slice = pickUserProfileFields(profileRow)
+    if (slice) {
+      setProfile((prev) => (prev?.id === user.id ? { ...prev, ...slice } : prev))
+    }
+  }, [user?.id, entitlementReady, traxProForTradeSlots, setProfile])
 
   useEffect(() => {
     if (loading || !entitlementReady) return
     void load()
   }, [loading, entitlementReady, load, refreshKey])
 
-  const viewerIsConfirmedFree = entitlementReady && traxProActive === false
+  const viewerIsConfirmedFree =
+    entitlementReady && traxProForTradeSlots === false
+
+  const traxProActiveForSlots = useMemo((): boolean | null => {
+    if (traxProForTradeSlots === true) return true
+    if (traxProForTradeSlots === false) return false
+    return null
+  }, [traxProForTradeSlots])
 
   const needsSelection = useMemo(
-    () => freePlanSlotSelectionRequired(traxProActive, rawCanAddFlags),
-    [traxProActive, rawCanAddFlags]
+    () =>
+      freePlanSlotSelectionRequired(
+        traxProActiveForSlots,
+        rawCanAddFlags,
+        slotEpochs
+      ),
+    [traxProActiveForSlots, rawCanAddFlags, slotEpochs]
   )
 
   const canReconfigureActiveAccounts = useMemo(() => {
@@ -205,7 +255,11 @@ export default function FreePlanAccountSlotShell({
     if (!user?.id || savingRef.current || !viewerIsConfirmedFree) return
     const ids = [
       ...new Set(
-        accountIds.map((id) => String(id).trim()).filter((id) => id.length > 0)
+        accountIds
+          .map((id) => String(id).trim())
+          .filter(
+            (id) => id.length > 0 && !copyTradingLinkedIds.has(id)
+          )
       ),
     ]
     if (ids.length < 1 || ids.length > FREE_PLAN_ACCOUNT_LIMIT) {
@@ -274,6 +328,13 @@ export default function FreePlanAccountSlotShell({
       )
       setAccountsCache(user.id, rows)
       invalidateSessionBootstrap(user.id)
+      const profileRow = await fetchSettingsProfileRow(supabase, user.id, {
+        force: true,
+      })
+      const slice = pickUserProfileFields(profileRow)
+      if (slice) {
+        setProfile((prev) => (prev?.id === user.id ? { ...prev, ...slice } : prev))
+      }
       setManualOpen(false)
       setRefreshKey((k) => k + 1)
     } catch (err) {
@@ -302,6 +363,7 @@ export default function FreePlanAccountSlotShell({
         open={modalOpen}
         accounts={accounts}
         initialSelectedIds={initialSelectedIds}
+        copyTradingLinkedAccountIds={copyTradingLinkedIds}
         saving={saving}
         error={error}
         onConfirm={handleConfirm}

@@ -58,7 +58,7 @@ export const TRADETRAXS_FREE_PLAN: TradeTraxsPlan = {
   id: "free",
   name: "TradeTraxs Free",
   description:
-    "Generous journaling, CSV imports, broker connections, community, and core analytics. No credit card required.",
+    "A capable on-ramp to the full platform: journal, core analytics, psychology check-ins, CSV imports, broker connections, and community. No credit card required.",
   features: [
     FREE_PLAN_UNLIMITED_MANUAL_TRADES_LABEL,
     FREE_PLAN_UNLIMITED_CSV_IMPORTS_LABEL,
@@ -109,7 +109,7 @@ export const TRADETRAXS_PRO_PLAN: TradeTraxsPlan = {
   id: "pro",
   name: "TraxPro",
   description:
-    "Powerful tools for serious traders — unlimited accounts and Clips, advanced analytics, AI coaching, reports, Backtest Lab, and Copy Trading.",
+    "Powerful tools for serious traders: unlimited accounts and Clips, advanced analytics, AI coaching, reports, Backtest Lab, and Copy Trading.",
   featuresHeading: TRADETRAXS_PRO_FEATURES_HEADING,
   featureGroups: TRADETRAXS_PRO_FEATURE_GROUPS,
   features: flattenProFeatureGroups(TRADETRAXS_PRO_FEATURE_GROUPS),

@@ -3,7 +3,11 @@
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import PsychologyAnalyticsDetail from "@/app/components/psychology/PsychologyAnalyticsDetail"
-import PsychologyInsightsRequirementNotice from "@/app/components/psychology/PsychologyInsightsRequirementNotice"
+import {
+  displayCheckInDayCountForGate,
+  displayTradeCountForGate,
+  PSYCHOLOGY_INSIGHTS_REQUIRED_COUNT,
+} from "@/lib/psychology/unlockProgress"
 import PsychologyProGate from "@/app/components/psychology/PsychologyProGate"
 import {
   focusPsychologySection,
@@ -75,7 +79,15 @@ function PsychologyAnalyticsPageContent() {
   return (
     <div className="space-y-6 max-md:space-y-3">
       {showsRequirement && unlock ? (
-        <PsychologyInsightsRequirementNotice unlock={unlock} />
+        <p
+          className="text-xs tabular-nums text-gray-500"
+          data-testid="psychologyAnalytics.progress"
+        >
+          Deeper report comparisons: check-in days{" "}
+          {displayCheckInDayCountForGate(unlock)}/{PSYCHOLOGY_INSIGHTS_REQUIRED_COUNT}
+          {" · "}
+          trades {displayTradeCountForGate(unlock)}/{PSYCHOLOGY_INSIGHTS_REQUIRED_COUNT}
+        </p>
       ) : null}
       <PsychologyAnalyticsDetail
         report={report}
@@ -91,16 +103,24 @@ function PsychologyAnalyticsPageContent() {
 
 export default function PsychologyAnalyticsPage() {
   return (
-    <main className={`tt-psych-experience mx-auto max-w-2xl px-4 py-8 md:py-10 max-md:px-3 max-md:py-3 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
-      <div className="mb-6 flex items-center gap-3 max-md:hidden">
-        <Link href="/dashboard" className="text-sm text-blue-400 hover:text-blue-300">
-          ← Dashboard
-        </Link>
+    <main
+      className={`tt-psych-experience w-full py-8 md:py-10 max-md:px-3 max-md:py-3 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}
+    >
+      <div className="mx-auto w-full min-w-0 max-w-[1600px] md:px-6 xl:px-8 2xl:px-12 max-md:px-3">
+        <div className="mx-auto max-w-2xl">
+          <div className="mb-6 flex items-center gap-3 max-md:hidden">
+            <Link href="/dashboard" className="text-sm text-blue-400 hover:text-blue-300">
+              ← Dashboard
+            </Link>
+          </div>
+          <h1 className="mb-6 text-2xl font-semibold text-blue-200 max-md:hidden">
+            Psychology Analytics
+          </h1>
+          <PsychologyProGate>
+            <PsychologyAnalyticsPageContent />
+          </PsychologyProGate>
+        </div>
       </div>
-      <h1 className="mb-6 text-2xl font-semibold text-blue-200 max-md:hidden">Psychology Analytics</h1>
-      <PsychologyProGate>
-        <PsychologyAnalyticsPageContent />
-      </PsychologyProGate>
     </main>
   )
 }

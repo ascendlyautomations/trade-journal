@@ -22,17 +22,18 @@ import { psychologySectionIdForCategory } from "@/lib/psychology/sectionId"
 import { hydratePsychologySession } from "@/lib/psychology/hydratePsychologySession"
 import { setPsychologyAnalyticsScope } from "@/lib/psychology/psychologySessionStore"
 import { createPsychologyAnalyticsScope } from "@/lib/psychology/psychologyScope"
-import PsychologyInsightGapPanel from "@/app/components/psychology/PsychologyInsightGapPanel"
-import { buildPostUnlockInsightGapMessages } from "@/lib/psychology/psychologyProgressMessaging"
-import { PSYCHOLOGY_UNLOCK_OVERVIEW_COPY } from "@/lib/psychology/psychologyProgressMessaging"
-import { reliabilityLabel } from "@/lib/psychology/reports/metrics"
-import type { PsychologyInsightCard } from "@/lib/psychology/reports/types"
+import {
+  buildEarlyPsychologyInsightCards,
+  hasMatchedPsychologyData,
+  mergePsychologyInsightCards,
+} from "@/lib/psychology/dailyPsychologyInsights"
 import {
   displayCheckInDayCountForGate,
   displayTradeCountForGate,
   PSYCHOLOGY_INSIGHTS_REQUIRED_COUNT,
-  showsPsychologyInsightsRequirement,
 } from "@/lib/psychology/unlockProgress"
+import { reliabilityLabel } from "@/lib/psychology/reports/metrics"
+import type { PsychologyInsightCard } from "@/lib/psychology/reports/types"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { useProGate } from "@/lib/useProGate"
 import { dashboardInsightCardClass } from "./dashboardInsightStyles"
@@ -195,7 +196,8 @@ function PsychologyInsightCardRow({
         <span className="mt-0.5 block text-sm font-semibold text-white">{card.headline}</span>
         <span className="mt-0.5 block text-xs text-gray-400">{card.detail}</span>
         <span className="mt-1 block text-[10px] text-gray-500">
-          {reliabilityLabel(card.reliability)} · {card.sampleSize} trades
+          {reliabilityLabel(card.reliability)}
+          {card.sampleSize > 0 ? ` · ${card.sampleSize} trades` : ""}
         </span>
       </span>
       <span className="shrink-0 text-xs text-gray-500" aria-hidden>
@@ -220,7 +222,6 @@ export default function DashboardPsychologyInsights({
   )
   const [reportReady, setReportReady] = useState(true)
   const [cards, setCards] = useState<PsychologyInsightCard[]>([])
-  const [gapMessages, setGapMessages] = useState<string[]>([])
 
   const stats = useMemo(
     () => buildDashboardPsychologyStats(trades, checkIns),
@@ -247,17 +248,9 @@ export default function DashboardPsychologyInsights({
         })
         if (cancelled) return
         setCards(snapshot.report?.dashboardCards ?? [])
-        if (snapshot.report) {
-          setGapMessages(
-            buildPostUnlockInsightGapMessages(snapshot.report, snapshot.journalTrades)
-          )
-        } else {
-          setGapMessages([])
-        }
       } catch {
         if (!cancelled) {
           setCards([])
-          setGapMessages([])
         }
       } finally {
         if (!cancelled) setReportReady(true)
@@ -276,12 +269,21 @@ export default function DashboardPsychologyInsights({
     userId,
   ])
 
+  const displayCards = useMemo(() => {
+    const early = buildEarlyPsychologyInsightCards(trades, checkIns)
+    return mergePsychologyInsightCards(early, cards)
+  }, [trades, checkIns, cards])
+
+  const hasMatched = useMemo(
+    () => hasMatchedPsychologyData(trades, checkIns),
+    [trades, checkIns]
+  )
+
   if (!ready || !tradesReady) {
     return <DashboardPsychologyInsightsSkeleton />
   }
 
   const { unlock } = stats
-  const showsRequirement = showsPsychologyInsightsRequirement(unlock)
 
   function openAnalytics(highlightSection: string | null) {
     setPsychologyAnalyticsScope(
@@ -328,33 +330,43 @@ export default function DashboardPsychologyInsights({
         </p>
       ) : !proFeatureUnlocked ? (
         <PsychologyUpgradeSection />
-      ) : showsRequirement ? (
-        <div
-          className="rounded-xl border border-white/10 bg-white/10 p-4"
-          data-testid="dashboard.psychologyInsights.requirements"
-        >
-          <h3 className="text-sm font-semibold text-white">
-            5 check-in days &amp; 5 trades to unlock overview
-          </h3>
-          <p className="mt-0.5 text-xs text-gray-400">{PSYCHOLOGY_UNLOCK_OVERVIEW_COPY}</p>
-          <p className="mt-1.5 text-xs tabular-nums text-gray-300">
-            Check-in days {displayCheckInDayCountForGate(unlock)}/
-            {PSYCHOLOGY_INSIGHTS_REQUIRED_COUNT}
-            {" · "}
-            Trades {displayTradeCountForGate(unlock)}/
-            {PSYCHOLOGY_INSIGHTS_REQUIRED_COUNT}
-          </p>
-        </div>
       ) : !reportReady ? (
         <DashboardPsychologyInsightsSkeleton />
-      ) : cards.length === 0 ? (
-        <PsychologyInsightGapPanel
-          title="Overview unlocked"
-          messages={gapMessages}
-          testId="dashboard.psychologyInsights.gaps"
-        />
+      ) : displayCards.length === 0 ? (
+        <div
+          className="rounded-xl border border-white/10 bg-white/5 p-4"
+          data-testid="dashboard.psychologyInsights.empty"
+        >
+          <p className="text-sm font-medium text-white">No matched days yet</p>
+          <p className="mt-1 text-xs text-gray-400">
+            Log a daily check-in on the same Eastern calendar day as a trade in this
+            filter scope to see sleep, mood, and performance relationships.
+          </p>
+          {!hasMatched && trades.length > 0 && checkIns.length > 0 ? (
+            <p className="mt-2 text-xs text-gray-500">
+              You have trades and check-ins, but none share the same trading day yet.
+            </p>
+          ) : null}
+        </div>
       ) : (
-        <PsychologyInsightCardList cards={cards} onOpenAnalytics={openAnalytics} />
+        <>
+          {unlock.tradingDayCheckInCount < PSYCHOLOGY_INSIGHTS_REQUIRED_COUNT ||
+          unlock.tradeCount < PSYCHOLOGY_INSIGHTS_REQUIRED_COUNT ? (
+            <p
+              className="mb-2 text-[10px] tabular-nums text-gray-500"
+              data-testid="dashboard.psychologyInsights.progress"
+            >
+              Full analytics depth: check-in days{" "}
+              {displayCheckInDayCountForGate(unlock)}/{PSYCHOLOGY_INSIGHTS_REQUIRED_COUNT}
+              {" · "}
+              trades {displayTradeCountForGate(unlock)}/{PSYCHOLOGY_INSIGHTS_REQUIRED_COUNT}
+            </p>
+          ) : null}
+          <PsychologyInsightCardList
+            cards={displayCards}
+            onOpenAnalytics={openAnalytics}
+          />
+        </>
       )}
     </section>
   )

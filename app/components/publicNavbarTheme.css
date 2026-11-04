@@ -56,3 +56,21 @@
   background-color: #7dd3f0;
   color: #041018;
 }
+
+.tt-public-navbar .tt-public-nav-dropdown {
+  background-color: #161b22;
+  border-color: #30363d;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+  animation: tt-public-nav-dropdown-in 0.15s ease-out;
+}
+
+@keyframes tt-public-nav-dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

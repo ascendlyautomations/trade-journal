@@ -18,8 +18,8 @@ export default function StreaksPage() {
 
   return (
     <>
-      <div className={`tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-gray-100 sm:px-6 xl:px-8 2xl:px-12 max-md:px-3 max-md:py-3 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
-        <div className="mx-auto max-w-6xl space-y-6 xl:max-w-[1440px] max-md:space-y-3">
+      <div className={`tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] py-8 text-gray-100 max-md:px-3 max-md:py-3 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
+        <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-6 px-4 sm:px-6 md:px-6 xl:px-8 2xl:px-12 max-md:space-y-3">
           <header className="rounded-xl border border-white/10 bg-white/5 p-5 md:p-6 max-md:hidden">
             <h1 className="text-2xl font-semibold text-blue-300 md:text-3xl">
               Streaks

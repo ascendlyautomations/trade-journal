@@ -15,10 +15,12 @@ import {
 } from "@/lib/tradingAccounts"
 import { syncPropFirmAccountPurchaseExpense } from "@/lib/propFirmExpenses"
 import {
+  assertAccountAllowsTradeWrites,
   countTradeEntryEnabledAccounts,
   filterAccountsForDropdown,
   filterAccountsForTradeEntry,
 } from "@/lib/freePlanAccountSlots"
+import { accountRowIsViewOnly } from "@/lib/tradeAccountVisibility"
 import { markProfileCsvImportUsed } from "@/lib/csvImportGate"
 import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount"
 import {
@@ -26,7 +28,7 @@ import {
   getCachedAccounts,
 } from "@/lib/appDataCache"
 import { useUserProfile } from "@/lib/UserProfileProvider"
-import { isProActive } from "@/lib/subscription"
+import { isProActive, isProActiveForTradeSlots } from "@/lib/subscription"
 import { knownTraxProActiveForPreflight } from "@/lib/billingEntitlement"
 import { insertCsvTradesWithAccount } from "@/lib/insertCsvTradesWithAccount"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
@@ -580,6 +582,18 @@ export default function InputTradeForm({
     [accounts]
   )
 
+  const tradeSlotsPro = isProActiveForTradeSlots(contextProfile)
+
+  const viewOnlyEditBlocked = useMemo(() => {
+    if (!isEditMode || tradeSlotsPro || !existingTrade?.account_id) {
+      return false
+    }
+    const id = String(existingTrade.account_id)
+    const row = accounts.find((a) => String(a.id) === id)
+    if (row) return accountRowIsViewOnly(row)
+    return existingTrade.can_add_trades === false
+  }, [isEditMode, tradeSlotsPro, existingTrade, accounts])
+
   const entryEligibleAccounts = useMemo(
     () => filterAccountsForPickerScope(activeAccounts, accountPickerScope),
     [activeAccounts, accountPickerScope]
@@ -991,6 +1005,16 @@ export default function InputTradeForm({
 
   async function handleSubmit() {
     if (submittingRef.current || submitting) return
+
+    if (viewOnlyEditBlocked) {
+      showPopup(
+        persistentError(
+          "View Only",
+          "Trades on view-only accounts cannot be edited on the Free plan. Upgrade to TraxPro or choose this account as active."
+        )
+      )
+      return
+    }
 
     if (accountPickerScope === "backtest_only" && selectedCopyGroupId) {
       showPopup(
@@ -1471,6 +1495,22 @@ export default function InputTradeForm({
     }
 
     if (isEditMode && existingTrade?.id) {
+      const profileRow = planProfile ?? contextProfile
+      const writeGate = await assertAccountAllowsTradeWrites(
+        supabase,
+        userId,
+        rowAcct.id,
+        profileRow,
+        isProActiveForTradeSlots(profileRow) ? true : false
+      )
+      if (!writeGate.ok) {
+        showMutationLimitOrError(
+          { message: writeGate.message },
+          "Save Failed"
+        )
+        throw new Error(writeGate.message)
+      }
+
       let redirectToProfileAfterFirstPublic = false
       if (isPublic && existingTrade.is_public !== true) {
         const { count: publicTradeCount } = await supabase
@@ -1707,6 +1747,19 @@ export default function InputTradeForm({
       max_rr_reached: maxRrForInsert,
       realized_rr: realizedRrForSave,
       ...(createAsUnreviewed ? { reviewed: false } : {}),
+    }
+
+    const profileRowForInsert = planProfile ?? contextProfile
+    const insertGate = await assertAccountAllowsTradeWrites(
+      supabase,
+      userId,
+      rowAcct.id,
+      profileRowForInsert,
+      isProActiveForTradeSlots(profileRowForInsert) ? true : false
+    )
+    if (!insertGate.ok) {
+      showMutationLimitOrError({ message: insertGate.message }, "Save Failed")
+      throw new Error(insertGate.message)
     }
 
     const { data: newTradeData, error } = await supabase
@@ -3132,6 +3185,7 @@ export default function InputTradeForm({
             tabIndex={26}
             disabled={
               submitting ||
+              viewOnlyEditBlocked ||
               invalidFutureDate ||
               (!isEditMode && isPublic && !communityPreviewPost)
             }

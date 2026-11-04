@@ -1,5 +1,6 @@
 "use client"
 import "../analyticsDesktopTheme.css"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import { SkeletonCalendarPage } from "../components/ui/skeletons"
 import TradesPageTradeCard from "../components/TradesPageTradeCard"
 import TradesPageOverlays from "../components/TradesPageOverlays"
@@ -19,7 +20,12 @@ import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
 import { deleteUserTrade } from "@/lib/deleteTrade"
-import { formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
+import {
+  buildAccountFilterOptionsFromRows,
+  formatTradeAccountNameSizeLine,
+  tradeMatchesAccountFilter,
+} from "@/lib/tradeAccountDisplay"
+import { isValidAccountFilterValue } from "@/lib/tradeAccountSelection"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 import { ConfirmModal, useDeleteTradeConfirmation } from "../components/ui"
 import { useUserProfile } from "@/lib/UserProfileProvider"
@@ -148,7 +154,7 @@ export default function CalendarPage() {
 
   const handleAnalyzeTrade = useCallback(
     (trade: any) => {
-      if (isDemoModeActive()) {
+      if (isExploreWriteBlocked()) {
         requestDemoSignup("ai")
         return
       }
@@ -167,26 +173,23 @@ export default function CalendarPage() {
     return Math.max(0, Math.round(n))
   }
 
-  const accountFilterOptions = useMemo(() => {
-    const seen = new Set<string>()
-    const opts: { value: string; label: string }[] = []
-    for (const t of trades) {
-      const id = t.account_id != null ? String(t.account_id) : ""
-      if (!id || seen.has(id)) continue
-      seen.add(id)
-      const label = formatTradeAccountNameSizeLine(t, accountById[id])
-      const prefix = t.account_type ? `${t.account_type} · ` : ""
-      opts.push({
-        value: id,
-        label: `${prefix}${label || "Account"}`.trim(),
-      })
+  const accountFilterOptions = useMemo(
+    () => buildAccountFilterOptionsFromRows(accountRows),
+    [accountRows]
+  )
+
+  useEffect(() => {
+    if (accountFilter === "all") return
+    if (!isValidAccountFilterValue(accountFilter, accountFilterOptions, [])) {
+      setAccountFilter("all")
     }
-    return opts
-  }, [trades, accountById])
+  }, [accountFilter, accountFilterOptions])
 
   const filteredTrades = trades.filter((trade) => {
     if (accountFilter !== "all") {
-      if (String(trade.account_id ?? "") !== accountFilter) {
+      const id = String(trade.account_id ?? "").trim()
+      const accountRow = id ? accountById[id] : null
+      if (!tradeMatchesAccountFilter(trade, accountFilter, accountRow)) {
         return false
       }
     }
@@ -201,8 +204,12 @@ export default function CalendarPage() {
   useEffect(() => {
     if (!selectedDate) return
     const visible = trades.filter((trade) => {
-      if (accountFilter !== "all" && String(trade.account_id ?? "") !== accountFilter) {
-        return false
+      if (accountFilter !== "all") {
+        const id = String(trade.account_id ?? "").trim()
+        const accountRow = id ? accountById[id] : null
+        if (!tradeMatchesAccountFilter(trade, accountFilter, accountRow)) {
+          return false
+        }
       }
       if (selectedMode !== "all") {
         const mode = selectedMode.toLowerCase()
@@ -501,7 +508,7 @@ export default function CalendarPage() {
           }}
         />
 
-        <div className="max-w-7xl mx-auto w-full px-4 max-md:px-3 xl:w-[calc(100%-4rem)] xl:max-w-[1900px] xl:px-0 2xl:w-[calc(100%-6rem)]">
+        <div className="mx-auto w-full min-w-0 max-w-[1600px] px-4 max-md:px-3 md:px-6 xl:px-8 2xl:px-12">
 
           {!tradesLoaded ? (
             <SkeletonCalendarPage />

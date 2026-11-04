@@ -1,6 +1,7 @@
 "use client"
 
 import "./tradesNativeTheme.css"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import { groupTradesForTradesPageDisplay } from "@/lib/copyTradePresentation"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { excludeBacktestTrades } from "@/lib/tradeModeFilters"
@@ -28,6 +29,7 @@ import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { useCopyTradingGroups } from "@/lib/useCopyTradingGroups"
 import {
   isCopyGroupFilterValue,
+  shouldFetchCopyTradingGroupsForFilter,
   isValidAccountFilterValue,
   resolveCopyGroupAccountIdsForFilter,
 } from "@/lib/tradeAccountSelection"
@@ -43,6 +45,10 @@ import {
   sortTradesForDisplay,
   type TradesSortKey,
 } from "@/lib/tradesSort"
+import {
+  tradeMatchesDashboardSelectedDate,
+  tradeMatchesDashboardTimeFilter,
+} from "@/lib/dashboardTradeDate"
 import { useIsNativeIos } from "@/lib/useIsNativeIos"
 import { writeTradeDetail } from "@/lib/tradeDetailCache"
 
@@ -105,12 +111,11 @@ export default function TradesPage() {
   }, [])
   const { copyGroups } = useCopyTradingGroups(
     user?.id,
-    proFeatureUnlocked &&
-      (copyGroupsRequested || isCopyGroupFilterValue(accountFilter))
+    shouldFetchCopyTradingGroupsForFilter(copyGroupsRequested, accountFilter)
   )
   const [accountTypeFilter, setAccountTypeFilter] = useState("all")
   const [showPublicOnly, setShowPublicOnly] = useState(false)
-  const [timeframe, setTimeframe] = useState("all")
+  const [timeframe, setTimeframe] = useState("90d")
   const [customRangeStart, setCustomRangeStart] = useState("")
   const [customRangeEnd, setCustomRangeEnd] = useState("")
   const [selectedDate, setSelectedDate] = useState("")
@@ -170,7 +175,7 @@ export default function TradesPage() {
 
     const editId = searchParams.get("edit")?.trim()
     if (editId) {
-      if (isDemoModeActive()) {
+      if (isExploreWriteBlocked()) {
         requestDemoSignup("edit")
         return
       }
@@ -264,7 +269,7 @@ export default function TradesPage() {
   }, [router])
 
   const handleEditTrade = useCallback((trade: any) => {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("edit")
       return
     }
@@ -279,7 +284,7 @@ export default function TradesPage() {
 
   const performDeleteTrade = useCallback(
     async (id: string) => {
-      if (isDemoModeActive()) {
+      if (isExploreWriteBlocked()) {
         requestDemoSignup("delete")
         return
       }
@@ -292,7 +297,7 @@ export default function TradesPage() {
     useDeleteTradeConfirmation(performDeleteTrade)
 
   const handleSendTrade = useCallback((trade: any) => {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("trade")
       return
     }
@@ -309,7 +314,7 @@ export default function TradesPage() {
 
   const handleAnalyzeTrade = useCallback(
     (trade: any) => {
-      if (isDemoModeActive()) {
+      if (isExploreWriteBlocked()) {
         requestDemoSignup("ai")
         return
       }
@@ -380,7 +385,7 @@ export default function TradesPage() {
   }, [])
 
   const handleOpenPerformanceShare = useCallback(() => {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("upload")
       return
     }
@@ -397,7 +402,7 @@ export default function TradesPage() {
   }, [])
 
   const handleOpenQuickInput = useCallback(() => {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("trade")
       return
     }
@@ -405,7 +410,7 @@ export default function TradesPage() {
   }, [])
 
   const handleTradeFormSaved = useCallback(() => {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("save")
       return
     }
@@ -458,43 +463,26 @@ export default function TradesPage() {
   )
 
   const filteredTrades = useMemo(() => {
+    const now = new Date()
     return tradesForPerformanceSharePool.filter((trade) => {
-      if (timeframe === "all") return true
-
-      const now = new Date()
-      const tradeDate = new Date(trade.created_at)
-
-      if (timeframe === "daily") {
-        return tradeDate.toDateString() === now.toDateString()
+      if (selectedDate?.trim()) {
+        return tradeMatchesDashboardSelectedDate(trade, selectedDate)
       }
-
-      if (timeframe === "weekly") {
-        const weekAgo = new Date()
-        weekAgo.setDate(now.getDate() - 7)
-        return tradeDate >= weekAgo
-      }
-
-      if (timeframe === "monthly") {
-        return (
-          tradeDate.getMonth() === now.getMonth() &&
-          tradeDate.getFullYear() === now.getFullYear()
-        )
-      }
-
-      if (timeframe === "yearly") {
-        return tradeDate.getFullYear() === now.getFullYear()
-      }
-
-      if (timeframe === "custom") {
-        if (!customRangeStart?.trim() || !customRangeEnd?.trim()) return true
-        const start = new Date(customRangeStart + "T00:00:00")
-        const end = new Date(customRangeEnd + "T23:59:59.999")
-        return tradeDate >= start && tradeDate <= end
-      }
-
-      return true
+      return tradeMatchesDashboardTimeFilter(
+        trade,
+        timeframe,
+        now,
+        customRangeStart,
+        customRangeEnd
+      )
     })
-  }, [tradesForPerformanceSharePool, timeframe, customRangeStart, customRangeEnd])
+  }, [
+    tradesForPerformanceSharePool,
+    timeframe,
+    selectedDate,
+    customRangeStart,
+    customRangeEnd,
+  ])
 
   const visibleTrades = useMemo(() => {
     const filtered = !showPublicOnly
@@ -528,6 +516,11 @@ export default function TradesPage() {
   const displayedTradeItems = useMemo(
     () => groupTradesForTradesPageDisplay(displayedTrades),
     [displayedTrades]
+  )
+
+  const groupedTradeItemsForPhotos = useMemo(
+    () => groupTradesForTradesPageDisplay(visibleTrades),
+    [visibleTrades]
   )
 
   const reelFetchTradeIds = useMemo(
@@ -590,7 +583,7 @@ export default function TradesPage() {
       >
       <div
         data-tt-native-surface="trades"
-        className="trade-page-native-theme w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10 xl:px-8 2xl:px-12"
+        className="trade-page-native-theme w-full text-white px-2 pb-3 pt-0 max-md:px-2 md:pb-10"
       >
         <PlatformTradesHeader
           accounts={accounts}
@@ -617,7 +610,7 @@ export default function TradesPage() {
           onAccountPickerOpen={requestCopyGroups}
         />
 
-        <div className="w-full px-1 md:px-6 md:max-w-[1600px] md:mx-auto xl:max-w-[1900px] xl:px-0">
+        <div className="mx-auto w-full min-w-0 max-w-[1600px] px-1 md:px-6 xl:px-8 2xl:px-12">
           <BrokerEnrichmentInboxBanner />
           <TradesPageMainContent
             loading={loading}
@@ -644,6 +637,7 @@ export default function TradesPage() {
             onOpenPerformanceShare={handleOpenPerformanceShare}
             tradeStats={tradeStats}
             displayedTradeItems={displayedTradeItems}
+            groupedTradeItemsForPhotos={groupedTradeItemsForPhotos}
             visibleTradesLength={visibleTrades.length}
             hasAnyTrades={trades.length > 0}
             visibleCount={visibleCount}

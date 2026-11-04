@@ -230,6 +230,7 @@ final class DashboardViewModel {
     }
 
     var psychologyPostUnlockGapMessages: [String] {
+        guard dashboardPsychologyInsightCards.isEmpty else { return [] }
         guard let report = psychologyReport else { return [] }
         guard !psychologyInsightsUnlockProgress.showsRequirementMessage else { return [] }
         let trades = resolvedFilteredTradesForDashboard()
@@ -238,6 +239,13 @@ final class DashboardViewModel {
             report: report,
             trades: trades,
             checkIns: checkIns
+        )
+    }
+
+    var psychologyHasMatchedCheckInDays: Bool {
+        EarlyPsychologyInsightsBuilder.hasMatchedData(
+            trades: resolvedFilteredTradesForDashboard(),
+            checkIns: psychologyCheckInsForUnlockGate()
         )
     }
 
@@ -977,10 +985,13 @@ final class DashboardViewModel {
         )
     }
 
-    /// Psychology cards — hidden until web-aligned unlock gate passes (5 check-in days + 5 trades).
+    /// Psychology cards — early matched-day insights plus full report cards when available (web parity).
     var dashboardPsychologyInsightCards: [PsychologyInsightCard] {
-        guard !psychologyInsightsUnlockProgress.showsRequirementMessage else { return [] }
-        return psychologyReport?.dashboardCards ?? []
+        let trades = resolvedFilteredTradesForDashboard()
+        let checkIns = psychologyCheckInsForUnlockGate()
+        let early = EarlyPsychologyInsightsBuilder.build(trades: trades, checkIns: checkIns)
+        let reportCards = psychologyReport?.dashboardCards ?? []
+        return EarlyPsychologyInsightsBuilder.merge(early: early, reportCards: reportCards)
     }
 
     /// True while V3 chart overlay (insights source) has not resolved for the current selection.

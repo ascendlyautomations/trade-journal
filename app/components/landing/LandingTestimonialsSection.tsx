@@ -8,7 +8,6 @@ import {
   selectFeaturedHomepageReviews,
   type PublicUserReview,
 } from "@/lib/userReviewDisplay"
-import { SAMPLE_USER_REVIEWS } from "@/lib/demo/sampleUserReviews"
 import {
   LANDING_CARD_FULL,
   LANDING_HEADLINE_SM,
@@ -83,8 +82,9 @@ export default function LandingTestimonialsSection({
 }: LandingTestimonialsSectionProps) {
   const stats = computeUserReviewStats(reviews)
   const featuredLive = selectFeaturedHomepageReviews(reviews, 3)
-  const displayCards =
-    featuredLive.length > 0 ? featuredLive : SAMPLE_USER_REVIEWS.slice(0, 3)
+  if (featuredLive.length === 0) {
+    return null
+  }
 
   return (
     <section
@@ -95,10 +95,11 @@ export default function LandingTestimonialsSection({
       <div className={LANDING_SECTION_SHELL}>
         <div className="mx-auto max-w-3xl text-center">
           <h2 id="testimonials-heading" className={LANDING_HEADLINE_SM}>
-            Real Stories From The Community
+            Traders who wanted more than a log
           </h2>
           <p className={`${LANDING_LEAD} mx-auto ${LANDING_LEAD_GAP}`}>
-            Traders are making TradeTraxs home.
+            Approved reviews from beta testers, what changed when journal, stats, and community
+            lived in one place.
           </p>
 
           {stats.count > 0 ? (
@@ -120,7 +121,7 @@ export default function LandingTestimonialsSection({
         </div>
 
         <div className={`${LANDING_SECTION_CONTENT_GAP} grid gap-4 md:grid-cols-3 md:gap-5`}>
-          {displayCards.map((testimonial) => (
+          {featuredLive.map((testimonial) => (
             <TestimonialCard key={testimonial.id} testimonial={testimonial} />
           ))}
         </div>

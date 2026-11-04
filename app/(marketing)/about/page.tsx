@@ -16,7 +16,11 @@ import {
   ABOUT_PAGE_EYEBROW,
   ABOUT_STORY,
 } from "@/lib/aboutPageContent"
-import { isDemoUserId } from "@/lib/demo/constants"
+import { isAuthenticatedAppUser } from "@/lib/marketingAccess"
+import {
+  isGuestExploreViewer,
+  resumeGuestExploreNavigation,
+} from "@/lib/guestExplore"
 import { profileNeedsOnboarding } from "@/lib/profileOnboardingGate"
 import { hasActiveMembership } from "@/lib/subscriptionAccess"
 import { enterSignupFlow, resolveSignupProfileSetupPath, setCheckoutBillingInterval } from "@/lib/signupFlow"
@@ -66,7 +70,7 @@ export default function AboutPage() {
   const [loggedInDemoModalOpen, setLoggedInDemoModalOpen] = useState(false)
   const [loggedInTrialModalOpen, setLoggedInTrialModalOpen] = useState(false)
 
-  const isAuthenticatedUser = !!user && !isDemoUserId(user.id)
+  const isAuthenticatedUser = isAuthenticatedAppUser(user)
 
   async function handleStartTrial() {
     if (isAuthenticatedUser) {
@@ -102,6 +106,10 @@ export default function AboutPage() {
   }
 
   function handleExploreDemo() {
+    if (isGuestExploreViewer(user)) {
+      resumeGuestExploreNavigation()
+      return
+    }
     if (isAuthenticatedUser) {
       setLoggedInDemoModalOpen(true)
       return

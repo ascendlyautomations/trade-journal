@@ -1,6 +1,7 @@
 "use client"
 
 import DashboardFilters from "../../components/dashboard/DashboardFilters"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
 import DashboardHeader from "../../components/dashboard/DashboardHeader"
 import GettingStartedChecklist from "../../components/dashboard/GettingStartedChecklist"
@@ -22,6 +23,10 @@ import DashboardPsychologyInsights, {
   DashboardPsychologyInsightsPlacement,
   DashboardPsychologyInsightsSlot,
 } from "../../components/dashboard/DashboardPsychologyInsights"
+import DashboardTradingScorecard, {
+  buildDashboardScorecardFingerprint,
+} from "../../components/scorecard/DashboardTradingScorecard"
+import { writeScorecardLastScope } from "@/lib/scorecard/scorecardSessionStore"
 import { formatPsychologyDashboardScopeLabel } from "@/lib/psychology/psychologyScopeLabel"
 import type {
   DashboardAccountRow,
@@ -68,6 +73,7 @@ import { useCopyTradingGroups } from "@/lib/useCopyTradingGroups"
 import {
   isValidAccountFilterValue,
   isCopyGroupFilterValue,
+  shouldFetchCopyTradingGroupsForFilter,
   resolveCopyGroupAccountIdsForFilter,
 } from "@/lib/tradeAccountSelection"
 import {
@@ -75,8 +81,10 @@ import {
 } from "@/lib/dashboardTradeDate"
 import {
   DASHBOARD_DEFAULT_TIME_FILTER,
+  DASHBOARD_DEMO_DEFAULT_TIME_FILTER,
   resolveInitialDashboardTimeframe,
 } from "@/lib/dashboardInitialTimeframe"
+import { isDemoUserId } from "@/lib/demo/constants"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import {
@@ -96,6 +104,8 @@ import {
 } from "@/lib/onboardingChecklistAudit"
 import { useGettingStartedProgress } from "@/lib/GettingStartedProgressProvider"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import { payoutHistorySummary } from "@/lib/payoutHistory"
+import { useWithdrawalsHistory } from "@/lib/useWithdrawalsHistory"
 import { shouldShowProForLifeCard } from "@/lib/earlyAccess"
 import { usePrefetchSecondaryRoutesWhenReady } from "@/lib/usePrefetchSecondaryRoutesWhenReady"
 import {
@@ -216,6 +226,10 @@ function inferredUserSelectedDashboardTimeframe(
   return prefs.timeFilter != null
 }
 
+function isDashboardDemoExperience(userId: string | null | undefined): boolean {
+  return isDemoModeActive() || isDemoUserId(userId)
+}
+
 export default function Dashboard() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const {
@@ -245,6 +259,14 @@ export default function Dashboard() {
     presentFeature,
   } = useProGate(profile)
   const isPro = proFeatureUnlocked
+  const {
+    items: withdrawalHistoryItems,
+    loading: withdrawalHistoryLoading,
+  } = useWithdrawalsHistory(user?.id)
+  const totalWithdrawalsAmount = useMemo(() => {
+    if (withdrawalHistoryLoading) return null
+    return payoutHistorySummary(withdrawalHistoryItems).total
+  }, [withdrawalHistoryItems, withdrawalHistoryLoading])
   const [deferredSectionsReady, setDeferredSectionsReady] = useState(false)
   const [dashboardPayoutsTotal, setDashboardPayoutsTotal] = useState<
     number | null | undefined
@@ -277,20 +299,22 @@ export default function Dashboard() {
   }, [user?.id])
 
   useEffect(() => {
-    if (!proFeatureUnlocked) return
     const prefs = loadDashboardGearPrefs()
     if (isCopyGroupFilterValue(prefs?.accountFilter)) {
       setCopyGroupsRequested(true)
     }
-  }, [proFeatureUnlocked])
-  // Copy Trading loads on demand — saved copy-group filter or account/filter UI open.
+  }, [])
+  // Copy groups load on demand — picker open or active copy-group filter (Free + Pro).
   const { copyGroups } = useCopyTradingGroups(
     user?.id,
-    proFeatureUnlocked &&
-      (copyGroupsRequested || isCopyGroupFilterValue(accountFilter))
+    shouldFetchCopyTradingGroupsForFilter(copyGroupsRequested, accountFilter)
   )
   const [accountTypeFilter, setAccountTypeFilter] = useState("all")
-  const [timeFilter, setTimeFilter] = useState(DASHBOARD_DEFAULT_TIME_FILTER)
+  const [timeFilter, setTimeFilter] = useState(() =>
+    typeof window !== "undefined" && isDemoModeActive()
+      ? DASHBOARD_DEMO_DEFAULT_TIME_FILTER
+      : DASHBOARD_DEFAULT_TIME_FILTER
+  )
   const [hasUserSelectedTimeframe, setHasUserSelectedTimeframe] = useState(false)
   const [customRangeStart, setCustomRangeStart] = useState("")
   const [customRangeEnd, setCustomRangeEnd] = useState("")
@@ -668,10 +692,19 @@ export default function Dashboard() {
   useEffect(() => {
     if (pageDataLoading || didHydrateDashboardPrefs.current) return
     didHydrateDashboardPrefs.current = true
+    const demoExperience = isDashboardDemoExperience(user?.id)
     const p = loadDashboardGearPrefs()
-    if (!p) return
+    if (!p) {
+      if (demoExperience) {
+        setTimeFilter(DASHBOARD_DEMO_DEFAULT_TIME_FILTER)
+        setHasUserSelectedTimeframe(false)
+      }
+      return
+    }
 
-    const userSelectedTimeframe = inferredUserSelectedDashboardTimeframe(p)
+    const userSelectedTimeframe = demoExperience
+      ? false
+      : inferredUserSelectedDashboardTimeframe(p)
     setHasUserSelectedTimeframe(userSelectedTimeframe)
 
     const {
@@ -686,7 +719,9 @@ export default function Dashboard() {
       copyGroups,
     })
 
-    if (userSelectedTimeframe) {
+    if (demoExperience) {
+      setTimeFilter(DASHBOARD_DEMO_DEFAULT_TIME_FILTER)
+    } else if (userSelectedTimeframe) {
       setTimeFilter(hydratedTimeFilter)
     } else {
       setTimeFilter(DASHBOARD_DEFAULT_TIME_FILTER)
@@ -741,11 +776,16 @@ export default function Dashboard() {
     accountRows,
     accountById,
     copyGroups,
+    user?.id,
   ])
 
   useEffect(() => {
     if (pageDataLoading || !didHydrateDashboardPrefs.current) return
     if (hasUserSelectedTimeframe) return
+    if (isDashboardDemoExperience(user?.id)) {
+      setTimeFilter(DASHBOARD_DEMO_DEFAULT_TIME_FILTER)
+      return
+    }
     const resolved = resolveInitialDashboardTimeframe({
       trades: tradesExcludingBacktest,
       accountFilter,
@@ -762,6 +802,7 @@ export default function Dashboard() {
     accountTypeFilter,
     accountById,
     copyGroups,
+    user?.id,
   ])
 
   // 🔥 MEMOIZED CALCULATIONS (PERFORMANCE BOOST)
@@ -833,6 +874,63 @@ export default function Dashboard() {
       accountFilter,
     ]
   )
+
+  const scorecardAnalytics = useMemo(
+    () => ({
+      periodTradingDayCount,
+      maxDrawdown,
+      avgWin,
+      avgLoss,
+      totalTrades,
+      postTripleLossWinRate: null as number | null,
+    }),
+    [periodTradingDayCount, maxDrawdown, avgWin, avgLoss, totalTrades]
+  )
+
+  const scorecardFilterFingerprint = useMemo(() => {
+    if (!user?.id) return ""
+    return buildDashboardScorecardFingerprint({
+      userId: user.id,
+      accountFilter,
+      accountTypeFilter,
+      timeFilter,
+      selectedDate,
+      customRangeStart,
+      customRangeEnd,
+      showPublicOnly,
+      tradeCount: totalTrades,
+    })
+  }, [
+    user?.id,
+    accountFilter,
+    accountTypeFilter,
+    timeFilter,
+    selectedDate,
+    customRangeStart,
+    customRangeEnd,
+    showPublicOnly,
+    totalTrades,
+  ])
+
+  useEffect(() => {
+    writeScorecardLastScope({
+      accountFilter,
+      accountTypeFilter,
+      timeFilter,
+      selectedDate,
+      customRangeStart,
+      customRangeEnd,
+      showPublicOnly,
+    })
+  }, [
+    accountFilter,
+    accountTypeFilter,
+    timeFilter,
+    selectedDate,
+    customRangeStart,
+    customRangeEnd,
+    showPublicOnly,
+  ])
 
   const { liveAccountValueState, liveEquityCurveState } =
     useDashboardLiveAccountBundle({
@@ -968,7 +1066,7 @@ export default function Dashboard() {
     ) : null
 
   const handleEmptyJournalAddTrade = useCallback(() => {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("trade")
       return
     }
@@ -976,7 +1074,7 @@ export default function Dashboard() {
   }, [openQuickTrade])
 
   const handleEmptyJournalImport = useCallback(() => {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("save")
       return
     }
@@ -1047,7 +1145,7 @@ export default function Dashboard() {
       : 0
 
   async function saveDashboardGearPanel() {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("save")
       return
     }
@@ -1227,6 +1325,30 @@ export default function Dashboard() {
   const timeframeLabel = syncTimeframeDisplayLabel(timeFilter, selectedDate)
   const dashboardUserIsPro = proFeatureUnlocked
 
+  const tradingScorecardSection =
+    user?.id && totalTrades > 0 && deferredSectionsReady ? (
+      <div className="mt-3 md:mt-4">
+        <DashboardTradingScorecard
+          userId={user.id}
+          filteredTrades={filteredTrades}
+          tradesReady={!statsStillLoading || dashboardHasCachedData}
+          scopeLabel={psychologyScopeLabel}
+          proFeatureUnlocked={proFeatureUnlocked}
+          analytics={scorecardAnalytics}
+          filterFingerprint={scorecardFilterFingerprint}
+          scopeFilters={{
+            accountFilter,
+            accountTypeFilter,
+            timeFilter,
+            selectedDate,
+            customRangeStart,
+            customRangeEnd,
+            showPublicOnly,
+          }}
+        />
+      </div>
+    ) : null
+
   const dashboardLiveAccountValueHero = liveAccountValueState.visible ? (
     <DashboardLiveAccountValueMetric
       state={liveAccountValueState}
@@ -1287,6 +1409,7 @@ export default function Dashboard() {
       holdTimeStats={holdTimeStats}
       liveAccountValue={dashboardLiveAccountValueHero}
       drawdownLimitLineY={drawdownLimitLineY}
+      totalWithdrawalsAmount={totalWithdrawalsAmount}
     />
   )
 
@@ -1313,10 +1436,10 @@ export default function Dashboard() {
       <div
         data-tt-native-surface="dashboard"
         data-tt-dashboard-canvas=""
-        className="w-full min-w-0 max-w-full overflow-x-hidden px-2.5 pb-3 pt-4 text-white max-md:px-2 max-md:pb-2 max-md:pt-2 md:px-10 md:pb-10 md:pt-0 xl:px-8 2xl:px-12"
+        className="w-full min-w-0 max-w-full overflow-x-hidden px-2.5 pb-3 pt-4 text-white max-md:px-2 max-md:pb-2 max-md:pt-2 md:pb-10 md:pt-0"
       >
 
-        <div className="tt-dash-workspace relative z-50 mx-auto w-full max-w-[1600px] px-0 md:px-6 xl:max-w-[1900px] xl:px-0">
+        <div className="tt-dash-workspace relative z-50 mx-auto w-full min-w-0 max-w-[1600px] md:px-6 xl:px-8 2xl:px-12">
           {user?.id ? (
             <DashboardFilters
               isPro={isPro}
@@ -1336,7 +1459,7 @@ export default function Dashboard() {
               showPublicOnly={showPublicOnly}
               onTogglePublicOnly={() => setShowPublicOnly(!showPublicOnly)}
               onOpenPerformanceShare={() => {
-                if (isDemoModeActive()) {
+                if (isExploreWriteBlocked()) {
                   requestDemoSignup("upload")
                   return
                 }
@@ -1344,7 +1467,7 @@ export default function Dashboard() {
                 openPerformanceShare()
               }}
               onOpenQuickInput={() => {
-                if (isDemoModeActive()) {
+                if (isExploreWriteBlocked()) {
                   requestDemoSignup("trade")
                   return
                 }
@@ -1374,7 +1497,7 @@ export default function Dashboard() {
           />
         </div>
 
-          <div className="tt-dash-workspace tt-dash-stack relative z-0 mx-auto flex w-full min-w-0 max-w-[1600px] flex-col gap-2 overflow-x-hidden px-0 max-md:gap-2 md:gap-3 md:px-6 xl:max-w-[1900px] xl:px-0">
+          <div className="tt-dash-workspace tt-dash-stack relative z-0 mx-auto flex w-full min-w-0 max-w-[1600px] flex-col gap-2 overflow-x-hidden max-md:gap-2 md:gap-3 md:px-6 xl:px-8 2xl:px-12">
 
   {user?.id ? (
     <div className="grid grid-cols-2 items-stretch gap-2 max-md:grid-cols-1 md:gap-3">
@@ -1441,6 +1564,7 @@ export default function Dashboard() {
         </div>
       ) : null}
       {desktopTerminal}
+      {tradingScorecardSection}
   <DashboardCharts
     isPro
     deferredSectionsReady={deferredSectionsReady}
@@ -1584,6 +1708,7 @@ export default function Dashboard() {
     ) : (
       <>
           {desktopTerminal}
+          {tradingScorecardSection}
           <DashboardCharts
             isPro={false}
             deferredSectionsReady={deferredSectionsReady}
@@ -1641,13 +1766,13 @@ export default function Dashboard() {
     </>
       )}
 
-  {user?.id ? (
+  {user?.id && dashboardUserIsPro ? (
     <DashboardPsychologyInsightsPlacement
       placementKey={[
         statsStillLoading ? "loading" : "ready",
         hasNoTrades ? "empty" : "trades",
         totalTrades > 0 ? "visible" : "filtered",
-        dashboardUserIsPro ? "pro" : "free",
+        "pro",
         deferredSectionsReady ? "deferred" : "pending",
       ].join(":")}
     >

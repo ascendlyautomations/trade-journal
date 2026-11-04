@@ -29,6 +29,8 @@ type FeedPostBodyProps = {
   onViewReel?: () => void
   /** Linked clip from trades.reels join — no extra fetch. */
   attachedReel?: ReelRow | null
+  /** Keep View Clip badge but hide thumbnail strip (e.g. marketing feed preview). */
+  hideAttachedReelPreview?: boolean
 }
 
 function FeedPostBody({
@@ -44,6 +46,7 @@ function FeedPostBody({
   timingTrade,
   onViewReel,
   attachedReel = null,
+  hideAttachedReelPreview = false,
 }: FeedPostBodyProps) {
   const resolvedPoints = resolveTradePoints(timingTrade)
   const showCopyBadge = isCopyTradedMode(timingTrade)
@@ -123,7 +126,7 @@ function FeedPostBody({
         </div>
       ) : null}
 
-      {attachedReel && onViewReel ? (
+      {attachedReel && onViewReel && !hideAttachedReelPreview ? (
         <div className="pt-1">
           <ReelThumbnailPreview
             reel={attachedReel}

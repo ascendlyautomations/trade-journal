@@ -12,6 +12,7 @@ export type WeeklyLeaderboardPeriodKind =
   | "previous_week"
   | "earlier_week"
   | "monthly"
+  | "yearly"
 
 export type WeeklyLeaderboardPeriod = {
   kind: WeeklyLeaderboardPeriodKind
@@ -21,6 +22,10 @@ export type WeeklyLeaderboardPeriod = {
 
 const MAX_WEEK_LOOKBACK = 52
 const MAX_MONTH_LOOKBACK = 24
+const MAX_YEAR_LOOKBACK = 10
+
+/** Homepage needs at least two slots (e.g. P&L + R:R) before we lock a calendar window. */
+export const MIN_WEEKLY_LEADERBOARD_PICKS = 2
 
 export function filterTradesForLeaderboardDateRange(
   trades: TradeForLeaderboard[],
@@ -41,7 +46,8 @@ function periodHasQualifyingTraders(
   start: Date,
   end: Date
 ): boolean {
-  return pickWeeklyTopPerformersInRange(trades, start, end).length > 0
+  const picks = pickWeeklyTopPerformersInRange(trades, start, end)
+  return picks.length >= MIN_WEEKLY_LEADERBOARD_PICKS
 }
 
 function calendarWeekBounds(
@@ -56,6 +62,19 @@ function calendarWeekBounds(
     weeksBeforeCurrent === 0
       ? endOfDay(now)
       : getSundayOfWeek(monday)
+  return { start, end }
+}
+
+function calendarYearBounds(
+  now: Date,
+  yearsBeforeCurrent: number
+): { start: Date; end: Date } {
+  const year = now.getFullYear() - yearsBeforeCurrent
+  const start = startOfDay(new Date(year, 0, 1))
+  const end =
+    yearsBeforeCurrent === 0
+      ? endOfDay(now)
+      : endOfDay(new Date(year, 11, 31))
   return { start, end }
 }
 
@@ -93,6 +112,17 @@ export function resolveWeeklyLeaderboardPeriod(
     return { kind: "previous_week", ...previous }
   }
 
+  const previousMonth = calendarMonthBounds(now, 1)
+  if (
+    periodHasQualifyingTraders(
+      trades,
+      previousMonth.start,
+      previousMonth.end
+    )
+  ) {
+    return { kind: "monthly", ...previousMonth }
+  }
+
   for (let weeksAgo = 2; weeksAgo < MAX_WEEK_LOOKBACK; weeksAgo += 1) {
     const bounds = calendarWeekBounds(now, weeksAgo)
     if (periodHasQualifyingTraders(trades, bounds.start, bounds.end)) {
@@ -104,6 +134,13 @@ export function resolveWeeklyLeaderboardPeriod(
     const bounds = calendarMonthBounds(now, monthsAgo)
     if (periodHasQualifyingTraders(trades, bounds.start, bounds.end)) {
       return { kind: "monthly", ...bounds }
+    }
+  }
+
+  for (let yearsAgo = 0; yearsAgo < MAX_YEAR_LOOKBACK; yearsAgo += 1) {
+    const bounds = calendarYearBounds(now, yearsAgo)
+    if (periodHasQualifyingTraders(trades, bounds.start, bounds.end)) {
+      return { kind: "yearly", ...bounds }
     }
   }
 
@@ -123,7 +160,7 @@ function formatWeekHeadingRange(start: Date, end: Date): string {
     day: "numeric",
     year: "numeric",
   })
-  return `${startLabel} – ${endLabel}`
+  return `${startLabel}, ${endLabel}`
 }
 
 export function weeklyLeaderboardDisplayCopy(period: WeeklyLeaderboardPeriod): {
@@ -148,7 +185,7 @@ export function weeklyLeaderboardDisplayCopy(period: WeeklyLeaderboardPeriod): {
       }
     case "earlier_week":
       return {
-        title: `Top Traders — Week of ${formatWeekHeadingRange(period.start, period.end)}`,
+        title: `Top Traders, Week of ${formatWeekHeadingRange(period.start, period.end)}`,
         subtitle:
           "Most recent calendar week with qualifying public trades (all accounts)",
         isHistoricalPeriod: true,
@@ -166,7 +203,16 @@ export function weeklyLeaderboardDisplayCopy(period: WeeklyLeaderboardPeriod): {
       return {
         title,
         subtitle:
-          "Monthly public leaderboard rankings from public trades (all accounts)",
+          "Monthly public leaderboard rankings when the calendar week is empty or too thin.",
+        isHistoricalPeriod: true,
+      }
+    }
+    case "yearly": {
+      const year = period.start.getFullYear()
+      return {
+        title: `${year}'s Top Traders`,
+        subtitle:
+          "Yearly public leaderboard highlights when shorter windows lack enough distinct traders.",
         isHistoricalPeriod: true,
       }
     }

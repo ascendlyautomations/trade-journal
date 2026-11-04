@@ -445,6 +445,7 @@ struct DashboardHomeView: View {
                             cards: viewModel.dashboardPsychologyInsightCards,
                             unlockProgress: viewModel.psychologyInsightsUnlockProgress,
                             unlockMetricsReady: viewModel.psychologyUnlockMetricsReady,
+                            hasMatchedCheckInDays: viewModel.psychologyHasMatchedCheckInDays,
                             postUnlockGapMessages: viewModel.psychologyPostUnlockGapMessages,
                             onSelect: { card in
                                 viewModel.openPsychologyAnalytics(

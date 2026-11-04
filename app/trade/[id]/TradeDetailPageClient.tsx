@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import dynamic from "next/dynamic"
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -268,7 +269,7 @@ export default function TradeDetailPageClient({
 
   const performDeleteTrade = useCallback(
     async (id: string) => {
-      if (isDemoModeActive()) {
+      if (isExploreWriteBlocked()) {
         requestDemoSignup("delete")
         return
       }
@@ -458,7 +459,7 @@ export default function TradeDetailPageClient({
             onEdit={
               isOwner
                 ? () => {
-                    if (isDemoModeActive()) {
+                    if (isExploreWriteBlocked()) {
                       requestDemoSignup("edit")
                       return
                     }
@@ -472,7 +473,7 @@ export default function TradeDetailPageClient({
             onShare={
               isOwner
                 ? () => {
-                    if (isDemoModeActive()) {
+                    if (isExploreWriteBlocked()) {
                       requestDemoSignup("trade")
                       return
                     }
@@ -487,7 +488,7 @@ export default function TradeDetailPageClient({
             onAnalyze={
               isOwner
                 ? () => {
-                    if (isDemoModeActive()) {
+                    if (isExploreWriteBlocked()) {
                       requestDemoSignup("ai")
                       return
                     }

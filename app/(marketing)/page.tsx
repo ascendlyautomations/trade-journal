@@ -55,7 +55,7 @@ export const metadata: Metadata = {
   },
 }
 
-/** Product-led experiment. Restore the previous homepage by rendering LandingPageClient here. */
+/** Marketing homepage (v2 redesign in ProductLedHome). Restore LandingPageClient here if needed. */
 export const revalidate = 86_400
 
 export default function HomePage() {

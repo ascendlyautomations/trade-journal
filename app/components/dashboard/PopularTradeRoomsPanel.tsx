@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import EmptyState from "@/app/components/ui/EmptyState"
 import { supabase } from "@/lib/supabaseClient"
 import { joinTradeRoom } from "@/lib/joinTradeRoom"
@@ -192,7 +193,7 @@ export default function PopularTradeRoomsPanel({
 
   const handleJoin = useCallback(
     async (room: PopularTradeRoom) => {
-      if (isDemoSupabaseBlocked()) {
+      if (isExploreWriteBlocked()) {
         requestDemoSignup("room")
         return
       }

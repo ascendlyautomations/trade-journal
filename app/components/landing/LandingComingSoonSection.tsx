@@ -36,13 +36,6 @@ type ComingSoonCard = {
 
 const COMING_SOON_CARDS: readonly ComingSoonCard[] = [
   {
-    icon: "🔗",
-    title: "Live Broker Connections",
-    description: "Automatically sync your trades without CSV uploads.",
-    bullets: ["Tradovate", "NinjaTrader", "Rithmic"],
-    status: "Coming Soon",
-  },
-  {
     icon: "🎙️",
     title: "Voice Chat",
     description: "Talk live with your trading group directly inside Trade Rooms.",
@@ -50,22 +43,22 @@ const COMING_SOON_CARDS: readonly ComingSoonCard[] = [
     status: "Coming Soon",
   },
   {
-    icon: "📱",
-    title: "Mobile Apps",
-    description: "TradeTraxs everywhere.",
-    bullets: ["iPhone", "Android", "Push Notifications"],
-    status: "In Development",
+    icon: "🤖",
+    title: "ChatGPT Integration",
+    description:
+      "Connect your ChatGPT account to analyze trades, journal entries, and psychology patterns with your existing TradeTraxs data.",
+    bullets: [
+      "Secure account connection",
+      "Deeper trade & performance analysis",
+      "Follow-ups on journal and check-ins",
+    ],
+    status: "Planned",
   },
   {
-    icon: "🤖",
-    title: "AI Trading Coach",
-    description: "The next evolution of AI analysis.",
-    bullets: [
-      "Personalized coaching",
-      "Behavioral insights",
-      "Smarter recommendations",
-      "Continuous improvement tracking",
-    ],
+    icon: "🔗",
+    title: "More Broker Platforms",
+    description: "Tradovate and Rithmic connections are available today in Settings.",
+    bullets: ["NinjaTrader", "Additional prop firm imports", "Expanded auto-sync"],
     status: "Coming Soon",
   },
   {
@@ -74,6 +67,13 @@ const COMING_SOON_CARDS: readonly ComingSoonCard[] = [
     description: "Stay ahead of market-moving events.",
     bullets: ["High-impact news", "Event filtering", "Built directly into TradeTraxs"],
     status: "Planned",
+  },
+  {
+    icon: "📱",
+    title: "Android App",
+    description: "Native Android is next. iOS is available today on the App Store.",
+    bullets: ["Android", "Push notifications", "Parity with core iOS flows"],
+    status: "In Development",
   },
   {
     icon: "⚡",
@@ -151,11 +151,11 @@ export default function LandingComingSoonSection() {
           }`}
         >
           <h2 id="coming-soon-heading" className={LANDING_HEADLINE_SM}>
-            Coming Soon
+            Our Roadmap
           </h2>
           <p className={`${LANDING_LEAD} mx-auto ${LANDING_LEAD_GAP}`}>
-            We&apos;re just getting started. Here&apos;s what&apos;s already in development for
-            TradeTraxs.
+            Core platform pieces, journal, analytics, community, iOS, and TraxPro tools, are live
+            above. Here&apos;s what we&apos;re building next.
           </p>
         </div>
 

@@ -703,9 +703,9 @@ export default function Leaderboard() {
       >
       <div
         data-tt-native-surface="leaderboard"
-        className={`tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 px-4 py-6 md:px-8 md:py-8 max-md:px-3 max-md:py-3 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}
+        className={`tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 px-4 py-6 md:py-8 max-md:px-3 max-md:py-3 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}
       >
-        <div className="mx-auto max-w-7xl min-w-0 space-y-4">
+        <div className="mx-auto min-w-0 w-full max-w-[1600px] space-y-4 md:px-6 xl:px-8 2xl:px-12">
           <h1 className="text-2xl font-semibold text-blue-300 md:text-3xl max-md:hidden">
             Leaderboard
           </h1>

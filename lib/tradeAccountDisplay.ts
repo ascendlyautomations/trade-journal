@@ -1,3 +1,8 @@
+import { ACCOUNT_VIEW_ONLY_BADGE } from "./freePlanAccountSlots.ts"
+import {
+  accountRowIsViewOnly,
+  accountRowVisibleInAnalyticsFilters,
+} from "./tradeAccountVisibility.ts"
 import {
   tradeMatchesParticipatingAccountFilter,
   type CopyTradeWireRow,
@@ -105,6 +110,7 @@ export type AccountRowForDisplay = {
   mode?: string | null
   is_active?: boolean | null
   can_add_trades?: boolean | null
+  show_in_account_dropdowns?: boolean | null
 }
 
 export type AccountFilterOption = {
@@ -222,9 +228,8 @@ export function formatTradingAccountSelectorLabel(
 }
 
 /**
- * Build account selector options from `accounts` rows for historical filters.
- * Soft-hidden (`is_active === false`) rows remain available for history.
- * `can_add_trades` does not change the label.
+ * Build account selector options for dashboard/trades/calendar analytics filters.
+ * Respects `show_in_account_dropdowns`; badges view-only (`can_add_trades === false`).
  */
 export function buildAccountFilterOptionsFromRows(
   accountRows: readonly AccountRowForDisplay[],
@@ -234,6 +239,8 @@ export function buildAccountFilterOptionsFromRows(
   const accountMap = new Map<string, AccountFilterOption>()
 
   for (const row of accountRows) {
+    if (!accountRowVisibleInAnalyticsFilters(row)) continue
+
     const id = String(row.id ?? "").trim()
     const name = String(row.name ?? "").trim()
     if (!id || !name) continue
@@ -251,19 +258,38 @@ export function buildAccountFilterOptionsFromRows(
       { includeAccountNumber }
     )
 
-    const baseLabel = `${parts.name}${parts.suffix}`.replace(/\s+/g, " ").trim()
+    const viewOnly = accountRowIsViewOnly(row)
+    const viewOnlySuffix = viewOnly ? ` • ${ACCOUNT_VIEW_ONLY_BADGE}` : ""
+    const suffixWithBadge = `${parts.suffix}${viewOnlySuffix}`
+    const baseLabel = `${parts.name}${suffixWithBadge}`
+      .replace(/\s+/g, " ")
+      .trim()
 
     accountMap.set(value, {
       value,
       label: baseLabel,
       labelName: parts.name,
-      labelSuffix: parts.suffix,
+      labelSuffix: suffixWithBadge,
       accountType: row.mode ?? null,
-      readOnly: false,
+      readOnly: viewOnly,
     })
   }
 
-  return Array.from(accountMap.values())
+  return sortAccountFilterOptionsForDisplay(Array.from(accountMap.values()))
+}
+
+/** Active trade-entry accounts first, then view-only; alphabetical within each group. */
+export function sortAccountFilterOptionsForDisplay(
+  options: readonly AccountFilterOption[]
+): AccountFilterOption[] {
+  return [...options].sort((a, b) => {
+    const aView = a.readOnly ? 1 : 0
+    const bView = b.readOnly ? 1 : 0
+    if (aView !== bView) return aView - bView
+    const aName = String(a.labelName ?? a.label).toLowerCase()
+    const bName = String(b.labelName ?? b.label).toLowerCase()
+    return aName.localeCompare(bName, undefined, { sensitivity: "base" })
+  })
 }
 
 export function tradeMatchesAccountFilter(

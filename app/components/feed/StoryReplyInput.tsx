@@ -1,6 +1,7 @@
 "use client"
 
 import { memo, useCallback, useState } from "react"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import { supabase } from "@/lib/supabaseClient"
 import { sendStoryReply } from "@/lib/sendStoryReply"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
@@ -44,7 +45,7 @@ function StoryReplyInput({
     const trimmed = text.trim()
     if (!trimmed || sending) return
 
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("comment")
       return
     }

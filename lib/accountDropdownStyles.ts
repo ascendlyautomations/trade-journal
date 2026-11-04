@@ -14,6 +14,10 @@ export const ACCOUNT_DROPDOWN_ROW_TEXT_CLASS =
 export const ACCOUNT_DROPDOWN_ITEM_CLASS =
   `${ACCOUNT_DROPDOWN_ROW_HEIGHT_CLASS} cursor-pointer px-3 py-2 text-sm ${READABLE_PRIMARY_CLASS} hover:bg-[#1f2937]`
 
+/** View-only rows — same base chrome as active; label parts carry the badge color. */
+export const ACCOUNT_DROPDOWN_VIEW_ONLY_ITEM_CLASS =
+  `${ACCOUNT_DROPDOWN_ROW_HEIGHT_CLASS} cursor-pointer px-3 py-2 text-sm ${READABLE_PRIMARY_CLASS} hover:bg-[#1f2937]`
+
 export const ACCOUNT_DROPDOWN_DIVIDER_CLASS =
   `pointer-events-none select-none px-3 text-xs leading-none ${READABLE_DISABLED_TEXT_CLASS} max-md:overflow-hidden max-md:whitespace-nowrap`
 

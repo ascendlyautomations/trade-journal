@@ -4,17 +4,30 @@ import {
   TRADETRAXS_FREE_PLAN,
   TRADETRAXS_PRO_PLAN,
 } from "@/lib/tradeTraxsPlans"
+import { FREE_PLAN_ACTIVE_TRADING_ACCOUNTS_LABEL } from "@/lib/freePlanDailyLimits"
 
 export type LandingFaqItem = { q: string; a: string }
 
 export const LANDING_FAQ_ITEMS: LandingFaqItem[] = [
   {
     q: "What is TradeTraxs?",
-    a: "TradeTraxs is the first social platform built specifically for traders, where you can track trades, analyze performance, and connect with a community built for how you actually trade.",
+    a: "TradeTraxs is a connected trading platform, not a standalone log. One account on web and iOS combines journaling, performance analytics, psychology check-ins, and a trader-focused social layer (Feed, Trade Rooms, messaging, profiles, achievements, and leaderboards) built around the same trades.",
+  },
+  {
+    q: "How is TradeTraxs different from a traditional trading journal?",
+    a: "Most journals stop at recording and reviewing trades. TradeTraxs uses that record across your dashboard, calendar, and profile, and lets you optionally share journaled trades to the Feed, rooms, or DMs, with P&L and context attached, instead of disconnected screenshots in generic social apps.",
+  },
+  {
+    q: "How does psychology tracking work?",
+    a: "You can log daily check-ins (such as sleep, mood, focus, and stress) alongside your trading history. TradeTraxs helps you compare mindset entries with performance over time for your own reflection. It does not claim that improving mood or sleep guarantees better trading results.",
+  },
+  {
+    q: "What are Trade Rooms?",
+    a: "Trade Rooms are trader communities inside TradeTraxs: group chat organized into sections (like channels), invites, and rich shares such as trades, images, and voice notes. Live voice channels are planned for the future; they are not available today.",
   },
   {
     q: "Can I track multiple trading accounts?",
-    a: `${TRADETRAXS_PRO_PLAN.name} includes unlimited trading accounts. ${TRADETRAXS_FREE_PLAN.name} is designed for getting started with manual trade journaling, Trade Rooms, and social features.`,
+    a: `${TRADETRAXS_PRO_PLAN.name} includes unlimited trading accounts. ${TRADETRAXS_FREE_PLAN.name} includes ${FREE_PLAN_ACTIVE_TRADING_ACCOUNTS_LABEL.toLowerCase()}, plus journaling, Trade Rooms, messaging, and social features.`,
   },
   {
     q: "What does the Free plan include?",
@@ -30,7 +43,15 @@ export const LANDING_FAQ_ITEMS: LandingFaqItem[] = [
   },
   {
     q: "Can I import trades from a CSV?",
-    a: `CSV import and advanced trade insights are included with ${TRAXPRO_PLAN_NAME}.`,
+    a: `${TRADETRAXS_FREE_PLAN.name} includes unlimited CSV imports. ${TRAXPRO_PLAN_NAME} adds advanced trade insights, AI Analyst, and other Pro analytics.`,
+  },
+  {
+    q: "Does TradeTraxs sync with brokers?",
+    a: `${TRADETRAXS_FREE_PLAN.name} includes broker integrations such as Tradovate and Rithmic where available in Settings, plus unlimited CSV imports. Additional broker platforms may roll out over time.`,
+  },
+  {
+    q: "Is there a native mobile app?",
+    a: "TradeTraxs offers a native iOS app on the App Store when the listing URL is configured for your deployment. Android is in development. The full web app works on mobile browsers.",
   },
   {
     q: "Does TradeTraxs support prop firm accounts?",
@@ -42,6 +63,6 @@ export const LANDING_FAQ_ITEMS: LandingFaqItem[] = [
   },
   {
     q: "Is my data private?",
-    a: "Yes. Your private trade notes stay private unless you choose to share a trade publicly.",
+    a: "Yes. Trades and notes stay private until you choose to share them. Public posts, leaderboard entries, and featured trades only use what you make public.",
   },
 ]

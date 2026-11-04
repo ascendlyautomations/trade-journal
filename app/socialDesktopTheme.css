@@ -26,9 +26,8 @@ html.tt-native-ios .tt-notifications-prefs-panel {
 
 /*
  * Large desktop: keep the 720px Feed on the same track as the previous
- * centered 1024px workspace (720 + 24 + 280). The rail sits in the open
- * space to the right of that Feed, with equal flexible space on both
- * sides of the rail and at least 40px of separation.
+ * centered 1032px workspace (720 + 32 + 280). The rail sits in column 4
+ * with a fixed 32px gutter (column 3) between the feed and sidebar.
  */
 @media (min-width: 1280px) {
   html:not(.tt-native-ios) [data-tt-feed-workspace] {
@@ -38,9 +37,9 @@ html.tt-native-ios .tt-notifications-prefs-panel {
     align-items: start;
     column-gap: 0;
     grid-template-columns:
-      calc((100% - 1024px) / 2)
+      calc((100% - 1032px) / 2)
       720px
-      minmax(40px, 1fr)
+      32px
       280px
       minmax(40px, 1fr);
   }
@@ -60,6 +59,7 @@ html.tt-native-ios .tt-notifications-prefs-panel {
     position: sticky;
     top: calc(var(--app-header-offset, 4rem) + 2.75rem);
     align-self: start;
+    margin-top: 0.25rem;
   }
 
   html:not(.tt-native-ios) [data-tt-feed-rail]:empty {

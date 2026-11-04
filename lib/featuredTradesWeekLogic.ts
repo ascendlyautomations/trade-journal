@@ -20,6 +20,12 @@ export function isPublicDiscoverableTradeRow(row: {
   return profileRow?.is_private !== true
 }
 
+/** Featured homepage slots require a post screenshot/chart image. */
+export function hasFeaturedPostImage(row: { image_url?: unknown }): boolean {
+  const raw = row.image_url != null ? String(row.image_url).trim() : ""
+  return raw.length > 0
+}
+
 export function pickBestPnlPost<T extends { pnl?: unknown; created_at?: string }>(
   rows: readonly T[]
 ): T | null {

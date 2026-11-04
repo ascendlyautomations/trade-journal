@@ -119,24 +119,44 @@ function WeekdayPerformancePlaceholder() {
   )
 }
 
-function TradingHoursPlaceholder() {
-  const bars = [72, 45, 88, 36, 64, 52, 78, 41]
+function PsychologyInsightsPlaceholder() {
+  const rows = [
+    {
+      section: "Discipline",
+      headline: "Revenge trades after losses",
+      detail: "Win rate drops after 2+ red days in a row",
+      sample: "24 trades",
+    },
+    {
+      section: "Emotions",
+      headline: "Calm entries outperform rushed ones",
+      detail: "Check-ins tagged “focused” align with higher R:R",
+      sample: "18 trades",
+    },
+  ]
   return (
-    <div className="space-y-2 px-1">
-      <p className="text-[11px] text-gray-400 md:text-sm">P&amp;L by hour</p>
-      <div className="flex h-[100px] items-end justify-between gap-1 md:h-[120px]">
-        {bars.map((h, i) => (
-          <div
-            key={i}
-            className="flex-1 rounded-t bg-sky-500/40"
-            style={{ height: `${h}%` }}
-          />
-        ))}
-      </div>
-      <div className="flex justify-between text-[10px] text-gray-400 md:text-xs">
-        <span>Best hour</span>
-        <span>Worst hour</span>
-      </div>
+    <div className="space-y-2.5">
+      {rows.map((row) => (
+        <div
+          key={row.headline}
+          className="flex items-start gap-2.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-2"
+        >
+          <span
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-xs text-blue-300"
+            aria-hidden
+          >
+            ◎
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-400">
+              {row.section}
+            </p>
+            <p className="text-[11px] font-semibold text-white md:text-sm">{row.headline}</p>
+            <p className="text-[10px] text-gray-400 md:text-xs">{row.detail}</p>
+            <p className="mt-0.5 text-[10px] text-gray-500">{row.sample}</p>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -216,9 +236,9 @@ const PREVIEW_CARDS = [
     content: <WeekdayPerformancePlaceholder />,
   },
   {
-    title: "Trading Hours",
+    title: "Psychology Insights",
     variant: "insight" as const,
-    content: <TradingHoursPlaceholder />,
+    content: <PsychologyInsightsPlaceholder />,
   },
   {
     title: "Behavior Warnings",
@@ -277,7 +297,7 @@ export default function DashboardPremiumPreviewSection({
             "inline-flex w-full justify-center sm:w-auto"
           )}
         >
-          Upgrade to Pro
+          Upgrade to TraxPro
         </Link>
       </div>
     </section>

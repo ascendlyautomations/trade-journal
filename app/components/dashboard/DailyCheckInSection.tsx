@@ -1,6 +1,7 @@
 "use client"
 
 import { Suspense, useCallback, useEffect, useState } from "react"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { DAILY_CHECK_IN_QUERY_PARAM } from "@/lib/dailyCheckIn/constants"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
@@ -83,7 +84,7 @@ export default function DailyCheckInSection({
   }, [isReady, pathname, router, searchParams, seedAndOpen])
 
   async function handleSave() {
-    if (isDemoModeActive() || isDemoUserId(userId)) {
+    if (isExploreWriteBlocked() || isDemoUserId(userId)) {
       requestDemoSignup("save")
       return
     }

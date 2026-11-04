@@ -185,12 +185,12 @@ describe("check-in summary", () => {
     assert.equal(stressAverageDisplayText(1), "1.0/5 · Calm")
   })
 
-  it("hides averages until the iOS unlock gate is met", () => {
+  it("shows matched-day averages with one trading day and check-in", () => {
     const trades = [trade("1", "2026-09-02T14:00:00.000Z")]
     const stats = buildDashboardPsychologyStats(trades, [checkIn("2026-09-02")])
-    assert.equal(stats.showMetrics, false)
-    assert.equal(stats.summary.averageSleepHours, null)
-    assert.equal(stats.summary.checkInCount, 0)
+    assert.equal(stats.showMetrics, true)
+    assert.equal(stats.summary.checkInCount, 1)
+    assert.equal(stats.summary.averageSleepHours, 7.5)
   })
 
   it("uses matched check-ins for averages after unlock", () => {

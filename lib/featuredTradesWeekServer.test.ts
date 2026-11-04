@@ -60,8 +60,18 @@ describe("fetchFeaturedPostCandidates timeout", () => {
                 created_at: new Date().toISOString(),
                 pnl: 100,
                 rr: 2,
+                image_url: "user/trade-screenshot.png",
                 trades: { is_public: true },
                 profiles: { is_private: false, username: "nrl" },
+              },
+              {
+                id: "no-image",
+                created_at: new Date().toISOString(),
+                pnl: 999,
+                rr: 5,
+                image_url: "",
+                trades: { is_public: true },
+                profiles: { is_private: false },
               },
               {
                 id: "private",

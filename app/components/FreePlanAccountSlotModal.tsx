@@ -9,6 +9,7 @@ import {
 } from "@/lib/tradingAccounts"
 import { formatSignedPnlDisplay } from "@/lib/formatDisplay"
 import { formatAccountNameWithSizeDisplay } from "@/lib/tradeAccountDisplay"
+import { COPY_TRADING_ACCOUNT_FREE_VIEW_ONLY_NOTE } from "@/lib/copyTradingGroups"
 
 export type FreePlanSlotAccountOption = {
   id: string
@@ -26,6 +27,8 @@ type FreePlanAccountSlotModalProps = {
   accounts: FreePlanSlotAccountOption[]
   /** Saved can_add_trades = true ids when that set is already 1–3. */
   initialSelectedIds?: string[]
+  /** Copy Trading–linked accounts cannot be active trade slots on Free. */
+  copyTradingLinkedAccountIds?: ReadonlySet<string>
   saving?: boolean
   error?: string | null
   onConfirm: (accountIds: string[]) => void | Promise<void>
@@ -55,6 +58,7 @@ export default function FreePlanAccountSlotModal({
   open,
   accounts,
   initialSelectedIds = [],
+  copyTradingLinkedAccountIds,
   saving = false,
   error = null,
   onConfirm,
@@ -98,6 +102,7 @@ export default function FreePlanAccountSlotModal({
 
   function toggleAccount(id: string) {
     if (saving) return
+    if (copyTradingLinkedAccountIds?.has(id)) return
     setUserEdited(true)
     setLocalError(null)
     setSelectedIds((prev) => {
@@ -166,6 +171,9 @@ export default function FreePlanAccountSlotModal({
               keep stay available in read-only mode with all trade history
               preserved.
             </p>
+            {copyTradingLinkedAccountIds && copyTradingLinkedAccountIds.size > 0 ? (
+              <p className="text-gray-400">{COPY_TRADING_ACCOUNT_FREE_VIEW_ONLY_NOTE}</p>
+            ) : null}
           </div>
 
           {localError || error ? (
@@ -176,9 +184,11 @@ export default function FreePlanAccountSlotModal({
 
           <ul className="max-h-[min(50dvh,420px)] space-y-2 overflow-y-auto overscroll-contain pr-1">
             {sortedAccounts.map((account) => {
-              const checked = selectedIds.includes(account.id)
+              const copyLinked = copyTradingLinkedAccountIds?.has(account.id)
+              const checked = !copyLinked && selectedIds.includes(account.id)
               const disabled =
-                !checked && selectedIds.length >= FREE_PLAN_ACCOUNT_LIMIT
+                copyLinked ||
+                (!checked && selectedIds.length >= FREE_PLAN_ACCOUNT_LIMIT)
               const title = formatAccountNameWithSizeDisplay(
                 account.name,
                 account.size
@@ -192,23 +202,44 @@ export default function FreePlanAccountSlotModal({
                 <li key={account.id}>
                   <label
                     className={cn(
-                      "flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition",
+                      "flex items-start gap-3 rounded-xl border p-3 transition",
+                      copyLinked
+                        ? "cursor-default border-white/10 bg-white/[0.02] opacity-90"
+                        : "cursor-pointer",
                       checked
                         ? "border-blue-400/40 bg-blue-500/10"
-                        : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]",
-                      disabled ? "cursor-not-allowed opacity-50" : null
+                        : !copyLinked
+                          ? "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
+                          : null,
+                      disabled && !copyLinked
+                        ? "cursor-not-allowed opacity-50"
+                        : null
                     )}
                   >
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={checked}
-                      disabled={disabled || saving}
-                      onChange={() => toggleAccount(account.id)}
-                    />
+                    {copyLinked ? (
+                      <span
+                        className="mt-0.5 shrink-0 rounded border border-white/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-400"
+                        aria-hidden
+                      >
+                        View only
+                      </span>
+                    ) : (
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={checked}
+                        disabled={disabled || saving}
+                        onChange={() => toggleAccount(account.id)}
+                      />
+                    )}
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium text-white">
                         {title || account.name || "—"}
+                        {copyLinked ? (
+                          <span className="ml-2 text-xs font-normal text-gray-400">
+                            Copy Trading
+                          </span>
+                        ) : null}
                       </span>
                       <span className="mt-1 block text-xs text-gray-400">
                         {typeLabel} · {brokerLabel}

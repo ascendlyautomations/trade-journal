@@ -446,21 +446,21 @@ export default function PropFirmDesktopView({
         </div>
       ) : null}
 
-      <section className={`${SURFACE} px-4 py-3`}>
-        <h2 className={TITLE}>Requirements</h2>
-        <div className="mt-1">
-          {requirements.length > 0 ? (
-            requirements.map((row) => (
-              <RequirementRow key={row.title} {...row} />
-            ))
-          ) : (
-            <p className="py-3 text-sm text-gray-400">No rules configured on this account.</p>
-          )}
-        </div>
-      </section>
+      <div className="tt-propfirm-body">
+        <div className="tt-propfirm-body-stack tt-propfirm-body-stack--left">
+          <section className={`${SURFACE} px-4 py-3`}>
+            <h2 className={TITLE}>Requirements</h2>
+            <div className="mt-1">
+              {requirements.length > 0 ? (
+                requirements.map((row) => (
+                  <RequirementRow key={row.title} {...row} />
+                ))
+              ) : (
+                <p className="py-3 text-sm text-gray-400">No rules configured on this account.</p>
+              )}
+            </div>
+          </section>
 
-      <div className="tt-propfirm-lower">
-        <div className="tt-propfirm-lower-stack">
           {model.isFunded ? (
             <section className={`${SURFACE} px-4 py-3`}>
               <h2 className={TITLE}>Payout status</h2>
@@ -545,71 +545,69 @@ export default function PropFirmDesktopView({
           </section>
         </div>
 
-        <div className="tt-propfirm-lower-stack">
-          <div className="min-w-0">{equity}</div>
+        <div className="tt-propfirm-body-stack tt-propfirm-body-stack--right">
+          <div className="tt-propfirm-body-equity min-w-0">{equity}</div>
+
+          <section className={`${SURFACE} px-4 py-3`}>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h2 className={TITLE}>Daily performance</h2>
+              <span className="text-xs tabular-nums text-gray-400">{model.dailyRows.length} days</span>
+            </div>
+            <p className="mb-2 text-xs text-gray-400">Lifetime, aggregated by trading day</p>
+            <div className="max-h-48 space-y-0 overflow-y-auto">
+              {model.dailyRows.length > 0 ? (
+                model.dailyRows.map(([date, pnl]) => (
+                  <div
+                    key={date}
+                    className="flex items-center justify-between gap-3 border-b border-white/10 py-1 text-sm last:border-b-0"
+                  >
+                    <span className="text-gray-300">{date}</span>
+                    <span className={`font-semibold tabular-nums ${pnlClass(pnl)}`}>
+                      {formatPnlCurrency(pnl, {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="py-4 text-center text-sm text-gray-400">No daily performance yet.</p>
+              )}
+            </div>
+          </section>
+
+          <section className={`${SURFACE} px-4 py-3`}>
+            <h2 className={TITLE}>Performance</h2>
+            <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
+              <div>
+                <p className={LABEL}>Cycle P&L</p>
+                <p className={`text-sm ${VALUE} ${pnlClass(model.cyclePnl)}`}>{signedUsd(model.cyclePnl)}</p>
+              </div>
+              <div>
+                <p className={LABEL}>Lifetime P&L</p>
+                <p className={`text-sm ${VALUE} ${pnlClass(model.lifetimePnl)}`}>{signedUsd(model.lifetimePnl)}</p>
+              </div>
+              <div>
+                <p className={LABEL}>Today</p>
+                <p className={`text-sm ${VALUE} ${pnlClass(model.todayPnl)}`}>{signedUsd(model.todayPnl)}</p>
+              </div>
+              <div>
+                <p className={LABEL}>Winning days</p>
+                <p className={`text-sm ${VALUE}`}>
+                  {model.winningDaysRequired
+                    ? `${model.winningDays} / ${model.winningDaysTarget}`
+                    : String(model.winningDays)}
+                </p>
+              </div>
+              <div>
+                <p className={LABEL}>Worst day</p>
+                <p className={`text-sm ${VALUE} ${pnlClass(model.worstDay)}`}>
+                  {signedUsd(model.worstDay)}
+                </p>
+              </div>
+            </div>
+          </section>
         </div>
-      </div>
-
-      <div className="tt-propfirm-analytics">
-        <section className={`${SURFACE} px-4 py-3`}>
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h2 className={TITLE}>Daily performance</h2>
-            <span className="text-xs tabular-nums text-gray-400">{model.dailyRows.length} days</span>
-          </div>
-          <p className="mb-2 text-xs text-gray-400">Lifetime, aggregated by trading day</p>
-          <div className="max-h-48 space-y-0 overflow-y-auto">
-            {model.dailyRows.length > 0 ? (
-              model.dailyRows.map(([date, pnl]) => (
-                <div
-                  key={date}
-                  className="flex items-center justify-between gap-3 border-b border-white/10 py-1 text-sm last:border-b-0"
-                >
-                  <span className="text-gray-300">{date}</span>
-                  <span className={`font-semibold tabular-nums ${pnlClass(pnl)}`}>
-                    {formatPnlCurrency(pnl, {
-                      minimumFractionDigits: 0,
-                      maximumFractionDigits: 2,
-                    })}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <p className="py-4 text-center text-sm text-gray-400">No daily performance yet.</p>
-            )}
-          </div>
-        </section>
-
-        <section className={`${SURFACE} px-4 py-3`}>
-          <h2 className={TITLE}>Performance</h2>
-          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
-            <div>
-              <p className={LABEL}>Cycle P&L</p>
-              <p className={`text-sm ${VALUE} ${pnlClass(model.cyclePnl)}`}>{signedUsd(model.cyclePnl)}</p>
-            </div>
-            <div>
-              <p className={LABEL}>Lifetime P&L</p>
-              <p className={`text-sm ${VALUE} ${pnlClass(model.lifetimePnl)}`}>{signedUsd(model.lifetimePnl)}</p>
-            </div>
-            <div>
-              <p className={LABEL}>Today</p>
-              <p className={`text-sm ${VALUE} ${pnlClass(model.todayPnl)}`}>{signedUsd(model.todayPnl)}</p>
-            </div>
-            <div>
-              <p className={LABEL}>Winning days</p>
-              <p className={`text-sm ${VALUE}`}>
-                {model.winningDaysRequired
-                  ? `${model.winningDays} / ${model.winningDaysTarget}`
-                  : String(model.winningDays)}
-              </p>
-            </div>
-            <div>
-              <p className={LABEL}>Worst day</p>
-              <p className={`text-sm ${VALUE} ${pnlClass(model.worstDay)}`}>
-                {signedUsd(model.worstDay)}
-              </p>
-            </div>
-          </div>
-        </section>
       </div>
     </div>
   )

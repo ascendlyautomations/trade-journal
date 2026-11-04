@@ -44,6 +44,7 @@ export type FeedPostCardProps = {
   onOpenAttachedReel?: (post: any, reel: ReelRow) => void
   /** Shared aspect-ratio media frame for homepage featured trade cards (contain, no re-crop). */
   screenshotFixedFrameClassName?: string
+  hideAttachedReelPreview?: boolean
 }
 
 function FeedPostCard({
@@ -61,6 +62,7 @@ function FeedPostCard({
   onSharePost,
   onOpenAttachedReel,
   screenshotFixedFrameClassName,
+  hideAttachedReelPreview = false,
 }: FeedPostCardProps) {
   const isNativeIos = useIsNativeIos()
   const phoneWeb = !isNativeIos
@@ -185,6 +187,7 @@ function FeedPostCard({
         publicDesc={publicDesc}
         timingTrade={tradeRow}
         attachedReel={attachedReel}
+        hideAttachedReelPreview={hideAttachedReelPreview}
         onViewReel={
           attachedReel
             ? () => {

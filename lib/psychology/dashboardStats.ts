@@ -5,7 +5,6 @@ import { checkInsMatchingTrades } from "./correlate.ts"
 import type { PsychologyTradeDateFields } from "./tradeDateKey.ts"
 import {
   computePsychologyInsightsUnlockProgress,
-  showsPsychologyInsightsRequirement,
   type PsychologyInsightsUnlockProgress,
 } from "./unlockProgress.ts"
 
@@ -30,7 +29,7 @@ export function buildDashboardPsychologyStats<
     trades,
     checkIns.filter(isCompleteCheckIn)
   )
-  const showMetrics = !showsPsychologyInsightsRequirement(unlock)
+  const showMetrics = matched.length >= 1
   return {
     unlock,
     summary: showMetrics

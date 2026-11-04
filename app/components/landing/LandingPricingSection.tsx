@@ -63,7 +63,7 @@ export default function LandingPricingSection({
       aria-labelledby="pricing-heading"
     >
       <div className={LANDING_SECTION_SHELL}>
-        <header className="mx-auto mb-8 max-w-4xl text-center md:mb-16">
+        <header className="mx-auto mb-8 max-w-3xl text-center md:mb-16">
           <h2
             id="pricing-heading"
             className={`${LANDING_HEADLINE_SM} md:whitespace-nowrap`}
@@ -71,6 +71,11 @@ export default function LandingPricingSection({
             Start Free.{" "}
             <span className={LANDING_TITLE_GRADIENT}>Upgrade When You&apos;re Ready.</span>
           </h2>
+          <p className="mt-4 text-base leading-relaxed text-gray-400 md:mt-5 md:text-lg">
+            Free is a real starting point, journal, core stats, psychology check-ins, and community.
+            TraxPro adds the advanced analytics and tools serious traders reach for next, on the
+            same account and trade history.
+          </p>
         </header>
 
         <div className="mx-auto grid max-w-5xl gap-5 md:gap-8 lg:grid-cols-2 lg:items-start lg:gap-10">

@@ -1,6 +1,7 @@
 "use client"
 
 import type { ChangeEvent } from "react"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import {
   useCallback,
   useEffect,
@@ -121,7 +122,7 @@ export default function CreateStoryComposer({
   )
 
   const handlePostStory = useCallback(async () => {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("upload")
       return
     }

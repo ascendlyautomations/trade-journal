@@ -79,6 +79,7 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
             loaded: products.map(\.id),
             loadError: products.isEmpty ? "StoreKit returned no products" : "none"
         )
+        logStoreKitProductPricingDetails(products)
         let sorted = products.sorted { lhs, rhs in
             Self.sortOrder(for: lhs.id) < Self.sortOrder(for: rhs.id)
         }
@@ -98,6 +99,8 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
             guard let product = products.first else {
                 return .failed("TraxPro product unavailable")
             }
+
+            logStoreKitPurchaseProductPricingDetails(product)
 
             var options: Set<Product.PurchaseOption> = []
             if let appAccountToken {
@@ -348,6 +351,38 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
             requestedProducts=\(requested)
             loadedProducts=\(loaded)
             loadError=\(loadError)
+            """
+        )
+        #endif
+    }
+
+    /// Temporary DEBUG probe — raw StoreKit `Product` pricing for v2 subscription verification.
+    private func logStoreKitProductPricingDetails(_ products: [Product]) {
+        #if DEBUG
+        for product in products {
+            print(
+                """
+                [StoreKit][product]
+                product.id=\(product.id)
+                product.displayPrice=\(product.displayPrice)
+                product.price=\(product.price)
+                product.priceFormatStyle.currencyCode=\(product.priceFormatStyle.currencyCode)
+                """
+            )
+        }
+        #endif
+    }
+
+    /// Temporary DEBUG probe — pricing on the purchase-path `Product.products` fetch.
+    private func logStoreKitPurchaseProductPricingDetails(_ product: Product) {
+        #if DEBUG
+        print(
+            """
+            [StoreKit][purchase-product]
+            product.id=\(product.id)
+            product.displayPrice=\(product.displayPrice)
+            product.price=\(product.price)
+            product.priceFormatStyle.currencyCode=\(product.priceFormatStyle.currencyCode)
             """
         )
         #endif

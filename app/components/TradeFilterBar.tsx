@@ -11,7 +11,10 @@ import TradeAccountPicker from "@/app/components/TradeAccountPicker"
 import CustomSelect from "@/app/components/CustomSelect"
 import { SELECT_FILTER_TRIGGER_CLASS } from "@/lib/accountDropdownStyles"
 import type { CopyTradingGroup } from "@/lib/copyTradingGroups"
-import { DASHBOARD_ALL_TIMEFRAME_LABEL } from "@/lib/dashboardTimeframeLabels"
+import {
+  DASHBOARD_ALL_TIMEFRAME_LABEL,
+  dashboardTimeframeCapsuleLabel,
+} from "@/lib/dashboardTimeframeLabels"
 
 /** Shared with account pickers — same destination as the filter bar action. */
 export const MANAGE_ACCOUNTS_SETTINGS_HREF = "/settings#trading-accounts" as const
@@ -63,6 +66,8 @@ export type TradeFilterBarProps = {
   accountSelectAccessory?: ReactNode
   /** Appended controls (e.g. Public Trades, performance share) */
   trailing?: ReactNode
+  /** Pinned to the bar’s right edge on desktop (e.g. Trades list/photos toggle). */
+  trailingEnd?: ReactNode
   /** PRO copy trading groups for unified account picker */
   isPro?: boolean
   copyGroups?: CopyTradingGroup[]
@@ -107,6 +112,7 @@ export default function TradeFilterBar({
   beforeAccountSelect,
   accountSelectAccessory,
   trailing,
+  trailingEnd,
   settingsNextToModes,
   publicNextToModes,
   beforeTimeframe,
@@ -130,8 +136,14 @@ export default function TradeFilterBar({
     setSelectedTimeframe(syncTimeframeDisplayLabel(timeframe, selectedDate))
   }, [timeframe, selectedDate])
 
-  const timeframeButtonLabel =
-    selectedTimeframe === DASHBOARD_ALL_TIMEFRAME_LABEL
+  const timeframeButtonLabel = isTradesVariant
+    ? dashboardTimeframeCapsuleLabel({
+        timeframe,
+        selectedDate,
+        customRangeStart,
+        customRangeEnd,
+      })
+    : selectedTimeframe === DASHBOARD_ALL_TIMEFRAME_LABEL
       ? "Timeframe"
       : selectedTimeframe
 
@@ -180,10 +192,17 @@ export default function TradeFilterBar({
               ? { "data-tt-tour-target": tourTargetId }
               : {})}
             className={`relative z-50 flex max-w-full overflow-visible rounded-xl border border-white/10 bg-white/5 backdrop-blur-md w-full flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:justify-center md:px-4 md:py-3 ${
-              isTradesVariant ? "px-2 py-3" : "px-3 py-2"
+              isTradesVariant
+                ? `px-2 py-3${trailingEnd ? " md:pr-[9.5rem]" : ""}`
+                : "px-3 py-2"
             }`}
           >
-            <div className="flex justify-center md:justify-start">{renderLeading()}</div>
+            {isTradesVariant && trailingEnd ? (
+              <div className="pointer-events-none absolute inset-y-0 right-3 z-20 hidden items-center md:flex">
+                <div className="pointer-events-auto">{trailingEnd}</div>
+              </div>
+            ) : null}
+            <div className="flex justify-center">{renderLeading()}</div>
 
             {accountSelectAccessory ? (
               <div className="flex w-full min-w-0 items-center gap-2 md:w-auto">

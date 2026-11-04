@@ -156,6 +156,7 @@ import {
 } from "@/lib/feedDeepLink"
 import { loginPathWithNext } from "@/lib/universalLinks"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import { isDemoUserId } from "@/lib/demo/constants"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import {
@@ -209,7 +210,7 @@ type LikeMeta = { count: number; liked: boolean }
 type FeedEmptyState = "following_nobody" | "no_posts"
 
 function guardDemoFeedWrite(reason: DemoSignupReason): boolean {
-  if (!isDemoModeActive()) return false
+  if (!isExploreWriteBlocked()) return false
   requestDemoSignup(reason)
   return true
 }
@@ -3156,9 +3157,9 @@ function FeedPageContent() {
       ) : null}
       <div
         data-tt-feed-column
-        className={`flex justify-center px-4 py-6 sm:py-8 pb-10${
+        className={`mx-auto flex w-full min-w-0 max-w-[1600px] justify-center py-6 sm:py-8 pb-10 md:px-6 xl:px-8 2xl:px-12${
           isNativeIos
-            ? ""
+            ? " px-4"
             : phoneClipsImmersive
               ? " max-md:h-[var(--app-viewport-height)] max-md:px-0 max-md:py-0 max-md:pb-0"
               : " max-md:px-0 max-md:py-3 max-md:pb-4"
@@ -3433,13 +3434,11 @@ function FeedPageContent() {
           </div>
         </div>
         {isNativeIos || !user?.id ? null : (
-          <div className="max-md:hidden">
-            <FeedRightRail
-              viewerId={user.id}
-              followingIds={followingIdsRef.current}
-              onFollowingChange={handleSuggestedFollowingChange}
-            />
-          </div>
+          <FeedRightRail
+            viewerId={user.id}
+            followingIds={followingIdsRef.current}
+            onFollowingChange={handleSuggestedFollowingChange}
+          />
         )}
         </div>
       </div>

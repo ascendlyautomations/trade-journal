@@ -24,8 +24,12 @@ export default function LandingFaqSection() {
       <div className={LANDING_SECTION_SHELL}>
         <div className="mx-auto max-w-3xl text-center">
           <h2 id="faq-heading" className={LANDING_HEADLINE_SM}>
-            Questions, answered.
+            Platform questions, answered
           </h2>
+          <p className="mt-4 text-base text-gray-400 md:mt-5 md:text-lg">
+            How TradeTraxs differs from a traditional journal, what Free includes, and how your
+            data stays private until you share.
+          </p>
         </div>
 
         <div className={`mx-auto max-w-2xl ${LANDING_SECTION_CONTENT_GAP} space-y-2 md:space-y-3`}>

@@ -2,32 +2,15 @@ import { normalizeTradeFeedItem } from "@/app/components/feed/feedPostHelpers"
 import type { FeaturedTradesWeekResponse } from "@/lib/featuredTradesWeek"
 import {
   featuredTradesPeriodHeading,
+  pickFeaturedTradePair,
   resolveFeaturedTradesPeriod,
 } from "@/lib/featuredTradesPeriodFallback.ts"
-import {
-  pickBestPnlPost,
-  pickHighestRrPost,
-} from "@/lib/featuredTradesWeekLogic"
 import { fetchFeaturedPostCandidates } from "@/lib/featuredTradesCandidates.ts"
-
-function rowsInRange<T extends { created_at?: string }>(
-  rows: readonly T[],
-  start: Date,
-  end: Date
-): T[] {
-  const startMs = start.getTime()
-  const endMs = end.getTime()
-  return rows.filter((row) => {
-    if (!row.created_at) return false
-    const ms = new Date(row.created_at).getTime()
-    return ms >= startMs && ms <= endMs
-  })
-}
 
 const EMPTY_HEADING = {
   sectionTitle: "Featured Trades of the Week",
   sectionLead:
-    "Discover some of the community's best trades from this calendar week.",
+    "Public trades logged on TradeTraxs, shared from the journal with real P&L, not staged marketing picks.",
 }
 
 /** Server-side featured trades fetch — shared by homepage cache and API route. */
@@ -44,9 +27,11 @@ export async function fetchFeaturedTradesWeekServer(): Promise<FeaturedTradesWee
     }
   }
 
-  const inPeriod = rowsInRange(rows, period.start, period.end)
-  const bestPnlRow = pickBestPnlPost(inPeriod)
-  const highestRrRow = pickHighestRrPost(inPeriod)
+  const { bestPnl: bestPnlRow, highestRr: highestRrRow } = pickFeaturedTradePair(
+    rows,
+    period.start,
+    period.end
+  )
   const heading = featuredTradesPeriodHeading(period)
 
   return {

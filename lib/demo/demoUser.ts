@@ -51,6 +51,8 @@ export function getDemoProfileSlice(): UserProfileSlice {
     max_drawdown_limit: DEMO_PROFILE.max_drawdown_limit,
     is_private: DEMO_PROFILE.is_private,
     has_email_password: DEMO_PROFILE.has_email_password,
+    free_plan_trade_slots_epoch: 0,
+    free_plan_trade_slots_confirmed_epoch: 0,
   }
 }
 

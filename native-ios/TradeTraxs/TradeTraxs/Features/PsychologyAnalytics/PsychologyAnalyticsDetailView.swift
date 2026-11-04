@@ -8,6 +8,7 @@ final class PsychologyAnalyticsSessionStore {
     private(set) var report: PsychologyAnalyticsReport?
     private(set) var unlockProgress: PsychologyInsightsUnlockProgress = .zero
     private(set) var postUnlockGapMessages: [String] = []
+    private(set) var displayInsightCards: [PsychologyInsightCard] = []
     private(set) var profileID: ProfileID?
     private(set) var scopeFingerprint: String?
     private(set) var scopeLabel: String?
@@ -20,6 +21,7 @@ final class PsychologyAnalyticsSessionStore {
         report: PsychologyAnalyticsReport?,
         unlockProgress: PsychologyInsightsUnlockProgress,
         postUnlockGapMessages: [String],
+        displayInsightCards: [PsychologyInsightCard] = [],
         profileID: ProfileID?,
         scopeFingerprint: String?,
         scopeLabel: String? = nil
@@ -27,6 +29,7 @@ final class PsychologyAnalyticsSessionStore {
         self.report = report
         self.unlockProgress = unlockProgress
         self.postUnlockGapMessages = postUnlockGapMessages
+        self.displayInsightCards = displayInsightCards
         self.profileID = profileID
         self.scopeFingerprint = scopeFingerprint
         self.scopeLabel = scopeLabel
@@ -60,6 +63,7 @@ final class PsychologyAnalyticsSessionStore {
 
 struct PsychologyAnalyticsDetailView: View {
     let report: PsychologyAnalyticsReport
+    var insightCards: [PsychologyInsightCard] = []
     var unlockProgress: PsychologyInsightsUnlockProgress = .zero
     var postUnlockGapMessages: [String] = []
     var highlightedSectionID: String?
@@ -82,6 +86,11 @@ struct PsychologyAnalyticsDetailView: View {
         report.sections.filter { Self.advancedSectionIDs.contains($0.id) }
     }
 
+    private var resolvedInsightCards: [PsychologyInsightCard] {
+        if !insightCards.isEmpty { return insightCards }
+        return report.dashboardCards
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -101,10 +110,10 @@ struct PsychologyAnalyticsDetailView: View {
                         .padding(.horizontal, ExperienceSpacing.md)
                     }
 
-                    if !report.dashboardCards.isEmpty {
+                    if !resolvedInsightCards.isEmpty {
                         comparisonInsightsSection
-                    } else if !unlockProgress.showsRequirementMessage {
-                        insightGapSection
+                    } else {
+                        noMatchedDaysInsightSection
                     }
 
                     advancedAnalyticsSection
@@ -144,7 +153,7 @@ struct PsychologyAnalyticsDetailView: View {
             }
             .padding(.horizontal, ExperienceSpacing.md)
 
-            if !unlockProgress.showsRequirementMessage {
+            if report.checkInMatchedTradeCount >= 1 || !unlockProgress.showsRequirementMessage {
                 VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
                     Text("Your trades in this scope")
                         .experienceStyle(.caption, color: colors.tertiaryText)
@@ -179,13 +188,15 @@ struct PsychologyAnalyticsDetailView: View {
 
     private var comparisonInsightsSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("Comparison insights")
+            Text("Insights")
                 .experienceStyle(.headline, color: colors.primaryText)
-            Text("Statistically meaningful patterns — not proof of causation.")
-                .experienceStyle(.caption, color: colors.tertiaryText)
+            Text(
+                "Patterns from matched check-in days and trade psychology tags — association only, not causation."
+            )
+            .experienceStyle(.caption, color: colors.tertiaryText)
 
             VStack(spacing: ExperienceSpacing.xs) {
-                ForEach(report.dashboardCards) { card in
+                ForEach(resolvedInsightCards) { card in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(card.headline)
                             .experienceStyle(.subheadline, color: colors.primaryText)
@@ -208,21 +219,23 @@ struct PsychologyAnalyticsDetailView: View {
         .padding(.horizontal, ExperienceSpacing.md)
     }
 
-    private var insightGapSection: some View {
+    private var noMatchedDaysInsightSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("What to log next")
+            Text("No matched days yet")
                 .experienceStyle(.subheadline, color: colors.primaryText)
                 .fontWeight(.semibold)
             Text(
-                "Your analytics overview is unlocked. Comparison cards appear when groups have enough matched, tagged trades."
+                "Complete a daily check-in on the same Eastern calendar day as a trade in this scope to unlock sleep, mood, and performance insights."
             )
             .experienceStyle(.caption, color: colors.secondaryText)
-            ForEach(postUnlockGapMessages, id: \.self) { message in
-                HStack(alignment: .top, spacing: 6) {
-                    Text("•")
-                    Text(message)
-                        .experienceStyle(.caption, color: colors.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
+            if !postUnlockGapMessages.isEmpty {
+                ForEach(postUnlockGapMessages, id: \.self) { message in
+                    HStack(alignment: .top, spacing: 6) {
+                        Text("•")
+                        Text(message)
+                            .experienceStyle(.caption, color: colors.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         }

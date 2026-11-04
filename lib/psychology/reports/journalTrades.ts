@@ -1,5 +1,6 @@
 import { isBacktestTrade } from "../../tradeModeFilters.ts"
 import { rpcTradesOwnerRows } from "../../tradeOwnerRead.ts"
+import { resolveRealizedRr } from "../../tradePointsAndRealizedRr.ts"
 import { supabase } from "../../supabaseClient.ts"
 import { PSYCHOLOGY_REPORT_TRADE_CAP, type PsychologyReportTrade } from "./types.ts"
 
@@ -46,6 +47,7 @@ export function mapPsychologyReportTrade(
     created_at: asText(row.created_at),
     pnl: asNumber(row.pnl) ?? 0,
     rr: asNumber(row.rr),
+    realizedRr: resolveRealizedRr(row),
     mode: asText(row.mode),
     account_type: asText(row.account_type),
     emotion: asText(row.emotion),

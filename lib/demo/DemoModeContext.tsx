@@ -18,6 +18,11 @@ import { DEMO_USER_ID } from "@/lib/demo/constants"
 import {
   registerDemoSignupHandler,
 } from "@/lib/demo/requestDemoSignup"
+import {
+  GUEST_EXPLORE_CHANGE_EVENT,
+  isGuestExploreActive,
+} from "@/lib/guestExplore"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import { useTraxProPurchaseCopy } from "@/lib/traxProPriceCatalogClient"
 import { enterSignupFlow } from "@/lib/signupFlow"
 
@@ -93,6 +98,7 @@ const SIGNUP_MESSAGES: Record<DemoSignupReason, { title: string; message: string
 export function DemoModeProvider({ children }: { children: ReactNode }) {
   const purchase = useTraxProPurchaseCopy(true)
   const [demoActive, setDemoActive] = useState(false)
+  const [guestExploreActive, setGuestExploreActive] = useState(false)
   const [signupOpen, setSignupOpen] = useState(false)
   const [signupReason, setSignupReason] = useState<DemoSignupReason>("default")
 
@@ -102,16 +108,23 @@ export function DemoModeProvider({ children }: { children: ReactNode }) {
       setDemoActive(active)
       if (active) {
         seedDemoCaches()
-      } else {
-        setSignupOpen(false)
       }
     }
     sync()
     return subscribeDemoModeChanges(sync)
   }, [])
 
+  useEffect(() => {
+    const syncGuest = () => setGuestExploreActive(isGuestExploreActive())
+    syncGuest()
+    window.addEventListener(GUEST_EXPLORE_CHANGE_EVENT, syncGuest)
+    return () => window.removeEventListener(GUEST_EXPLORE_CHANGE_EVENT, syncGuest)
+  }, [])
+
+  const explorePromptActive = demoActive || guestExploreActive
+
   const requestSignup = useCallback((reason: DemoSignupReason = "default") => {
-    if (!isDemoModeActive()) return
+    if (!isExploreWriteBlocked()) return
     setSignupReason(reason)
     setSignupOpen(true)
   }, [])
@@ -135,7 +148,7 @@ export function DemoModeProvider({ children }: { children: ReactNode }) {
   return (
     <DemoModeContext.Provider value={value}>
       {children}
-      {demoActive && signupOpen ? (
+      {explorePromptActive && signupOpen ? (
         <div
           className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
           role="dialog"

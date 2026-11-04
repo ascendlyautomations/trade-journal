@@ -280,7 +280,7 @@ export default function AffiliateDashboard() {
   return (
     <>
       <div className="tt-affiliate-dashboard tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
-        <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:p-10">
+        <div className="mx-auto w-full min-w-0 max-w-[1600px] px-4 py-8 sm:px-6 md:px-6 lg:p-10 xl:px-8 2xl:px-12">
           {loading ? (
             <SkeletonAffiliateDashboardPage />
           ) : hasAffiliateAccess ? (

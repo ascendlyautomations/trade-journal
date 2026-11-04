@@ -1,6 +1,7 @@
 "use client"
 
 import "../analyticsDesktopTheme.css"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import "../achievementsDesktopDensity.css"
 import { useCallback, useMemo, useState } from "react"
 import AchievementCard from "../components/AchievementCard"
@@ -82,7 +83,7 @@ export default function AchievementsPage() {
   const unreadFeatured = featured.length
 
   function openCreate() {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("upload")
       return
     }
@@ -105,7 +106,7 @@ export default function AchievementsPage() {
   const handleDeleteAchievement = useCallback(
     async (achievementId: string) => {
       if (!userId) return
-      if (isDemoModeActive()) {
+      if (isExploreWriteBlocked()) {
         requestDemoSignup("delete")
         return
       }
@@ -130,8 +131,8 @@ export default function AchievementsPage() {
 
   return (
     <>
-      <div className={`tt-ach-page tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-gray-100 sm:px-6 xl:px-8 2xl:px-12 max-md:px-3 max-md:py-3 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
-        <div className="tt-ach-workspace mx-auto max-w-6xl space-y-5 max-md:space-y-3">
+      <div className={`tt-ach-page tt-phase3-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-gray-100 max-md:px-3 max-md:py-3 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}>
+        <div className="tt-ach-workspace mx-auto w-full min-w-0 max-w-[1600px] space-y-5 md:px-6 xl:px-8 2xl:px-12 max-md:space-y-3">
           <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 p-5 sm:flex-row sm:items-center sm:justify-between max-md:flex-row max-md:items-center max-md:rounded-[14px] max-md:border-0 max-md:bg-transparent max-md:p-0">
             <div className="max-md:hidden">
               <h1 className="text-2xl font-semibold text-blue-300">

@@ -22,6 +22,7 @@ import {
 } from "@/lib/landingPageUi"
 import { TRADE_IMAGE_MEDIA_FRAME_CLASS } from "@/lib/tradeImageAspect"
 import { supabase } from "@/lib/supabaseClient"
+import LandingExploreLink from "@/app/components/landing/v2/LandingExploreLink"
 import { useUserProfile } from "@/lib/useUserProfile"
 
 const FeedPostDetailModal = dynamic(
@@ -37,25 +38,31 @@ type FeaturedSlot = {
   post: FeedItem | null
 }
 
-const SLOTS: Omit<FeaturedSlot, "post">[] = [
-  {
-    key: "bestPnl",
-    label: "🏆 Best Trade of the Week",
-    description:
-      "The community's top-performing trade based on overall performance.",
-    badge: "🏆 Best Trade",
-    badgeClassName:
-      "border-amber-400/35 bg-amber-500/20 text-amber-100",
-  },
-  {
-    key: "highestRr",
-    label: "📈 Highest Risk:Reward Trade",
-    description: "The highest R:R trade shared with the community this week.",
-    badge: "📈 Highest R:R",
-    badgeClassName:
-      "border-emerald-400/35 bg-emerald-500/20 text-emerald-100",
-  },
-]
+function featuredSlotMeta(featured: FeaturedTradesWeekResponse): Omit<FeaturedSlot, "post">[] {
+  const weekly =
+    !featured.isHistoricalPeriod &&
+    featured.sectionTitle.toLowerCase().includes("week")
+  const periodHint = weekly ? " this period" : " in this period"
+
+  return [
+    {
+      key: "bestPnl",
+      label: "Best overall performance",
+      description: `Top public trade by P&L${periodHint}, logged on TradeTraxs and shared to the Feed.`,
+      badge: "Top P&L",
+      badgeClassName:
+        "border-amber-400/35 bg-amber-500/20 text-amber-100",
+    },
+    {
+      key: "highestRr",
+      label: "Highest risk:reward",
+      description: `Best R:R on a distinct public trade${periodHint}, separate from the top P&L pick.`,
+      badge: "Top R:R",
+      badgeClassName:
+        "border-emerald-400/35 bg-emerald-500/20 text-emerald-100",
+    },
+  ]
+}
 
 function FeaturedTradePlaceholder() {
   return (
@@ -86,19 +93,17 @@ function FeaturedTradeCardShell({
   children: ReactNode
 }) {
   return (
-    <div className="flex h-full flex-col">
-      <div className="mb-4 text-center md:mb-5 md:text-left">
-        <h3 className="text-base font-semibold text-white md:text-lg">{label}</h3>
-        <p className="mt-1.5 text-sm leading-relaxed text-gray-400">{description}</p>
-      </div>
-      <div className="relative flex-1">
+    <div className="tt-featured-trade-card flex h-full flex-col">
+      <div className="tt-featured-trade-card-head">
         <span
-          className={`pointer-events-none absolute right-3 top-3 z-10 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide shadow-sm ${badgeClassName}`}
+          className={`tt-featured-trade-card-badge ${badgeClassName}`}
         >
           {badge}
         </span>
-        {children}
+        <h3 className="tt-featured-trade-card-title">{label}</h3>
+        <p className="tt-featured-trade-card-desc">{description}</p>
       </div>
+      <div className="tt-featured-trade-card-body">{children}</div>
     </div>
   )
 }
@@ -132,9 +137,12 @@ async function loadTradePostEngagement(
 
 export default function LandingFeaturedTradesSection({
   initialFeatured,
+  layout = "standalone",
 }: {
   initialFeatured: FeaturedTradesWeekResponse
+  layout?: "standalone" | "community"
 }) {
+  const inCommunity = layout === "community"
   const { user } = useUserProfile()
   const [featured, setFeatured] = useState<FeaturedTradesWeekResponse>(initialFeatured)
   const [loaded, setLoaded] = useState(true)
@@ -150,7 +158,7 @@ export default function LandingFeaturedTradesSection({
     setLoaded(true)
   }, [initialFeatured])
 
-  const slots: FeaturedSlot[] = SLOTS.map((slot) => ({
+  const slots: FeaturedSlot[] = featuredSlotMeta(featured).map((slot) => ({
     ...slot,
     post:
       slot.key === "bestPnl"
@@ -231,21 +239,42 @@ export default function LandingFeaturedTradesSection({
     <>
       <section
         id="featured-trades"
-        className={`relative z-10 ${LANDING_SECTION_BORDER} ${LANDING_SECTION_SPACING}`}
+        className={`tt-landing-featured-trades relative z-10 ${
+          inCommunity ? "tt-community-subsection" : LANDING_SECTION_SPACING
+        }`}
         aria-labelledby="featured-trades-heading"
       >
         <div className={LANDING_SECTION_SHELL}>
-          <div className="mx-auto max-w-3xl text-center">
-            <h2 id="featured-trades-heading" className={LANDING_HEADLINE_SM}>
-              {featured.sectionTitle}
-            </h2>
-            <p className={`${LANDING_LEAD} mx-auto ${LANDING_LEAD_GAP}`}>
+          <div
+            className={`mx-auto max-w-3xl text-center ${
+              inCommunity ? "tt-community-subsection-head" : ""
+            }`}
+          >
+            {inCommunity ? (
+              <div className="tt-community-featured-head">
+                <h3 id="featured-trades-heading" className="tt-community-subsection-title">
+                  {featured.sectionTitle}
+                </h3>
+                <LandingExploreLink destination="feed" />
+              </div>
+            ) : (
+              <h2 id="featured-trades-heading" className={LANDING_HEADLINE_SM}>
+                {featured.sectionTitle}
+              </h2>
+            )}
+            <p
+              className={`${LANDING_LEAD} mx-auto ${
+                inCommunity ? "mt-2 md:mt-3" : LANDING_LEAD_GAP
+              }`}
+            >
               {featured.sectionLead}
             </p>
           </div>
 
           <div
-            className={`${LANDING_SECTION_CONTENT_GAP} grid gap-6 md:grid-cols-2 md:gap-8`}
+            className={`tt-featured-trades-grid grid gap-6 md:grid-cols-2 md:gap-8 ${
+              inCommunity ? "mt-6 md:mt-8" : LANDING_SECTION_CONTENT_GAP
+            }`}
           >
             {hasAnyFeatured || !loaded ? (
               slots.map((slot) => (

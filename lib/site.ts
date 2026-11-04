@@ -12,7 +12,7 @@ export const OG_IMAGE_HEIGHT = 1254
 export const DEFAULT_TWITTER_CARD = "summary" as const
 
 export const DEFAULT_OG_IMAGE_ALT =
-  "TradeTraxs, social trading platform, AI trading journal, and advanced analytics"
+  "TradeTraxs, more than a trading journal: analytics, psychology, and trader community in one platform"
 
 export const SITE_NAME = "TradeTraxs"
 
@@ -23,10 +23,10 @@ export const SITE_NAME_VARIANTS = [
 ] as const
 
 export const DEFAULT_SITE_DESCRIPTION =
-  "TradeTraxs is the social platform built for traders. Journal your trades, share clips, connect with other traders, analyze with AI, and build Trade Rooms."
+  "More than a trading journal. TradeTraxs is a connected platform for journaling, performance analytics, psychology check-ins, and a trader community, web and native iOS, one account."
 
 export const HOME_PAGE_TITLE =
-  "TradeTraxs | Social Trading Platform • AI Trading Journal & Advanced Analytics"
+  "TradeTraxs | Trading Platform for Journal, Analytics & Community"
 
 /** Primary SEO keywords — used in metadata keywords field on key pages. */
 export const SITE_KEYWORDS = [

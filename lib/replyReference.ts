@@ -72,7 +72,7 @@ export function previewTextFromMessage(
     "content" | "type" | "image_url" | "audio_url" | "deleted_for_everyone"
   >
 ): string {
-  if (message.deleted_for_everyone) return "Message deleted"
+  if (message.deleted_for_everyone) return ""
   const type = message.type?.trim()
   if (type === "story_reply") {
     return storyReplyPreviewText(message.content, "Replied to your story")

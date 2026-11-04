@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import { supabase } from "@/lib/supabaseClient"
 import { fetchProfileOwnerPrivateFields } from "@/lib/profileOwnerPrivateFields"
 import {
@@ -525,6 +526,7 @@ export default function QuickTradeModal({
         category: account.category ?? null,
         is_active: true,
         can_add_trades: true,
+        show_in_account_dropdowns: account.show_in_account_dropdowns !== false,
         note: "",
         rules: null,
       })),
@@ -685,7 +687,7 @@ export default function QuickTradeModal({
   }
 
   async function handleCreateAccountSave(newAccount: CreateAccountSavePayload) {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("save")
       return
     }
@@ -792,7 +794,7 @@ export default function QuickTradeModal({
   }
 
   async function handleSave() {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("trade")
       return
     }
@@ -897,7 +899,7 @@ export default function QuickTradeModal({
               trade_type: null,
               confidence: null,
               emotion: null,
-              followed_plan: false,
+              followed_plan: null,
               mistake_type: null,
               market_condition: null,
               news_event: false,

@@ -1,6 +1,7 @@
 "use client"
 
 import "../utilityDesktopTheme.css"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import { SkeletonSettingsPage } from "../components/ui/skeletons"
 
 import { ProfileAvatarImg } from "../components/SafeProfileAvatar"
@@ -729,7 +730,7 @@ export default function SettingsPage() {
   }
 
   async function saveProfileTab() {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("save")
       return
     }
@@ -1240,12 +1241,12 @@ export default function SettingsPage() {
     <>
 
       <div
-        className={`tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-6${
-          isNativeIos ? "" : " max-md:p-0"
+        className={`tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white md:py-6${
+          isNativeIos ? " p-6" : " max-md:p-0"
         }`}
       >
         <div
-          className={`mx-auto flex max-w-6xl flex-col gap-6 md:flex-row md:items-start${
+          className={`mx-auto flex w-full min-w-0 max-w-[1600px] flex-col gap-6 md:flex-row md:items-start md:px-6 xl:px-8 2xl:px-12${
             isNativeIos ? "" : " max-md:gap-0"
           }`}
         >
@@ -1352,7 +1353,7 @@ export default function SettingsPage() {
               <MobileWebSettingsHome
                 sections={SETTINGS_SECTIONS}
                 isAdmin={isAdmin}
-                isDemo={isDemoModeActive()}
+                isDemo={isExploreWriteBlocked()}
                 onSelectPanel={(id) => selectSettingsPanel(id as TabId)}
                 onReview={() => setReviewModalOpen(true)}
                 onWalkthrough={tour ? () => tour.beginReplay() : undefined}

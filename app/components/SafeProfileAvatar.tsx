@@ -112,6 +112,11 @@ export function SafeProfileAvatar({
     () => optimizedSrc ?? originalSrc
   )
   const [failed, setFailed] = useState(false)
+  const [hydrated, setHydrated] = useState(false)
+
+  useEffect(() => {
+    setHydrated(true)
+  }, [])
 
   useEffect(() => {
     setRequestSrc(optimizedSrc ?? originalSrc)
@@ -134,6 +139,9 @@ export function SafeProfileAvatar({
   const showImage = Boolean(requestSrc && !failed)
   const fallbackNode = fallback ?? <DefaultAvatarFallback />
   const outerClass = outerAvatarClassName(className)
+  const eagerLoad =
+    priority ||
+    (hydrated && requestSrc != null && isImageUrlLoaded(requestSrc))
 
   if (!showImage) {
     return <div className={outerClass}>{fallbackNode}</div>
@@ -146,9 +154,7 @@ export function SafeProfileAvatar({
         alt={alt}
         width={pixelSize}
         height={pixelSize}
-        loading={
-          priority || isImageUrlLoaded(requestSrc!) ? "eager" : "lazy"
-        }
+        loading={eagerLoad ? "eager" : "lazy"}
         decoding="async"
         fetchPriority={priority ? "high" : undefined}
         className="h-full w-full object-cover"

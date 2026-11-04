@@ -262,7 +262,7 @@ final class AccountDeletionExperienceTests: XCTestCase {
         status.lifecycle = .active
         status.billingInterval = .monthly
         status.appleSubscriptionStatus = "active"
-        status.appleProductID = "com.tradetraxs.traxspro.monthly"
+        status.appleProductID = "com.tradetraxs.pro.monthly.v2"
         return status
     }
 

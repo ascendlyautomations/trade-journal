@@ -21,7 +21,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
         IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
         let products = [
             StoreKitTraxProProduct(
-                id: "com.tradetraxs.traxspro.monthly",
+                id: "com.tradetraxs.pro.monthly.v2",
                 displayName: "TraxPro Monthly",
                 displayPrice: "$23.99",
                 subscriptionPeriodLabel: "Monthly",
@@ -117,7 +117,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
         status.entitlementSource = .apple
         status.appleSubscriptionStatus = "active"
         status.appleExpiresAt = Date().addingTimeInterval(86_400 * 30)
-        status.appleProductID = "com.tradetraxs.traxspro.monthly"
+        status.appleProductID = "com.tradetraxs.pro.monthly.v2"
         status.billingInterval = .monthly
         let viewModel = makeViewModel(
             billing: StubBilling(status: status),
@@ -147,7 +147,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
         IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled = true
         var status = SettingsFixtures.billingStatus()
         status.entitlementSource = .apple
-        status.appleProductID = "com.tradetraxs.traxspro.monthly"
+        status.appleProductID = "com.tradetraxs.pro.monthly.v2"
         let storeKit = StubStoreKit(products: [sampleProduct()])
         let viewModel = makeViewModel(billing: StubBilling(status: status), storeKit: storeKit)
         viewModel.loadIfNeeded()
@@ -309,7 +309,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
         XCTAssertEqual(metrics.loadCount, 1)
         XCTAssertTrue(viewModel.showsApplePurchaseSection)
         if case .loaded(let products) = viewModel.productsState {
-            XCTAssertEqual(products.map(\.id), ["com.tradetraxs.traxspro.monthly"])
+            XCTAssertEqual(products.map(\.id), ["com.tradetraxs.pro.monthly.v2"])
         } else {
             XCTFail("Expected StoreKit products after entitlement recovery")
         }
@@ -343,7 +343,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.showsApplePurchaseSection)
         XCTAssertTrue(viewModel.showsRestorePurchases)
         if case .loaded(let products) = viewModel.productsState {
-            XCTAssertEqual(products.map(\.id), ["com.tradetraxs.traxspro.monthly"])
+            XCTAssertEqual(products.map(\.id), ["com.tradetraxs.pro.monthly.v2"])
         } else {
             XCTFail("Expected StoreKit products after a foreground entitlement update")
         }
@@ -423,7 +423,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
 
     private func sampleProduct() -> StoreKitTraxProProduct {
         StoreKitTraxProProduct(
-            id: "com.tradetraxs.traxspro.monthly",
+            id: "com.tradetraxs.pro.monthly.v2",
             displayName: "TraxPro Monthly",
             displayPrice: "$23.99",
             subscriptionPeriodLabel: "Monthly",

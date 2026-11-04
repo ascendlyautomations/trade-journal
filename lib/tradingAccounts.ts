@@ -38,8 +38,10 @@ export type TradingAccountListItem = {
   mode: string | null
   category: string | null
   is_active: boolean
-  /** Free-plan account-creation quota flag. Not trade-entry authorization. */
+  /** Free-plan trade-entry slot; false = view-only for new/edited trades. */
   can_add_trades: boolean
+  /** When false, hidden from dashboard/trades/calendar account filters. */
+  show_in_account_dropdowns: boolean
   note: string
   rules: TradingAccountPropFirmRules | null
 }
@@ -132,6 +134,7 @@ function mapAccountRow(acc: Record<string, unknown>): TradingAccountListItem {
     category,
     is_active: acc.is_active !== false,
     can_add_trades: accountCanAddTrades(acc),
+    show_in_account_dropdowns: acc.show_in_account_dropdowns !== false,
     note: acc.note != null ? String(acc.note) : "",
     rules: category === "Prop Firm" ? mapPropFirmRules(acc) : null,
   }
@@ -509,6 +512,24 @@ export async function setTradingAccountActive(
   const { error } = await client
     .from("accounts")
     .update({ is_active: isActive })
+    .eq("id", accountId)
+
+  if (error) {
+    return { error: new Error(error.message) }
+  }
+
+  return { error: null }
+}
+
+/** Show or hide an account in analytics filters (`show_in_account_dropdowns`). */
+export async function setTradingAccountFilterVisibility(
+  client: SupabaseClient,
+  accountId: string,
+  visible: boolean
+): Promise<{ error: Error | null }> {
+  const { error } = await client
+    .from("accounts")
+    .update({ show_in_account_dropdowns: visible })
     .eq("id", accountId)
 
   if (error) {

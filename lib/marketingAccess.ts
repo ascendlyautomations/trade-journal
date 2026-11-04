@@ -1,4 +1,5 @@
 import { isDemoUserId } from "@/lib/demo/constants"
+import { isGuestExploreViewer } from "@/lib/guestExplore"
 import { profileNeedsOnboarding } from "@/lib/profileOnboardingGate"
 import {
   hasActiveMembership,
@@ -11,7 +12,9 @@ import { isSignupFlowActive } from "@/lib/signupFlow"
 type MarketingUser = { id: string } | null | undefined
 
 export function isAuthenticatedAppUser(user: MarketingUser): boolean {
-  return !!user && !isDemoUserId(user.id)
+  return (
+    !!user && !isDemoUserId(user.id) && !isGuestExploreViewer(user)
+  )
 }
 
 /** Authenticated user still completing signup → onboarding → checkout. */

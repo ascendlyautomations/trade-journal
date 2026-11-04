@@ -1,5 +1,6 @@
 "use client"
 
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import {
   Suspense,
   useCallback,
@@ -60,6 +61,12 @@ import {
 } from "@/lib/demo/demoRooms"
 import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
 import {
+  fetchMemberRoomsForSidebar,
+  removeMemberRoomFromList,
+  upsertMemberRoomInList,
+  type MemberRoomsFetchResult,
+} from "@/lib/memberRoomsSidebar"
+import {
   patchRoomMessagesInSession,
   patchRoomSectionsInSession,
   readRoomSession,
@@ -81,7 +88,6 @@ import {
   fetchViewerTradeRoomJoinRequest,
   assignMemberTag,
   removeMemberTagAssignment,
-  TRADE_ROOM_DETAIL_SELECT,
   type RoomMemberTag,
   type TradeRoomRow,
 } from "@/lib/tradeRoomClient"
@@ -174,13 +180,15 @@ import { trackMobileWebAppStoreClick } from "@/lib/mobileWebAppInstallAnalytics"
 import { isPhoneWebTouchTarget } from "@/lib/mobileWebTouch"
 import { nativeIosAppStoreURL } from "@/lib/nativeIosAppStore"
 import { tradeRoomSharePath, tradeRoomShareUrl } from "@/lib/tradeRoomShareUrl"
-
 type Room = TradeRoomRow & {
   /** If present from API joins, used as sidebar avatar fallback after image_url */
   avatar_url?: string | null
 }
 
-const memberRoomsRequestByUser = new Map<string, Promise<Room[]>>()
+const memberRoomsRequestByUser = new Map<
+  string,
+  Promise<MemberRoomsFetchResult>
+>()
 
 /** Shared sizing for owner room header actions (desktop main header). */
 const ROOM_OWNER_HEADER_ACTION_CLASS =
@@ -384,6 +392,9 @@ function CommunityContent() {
     >
   >({})
   const [loadingRooms, setLoadingRooms] = useState(true)
+  const [memberRoomsLoadError, setMemberRoomsLoadError] = useState<
+    string | null
+  >(null)
   const [creatingRoom, setCreatingRoom] = useState(false)
   const creatingRoomRef = useRef(false)
   const [loadingMessages, setLoadingMessages] = useState(false)
@@ -668,10 +679,13 @@ function CommunityContent() {
     return sectionParam.trim()
   }, [sectionParam, selectedRoomMatchesUrl])
 
-  const selectedRoom = useMemo(
-    () => rooms.find((r) => r.id === selectedRoomId) ?? null,
-    [rooms, selectedRoomId]
-  )
+  const selectedRoom = useMemo(() => {
+    if (!selectedRoomId) return null
+    const inList = rooms.find((r) => r.id === selectedRoomId)
+    if (inList) return inList
+    if (inviteTargetRoom?.id === selectedRoomId) return inviteTargetRoom
+    return null
+  }, [rooms, selectedRoomId, inviteTargetRoom])
 
   const canModerateRoom = useMemo(
     () =>
@@ -750,8 +764,9 @@ function CommunityContent() {
 
   const phoneWebRoomList = useMemo(() => {
     const query = mobileRoomQuery.trim().toLowerCase()
-    if (!query) return sortedSidebarRooms
-    return sortedSidebarRooms.filter((room) =>
+    const base = sortedSidebarRooms
+    if (!query) return base
+    return base.filter((room) =>
       String(room.name ?? "").toLowerCase().includes(query)
     )
   }, [mobileRoomQuery, sortedSidebarRooms])
@@ -842,6 +857,63 @@ function CommunityContent() {
   roomsRef.current = rooms
   needsJoinRef.current = needsJoin
   usernameRef.current = username
+
+  const applyMemberRoomsFetch = useCallback(
+    (fetch: MemberRoomsFetchResult, previous: Room[]) => {
+      const keepPrevious =
+        previous.length > 0 &&
+        (fetch.failed ||
+          fetch.incomplete ||
+          (fetch.rooms.length === 0 && fetch.membershipRowCount > 0))
+      const next = keepPrevious ? previous : fetch.rooms
+      setRooms(next)
+      setMemberRoomsLoadError(
+        fetch.failed || fetch.incomplete
+          ? fetch.errorMessage ?? "Could not load your Trade Rooms."
+          : null
+      )
+      const uid = userIdRef.current
+      if (uid && !fetch.failed && !fetch.incomplete && fetch.rooms.length > 0) {
+        writeRoomSession(uid, { rooms: next })
+      }
+      return next
+    },
+    []
+  )
+
+  const refreshSidebarMemberRooms = useCallback(
+    async (userId: string): Promise<Room[]> => {
+      if (isDemoUserId(userId)) {
+        const demo = fetchDemoMemberRooms(userId)
+        setRooms(demo)
+        setMemberRoomsLoadError(null)
+        writeRoomSession(userId, { rooms: demo })
+        return demo
+      }
+
+      let pending = memberRoomsRequestByUser.get(userId)
+      if (!pending) {
+        pending = fetchMemberRoomsForSidebar(supabase, userId).finally(() => {
+          memberRoomsRequestByUser.delete(userId)
+        })
+        memberRoomsRequestByUser.set(userId, pending)
+      }
+
+      const fetch = await pending
+      return applyMemberRoomsFetch(fetch, roomsRef.current)
+    },
+    [applyMemberRoomsFetch]
+  )
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const mq = window.matchMedia("(min-width: 768px)")
+    const onChange = () => {
+      if (mq.matches) setMobileRoomQuery("")
+    }
+    mq.addEventListener("change", onChange)
+    return () => mq.removeEventListener("change", onChange)
+  }, [])
 
   useEffect(() => {
     roomIdsForUnreadRef.current = rooms.map((r) => r.id)
@@ -1119,7 +1191,7 @@ function CommunityContent() {
       return
     }
 
-    if (isDemoSupabaseBlocked()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("room")
       return
     }
@@ -1150,7 +1222,7 @@ function CommunityContent() {
       return
     }
 
-    if (isDemoSupabaseBlocked()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("room")
       return
     }
@@ -2317,13 +2389,16 @@ function CommunityContent() {
 
       if (error) throw error
 
-      setRooms((prev) =>
-        prev.map((r) =>
+      setRooms((prev) => {
+        const next = prev.map((r) =>
           r.id === selectedRoomId
             ? { ...r, name: trimmed, show_on_profile: showOnProfile }
             : r
         )
-      )
+        const uid = userIdRef.current
+        if (uid) writeRoomSession(uid, { rooms: next })
+        return next
+      })
       if (opts?.closeSettings) setShowRoomSettings(false)
     } catch (err) {
       console.error(err)
@@ -2582,47 +2657,9 @@ function CommunityContent() {
     return "Allow this user to join the room again?"
   }
 
-  async function loadMemberRooms(userId: string): Promise<Room[]> {
-    if (isDemoUserId(userId)) {
-      return fetchDemoMemberRooms(userId)
-    }
-
-    const pending = memberRoomsRequestByUser.get(userId)
-    if (pending) return pending
-
-    const request = (async () => {
-      const { data, error } = await supabase
-        .from("room_members")
-        .select(
-          `room_id, room:rooms!room_members_room_id_fkey (${TRADE_ROOM_DETAIL_SELECT})`
-        )
-        .eq("user_id", userId)
-        .is("left_at", null)
-
-      if (error) {
-        console.error("member rooms fetch:", error)
-        return []
-      }
-
-      return (data ?? [])
-        .flatMap((membership) => {
-          const room = membership.room as Room | Room[] | null
-          return Array.isArray(room) ? room : room ? [room] : []
-        })
-        .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")))
-    })()
-
-    memberRoomsRequestByUser.set(userId, request)
-    try {
-      return await request
-    } finally {
-      memberRoomsRequestByUser.delete(userId)
-    }
-  }
-
   async function joinRoom(roomId: string) {
     if (joiningRoomId) return
-    if (isDemoSupabaseBlocked()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("room")
       return
     }
@@ -2681,9 +2718,7 @@ function CommunityContent() {
       }
 
       const alreadyActive = result.alreadyMember
-      const nextRooms = await loadMemberRooms(authUser.id)
-      setRooms(nextRooms)
-      writeRoomSession(authUser.id, { rooms: nextRooms })
+      await refreshSidebarMemberRooms(authUser.id)
       setInviteTargetRoom(null)
       setSelectedRoomId(roomId)
       setViewerJoinStatus(null)
@@ -2711,9 +2746,7 @@ function CommunityContent() {
     slug?: string | null
   }) {
     if (!user?.id) return
-    const nextRooms = await loadMemberRooms(user.id)
-    setRooms(nextRooms)
-    writeRoomSession(user.id, { rooms: nextRooms })
+    await refreshSidebarMemberRooms(user.id)
     setInviteTargetRoom(null)
     setSelectedRoomId(room.id)
     setRoomNotificationsEnabled(true)
@@ -2733,7 +2766,7 @@ function CommunityContent() {
     const prevLeftMembers = leftMembers
 
     setRooms((prev) => {
-      const next = prev.filter((r) => r.id !== leftRoomId)
+      const next = removeMemberRoomFromList(prev, leftRoomId)
       writeRoomSession(authUser.id, { rooms: next })
       return next
     })
@@ -2798,7 +2831,13 @@ function CommunityContent() {
   function handleTradeRoomCreated(room: TradeRoomRow) {
     setShowCreateWizard(false)
     const next = room as Room
-    setRooms((prev) => [...prev, next])
+    setRooms((prev) => {
+      const merged = upsertMemberRoomInList(prev, next)
+      if (user?.id) {
+        writeRoomSession(user.id, { rooms: merged })
+      }
+      return merged
+    })
     setSelectedRoomId(room.id)
     setMobileRoomsOpen(false)
     const slug = String(room.slug ?? room.id)
@@ -2888,61 +2927,82 @@ function CommunityContent() {
   roomImageUploadRef.current = handleRoomImageUpload
 
   useEffect(() => {
-    if (!user?.id) {
-      if (profileLoading || isDemoModeActive()) return
-      if (roomParam?.trim()) {
-        setLoadingRooms(false)
-        return
-      }
-      const returnPath = `/community${window.location.search}`
-      router.push(`/login?next=${encodeURIComponent(returnPath)}`)
+    if (user?.id || profileLoading || isDemoModeActive()) return
+    if (roomParam?.trim()) {
+      setLoadingRooms(false)
       return
     }
+    const returnPath = `/community${window.location.search}`
+    router.push(`/login?next=${encodeURIComponent(returnPath)}`)
+  }, [user?.id, profileLoading, router, roomParam])
+
+  useEffect(() => {
+    if (!user?.id) return
 
     let cancelled = false
-    const init = async () => {
-      const cached = readRoomSession(user.id)
-      const rp = roomParam?.trim()
-      if (cached) {
-        setRooms(cached.rooms)
-        if (Object.keys(cached.messagesByKey).length > 0) {
-          setMessagesByRoom(cached.messagesByKey)
+    const uid = user.id
+    const rp = roomParam?.trim()
+
+    void (async () => {
+      try {
+        const cached = readRoomSession(uid)
+        const cachedRooms = (cached?.rooms ?? []) as Room[]
+
+        if (cached) {
+          setRooms(cachedRooms)
+          if (Object.keys(cached.messagesByKey).length > 0) {
+            setMessagesByRoom(cached.messagesByKey)
+          }
+          if (cachedRooms.length > 0) {
+            setLoadingRooms(false)
+            if (!rp && !createMode) {
+              const defaultRoomId = pickInitialTradeRoomId(cachedRooms, uid)
+              if (defaultRoomId) setSelectedRoomId(defaultRoomId)
+            }
+          }
         }
-        setLoadingRooms(false)
-        if (cached.rooms.length > 0 && !rp && !createMode) {
-          const defaultRoomId = pickInitialTradeRoomId(cached.rooms, user.id)
+
+        let pending = memberRoomsRequestByUser.get(uid)
+        if (!pending) {
+          pending = fetchMemberRoomsForSidebar(supabase, uid).finally(() => {
+            memberRoomsRequestByUser.delete(uid)
+          })
+          memberRoomsRequestByUser.set(uid, pending)
+        }
+        const fetch = await pending
+        if (cancelled) return
+
+        const previous =
+          cachedRooms.length > 0 ? cachedRooms : roomsRef.current
+        const nextRooms = applyMemberRoomsFetch(fetch, previous)
+
+        if (!fetch.failed && !fetch.incomplete && cached) {
+          writeRoomSession(uid, {
+            messagesByKey: messagesByRoomRef.current,
+            sectionsByRoom: cached.sectionsByRoom ?? {},
+          })
+        }
+
+        if (
+          nextRooms.length > 0 &&
+          !rp &&
+          !createMode &&
+          !selectedRoomIdRef.current
+        ) {
+          const defaultRoomId = pickInitialTradeRoomId(nextRooms, uid)
           if (defaultRoomId) setSelectedRoomId(defaultRoomId)
         }
-        return
+      } finally {
+        if (!cancelled) setLoadingRooms(false)
       }
+    })()
 
-      const nextRooms = await loadMemberRooms(user.id)
-      if (cancelled) return
-      setRooms(nextRooms)
-      setLoadingRooms(false)
-
-      writeRoomSession(user.id, {
-        rooms: nextRooms,
-        messagesByKey: messagesByRoomRef.current,
-        sectionsByRoom: {},
-      })
-
-      if (nextRooms.length > 0 && !rp && !createMode) {
-        const defaultRoomId = pickInitialTradeRoomId(nextRooms, user.id)
-        if (defaultRoomId) setSelectedRoomId(defaultRoomId)
-      }
-    }
-
-    void init()
     return () => {
       cancelled = true
     }
-  }, [user?.id, profileLoading, router, roomParam, createMode])
-
-  useEffect(() => {
-    if (!user?.id || loadingRooms) return
-    writeRoomSession(user.id, { rooms })
-  }, [rooms, loadingRooms, user?.id])
+    // Member list loads once per signed-in user — not on ?room= / ?create= changes (avoids cancelled fetches).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- roomParam/createMode read at completion only
+  }, [user?.id, applyMemberRoomsFetch])
 
   useEffect(() => {
     if (!roomParam || loadingRooms) return
@@ -3948,15 +4008,16 @@ function CommunityContent() {
       <div
         data-tt-native-surface="community"
         data-tt-trade-rooms
-        className={`tt-community flex h-[var(--app-viewport-height)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-2 text-white xl:px-8 2xl:px-12 ${MOBILE_WEB_NEUTRAL_PAGE_BG} max-md:px-0 max-md:py-0`}
+        className={`tt-community flex h-[var(--app-viewport-height)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] py-2 text-white ${MOBILE_WEB_NEUTRAL_PAGE_BG} max-md:px-0 max-md:py-0`}
       >
+        <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1600px] flex-col px-4 md:px-6 xl:px-8 2xl:px-12 max-md:max-w-none max-md:px-0">
         <div
           data-tt-trade-rooms-shell
-          className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-white/10 bg-white/5 shadow-xl backdrop-blur-md md:flex-row md:overflow-hidden xl:max-w-[1500px] max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:shadow-none max-md:backdrop-blur-none"
+          className="flex h-full min-h-0 w-full flex-col overflow-visible rounded-2xl border border-white/10 bg-white/5 shadow-xl backdrop-blur-md md:flex-row md:overflow-hidden max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:shadow-none max-md:backdrop-blur-none"
         >
           <aside
             data-tt-trade-rooms-aside
-            className={`shrink-0 border-b border-white/10 bg-white/[0.04] backdrop-blur-md md:w-72 md:border-b-0 md:border-r${
+            className={`shrink-0 border-b border-white/10 bg-white/[0.04] backdrop-blur-md md:flex md:min-h-0 md:w-72 md:flex-col md:border-b-0 md:border-r${
               !nativeIos && (roomParam?.trim() || showCreateDiscoverView)
                 ? " max-md:hidden"
                 : !nativeIos
@@ -4059,11 +4120,11 @@ function CommunityContent() {
             </div>
             <div
               id="trade-rooms-list"
-              className={`grid overflow-hidden transition-[grid-template-rows] duration-200 ease-out ${
-                mobileRoomsOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-              } md:grid-rows-[1fr]${
+              className={`grid min-h-0 grid-rows-[1fr] overflow-hidden md:min-h-0 md:flex-1 max-md:transition-[grid-template-rows] max-md:duration-200 max-md:ease-out ${
+                mobileRoomsOpen ? "max-md:grid-rows-[1fr]" : "max-md:grid-rows-[0fr]"
+              }${
                 !nativeIos
-                  ? " max-md:min-h-0 max-md:flex-1 max-md:grid-rows-[1fr]"
+                  ? " max-md:min-h-0 max-md:flex-1"
                   : ""
               }`}
             >
@@ -4096,10 +4157,39 @@ function CommunityContent() {
                         </div>
                       ))}
                     </div>
+                  ) : memberRoomsLoadError && rooms.length === 0 ? (
+                    <div className="space-y-2 px-2 py-3">
+                      <p className="text-sm text-red-300/90">{memberRoomsLoadError}</p>
+                      <button
+                        type="button"
+                        className="text-sm font-medium text-blue-300 hover:text-blue-200"
+                        onClick={() => {
+                          if (!user?.id) return
+                          void refreshSidebarMemberRooms(user.id)
+                        }}
+                      >
+                        Retry loading rooms
+                      </button>
+                    </div>
                   ) : rooms.length === 0 && !showCreateFirstRoomCard ? (
                     <p className="px-2 py-3 text-sm text-gray-400">No rooms found.</p>
                   ) : (
                     <>
+                      {memberRoomsLoadError && rooms.length > 0 ? (
+                        <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-100/90">
+                          <span className="min-w-0 truncate">{memberRoomsLoadError}</span>
+                          <button
+                            type="button"
+                            className="shrink-0 font-medium text-amber-200 hover:text-white"
+                            onClick={() => {
+                              if (!user?.id) return
+                              void refreshSidebarMemberRooms(user.id)
+                            }}
+                          >
+                            Retry
+                          </button>
+                        </div>
+                      ) : null}
                       {showCreateFirstRoomCard ? (
                         <CreateFirstTradeRoomCard
                           onClick={navigateToCreateDiscover}
@@ -4108,6 +4198,13 @@ function CommunityContent() {
                             showCreateDiscoverView && showCreateFirstRoomCard
                           }
                         />
+                      ) : null}
+                      {phoneWebRoomList.length === 0 &&
+                      rooms.length > 0 &&
+                      mobileRoomQuery.trim() ? (
+                        <p className="px-2 py-2 text-sm text-gray-400">
+                          No rooms match your search.
+                        </p>
                       ) : null}
                       {phoneWebRoomList.map((room) => {
                       const selected =
@@ -4623,14 +4720,11 @@ function CommunityContent() {
                 scrollRef={messagesScrollRef}
                 className="tt-trade-rooms-chat min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-3 max-md:px-3"
                 onRefresh={async () => {
+                  if (!user?.id) return
+                  await refreshSidebarMemberRooms(user.id)
                   if (selectedRoomId) {
                     await refetchSections()
-                    return
                   }
-                  if (!user?.id) return
-                  const nextRooms = await loadMemberRooms(user.id)
-                  setRooms(nextRooms)
-                  writeRoomSession(user.id, { rooms: nextRooms })
                 }}
               >
               {loadingOlderMessages ? (
@@ -5065,6 +5159,7 @@ function CommunityContent() {
             </>
             )}
           </section>
+        </div>
         </div>
 
       {showCreateSectionModal ? (
@@ -5773,9 +5868,15 @@ function CommunityContent() {
           onClose={() => setShowManageRoom(false)}
           onRoomUpdated={(updated) => {
             setManageRoomDetail(updated)
-            setRooms((prev) =>
-              prev.map((r) => (r.id === updated.id ? { ...r, ...updated } : r))
-            )
+            setRooms((prev) => {
+              const next = prev.map((r) =>
+                r.id === updated.id ? { ...r, ...updated } : r
+              )
+              if (user?.id) {
+                writeRoomSession(user.id, { rooms: next })
+              }
+              return next
+            })
             setRoomName(updated.name ?? "")
             setShowOnProfile(updated.show_on_profile !== false)
           }}

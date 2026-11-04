@@ -2,7 +2,7 @@ import Link from "next/link"
 import { LANDING_BRAND_TAGLINE } from "@/lib/landingFlagships"
 
 const FOOTER_DESCRIPTION =
-  "The all-in-one platform to journal, analyze, and socialize your trading."
+  "Journal, analytics, Feed, Trade Rooms, messaging, and profiles in one interconnected platform for traders."
 
 const TRADETRAXS_INSTAGRAM_URL =
   "https://www.instagram.com/tradetraxs/"

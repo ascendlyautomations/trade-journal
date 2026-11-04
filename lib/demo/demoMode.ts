@@ -1,6 +1,9 @@
 export const DEMO_MODE_STORAGE_KEY = "tradetraxs_demo_mode"
 export const DEMO_MODE_CHANGE_EVENT = "tradetraxs-demo-mode"
 
+/** Keep in sync with `lib/guestExplore.ts` — duplicated here to avoid import cycles. */
+const GUEST_EXPLORE_STORAGE_KEY = "tradetraxs_guest_explore"
+
 export function isDemoModeActive(): boolean {
   if (typeof window === "undefined") return false
   return sessionStorage.getItem(DEMO_MODE_STORAGE_KEY) === "1"
@@ -8,7 +11,9 @@ export function isDemoModeActive(): boolean {
 
 /** Preview/Demo UI (e.g. "Return to App") — session flag only, never pathname-based. */
 export function isPreviewExperienceActive(): boolean {
-  return isDemoModeActive()
+  if (isDemoModeActive()) return true
+  if (typeof window === "undefined") return false
+  return sessionStorage.getItem(GUEST_EXPLORE_STORAGE_KEY) === "1"
 }
 
 export function enableDemoMode(): void {

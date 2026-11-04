@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import FeedRoomShareCard from "@/app/components/feed/FeedRoomShareCard"
 import ImageCropModal from "@/app/components/ImageCropModal"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
@@ -132,7 +133,7 @@ export default function CreatePostComposer({
 
   const handlePublish = useCallback(async () => {
     if (!userId) return
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("comment")
       return
     }

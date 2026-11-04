@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { AUTH_PAGE_CONTAINER_CLASS } from "@/lib/authenticatedPageShell"
 import { UI_SKELETON_CARD } from "@/lib/uiPrimitiveStyles"
 import Skeleton from "./Skeleton"
 import { cn } from "./cn"
@@ -291,13 +292,18 @@ export function SkeletonDashboardPage() {
       data-tt-dashboard-canvas=""
       aria-busy="true"
       aria-label="Loading dashboard"
-      className="w-full min-w-0 max-w-full overflow-x-hidden px-2.5 pb-3 pt-4 text-white max-md:px-2 max-md:pb-2 max-md:pt-2 md:px-10 md:pb-10 md:pt-0 xl:px-8 2xl:px-12"
+      className="w-full min-w-0 max-w-full overflow-x-hidden px-2.5 pb-3 pt-4 text-white max-md:px-2 max-md:pb-2 max-md:pt-2 md:pb-10 md:pt-0"
     >
-      <div className="tt-dash-workspace relative z-50 mx-auto w-full max-w-[1600px] px-0 md:px-6 xl:max-w-[1900px] xl:px-0">
+      <div className={cn("tt-dash-workspace relative z-50", AUTH_PAGE_CONTAINER_CLASS)}>
         <DashboardPulse className="h-11 w-full" />
         <DashboardPulse className="mt-3 h-8 w-40" />
       </div>
-      <div className="tt-dash-workspace tt-dash-stack relative z-0 mx-auto mt-2 flex w-full min-w-0 max-w-[1600px] flex-col gap-2 overflow-x-hidden px-0 max-md:gap-2 md:mt-3 md:gap-3 md:px-6 xl:max-w-[1900px] xl:px-0">
+      <div
+        className={cn(
+          "tt-dash-workspace tt-dash-stack relative z-0 mt-2 flex flex-col gap-2 overflow-x-hidden max-md:gap-2 md:mt-3 md:gap-3",
+          AUTH_PAGE_CONTAINER_CLASS
+        )}
+      >
         <div className="grid grid-cols-2 items-stretch gap-2 md:gap-3">
           <DashboardPulse className="h-[3.75rem]" />
           <DashboardPulse className="h-[3.75rem]" />
@@ -466,7 +472,7 @@ export function SkeletonAnalystPanel({ count = 4 }: { count?: number }) {
 export function SkeletonProfilePage() {
   return (
     <div className="w-full text-gray-100">
-      <div className="mx-auto max-w-5xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
+      <div className={cn(AUTH_PAGE_CONTAINER_CLASS, "space-y-4 py-6 max-md:px-4")}>
         <SkeletonProfileHeader />
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6 md:gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -521,7 +527,7 @@ export function SkeletonExplorePage() {
 
 export function SkeletonLeaderboardPage() {
   return (
-    <div className="mx-auto max-w-7xl space-y-4">
+    <div className={cn(AUTH_PAGE_CONTAINER_CLASS, "space-y-4")}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Skeleton className="h-9 w-40" />
         <div className="flex gap-3">
@@ -611,7 +617,12 @@ export function SkeletonMessagesPage() {
 
 export function SkeletonCalendarPage() {
   return (
-    <div className="mx-auto grid w-full max-w-7xl grid-cols-1 items-start gap-4 px-4 md:grid-cols-[2fr_1.4fr] md:gap-8">
+    <div
+      className={cn(
+        AUTH_PAGE_CONTAINER_CLASS,
+        "grid grid-cols-1 items-start gap-4 max-md:px-4 md:grid-cols-[2fr_1.4fr] md:gap-8"
+      )}
+    >
       <div className="w-full min-w-0">
         <div className="mb-6 flex items-center justify-between">
           <Skeleton className="h-8 w-8" />
@@ -636,7 +647,7 @@ export function SkeletonCalendarPage() {
 
 export function SkeletonSettingsPage() {
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6 md:flex-row md:items-start">
+    <div className={cn(AUTH_PAGE_CONTAINER_CLASS, "flex flex-col gap-6 md:flex-row md:items-start")}>
       <aside className="w-full shrink-0 md:w-64">
         <Skeleton className="mb-2 h-8 w-28" />
         <Skeleton className="mb-4 h-4 w-20" />

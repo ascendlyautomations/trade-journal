@@ -1,5 +1,5 @@
 import { describe, it } from "node:test"
-import { buildAccountFilterKeyFromRow, buildAccountFilterOptionsFromRows, buildTradeAccountFilterKey, formatAccountBalanceForDisplay, formatAccountLabelForDisplay, formatAccountNameWithSizeDisplay, formatTradeAccountDisplay, formatTradeAccountNameSizeLine, formatTradingAccountSelectorLabel, resolveTradeAccountName, tradeMatchesAccountFilter, } from "./tradeAccountDisplay.ts"
+import { buildAccountFilterKeyFromRow, buildAccountFilterOptionsFromRows, buildTradeAccountFilterKey, formatAccountBalanceForDisplay, formatAccountLabelForDisplay, formatAccountNameWithSizeDisplay, formatTradeAccountDisplay, formatTradeAccountNameSizeLine, formatTradingAccountSelectorLabel, resolveTradeAccountName, sortAccountFilterOptionsForDisplay, tradeMatchesAccountFilter, } from "./tradeAccountDisplay.ts"
 import assert from "node:assert/strict"
 
 describe("formatAccountBalanceForDisplay", () => {
@@ -77,43 +77,74 @@ describe("buildAccountFilterKeyFromRow", () => {
 })
 
 describe("buildAccountFilterOptionsFromRows", () => {
-  it("includes active accounts with zero trades", () => {
+  it("includes visible accounts with zero trades", () => {
     const options = buildAccountFilterOptionsFromRows([
       {
         id: "a1",
         name: "Empty Sim",
         account_size: "25000",
         mode: "sim",
-        is_active: true,
+        show_in_account_dropdowns: true,
       },
       {
         id: "a2",
         name: "Archived",
         account_size: "50000",
-        is_active: false,
+        show_in_account_dropdowns: false,
       },
     ])
-    assert.equal(options.length, 2)
+    assert.equal(options.length, 1)
     assert.equal(options[0].value, "Empty Sim|25000|a1")
     assert.equal(options[0].label, "Empty Sim 25k • Sim")
     assert.equal(options[0].accountType, "sim")
-    assert.equal(options[1].value, "Archived|50000|a2")
-    assert.equal(options[1].label, "Archived 50k • Live")
   })
 
-  it("does not badge historical can_add_trades false in filter labels", () => {
+  it("lists active accounts before view-only in filter dropdowns", () => {
+    const options = buildAccountFilterOptionsFromRows([
+      {
+        id: "vo",
+        name: "Archive",
+        account_size: "50000",
+        mode: "live",
+        show_in_account_dropdowns: true,
+        can_add_trades: false,
+      },
+      {
+        id: "a1",
+        name: "Alpha",
+        account_size: "25000",
+        mode: "sim",
+        show_in_account_dropdowns: true,
+        can_add_trades: true,
+      },
+      {
+        id: "a2",
+        name: "Beta",
+        account_size: "25000",
+        mode: "sim",
+        show_in_account_dropdowns: true,
+        can_add_trades: true,
+      },
+    ])
+    assert.equal(options[0].readOnly, false)
+    assert.equal(options[1].readOnly, false)
+    assert.equal(options[2].readOnly, true)
+    assert.match(options[2].label, /View Only/)
+  })
+
+  it("badges view-only accounts in filter labels", () => {
     const options = buildAccountFilterOptionsFromRows([
       {
         id: "a1",
         name: "Legacy",
         account_size: "50000",
         mode: "live",
-        is_active: true,
+        show_in_account_dropdowns: true,
         can_add_trades: false,
       },
     ])
-    assert.equal(options[0].label, "Legacy 50k • Live")
-    assert.equal(options[0].readOnly, false)
+    assert.equal(options[0].label, "Legacy 50k • Live • View Only")
+    assert.equal(options[0].readOnly, true)
   })
 
   it("includes account number before mode in label when present", () => {
@@ -149,6 +180,17 @@ describe("buildAccountFilterOptionsFromRows", () => {
     )
     const rowKey = buildAccountFilterKeyFromRow(row)
     assert.equal(tradeKey, rowKey)
+  })
+})
+
+describe("sortAccountFilterOptionsForDisplay", () => {
+  it("sorts active before view-only", () => {
+    const sorted = sortAccountFilterOptionsForDisplay([
+      { value: "v", label: "View", readOnly: true },
+      { value: "a", label: "Active", readOnly: false },
+    ])
+    assert.equal(sorted[0].value, "a")
+    assert.equal(sorted[1].value, "v")
   })
 })
 

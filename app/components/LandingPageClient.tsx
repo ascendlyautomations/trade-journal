@@ -16,7 +16,11 @@ import MarketingFooter from "./marketing/MarketingFooter"
 import { profileHasUsedCheckoutTrial } from "@/lib/checkoutTrial"
 import { useTraxProPurchaseCopy } from "@/lib/traxProPriceCatalogClient"
 import { useUserProfile } from "@/lib/useUserProfile"
-import { isDemoUserId } from "@/lib/demo/constants"
+import { isAuthenticatedAppUser } from "@/lib/marketingAccess"
+import {
+  isGuestExploreViewer,
+  resumeGuestExploreNavigation,
+} from "@/lib/guestExplore"
 import { isBetaReferralRef } from "@/lib/betaReferralCode"
 import { profileNeedsOnboarding } from "@/lib/profileOnboardingGate"
 import {
@@ -57,7 +61,7 @@ export default function LandingPageClient({
   const [loggedInDemoModalOpen, setLoggedInDemoModalOpen] = useState(false)
   const [loggedInTrialModalOpen, setLoggedInTrialModalOpen] = useState(false)
 
-  const isAuthenticatedUser = !!user && !isDemoUserId(user.id)
+  const isAuthenticatedUser = isAuthenticatedAppUser(user)
   const hasActiveMembershipAccess =
     isAuthenticatedUser && !!profile && hasActiveMembership(profile)
   const purchase = useTraxProPurchaseCopy(!profileHasUsedCheckoutTrial(profile))
@@ -80,6 +84,10 @@ export default function LandingPageClient({
   }, [loading, isAuthenticatedUser, user?.id, profile, router, membershipReconciling])
 
   function handleExploreDemo() {
+    if (isGuestExploreViewer(user)) {
+      resumeGuestExploreNavigation()
+      return
+    }
     if (isAuthenticatedUser) {
       setLoggedInDemoModalOpen(true)
       return
@@ -96,7 +104,7 @@ export default function LandingPageClient({
 
       if (!ref || isBetaReferralRef(ref)) return
 
-      if (!user?.id) return
+      if (!user?.id || isGuestExploreViewer(user)) return
 
       void startTraxProCheckout()
         .then((url) => {

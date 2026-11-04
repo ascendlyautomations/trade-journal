@@ -1,5 +1,6 @@
 "use client"
 
+import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import DmStyleComposer, {
   type VoiceSendPayload,
 } from "@/app/components/DmStyleComposer"
@@ -49,6 +50,7 @@ import { isConversationParticipant } from "@/lib/conversationAccess"
 import { ensureDmConversation } from "@/lib/dmConversation"
 import {
   dispatchConversationInboxPatch,
+  latestConversationPreviewFromMessages,
   previewFromMessage,
   updateConversationPreview,
 } from "@/lib/conversationInboxSync"
@@ -487,13 +489,7 @@ function TradeMessageBubble({
   initialTrade?: any | null
   onTradeLoaded?: (trade: any | null) => void
 } & DmBubbleReactionProps) {
-  if (message.deleted_for_everyone) {
-    return (
-      <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-        <p className="text-gray-400 italic text-sm">Message deleted</p>
-      </div>
-    )
-  }
+  if (message.deleted_for_everyone) return null
 
   const isMine = message.sender_id === userId
   const menuOpen = activeMenuId === message.id
@@ -737,13 +733,7 @@ function PostMessageBubble({
     message.reel_id,
   ])
 
-  if (message.deleted_for_everyone) {
-    return (
-      <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-        <p className="text-gray-400 italic text-sm">Message deleted</p>
-      </div>
-    )
-  }
+  if (message.deleted_for_everyone) return null
 
   if (postLoading) {
     return (
@@ -955,13 +945,7 @@ function StoryShareMessageBubble({
   onViewStory: (storyId: string) => void
   onMediaLoad?: () => void
 } & DmBubbleReactionProps) {
-  if (message.deleted_for_everyone) {
-    return (
-      <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-        <p className="text-sm italic text-gray-400">Message deleted</p>
-      </div>
-    )
-  }
+  if (message.deleted_for_everyone) return null
 
   const payload = resolveStorySharePayload(message)
   if (!payload) {
@@ -1059,13 +1043,7 @@ function StoryReplyMessageBubble({
   parentMessage?: ReplyParentMessageLike | null
   onMediaLoad?: () => void
 } & DmBubbleReactionProps) {
-  if (message.deleted_for_everyone) {
-    return (
-      <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-        <p className="text-sm italic text-gray-400">Message deleted</p>
-      </div>
-    )
-  }
+  if (message.deleted_for_everyone) return null
 
   const payload = decodeStoryReplyContent(message.content)
   const replyText = payload?.text?.trim() ?? ""
@@ -1838,19 +1816,26 @@ export default function DMPage() {
         if (payload.eventType === "UPDATE") {
           const next = payload.new as {
             id?: string
+            deleted_for_everyone?: boolean
             sender_anonymized?: boolean
             profiles?: unknown
           }
-          setMessagesWithCache((prev) =>
-            prev.map((msg) => {
-              if (msg.id !== next.id) return msg
-              return {
-                ...msg,
-                ...next,
-                profiles: next.profiles ?? msg.profiles,
-              }
-            })
-          )
+          if (next.deleted_for_everyone === true && next.id) {
+            setMessagesWithCache((prev) =>
+              prev.filter((msg) => msg.id !== next.id)
+            )
+          } else {
+            setMessagesWithCache((prev) =>
+              prev.map((msg) => {
+                if (msg.id !== next.id) return msg
+                return {
+                  ...msg,
+                  ...next,
+                  profiles: next.profiles ?? msg.profiles,
+                }
+              })
+            )
+          }
           if (
             next.sender_anonymized === true &&
             !conversationGroupRef.current
@@ -2966,7 +2951,7 @@ export default function DMPage() {
     retryImageUrl?: string | null
     retryParentId?: string | null
   }) {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("comment")
       return
     }
@@ -3175,7 +3160,7 @@ export default function DMPage() {
   }
 
   async function sendVoiceMessage(payload: VoiceSendPayload) {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("comment")
       return
     }
@@ -3328,7 +3313,7 @@ export default function DMPage() {
   }
 
   async function handleSendTrade(trade: any) {
-    if (isDemoModeActive()) {
+    if (isExploreWriteBlocked()) {
       requestDemoSignup("comment")
       return
     }
@@ -3644,16 +3629,32 @@ export default function DMPage() {
   async function deleteForEveryone(message: any) {
     if (!user || pageAccess !== "allowed") return
     if (message.sender_id !== user.id) return
+    const conversationId = activeConversationId
     await supabase
       .from("messages")
       .update({ deleted_for_everyone: true })
       .eq("id", message.id)
-    setMessagesWithCache((prev) =>
-      prev.map((m) =>
-        m.id === message.id ? { ...m, deleted_for_everyone: true } : m
-      )
-    )
+    let nextMessages: any[] = []
+    setMessagesWithCache((prev) => {
+      nextMessages = prev.filter((m) => m.id !== message.id)
+      return nextMessages
+    })
     setActiveMenuId(null)
+    if (!conversationId) return
+    const latest = latestConversationPreviewFromMessages(nextMessages)
+    const previewText = latest?.text ?? "No messages yet"
+    const previewAt = latest?.at ?? new Date().toISOString()
+    const lastMessageAt = await updateConversationPreview(
+      supabase,
+      conversationId,
+      previewText,
+      previewAt
+    )
+    dispatchConversationInboxPatch({
+      conversationId,
+      last_message: previewText,
+      last_message_at: lastMessageAt,
+    })
   }
 
   const title = conversation?.is_group
@@ -3986,6 +3987,7 @@ export default function DMPage() {
                   </div>
                 )
               }
+              if (message.deleted_for_everyone) return null
 
               const parentMessage = resolveParentMessage(message, messagesById)
 
@@ -4253,12 +4255,7 @@ export default function DMPage() {
                                 : ""
                             }`.trim()}
                           >
-                          {message.deleted_for_everyone ? (
-                            <p className="text-gray-400 italic">
-                              Message deleted
-                            </p>
-                          ) : (
-                            <>
+                          <>
                               <DmReplyReference
                                 message={message}
                                 parentMessage={parentMessage}
@@ -4314,7 +4311,6 @@ export default function DMPage() {
                                 </p>
                               ) : null}
                             </>
-                          )}
                           </div>
                         </div>
                       </div>
