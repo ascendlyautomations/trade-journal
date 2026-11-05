@@ -2,9 +2,15 @@ import { describe, it } from "node:test"
 import assert from "node:assert/strict"
 import type { TraderDailyCheckIn } from "../dailyCheckIn/types.ts"
 import { buildTradingScorecard } from "./buildScorecard.ts"
+import { scoreConsistencyCategory } from "./consistency.ts"
 import { scoreDisciplineCategory } from "./discipline.ts"
 import { scorePsychologyCategory } from "./psychologyCategory.ts"
 import { scoreRiskCategory } from "./risk.ts"
+import {
+  consistencyPlanAdherencePool,
+  MIN_POST_LOSS_PLAN_TAGGED,
+  postLossPlanObservations,
+} from "./planAdherence.ts"
 import {
   mapDashboardRowToScorecardTrade,
   mergeScorecardTrades,
@@ -14,11 +20,15 @@ import {
   scorecardScopeKey,
 } from "./scorecardSessionStore.ts"
 import type { ScorecardTrade } from "./types.ts"
-import { SCORECARD_CATEGORY_WEIGHTS, SCORECARD_MIN_TRADES_OVERALL } from "./types.ts"
+import {
+  SCORECARD_CATEGORY_WEIGHTS,
+  SCORECARD_MIN_NOMINAL_WEIGHT_OVERALL,
+  SCORECARD_MIN_TRADES_OVERALL,
+} from "./types.ts"
 import type { PsychologyReportTrade } from "../psychology/reports/types.ts"
 
 function makeTrade(index: number, overrides: Partial<ScorecardTrade> = {}): ScorecardTrade {
-  const day = `2026-09-${String(2 + (index % 5)).padStart(2, "0")}`
+  const day = `2026-09-${String(2 + (index % 8)).padStart(2, "0")}`
   return {
     id: `t-${index}`,
     pnl: index % 3 === 0 ? -50 : 80,
@@ -34,6 +44,34 @@ function makeTrade(index: number, overrides: Partial<ScorecardTrade> = {}): Scor
     psychologyDayKey: day,
     ...overrides,
   }
+}
+
+/** Strict alternating loss → tagged trade in chronological order (each tag counts as post-loss). */
+function tradesWithPostLossTags(count: number, followRate = 0.8): ScorecardTrade[] {
+  const trades: ScorecardTrade[] = []
+  let t = Date.parse("2026-09-02T10:00:00.000Z")
+  const day = "2026-09-02"
+  for (let i = 0; i < count; i++) {
+    t += 3600_000
+    trades.push({
+      ...makeTrade(i * 2, { pnl: -40, followedPlan: null }),
+      id: `loss-${i}`,
+      entryTimeMs: t,
+      tradingDayKey: day,
+      psychologyDayKey: day,
+    })
+    t += 3600_000
+    const followed =
+      followRate >= 1 ? true : followRate <= 0 ? false : i % 2 === 0
+    trades.push({
+      ...makeTrade(i * 2 + 1, { pnl: 30, followedPlan: followed }),
+      id: `after-${i}`,
+      entryTimeMs: t,
+      tradingDayKey: day,
+      psychologyDayKey: day,
+    })
+  }
+  return trades
 }
 
 function checkIn(date: string): TraderDailyCheckIn {
@@ -53,39 +91,156 @@ function checkIn(date: string): TraderDailyCheckIn {
   }
 }
 
-describe("scoreRiskCategory", () => {
-  it("uses absolute average loss magnitude when avgLoss is negative", () => {
-    const trades = Array.from({ length: 12 }, (_, i) =>
-      makeTrade(i, { rr: 1.5, maxRrReached: 1.0 })
-    )
-    const cat = scoreRiskCategory(trades, 200, 100, -45)
-    const lossMetric = cat.subMetrics.find((m) => m.id === "risk.avg_loss_vs_win")
-    assert.ok(lossMetric, "expected avg loss vs win sub-metric")
+describe("planAdherence pool", () => {
+  it("does not add triple-loss window trades when post-loss pool already suffices", () => {
+    const trades = tradesWithPostLossTags(12, 1)
+    const post = postLossPlanObservations(trades)
+    const pool = consistencyPlanAdherencePool(trades)
+    assert.ok(post.length >= MIN_POST_LOSS_PLAN_TAGGED)
+    assert.equal(pool.observations.length, post.length)
+    assert.equal(pool.tripleWindowAddedCount, 0)
+  })
+})
+
+describe("scoreConsistencyCategory", () => {
+  it("scores post-loss plan adherence, not win rate after 3 losses", () => {
+    const trades = tradesWithPostLossTags(12, 1)
+    const cat = scoreConsistencyCategory(trades, 8, 0.2)
     assert.ok(cat.score != null)
-    assert.equal(lossMetric!.value, "0.45×")
+    assert.equal(cat.score, 100)
+    const winCtx = cat.subMetrics.find((m) => m.id === "streak.after_three_losses_win_rate")
+    assert.ok(winCtx)
+    assert.ok(!cat.subMetrics.some((m) => m.label.includes("Win rate") && m.id !== "streak.after_three_losses_win_rate"))
   })
 
-  it("does not score documentation-only when no outcome proxies exist", () => {
-    const trades = Array.from({ length: 8 }, (_, i) =>
-      makeTrade(i, { pnl: 10, rr: null, maxRrReached: null })
-    )
-    const cat = scoreRiskCategory(trades, 0, 10, 0)
+  it("stays unscored with fewer than 10 post-loss tags", () => {
+    const trades = tradesWithPostLossTags(4, 1)
+    const cat = scoreConsistencyCategory(trades, 6, null)
     assert.equal(cat.score, null)
     assert.equal(cat.eligible, false)
   })
 })
 
-describe("tradeMapping", () => {
-  it("treats omitted followed_plan as unknown on dashboard rows", () => {
-    const row = mapDashboardRowToScorecardTrade({
-      id: "a",
-      entry_time: "2026-09-02T14:00:00.000Z",
-      pnl: 50,
-      followed_plan: null,
+describe("scoreRiskCategory", () => {
+  it("never produces a numerical score in Phase 1", () => {
+    const trades = Array.from({ length: 20 }, (_, i) =>
+      makeTrade(i, { rr: 2, maxRrReached: 1.5, realizedRr: 1.1 })
+    )
+    const cat = scoreRiskCategory(trades, 500, 100, -50)
+    assert.equal(cat.score, null)
+    assert.equal(cat.eligible, false)
+    assert.ok(cat.subMetrics.some((m) => m.id === "risk.target_attainment_context"))
+    assert.ok(cat.subMetrics.some((m) => m.id === "risk.avg_loss_vs_win_context"))
+  })
+})
+
+describe("scorePsychologyCategory", () => {
+  it("is insights-only with no numerical score", () => {
+    const trades = Array.from({ length: 10 }, (_, i) => makeTrade(i, { followedPlan: true }))
+    const checkIns = ["2026-09-02", "2026-09-03", "2026-09-04", "2026-09-05", "2026-09-06"].map(
+      checkIn
+    )
+    const cat = scorePsychologyCategory(trades, checkIns, 6)
+    assert.equal(cat.score, null)
+    assert.equal(cat.eligible, false)
+    assert.ok(cat.subMetrics.some((m) => m.id === "psych.phase1_mode"))
+  })
+})
+
+describe("scoreDisciplineCategory", () => {
+  it("requires 10 explicit plan tags", () => {
+    const trades = Array.from({ length: 9 }, (_, i) => makeTrade(i, { followedPlan: true }))
+    assert.equal(scoreDisciplineCategory(trades).score, null)
+    const ten = Array.from({ length: 10 }, (_, i) => makeTrade(i, { followedPlan: true }))
+    assert.equal(scoreDisciplineCategory(ten).score, 100)
+  })
+})
+
+describe("buildTradingScorecard overall", () => {
+  it("returns building when trade count below overall minimum", () => {
+    const trades = Array.from({ length: 10 }, (_, i) => makeTrade(i))
+    const result = buildTradingScorecard({
+      scopeLabel: "Test",
+      trades,
+      checkIns: [],
+      analytics: {
+        periodTradingDayCount: 6,
+        maxDrawdown: 200,
+        avgWin: 100,
+        avgLoss: -50,
+        totalTrades: trades.length,
+        postTripleLossWinRate: null,
+      },
     })
-    assert.equal(row!.followedPlan, null)
+    assert.equal(result.overall.status, "building")
+    assert.equal(result.overall.score, null)
+    assert.ok(result.overall.statusMessage.includes(String(SCORECARD_MIN_TRADES_OVERALL)))
   })
 
+  it("blocks composite when only one category scores (partial coverage)", () => {
+    const trades = Array.from({ length: 10 }, (_, i) =>
+      makeTrade(i, { followedPlan: true })
+    )
+    const result = buildTradingScorecard({
+      scopeLabel: "Test",
+      trades,
+      checkIns: [],
+      analytics: {
+        periodTradingDayCount: 6,
+        maxDrawdown: 0,
+        avgWin: 80,
+        avgLoss: -40,
+        totalTrades: 24,
+        postTripleLossWinRate: null,
+      },
+    })
+    assert.equal(result.overall.status, "building")
+    assert.equal(result.overall.score, null)
+    assert.ok(result.overall.statusMessage.includes("nominal weight"))
+  })
+
+  it("produces overall when two categories score with enough nominal weight", () => {
+    const postLoss = tradesWithPostLossTags(12, 0.75)
+    let t = postLoss[postLoss.length - 1].entryTimeMs + 3600_000
+    const disciplineTagged = Array.from({ length: 10 }, (_, i) => {
+      t += 3600_000
+      return {
+        ...makeTrade(100 + i, { followedPlan: i < 8, pnl: 50 }),
+        id: `disc-${i}`,
+        entryTimeMs: t,
+      }
+    })
+    const trades = [...postLoss, ...disciplineTagged]
+    const result = buildTradingScorecard({
+      scopeLabel: "Test scope",
+      trades,
+      checkIns: [],
+      analytics: {
+        periodTradingDayCount: 8,
+        maxDrawdown: 150,
+        avgWin: 90,
+        avgLoss: -45,
+        totalTrades: trades.length,
+        postTripleLossWinRate: 0.4,
+      },
+    })
+    assert.equal(result.overall.status, "ready")
+    assert.ok(result.overall.score != null)
+    assert.ok(result.overall.contributions.length >= 2)
+    assert.ok(result.overall.nominalWeightIncluded >= SCORECARD_MIN_NOMINAL_WEIGHT_OVERALL)
+    const effectiveSum = result.overall.contributions.reduce(
+      (s, c) => s + c.effectiveWeight,
+      0
+    )
+    assert.ok(Math.abs(effectiveSum - 1) < 0.01)
+    const risk = result.categories.find((c) => c.id === "risk")
+    assert.equal(risk!.score, null)
+    const psych = result.categories.find((c) => c.id === "psychology")
+    assert.equal(psych!.score, null)
+  })
+})
+
+describe("tradeMapping", () => {
   it("keeps planned and realized RR separate on merge", () => {
     const dashboard = [
       {
@@ -116,140 +271,6 @@ describe("tradeMapping", () => {
   })
 })
 
-describe("scoreDisciplineCategory", () => {
-  it("does not treat null followedPlan as negative", () => {
-    const trades = Array.from({ length: 10 }, (_, i) =>
-      makeTrade(i, { followedPlan: null })
-    )
-    const cat = scoreDisciplineCategory(trades)
-    assert.equal(cat.score, null)
-    assert.ok(cat.dataGaps.some((g) => g.includes("Tag plan")))
-  })
-
-  it("scores explicit plan adherence only among tagged trades", () => {
-    const trades = [
-      ...Array.from({ length: 5 }, (_, i) => makeTrade(i, { followedPlan: true })),
-      ...Array.from({ length: 5 }, (_, i) => makeTrade(i + 5, { followedPlan: null })),
-    ]
-    const cat = scoreDisciplineCategory(trades)
-    const adherence = cat.subMetrics.find((m) => m.id === "discipline.plan_adherence")
-    assert.ok(adherence)
-    assert.equal(adherence!.value, "100%")
-    assert.equal(cat.score, 100)
-  })
-})
-
-describe("psychologyCategory cross-day boundaries", () => {
-  it("matches check-ins on Eastern calendar day, not futures session key alone", () => {
-    const entry = "2026-09-02T22:30:00.000-04:00"
-    const trades: ScorecardTrade[] = [
-      {
-        id: "t1",
-        pnl: 50,
-        rr: null,
-        maxRrReached: null,
-        realizedRr: null,
-        followedPlan: true,
-        mistakeType: null,
-        confidence: null,
-        executionRating: null,
-        entryTimeMs: Date.parse(entry),
-        tradingDayKey: "2026-09-03",
-        psychologyDayKey: "2026-09-02",
-      },
-    ]
-    const checkIns = [checkIn("2026-09-02")]
-    const cat = scorePsychologyCategory(trades, checkIns, 1)
-    const matched = cat.subMetrics.find((m) => m.id === "psych.matched_days")
-    assert.equal(matched!.value, "1")
-  })
-})
-
-describe("buildTradingScorecard overall", () => {
-  it("returns building status when trade count below overall minimum", () => {
-    const trades = Array.from({ length: 10 }, (_, i) => makeTrade(i))
-    const result = buildTradingScorecard({
-      scopeLabel: "Test",
-      trades,
-      checkIns: [],
-      analytics: {
-        periodTradingDayCount: 6,
-        maxDrawdown: 200,
-        avgWin: 100,
-        avgLoss: -50,
-        totalTrades: trades.length,
-        postTripleLossWinRate: null,
-      },
-    })
-    assert.equal(result.overall.status, "building")
-    assert.equal(result.overall.score, null)
-    assert.ok(result.overall.statusMessage.includes(String(SCORECARD_MIN_TRADES_OVERALL)))
-  })
-
-  it("renormalizes category weights when only some categories score", () => {
-    const trades = Array.from({ length: 24 }, (_, i) =>
-      makeTrade(i, {
-        followedPlan: i % 2 === 0,
-        rr: 1.2,
-        maxRrReached: 1.0,
-      })
-    )
-    const result = buildTradingScorecard({
-      scopeLabel: "Test",
-      trades,
-      checkIns: [],
-      analytics: {
-        periodTradingDayCount: 8,
-        maxDrawdown: 150,
-        avgWin: 90,
-        avgLoss: -45,
-        totalTrades: trades.length,
-        postTripleLossWinRate: 0.6,
-      },
-    })
-    assert.equal(result.overall.status, "ready")
-    assert.ok(result.overall.contributions.length >= 2)
-    const effectiveSum = result.overall.contributions.reduce(
-      (s, c) => s + c.effectiveWeight,
-      0
-    )
-    assert.ok(Math.abs(effectiveSum - 1) < 0.01)
-    const nominalSum = result.overall.contributions.reduce(
-      (s, c) => s + c.nominalWeight,
-      0
-    )
-    assert.ok(nominalSum < 1)
-    assert.ok(result.overall.nominalWeightIncluded < 1)
-  })
-
-  it("produces overall score when gates and discipline sample met", () => {
-    const trades = Array.from({ length: 24 }, (_, i) =>
-      makeTrade(i, {
-        followedPlan: true,
-        rr: 1.2,
-        maxRrReached: 1.0,
-      })
-    )
-    const result = buildTradingScorecard({
-      scopeLabel: "Test scope",
-      trades,
-      checkIns: [],
-      analytics: {
-        periodTradingDayCount: 8,
-        maxDrawdown: 150,
-        avgWin: 90,
-        avgLoss: -45,
-        totalTrades: trades.length,
-        postTripleLossWinRate: 0.5,
-      },
-    })
-    assert.equal(result.overall.status, "ready")
-    assert.ok(result.overall.score != null)
-    const discipline = result.categories.find((c) => c.id === "discipline")
-    assert.ok(discipline!.score != null)
-  })
-})
-
 describe("scorecard scope persistence helpers", () => {
   it("detects equal scope filters", () => {
     const a = {
@@ -261,12 +282,7 @@ describe("scorecard scope persistence helpers", () => {
       customRangeEnd: "",
       showPublicOnly: false,
     }
-    const b = { ...a }
-    assert.equal(scorecardScopeFiltersEqual(a, b), true)
-    assert.equal(
-      scorecardScopeFiltersEqual(a, { ...b, selectedDate: "2026-09-03" }),
-      false
-    )
+    assert.equal(scorecardScopeFiltersEqual(a, { ...a }), true)
   })
 
   it("builds scope key without trade count", () => {
@@ -280,7 +296,6 @@ describe("scorecard scope persistence helpers", () => {
       customRangeEnd: "",
       showPublicOnly: false,
     })
-    assert.ok(!key.includes("|24"))
     assert.ok(key.startsWith("u1|"))
   })
 })

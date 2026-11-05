@@ -4,7 +4,6 @@ struct DashboardInsightsSection: View {
     let presentation: DashboardInsightsPresentation
 
     @Environment(\.themeColors) private var colors
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isSectionExpanded = true
 
     var body: some View {
@@ -34,48 +33,40 @@ struct DashboardInsightsSection: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
             if !presentation.performance.isEmpty {
-                insightGroup(title: "Performance", subtitle: "Session, symbol, and direction highlights") {
+                insightGroup(title: "Performance") {
                     ForEach(presentation.performance) { insight in
                         insightCard(insight)
                     }
                 }
             }
             if !presentation.advancedEdge.isEmpty {
-                insightGroup(title: "Advanced Edge", subtitle: "Strongest combined setups (min. 3 trades)") {
+                insightGroup(title: "Advanced Edge") {
                     ForEach(presentation.advancedEdge) { insight in
                         insightCard(insight)
                     }
                 }
             }
             if !presentation.riskBehavior.isEmpty {
-                insightGroup(title: "Risk & Behavior", subtitle: "Setups to review and behavioral flags") {
+                insightGroup(title: "Risk & Behavior") {
                     ForEach(presentation.riskBehavior) { insight in
                         insightCard(insight)
                     }
                 }
             }
         }
-        .animation(
-            ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-            value: presentation
-        )
     }
 
     private func insightGroup<Content: View>(
         title: String,
-        subtitle: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .experienceStyle(.subheadline, color: colors.primaryText)
-                    .fontWeight(.semibold)
-                Text(subtitle)
-                    .experienceStyle(.caption2, color: colors.tertiaryText)
-            }
+            Text(title)
+                .experienceStyle(.subheadline, color: colors.primaryText)
+                .fontWeight(.semibold)
+                .accessibilityAddTraits(.isHeader)
             VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
                 content()
             }
@@ -109,47 +100,58 @@ struct DashboardInsightsSection: View {
     }
 
     private func insightCard(_ insight: DashboardInsightItem) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-                ExperienceIcon(
-                    icon: icon(for: insight.kind),
-                    size: .sm,
-                    color: toneColor(insight.tone)
-                )
-                .frame(width: 32, height: 32)
-                .background(toneColor(insight.tone).opacity(0.14), in: Circle())
-                .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(insight.displayTitle)
-                        .experienceStyle(.footnote, color: colors.primaryText)
-                        .fontWeight(.semibold)
-                    Text(insight.displayBody)
-                        .experienceStyle(.caption, color: colors.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
+        HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                if let metric = insight.metric {
+                    Text(metric)
+                        .font(.system(.title3, design: .rounded).weight(.bold).monospacedDigit())
+                        .foregroundStyle(toneColor(insight.tone))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.8)
                 }
-            }
 
-            if let metric = insight.metric {
-                Text(metric)
-                    .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
-                    .foregroundStyle(toneColor(insight.tone))
-                    .padding(.leading, 32 + ExperienceSpacing.sm)
+                Text(insight.displayTitle)
+                    .experienceStyle(.footnote, color: colors.primaryText)
+                    .fontWeight(.semibold)
+                    .lineLimit(2)
+
+                Text(insight.displayBody)
+                    .experienceStyle(.caption, color: colors.secondaryText)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            toneIndicator(for: insight)
         }
         .padding(ExperienceSpacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
-            cornerRadius: ExperienceRadius.md,
-            style: .continuous
-        ))
+        .experienceDashboardCard(prominence: .standard)
         .overlay {
             RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
                 .stroke(toneColor(insight.tone).opacity(0.28), lineWidth: ExperienceBorder.hairline)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(insight.displayTitle). \(insight.displayBody)")
+        .accessibilityLabel(accessibilityLabel(for: insight))
         .accessibilityIdentifier("dashboard.insight.\(insight.id)")
+    }
+
+    private func toneIndicator(for insight: DashboardInsightItem) -> some View {
+        ExperienceIcon(
+            icon: icon(for: insight.kind),
+            size: .sm,
+            color: toneColor(insight.tone)
+        )
+        .frame(width: 28, height: 28)
+        .background(toneColor(insight.tone).opacity(0.14), in: Circle())
+        .accessibilityHidden(true)
+    }
+
+    private func accessibilityLabel(for insight: DashboardInsightItem) -> String {
+        if let metric = insight.metric {
+            return "\(metric). \(insight.displayTitle). \(insight.displayBody)"
+        }
+        return "\(insight.displayTitle). \(insight.displayBody)"
     }
 
     private func toneColor(_ tone: DashboardInsightTone) -> Color {

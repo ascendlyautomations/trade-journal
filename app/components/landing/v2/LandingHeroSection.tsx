@@ -27,7 +27,7 @@ export default function LandingHeroSection({
 
       <div className="tt-hero-inner tt-hero-inner--split">
         <div className="tt-hero-copy tt-hero-copy--split">
-          <p className="tt-hero-eyebrow">Trading platform · Not just a journal</p>
+          <p className="tt-hero-eyebrow">Trading platform · Web & iOS</p>
           <h1 id="home-heading" className="tt-hero-title">
             More Than a Trading Journal.
             <span className="tt-hero-title-accent">A Platform Built for Traders.</span>

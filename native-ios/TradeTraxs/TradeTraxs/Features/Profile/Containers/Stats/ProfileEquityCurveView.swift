@@ -31,14 +31,38 @@ struct ProfileEquityCurveView: View {
         }
     }
 
+    private var showsPersonalDrawdownFloor: Bool {
+        chartPoints.contains { $0.drawdownFloorValue != nil }
+    }
+
+    private var equityInterpolation: InterpolationMethod {
+        showsPersonalDrawdownFloor ? .linear : .catmullRom
+    }
+
     private var chart: some View {
         Chart {
+            if showsPersonalDrawdownFloor {
+                ForEach(chartPoints) { point in
+                    if let floor = point.drawdownFloorValue {
+                        LineMark(
+                            x: .value("Trade", point.index),
+                            y: .value("Drawdown floor", floor),
+                            series: .value("Series", "Drawdown floor")
+                        )
+                        .interpolationMethod(.linear)
+                        .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [6, 4]))
+                        .foregroundStyle(colors.loss.opacity(0.8))
+                    }
+                }
+            }
+
             ForEach(chartPoints) { point in
                 LineMark(
                     x: .value("Trade", point.index),
-                    y: .value("Equity", point.equityValue)
+                    y: .value("Equity", point.equityValue),
+                    series: .value("Series", "Equity")
                 )
-                .interpolationMethod(.catmullRom)
+                .interpolationMethod(equityInterpolation)
                 .lineStyle(StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
                 .foregroundStyle(
                     LinearGradient(
@@ -48,15 +72,13 @@ struct ProfileEquityCurveView: View {
                     )
                 )
 
-                // Fill only within the visible Y domain (line → plot bottom).
-                // A single-y AreaMark baselines at 0, which sits far below padded
-                // equity domains and can bleed past the chart into layout below.
                 AreaMark(
                     x: .value("Trade", point.index),
                     yStart: .value("Baseline", yDomain.lowerBound),
-                    yEnd: .value("Equity", point.equityValue)
+                    yEnd: .value("Equity", point.equityValue),
+                    series: .value("Series", "Equity")
                 )
-                .interpolationMethod(.catmullRom)
+                .interpolationMethod(equityInterpolation)
                 .foregroundStyle(
                     LinearGradient(
                         colors: [
@@ -150,6 +172,11 @@ struct ProfileEquityCurveView: View {
             Text(StatsContainerView.equityMoneyText(point.equity))
                 .font(.system(.subheadline, design: .rounded).weight(.bold).monospacedDigit())
                 .foregroundStyle(point.equity >= 0 ? colors.profit : colors.loss)
+            if let floor = point.drawdownFloorValue {
+                Text("Floor \(StatsContainerView.equityMoneyText(Decimal(floor)))")
+                    .font(.system(.caption2, design: .rounded).weight(.semibold).monospacedDigit())
+                    .foregroundStyle(colors.loss.opacity(0.9))
+            }
         }
         .padding(.horizontal, ExperienceSpacing.sm)
         .padding(.vertical, ExperienceSpacing.xs)
@@ -167,6 +194,7 @@ struct ProfileEquityCurveView: View {
         var index: Int
         var equity: Decimal
         var equityValue: Double
+        var drawdownFloorValue: Double?
         var date: Date?
 
         var dateLabel: String {
@@ -186,6 +214,7 @@ struct ProfileEquityCurveView: View {
                 index: $0.index,
                 equity: $0.equity,
                 equityValue: NSDecimalNumber(decimal: $0.equity).doubleValue,
+                drawdownFloorValue: $0.drawdownFloor.map { NSDecimalNumber(decimal: $0).doubleValue },
                 date: $0.date
             )
         }
@@ -202,7 +231,8 @@ struct ProfileEquityCurveView: View {
     }
 
     private var yDomain: ClosedRange<Double> {
-        let values = chartPoints.map(\.equityValue)
+        var values = chartPoints.map(\.equityValue)
+        values.append(contentsOf: chartPoints.compactMap(\.drawdownFloorValue))
         let minY = values.min() ?? 0
         let maxY = values.max() ?? 0
         if minY == maxY {

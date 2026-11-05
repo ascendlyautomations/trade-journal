@@ -27,6 +27,8 @@ enum HomeRoute: Hashable, Codable, Sendable {
     case report(ReportID)
     /// Owner-only psychology analytics detail.
     case psychologyAnalytics
+    /// Trading Scorecard Phase 1 (plan-adherence composite + category breakdown).
+    case tradingScorecard
     /// Owner-only psychology coach (AI explains deterministic facts).
     case psychologyCoach
     /// Owner-only check-in history list.

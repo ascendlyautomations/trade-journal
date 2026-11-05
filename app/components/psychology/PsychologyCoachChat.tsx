@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 import type { PsychologyCoachFacts } from "@/lib/psychology/reports/types"
 import { buildPsychologyCoachDeterministicSummary } from "@/lib/psychology/reports/coach"
+import { normalizeAIGeneratedText } from "@/lib/normalizeAIGeneratedText"
 
 type CoachMessage = { role: "user" | "assistant"; content: string }
 
@@ -87,7 +88,7 @@ export default function PsychologyCoachChat({ facts }: PsychologyCoachChatProps)
     >
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
         <p className="text-xs text-gray-500">
-          Your patterns are computed from your journal. The coach explains them — it
+          Your patterns are computed from your journal. The coach explains them, it
           never invents statistics.
         </p>
         <p className="text-[11px] text-gray-600">
@@ -142,7 +143,7 @@ export default function PsychologyCoachChat({ facts }: PsychologyCoachChatProps)
 function CoachBubble({ text }: { text: string }) {
   return (
     <div className="rounded-xl bg-blue-500/10 p-3 text-sm leading-relaxed text-gray-100">
-      {text}
+      {normalizeAIGeneratedText(text)}
     </div>
   )
 }

@@ -28,4 +28,9 @@ describe("normalizeAIGeneratedText", () => {
     const plain = "Hold the plan. Size down if needed."
     assert.equal(normalizeAIGeneratedText(plain), plain)
   })
+
+  it("preserves missing-data em dash and scorecard tag labels", () => {
+    assert.equal(normalizeAIGeneratedText("—"), "—")
+    assert.equal(normalizeAIGeneratedText("— · 5/10 tags"), "— · 5/10 tags")
+  })
 })

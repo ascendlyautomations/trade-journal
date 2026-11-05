@@ -15,6 +15,8 @@ import type {
 } from "./types.ts"
 import {
   SCORECARD_CATEGORY_WEIGHTS,
+  SCORECARD_MIN_NOMINAL_WEIGHT_OVERALL,
+  SCORECARD_MIN_SCORED_CATEGORIES_OVERALL,
   SCORECARD_MIN_TRADES_OVERALL,
   SCORECARD_MIN_TRADING_DAYS_OVERALL,
 } from "./types.ts"
@@ -32,10 +34,24 @@ function computeOverall(
 
   const emptyContributions: ScorecardOverallContribution[] = []
 
+  const baseBuilding = (
+    statusMessage: string,
+    status: "building" | "unavailable" = "building"
+  ): ScorecardResult["overall"] => ({
+    score: null,
+    status: tradeCount > 0 ? status : "unavailable",
+    statusMessage,
+    coveragePercent: 0,
+    reliability: resolveScorecardReliability(tradeCount),
+    tradeCount,
+    tradingDayCount,
+    contributions: emptyContributions,
+    nominalWeightIncluded: 0,
+  })
+
   if (
     tradeCount < SCORECARD_MIN_TRADES_OVERALL ||
-    tradingDayCount < SCORECARD_MIN_TRADING_DAYS_OVERALL ||
-    !hasDeveloping
+    tradingDayCount < SCORECARD_MIN_TRADING_DAYS_OVERALL
   ) {
     const parts: string[] = []
     if (tradeCount < SCORECARD_MIN_TRADES_OVERALL) {
@@ -48,47 +64,45 @@ function computeOverall(
         `${tradingDayCount}/${SCORECARD_MIN_TRADING_DAYS_OVERALL} trading days`
       )
     }
-    if (!hasDeveloping) {
-      parts.push("at least one category needs developing-level sample size")
-    }
-    return {
-      score: null,
-      status: tradeCount > 0 ? "building" : "unavailable",
-      statusMessage: `Building your score — ${parts.join(" · ")}`,
-      coveragePercent: 0,
-      reliability: resolveScorecardReliability(tradeCount),
-      tradeCount,
-      tradingDayCount,
-      contributions: emptyContributions,
-      nominalWeightIncluded: 0,
-    }
+    return baseBuilding(`Building your score, ${parts.join(" · ")}`)
   }
 
   if (scored.length === 0) {
-    return {
-      score: null,
-      status: "building",
-      statusMessage:
-        "Building your score — add journal tags, risk data, and matched check-ins to unlock category scores.",
-      coveragePercent: 0,
-      reliability: resolveScorecardReliability(tradeCount),
-      tradeCount,
-      tradingDayCount,
-      contributions: emptyContributions,
-      nominalWeightIncluded: 0,
-    }
+    return baseBuilding(
+      "Building your score, tag plan adherence after losses and on more trades to unlock category scores. Category breakdowns below show coverage and insights."
+    )
+  }
+
+  let nominalIncluded = 0
+  for (const cat of scored) {
+    nominalIncluded += SCORECARD_CATEGORY_WEIGHTS[cat.id]
+  }
+
+  const coverageTooNarrow =
+    scored.length < SCORECARD_MIN_SCORED_CATEGORIES_OVERALL ||
+    nominalIncluded < SCORECARD_MIN_NOMINAL_WEIGHT_OVERALL
+
+  if (coverageTooNarrow) {
+    const pct = Math.round(nominalIncluded * 100)
+    return baseBuilding(
+      `Building your score, ${scored.length} scored categor${scored.length === 1 ? "y" : "ies"} (${pct}% nominal weight). A composite needs at least ${SCORECARD_MIN_SCORED_CATEGORIES_OVERALL} categories and ${Math.round(SCORECARD_MIN_NOMINAL_WEIGHT_OVERALL * 100)}% nominal weight. See breakdowns below.`
+    )
+  }
+
+  if (!hasDeveloping) {
+    return baseBuilding(
+      "Building your score, at least one category needs developing-level sample size. See category breakdowns below."
+    )
   }
 
   let weightSum = 0
   let weighted = 0
-  let nominalIncluded = 0
   const contributions: ScorecardOverallContribution[] = []
 
   for (const cat of scored) {
     const w = SCORECARD_CATEGORY_WEIGHTS[cat.id]
     weightSum += w
     weighted += w * (cat.score ?? 0)
-    nominalIncluded += w
   }
 
   for (const cat of scored) {
@@ -117,7 +131,7 @@ function computeOverall(
   let statusMessage = "Overall trading score for the current dashboard scope."
   if (nominalIncluded < 0.999) {
     const pct = Math.round(nominalIncluded * 100)
-    statusMessage += ` Based on ${scored.length} of 4 categories (${pct}% of nominal weight) — incomplete coverage is not low performance.`
+    statusMessage += ` Based on ${scored.length} of 4 categories (${pct}% of nominal weight), Psychology and Risk are insights/coverage only in Phase 1.`
   }
 
   return {

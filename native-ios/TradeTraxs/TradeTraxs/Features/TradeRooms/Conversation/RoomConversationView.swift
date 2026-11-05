@@ -20,6 +20,7 @@ struct RoomConversationView: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.appEnvironment) private var appEnvironment
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Bindable private var liveVoiceCoordinator = RoomLiveVoiceCoordinator.shared
 
     init(
         roomID: RoomID,
@@ -78,6 +79,18 @@ struct RoomConversationView: View {
                         selectedChannelID: viewModel.selectedChannelID,
                         onSelect: { viewModel.selectChannel($0) }
                     )
+                }
+                if let channel = viewModel.selectedChannel, channel.liveKind.supportsLiveVoice {
+                    HStack {
+                        Spacer(minLength: 0)
+                        RoomLiveVoiceJoinButton(
+                            channel: channel,
+                            roomTitle: room.name,
+                            coordinator: liveVoiceCoordinator
+                        )
+                    }
+                    .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.bottom, ExperienceSpacing.xxs)
                 }
             }
             content

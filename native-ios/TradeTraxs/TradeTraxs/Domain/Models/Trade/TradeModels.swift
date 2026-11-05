@@ -120,6 +120,8 @@ nonisolated struct TradingAccount: Hashable, Codable, Sendable, Identifiable {
     var note: String? = nil
     /// Present when category is prop firm and rule columns are loaded.
     var propFirmRules: PropFirmAccountRules? = nil
+    /// Live manual-ledger personal drawdown (`accounts.max_drawdown` / `drawdown_type`).
+    var livePersonalDrawdown: LivePersonalDrawdownStored? = nil
 
     var isPropFirmAccount: Bool { category == .propFirm }
 }
@@ -176,6 +178,8 @@ nonisolated struct Trade: Hashable, Codable, Sendable, Identifiable {
     var confidence: Int? = nil
     var emotion: String? = nil
     var followedPlan: Bool? = nil
+    /// Owner-only mistake tag — `trades.mistake_type` (scorecard discipline coverage).
+    var mistakeType: String? = nil
     var marketCondition: String? = nil
     var psychologyNotes: String? = nil
     /// Owner-only emotion after exit — `trades.exit_emotion`.
@@ -285,7 +289,7 @@ nonisolated struct TradeDraft: Hashable, Codable, Sendable {
     var newsEvent: Bool = false
     var confidence: Int? = nil
     var emotion: String? = nil
-    var followedPlan: Bool = false
+    var followedPlan: Bool? = nil
     var marketCondition: String? = nil
     var psychologyNotes: String? = nil
     var exitEmotion: String? = nil

@@ -54,13 +54,13 @@ nonisolated enum TradeReviewCatalog {
     static func hasPsychologyDetails(
         confidence: Int,
         emotion: String,
-        followedPlan: Bool,
+        followedPlan: Bool?,
         marketCondition: String,
         psychologyNotes: String
     ) -> Bool {
         confidence > 0
             || !emotion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || followedPlan
+            || followedPlan != nil
             || !marketCondition.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !psychologyNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -68,7 +68,7 @@ nonisolated enum TradeReviewCatalog {
     static func psychologySummary(
         confidence: Int,
         emotion: String,
-        followedPlan: Bool,
+        followedPlan: Bool?,
         marketCondition: String,
         psychologyNotes: String
     ) -> String {
@@ -94,8 +94,10 @@ nonisolated enum TradeReviewCatalog {
         if !trimmedMarket.isEmpty {
             parts.append(trimmedMarket)
         }
-        if followedPlan {
+        if followedPlan == true {
             parts.append("Followed plan")
+        } else if followedPlan == false {
+            parts.append("Did not follow plan")
         }
 
         if parts.isEmpty {

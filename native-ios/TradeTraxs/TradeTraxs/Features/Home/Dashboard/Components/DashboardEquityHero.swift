@@ -34,7 +34,9 @@ struct DashboardEquityHero: View {
     var chartPoints: [ProfileStatisticsMetrics.EquityPoint]
     var isChartLoading: Bool = false
     var withdrawalSummary: AccountTrackedBalanceSupport.WithdrawalSummary?
-    var onWithdrawalSummaryTap: (() -> Void)?
+    var onWithdrawalSummaryTap: (() -> Void)? = nil
+    var showsDrawdownSettings: Bool = false
+    var onDrawdownSettingsTap: (() -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -48,7 +50,9 @@ struct DashboardEquityHero: View {
         chartPoints: [ProfileStatisticsMetrics.EquityPoint]? = nil,
         isChartLoading: Bool = false,
         withdrawalSummary: AccountTrackedBalanceSupport.WithdrawalSummary? = nil,
-        onWithdrawalSummaryTap: (() -> Void)? = nil
+        onWithdrawalSummaryTap: (() -> Void)? = nil,
+        showsDrawdownSettings: Bool = false,
+        onDrawdownSettingsTap: (() -> Void)? = nil
     ) {
         self.summary = summary
         self.periodTitle = periodTitle
@@ -58,6 +62,8 @@ struct DashboardEquityHero: View {
         self.isChartLoading = isChartLoading
         self.withdrawalSummary = withdrawalSummary
         self.onWithdrawalSummaryTap = onWithdrawalSummaryTap
+        self.showsDrawdownSettings = showsDrawdownSettings
+        self.onDrawdownSettingsTap = onDrawdownSettingsTap
     }
 
     var body: some View {
@@ -158,7 +164,7 @@ struct DashboardEquityHero: View {
                 withdrawalSummaryLine(withdrawalSummary)
             }
 
-            HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
+            HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
                 Text(numbersReady ? signedMoney(summary.netPnL) : "—")
                     .font(.system(.title3, design: .rounded).weight(.semibold).monospacedDigit())
                     .foregroundStyle(toneColor(for: summary.netPnL))
@@ -174,6 +180,12 @@ struct DashboardEquityHero: View {
                         .foregroundStyle(toneColor(for: summary.netPnL))
                         .contentTransition(.numericText())
                         .accessibilityLabel("Period change \(percent)")
+                }
+
+                Spacer(minLength: ExperienceSpacing.xs)
+
+                if showsDrawdownSettings, let onDrawdownSettingsTap {
+                    drawdownSettingsButton(action: onDrawdownSettingsTap)
                 }
             }
         }
@@ -195,6 +207,22 @@ struct DashboardEquityHero: View {
             maximumFractionDigits: abs(pct) >= 10 ? 0 : 1,
             explicitPlus: pct >= 0
         )
+    }
+
+    private func drawdownSettingsButton(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            ExperienceIcon(icon: .settings, size: .sm, color: colors.secondaryText)
+                .frame(width: 32, height: 32)
+                .background(colors.fillSecondary.opacity(0.45), in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(colors.border.opacity(0.35), lineWidth: ExperienceBorder.hairline)
+                }
+        }
+        .buttonStyle(.experiencePlain)
+        .accessibilityLabel("Drawdown settings")
+        .accessibilityHint("Configure personal drawdown floor for this live account")
+        .accessibilityIdentifier("dashboard.equity.drawdownSettings")
     }
 
     private func signedMoney(_ value: Decimal) -> String {

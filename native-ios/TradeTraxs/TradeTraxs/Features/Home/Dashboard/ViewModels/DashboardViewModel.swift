@@ -33,6 +33,11 @@ final class DashboardViewModel {
     var customDateInterval: DateInterval?
     var showsScopeFilterSheet = false
     var draftScopeFilters = DashboardScopeFilterDraft.defaults
+    var showsEquityDrawdownSettings = false
+    var equityDrawdownLimitDraft = ""
+    var equityDrawdownTypeDraft: LivePersonalDrawdownType = .fixed
+    private(set) var isSavingEquityDrawdownSettings = false
+    var equityDrawdownSettingsError: String?
     /// Widened preset for the equity hero when the dashboard selection has no trades in-range.
     private(set) var effectiveEquityChartRange: DashboardDateRange = .thirtyDays
 
@@ -398,9 +403,20 @@ final class DashboardViewModel {
         return displayed
     }
 
+    /// Web `resolveDashboardLiveSingleAccountId` + live personal drawdown gear (not All Accounts / prop / sim).
+    var canConfigureEquityDrawdownSettings: Bool {
+        guard case .account = accountFilter, let account = selectedAccount else { return false }
+        guard !account.isPropFirmAccount else { return false }
+        return PropFirmPayoutPolicy.supportsLiveWithdrawal(for: account)
+    }
+
     var equityHeroChartPoints: [ProfileStatisticsMetrics.EquityPoint] {
         guard equityChartAccountFilter == accountFilter else {
             return lastDisplayedEquityHeroChartPoints
+        }
+        if let personal = resolvedLivePersonalDrawdownHeroPoints(), !personal.isEmpty {
+            lastDisplayedEquityHeroChartPoints = personal
+            return personal
         }
         if let points = resolvedEquityHeroChartPoints(), !points.isEmpty {
             lastDisplayedEquityHeroChartPoints = points
@@ -466,6 +482,88 @@ final class DashboardViewModel {
         if let cycles = WithdrawalsHistoryStore.shared.cyclesByAccount[accountID] {
             payoutCyclesByAccount[accountID] = cycles
         }
+        lastDisplayedEquityHeroChartPoints = []
+    }
+
+    func openEquityDrawdownSettings() {
+        guard let account = selectedAccount,
+              PropFirmPayoutPolicy.supportsLiveWithdrawal(for: account)
+        else { return }
+        let draft = LivePersonalDrawdownEngine.gearDraft(from: account)
+        equityDrawdownLimitDraft = draft.limitDigits
+        equityDrawdownTypeDraft = draft.limitType
+        equityDrawdownSettingsError = nil
+        showsEquityDrawdownSettings = true
+    }
+
+    func cancelEquityDrawdownSettings() {
+        showsEquityDrawdownSettings = false
+        equityDrawdownSettingsError = nil
+    }
+
+    func saveEquityDrawdownSettings() async {
+        guard let profileID,
+              let account = selectedAccount,
+              PropFirmPayoutPolicy.supportsLiveWithdrawal(for: account)
+        else { return }
+
+        let trimmed = equityDrawdownLimitDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let config: LivePersonalDrawdownConfig?
+        if trimmed.isEmpty {
+            config = nil
+        } else if let limit = Decimal(string: trimmed.replacingOccurrences(of: ",", with: "")), limit >= 0 {
+            if limit == 0 {
+                config = nil
+            } else {
+                config = LivePersonalDrawdownConfig(limitAmount: limit, limitType: equityDrawdownTypeDraft)
+            }
+        } else {
+            equityDrawdownSettingsError =
+                "Enter a valid non-negative dollar amount for drawdown limit, or leave blank to clear."
+            return
+        }
+
+        isSavingEquityDrawdownSettings = true
+        equityDrawdownSettingsError = nil
+        defer { isSavingEquityDrawdownSettings = false }
+
+        do {
+            let updated = try await trades.updateLivePersonalDrawdownConfig(
+                id: account.id,
+                ownerID: profileID,
+                config: config
+            )
+            if let index = accounts.firstIndex(where: { $0.id == updated.id }) {
+                accounts[index] = updated
+            }
+            SessionAccountsStore.shared.seed(accounts, for: profileID)
+            lastDisplayedEquityHeroChartPoints = []
+            showsEquityDrawdownSettings = false
+        } catch {
+            equityDrawdownSettingsError = UserFacingError.message(for: error)
+        }
+    }
+
+    private func resolvedLivePersonalDrawdownHeroPoints() -> [ProfileStatisticsMetrics.EquityPoint]? {
+        guard equityHeroShowsAccountValue,
+              let account = selectedAccount,
+              let config = LivePersonalDrawdownEngine.config(from: account)
+        else { return nil }
+
+        let samples = LivePersonalDrawdownEngine.computeEquitySeries(
+            account: account,
+            config: config,
+            lifetimeTrades: accountScopedTrades(for: account.id),
+            ledgerEntries: manualPayoutEntries(for: account.id),
+            period: LivePersonalDrawdownEngine.PeriodContext(
+                dateRange: effectiveEquityChartRange,
+                customInterval: customDateInterval
+            )
+        )
+        guard !samples.isEmpty else { return nil }
+        return ProfileStatisticsMetrics.chartOrderedEquityPoints(
+            LivePersonalDrawdownEngine.mapToEquityPoints(samples)
+        )
     }
 
     private var equityHeroLifetimeRealizedPnL: Decimal {
@@ -3256,6 +3354,7 @@ final class DashboardViewModel {
             dismissedKeys: dismissed,
             tradingDay: todayKey
         )
+        recomputeTradingScorecard()
     }
 
     private func enrichedTodayTrades(
@@ -3742,6 +3841,84 @@ final class DashboardViewModel {
         } catch {
             // Preserve GRDB/JSON presentation when background reconcile fails.
         }
+    }
+
+    // MARK: - Trading Scorecard
+
+    func openTradingScorecard() {
+        navigationCoordinator.pushHome(.tradingScorecard)
+    }
+
+    func recomputeTradingScorecard() {
+        let trades = resolvedFilteredTradesForDashboard()
+        let checkIns = psychologyCheckInsForUnlockGate()
+        let ready = !isScopeFilteredMetricsLoading && profileID != nil
+
+        guard ready, !trades.isEmpty, let summary else {
+            TradingScorecardSessionStore.shared.publish(
+                ready: ready,
+                result: nil,
+                highlights: .init(strengths: [], weaknesses: []),
+                psychologyInsightCards: []
+            )
+            return
+        }
+
+        let scorecardTrades = ScorecardTradeMapper.mapChronological(trades: trades)
+        let periodDays = ScorecardTradeMapper.periodTradingDayCount(from: scorecardTrades)
+        let postLossWinRate = ScorecardTradeMapper.postTripleLossWinRate(trades: scorecardTrades)
+        let scopedTradeCount = scorecardTrades.count
+
+        let avgWin = summary.avgWin.map { NSDecimalNumber(decimal: $0).doubleValue } ?? 0
+        let avgLoss = summary.avgLoss.map { NSDecimalNumber(decimal: $0).doubleValue } ?? 0
+        let maxDrawdown = NSDecimalNumber(decimal: summary.maxDrawdown).doubleValue
+
+        let analytics = ScorecardAnalyticsContext(
+            periodTradingDayCount: periodDays,
+            maxDrawdown: maxDrawdown,
+            avgWin: avgWin,
+            avgLoss: avgLoss,
+            totalTrades: scopedTradeCount,
+            postTripleLossWinRate: postLossWinRate,
+            rrTargetAnalysis: summary.rrTargetAnalysis
+        )
+
+        let result = TradingScorecardBuilder.build(
+            input: ScorecardBuildInput(
+                scopeLabel: tradingScorecardScopeLabel,
+                trades: scorecardTrades,
+                checkIns: checkIns,
+                analytics: analytics
+            ),
+            domainTrades: trades
+        )
+        let highlights = TradingScorecardBuilder.collectTopStrengthsAndWeaknesses(result: result)
+        let psychCards = EarlyPsychologyInsightsBuilder.build(trades: trades, checkIns: checkIns)
+
+        TradingScorecardSessionStore.shared.publish(
+            ready: true,
+            result: result,
+            highlights: highlights,
+            psychologyInsightCards: psychCards
+        )
+    }
+
+    var tradingScorecardScopeLabel: String {
+        var parts: [String] = [dateRange.title]
+        switch accountFilter {
+        case .all:
+            parts.append("All accounts")
+        case .account(let id):
+            if let name = accountNames[id], !name.isEmpty {
+                parts.append(name)
+            } else {
+                parts.append("Account")
+            }
+        }
+        if accountTypeFilter != .all {
+            parts.append(accountTypeFilter.title)
+        }
+        return parts.joined(separator: " · ")
     }
 
     // MARK: - Format

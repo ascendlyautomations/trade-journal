@@ -88,6 +88,7 @@ nonisolated struct DashboardTradeWireV1: Codable, Sendable, Equatable {
             confidence: flex(confidence),
             emotion: emotion,
             followed_plan: followed_plan?.value,
+            mistake_type: mistake_type,
             market_condition: market_condition,
             timeframe: timeframe,
             news_event: news_event?.value,
@@ -141,6 +142,7 @@ nonisolated extension DashboardTradeWireV1 {
         confidence = PostgresFlexibleDouble(trade.confidence.map { Double($0) })
         emotion = trade.emotion
         followed_plan = PostgresFlexibleBool(trade.followedPlan)
+        mistake_type = trade.mistakeType
         market_condition = trade.marketCondition
         timeframe = trade.timeframe
         news_event = PostgresFlexibleBool(trade.newsEvent)

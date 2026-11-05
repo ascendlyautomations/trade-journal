@@ -104,7 +104,7 @@ export default function PsychologyAnalyticsDetail({
         <section className="space-y-3">
           <h2 className="text-base font-semibold text-white">Insights</h2>
           <p className="text-xs text-gray-500">
-            Patterns from matched check-in days and trade psychology tags — association
+            Patterns from matched check-in days and trade psychology tags, association
             only, not causation.
           </p>
           <div className="space-y-2">

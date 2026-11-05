@@ -2,6 +2,9 @@
 
 import { formatRR } from "@/lib/formatDisplay"
 import type { DashboardRrTargetAnalysis } from "@/lib/dashboardRrTargetAnalysis"
+import { normalizeAIGeneratedText } from "@/lib/normalizeAIGeneratedText"
+
+const prose = (text: string) => normalizeAIGeneratedText(text)
 
 function formatTargetAttainmentPct(ratio: number | null): string {
   if (ratio == null) return "—"
@@ -17,12 +20,12 @@ export default function DashboardRrTargetAnalysisPanel({
     return (
       <div className="space-y-2">
         {analysis.headline ? (
-          <p className="text-sm font-medium text-gray-200">{analysis.headline}</p>
+          <p className="text-sm font-medium text-gray-200">{prose(analysis.headline)}</p>
         ) : null}
         {analysis.bullets.length > 0 ? (
           <ul className="space-y-2 text-sm leading-snug text-gray-400">
             {analysis.bullets.map((line) => (
-              <li key={line}>{line}</li>
+              <li key={line}>{prose(line)}</li>
             ))}
           </ul>
         ) : (
@@ -40,7 +43,7 @@ export default function DashboardRrTargetAnalysisPanel({
     <div className="space-y-3">
       {analysis.sampleSummary ? (
         <p className="text-xs font-medium leading-snug text-gray-400">
-          {analysis.sampleSummary}
+          {prose(analysis.sampleSummary)}
         </p>
       ) : null}
 
@@ -79,7 +82,7 @@ export default function DashboardRrTargetAnalysisPanel({
 
       {analysis.headline ? (
         <p className="text-sm font-medium leading-snug text-gray-100">
-          {analysis.headline}
+          {prose(analysis.headline)}
         </p>
       ) : null}
 
@@ -88,7 +91,7 @@ export default function DashboardRrTargetAnalysisPanel({
           {analysis.bullets.map((line) => (
             <li key={line} className="flex gap-2">
               <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-blue-400" />
-              <span>{line}</span>
+              <span>{prose(line)}</span>
             </li>
           ))}
         </ul>

@@ -64,7 +64,7 @@ function buildSampleSummary(pairedCount: number, tradeCount: number): string {
       : `Based on ${pairedCount} trades with both values recorded.`
   if (tradeCount <= pairedCount) return label
   const excluded = tradeCount - pairedCount
-  return `${label} (${excluded} other filtered trade${excluded === 1 ? "" : "s"} excluded — missing target or max R:R.)`
+  return `${label} (${excluded} other filtered trade${excluded === 1 ? "" : "s"} excluded, missing target or max R:R.)`
 }
 
 export function computeDashboardRrTargetAnalysis(
@@ -100,7 +100,7 @@ export function computeDashboardRrTargetAnalysis(
   if (paired.length < RR_TARGET_MIN_PAIRED_DESCRIPTIVE) {
     base.headline = "Record both values to unlock R:R Targeting."
     base.bullets = [
-      "This panel only includes trades with Targeted Risk/Reward and Max R:R Reached. Add both on the same trade — max R:R is usually recorded on losses and breakevens.",
+      "This panel only includes trades with Targeted Risk/Reward and Max R:R Reached. Add both on the same trade, max R:R is usually recorded on losses and breakevens.",
     ]
     if (tradeCount > 0) {
       base.bullets.push(
@@ -161,7 +161,7 @@ export function computeDashboardRrTargetAnalysis(
       Math.round(base.avgTargetRr * attainment * 2) / 2
     )
     base.bullets.push(
-      `Among these ${paired.length} trades, price often reversed before the full target — exits planned nearer ${formatR(suggested)}R may align with typical extension (not a profit guarantee).`,
+      `Among these ${paired.length} trades, price often reversed before the full target, exits planned nearer ${formatR(suggested)}R may align with typical extension (not a profit guarantee).`,
     )
   }
 
@@ -188,7 +188,7 @@ export function computeDashboardRrTargetAnalysis(
     ) {
       const wrPct = Math.round(bestWin.winRate * 100)
       base.bullets.push(
-        `Among paired trades, ${bestWin.label} targets (${bestWin.trades} trades) show a ${wrPct}% win rate vs ${formatR(base.avgTargetRr)}R average target in this sample — consider whether ~${formatR(bestWin.avgTarget)}R plans fit your edge.`,
+        `Among paired trades, ${bestWin.label} targets (${bestWin.trades} trades) show a ${wrPct}% win rate vs ${formatR(base.avgTargetRr)}R average target in this sample, consider whether ~${formatR(bestWin.avgTarget)}R plans fit your edge.`,
       )
     }
   }
@@ -200,7 +200,7 @@ export function computeDashboardRrTargetAnalysis(
         const avgTarget = b.targetSum / b.trades
         if (avgTarget >= 3 && avgMax < avgTarget * 0.7) {
           base.bullets.push(
-            `For ${label} targets (${b.trades} paired trades), price peaked around ${formatR(avgMax)}R before exit while targeting ~${formatR(avgTarget)}R — partials or trails may protect open heat.`,
+            `For ${label} targets (${b.trades} paired trades), price peaked around ${formatR(avgMax)}R before exit while targeting ~${formatR(avgTarget)}R, partials or trails may protect open heat.`,
           )
           break
         }

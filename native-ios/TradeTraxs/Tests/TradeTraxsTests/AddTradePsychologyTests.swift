@@ -201,7 +201,7 @@ final class AddTradePsychologyViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.newsEvent)
         XCTAssertEqual(viewModel.confidenceLevel, 3)
         XCTAssertEqual(viewModel.emotionSelection, "Calm")
-        XCTAssertTrue(viewModel.followedPlan)
+        XCTAssertEqual(viewModel.followedPlan, true)
         XCTAssertEqual(viewModel.marketConditionSelection, "Trending")
         XCTAssertEqual(viewModel.psychologyNotesText, "Felt good about the setup.")
         XCTAssertEqual(viewModel.psychologySummary, "Conviction 3/5 • Calm • Trending • Followed plan")

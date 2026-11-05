@@ -12,7 +12,7 @@ struct PsychologyGuardrailBanner: View {
                 Text(notice.title)
                     .experienceStyle(.subheadline, color: colors.primaryText)
                     .fontWeight(.semibold)
-                Text(notice.message)
+                Text(GeneratedProseNormalizer.normalize(notice.message))
                     .experienceStyle(.footnote, color: colors.secondaryText)
             }
             Spacer(minLength: 0)

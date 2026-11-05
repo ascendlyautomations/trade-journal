@@ -18,6 +18,14 @@ export function normalizeAIGeneratedText(text: string): string {
     return text
   }
 
+  const trimmed = text.trim()
+  if (trimmed === EM_DASH) {
+    return text
+  }
+  if (trimmed.startsWith(`${EM_DASH} ·`) || trimmed.startsWith(`${EM_DASH}·`)) {
+    return text
+  }
+
   let result = text
   result = result.replace(/ — /g, ", ")
   result = result.replace(/— /g, ", ")

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Target R:R (`rr`) vs max reached — mirrors web `dashboardRrTargetAnalysis.ts`.
+/// Target R:R (`rr`) vs max reached, mirrors web `dashboardRrTargetAnalysis.ts`.
 nonisolated struct DashboardRrTargetAnalysis: Sendable, Equatable {
     static let minPairedDescriptive = 1
     static let minPairedRecommend = 5
@@ -110,7 +110,7 @@ nonisolated struct DashboardRrTargetAnalysis: Sendable, Equatable {
                 Self.rrRounded(avgTarget * attainment * 2, scale: 1)
             )
             result.bullets.append(
-                "Among these \(paired.count) trades, price often reversed before the full target — exits planned nearer \(formatR(suggested))R may align with typical extension (not a profit guarantee)."
+                "Among these \(paired.count) trades, price often reversed before the full target, exits planned nearer \(formatR(suggested))R may align with typical extension (not a profit guarantee)."
             )
         }
 
@@ -129,7 +129,7 @@ nonisolated struct DashboardRrTargetAnalysis: Sendable, Equatable {
             {
                 let wrPct = Int(truncating: NSDecimalNumber(decimal: bestWin.winRate * 100))
                 result.bullets.append(
-                    "Among paired trades, \(bestWin.label) targets (\(bestWin.trades) trades) show a \(wrPct)% win rate vs \(formatR(avgTarget))R average target in this sample — consider whether ~\(formatR(bestWin.avgTarget))R plans fit your edge."
+                    "Among paired trades, \(bestWin.label) targets (\(bestWin.trades) trades) show a \(wrPct)% win rate vs \(formatR(avgTarget))R average target in this sample, consider whether ~\(formatR(bestWin.avgTarget))R plans fit your edge."
                 )
             }
         }
@@ -140,7 +140,7 @@ nonisolated struct DashboardRrTargetAnalysis: Sendable, Equatable {
                 let avgTarget = b.targetSum / Decimal(b.trades)
                 if avgTarget >= 3, avgMax < avgTarget * Decimal(string: "0.7")! {
                     result.bullets.append(
-                        "For \(label) targets (\(b.trades) paired trades), price peaked around \(formatR(avgMax))R before exit while targeting ~\(formatR(avgTarget))R — partials or trails may protect open heat."
+                        "For \(label) targets (\(b.trades) paired trades), price peaked around \(formatR(avgMax))R before exit while targeting ~\(formatR(avgTarget))R, partials or trails may protect open heat."
                     )
                     break
                 }
@@ -187,7 +187,7 @@ nonisolated struct DashboardRrTargetAnalysis: Sendable, Equatable {
             : "Based on \(pairedCount) trades with both values recorded."
         guard tradeCount > pairedCount else { return label }
         let excluded = tradeCount - pairedCount
-        return "\(label) (\(excluded) other filtered trade\(excluded == 1 ? "" : "s") excluded — missing target or max R:R.)"
+        return "\(label) (\(excluded) other filtered trade\(excluded == 1 ? "" : "s") excluded, missing target or max R:R.)"
     }
 
     private static func bucketLabel(_ target: Decimal) -> String {

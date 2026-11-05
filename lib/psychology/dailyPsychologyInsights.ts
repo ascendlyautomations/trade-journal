@@ -74,7 +74,7 @@ function toGroupMetrics(group: DailyGroupAggregate): PsychologyGroupMetrics {
 function reliabilityNote(reliability: PsychologySampleReliability): string {
   switch (reliability) {
     case "earlySignal":
-      return "Early observation — small sample"
+      return "Early observation, small sample"
     case "developing":
       return "Developing pattern"
     case "strong":
@@ -134,7 +134,7 @@ function compareDetail(
         better.dayCount + worse.dayCount,
         better.tradeCount + worse.tradeCount
       )
-    )} — association only, not causation`
+    )}, association only, not causation`
   )
 }
 

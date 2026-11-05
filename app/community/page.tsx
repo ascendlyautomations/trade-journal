@@ -81,6 +81,10 @@ import { createRoomJoinNotification } from "@/lib/createRoomJoinNotification"
 import { createRoomMessageNotifications } from "@/lib/createRoomMessageNotifications"
 import TradeRoomCreateWizard from "@/app/components/tradeRooms/TradeRoomCreateWizard"
 import ManageTradeRoomModal from "@/app/components/tradeRooms/ManageTradeRoomModal"
+import TradeRoomLiveVoiceBar from "@/app/components/tradeRooms/live/TradeRoomLiveVoiceBar"
+import TradeRoomLiveVoiceJoinButton from "@/app/components/tradeRooms/live/TradeRoomLiveVoiceJoinButton"
+import TradeRoomLiveVoiceSessionGuard from "@/app/components/tradeRooms/live/TradeRoomLiveVoiceSessionGuard"
+import { useTradeRoomLiveVoice } from "@/app/components/tradeRooms/live/useTradeRoomLiveVoice"
 import {
   fetchMemberTagAssignments,
   fetchRoomMemberTags,
@@ -371,6 +375,7 @@ function CommunityContent() {
   )
   const searchParams = useSearchParams()
   const { user, profile, loading: profileLoading } = useUserProfile()
+  const liveVoice = useTradeRoomLiveVoice()
   const { runUpload } = useUploadProgress()
   const username = profile?.username?.trim() || "User"
   const roomParam = searchParams.get("room")
@@ -1031,6 +1036,45 @@ function CommunityContent() {
     () => sections.find((s) => s.id === selectedSectionId) ?? null,
     [sections, selectedSectionId]
   )
+
+  const fetchLiveKitVoiceToken = useCallback(async () => {
+    if (!selectedRoomId || !selectedSectionId) {
+      throw new Error("Select a voice channel first.")
+    }
+    const { data: sessionData } = await supabase.auth.getSession()
+    const accessToken = sessionData.session?.access_token
+    if (!accessToken) {
+      throw new Error("Sign in required for live voice.")
+    }
+    const res = await fetch("/api/livekit/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        roomId: selectedRoomId,
+        sectionId: selectedSectionId,
+      }),
+    })
+    const payload = (await res.json().catch(() => ({}))) as {
+      error?: string
+      token?: string
+      livekitUrl?: string
+      canPublish?: boolean
+    }
+    if (!res.ok) {
+      throw new Error(payload.error || "Could not join live voice.")
+    }
+    if (!payload.token || !payload.livekitUrl) {
+      throw new Error("Invalid live voice token response.")
+    }
+    return {
+      token: payload.token,
+      livekitUrl: payload.livekitUrl,
+      canPublish: Boolean(payload.canPublish),
+    }
+  }, [selectedRoomId, selectedSectionId])
 
   const isBetaAnnouncementsLocked = useMemo(
     () => isBetaAnnouncementsSection(selectedRoom?.slug, currentSection),
@@ -2098,7 +2142,7 @@ function CommunityContent() {
 
     const { data, error } = await supabase
       .from("room_sections")
-      .select("id, room_id, name, position, allow_members_chat")
+      .select("id, room_id, name, position, allow_members_chat, live_kind")
       .eq("room_id", roomId)
       .order("position", { ascending: true })
 
@@ -2575,6 +2619,19 @@ function CommunityContent() {
       return
     }
 
+    const { data: kickSession } = await supabase.auth.getSession()
+    const kickAccessToken = kickSession.session?.access_token
+    if (kickAccessToken) {
+      const { requestLiveKitMemberDisconnect } = await import(
+        "@/lib/livekit/requestLiveKitMemberDisconnect"
+      )
+      void requestLiveKitMemberDisconnect({
+        roomId: selectedRoomId,
+        userId: targetUserId,
+        accessToken: kickAccessToken,
+      })
+    }
+
     showPopup({ type: "success", message: "Member removed" })
     await loadManageMembers(selectedRoomId)
     await loadMemberStats(selectedRoomId)
@@ -2600,6 +2657,19 @@ function CommunityContent() {
       console.error("handleBanMember:", banned.error)
       showPopup(persistentError("Ban Failed", banned.error))
       return
+    }
+
+    const { data: banSession } = await supabase.auth.getSession()
+    const banAccessToken = banSession.session?.access_token
+    if (banAccessToken) {
+      const { requestLiveKitMemberDisconnect } = await import(
+        "@/lib/livekit/requestLiveKitMemberDisconnect"
+      )
+      void requestLiveKitMemberDisconnect({
+        roomId: selectedRoomId,
+        userId: targetUserId,
+        accessToken: banAccessToken,
+      })
     }
 
     showPopup({ type: "success", message: "Member banned" })
@@ -4716,6 +4786,18 @@ function CommunityContent() {
                   </div>
                 ) : null}
 
+                {selectedRoomId && currentSection ? (
+                  <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2">
+                    <TradeRoomLiveVoiceJoinButton
+                      roomId={selectedRoomId}
+                      section={currentSection}
+                      roomName={selectedRoom?.name ?? null}
+                      disabled={needsJoin}
+                      fetchToken={fetchLiveKitVoiceToken}
+                    />
+                  </div>
+                ) : null}
+
               <NativeIosPullToRefresh
                 scrollRef={messagesScrollRef}
                 className="tt-trade-rooms-chat min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-3 max-md:px-3"
@@ -5107,7 +5189,9 @@ function CommunityContent() {
                     }}
                     onSend={() => void sendMessage()}
                     onSendVoice={(payload) => void sendVoiceMessage(payload)}
-                    voiceDisabled={!canPostInRoom || sendingMessage}
+                    voiceDisabled={
+                      !canPostInRoom || sendingMessage || liveVoice.isConnected
+                    }
                     placeholder={
                       !selectedRoomId
                         ? "Select a room first"
@@ -5914,6 +5998,8 @@ function CommunityContent() {
         imageUrl={lightboxImageUrl}
         onClose={() => setLightboxImageUrl(null)}
       />
+      <TradeRoomLiveVoiceSessionGuard userId={user?.id} />
+      <TradeRoomLiveVoiceBar />
     </>
   )
 }

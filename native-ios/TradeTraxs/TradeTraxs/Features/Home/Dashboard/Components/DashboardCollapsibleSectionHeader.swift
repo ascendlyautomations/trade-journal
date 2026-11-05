@@ -21,7 +21,7 @@ struct DashboardCollapsibleSectionHeader: View {
                         .experienceStyle(.headline, color: colors.primaryText)
                     if let subtitle {
                         Text(subtitle)
-                            .experienceStyle(.caption, color: colors.tertiaryText)
+                            .experienceStyle(.footnote, color: colors.tertiaryText)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

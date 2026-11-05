@@ -88,6 +88,7 @@ nonisolated enum TradeMapper: DTOMapper {
             confidence: confidence.flatMap { $0 > 0 ? $0 : nil },
             emotion: emotion.flatMap { $0.isEmpty ? nil : $0 },
             followedPlan: dto.followed_plan,
+            mistakeType: dto.mistake_type.flatMap { $0.isEmpty ? nil : $0 },
             marketCondition: marketCondition.flatMap { $0.isEmpty ? nil : $0 },
             psychologyNotes: psychologyNotes.flatMap { $0.isEmpty ? nil : $0 },
             exitEmotion: exitEmotion.flatMap { $0.isEmpty ? nil : $0 },
@@ -182,6 +183,7 @@ nonisolated enum TradeMapper: DTOMapper {
             confidence: domain.confidence.map { FlexibleNumber(Decimal($0)) },
             emotion: domain.emotion,
             followed_plan: domain.followedPlan,
+            mistake_type: domain.mistakeType,
             market_condition: domain.marketCondition,
             timeframe: domain.timeframe,
             news_event: domain.newsEvent,
@@ -235,7 +237,7 @@ nonisolated enum TradeMapper: DTOMapper {
     private static func psychologyFields(from draft: TradeDraft) -> (
         confidence: Double?,
         emotion: String?,
-        followedPlan: Bool,
+        followedPlan: Bool?,
         marketCondition: String?,
         timeframe: String?,
         newsEvent: Bool,
@@ -772,7 +774,7 @@ nonisolated enum TradingAccountMapper {
         }()
         let number = dto.account_number?.trimmingCharacters(in: .whitespacesAndNewlines)
         let note = dto.note?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return TradingAccount(
+        var account = TradingAccount(
             id: TradingAccountID(id),
             ownerProfileID: ProfileID(owner),
             name: name,
@@ -785,8 +787,16 @@ nonisolated enum TradingAccountMapper {
             customPublicStatus: normalizedOptionalText(dto.custom_public_status),
             accountNumber: (number?.isEmpty == false) ? number : nil,
             note: (note?.isEmpty == false) ? note : nil,
-            propFirmRules: rules
+            propFirmRules: rules,
+            livePersonalDrawdown: nil
         )
+        if PropFirmPayoutPolicy.supportsLiveWithdrawal(for: account) {
+            account.livePersonalDrawdown = LivePersonalDrawdownEngine.stored(
+                maxDrawdown: DecimalParser.parseFlexible(dto.max_drawdown),
+                drawdownTypeRaw: dto.drawdown_type
+            )
+        }
+        return account
     }
 
     /// Web insert/update wire strings for `accounts.category` / `accounts.mode`.

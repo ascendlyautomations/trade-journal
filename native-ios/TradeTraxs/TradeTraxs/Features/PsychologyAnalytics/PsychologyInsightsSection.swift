@@ -119,7 +119,7 @@ struct PsychologyInsightsSection: View {
                     ForEach(postUnlockGapMessages, id: \.self) { message in
                         HStack(alignment: .top, spacing: 6) {
                             Text("•")
-                            Text(message)
+                            Text(GeneratedProseNormalizer.normalize(message))
                                 .experienceStyle(.caption, color: colors.secondaryText)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -183,12 +183,13 @@ struct PsychologyInsightsSection: View {
                     .experienceStyle(.caption2, color: colors.accent)
                     .fontWeight(.semibold)
                     .tracking(0.4)
-                Text(card.headline)
+                Text(card.displayHeadline)
                     .experienceStyle(.footnote, color: colors.primaryText)
                     .fontWeight(.semibold)
                     .multilineTextAlignment(.leading)
-                Text(card.detail)
+                Text(card.displayDetail)
                     .experienceStyle(.caption, color: colors.secondaryText)
+                    .lineLimit(2)
                     .multilineTextAlignment(.leading)
                 Text("\(card.reliability.label) • \(card.sampleSize) trades")
                     .experienceStyle(.caption2, color: colors.tertiaryText)
@@ -200,10 +201,10 @@ struct PsychologyInsightsSection: View {
         }
         .padding(ExperienceSpacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+        .experienceDashboardCard(prominence: .standard)
         .overlay {
             RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                .stroke(colors.border, lineWidth: 1)
+                .stroke(colors.accent.opacity(0.28), lineWidth: ExperienceBorder.hairline)
         }
         .accessibilityIdentifier("dashboard.psychologyInsight.\(card.id)")
     }

@@ -293,7 +293,7 @@ function buildAnalyticsSections(
         },
         highlight: true,
       })),
-      footnote: "Associated patterns — not proof of causation.",
+      footnote: "Associated patterns, not proof of causation.",
     })
   }
 

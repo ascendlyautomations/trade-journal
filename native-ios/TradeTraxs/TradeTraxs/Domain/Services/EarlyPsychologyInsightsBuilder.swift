@@ -123,7 +123,7 @@ nonisolated enum EarlyPsychologyInsightsBuilder {
 
     private static func reliabilityNote(_ reliability: PsychologySampleReliability) -> String {
         switch reliability {
-        case .earlySignal: return "Early observation — small sample"
+        case .earlySignal: return "Early observation, small sample"
         case .developing: return "Developing pattern"
         case .strong: return "Stronger sample"
         case .insufficient: return "Limited data"
@@ -190,7 +190,7 @@ nonisolated enum EarlyPsychologyInsightsBuilder {
                 "\(bLabel): \(TraderPsychologyAnalyticsEngine.money(better.avgDailyPnL))/day (\(better.dayCount)d) vs " +
                 "\(wLabel): \(TraderPsychologyAnalyticsEngine.money(worse.avgDailyPnL))/day (\(worse.dayCount)d) · " +
                 "\(better.tradeCount + worse.tradeCount) trades · " +
-                "\(reliabilityNote(resolveMatchedDayReliability(dayCount: better.dayCount + worse.dayCount, tradeCount: better.tradeCount + worse.tradeCount))) — association only, not causation"
+                "\(reliabilityNote(resolveMatchedDayReliability(dayCount: better.dayCount + worse.dayCount, tradeCount: better.tradeCount + worse.tradeCount))), association only, not causation"
             return [
                 PsychologyInsightCard(
                     id: "\(id).compare",

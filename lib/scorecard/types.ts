@@ -107,3 +107,7 @@ export const SCORECARD_CATEGORY_WEIGHTS: Record<ScorecardCategoryId, number> = {
 
 export const SCORECARD_MIN_TRADES_OVERALL = 20
 export const SCORECARD_MIN_TRADING_DAYS_OVERALL = 5
+/** Minimum nominal weight sum (0–1) across scored categories to show a composite overall score. */
+export const SCORECARD_MIN_NOMINAL_WEIGHT_OVERALL = 0.45
+/** Minimum number of scored categories for a composite overall score. */
+export const SCORECARD_MIN_SCORED_CATEGORIES_OVERALL = 2

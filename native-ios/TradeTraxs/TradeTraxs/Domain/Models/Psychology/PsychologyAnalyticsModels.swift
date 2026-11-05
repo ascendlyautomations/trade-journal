@@ -89,6 +89,9 @@ nonisolated struct PsychologyInsightCard: Identifiable, Hashable, Sendable {
     var sampleSize: Int
     var reliability: PsychologySampleReliability
     var rankingScore: Double
+
+    var displayHeadline: String { GeneratedProseNormalizer.normalize(headline) }
+    var displayDetail: String { GeneratedProseNormalizer.normalize(detail) }
 }
 
 nonisolated struct PsychologyAnalyticsSection: Identifiable, Hashable, Sendable {

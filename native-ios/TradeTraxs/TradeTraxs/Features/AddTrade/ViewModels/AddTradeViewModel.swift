@@ -65,7 +65,7 @@ final class AddTradeViewModel {
     var newsEvent = false
     var confidenceLevel = 0
     var emotionSelection = ""
-    var followedPlan = false
+    var followedPlan: Bool?
     var marketConditionSelection = ""
     var psychologyNotesText = ""
     var screenshotDisplayMode: TradeScreenshotDisplayMode = .fit
@@ -310,7 +310,7 @@ final class AddTradeViewModel {
             || newsEvent
             || confidenceLevel > 0
             || !emotionSelection.isEmpty
-            || followedPlan
+            || followedPlan != nil
             || !marketConditionSelection.isEmpty
             || !rrText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || screenshotData != nil
@@ -935,7 +935,7 @@ final class AddTradeViewModel {
         newsEvent = trade.newsEvent ?? false
         confidenceLevel = trade.confidence ?? 0
         emotionSelection = trade.emotion ?? ""
-        followedPlan = trade.followedPlan ?? false
+        followedPlan = trade.followedPlan
         marketConditionSelection = trade.marketCondition ?? ""
         psychologyNotesText = trade.psychologyNotes ?? ""
         screenshotDisplayMode = trade.imageDisplayMode
@@ -992,7 +992,7 @@ final class AddTradeViewModel {
             newsEvent ? "1" : "0",
             String(confidenceLevel),
             emotionSelection,
-            followedPlan ? "1" : "0",
+            followedPlan.map { $0 ? "1" : "0" } ?? "nil",
             marketConditionSelection,
             psychologyNotesText,
             screenshotDisplayMode.rawValue,
@@ -1266,7 +1266,7 @@ final class AddTradeViewModel {
             newsEvent: trade.newsEvent ?? false,
             confidence: trade.confidence,
             emotion: trade.emotion,
-            followedPlan: trade.followedPlan ?? false,
+            followedPlan: trade.followedPlan,
             marketCondition: trade.marketCondition,
             psychologyNotes: trade.psychologyNotes,
             exitEmotion: trade.exitEmotion,

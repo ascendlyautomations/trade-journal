@@ -1,12 +1,15 @@
 import Foundation
 
-/// User-facing generated prose (AI, templates, analytics copy) — not user-authored content.
+/// User-facing generated prose (AI, templates, dashboard insights) — not user-authored content.
 ///
-/// Mirrors `lib/normalizeAIGeneratedText.ts` em-dash rules.
+/// Mirrors `lib/normalizeAIGeneratedText.ts` em-dash rules. Preserves missing-data `—` and `— ·` score labels.
 nonisolated enum GeneratedProseNormalizer {
     private static let emDash = "\u{2014}"
 
     static func normalize(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed == emDash { return text }
+        if trimmed.hasPrefix("\(emDash) ·") || trimmed.hasPrefix("\(emDash)·") { return text }
         guard text.contains(emDash) else { return text }
 
         var result = text

@@ -29,6 +29,8 @@ final class TradeAIExperienceTests: XCTestCase {
             AIGeneratedTextNormalizer.normalize("User caption — unchanged scope is server-side"),
             "User caption, unchanged scope is server-side"
         )
+        XCTAssertEqual(AIGeneratedTextNormalizer.normalize("—"), "—")
+        XCTAssertEqual(AIGeneratedTextNormalizer.normalize("— · 5/10 tags"), "— · 5/10 tags")
     }
 
     func testEveryPresetHasSpecializedCoachPrompt() {

@@ -80,7 +80,8 @@ nonisolated enum DashboardEquityHeroPresentation {
             ProfileStatisticsMetrics.EquityPoint(
                 index: $0.index,
                 equity: $0.equity + balance,
-                date: $0.date
+                date: $0.date,
+                drawdownFloor: $0.drawdownFloor.map { $0 + balance }
             )
         }
     }

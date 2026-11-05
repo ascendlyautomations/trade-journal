@@ -38,7 +38,7 @@ export default function DashboardJournalEmptyState({
         </h2>
         <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-gray-300 md:text-[15px]">
           Log your first trade, import history, or connect a broker. Your stats,
-          equity curve, and insights will fill in as you go — no sample data.
+          equity curve, and insights will fill in as you go, no sample data.
         </p>
 
         <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center md:mt-5">

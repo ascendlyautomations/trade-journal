@@ -59,6 +59,11 @@ nonisolated protocol TradeRepository: Sendable {
         showInAccountDropdowns: Bool,
         customPublicStatus: String?
     ) async throws -> TradingAccount
+    func updateLivePersonalDrawdownConfig(
+        id: TradingAccountID,
+        ownerID: ProfileID,
+        config: LivePersonalDrawdownConfig?
+    ) async throws -> TradingAccount
     func payoutEntries(for accountID: TradingAccountID) async throws -> [AccountPayoutEntry]
     func payoutEntries(for accountIDs: [TradingAccountID]) async throws -> [AccountPayoutEntry]
     func createPayoutEntry(
@@ -95,6 +100,14 @@ nonisolated protocol TradeRepository: Sendable {
 }
 
 extension TradeRepository {
+    func updateLivePersonalDrawdownConfig(
+        id: TradingAccountID,
+        ownerID: ProfileID,
+        config: LivePersonalDrawdownConfig?
+    ) async throws -> TradingAccount {
+        throw AppError.unknown(message: "Live drawdown settings are unavailable.")
+    }
+
     /// Web Backtest Lab — owner rows where `mode == backtest` (journal list excludes these).
     func backtestLabTrades(ownedBy profileID: ProfileID) async throws -> [Trade] {
         let loaded = try await trades(

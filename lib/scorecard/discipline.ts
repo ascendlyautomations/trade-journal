@@ -2,7 +2,7 @@ import { clampScore, formatPercent, resolveScorecardReliability } from "./reliab
 import type { ScorecardCategoryResult, ScorecardTrade } from "./types.ts"
 import { SCORECARD_CATEGORY_WEIGHTS } from "./types.ts"
 
-const MIN_PLAN_TAGGED_FOR_SCORE = 5
+const MIN_PLAN_TAGGED_FOR_SCORE = 10
 
 export function scoreDisciplineCategory(trades: readonly ScorecardTrade[]): ScorecardCategoryResult {
   const weight = SCORECARD_CATEGORY_WEIGHTS.discipline
@@ -32,7 +32,7 @@ export function scoreDisciplineCategory(trades: readonly ScorecardTrade[]): Scor
 
   if (planCoverage < 0.5 && trades.length >= 10) {
     weaknesses.push(
-      "Plan adherence is tagged on fewer than half of trades — interpret the score cautiously or tag more trades."
+      "Plan adherence is tagged on fewer than half of trades, interpret the score cautiously or tag more trades."
     )
   }
 
@@ -45,12 +45,12 @@ export function scoreDisciplineCategory(trades: readonly ScorecardTrade[]): Scor
       label: "Plan followed (explicit tags only)",
       value: formatPercent(rate),
       explanation:
-        "Share of tagged trades where you marked the plan as followed — missing tags are excluded, not treated as violations.",
+        "Share of tagged trades where you marked the plan as followed, missing tags are excluded, not treated as violations.",
       sampleSize: withPlanKnown.length,
       sampleLabel: "tagged trades",
     })
     if (rate >= 0.7) strengths.push("You report following your plan on most explicitly tagged trades.")
-    if (rate < 0.45) weaknesses.push("Plan adherence is low on tagged trades — review rules and triggers.")
+    if (rate < 0.45) weaknesses.push("Plan adherence is low on tagged trades, review rules and triggers.")
   } else {
     dataGaps.push(
       `Tag plan followed / not followed on at least ${MIN_PLAN_TAGGED_FOR_SCORE} trades to score discipline.`
@@ -64,7 +64,7 @@ export function scoreDisciplineCategory(trades: readonly ScorecardTrade[]): Scor
       label: "Losses with mistake type logged (coverage)",
       value: formatPercent(mistakeOnLoss),
       explanation:
-        "Review documentation on losses — logging mistakes supports learning and is not scored as mistake avoidance.",
+        "Review documentation on losses, logging mistakes supports learning and is not scored as mistake avoidance.",
       sampleSize: losses.length,
       sampleLabel: "losing trades",
     })
@@ -75,7 +75,7 @@ export function scoreDisciplineCategory(trades: readonly ScorecardTrade[]): Scor
       id: "discipline.confidence_coverage",
       label: "Trades with confidence logged (coverage)",
       value: formatPercent(withConfidence.length / trades.length),
-      explanation: "Confidence tags are optional context — not part of the discipline score.",
+      explanation: "Confidence tags are optional context, not part of the discipline score.",
       sampleSize: withConfidence.length,
       sampleLabel: "tagged trades",
     })
@@ -89,7 +89,7 @@ export function scoreDisciplineCategory(trades: readonly ScorecardTrade[]): Scor
       label: "Average execution self-rating (coverage)",
       value: `${avg.toFixed(1)} / 5`,
       explanation:
-        "Self-rated execution where logged — shown for transparency; not part of the discipline score.",
+        "Self-rated execution where logged, shown for transparency; not part of the discipline score.",
       sampleSize: withExecution.length,
       sampleLabel: "rated trades",
     })

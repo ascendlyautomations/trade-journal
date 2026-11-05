@@ -114,7 +114,7 @@ export function buildPsychologyRecommendations(facts: PsychologyCoachFacts): str
   const recs: string[] = []
   if (facts.guardrailFacts.consecutiveLossCheckpoint != null) {
     recs.push(
-      `Consider using ${facts.guardrailFacts.consecutiveLossCheckpoint} consecutive losses as a checkpoint before taking another trade — historically your results weaken after this point.`
+      `Consider using ${facts.guardrailFacts.consecutiveLossCheckpoint} consecutive losses as a checkpoint before taking another trade, historically your results weaken after this point.`
     )
   }
   if (facts.guardrailFacts.maxTradesDaySoftLimit != null) {

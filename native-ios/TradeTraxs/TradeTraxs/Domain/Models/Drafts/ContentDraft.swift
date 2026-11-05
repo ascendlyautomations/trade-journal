@@ -129,7 +129,7 @@ nonisolated struct TradeComposerDraftState: Codable, Equatable, Sendable {
     var newsEvent: Bool = false
     var confidence: Int = 0
     var emotion: String = ""
-    var followedPlan: Bool = false
+    var followedPlan: Bool?
     var marketCondition: String = ""
     var psychologyNotes: String = ""
     var screenshotDisplayMode: String = TradeScreenshotDisplayMode.fit.rawValue
@@ -149,7 +149,7 @@ nonisolated struct TradeComposerDraftState: Codable, Equatable, Sendable {
             && imageStoragePath == nil
             && !includeExitTime
             && !newsEvent
-            && !followedPlan
+            && followedPlan == nil
             && !shareToProfile
             && confidence == 0
             && side == TradeSide.long.rawValue

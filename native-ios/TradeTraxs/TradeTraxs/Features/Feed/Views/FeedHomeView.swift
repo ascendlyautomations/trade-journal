@@ -151,6 +151,11 @@ struct FeedHomeView: View {
         .onChange(of: navigationEnvironment.store.paths.feed.count) { _, _ in
             syncFeedPlaybackSurfaceActive(reason: "navigatedAway")
         }
+        .onReceive(NotificationCenter.default.publisher(for: .tradeTraxsLiveVoiceSessionDidChange)) { _ in
+            if RoomLiveVoiceCoordinator.shared.isSessionActive {
+                playbackCoordinator.pauseAll(reason: "liveVoiceActive")
+            }
+        }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase != .active {
                 playbackCoordinator.setSurfaceActive(false, reason: "appBackgrounded")

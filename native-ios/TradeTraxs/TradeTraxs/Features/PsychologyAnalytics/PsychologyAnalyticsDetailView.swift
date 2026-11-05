@@ -191,17 +191,19 @@ struct PsychologyAnalyticsDetailView: View {
             Text("Insights")
                 .experienceStyle(.headline, color: colors.primaryText)
             Text(
-                "Patterns from matched check-in days and trade psychology tags — association only, not causation."
+                GeneratedProseNormalizer.normalize(
+                    "Patterns from matched check-in days and trade psychology tags, association only, not causation."
+                )
             )
             .experienceStyle(.caption, color: colors.tertiaryText)
 
             VStack(spacing: ExperienceSpacing.xs) {
                 ForEach(resolvedInsightCards) { card in
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(card.headline)
+                        Text(card.displayHeadline)
                             .experienceStyle(.subheadline, color: colors.primaryText)
                             .fontWeight(.semibold)
-                        Text(card.detail)
+                        Text(card.displayDetail)
                             .experienceStyle(.footnote, color: colors.secondaryText)
                         Text("\(card.sampleSize) trades · \(card.reliability.label)")
                             .experienceStyle(.caption2, color: colors.tertiaryText)
@@ -232,7 +234,7 @@ struct PsychologyAnalyticsDetailView: View {
                 ForEach(postUnlockGapMessages, id: \.self) { message in
                     HStack(alignment: .top, spacing: 6) {
                         Text("•")
-                        Text(message)
+                        Text(GeneratedProseNormalizer.normalize(message))
                             .experienceStyle(.caption, color: colors.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -358,7 +360,7 @@ struct PsychologyAnalyticsDetailView: View {
                     metricPill("Win rate", value: TraderPsychologyAnalyticsEngine.formatWinRate(row.metrics.winRate))
                     metricPill("Avg P&L / trade", value: TraderPsychologyAnalyticsEngine.money(row.metrics.averagePnL ?? 0))
                 }
-                Text("\(row.metrics.reliability.label) — need 5+ trades for a reliable read")
+                Text("\(row.metrics.reliability.label), need 5+ trades for a reliable read")
                     .experienceStyle(.caption2, color: colors.tertiaryText)
             } else {
                 HStack(spacing: ExperienceSpacing.md) {

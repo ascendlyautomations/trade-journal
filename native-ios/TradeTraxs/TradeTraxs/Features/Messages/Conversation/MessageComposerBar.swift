@@ -22,6 +22,7 @@ struct MessageComposerBar: View {
     @State private var keyboardSendScheduled = false
     @State private var showsMicrophoneSettings = false
     @StateObject private var voiceRecorder = VoiceMessageRecorder()
+    @Bindable private var liveVoiceCoordinator = RoomLiveVoiceCoordinator.shared
 
     var body: some View {
         Group {
@@ -256,7 +257,9 @@ struct MessageComposerBar: View {
 
     /// Mic stays inside the field until Send takes over for non-empty text.
     private var showsInlineMicrophone: Bool {
-        onSendVoice != nil && !(canSendText && isEnabled)
+        onSendVoice != nil
+            && !(canSendText && isEnabled)
+            && !liveVoiceCoordinator.isSessionActive
     }
 
     /// Menu dismissal and the photo picker cannot present in the same turn.

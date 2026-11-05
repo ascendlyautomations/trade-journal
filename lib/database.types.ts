@@ -3839,6 +3839,50 @@ export type Database = {
           },
         ]
       }
+      room_livekit_disconnect_outbox: {
+        Row: {
+          attempt_count: number
+          created_at: string
+          id: string
+          last_error: string | null
+          processed_at: string | null
+          processing_claimed_at: string | null
+          reason: string
+          room_id: string
+          user_id: string
+        }
+        Insert: {
+          attempt_count?: number
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          processed_at?: string | null
+          processing_claimed_at?: string | null
+          reason: string
+          room_id: string
+          user_id: string
+        }
+        Update: {
+          attempt_count?: number
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          processed_at?: string | null
+          processing_claimed_at?: string | null
+          reason?: string
+          room_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_livekit_disconnect_outbox_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       room_bans: {
         Row: {
           banned_by: string
@@ -4330,6 +4374,7 @@ export type Database = {
           allow_members_chat: boolean | null
           created_at: string | null
           id: string
+          live_kind: string
           name: string
           position: number
           room_id: string | null
@@ -4338,6 +4383,7 @@ export type Database = {
           allow_members_chat?: boolean | null
           created_at?: string | null
           id?: string
+          live_kind?: string
           name: string
           position?: number
           room_id?: string | null
@@ -4346,6 +4392,7 @@ export type Database = {
           allow_members_chat?: boolean | null
           created_at?: string | null
           id?: string
+          live_kind?: string
           name?: string
           position?: number
           room_id?: string | null
@@ -6231,6 +6278,14 @@ export type Database = {
           blocked_by_other: boolean
           other_user_id: string
         }[]
+      }
+      room_livekit_claim_outbox: {
+        Args: { p_limit?: number; p_outbox_id?: string }
+        Returns: Database["public"]["Tables"]["room_livekit_disconnect_outbox"]["Row"][]
+      }
+      room_livekit_should_disconnect: {
+        Args: { p_room_id: string; p_user_id: string }
+        Returns: boolean
       }
       is_active_room_member: {
         Args: { p_room_id: string; p_user_id: string }

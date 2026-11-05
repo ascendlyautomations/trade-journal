@@ -103,6 +103,23 @@ nonisolated struct RoomChannel: Hashable, Codable, Sendable, Identifiable {
     var name: String
     var position: Int
     var allowMembersChat: Bool
+    var liveKind: RoomChannelLiveKind
+
+    init(
+        id: RoomChannelID,
+        roomID: RoomID,
+        name: String,
+        position: Int,
+        allowMembersChat: Bool,
+        liveKind: RoomChannelLiveKind = .text
+    ) {
+        self.id = id
+        self.roomID = roomID
+        self.name = name
+        self.position = position
+        self.allowMembersChat = allowMembersChat
+        self.liveKind = liveKind
+    }
 
     /// Display label like `# general`.
     var displayTitle: String {

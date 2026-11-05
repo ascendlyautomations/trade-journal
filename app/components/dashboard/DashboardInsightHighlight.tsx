@@ -1,6 +1,7 @@
 "use client"
 
 import { type ReactNode } from "react"
+import { normalizeAIGeneratedText } from "@/lib/normalizeAIGeneratedText"
 
 const MONEY_REGEX = /-?\$[\d,]+\.\d{2}/g
 const WIN_RATE_REGEX = /\d+% win rate/gi
@@ -118,6 +119,7 @@ export function highlightInsightText(
   text: string,
   options: HighlightOptions = {}
 ): ReactNode {
+  text = normalizeAIGeneratedText(text)
   const {
     entityPattern,
     entityTone = "auto",
@@ -284,5 +286,9 @@ export function NegativeInsightLine({ text }: { text: string }) {
 
 /** Behavior Warnings — full line stays yellow. */
 export function WarningInsightLine({ text }: { text: string }) {
-  return <span className="font-semibold text-yellow-300">{text}</span>
+  return (
+    <span className="font-semibold text-yellow-300">
+      {normalizeAIGeneratedText(text)}
+    </span>
+  )
 }

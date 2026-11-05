@@ -106,6 +106,8 @@ nonisolated enum ProfileStatisticsMetrics {
         var equity: Decimal
         /// Trade timestamp when available — presentation only (does not affect equity math).
         var date: Date? = nil
+        /// Live personal drawdown floor (informational), web `drawdownFloor` series.
+        var drawdownFloor: Decimal? = nil
         var id: Int { index }
     }
 
@@ -193,7 +195,12 @@ nonisolated enum ProfileStatisticsMetrics {
             lastDate = point.date ?? lastDate
         }
         return sorted.enumerated().map { offset, point in
-            EquityPoint(index: offset, equity: point.equity, date: point.date)
+            EquityPoint(
+                index: offset,
+                equity: point.equity,
+                date: point.date,
+                drawdownFloor: point.drawdownFloor
+            )
         }
     }
 

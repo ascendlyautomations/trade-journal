@@ -7,6 +7,31 @@ struct AddTradePsychologySheet: View {
 
     @Environment(\.themeColors) private var colors
 
+    private enum FollowedPlanPickerValue: Hashable {
+        case unset
+        case yes
+        case no
+    }
+
+    private var followedPlanBinding: Binding<FollowedPlanPickerValue> {
+        Binding(
+            get: {
+                switch viewModel.followedPlan {
+                case nil: return .unset
+                case true: return .yes
+                case false: return .no
+                }
+            },
+            set: { value in
+                switch value {
+                case .unset: viewModel.followedPlan = nil
+                case .yes: viewModel.followedPlan = true
+                case .no: viewModel.followedPlan = false
+                }
+            }
+        )
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -30,8 +55,12 @@ struct AddTradePsychologySheet: View {
                 }
 
                 Section("Execution") {
-                    Toggle("Followed plan", isOn: $viewModel.followedPlan)
-                        .accessibilityIdentifier("addTrade.psychology.followedPlan")
+                    Picker("Followed plan", selection: followedPlanBinding) {
+                        Text("Not set").tag(FollowedPlanPickerValue.unset)
+                        Text("Yes").tag(FollowedPlanPickerValue.yes)
+                        Text("No").tag(FollowedPlanPickerValue.no)
+                    }
+                    .accessibilityIdentifier("addTrade.psychology.followedPlan")
                 }
 
                 Section("Market") {

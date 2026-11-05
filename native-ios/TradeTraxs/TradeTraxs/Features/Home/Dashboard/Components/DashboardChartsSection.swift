@@ -18,7 +18,6 @@ struct DashboardChartsSection: View {
     var hidesPremiumDashboardCharts: Bool = false
 
     @Environment(\.themeColors) private var colors
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxl) {
@@ -101,7 +100,7 @@ struct DashboardChartsSection: View {
             }
             chartBlock(
                 title: "R:R Targeting",
-                subtitle: "Target R:R vs how far trades ran before exit"
+                subtitle: "Target vs max reached · paired trades"
             ) {
                 DashboardRrTargetAnalysisView(analysis: summary.rrTargetAnalysis)
             }
@@ -195,18 +194,8 @@ struct DashboardChartsSection: View {
             content()
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(ExperienceSpacing.md)
-                .background(colors.fillSecondary.opacity(0.28), in: RoundedRectangle(
-                    cornerRadius: ExperienceRadius.md,
-                    style: .continuous
-                ))
-                .transition(
-                    .opacity.combined(with: .scale(scale: 0.98, anchor: .top))
-                )
+                .experienceDashboardCard(prominence: .standard)
         }
         .accessibilityElement(children: .contain)
-        .animation(
-            ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-            value: summary.tradeCount
-        )
     }
 }

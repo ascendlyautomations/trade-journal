@@ -1,5 +1,7 @@
 "use client"
 
+import { normalizeAIGeneratedText } from "@/lib/normalizeAIGeneratedText"
+
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -193,8 +195,12 @@ function PsychologyInsightCardRow({
         <span className="block text-[10px] font-semibold uppercase tracking-wide text-blue-400">
           {card.sectionTitle}
         </span>
-        <span className="mt-0.5 block text-sm font-semibold text-white">{card.headline}</span>
-        <span className="mt-0.5 block text-xs text-gray-400">{card.detail}</span>
+        <span className="mt-0.5 block text-sm font-semibold text-white">
+          {normalizeAIGeneratedText(card.headline)}
+        </span>
+        <span className="mt-0.5 block text-xs text-gray-400">
+          {normalizeAIGeneratedText(card.detail)}
+        </span>
         <span className="mt-1 block text-[10px] text-gray-500">
           {reliabilityLabel(card.reliability)}
           {card.sampleSize > 0 ? ` · ${card.sampleSize} trades` : ""}

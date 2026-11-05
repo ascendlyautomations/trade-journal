@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		C77437DE3061A6DE00DDFDCA /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A5B0GRDB0000000000000002 /* GRDB */; };
 		C77437DF3061A6DE00DDFDCA /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A5B0GRDB0000000000000002 /* GRDB */; };
+		C77437E03061A6DE00DDFDCA /* LiveKit in Frameworks */ = {isa = PBXBuildFile; productRef = A5LIVEKIT0000000000000002 /* LiveKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -89,6 +90,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C77437DE3061A6DE00DDFDCA /* GRDB in Frameworks */,
+				C77437E03061A6DE00DDFDCA /* LiveKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -152,6 +154,7 @@
 			name = TradeTraxs;
 			packageProductDependencies = (
 				A5B0GRDB0000000000000002 /* GRDB */,
+				A5LIVEKIT0000000000000002 /* LiveKit */,
 			);
 			productName = TradeTraxs;
 			productReference = C73441913025511800D1FF5B /* TradeTraxs.app */;
@@ -238,6 +241,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				A5B0GRDB0000000000000001 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
+				A5LIVEKIT0000000000000001 /* XCRemoteSwiftPackageReference "client-sdk-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C73441923025511800D1FF5B /* Products */;
@@ -662,6 +666,14 @@
 				minimumVersion = 7.0.0;
 			};
 		};
+		A5LIVEKIT0000000000000001 /* XCRemoteSwiftPackageReference "client-sdk-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/livekit/client-sdk-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -669,6 +681,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A5B0GRDB0000000000000001 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
 			productName = GRDB;
+		};
+		A5LIVEKIT0000000000000002 /* LiveKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A5LIVEKIT0000000000000001 /* XCRemoteSwiftPackageReference "client-sdk-swift" */;
+			productName = LiveKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

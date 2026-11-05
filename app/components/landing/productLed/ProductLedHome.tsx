@@ -132,7 +132,7 @@ export default function ProductLedHome({
         <section className="tt-final-cta" aria-labelledby="final-cta-heading">
           <div className="tt-section-inner">
             <div className="tt-final-cta-inner">
-              <h2 id="final-cta-heading">Your Trading Journey Deserves More Than a Journal.</h2>
+              <h2 id="final-cta-heading">Bring Your Whole Trading Journey Into One Place.</h2>
               <p>
                 One account on web and iPhone, log trades, review performance, track mindset, and
                 share with the community when you are ready. Start free or explore the demo with

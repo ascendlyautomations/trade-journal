@@ -3,12 +3,16 @@ import {
   type BootstrapMetaV1,
 } from "./versioning.ts"
 
+export type RoomSectionLiveKindV1 = "text" | "voice_open" | "voice_stage"
+
 export type RoomSectionV1 = {
   id: string
   room_id: string
   name: string
   position: number
   allow_members_chat: boolean
+  /** Defaults to `text` when omitted (pre-migration clients). */
+  live_kind: RoomSectionLiveKindV1
 }
 
 export type RoomMessageReactionV1 = {
@@ -151,6 +155,14 @@ export class RoomBootstrapContractError extends Error {
   }
 }
 
+function decodeSectionLiveKind(raw: unknown): RoomSectionLiveKindV1 {
+  const v = String(raw ?? "text")
+    .trim()
+    .toLowerCase()
+  if (v === "voice_open" || v === "voice_stage") return v
+  return "text"
+}
+
 function decodeSection(raw: unknown): RoomSectionV1 {
   const r = asRecord(raw) ?? {}
   return {
@@ -159,6 +171,7 @@ function decodeSection(raw: unknown): RoomSectionV1 {
     name: String(r.name ?? ""),
     position: asNumber(r.position),
     allow_members_chat: asBool(r.allow_members_chat, true),
+    live_kind: decodeSectionLiveKind(r.live_kind),
   }
 }
 

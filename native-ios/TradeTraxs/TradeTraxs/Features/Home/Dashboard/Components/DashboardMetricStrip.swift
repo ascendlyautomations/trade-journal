@@ -22,10 +22,7 @@ struct DashboardMetricStrip: View {
         }
         .padding(.vertical, ExperienceSpacing.sm)
         .padding(.horizontal, ExperienceSpacing.xs)
-        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
-            cornerRadius: ExperienceRadius.md,
-            style: .continuous
-        ))
+        .experienceDashboardCard(prominence: .standard)
         .padding(.horizontal, ExperienceSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
         .clipped()

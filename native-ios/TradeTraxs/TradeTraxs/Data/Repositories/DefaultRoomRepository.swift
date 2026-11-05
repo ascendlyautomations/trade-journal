@@ -383,7 +383,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
             RoomDTO.Channel.self,
             from: "room_sections",
             query: [
-                SupabaseQuery.select("id, room_id, name, position, allow_members_chat"),
+                SupabaseQuery.select("id, room_id, name, position, allow_members_chat, live_kind"),
                 SupabaseQuery.eq("room_id", roomID.rawValue),
                 URLQueryItem(name: "order", value: "position.asc"),
             ]
@@ -841,7 +841,8 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
             roomID: RoomID(roomID),
             name: name,
             position: dto.position ?? 0,
-            allowMembersChat: dto.allow_members_chat ?? true
+            allowMembersChat: dto.allow_members_chat ?? true,
+            liveKind: RoomChannelLiveKind(rawDatabaseValue: dto.live_kind)
         )
     }
 

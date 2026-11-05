@@ -975,6 +975,28 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         )
     }
 
+    func updateLivePersonalDrawdownConfig(
+        id: TradingAccountID,
+        ownerID: ProfileID,
+        config: LivePersonalDrawdownConfig?
+    ) async throws -> TradingAccount {
+        let patch = LivePersonalDrawdownEngine.buildAccountUpdate(config: config)
+        struct Body: Encodable {
+            var max_drawdown: Double?
+            var drawdown_type: String?
+        }
+        let row: TradeDTO.Account = try await supabase.database.update(
+            Body(max_drawdown: patch.maxDrawdown, drawdown_type: patch.drawdownType),
+            table: "accounts",
+            query: [
+                SupabaseQuery.eq("id", id.rawValue),
+                SupabaseQuery.eq("user_id", ownerID.rawValue),
+            ],
+            returning: TradeDTO.Account.self
+        )
+        return try TradingAccountMapper.mapToDomain(row)
+    }
+
     func updateAccountInsightsSettings(
         id: TradingAccountID,
         ownerID: ProfileID,

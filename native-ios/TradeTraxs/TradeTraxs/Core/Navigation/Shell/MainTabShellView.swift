@@ -13,6 +13,7 @@ struct MainTabShellView: View {
     @Bindable private var viewerStoryStore = ViewerActiveStoryStore.shared
     @Bindable private var postTradeReflectionGate = PostTradeReflectionGate.shared
     @Bindable private var globalUploadCoordinator = GlobalUploadCoordinator.shared
+    @Bindable private var liveVoiceCoordinator = RoomLiveVoiceCoordinator.shared
     @Environment(\.appEnvironment) private var appEnvironment
     @State private var reflectionError: String?
 
@@ -73,6 +74,11 @@ struct MainTabShellView: View {
         }
         .vaultConfirmationOverlay(store: appEnvironment.data.vaultStore)
         .saveSuccessToastOverlay()
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if liveVoiceCoordinator.showsPersistentBar {
+                RoomLiveVoiceBar(coordinator: liveVoiceCoordinator)
+            }
+        }
         .onChange(of: store.selectedTab) { _, tab in
             MainThreadOperationTracker.push("tab.select.\(tab.rawValue)")
             defer { MainThreadOperationTracker.pop("tab.select.\(tab.rawValue)") }
@@ -375,6 +381,11 @@ struct HomeNavigationStack: View {
                 navigationCoordinator: coordinator,
                 data: appEnvironment.data
             )
+        case .tradingScorecard:
+            TradingScorecardDetailView(
+                navigationCoordinator: coordinator,
+                data: appEnvironment.data
+            )
         case .psychologyCoach:
             PsychologyCoachHomeRouteView(ai: appEnvironment.data.ai)
         case .settings(let settingsRoute):
@@ -419,6 +430,7 @@ struct HomeNavigationStack: View {
         case .withdrawalDetail: return "Withdrawal"
         case .report: return "Report"
         case .psychologyAnalytics: return "Psychology Analytics"
+        case .tradingScorecard: return DashboardScorecardDisplayCopy.sectionTitle
         case .psychologyCoach: return "Psychology Coach"
         case .checkInHistory: return "Check-In History"
         case .checkInDay: return "Daily Check-In"

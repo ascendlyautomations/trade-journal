@@ -115,7 +115,7 @@ struct PsychologyCoachView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-                    Text("Your patterns are computed from your journal. The coach explains them — it never invents statistics.")
+                    Text("Your patterns are computed from your journal. The coach explains them, it never invents statistics.")
                         .experienceStyle(.footnote, color: colors.tertiaryText)
 
                     ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.psychologyCoach)
@@ -178,7 +178,7 @@ struct PsychologyCoachView: View {
     }
 
     private func coachBubble(_ text: String) -> some View {
-        Text(text)
+        Text(AIGeneratedTextNormalizer.normalize(text))
             .experienceStyle(.body, color: colors.primaryText)
             .padding(ExperienceSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)

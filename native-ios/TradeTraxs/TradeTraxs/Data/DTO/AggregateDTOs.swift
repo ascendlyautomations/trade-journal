@@ -16,11 +16,11 @@ nonisolated enum TradeDTO {
     /// Owner Trade Detail / Add Trade edit — includes psychology + journal review columns.
     static let ownerJournalSelect =
         profileListSelect
-        + ",confidence,emotion,followed_plan,market_condition,timeframe,news_event,psychology_notes,exit_emotion,execution_rating,image_display_mode,reviewed,is_initial_import,import_source,import_fingerprint,max_rr_reached"
+        + ",confidence,emotion,followed_plan,mistake_type,market_condition,timeframe,news_event,psychology_notes,exit_emotion,execution_rating,image_display_mode,reviewed,is_initial_import,import_source,import_fingerprint,max_rr_reached"
 
     /// Owner Trade History — includes denormalized account_name for search.
     static let historyListSelect =
-        "id,user_id,account_id,account_name,created_at,date,trade_date,pnl,rr,max_rr_reached,points,contracts,session,ticker,direction,notes,public_description,is_public,is_pinned,image_url,entry_time,exit_time,entry_price,exit_price,account_type,mode,strategy,confidence,emotion,followed_plan,market_condition,timeframe,news_event,psychology_notes,exit_emotion,execution_rating,duration_seconds,duration_text,trade_mode,image_display_mode,reviewed,is_initial_import,import_source,import_fingerprint,source_account_id,copied_account_ids,copy_trading_group_id"
+        "id,user_id,account_id,account_name,created_at,date,trade_date,pnl,rr,max_rr_reached,points,contracts,session,ticker,direction,notes,public_description,is_public,is_pinned,image_url,entry_time,exit_time,entry_price,exit_price,account_type,mode,strategy,confidence,emotion,followed_plan,mistake_type,market_condition,timeframe,news_event,psychology_notes,exit_emotion,execution_rating,duration_seconds,duration_text,trade_mode,image_display_mode,reviewed,is_initial_import,import_source,import_fingerprint,source_account_id,copied_account_ids,copy_trading_group_id"
 
     /// Mirrors web `PROFILE_SUMMARY_TRADE_SELECT`.
     static let profileSummarySelect = "id,created_at,pnl,rr,mode,account_type"
@@ -61,6 +61,7 @@ nonisolated enum TradeDTO {
         var confidence: FlexibleNumber?
         var emotion: String?
         var followed_plan: Bool?
+        var mistake_type: String?
         var market_condition: String?
         var timeframe: String?
         var news_event: Bool?
@@ -288,7 +289,7 @@ nonisolated enum TradeDTO {
         var public_description: String?
         var confidence: Double?
         var emotion: String?
-        var followed_plan: Bool
+        var followed_plan: Bool?
         var market_condition: String?
         var timeframe: String?
         var news_event: Bool
@@ -357,7 +358,11 @@ nonisolated enum TradeDTO {
                 try container.encodeNil(forKey: .confidence)
             }
             try container.encodeIfPresent(emotion, forKey: .emotion)
-            try container.encode(followed_plan, forKey: .followed_plan)
+            if let followed_plan {
+                try container.encode(followed_plan, forKey: .followed_plan)
+            } else {
+                try container.encodeNil(forKey: .followed_plan)
+            }
             try container.encodeIfPresent(market_condition, forKey: .market_condition)
             try container.encodeIfPresent(timeframe, forKey: .timeframe)
             try container.encode(news_event, forKey: .news_event)
@@ -903,6 +908,7 @@ nonisolated enum RoomDTO {
         var name: String?
         var position: Int?
         var allow_members_chat: Bool?
+        var live_kind: String?
     }
 
     struct Membership: Codable, Sendable {

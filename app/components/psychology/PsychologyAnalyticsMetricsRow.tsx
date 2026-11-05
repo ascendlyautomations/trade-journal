@@ -43,7 +43,7 @@ export default function PsychologyAnalyticsMetricsRow({
             />
           </div>
           <p className="mt-2 text-[11px] text-gray-500">
-            {reliabilityLabel(metrics.reliability)} — need 5+ trades for a reliable read
+            {reliabilityLabel(metrics.reliability)}, need 5+ trades for a reliable read
           </p>
         </>
       ) : (

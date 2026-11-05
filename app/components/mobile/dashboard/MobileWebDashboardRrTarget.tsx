@@ -2,7 +2,10 @@
 
 import { formatRR } from "@/lib/formatDisplay"
 import type { DashboardRrTargetAnalysis } from "@/lib/dashboardRrTargetAnalysis"
+import { normalizeAIGeneratedText } from "@/lib/normalizeAIGeneratedText"
 import { mwDashText } from "./mobileWebDashboardChrome"
+
+const prose = (text: string) => normalizeAIGeneratedText(text)
 
 function formatTargetAttainmentPct(ratio: number | null): string {
   if (ratio == null) return "—"
@@ -19,15 +22,17 @@ export default function MobileWebDashboardRrTarget({
     return (
       <div className="flex flex-col gap-1.5">
         <p className={`text-[13px] font-semibold leading-snug ${mwDashText.primary}`}>
-          {analysis.headline ?? "Not enough paired R:R yet"}
+          {prose(analysis.headline ?? "Not enough paired R:R yet")}
         </p>
         <p className={`text-[12px] leading-snug ${mwDashText.muted}`}>
-          {first ??
-            "Only trades with both Targeted Risk/Reward and Max R:R Reached appear here."}
+          {prose(
+            first ??
+              "Only trades with both Targeted Risk/Reward and Max R:R Reached appear here."
+          )}
         </p>
         {rest.map((line) => (
           <p key={line} className={`text-[11px] leading-snug ${mwDashText.tertiary}`}>
-            {line}
+            {prose(line)}
           </p>
         ))}
       </div>
@@ -38,7 +43,7 @@ export default function MobileWebDashboardRrTarget({
     <div className="flex flex-col gap-3">
       {analysis.sampleSummary ? (
         <p className={`text-[11px] leading-snug ${mwDashText.tertiary}`}>
-          {analysis.sampleSummary}
+          {prose(analysis.sampleSummary)}
         </p>
       ) : null}
 
@@ -72,7 +77,7 @@ export default function MobileWebDashboardRrTarget({
 
       {analysis.headline ? (
         <p className={`text-[13px] font-medium leading-snug ${mwDashText.primary}`}>
-          {analysis.headline}
+          {prose(analysis.headline)}
         </p>
       ) : null}
 
@@ -82,7 +87,7 @@ export default function MobileWebDashboardRrTarget({
             <li key={line} className="flex gap-2">
               <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-[color:var(--tt-accent,#4ec4e0)]" />
               <span className={`text-[13px] leading-snug ${mwDashText.muted}`}>
-                {line}
+                {prose(line)}
               </span>
             </li>
           ))}

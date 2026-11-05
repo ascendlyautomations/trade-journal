@@ -421,6 +421,7 @@ enum CompositionRoot {
         authState: AuthenticationState
     ) -> AppEnvironment {
         SocialRealtimeRepairExecutor.shared.configure(data: data)
+        RoomLiveVoiceCoordinator.shared.configure(transport: transport)
 
         authentication.manager.sessionBootstrap = AuthenticatedSessionBootstrap(
             profiles: data.profiles,

@@ -88,7 +88,7 @@ nonisolated enum PsychologyCoachDeterministicCoach {
 
         if let checkpoint = facts.guardrailFacts.consecutiveLossCheckpoint {
             recs.append(
-                "Consider using \(checkpoint) consecutive losses as a checkpoint before taking another trade — historically your results weaken after this point."
+                "Consider using \(checkpoint) consecutive losses as a checkpoint before taking another trade, historically your results weaken after this point."
             )
         }
 

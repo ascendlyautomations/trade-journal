@@ -82,6 +82,19 @@ struct DashboardHomeView: View {
             DashboardScopeFilterSheet(viewModel: viewModel)
                 .presentationDetents([.medium, .large])
         }
+        .sheet(isPresented: $viewModel.showsEquityDrawdownSettings) {
+            DashboardEquityDrawdownSettingsSheet(
+                accountName: viewModel.selectedAccount?.name ?? "Live account",
+                limitDigits: $viewModel.equityDrawdownLimitDraft,
+                limitType: $viewModel.equityDrawdownTypeDraft,
+                isSaving: viewModel.isSavingEquityDrawdownSettings,
+                errorMessage: viewModel.equityDrawdownSettingsError,
+                onSave: {
+                    Task { await viewModel.saveEquityDrawdownSettings() }
+                },
+                onCancel: viewModel.cancelEquityDrawdownSettings
+            )
+        }
         .experienceNavigationTitle("Dashboard")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -234,14 +247,6 @@ struct DashboardHomeView: View {
                 ExperienceMotion.preferred(ExperienceMotion.navigation, reduceMotion: reduceMotion),
                 value: contentRevealed
             )
-            .animation(
-                ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-                value: viewModel.scopeFilterTimeLabel
-            )
-            .animation(
-                ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-                value: viewModel.accountFilter
-            )
     }
 
     /// Opaque nav bar on the Dashboard root so header chrome stays visually stable.
@@ -303,10 +308,7 @@ struct DashboardHomeView: View {
             }
             .padding(ExperienceSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
-                cornerRadius: ExperienceRadius.md,
-                style: .continuous
-            ))
+            .experienceDashboardCard(prominence: .standard)
             .padding(.horizontal, ExperienceSpacing.md)
             .accessibilityIdentifier("dashboard.psychology.traxpro.gate")
         }
@@ -383,11 +385,13 @@ struct DashboardHomeView: View {
                             chartPoints: viewModel.equityHeroChartPoints,
                             isChartLoading: viewModel.isEquityChartOverlayLoading,
                             withdrawalSummary: accountValueWithdrawalSummary,
-                            onWithdrawalSummaryTap: viewModel.openWithdrawalsHistory
+                            onWithdrawalSummaryTap: viewModel.openWithdrawalsHistory,
+                            showsDrawdownSettings: viewModel.canConfigureEquityDrawdownSettings,
+                            onDrawdownSettingsTap: viewModel.openEquityDrawdownSettings
                         )
 
                         DashboardMetricStrip(chips: viewModel.metricChips)
-                            .padding(.bottom, ExperienceSpacing.xl)
+                            .padding(.bottom, ExperienceSpacing.lg)
                     }
                     .contextualTourTarget(.dashboardPerformance)
 
@@ -406,6 +410,15 @@ struct DashboardHomeView: View {
                     )
                     performanceCardsGrid
                         .padding(.bottom, ExperienceSpacing.lg)
+
+                    sectionHeader(
+                        DashboardScorecardDisplayCopy.sectionTitle,
+                        subtitle: "Category scores for this filter"
+                    )
+                    DashboardTradingScorecardSection(showsTitle: false) {
+                        viewModel.openTradingScorecard()
+                    }
+                    .padding(.bottom, ExperienceSpacing.xl)
 
                     DashboardChartsSection(
                         summary: summary,
@@ -432,6 +445,7 @@ struct DashboardHomeView: View {
                         .padding(.horizontal, ExperienceSpacing.md)
                         .padding(.bottom, ExperienceSpacing.sm)
                     }
+
                     DashboardInsightsSection(presentation: viewModel.insightsPresentation)
                         .padding(.bottom, ExperienceSpacing.lg)
 
@@ -464,14 +478,6 @@ struct DashboardHomeView: View {
             .animation(
                 ExperienceMotion.preferred(ExperienceMotion.navigation, reduceMotion: reduceMotion),
                 value: contentRevealed
-            )
-            .animation(
-                ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-                value: viewModel.scopeFilterTimeLabel
-            )
-            .animation(
-                ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-                value: viewModel.accountFilter
             )
             .onAppear {
                 revealContentIfNeeded()
@@ -525,10 +531,7 @@ struct DashboardHomeView: View {
                 .padding(.horizontal, ExperienceSpacing.md)
                 .padding(.vertical, ExperienceSpacing.sm)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
-                    cornerRadius: ExperienceRadius.sm,
-                    style: .continuous
-                ))
+                .experienceDashboardCard(cornerRadius: ExperienceRadius.sm)
                 .accessibilityIdentifier("dashboard.card.\(chip.id)")
             }
         }

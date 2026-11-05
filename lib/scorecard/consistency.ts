@@ -1,3 +1,11 @@
+import {
+  consistencyPlanAdherencePool,
+  MIN_POST_LOSS_PLAN_TAGGED,
+  MIN_TRIPLE_LOSS_WINDOW_PLAN_TAGGED,
+  planAdherenceRate,
+  postLossPlanObservations,
+  tripleLossWindowPlanObservations,
+} from "./planAdherence.ts"
 import { clampScore, formatPercent, resolveScorecardReliability } from "./reliability.ts"
 import type { ScorecardCategoryResult, ScorecardTrade } from "./types.ts"
 import { SCORECARD_CATEGORY_WEIGHTS } from "./types.ts"
@@ -26,44 +34,98 @@ export function scoreConsistencyCategory(
     label: "Active trading days in scope",
     value: String(tradingDayCount),
     explanation:
-      "Days with at least one trade in this filter — sparse schedules and breaks are not penalized.",
+      "Days with at least one trade in this filter, sparse schedules and breaks are not penalized.",
     sampleSize: tradingDayCount,
     sampleLabel: "trading days",
   })
 
-  let streakScore: number | null = null
-  if (postTripleLossWinRate != null) {
-    streakScore = clampScore(postTripleLossWinRate * 100)
+  const postLoss = postLossPlanObservations(trades)
+  const postLossRate = planAdherenceRate(postLoss)
+  if (postLoss.length > 0 && postLossRate != null) {
     subMetrics.push({
-      id: "streak.after_three_losses",
-      label: "Win rate after 3 consecutive losses",
+      id: "consistency.plan_after_loss",
+      label: "Plan followed after a loss (explicit tags)",
+      value: formatPercent(postLossRate),
+      explanation:
+        "Among trades immediately after a losing trade where you tagged plan adherence, behavioral consistency under pressure.",
+      sampleSize: postLoss.length,
+      sampleLabel: "tagged post-loss trades",
+    })
+  }
+
+  const tripleWindow = tripleLossWindowPlanObservations(trades)
+  const tripleWindowRate = planAdherenceRate(tripleWindow)
+  if (tripleWindow.length >= MIN_TRIPLE_LOSS_WINDOW_PLAN_TAGGED && tripleWindowRate != null) {
+    subMetrics.push({
+      id: "consistency.plan_after_three_losses",
+      label: "Plan followed after 3-loss sequence (explicit tags)",
+      value: formatPercent(tripleWindowRate),
+      explanation:
+        "Tagged trades in the recovery window after the first 3-loss run, shown separately; not double-counted in the score pool.",
+      sampleSize: tripleWindow.length,
+      sampleLabel: "tagged trades in window",
+    })
+  }
+
+  if (postTripleLossWinRate != null) {
+    subMetrics.push({
+      id: "streak.after_three_losses_win_rate",
+      label: "Win rate after 3 consecutive losses (outcome context)",
       value: formatPercent(postTripleLossWinRate),
       explanation:
-        "Outcome proxy after a 3-loss sequence — reflects tilt/recovery patterns, not calendar frequency or net P&L.",
+        "Performance context only, not part of the consistency score. Does not reflect plan tagging or calendar frequency.",
       sampleSize: trades.length,
       sampleLabel: "trades in scope",
     })
     if (postTripleLossWinRate < 0.45) {
       weaknesses.push(
-        "Win rate drops after 3 consecutive losses — consider a pause rule or size reduction."
+        "Win rate drops after 3 consecutive losses, consider a pause rule (outcome context)."
       )
     } else if (postTripleLossWinRate >= 0.55) {
-      strengths.push("You recover reasonably after 3-loss sequences in this sample.")
+      strengths.push("Win rate after 3-loss sequences is stable in this sample (outcome context).")
+    }
+  }
+
+  const pool = consistencyPlanAdherencePool(trades)
+  const poolRate = planAdherenceRate(pool.observations)
+  let score: number | null = null
+  if (pool.observations.length >= MIN_POST_LOSS_PLAN_TAGGED && poolRate != null) {
+    score = clampScore(poolRate * 100)
+    if (pool.tripleWindowAddedCount > 0) {
+      subMetrics.push({
+        id: "consistency.scored_pool",
+        label: "Scored post-loss sample (deduplicated)",
+        value: formatPercent(poolRate),
+        explanation: `${pool.postLossCount} post-loss tagged trade(s)${
+          pool.tripleWindowAddedCount > 0
+            ? ` plus ${pool.tripleWindowAddedCount} additional tagged trade(s) from the 3-loss window without double-counting.`
+            : "."
+        }`,
+        sampleSize: pool.observations.length,
+        sampleLabel: "tagged trades in score pool",
+      })
+    }
+    if (poolRate >= 0.7) {
+      strengths.push("You often report following your plan on trades taken after losses.")
+    } else if (poolRate < 0.45) {
+      weaknesses.push("Plan adherence drops on trades after losses, review pause rules and triggers.")
     }
   } else if (trades.length >= 5) {
     dataGaps.push(
-      "No 3-loss sequence in this scope — recovery-after-losses is not scored (not a penalty)."
+      `Tag plan followed / not followed on at least ${MIN_POST_LOSS_PLAN_TAGGED} trades immediately after a loss to score consistency.`
     )
   }
 
-  const score = streakScore != null ? streakScore : null
-
   const reliability =
-    streakScore != null
-      ? resolveScorecardReliability(trades.length)
+    pool.observations.length >= MIN_POST_LOSS_PLAN_TAGGED
+      ? resolveScorecardReliability(pool.observations.length)
       : "insufficient"
 
-  const eligible = tradingDayCount >= 5 && trades.length >= 5 && score != null
+  const eligible =
+    tradingDayCount >= 5 &&
+    trades.length >= 5 &&
+    score != null &&
+    isDevelopingOrStrong(reliability)
 
   const coveragePercent =
     trades.length > 0
@@ -83,4 +145,8 @@ export function scoreConsistencyCategory(
     weaknesses,
     dataGaps,
   }
+}
+
+function isDevelopingOrStrong(reliability: ReturnType<typeof resolveScorecardReliability>): boolean {
+  return reliability === "developing" || reliability === "strong"
 }

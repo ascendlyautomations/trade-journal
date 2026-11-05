@@ -106,6 +106,7 @@ enum SessionScopedCaches {
         data.engagementStore.removeAll()
         data.vaultStore.removeAll()
         Task { await data.realtimeHub.stop() }
+        Task { await RoomLiveVoiceCoordinator.shared.leave(reason: .sessionEnded) }
         #if DEBUG
         SessionNetworkProbe.resetForTesting()
         SupabaseSessionUsage.resetForTesting()
