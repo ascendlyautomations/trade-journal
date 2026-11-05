@@ -1,4 +1,4 @@
-# Trade Room live voice — Phase 1 (web + iOS clients)
+# Trade Room live voice — Phase 1 (web + iOS)
 
 Open voice channels (`live_kind = voice_open` or `voice_stage` without stage UI) using LiveKit tokens from `POST /api/livekit/token`.
 
