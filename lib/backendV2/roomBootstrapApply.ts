@@ -1,5 +1,10 @@
 import type { Dispatch, SetStateAction } from "react"
-import type { RoomBootstrapV1, RoomMessageV1 } from "./roomContracts.ts"
+import type { RoomBootstrapV1, RoomMessageV1, RoomSectionV1 } from "./roomContracts.ts"
+
+function isTextOnlySection(section: RoomSectionV1): boolean {
+  const v = (section.live_kind ?? "text").trim().toLowerCase()
+  return v !== "voice_open" && v !== "voice_stage"
+}
 
 export type RoomBootstrapApplyTarget = {
   setSections: Dispatch<SetStateAction<any[]>>
@@ -45,6 +50,7 @@ export type RoomBootstrapApplyTarget = {
     >
   >
   markedReadRoomKeyRef: { current: string | null }
+  setRoomLiveVoiceKind?: Dispatch<SetStateAction<string>>
 }
 
 export function mapRoomBootstrapMessages(messages: RoomMessageV1[]): unknown[] {
@@ -70,8 +76,17 @@ export function applyRoomBootstrapToCommunityState(
     mark_read: markRead,
   } = bootstrap.data
 
-  target.setSections(sections)
-  target.setSelectedSectionId(activeSectionId)
+  const textSections = sections.filter(isTextOnlySection)
+  target.setSections(textSections)
+  target.setRoomLiveVoiceKind?.(
+    bootstrap.data.room.live_voice_kind?.trim() || "voice_open"
+  )
+  const resolvedActiveSectionId =
+    activeSectionId &&
+    textSections.some((s) => s.id === activeSectionId)
+      ? activeSectionId
+      : (textSections[0]?.id ?? null)
+  target.setSelectedSectionId(resolvedActiveSectionId)
   target.setPinnedMessages(mapRoomBootstrapMessages(pinned))
   target.setMessages(mapRoomBootstrapMessages(messages))
   target.setHasOlderMessages(hasMore)
@@ -86,8 +101,8 @@ export function applyRoomBootstrapToCommunityState(
 
   const cacheKey = target.buildRoomMessagesCacheKey(
     roomId,
-    sections,
-    activeSectionId
+    textSections,
+    resolvedActiveSectionId
   )
   target.messagesByRoomRef.current[cacheKey] = {
     pinned: mapRoomBootstrapMessages(pinned),
@@ -100,8 +115,8 @@ export function applyRoomBootstrapToCommunityState(
   }))
 
   target.patchRoomSectionsInSession(userId, roomId, {
-    list: sections,
-    activeSectionId,
+    list: textSections,
+    activeSectionId: resolvedActiveSectionId,
   })
   target.patchRoomMessagesInSession(userId, cacheKey, {
     pinned: mapRoomBootstrapMessages(pinned),

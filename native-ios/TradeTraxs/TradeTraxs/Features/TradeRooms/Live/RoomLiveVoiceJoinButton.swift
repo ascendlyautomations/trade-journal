@@ -1,18 +1,14 @@
 import SwiftUI
 
 struct RoomLiveVoiceJoinButton: View {
-    let channel: RoomChannel
+    let roomID: RoomID
     let roomTitle: String
     @Bindable var coordinator: RoomLiveVoiceCoordinator
 
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        if !channel.liveKind.supportsLiveVoice {
-            EmptyView()
-        } else if coordinator.session?.sectionID == channel.id,
-                  coordinator.isSessionActive
-        {
+        if coordinator.session?.roomID == roomID, coordinator.isSessionActive {
             HStack(spacing: 4) {
                 Image(systemName: "waveform")
                     .foregroundStyle(colors.accent)
@@ -23,12 +19,7 @@ struct RoomLiveVoiceJoinButton: View {
         } else {
             Button {
                 Task {
-                    await coordinator.join(
-                        roomID: channel.roomID,
-                        sectionID: channel.id,
-                        roomTitle: roomTitle,
-                        channelTitle: channel.displayTitle
-                    )
+                    await coordinator.join(roomID: roomID, roomTitle: roomTitle)
                 }
             } label: {
                 Label(coordinator.isJoining ? "Joining…" : "Join voice", systemImage: "headphones")

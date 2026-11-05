@@ -8,7 +8,6 @@ export const dynamic = "force-dynamic"
 
 type ParsedStageBody = {
   roomId: string
-  sectionId: string
   targetUserId: string
 }
 
@@ -16,11 +15,10 @@ function parseStageBody(raw: unknown): ParsedStageBody | null {
   if (!raw || typeof raw !== "object") return null
   const b = raw as Record<string, unknown>
   const roomId = typeof b.roomId === "string" ? b.roomId.trim() : ""
-  const sectionId = typeof b.sectionId === "string" ? b.sectionId.trim() : ""
   const targetUserId =
     typeof b.targetUserId === "string" ? b.targetUserId.trim() : ""
-  if (!roomId || !sectionId || !targetUserId) return null
-  return { roomId, sectionId, targetUserId }
+  if (!roomId || !targetUserId) return null
+  return { roomId, targetUserId }
 }
 
 export async function POST(req: Request) {
@@ -46,17 +44,16 @@ export async function POST(req: Request) {
   const parsed = parseStageBody(body)
   if (parsed === null) {
     return Response.json(
-      { error: "roomId, sectionId, and targetUserId are required." },
+      { error: "roomId and targetUserId are required." },
       { status: 400 }
     )
   }
 
-  const { roomId, sectionId, targetUserId } = parsed
+  const { roomId, targetUserId } = parsed
 
   const access = await resolveStageModerationAccess(supabaseServiceRole, {
     actorUserId: user.id,
     roomId,
-    sectionId,
     targetUserId,
   })
 
@@ -65,12 +62,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    await setLiveKitStagePublish(
-      access.roomId,
-      access.sectionId,
-      access.targetUserId,
-      false
-    )
+    await setLiveKitStagePublish(access.roomId, access.targetUserId, false)
   } catch (err) {
     console.error("[livekit/stage/demote] failed", err)
     return Response.json(

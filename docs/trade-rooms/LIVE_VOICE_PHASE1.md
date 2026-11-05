@@ -1,21 +1,18 @@
 # Trade Room live voice — Phase 1 (web + iOS)
 
-Open voice channels (`live_kind = voice_open` or `voice_stage` without stage UI) using LiveKit tokens from `POST /api/livekit/token`.
+Each Trade Room has **one shared voice channel** — **General Voice** — backed by LiveKit room names `tt/{roomId}/voice` and tokens from `POST /api/livekit/token` with `{ "roomId": "uuid" }`.
 
-## Enable a channel
+## Database
 
-```sql
-update public.room_sections
-set live_kind = 'voice_open'
-where id = '<section-uuid>';
-```
+- `rooms.live_voice_kind`: `voice_open` (default), `voice_stage`, or `off`
+- Text channels stay in `room_sections` with `live_kind = text` (no per-section voice rows)
 
 ## Clients
 
-- **Web:** `/community` — Join voice, fixed bottom bar (mute / participants / leave).
-- **iOS:** Trade Room conversation — Join voice; app-wide bar via `MainTabShellView` safe area inset.
+- **Web:** `/community` — General Voice in the room sidebar (separate from text channels); fixed bottom bar while connected.
+- **iOS:** Trade Room conversation — General Voice row above the text channel switcher; app-wide bar via `MainTabShellView`.
 
-Sessions are **app-scoped** (`RoomLiveVoiceCoordinator.shared` / web store) and persist across navigation and text-channel switches until Leave or joining another voice section.
+Voice sessions are **app-scoped** and persist across text-channel switches and navigation until Leave or joining another Trade Room’s voice.
 
 ## Not in Phase 1
 
@@ -23,4 +20,4 @@ Stage promote UI, screen share, iOS background audio.
 
 ## Device QA (required)
 
-Two physical devices or simulator + device with LiveKit env configured: join same voice section, bidirectional audio, mute, navigate tabs/channels without drop, leave clears mic.
+Two devices with LiveKit env: join the same Trade Room General Voice from different text channels, bidirectional audio, mute, navigate without drop, leave clears mic; no mic → listen-only with message (no disconnect loop).

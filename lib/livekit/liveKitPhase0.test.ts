@@ -12,14 +12,12 @@ import {
 } from "./liveKitRoomName.ts"
 
 describe("LiveKit Phase 0 — room naming", () => {
-  it("builds stable tt/{room}/{section} names", () => {
+  it("builds stable tt/{roomId}/voice names", () => {
     const roomId = "11111111-1111-1111-1111-111111111111"
-    const sectionId = "22222222-2222-2222-2222-222222222222"
-    const name = liveKitRoomName(roomId, sectionId)
-    assert.equal(name, `tt/${roomId}/${sectionId}`)
+    const name = liveKitRoomName(roomId)
+    assert.equal(name, `tt/${roomId}/voice`)
     assert.deepEqual(parseLiveKitRoomName(name), {
       roomId,
-      sectionId,
     })
   })
 

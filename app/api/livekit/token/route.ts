@@ -8,16 +8,14 @@ export const dynamic = "force-dynamic"
 
 type ParsedTokenRequestBody = {
   roomId: string
-  sectionId: string
 }
 
 function parseTokenRequestBody(raw: unknown): ParsedTokenRequestBody | null {
   if (!raw || typeof raw !== "object") return null
   const b = raw as Record<string, unknown>
   const roomId = typeof b.roomId === "string" ? b.roomId.trim() : ""
-  const sectionId = typeof b.sectionId === "string" ? b.sectionId.trim() : ""
-  if (!roomId || !sectionId) return null
-  return { roomId, sectionId }
+  if (!roomId) return null
+  return { roomId }
 }
 
 export async function POST(req: Request) {
@@ -45,18 +43,14 @@ export async function POST(req: Request) {
 
   const parsed = parseTokenRequestBody(body)
   if (parsed === null) {
-    return Response.json(
-      { error: "roomId and sectionId are required." },
-      { status: 400 }
-    )
+    return Response.json({ error: "roomId is required." }, { status: 400 })
   }
 
-  const { roomId, sectionId } = parsed
+  const { roomId } = parsed
 
   const access = await resolveTradeRoomLiveVoiceAccess(supabaseServiceRole, {
     userId: user.id,
     roomId,
-    sectionId,
   })
 
   if (!access.ok) {

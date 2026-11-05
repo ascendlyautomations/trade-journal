@@ -2,7 +2,10 @@ import { RoomServiceClient, TrackSource } from "livekit-server-sdk"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/database.types"
 import { readLiveKitServerConfig } from "./config.ts"
-import { liveKitRoomName } from "./liveKitRoomName.ts"
+import {
+  legacySectionLiveKitRoomName,
+  liveKitRoomName,
+} from "./liveKitRoomName.ts"
 
 let cachedClient: RoomServiceClient | null = null
 
@@ -19,7 +22,7 @@ export function getLiveKitRoomServiceClient(): RoomServiceClient | null {
   return cachedClient
 }
 
-export async function listVoiceSectionIdsForRoom(
+async function listLegacyVoiceSectionIdsForRoom(
   admin: SupabaseClient<Database>,
   roomId: string
 ): Promise<string[]> {
@@ -29,7 +32,7 @@ export async function listVoiceSectionIdsForRoom(
     .eq("room_id", roomId)
 
   if (error) {
-    console.error("[livekit] list voice sections failed", error.message)
+    console.error("[livekit] list legacy voice sections failed", error.message)
     return []
   }
 
@@ -41,7 +44,7 @@ export async function listVoiceSectionIdsForRoom(
     .map((row) => row.id)
 }
 
-/** Removes a user from every LiveKit voice room tied to a Trade Room. */
+/** Removes a user from the Trade Room shared LiveKit voice room (+ legacy section rooms). */
 export async function disconnectUserFromTradeRoomLiveKit(
   admin: SupabaseClient<Database>,
   roomId: string,
@@ -56,12 +59,15 @@ export async function disconnectUserFromTradeRoomLiveKit(
     }
   }
 
-  const sectionIds = await listVoiceSectionIdsForRoom(admin, roomId)
+  const lkRoomNames = new Set<string>([liveKitRoomName(roomId)])
+  for (const sectionId of await listLegacyVoiceSectionIdsForRoom(admin, roomId)) {
+    lkRoomNames.add(legacySectionLiveKitRoomName(roomId, sectionId))
+  }
+
   const errors: string[] = []
   let removed = 0
 
-  for (const sectionId of sectionIds) {
-    const lkRoom = liveKitRoomName(roomId, sectionId)
+  for (const lkRoom of lkRoomNames) {
     try {
       await client.removeParticipant(lkRoom, userId)
       removed += 1
@@ -74,12 +80,11 @@ export async function disconnectUserFromTradeRoomLiveKit(
     }
   }
 
-  return { attempted: sectionIds.length, removed, errors }
+  return { attempted: lkRoomNames.size, removed, errors }
 }
 
 export async function setLiveKitStagePublish(
   roomId: string,
-  sectionId: string,
   targetUserId: string,
   canPublish: boolean
 ): Promise<void> {
@@ -88,7 +93,7 @@ export async function setLiveKitStagePublish(
     throw new Error("LiveKit is not configured on the server.")
   }
 
-  const lkRoom = liveKitRoomName(roomId, sectionId)
+  const lkRoom = liveKitRoomName(roomId)
   await client.updateParticipant(lkRoom, targetUserId, {
     permission: {
       canPublish,

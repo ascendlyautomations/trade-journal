@@ -6,8 +6,11 @@ import {
   TRADE_ROOM_MODERATOR_TAG_NAME,
 } from "@/lib/tradeRoomModerationPermission.ts"
 import { canManageTradeRoom } from "@/lib/tradeRoomManagementPermission.ts"
-
-export type RoomSectionLiveKind = "text" | "voice_open" | "voice_stage"
+import {
+  normalizeTradeRoomLiveVoiceKind,
+  tradeRoomSupportsSharedLiveVoice,
+  type TradeRoomLiveVoiceKind,
+} from "./tradeRoomSharedLiveVoice.ts"
 
 export type LiveVoiceTokenRole = "listener" | "speaker" | "moderator"
 
@@ -15,8 +18,7 @@ export type TradeRoomLiveVoiceAccess =
   | {
       ok: true
       roomId: string
-      sectionId: string
-      liveKind: "voice_open" | "voice_stage"
+      liveKind: Extract<TradeRoomLiveVoiceKind, "voice_open" | "voice_stage">
       role: LiveVoiceTokenRole
       canPublish: boolean
       canSubscribe: true
@@ -26,21 +28,14 @@ export type TradeRoomLiveVoiceAccess =
     }
   | { ok: false; status: number; error: string }
 
-function normalizeLiveKind(raw: string | null | undefined): RoomSectionLiveKind {
-  const v = (raw ?? "text").trim().toLowerCase()
-  if (v === "voice_open" || v === "voice_stage") return v
-  return "text"
-}
-
 export async function resolveTradeRoomLiveVoiceAccess(
   admin: SupabaseClient<Database>,
   options: {
     userId: string
     roomId: string
-    sectionId: string
   }
 ): Promise<TradeRoomLiveVoiceAccess> {
-  const { userId, roomId, sectionId } = options
+  const { userId, roomId } = options
 
   const { data: banRow } = await admin
     .from("room_bans")
@@ -69,40 +64,28 @@ export async function resolveTradeRoomLiveVoiceAccess(
     return { ok: false, status: 403, error: "Active room membership is required for live voice." }
   }
 
-  const { data: sectionRow, error: sectionErr } = await admin
-    .from("room_sections")
-    .select("id, room_id, live_kind, allow_members_chat")
-    .eq("id", sectionId)
-    .eq("room_id", roomId)
-    .maybeSingle()
-
-  if (sectionErr) {
-    console.error("[livekit/access] section lookup failed", sectionErr.message)
-    return { ok: false, status: 500, error: "Could not load channel." }
-  }
-
-  if (!sectionRow) {
-    return { ok: false, status: 404, error: "Channel not found." }
-  }
-
-  const liveKind = normalizeLiveKind(sectionRow.live_kind)
-  if (liveKind === "text") {
-    return {
-      ok: false,
-      status: 400,
-      error: "This channel does not support live voice.",
-    }
-  }
-
   const { data: roomRow, error: roomErr } = await admin
     .from("rooms")
-    .select("owner_user_id, room_kind")
+    .select("owner_user_id, room_kind, allow_members_chat, live_voice_kind")
     .eq("id", roomId)
     .maybeSingle()
 
   if (roomErr || !roomRow) {
     return { ok: false, status: 404, error: "Trade Room not found." }
   }
+
+  const liveKind = normalizeTradeRoomLiveVoiceKind(roomRow.live_voice_kind)
+
+  if (!tradeRoomSupportsSharedLiveVoice(liveKind)) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Live voice is not enabled for this Trade Room.",
+    }
+  }
+
+  const voiceKind: Extract<TradeRoomLiveVoiceKind, "voice_open" | "voice_stage"> =
+    liveKind === "voice_stage" ? "voice_stage" : "voice_open"
 
   const { data: adminRow } = await admin
     .from("admin_users")
@@ -141,14 +124,14 @@ export async function resolveTradeRoomLiveVoiceAccess(
     isPlatformAdmin,
   })
 
-  const allowMembersChat = sectionRow.allow_members_chat !== false
+  const allowMembersChat = roomRow.allow_members_chat !== false
   const mayPublishByChatPolicy =
     allowMembersChat || canModerate || canManage || isOwner
 
   let role: LiveVoiceTokenRole = "listener"
   let canPublish = false
 
-  if (liveKind === "voice_open") {
+  if (voiceKind === "voice_open") {
     if (mayPublishByChatPolicy) {
       role = canModerate || canManage ? "moderator" : "speaker"
       canPublish = true
@@ -157,7 +140,6 @@ export async function resolveTradeRoomLiveVoiceAccess(
       canPublish = false
     }
   } else {
-    // voice_stage — default listen-only; speakers promoted server-side.
     if (canModerate || canManage) {
       role = "moderator"
       canPublish = true
@@ -181,8 +163,7 @@ export async function resolveTradeRoomLiveVoiceAccess(
   return {
     ok: true,
     roomId,
-    sectionId,
-    liveKind,
+    liveKind: voiceKind,
     role,
     canPublish,
     canSubscribe: true,

@@ -14,7 +14,6 @@ struct LiveVoiceParticipantItem: Identifiable, Hashable, Sendable {
 
 struct LiveVoiceSessionInfo: Hashable, Sendable {
     var roomID: RoomID
-    var sectionID: RoomChannelID
     var roomTitle: String
     var channelTitle: String
     var canPublish: Bool
@@ -24,6 +23,10 @@ enum LiveVoiceLeaveReason: Sendable {
     case user
     case sessionEnded
     case replaced
+}
+
+enum TradeRoomGeneralVoice {
+    static let channelTitle = "General Voice"
 }
 
 /// App-scoped live voice session — survives Trade Room navigation and text-channel switches.
@@ -57,21 +60,17 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
         tokenClient = LiveKitTokenClient(transport: transport)
     }
 
-    func join(
-        roomID: RoomID,
-        sectionID: RoomChannelID,
-        roomTitle: String,
-        channelTitle: String
-    ) async {
-        if session?.roomID == roomID,
-           session?.sectionID == sectionID,
-           connectionState == .connected
-        {
+    func join(roomID: RoomID, roomTitle: String) async {
+        if isJoining {
+            return
+        }
+
+        if session?.roomID == roomID, connectionState == .connected {
             return
         }
 
         if session != nil {
-            await leave(reason: .replaced)
+            await leave(reason: .replaced, clearError: true)
         }
 
         guard let tokenClient else {
@@ -83,24 +82,23 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
         lastError = nil
         defer { isJoining = false }
 
+        var joinedRoom: Room?
+
         do {
             applyAudioPolicyBeforeConnect()
 
-            let tokenResponse = try await tokenClient.fetchVoiceToken(
-                roomID: roomID,
-                sectionID: sectionID
-            )
+            let tokenResponse = try await tokenClient.fetchVoiceToken(roomID: roomID)
 
             let nextRoom = Room()
             nextRoom.add(delegate: self)
             room = nextRoom
+            joinedRoom = nextRoom
             canPublishCurrent = tokenResponse.canPublish
 
             session = LiveVoiceSessionInfo(
                 roomID: roomID,
-                sectionID: sectionID,
                 roomTitle: roomTitle,
-                channelTitle: channelTitle,
+                channelTitle: TradeRoomGeneralVoice.channelTitle,
                 canPublish: tokenResponse.canPublish
             )
 
@@ -111,8 +109,16 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
             connectionState = nextRoom.connectionState
 
             if tokenResponse.canPublish {
-                try await nextRoom.localParticipant.setMicrophone(enabled: true)
-                isMicrophoneEnabled = true
+                do {
+                    try await nextRoom.localParticipant.setMicrophone(enabled: true)
+                    isMicrophoneEnabled = true
+                } catch {
+                    if isMicrophoneAccessError(error) {
+                        downgradeToListenOnly(on: nextRoom, error: error)
+                    } else {
+                        throw error
+                    }
+                }
             } else {
                 isMicrophoneEnabled = false
             }
@@ -126,27 +132,13 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
             notifySessionDidChange()
         } catch {
             lastError = error.localizedDescription
-            await leave(reason: .user)
+            await teardownRoom(joinedRoom, clearError: false)
         }
     }
 
-    func leave(reason: LiveVoiceLeaveReason = .user) async {
+    func leave(reason: LiveVoiceLeaveReason = .user, clearError: Bool = true) async {
         _ = reason
-        if let room {
-            room.remove(delegate: self)
-            for participant in room.remoteParticipants.values {
-                participant.remove(delegate: self)
-            }
-            room.localParticipant.remove(delegate: self)
-            await room.disconnect()
-        }
-        room = nil
-        session = nil
-        connectionState = .disconnected
-        isMicrophoneEnabled = false
-        canPublishCurrent = false
-        participants = []
-        notifySessionDidChange()
+        await teardownRoom(room, clearError: clearError)
     }
 
     func setMuted(_ muted: Bool) async {
@@ -154,9 +146,14 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
         do {
             try await room.localParticipant.setMicrophone(enabled: !muted)
             isMicrophoneEnabled = !muted
+            lastError = nil
             syncParticipants()
         } catch {
-            lastError = error.localizedDescription
+            if isMicrophoneAccessError(error) {
+                downgradeToListenOnly(on: room, error: error)
+            } else {
+                lastError = error.localizedDescription
+            }
         }
     }
 
@@ -216,6 +213,65 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
     }
 
     // MARK: - Private
+
+    private func teardownRoom(_ activeRoom: Room?, clearError: Bool) async {
+        if let activeRoom {
+            activeRoom.remove(delegate: self)
+            for participant in activeRoom.remoteParticipants.values {
+                participant.remove(delegate: self)
+            }
+            activeRoom.localParticipant.remove(delegate: self)
+            await activeRoom.disconnect()
+        }
+        room = nil
+        session = nil
+        connectionState = .disconnected
+        isMicrophoneEnabled = false
+        canPublishCurrent = false
+        participants = []
+        if clearError {
+            lastError = nil
+        }
+        notifySessionDidChange()
+    }
+
+    private func downgradeToListenOnly(on activeRoom: Room, error: Error) {
+        isMicrophoneEnabled = false
+        canPublishCurrent = false
+        if var current = session {
+            current.canPublish = false
+            session = current
+        }
+        lastError = microphoneUserMessage(error) + " You can still listen to the channel."
+        Task {
+            try? await activeRoom.localParticipant.setMicrophone(enabled: false)
+            await MainActor.run { self.syncParticipants() }
+        }
+        syncParticipants()
+    }
+
+    private func isMicrophoneAccessError(_ error: Error) -> Bool {
+        let ns = error as NSError
+        if ns.domain == AVFoundation.AVError.errorDomain {
+            return true
+        }
+        let message = error.localizedDescription.lowercased()
+        return message.contains("not found")
+            || message.contains("permission")
+            || message.contains("not allowed")
+            || message.contains("unavailable")
+    }
+
+    private func microphoneUserMessage(_ error: Error) -> String {
+        let message = error.localizedDescription.lowercased()
+        if message.contains("not found") {
+            return "No microphone was found on this device."
+        }
+        if message.contains("permission") || message.contains("not allowed") {
+            return "Microphone access was blocked. Check Settings."
+        }
+        return "Could not open the microphone."
+    }
 
     private func syncParticipants() {
         guard let room else {

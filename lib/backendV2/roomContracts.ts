@@ -56,6 +56,8 @@ export type RoomBootstrapV1 = {
       is_public: boolean
       /** Wire-compat only — chat permission is per section; defaults true. */
       allow_members_chat: boolean
+      /** Shared LiveKit voice mode for the Trade Room (`voice_open` default). */
+      live_voice_kind?: string | null
       show_on_profile: boolean
       created_at: string | null
     }
@@ -225,6 +227,7 @@ export function decodeRoomBootstrapV1(raw: unknown): RoomBootstrapV1 {
         owner_user_id: asString(room.owner_user_id),
         is_public: asBool(room.is_public, true),
         allow_members_chat: asBool(room.allow_members_chat, true),
+        live_voice_kind: asString(room.live_voice_kind) ?? "voice_open",
         show_on_profile: asBool(room.show_on_profile, true),
         created_at: asString(room.created_at),
       },

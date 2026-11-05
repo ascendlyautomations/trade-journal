@@ -134,7 +134,7 @@ async function loadRoomBootstrapLegacy(
   const { data: roomRow, error: roomError } = await client
     .from("rooms")
     .select(
-      "id, name, description, slug, image_url, owner_user_id, show_on_profile"
+      "id, name, description, slug, image_url, owner_user_id, show_on_profile, allow_members_chat, live_voice_kind"
     )
     .eq("id", roomId)
     .maybeSingle()
@@ -262,7 +262,10 @@ async function loadRoomBootstrapLegacy(
         image_url: roomRow.image_url ?? null,
         owner_user_id: roomRow.owner_user_id ?? null,
         is_public: true,
-        allow_members_chat: true,
+        allow_members_chat: roomRow.allow_members_chat !== false,
+        live_voice_kind:
+          (roomRow as { live_voice_kind?: string | null }).live_voice_kind ??
+          "voice_open",
         show_on_profile: roomRow.show_on_profile !== false,
         created_at: null,
       },

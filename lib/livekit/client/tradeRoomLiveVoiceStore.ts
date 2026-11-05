@@ -10,10 +10,15 @@ import {
 } from "livekit-client"
 import { applyLiveVoiceAudioPolicyOnConnect } from "./applyLiveVoiceAudioPolicy.ts"
 import { createExternalStoreSnapshotCache } from "./externalStoreSnapshot.ts"
+import {
+  isLiveVoiceMicrophoneAccessError,
+  LIVE_VOICE_LISTEN_ONLY_SUFFIX,
+  liveVoiceMicrophoneErrorMessage,
+} from "./liveVoiceMicrophoneErrors.ts"
+import { TRADE_ROOM_GENERAL_VOICE_LABEL } from "@/lib/livekit/tradeRoomSharedLiveVoice.ts"
 
 export type LiveVoiceSessionMeta = {
   roomId: string
-  sectionId: string
   roomLabel: string
   channelLabel: string
   canPublish: boolean
@@ -119,9 +124,12 @@ export function getTradeRoomLiveVoiceSnapshot(): LiveVoiceStoreSnapshot {
   return snapshotCache.getSnapshot()
 }
 
-export async function leaveTradeRoomLiveVoice(): Promise<void> {
+export async function leaveTradeRoomLiveVoice(options?: {
+  retainError?: boolean
+}): Promise<void> {
   isBusy = true
   emit()
+  const keepError = options?.retainError === true
   try {
     if (room) {
       detachRoomHandlers(room)
@@ -135,27 +143,51 @@ export async function leaveTradeRoomLiveVoice(): Promise<void> {
     connectionState = ConnectionState.Disconnected
     isMicrophoneEnabled = false
     participants = []
-    error = null
+    if (!keepError) {
+      error = null
+    }
     isBusy = false
     emit()
   }
 }
 
+async function enablePublisherMicrophone(activeRoom: Room): Promise<void> {
+  await activeRoom.localParticipant.setMicrophoneEnabled(true)
+  isMicrophoneEnabled = true
+}
+
+function downgradeToListenOnly(activeRoom: Room, micErr: unknown): void {
+  isMicrophoneEnabled = false
+  if (session) {
+    session = { ...session, canPublish: false }
+  }
+  error =
+    liveVoiceMicrophoneErrorMessage(micErr) + LIVE_VOICE_LISTEN_ONLY_SUFFIX
+  try {
+    void activeRoom.localParticipant.setMicrophoneEnabled(false)
+  } catch {
+    /* already unavailable */
+  }
+  refreshParticipants(activeRoom)
+}
+
 export async function joinTradeRoomLiveVoice(options: {
   roomId: string
-  sectionId: string
   roomLabel: string
-  channelLabel: string
+  channelLabel?: string
   fetchToken: () => Promise<{
     token: string
     livekitUrl: string
     canPublish: boolean
   }>
 }): Promise<void> {
+  if (isBusy) {
+    return
+  }
+
   if (
     session &&
     session.roomId === options.roomId &&
-    session.sectionId === options.sectionId &&
     room?.state === ConnectionState.Connected
   ) {
     return
@@ -169,6 +201,8 @@ export async function joinTradeRoomLiveVoice(options: {
   error = null
   emit()
 
+  let joinedRoom: Room | null = null
+
   try {
     const { token, livekitUrl, canPublish } = await options.fetchToken()
     applyLiveVoiceAudioPolicyOnConnect()
@@ -179,11 +213,11 @@ export async function joinTradeRoomLiveVoice(options: {
     })
     attachRoomHandlers(nextRoom)
     room = nextRoom
+    joinedRoom = nextRoom
     session = {
       roomId: options.roomId,
-      sectionId: options.sectionId,
       roomLabel: options.roomLabel,
-      channelLabel: options.channelLabel,
+      channelLabel: options.channelLabel?.trim() || TRADE_ROOM_GENERAL_VOICE_LABEL,
       canPublish,
     }
 
@@ -191,17 +225,37 @@ export async function joinTradeRoomLiveVoice(options: {
     connectionState = nextRoom.state
 
     if (canPublish) {
-      await nextRoom.localParticipant.setMicrophoneEnabled(true)
-      isMicrophoneEnabled = true
+      try {
+        await enablePublisherMicrophone(nextRoom)
+      } catch (micErr) {
+        if (isLiveVoiceMicrophoneAccessError(micErr)) {
+          downgradeToListenOnly(nextRoom, micErr)
+        } else {
+          throw micErr
+        }
+      }
     } else {
       isMicrophoneEnabled = false
     }
 
     refreshParticipants(nextRoom)
   } catch (err) {
-    error = err instanceof Error ? err.message : "Could not join live voice."
-    await leaveTradeRoomLiveVoice()
-    throw err
+    const message =
+      err instanceof Error ? err.message : "Could not join live voice."
+    error = message
+    if (joinedRoom) {
+      detachRoomHandlers(joinedRoom)
+      try {
+        await joinedRoom.disconnect()
+      } catch (disconnectErr) {
+        console.warn("[live-voice] failed join cleanup", disconnectErr)
+      }
+    }
+    room = null
+    session = null
+    connectionState = ConnectionState.Disconnected
+    isMicrophoneEnabled = false
+    participants = []
   } finally {
     isBusy = false
     emit()
@@ -213,9 +267,23 @@ export async function setTradeRoomLiveVoiceMuted(muted: boolean): Promise<void> 
   try {
     await room.localParticipant.setMicrophoneEnabled(!muted)
     isMicrophoneEnabled = !muted
+    error = null
     refreshParticipants(room)
     emit()
   } catch (err) {
+    if (isLiveVoiceMicrophoneAccessError(err)) {
+      isMicrophoneEnabled = false
+      if (session) {
+        session = { ...session, canPublish: false }
+      }
+      error =
+        liveVoiceMicrophoneErrorMessage(err) + LIVE_VOICE_LISTEN_ONLY_SUFFIX
+      refreshParticipants(room)
+      emit()
+      return
+    }
     console.error("[live-voice] mute", err)
+    error = err instanceof Error ? err.message : "Could not change microphone."
+    emit()
   }
 }

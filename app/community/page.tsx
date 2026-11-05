@@ -81,10 +81,15 @@ import { createRoomJoinNotification } from "@/lib/createRoomJoinNotification"
 import { createRoomMessageNotifications } from "@/lib/createRoomMessageNotifications"
 import TradeRoomCreateWizard from "@/app/components/tradeRooms/TradeRoomCreateWizard"
 import ManageTradeRoomModal from "@/app/components/tradeRooms/ManageTradeRoomModal"
+import TradeRoomGeneralVoiceSidebarRow from "@/app/components/tradeRooms/live/TradeRoomGeneralVoiceSidebarRow"
 import TradeRoomLiveVoiceBar from "@/app/components/tradeRooms/live/TradeRoomLiveVoiceBar"
-import TradeRoomLiveVoiceJoinButton from "@/app/components/tradeRooms/live/TradeRoomLiveVoiceJoinButton"
 import TradeRoomLiveVoiceSessionGuard from "@/app/components/tradeRooms/live/TradeRoomLiveVoiceSessionGuard"
 import { useTradeRoomLiveVoice } from "@/app/components/tradeRooms/live/useTradeRoomLiveVoice"
+import { isVoiceLiveSection } from "@/lib/livekit/client/liveVoiceSection.ts"
+import {
+  normalizeTradeRoomLiveVoiceKind,
+  tradeRoomSupportsSharedLiveVoice,
+} from "@/lib/livekit/tradeRoomSharedLiveVoice.ts"
 import {
   fetchMemberTagAssignments,
   fetchRoomMemberTags,
@@ -417,6 +422,7 @@ function CommunityContent() {
   const [mobileRoomQuery, setMobileRoomQuery] = useState("")
   const [mobileSectionsOpen, setMobileSectionsOpen] = useState(false)
   const [sections, setSections] = useState<any[]>([])
+  const [roomLiveVoiceKind, setRoomLiveVoiceKind] = useState<string>("voice_open")
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
   const [isOwner, setIsOwner] = useState(false)
   const [isRoomModerator, setIsRoomModerator] = useState(false)
@@ -1037,9 +1043,19 @@ function CommunityContent() {
     [sections, selectedSectionId]
   )
 
+  const showsGeneralVoice = useMemo(
+    () =>
+      Boolean(selectedRoomId) &&
+      !needsJoin &&
+      tradeRoomSupportsSharedLiveVoice(
+        normalizeTradeRoomLiveVoiceKind(roomLiveVoiceKind)
+      ),
+    [selectedRoomId, needsJoin, roomLiveVoiceKind]
+  )
+
   const fetchLiveKitVoiceToken = useCallback(async () => {
-    if (!selectedRoomId || !selectedSectionId) {
-      throw new Error("Select a voice channel first.")
+    if (!selectedRoomId) {
+      throw new Error("Select a Trade Room first.")
     }
     const { data: sessionData } = await supabase.auth.getSession()
     const accessToken = sessionData.session?.access_token
@@ -1054,7 +1070,6 @@ function CommunityContent() {
       },
       body: JSON.stringify({
         roomId: selectedRoomId,
-        sectionId: selectedSectionId,
       }),
     })
     const payload = (await res.json().catch(() => ({}))) as {
@@ -1074,7 +1089,7 @@ function CommunityContent() {
       livekitUrl: payload.livekitUrl,
       canPublish: Boolean(payload.canPublish),
     }
-  }, [selectedRoomId, selectedSectionId])
+  }, [selectedRoomId])
 
   const isBetaAnnouncementsLocked = useMemo(
     () => isBetaAnnouncementsSection(selectedRoom?.slug, currentSection),
@@ -1641,6 +1656,7 @@ function CommunityContent() {
       messagesByRoomRef,
       setMessagesByRoom,
       markedReadRoomKeyRef,
+      setRoomLiveVoiceKind,
     }
   }
 
@@ -2150,7 +2166,9 @@ function CommunityContent() {
       console.error(error)
     }
 
-    const list = data || []
+    const list = (data || []).filter(
+      (section) => !isVoiceLiveSection(section.live_kind)
+    )
     setSections(list)
 
     if (list.length > 0) {
@@ -4654,9 +4672,17 @@ function CommunityContent() {
             ) : (
               <>
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
-              {sections.length > 0 ? (
+              {sections.length > 0 || showsGeneralVoice ? (
                 <div className="hidden max-h-none w-48 shrink-0 flex-col border-r border-white/10 p-2 md:flex">
                   <div className="flex max-h-none flex-col gap-0 overflow-y-auto">
+                    {showsGeneralVoice && selectedRoomId ? (
+                      <TradeRoomGeneralVoiceSidebarRow
+                        roomId={selectedRoomId}
+                        roomName={selectedRoom?.name ?? null}
+                        disabled={needsJoin}
+                        fetchToken={fetchLiveKitVoiceToken}
+                      />
+                    ) : null}
                     {sections.map((section) => (
                       <div
                         key={section.id}
@@ -4746,6 +4772,16 @@ function CommunityContent() {
                     >
                       <div className="min-h-0 overflow-hidden">
                         <div className="max-h-[min(40svh,220px)] overflow-y-auto p-2">
+                          {showsGeneralVoice && selectedRoomId ? (
+                            <div className="mb-2 px-1">
+                              <TradeRoomGeneralVoiceSidebarRow
+                                roomId={selectedRoomId}
+                                roomName={selectedRoom?.name ?? null}
+                                disabled={needsJoin}
+                                fetchToken={fetchLiveKitVoiceToken}
+                              />
+                            </div>
+                          ) : null}
                           {sections.map((section) => (
                             <button
                               key={`mobile-section-${section.id}`}
@@ -4783,18 +4819,6 @@ function CommunityContent() {
                         </div>
                       </div>
                     </div>
-                  </div>
-                ) : null}
-
-                {selectedRoomId && currentSection ? (
-                  <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2">
-                    <TradeRoomLiveVoiceJoinButton
-                      roomId={selectedRoomId}
-                      section={currentSection}
-                      roomName={selectedRoom?.name ?? null}
-                      disabled={needsJoin}
-                      fetchToken={fetchLiveKitVoiceToken}
-                    />
                   </div>
                 ) : null}
 

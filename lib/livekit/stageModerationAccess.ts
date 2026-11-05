@@ -4,11 +4,13 @@ import {
   canModerateRoomMemberTarget,
   canModerateTradeRoom,
   memberHasElevatedTag,
+  memberHasModeratorTag,
 } from "@/lib/tradeRoomModerationPermission.ts"
 import { canManageTradeRoom } from "@/lib/tradeRoomManagementPermission.ts"
+import { normalizeTradeRoomLiveVoiceKind } from "./tradeRoomSharedLiveVoice.ts"
 
 export type StageModerationAccess =
-  | { ok: true; roomId: string; sectionId: string; targetUserId: string }
+  | { ok: true; roomId: string; targetUserId: string }
   | { ok: false; status: number; error: string }
 
 export async function resolveStageModerationAccess(
@@ -16,43 +18,33 @@ export async function resolveStageModerationAccess(
   options: {
     actorUserId: string
     roomId: string
-    sectionId: string
     targetUserId: string
   }
 ): Promise<StageModerationAccess> {
-  const { actorUserId, roomId, sectionId, targetUserId } = options
+  const { actorUserId, roomId, targetUserId } = options
 
   if (actorUserId === targetUserId) {
     return { ok: false, status: 400, error: "Cannot change your own stage role." }
   }
 
-  const { data: sectionRow } = await admin
-    .from("room_sections")
-    .select("id, room_id, live_kind")
-    .eq("id", sectionId)
-    .eq("room_id", roomId)
-    .maybeSingle()
-
-  if (!sectionRow) {
-    return { ok: false, status: 404, error: "Channel not found." }
-  }
-
-  if ((sectionRow.live_kind ?? "text") !== "voice_stage") {
-    return {
-      ok: false,
-      status: 400,
-      error: "Stage actions apply only to stage voice channels.",
-    }
-  }
-
   const { data: roomRow } = await admin
     .from("rooms")
-    .select("owner_user_id, room_kind")
+    .select("owner_user_id, room_kind, live_voice_kind")
     .eq("id", roomId)
     .maybeSingle()
 
   if (!roomRow) {
     return { ok: false, status: 404, error: "Trade Room not found." }
+  }
+
+  const liveKind = normalizeTradeRoomLiveVoiceKind(roomRow.live_voice_kind)
+
+  if (liveKind !== "voice_stage") {
+    return {
+      ok: false,
+      status: 400,
+      error: "Stage actions apply only when the room uses stage voice mode.",
+    }
   }
 
   const { data: adminRow } = await admin
@@ -75,12 +67,10 @@ export async function resolveStageModerationAccess(
     .eq("user_id", actorUserId)
 
   const actorTagIds = (actorAssignments ?? []).map((r) => r.tag_id)
-  const actorHasModTag = tagList.some(
-    (t) =>
-      actorTagIds.includes(t.id) &&
-      t.name.trim().toLowerCase() === "moderator"
-  )
-
+  const hasModeratorTag = memberHasModeratorTag({
+    tagIds: actorTagIds,
+    tags: tagList,
+  })
   const canManage = canManageTradeRoom({
     viewerId: actorUserId,
     ownerUserId: roomRow.owner_user_id,
@@ -91,10 +81,14 @@ export async function resolveStageModerationAccess(
   const canModerate = canModerateTradeRoom({
     viewerId: actorUserId,
     ownerUserId: roomRow.owner_user_id,
-    hasModeratorTag: actorHasModTag,
+    hasModeratorTag,
     roomKind: roomRow.room_kind,
     isPlatformAdmin: Boolean(adminRow),
   })
+
+  if (!canModerate && !canManage) {
+    return { ok: false, status: 403, error: "Permission denied." }
+  }
 
   const { data: targetAssignments } = await admin
     .from("room_member_tag_assignments")
@@ -145,11 +139,10 @@ export async function resolveStageModerationAccess(
   }
 
   if (memberHasElevatedTag({ tagIds: targetTagIds, tags: tagList })) {
-    // Owners are blocked in canModerateRoomMemberTarget; elevated tags need manage room.
     if (!canManage) {
       return { ok: false, status: 403, error: "Permission denied." }
     }
   }
 
-  return { ok: true, roomId, sectionId, targetUserId }
+  return { ok: true, roomId, targetUserId }
 }

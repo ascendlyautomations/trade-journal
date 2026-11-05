@@ -20,7 +20,7 @@ export async function mintLiveKitVoiceToken(
   const config = readLiveKitServerConfig()
   if (!config) return null
 
-  const roomName = liveKitRoomName(access.roomId, access.sectionId)
+  const roomName = liveKitRoomName(access.roomId)
   const at = new AccessToken(config.apiKey, config.apiSecret, {
     identity: userId,
     name: access.displayName ?? undefined,

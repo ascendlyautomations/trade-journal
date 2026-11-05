@@ -17,14 +17,13 @@ nonisolated struct LiveKitTokenClient: Sendable {
         self.transport = transport
     }
 
-    func fetchVoiceToken(roomID: RoomID, sectionID: RoomChannelID) async throws -> LiveKitVoiceTokenResponse {
+    func fetchVoiceToken(roomID: RoomID) async throws -> LiveKitVoiceTokenResponse {
         struct Body: Encodable {
             var roomId: String
-            var sectionId: String
         }
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .useDefaultKeys
-        let body = try encoder.encode(Body(roomId: roomID.rawValue, sectionId: sectionID.rawValue))
+        let body = try encoder.encode(Body(roomId: roomID.rawValue))
 
         let response = try await transport.send(
             host: .bff,

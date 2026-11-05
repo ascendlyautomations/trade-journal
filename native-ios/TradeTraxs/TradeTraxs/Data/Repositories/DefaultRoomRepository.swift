@@ -836,13 +836,17 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
         guard let id = dto.id, let roomID = dto.room_id else { return nil }
         let name = dto.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !name.isEmpty else { return nil }
+        let liveKind = RoomChannelLiveKind(rawDatabaseValue: dto.live_kind)
+        if liveKind.supportsLiveVoice {
+            return nil
+        }
         return RoomChannel(
             id: RoomChannelID(id),
             roomID: RoomID(roomID),
             name: name,
             position: dto.position ?? 0,
             allowMembersChat: dto.allow_members_chat ?? true,
-            liveKind: RoomChannelLiveKind(rawDatabaseValue: dto.live_kind)
+            liveKind: liveKind
         )
     }
 

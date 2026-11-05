@@ -73,24 +73,27 @@ struct RoomConversationView: View {
                         onTap: { viewModel.openActivePresence() }
                     )
                 }
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label(TradeRoomGeneralVoice.channelTitle, systemImage: "headphones")
+                            .font(.system(.caption, design: .rounded).weight(.semibold))
+                            .foregroundStyle(colors.secondaryText)
+                        RoomLiveVoiceJoinButton(
+                            roomID: room.id,
+                            roomTitle: room.name,
+                            coordinator: liveVoiceCoordinator
+                        )
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.bottom, ExperienceSpacing.xxs)
                 if !viewModel.channels.isEmpty {
                     RoomChannelSwitcherView(
                         channels: viewModel.channels,
                         selectedChannelID: viewModel.selectedChannelID,
                         onSelect: { viewModel.selectChannel($0) }
                     )
-                }
-                if let channel = viewModel.selectedChannel, channel.liveKind.supportsLiveVoice {
-                    HStack {
-                        Spacer(minLength: 0)
-                        RoomLiveVoiceJoinButton(
-                            channel: channel,
-                            roomTitle: room.name,
-                            coordinator: liveVoiceCoordinator
-                        )
-                    }
-                    .padding(.horizontal, ExperienceSpacing.md)
-                    .padding(.bottom, ExperienceSpacing.xxs)
                 }
             }
             content

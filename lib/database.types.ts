@@ -4410,6 +4410,7 @@ export type Database = {
       rooms: {
         Row: {
           allow_members_chat: boolean | null
+          live_voice_kind: string
           category: string | null
           created_at: string | null
           description: string | null
@@ -4430,6 +4431,7 @@ export type Database = {
         }
         Insert: {
           allow_members_chat?: boolean | null
+          live_voice_kind?: string
           category?: string | null
           created_at?: string | null
           description?: string | null
@@ -4450,6 +4452,7 @@ export type Database = {
         }
         Update: {
           allow_members_chat?: boolean | null
+          live_voice_kind?: string
           category?: string | null
           created_at?: string | null
           description?: string | null
