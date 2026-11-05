@@ -9,6 +9,7 @@ import {
   type RemoteParticipant,
 } from "livekit-client"
 import { applyLiveVoiceAudioPolicyOnConnect } from "./applyLiveVoiceAudioPolicy.ts"
+import { createExternalStoreSnapshotCache } from "./externalStoreSnapshot.ts"
 
 export type LiveVoiceSessionMeta = {
   roomId: string
@@ -47,7 +48,21 @@ let participants: LiveVoiceParticipantView[] = []
 let error: string | null = null
 let isBusy = false
 
+function buildStoreSnapshot(): LiveVoiceStoreSnapshot {
+  return {
+    session,
+    connectionState,
+    isMicrophoneEnabled,
+    participants,
+    error,
+    isBusy,
+  }
+}
+
+const snapshotCache = createExternalStoreSnapshotCache(buildStoreSnapshot)
+
 function emit() {
+  snapshotCache.publish(buildStoreSnapshot)
   for (const listener of listeners) {
     listener()
   }
@@ -101,14 +116,7 @@ export function subscribeTradeRoomLiveVoice(listener: Listener): () => void {
 }
 
 export function getTradeRoomLiveVoiceSnapshot(): LiveVoiceStoreSnapshot {
-  return {
-    session,
-    connectionState,
-    isMicrophoneEnabled,
-    participants,
-    error,
-    isBusy,
-  }
+  return snapshotCache.getSnapshot()
 }
 
 export async function leaveTradeRoomLiveVoice(): Promise<void> {
