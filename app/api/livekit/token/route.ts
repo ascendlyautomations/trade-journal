@@ -6,12 +6,12 @@ import { resolveTradeRoomLiveVoiceAccess } from "@/lib/livekit/tradeRoomLiveVoic
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-type TokenRequestBody = {
-  roomId?: string
-  sectionId?: string
+type ParsedTokenRequestBody = {
+  roomId: string
+  sectionId: string
 }
 
-function parseBody(raw: unknown): TokenRequestBody | null {
+function parseTokenRequestBody(raw: unknown): ParsedTokenRequestBody | null {
   if (!raw || typeof raw !== "object") return null
   const b = raw as Record<string, unknown>
   const roomId = typeof b.roomId === "string" ? b.roomId.trim() : ""
@@ -43,18 +43,20 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid JSON body." }, { status: 400 })
   }
 
-  const parsed = parseBody(body)
-  if (!parsed) {
+  const parsed = parseTokenRequestBody(body)
+  if (parsed === null) {
     return Response.json(
       { error: "roomId and sectionId are required." },
       { status: 400 }
     )
   }
 
+  const { roomId, sectionId } = parsed
+
   const access = await resolveTradeRoomLiveVoiceAccess(supabaseServiceRole, {
     userId: user.id,
-    roomId: parsed.roomId,
-    sectionId: parsed.sectionId,
+    roomId,
+    sectionId,
   })
 
   if (!access.ok) {

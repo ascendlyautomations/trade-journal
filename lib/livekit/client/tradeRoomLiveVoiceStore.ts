@@ -4,6 +4,7 @@ import {
   ConnectionState,
   Room,
   RoomEvent,
+  Track,
   type Participant,
   type RemoteParticipant,
 } from "livekit-client"
@@ -53,7 +54,7 @@ function emit() {
 }
 
 function participantView(local: Participant, isLocal: boolean): LiveVoiceParticipantView {
-  const micPub = local.getTrackPublication("microphone")
+  const micPub = local.getTrackPublication(Track.Source.Microphone)
   const muted = micPub?.isMuted !== false && !local.isMicrophoneEnabled
   return {
     identity: local.identity,

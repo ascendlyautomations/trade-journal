@@ -5,6 +5,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { mapProjectedRows } from "@/lib/supabaseProjectedQuery"
 import { fetchRoomChannelNotificationPrefs } from "@/lib/roomChannelNotificationPreferences.ts"
+import { normalizeLiveKind } from "@/lib/livekit/client/liveVoiceSection.ts"
 import {
   decodeRoomBootstrapV1,
   decodeRoomMessageV1,
@@ -151,7 +152,7 @@ async function loadRoomBootstrapLegacy(
 
   const { data: sectionRows, error: sectionError } = await client
     .from("room_sections")
-    .select("id, room_id, name, position, allow_members_chat")
+    .select("id, room_id, name, position, allow_members_chat, live_kind")
     .eq("room_id", roomId)
     .order("position", { ascending: true })
   if (sectionError) throw sectionError
@@ -162,6 +163,7 @@ async function loadRoomBootstrapLegacy(
     name: String(s.name ?? ""),
     position: Number(s.position) || 0,
     allow_members_chat: s.allow_members_chat !== false,
+    live_kind: normalizeLiveKind(s.live_kind),
   }))
 
   const { activeSectionId, activeSectionName } = resolveActiveSection(

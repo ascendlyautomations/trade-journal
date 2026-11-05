@@ -6,12 +6,12 @@ import { isLiveKitConfigured } from "@/lib/livekit/config.ts"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-type Body = {
-  roomId?: string
-  userId?: string
+type ParsedDisconnectMemberBody = {
+  roomId: string
+  userId: string
 }
 
-function parseBody(raw: unknown): Body | null {
+function parseDisconnectMemberBody(raw: unknown): ParsedDisconnectMemberBody | null {
   if (!raw || typeof raw !== "object") return null
   const b = raw as Record<string, unknown>
   const roomId = typeof b.roomId === "string" ? b.roomId.trim() : ""
@@ -40,18 +40,20 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid JSON body." }, { status: 400 })
   }
 
-  const parsed = parseBody(body)
-  if (!parsed) {
+  const parsed = parseDisconnectMemberBody(body)
+  if (parsed === null) {
     return Response.json(
       { error: "roomId and userId are required." },
       { status: 400 }
     )
   }
 
+  const { roomId, userId: targetUserId } = parsed
+
   const access = await resolveDisconnectMemberAccess(supabaseServiceRole, {
     actorUserId: user.id,
-    roomId: parsed.roomId,
-    targetUserId: parsed.userId,
+    roomId,
+    targetUserId,
   })
 
   if (!access.ok) {

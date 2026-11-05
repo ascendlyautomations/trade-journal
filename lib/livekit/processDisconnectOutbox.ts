@@ -48,7 +48,10 @@ async function finalizeOutboxRow(
     clearClaim?: boolean
   }
 ): Promise<void> {
-  const patch: Record<string, unknown> = {
+  type OutboxUpdate =
+    Database["public"]["Tables"]["room_livekit_disconnect_outbox"]["Update"]
+
+  const patch: OutboxUpdate = {
     last_error: options.lastError,
   }
   if (options.processed) {

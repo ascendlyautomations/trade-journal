@@ -6,13 +6,13 @@ import { resolveStageModerationAccess } from "@/lib/livekit/stageModerationAcces
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-type Body = {
-  roomId?: string
-  sectionId?: string
-  targetUserId?: string
+type ParsedStageBody = {
+  roomId: string
+  sectionId: string
+  targetUserId: string
 }
 
-function parseBody(raw: unknown): Body | null {
+function parseStageBody(raw: unknown): ParsedStageBody | null {
   if (!raw || typeof raw !== "object") return null
   const b = raw as Record<string, unknown>
   const roomId = typeof b.roomId === "string" ? b.roomId.trim() : ""
@@ -43,19 +43,21 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid JSON body." }, { status: 400 })
   }
 
-  const parsed = parseBody(body)
-  if (!parsed) {
+  const parsed = parseStageBody(body)
+  if (parsed === null) {
     return Response.json(
       { error: "roomId, sectionId, and targetUserId are required." },
       { status: 400 }
     )
   }
 
+  const { roomId, sectionId, targetUserId } = parsed
+
   const access = await resolveStageModerationAccess(supabaseServiceRole, {
     actorUserId: user.id,
-    roomId: parsed.roomId,
-    sectionId: parsed.sectionId,
-    targetUserId: parsed.targetUserId,
+    roomId,
+    sectionId,
+    targetUserId,
   })
 
   if (!access.ok) {

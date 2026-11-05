@@ -169,12 +169,12 @@ export async function resolveTradeRoomLiveVoiceAccess(
 
   const { data: profileRow } = await admin
     .from("profiles")
-    .select("username, display_name")
+    .select("username, name")
     .eq("id", userId)
     .maybeSingle()
 
   const displayName =
-    profileRow?.display_name?.trim() ||
+    profileRow?.name?.trim() ||
     profileRow?.username?.trim() ||
     null
 
