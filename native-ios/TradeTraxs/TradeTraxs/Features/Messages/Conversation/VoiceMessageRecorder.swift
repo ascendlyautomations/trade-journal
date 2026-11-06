@@ -44,6 +44,9 @@ final class VoiceMessageRecorder: ObservableObject {
             phase = .idle
             return StartResult(started: false, showSettings: showSettings)
         }
+        guard !TradeRoomLiveVoiceAudioSession.shared.isActive else {
+            return StartResult(started: false, showSettings: false)
+        }
 
         do {
             let session = AVAudioSession.sharedInstance()
@@ -100,7 +103,7 @@ final class VoiceMessageRecorder: ObservableObject {
         outputURL = nil
         phase = .idle
         elapsed = 0
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        deactivateAudioSessionIfLiveVoiceInactive()
         guard duration >= 0.5 else {
             try? FileManager.default.removeItem(at: url)
             return nil
@@ -144,6 +147,11 @@ final class VoiceMessageRecorder: ObservableObject {
             try? FileManager.default.removeItem(at: url)
         }
         outputURL = nil
+        deactivateAudioSessionIfLiveVoiceInactive()
+    }
+
+    private func deactivateAudioSessionIfLiveVoiceInactive() {
+        guard !TradeRoomLiveVoiceAudioSession.shared.isActive else { return }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }

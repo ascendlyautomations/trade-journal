@@ -16,6 +16,14 @@ import {
   liveVoiceMicrophoneErrorMessage,
 } from "./liveVoiceMicrophoneErrors.ts"
 import { TRADE_ROOM_GENERAL_VOICE_LABEL } from "@/lib/livekit/tradeRoomSharedLiveVoice.ts"
+import {
+  attachExistingRemoteAudio,
+  cleanupLiveVoiceRemoteAudio,
+  ensureLiveVoicePlayback,
+  getLiveVoiceRemoteAudioDiagnostics,
+  registerLiveVoiceRemoteAudioHandlers,
+  type LiveVoiceRemoteAudioDiagnostics,
+} from "./tradeRoomLiveVoiceRemoteAudio.ts"
 
 export type LiveVoiceSessionMeta = {
   roomId: string
@@ -52,6 +60,18 @@ let isMicrophoneEnabled = false
 let participants: LiveVoiceParticipantView[] = []
 let error: string | null = null
 let isBusy = false
+let devDiagnostics: LiveVoiceRemoteAudioDiagnostics | null = null
+
+function refreshDevDiagnostics(activeRoom: Room | null) {
+  if (process.env.NODE_ENV === "production") {
+    devDiagnostics = null
+    return
+  }
+  devDiagnostics = getLiveVoiceRemoteAudioDiagnostics(
+    activeRoom,
+    isMicrophoneEnabled
+  )
+}
 
 function buildStoreSnapshot(): LiveVoiceStoreSnapshot {
   return {
@@ -98,6 +118,7 @@ function attachRoomHandlers(activeRoom: Room) {
   const sync = () => {
     connectionState = activeRoom.state
     refreshParticipants(activeRoom)
+    refreshDevDiagnostics(activeRoom)
     emit()
   }
   activeRoom
@@ -109,10 +130,13 @@ function attachRoomHandlers(activeRoom: Room) {
     .on(RoomEvent.TrackUnmuted, sync)
     .on(RoomEvent.LocalTrackPublished, sync)
     .on(RoomEvent.LocalTrackUnpublished, sync)
+
+  registerLiveVoiceRemoteAudioHandlers(activeRoom, sync)
 }
 
 function detachRoomHandlers(activeRoom: Room) {
   activeRoom.removeAllListeners()
+  cleanupLiveVoiceRemoteAudio()
 }
 
 export function subscribeTradeRoomLiveVoice(listener: Listener): () => void {
@@ -122,6 +146,11 @@ export function subscribeTradeRoomLiveVoice(listener: Listener): () => void {
 
 export function getTradeRoomLiveVoiceSnapshot(): LiveVoiceStoreSnapshot {
   return snapshotCache.getSnapshot()
+}
+
+/** Development-only LiveKit audio pipeline stats (null in production). */
+export function getTradeRoomLiveVoiceDiagnostics(): LiveVoiceRemoteAudioDiagnostics | null {
+  return devDiagnostics
 }
 
 export async function leaveTradeRoomLiveVoice(options?: {
@@ -143,6 +172,7 @@ export async function leaveTradeRoomLiveVoice(options?: {
     connectionState = ConnectionState.Disconnected
     isMicrophoneEnabled = false
     participants = []
+    devDiagnostics = null
     if (!keepError) {
       error = null
     }
@@ -210,6 +240,7 @@ export async function joinTradeRoomLiveVoice(options: {
     const nextRoom = new Room({
       adaptiveStream: true,
       dynacast: true,
+      webAudioMix: true,
     })
     attachRoomHandlers(nextRoom)
     room = nextRoom
@@ -238,7 +269,14 @@ export async function joinTradeRoomLiveVoice(options: {
       isMicrophoneEnabled = false
     }
 
+    try {
+      await ensureLiveVoicePlayback(nextRoom)
+    } catch {
+      /* join click counts as user gesture; playback may still unlock on track subscribe */
+    }
+    attachExistingRemoteAudio(nextRoom)
     refreshParticipants(nextRoom)
+    refreshDevDiagnostics(nextRoom)
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Could not join live voice."
@@ -256,10 +294,27 @@ export async function joinTradeRoomLiveVoice(options: {
     connectionState = ConnectionState.Disconnected
     isMicrophoneEnabled = false
     participants = []
+    devDiagnostics = null
   } finally {
     isBusy = false
+    refreshDevDiagnostics(room)
     emit()
   }
+}
+
+/** User gesture — unlock browser audio playback when autoplay is blocked. */
+export async function resumeTradeRoomLiveVoicePlayback(): Promise<void> {
+  if (!room) return
+  try {
+    await ensureLiveVoicePlayback(room)
+    attachExistingRemoteAudio(room)
+    error = null
+  } catch (err) {
+    error =
+      err instanceof Error ? err.message : "Could not enable audio playback."
+  }
+  refreshDevDiagnostics(room)
+  emit()
 }
 
 export async function setTradeRoomLiveVoiceMuted(muted: boolean): Promise<void> {

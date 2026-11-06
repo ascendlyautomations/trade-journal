@@ -1,4 +1,5 @@
 import Foundation
+import LiveKit
 import OSLog
 
 struct CompositionBootstrapResult {
@@ -421,7 +422,14 @@ enum CompositionRoot {
         authState: AuthenticationState
     ) -> AppEnvironment {
         SocialRealtimeRepairExecutor.shared.configure(data: data)
+        AudioManager.prepare()
         RoomLiveVoiceCoordinator.shared.configure(transport: transport)
+        RoomBroadcastCoordinator.shared.configure(
+            transport: transport,
+            profileLookup: { ids in
+                try await data.profiles.profiles(ids: ids)
+            }
+        )
 
         authentication.manager.sessionBootstrap = AuthenticatedSessionBootstrap(
             profiles: data.profiles,

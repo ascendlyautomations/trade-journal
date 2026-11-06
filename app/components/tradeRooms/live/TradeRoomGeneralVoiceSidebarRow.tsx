@@ -2,7 +2,7 @@
 
 import { Headphones } from "lucide-react"
 import TradeRoomLiveVoiceJoinButton from "./TradeRoomLiveVoiceJoinButton.tsx"
-import { TRADE_ROOM_GENERAL_VOICE_LABEL } from "@/lib/livekit/tradeRoomSharedLiveVoice.ts"
+import { TRADE_ROOM_VOICE_USER_LABEL } from "@/lib/livekit/tradeRoomSharedLiveVoice.ts"
 import { useTradeRoomLiveVoice } from "./useTradeRoomLiveVoice.ts"
 
 type Props = {
@@ -39,7 +39,7 @@ export default function TradeRoomGeneralVoiceSidebarRow({
       <div className="flex items-center gap-2 px-1">
         <Headphones className="h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
         <span className="truncate text-sm font-medium text-emerald-100">
-          {TRADE_ROOM_GENERAL_VOICE_LABEL}
+          {TRADE_ROOM_VOICE_USER_LABEL}
         </span>
       </div>
       <div className="px-1">

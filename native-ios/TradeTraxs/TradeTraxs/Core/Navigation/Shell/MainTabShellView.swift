@@ -14,6 +14,7 @@ struct MainTabShellView: View {
     @Bindable private var postTradeReflectionGate = PostTradeReflectionGate.shared
     @Bindable private var globalUploadCoordinator = GlobalUploadCoordinator.shared
     @Bindable private var liveVoiceCoordinator = RoomLiveVoiceCoordinator.shared
+    @Bindable private var broadcastCoordinator = RoomBroadcastCoordinator.shared
     @Environment(\.appEnvironment) private var appEnvironment
     @State private var reflectionError: String?
 
@@ -23,19 +24,26 @@ struct MainTabShellView: View {
         // `tabBarMinimizeBehavior` is iOS 26+; on iOS 18 the tab bar never minimizes.
         Group {
             if #available(iOS 26.0, *) {
-                if showsDemoExperienceChrome {
-                    tabView
-                        .tabBarMinimizeBehavior(.never)
-                        .tabViewBottomAccessory {
-                            DemoExperienceLeaveButtonPlacement()
-                        }
-                } else {
-                    tabView.tabBarMinimizeBehavior(.never)
-                }
+                tabView
+                    .tabBarMinimizeBehavior(.never)
+                    .liveVoiceTabShellLayout(
+                        showsDemoLeave: showsDemoExperienceChrome,
+                        broadcastCoordinator: broadcastCoordinator,
+                        liveVoiceCoordinator: liveVoiceCoordinator
+                    )
             } else {
                 tabView
+                    .liveVoiceTabShellLayout(
+                        showsDemoLeave: false,
+                        broadcastCoordinator: broadcastCoordinator,
+                        liveVoiceCoordinator: liveVoiceCoordinator
+                    )
             }
         }
+        .tradeRoomBroadcastViewerSheet(
+            coordinator: broadcastCoordinator,
+            currentUserProfile: currentUserProfile
+        )
         .tabViewStyle(.tabBarOnly)
         .globalUploadPageLayout()
         .experienceAppChrome(usesFeedOpaqueChrome: store.selectedTab == .feed)
@@ -74,11 +82,6 @@ struct MainTabShellView: View {
         }
         .vaultConfirmationOverlay(store: appEnvironment.data.vaultStore)
         .saveSuccessToastOverlay()
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if liveVoiceCoordinator.showsPersistentBar {
-                RoomLiveVoiceBar(coordinator: liveVoiceCoordinator)
-            }
-        }
         .onChange(of: store.selectedTab) { _, tab in
             MainThreadOperationTracker.push("tab.select.\(tab.rawValue)")
             defer { MainThreadOperationTracker.pop("tab.select.\(tab.rawValue)") }

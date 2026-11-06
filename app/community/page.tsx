@@ -82,6 +82,7 @@ import { createRoomMessageNotifications } from "@/lib/createRoomMessageNotificat
 import TradeRoomCreateWizard from "@/app/components/tradeRooms/TradeRoomCreateWizard"
 import ManageTradeRoomModal from "@/app/components/tradeRooms/ManageTradeRoomModal"
 import TradeRoomGeneralVoiceSidebarRow from "@/app/components/tradeRooms/live/TradeRoomGeneralVoiceSidebarRow"
+import TradeRoomBroadcastPanel from "@/app/components/tradeRooms/live/TradeRoomBroadcastPanel"
 import TradeRoomLiveVoiceBar from "@/app/components/tradeRooms/live/TradeRoomLiveVoiceBar"
 import TradeRoomLiveVoiceSessionGuard from "@/app/components/tradeRooms/live/TradeRoomLiveVoiceSessionGuard"
 import { useTradeRoomLiveVoice } from "@/app/components/tradeRooms/live/useTradeRoomLiveVoice"
@@ -421,6 +422,10 @@ function CommunityContent() {
   const [mobileRoomsOpen, setMobileRoomsOpen] = useState(false)
   const [mobileRoomQuery, setMobileRoomQuery] = useState("")
   const [mobileSectionsOpen, setMobileSectionsOpen] = useState(false)
+  const [broadcastPanelExpanded, setBroadcastPanelExpanded] = useState(false)
+  const [liveKitAccessToken, setLiveKitAccessToken] = useState<string | null>(
+    null
+  )
   const [sections, setSections] = useState<any[]>([])
   const [roomLiveVoiceKind, setRoomLiveVoiceKind] = useState<string>("voice_open")
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
@@ -1052,6 +1057,23 @@ function CommunityContent() {
       ),
     [selectedRoomId, needsJoin, roomLiveVoiceKind]
   )
+
+  const canGoLiveInRoom = useMemo(
+    () => Boolean(selectedRoomId) && !needsJoin && (isOwner || canModerateRoom),
+    [selectedRoomId, needsJoin, isOwner, canModerateRoom]
+  )
+
+  useEffect(() => {
+    void supabase.auth.getSession().then(({ data }) => {
+      setLiveKitAccessToken(data.session?.access_token ?? null)
+    })
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setLiveKitAccessToken(session?.access_token ?? null)
+      }
+    )
+    return () => authListener.subscription.unsubscribe()
+  }, [])
 
   const fetchLiveKitVoiceToken = useCallback(async () => {
     if (!selectedRoomId) {
@@ -4737,6 +4759,18 @@ function CommunityContent() {
               ) : null}
 
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                {selectedRoomId && !needsJoin ? (
+                  <TradeRoomBroadcastPanel
+                    roomId={selectedRoomId}
+                    canGoLive={canGoLiveInRoom}
+                    accessToken={liveKitAccessToken}
+                    viewerUserId={user?.id ?? null}
+                    viewerDisplayName={username}
+                    viewerAvatarUrl={profile?.avatar_url ?? null}
+                    expanded={broadcastPanelExpanded}
+                    onExpandedChange={setBroadcastPanelExpanded}
+                  />
+                ) : null}
                 {sections.length > 1 ? (
                   <div className="shrink-0 border-b border-white/10 md:hidden">
                     <button

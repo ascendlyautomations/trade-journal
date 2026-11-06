@@ -9,6 +9,7 @@ export type DurableRateLimitAction =
   | "ai_analyze_trade"
   | "ai_psychology_coach"
   | "ai_screenshot_extract"
+  | "livekit_broadcast_control"
 
 const RULES: Record<DurableRateLimitAction, WindowRule[]> = {
   ai_analyze_trade: [
@@ -22,6 +23,10 @@ const RULES: Record<DurableRateLimitAction, WindowRule[]> = {
   ai_screenshot_extract: [
     { windowSeconds: 60, maxCount: 5 },
     { windowSeconds: 3600, maxCount: 20 },
+  ],
+  livekit_broadcast_control: [
+    { windowSeconds: 60, maxCount: 20 },
+    { windowSeconds: 3600, maxCount: 120 },
   ],
 }
 

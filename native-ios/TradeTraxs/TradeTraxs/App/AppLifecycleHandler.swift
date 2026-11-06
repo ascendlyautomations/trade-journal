@@ -26,6 +26,18 @@ final class AppLifecycleHandler {
         MediaEgressTracker.startPeriodicSummaries()
         #endif
         Task { @MainActor in
+            let voice = RoomLiveVoiceCoordinator.shared
+            if voice.session != nil {
+                try? TradeRoomLiveVoiceAudioSession.shared.updateRequiresRecording(
+                    voice.session?.canPublish == true
+                )
+                voice.refreshAudioDiagnosticsForLifecycle()
+                voice.refreshLiveActivityAfterForeground()
+            }
+            let broadcast = RoomBroadcastCoordinator.shared
+            if let roomID = broadcast.watchSession?.roomID {
+                await broadcast.refreshStatus(roomID: roomID)
+            }
             await pushNotifications?.refreshAuthorizationStatus()
             if AuthBootstrapReadiness.allowsAuthenticatedBackgroundWork() {
                 pushNotifications?.syncBadgeFromActivity()

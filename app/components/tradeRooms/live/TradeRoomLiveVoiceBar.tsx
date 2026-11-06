@@ -87,6 +87,20 @@ export default function TradeRoomLiveVoiceBar() {
       {voice.error ? (
         <p className="mx-auto mt-1 max-w-3xl text-xs text-red-300">{voice.error}</p>
       ) : null}
+      {voice.diagnostics && !voice.diagnostics.canPlaybackAudio ? (
+        <button
+          type="button"
+          className="mx-auto mt-1 block max-w-3xl rounded bg-amber-600/90 px-3 py-1 text-xs text-white hover:bg-amber-500"
+          onClick={() => void voice.resumePlayback()}
+        >
+          Enable audio playback
+        </button>
+      ) : null}
+      {voice.diagnostics ? (
+        <pre className="mx-auto mt-1 max-h-24 max-w-3xl overflow-auto rounded bg-black/40 p-2 text-[10px] leading-snug text-gray-400">
+          {JSON.stringify(voice.diagnostics, null, 2)}
+        </pre>
+      ) : null}
     </div>
   )
 }

@@ -21,6 +21,9 @@ struct RoomConversationView: View {
     @Environment(\.appEnvironment) private var appEnvironment
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable private var liveVoiceCoordinator = RoomLiveVoiceCoordinator.shared
+    @Bindable private var broadcastCoordinator = RoomBroadcastCoordinator.shared
+    @State private var broadcastChatUserId: String?
+    @State private var broadcastChatDisplayName = "You"
 
     init(
         roomID: RoomID,
@@ -73,21 +76,22 @@ struct RoomConversationView: View {
                         onTap: { viewModel.openActivePresence() }
                     )
                 }
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label(TradeRoomGeneralVoice.channelTitle, systemImage: "headphones")
-                            .font(.system(.caption, design: .rounded).weight(.semibold))
-                            .foregroundStyle(colors.secondaryText)
-                        RoomLiveVoiceJoinButton(
-                            roomID: room.id,
-                            roomTitle: room.name,
-                            coordinator: liveVoiceCoordinator
-                        )
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, ExperienceSpacing.md)
-                .padding(.bottom, ExperienceSpacing.xxs)
+                RoomTradeRoomLiveControls(
+                    roomID: room.id,
+                    roomTitle: room.name,
+                    isStreamLive: broadcastCoordinator.isStreamLive(for: room.id),
+                    onJoinStream: {
+                        Task {
+                            await broadcastCoordinator.watch(roomID: room.id, roomTitle: room.name)
+                            broadcastCoordinator.presentViewer()
+                        }
+                    },
+                    onOpenStream: {
+                        broadcastCoordinator.presentViewer()
+                    },
+                    liveVoiceCoordinator: liveVoiceCoordinator,
+                    broadcastCoordinator: broadcastCoordinator
+                )
                 if !viewModel.channels.isEmpty {
                     RoomChannelSwitcherView(
                         channels: viewModel.channels,
@@ -306,6 +310,18 @@ struct RoomConversationView: View {
         }
         .onDisappear {
             viewModel.stopRealtime()
+            broadcastCoordinator.stopPolling()
+        }
+        .task(id: viewModel.roomID) {
+            broadcastCoordinator.startPolling(roomID: viewModel.roomID)
+            if let data {
+                broadcastChatUserId = await data.session.currentUserID?.rawValue
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            Task {
+                await broadcastCoordinator.refreshStatus(roomID: viewModel.roomID)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .tradeRoomMetadataDidChange)) { notification in
             guard let changedID = notification.object as? RoomID,

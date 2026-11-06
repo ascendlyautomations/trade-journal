@@ -10,6 +10,7 @@ struct LiveVoiceParticipantItem: Identifiable, Hashable, Sendable {
     var isLocal: Bool
     var isSpeaking: Bool
     var isMuted: Bool
+    var isHandRaised: Bool
 }
 
 struct LiveVoiceSessionInfo: Hashable, Sendable {
@@ -26,7 +27,9 @@ enum LiveVoiceLeaveReason: Sendable {
 }
 
 enum TradeRoomGeneralVoice {
+    /// Internal LiveKit channel naming — user-facing copy uses ``userChannelTitle``.
     static let channelTitle = "General Voice"
+    static let userChannelTitle = "Voice"
 }
 
 /// App-scoped live voice session — survives Trade Room navigation and text-channel switches.
@@ -38,30 +41,85 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
     private(set) var session: LiveVoiceSessionInfo?
     private(set) var connectionState: ConnectionState = .disconnected
     private(set) var isMicrophoneEnabled = false
+    private(set) var isHandRaised = false
     private(set) var participants: [LiveVoiceParticipantItem] = []
     private(set) var lastError: String?
     private(set) var isJoining = false
+    private(set) var isLeaving = false
+    private(set) var audioDiagnostics = TradeRoomLiveVoiceAudioSession.shared.diagnostics
 
     var showsPersistentBar: Bool {
-        session != nil && (connectionState == .connected || connectionState == .connecting)
+        showsVoiceChrome
+    }
+
+    var showsVoiceChrome: Bool {
+        LiveVoiceChromeVisibility.shouldShowBar(
+            hasSession: session != nil,
+            connectionState: connectionState,
+            isLeaving: isLeaving,
+            isJoining: isJoining
+        )
     }
 
     var isSessionActive: Bool {
         session != nil && connectionState == .connected
     }
 
+    var isReconnecting: Bool {
+        connectionState == .reconnecting
+    }
+
+    var participantCount: Int {
+        participants.count
+    }
+
+    /// Short status for chrome, Live Activity, and in-room indicators.
+    var voiceConnectionStatusLabel: String {
+        if isLeaving { return "Leaving…" }
+        if isJoining { return "Connecting…" }
+        switch connectionState {
+        case .connected:
+            return "Connected"
+        case .connecting:
+            return "Connecting…"
+        case .reconnecting:
+            return "Reconnecting…"
+        case .disconnecting:
+            return "Leaving…"
+        case .disconnected:
+            return "Disconnected"
+        @unknown default:
+            return "Voice"
+        }
+    }
+
+    func isEngagedInVoice(for roomID: RoomID) -> Bool {
+        guard session?.roomID == roomID else { return false }
+        return showsVoiceChrome
+            || connectionState == .connected
+            || connectionState == .connecting
+            || connectionState == .reconnecting
+            || connectionState == .disconnecting
+    }
+
     private var tokenClient: LiveKitTokenClient?
     private var room: Room?
     private var canPublishCurrent = false
+    private var operationGeneration: UInt64 = 0
+    private var liveActivityEpoch: UInt64 = 0
+    private var raisedHandIdentities: Set<String> = []
+    private var leaveInFlight: Task<Void, Never>?
 
-    private init() {}
+    private init() {
+        wireLiveActivityIntentBridge()
+    }
 
     func configure(transport: SupabaseTransport) {
         tokenClient = LiveKitTokenClient(transport: transport)
     }
 
     func join(roomID: RoomID, roomTitle: String) async {
-        if isJoining {
+        if isJoining || isLeaving {
             return
         }
 
@@ -78,6 +136,7 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
             return
         }
 
+        let joinGeneration = operationGeneration
         isJoining = true
         lastError = nil
         defer { isJoining = false }
@@ -88,6 +147,7 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
             applyAudioPolicyBeforeConnect()
 
             let tokenResponse = try await tokenClient.fetchVoiceToken(roomID: roomID)
+            guard operationGeneration == joinGeneration, !isLeaving else { return }
 
             let nextRoom = Room()
             nextRoom.add(delegate: self)
@@ -95,17 +155,35 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
             joinedRoom = nextRoom
             canPublishCurrent = tokenResponse.canPublish
 
+            try TradeRoomLiveVoiceAudioSession.shared.activate(
+                requiresRecording: tokenResponse.canPublish
+            )
+            refreshAudioDiagnostics()
+            guard operationGeneration == joinGeneration, !isLeaving else {
+                await teardownRoom(joinedRoom, clearError: true, liveActivityEpoch: liveActivityEpoch)
+                return
+            }
+
             session = LiveVoiceSessionInfo(
                 roomID: roomID,
                 roomTitle: roomTitle,
-                channelTitle: TradeRoomGeneralVoice.channelTitle,
+                channelTitle: TradeRoomGeneralVoice.userChannelTitle,
                 canPublish: tokenResponse.canPublish
             )
+            isHandRaised = false
+            raisedHandIdentities = []
 
             try await nextRoom.connect(
                 url: tokenResponse.livekitUrl,
                 token: tokenResponse.token
             )
+            guard operationGeneration == joinGeneration, !isLeaving else {
+                await teardownRoom(joinedRoom, clearError: true, liveActivityEpoch: liveActivityEpoch)
+                return
+            }
+
+            liveActivityEpoch &+= 1
+
             connectionState = nextRoom.connectionState
 
             if tokenResponse.canPublish {
@@ -130,15 +208,40 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
 
             syncParticipants()
             notifySessionDidChange()
+            syncLiveActivity()
         } catch {
+            guard operationGeneration == joinGeneration, !isLeaving else { return }
             lastError = error.localizedDescription
-            await teardownRoom(joinedRoom, clearError: false)
+            await teardownRoom(joinedRoom, clearError: false, liveActivityEpoch: liveActivityEpoch)
         }
     }
 
     func leave(reason: LiveVoiceLeaveReason = .user, clearError: Bool = true) async {
         _ = reason
-        await teardownRoom(room, clearError: clearError)
+        if let leaveInFlight {
+            await leaveInFlight.value
+            return
+        }
+
+        let task = Task { @MainActor in
+            isLeaving = true
+            operationGeneration &+= 1
+            lastError = nil
+
+            let activeRoom = room
+            let endingEpoch = liveActivityEpoch
+            await teardownRoom(activeRoom, clearError: clearError, liveActivityEpoch: endingEpoch)
+
+            isLeaving = false
+        }
+        leaveInFlight = task
+        await task.value
+        leaveInFlight = nil
+    }
+
+    func leaveWithError(_ message: String) async {
+        lastError = message
+        await leave(clearError: false)
     }
 
     func setMuted(_ muted: Bool) async {
@@ -148,6 +251,7 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
             isMicrophoneEnabled = !muted
             lastError = nil
             syncParticipants()
+            syncLiveActivity()
         } catch {
             if isMicrophoneAccessError(error) {
                 downgradeToListenOnly(on: room, error: error)
@@ -161,6 +265,42 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
         await setMuted(isMicrophoneEnabled)
     }
 
+    func toggleHandRaised() async {
+        guard let room, let identity = room.localParticipant.identity?.stringValue else { return }
+        let next = !isHandRaised
+        do {
+            let data = try LiveVoiceHandPayload.encodeHandState(identity: identity, raised: next)
+            try await room.localParticipant.publish(
+                data: data,
+                options: DataPublishOptions(
+                    topic: TradeTraxsLiveVoiceActivityConstants.handSignalTopic,
+                    reliable: true
+                )
+            )
+            applyLocalHandState(identity: identity, raised: next)
+        } catch {
+            lastError = "Could not update raise hand."
+        }
+    }
+
+    func refreshAudioDiagnosticsForLifecycle() {
+        refreshAudioDiagnostics()
+        syncLiveActivity()
+    }
+
+    func refreshLiveActivityAfterForeground() {
+        guard let session else {
+            TradeTraxsLiveVoiceLiveActivityManager.shared.end(sessionEpoch: nil)
+            return
+        }
+        TradeTraxsLiveVoiceLiveActivityManager.shared.reconcileAfterForeground(
+            sessionEpoch: liveActivityEpoch,
+            content: liveActivityContentState(),
+            tradeRoomName: session.roomTitle,
+            channelName: session.channelTitle
+        )
+    }
+
     // MARK: - RoomDelegate
 
     nonisolated func room(
@@ -170,28 +310,61 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
     ) {
         Task { @MainActor in
             self.connectionState = connectionState
-            if connectionState == .disconnected, self.session != nil {
+            if connectionState == .disconnected, self.session != nil, !self.isLeaving {
+                self.releaseLiveVoiceAudio()
                 self.session = nil
+                self.room = nil
+                self.isMicrophoneEnabled = false
+                self.isHandRaised = false
+                self.raisedHandIdentities = []
+                self.canPublishCurrent = false
                 self.participants = []
+                TradeTraxsLiveVoiceLiveActivityManager.shared.end(sessionEpoch: self.liveActivityEpoch)
                 self.notifySessionDidChange()
             }
             self.syncParticipants()
+            self.syncLiveActivity()
         }
     }
 
     nonisolated func room(_: Room, participantDidConnect participant: RemoteParticipant) {
         participant.add(delegate: self)
-        Task { @MainActor in self.syncParticipants() }
+        Task { @MainActor in
+            self.syncParticipants()
+            self.syncLiveActivity()
+        }
     }
 
-    nonisolated func room(_: Room, participantDidDisconnect _: RemoteParticipant) {
-        Task { @MainActor in self.syncParticipants() }
+    nonisolated func room(_: Room, participantDidDisconnect participant: RemoteParticipant) {
+        Task { @MainActor in
+            if let id = participant.identity?.stringValue {
+                self.raisedHandIdentities.remove(id)
+            }
+            self.syncParticipants()
+            self.syncLiveActivity()
+        }
     }
 
     nonisolated func room(_: Room, didUpdateSpeakingParticipants speakers: [Participant]) {
         Task { @MainActor in
             _ = speakers
             self.syncParticipants()
+        }
+    }
+
+    nonisolated func room(
+        _: Room,
+        participant: RemoteParticipant?,
+        didReceiveData data: Data,
+        forTopic topic: String,
+        encryptionType _: EncryptionType
+    ) {
+        guard topic == TradeTraxsLiveVoiceActivityConstants.handSignalTopic else { return }
+        Task { @MainActor in
+            guard case .handState(let identity, let raised) = LiveVoiceHandPayload.decode(from: data) else {
+                return
+            }
+            self.applyRemoteHandState(identity: identity, raised: raised)
         }
     }
 
@@ -214,7 +387,7 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
 
     // MARK: - Private
 
-    private func teardownRoom(_ activeRoom: Room?, clearError: Bool) async {
+    private func teardownRoom(_ activeRoom: Room?, clearError: Bool, liveActivityEpoch: UInt64) async {
         if let activeRoom {
             activeRoom.remove(delegate: self)
             for participant in activeRoom.remoteParticipants.values {
@@ -227,11 +400,15 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
         session = nil
         connectionState = .disconnected
         isMicrophoneEnabled = false
+        isHandRaised = false
+        raisedHandIdentities = []
         canPublishCurrent = false
         participants = []
         if clearError {
             lastError = nil
         }
+        releaseLiveVoiceAudio()
+        TradeTraxsLiveVoiceLiveActivityManager.shared.end(sessionEpoch: liveActivityEpoch)
         notifySessionDidChange()
     }
 
@@ -245,7 +422,12 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
         lastError = microphoneUserMessage(error) + " You can still listen to the channel."
         Task {
             try? await activeRoom.localParticipant.setMicrophone(enabled: false)
-            await MainActor.run { self.syncParticipants() }
+            try? TradeRoomLiveVoiceAudioSession.shared.updateRequiresRecording(false)
+            await MainActor.run {
+                self.refreshAudioDiagnostics()
+                self.syncParticipants()
+                self.syncLiveActivity()
+            }
         }
         syncParticipants()
     }
@@ -292,13 +474,87 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
     private func mapParticipant(_ participant: Participant, isLocal: Bool) -> LiveVoiceParticipantItem {
         let micPub = participant.firstAudioPublication
         let muted = micPub?.isMuted == true || !participant.isMicrophoneEnabled()
+        let identity = participant.identity?.stringValue ?? UUID().uuidString
+        let hand = isLocal ? isHandRaised : raisedHandIdentities.contains(identity)
         return LiveVoiceParticipantItem(
-            identity: participant.identity?.stringValue ?? UUID().uuidString,
+            identity: identity,
             displayName: participant.name ?? participant.identity?.stringValue ?? "Guest",
             isLocal: isLocal,
             isSpeaking: participant.isSpeaking,
-            isMuted: muted
+            isMuted: muted,
+            isHandRaised: hand
         )
+    }
+
+    private func applyLocalHandState(identity: String, raised: Bool) {
+        isHandRaised = raised
+        if raised {
+            raisedHandIdentities.insert(identity)
+        } else {
+            raisedHandIdentities.remove(identity)
+        }
+        syncParticipants()
+        syncLiveActivity()
+    }
+
+    private func applyRemoteHandState(identity: String, raised: Bool) {
+        if raised {
+            raisedHandIdentities.insert(identity)
+        } else {
+            raisedHandIdentities.remove(identity)
+        }
+        syncParticipants()
+        syncLiveActivity()
+    }
+
+    private func liveActivityContentState() -> TradeTraxsLiveVoiceActivityAttributes.ContentState {
+        let label: String = {
+            switch connectionState {
+            case .connected: return "Connected"
+            case .connecting: return "Connecting…"
+            case .reconnecting: return "Reconnecting…"
+            case .disconnecting: return "Leaving…"
+            case .disconnected: return "Disconnected"
+            @unknown default: return "Live voice"
+            }
+        }()
+        return TradeTraxsLiveVoiceActivityAttributes.ContentState(
+            connectionLabel: label,
+            participantCount: participants.count,
+            isMicrophoneEnabled: isMicrophoneEnabled,
+            isHandRaised: isHandRaised,
+            raisedHandCount: raisedHandIdentities.count
+        )
+    }
+
+    private func syncLiveActivity() {
+        guard let session else { return }
+        let content = liveActivityContentState()
+        if connectionState == .connected {
+            TradeTraxsLiveVoiceLiveActivityManager.shared.start(
+                tradeRoomName: session.roomTitle,
+                channelName: session.channelTitle,
+                sessionEpoch: liveActivityEpoch,
+                content: content
+            )
+        } else {
+            TradeTraxsLiveVoiceLiveActivityManager.shared.update(
+                sessionEpoch: liveActivityEpoch,
+                content: content
+            )
+        }
+    }
+
+    private func wireLiveActivityIntentBridge() {
+        LiveVoiceActivityIntentBridge.toggleMute = {
+            await RoomLiveVoiceCoordinator.shared.toggleMute()
+        }
+        LiveVoiceActivityIntentBridge.toggleHand = {
+            await RoomLiveVoiceCoordinator.shared.toggleHandRaised()
+        }
+        LiveVoiceActivityIntentBridge.leaveVoice = {
+            await RoomLiveVoiceCoordinator.shared.leave()
+        }
     }
 
     private func applyAudioPolicyBeforeConnect() {
@@ -308,5 +564,15 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
 
     private func notifySessionDidChange() {
         NotificationCenter.default.post(name: .tradeTraxsLiveVoiceSessionDidChange, object: nil)
+    }
+
+    private func releaseLiveVoiceAudio() {
+        TradeRoomLiveVoiceAudioSession.shared.deactivate()
+        refreshAudioDiagnostics()
+    }
+
+    private func refreshAudioDiagnostics() {
+        TradeRoomLiveVoiceAudioSession.shared.refreshDiagnostics()
+        audioDiagnostics = TradeRoomLiveVoiceAudioSession.shared.diagnostics
     }
 }

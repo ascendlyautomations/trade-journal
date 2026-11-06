@@ -776,6 +776,9 @@ struct AppRootView: View {
     }
 
     private func handleIncomingURL(_ url: URL) {
+        if LiveVoiceDeepLinkHandler.handle(url) {
+            return
+        }
         _ = navigation.deepLinkRouter.route(
             url: url,
             using: navigation.coordinator,

@@ -55,7 +55,7 @@ export default function TradeRoomLiveVoiceJoinButton({
         className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600/90 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Headphones className="h-3.5 w-3.5" />
-        {voice.isBusy ? "Joining…" : "Join voice"}
+        {voice.isBusy ? "Joining…" : "Join Voice"}
       </button>
       {joinError ? (
         <span className="max-w-xs text-[11px] leading-snug text-red-300">

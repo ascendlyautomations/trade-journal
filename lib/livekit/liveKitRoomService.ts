@@ -4,6 +4,7 @@ import type { Database } from "@/lib/database.types"
 import { readLiveKitServerConfig } from "./config.ts"
 import {
   legacySectionLiveKitRoomName,
+  liveKitBroadcastRoomName,
   liveKitRoomName,
 } from "./liveKitRoomName.ts"
 
@@ -59,7 +60,10 @@ export async function disconnectUserFromTradeRoomLiveKit(
     }
   }
 
-  const lkRoomNames = new Set<string>([liveKitRoomName(roomId)])
+  const lkRoomNames = new Set<string>([
+    liveKitRoomName(roomId),
+    liveKitBroadcastRoomName(roomId),
+  ])
   for (const sectionId of await listLegacyVoiceSectionIdsForRoom(admin, roomId)) {
     lkRoomNames.add(legacySectionLiveKitRoomName(roomId, sectionId))
   }
@@ -102,4 +106,46 @@ export async function setLiveKitStagePublish(
       canPublishSources: canPublish ? [TrackSource.MICROPHONE] : [],
     },
   })
+}
+
+export async function setLiveKitBroadcastParticipantMic(
+  roomId: string,
+  targetUserId: string,
+  canPublishMic: boolean
+): Promise<void> {
+  const client = getLiveKitRoomServiceClient()
+  if (!client) {
+    throw new Error("LiveKit is not configured on the server.")
+  }
+
+  await client.updateParticipant(liveKitBroadcastRoomName(roomId), targetUserId, {
+    permission: {
+      canPublish: canPublishMic,
+      canSubscribe: true,
+      canPublishData: true,
+      canPublishSources: canPublishMic ? [TrackSource.MICROPHONE] : [],
+    },
+  })
+}
+
+export async function countLiveKitBroadcastViewers(
+  roomId: string,
+  broadcasterUserId: string
+): Promise<number | null> {
+  const client = getLiveKitRoomServiceClient()
+  if (!client) return null
+
+  try {
+    const participants = await client.listParticipants(
+      liveKitBroadcastRoomName(roomId)
+    )
+    return participants.filter((p) => p.identity !== broadcasterUserId).length
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (/not found|does not exist|404/i.test(message)) {
+      return 0
+    }
+    console.warn("[livekit/broadcast] list participants failed", message)
+    return null
+  }
 }

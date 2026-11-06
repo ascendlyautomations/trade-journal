@@ -33,11 +33,14 @@
 	<key>NSCameraUsageDescription</key>
 	<string>TradeTraxs uses the camera to take photos and record video for stories, clips, and trade attachments.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>TradeTraxs uses the microphone for voice messages and audio in recorded videos.</string>
+	<string>TradeTraxs uses the microphone for Trade Room live voice, voice messages, and audio in recorded videos.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>TradeTraxs uses your photo library so you can attach images and videos to trades, posts, stories, messages, and your profile.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
+		<string>audio</string>
 		<string>remote-notification</string>
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>

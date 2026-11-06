@@ -15,6 +15,20 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "C73441E33025511900D1FF5B"
+               BuildableName = "TradeTraxsLiveVoiceWidget.appex"
+               BlueprintName = "TradeTraxsLiveVoiceWidget"
+               ReferencedContainer = "container:TradeTraxs.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "C73441903025511800D1FF5B"
                BuildableName = "TradeTraxs.app"
                BlueprintName = "TradeTraxs"

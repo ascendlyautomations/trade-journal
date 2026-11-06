@@ -3839,6 +3839,50 @@ export type Database = {
           },
         ]
       }
+      room_live_broadcasts: {
+        Row: {
+          broadcaster_user_id: string
+          ended_at: string | null
+          ended_reason: string | null
+          id: string
+          last_livekit_signal_at: string | null
+          room_id: string
+          started_at: string
+          video_source: string
+          voice_mode: string
+        }
+        Insert: {
+          broadcaster_user_id: string
+          ended_at?: string | null
+          ended_reason?: string | null
+          id?: string
+          last_livekit_signal_at?: string | null
+          room_id: string
+          started_at?: string
+          video_source?: string
+          voice_mode?: string
+        }
+        Update: {
+          broadcaster_user_id?: string
+          ended_at?: string | null
+          ended_reason?: string | null
+          id?: string
+          last_livekit_signal_at?: string | null
+          room_id?: string
+          started_at?: string
+          video_source?: string
+          voice_mode?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_live_broadcasts_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       room_livekit_disconnect_outbox: {
         Row: {
           attempt_count: number

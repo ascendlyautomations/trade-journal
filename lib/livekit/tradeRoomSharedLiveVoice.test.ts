@@ -9,6 +9,7 @@ import {
   normalizeTradeRoomLiveVoiceKind,
   tradeRoomSupportsSharedLiveVoice,
   TRADE_ROOM_GENERAL_VOICE_LABEL,
+  TRADE_ROOM_VOICE_USER_LABEL,
 } from "./tradeRoomSharedLiveVoice.ts"
 
 describe("Trade Room shared live voice identity", () => {
@@ -40,5 +41,6 @@ describe("Trade Room shared live voice identity", () => {
     assert.equal(tradeRoomSupportsSharedLiveVoice("voice_open"), true)
     assert.equal(tradeRoomSupportsSharedLiveVoice("off"), false)
     assert.equal(TRADE_ROOM_GENERAL_VOICE_LABEL, "General Voice")
+    assert.equal(TRADE_ROOM_VOICE_USER_LABEL, "Voice")
   })
 })

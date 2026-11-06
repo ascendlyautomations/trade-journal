@@ -6,6 +6,7 @@ enum FeedVideoAudioSession {
     private static var isPlaybackConfigured = false
 
     static func activateForPlaybackIfNeeded() {
+        guard !TradeRoomLiveVoiceAudioSession.shared.isActive else { return }
         guard !isPlaybackConfigured else { return }
         let session = AVAudioSession.sharedInstance()
         do {

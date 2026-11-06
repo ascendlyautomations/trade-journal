@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C73441E43025511900D1FF5B /* TradeTraxsLiveVoiceWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C73441E13025511900D1FF5B /* TradeTraxsLiveVoiceWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		C77437DE3061A6DE00DDFDCA /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A5B0GRDB0000000000000002 /* GRDB */; };
 		C77437DF3061A6DE00DDFDCA /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A5B0GRDB0000000000000002 /* GRDB */; };
 		C77437E03061A6DE00DDFDCA /* LiveKit in Frameworks */ = {isa = PBXBuildFile; productRef = A5LIVEKIT0000000000000002 /* LiveKit */; };
@@ -27,12 +28,34 @@
 			remoteGlobalIDString = C73441903025511800D1FF5B;
 			remoteInfo = TradeTraxs;
 		};
+		C73441E73025511900D1FF5B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C73441893025511800D1FF5B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C73441E33025511900D1FF5B;
+			remoteInfo = TradeTraxsLiveVoiceWidget;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		C73441E53025511900D1FF5B /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C73441E43025511900D1FF5B /* TradeTraxsLiveVoiceWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		C73441913025511800D1FF5B /* TradeTraxs.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TradeTraxs.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C734419E3025511900D1FF5B /* TradeTraxsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TradeTraxsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C73441A83025511900D1FF5B /* TradeTraxsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TradeTraxsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C73441E13025511900D1FF5B /* TradeTraxsLiveVoiceWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TradeTraxsLiveVoiceWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -61,6 +84,13 @@
 			);
 			target = C73441903025511800D1FF5B /* TradeTraxs */;
 		};
+		C73441EB3025511900D1FF5B /* Exceptions for "TradeTraxsLiveVoiceWidget" folder in "TradeTraxsLiveVoiceWidget" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = C73441E33025511900D1FF5B /* TradeTraxsLiveVoiceWidget */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -80,6 +110,14 @@
 		C73441AB3025511900D1FF5B /* Tests/TradeTraxsUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Tests/TradeTraxsUITests;
+			sourceTree = "<group>";
+		};
+		C73441E23025511900D1FF5B /* TradeTraxsLiveVoiceWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C73441EB3025511900D1FF5B /* Exceptions for "TradeTraxsLiveVoiceWidget" folder in "TradeTraxsLiveVoiceWidget" target */,
+			);
+			path = TradeTraxsLiveVoiceWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -109,6 +147,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C73441E83025511900D1FF5B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -118,6 +163,7 @@
 				C73441933025511800D1FF5B /* TradeTraxs */,
 				C73441A13025511900D1FF5B /* Tests/TradeTraxsTests */,
 				C73441AB3025511900D1FF5B /* Tests/TradeTraxsUITests */,
+				C73441E23025511900D1FF5B /* TradeTraxsLiveVoiceWidget */,
 				C73441923025511800D1FF5B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -128,6 +174,7 @@
 				C73441913025511800D1FF5B /* TradeTraxs.app */,
 				C734419E3025511900D1FF5B /* TradeTraxsTests.xctest */,
 				C73441A83025511900D1FF5B /* TradeTraxsUITests.xctest */,
+				C73441E13025511900D1FF5B /* TradeTraxsLiveVoiceWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -143,10 +190,12 @@
 				C734418E3025511800D1FF5B /* Frameworks */,
 				C73441D13025511900D1FF5B /* Copy Secrets.plist */,
 				C734418F3025511800D1FF5B /* Resources */,
+				C73441E53025511900D1FF5B /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				C73441E63025511900D1FF5B /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				C73441933025511800D1FF5B /* TradeTraxs */,
@@ -207,6 +256,28 @@
 			productReference = C73441A83025511900D1FF5B /* TradeTraxsUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		C73441E33025511900D1FF5B /* TradeTraxsLiveVoiceWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C73441EA3025511900D1FF5B /* Build configuration list for PBXNativeTarget "TradeTraxsLiveVoiceWidget" */;
+			buildPhases = (
+				C73441E93025511900D1FF5B /* Sources */,
+				C73441E83025511900D1FF5B /* Frameworks */,
+				C73441EC3025511900D1FF5B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				C73441E23025511900D1FF5B /* TradeTraxsLiveVoiceWidget */,
+			);
+			name = TradeTraxsLiveVoiceWidget;
+			packageProductDependencies = (
+			);
+			productName = TradeTraxsLiveVoiceWidget;
+			productReference = C73441E13025511900D1FF5B /* TradeTraxsLiveVoiceWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -227,6 +298,9 @@
 					C73441A73025511900D1FF5B = {
 						CreatedOnToolsVersion = 26.6;
 						TestTargetID = C73441903025511800D1FF5B;
+					};
+					C73441E33025511900D1FF5B = {
+						CreatedOnToolsVersion = 26.6;
 					};
 				};
 			};
@@ -251,6 +325,7 @@
 				C73441903025511800D1FF5B /* TradeTraxs */,
 				C734419D3025511900D1FF5B /* TradeTraxsTests */,
 				C73441A73025511900D1FF5B /* TradeTraxsUITests */,
+				C73441E33025511900D1FF5B /* TradeTraxsLiveVoiceWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -271,6 +346,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		C73441A63025511900D1FF5B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C73441EC3025511900D1FF5B /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -323,6 +405,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C73441E93025511900D1FF5B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -335,6 +424,11 @@
 			isa = PBXTargetDependency;
 			target = C73441903025511800D1FF5B /* TradeTraxs */;
 			targetProxy = C73441A93025511900D1FF5B /* PBXContainerItemProxy */;
+		};
+		C73441E63025511900D1FF5B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C73441E33025511900D1FF5B /* TradeTraxsLiveVoiceWidget */;
+			targetProxy = C73441E73025511900D1FF5B /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -616,6 +710,58 @@
 			};
 			name = Release;
 		};
+		C73441ED3025511900D1FF5B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 48;
+				DEVELOPMENT_TEAM = 486KAM395Y;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TradeTraxsLiveVoiceWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "TradeTraxs Voice";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tradetraxs.TradeTraxs.LiveVoiceWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		C73441EE3025511900D1FF5B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 48;
+				DEVELOPMENT_TEAM = 486KAM395Y;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TradeTraxsLiveVoiceWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "TradeTraxs Voice";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tradetraxs.TradeTraxs.LiveVoiceWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -651,6 +797,15 @@
 			buildConfigurations = (
 				C73441B93025511900D1FF5B /* Debug */,
 				C73441BA3025511900D1FF5B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C73441EA3025511900D1FF5B /* Build configuration list for PBXNativeTarget "TradeTraxsLiveVoiceWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C73441ED3025511900D1FF5B /* Debug */,
+				C73441EE3025511900D1FF5B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

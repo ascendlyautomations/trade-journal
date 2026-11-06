@@ -9,13 +9,20 @@ It is **not** the Capacitor / WKWebView shell under `/ios`.
 | `/ios` | Legacy Capacitor host (web app in WebView) — do not extend for the native rebuild |
 | `/native-ios` | Native Swift application architecture, docs, and (later) Xcode project sources |
 
+## Xcode project (open this)
+
+**Canonical path:** `native-ios/TradeTraxs/TradeTraxs.xcodeproj`
+
+A symlink also exists at `native-ios/TradeTraxs.xcodeproj` → the same project.
+
+Use the **TradeTraxs** shared scheme (main app). Do not run the widget scheme for day-to-day development.
+
 ## Current status
 
 Foundation phase only:
 
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md) — permanent source of truth for how this app is built
-- No feature screens yet
-- No production feature code yet
+- Native Swift app under `TradeTraxs/` (LiveKit voice, livestream viewing, Live Activity widget extension)
 
 ## Next steps (after architecture sign-off)
 
