@@ -535,7 +535,15 @@ async function maybeAutoUpgradeViewerToSpeaker(
   sessionId: string
 ): Promise<void> {
   if (speakerAutoUpgradeAttemptedSessionId === sessionId) return
-  if (speakerUpgradeInFlight || isBusy || !roomId || !boundViewerVideoElement) {
+  const activeRoomId = roomId
+  const videoElement = boundViewerVideoElement
+  const token = accessToken.trim()
+  if (speakerUpgradeInFlight || isBusy || !activeRoomId || !videoElement) {
+    return
+  }
+  if (!token) {
+    error = "Sign in to join as a speaker."
+    emit()
     return
   }
   speakerAutoUpgradeAttemptedSessionId = sessionId
@@ -543,9 +551,10 @@ async function maybeAutoUpgradeViewerToSpeaker(
   emit()
   try {
     await joinTradeRoomBroadcastConversation({
-      roomId,
-      videoElement: boundViewerVideoElement,
-      fetchJoin: () => fetchBroadcastConversationJoinPayload(accessToken, roomId),
+      roomId: activeRoomId,
+      videoElement,
+      fetchJoin: () =>
+        fetchBroadcastConversationJoinPayload(token, activeRoomId),
     })
     speakInviteNotice = null
     viewerMicMuted = false

@@ -35,7 +35,7 @@ describe("free plan view-only enforcement migration", () => {
     assert.match(sql, /free_plan_trade_slots_confirmed_epoch/)
     assert.doesNotMatch(
       sql,
-      /grant select \(.*free_plan_trade_slots_epoch/s
+      /grant select \([\s\S]*free_plan_trade_slots_epoch/
     )
     assert.match(sql, /profile_trade_slots_pro/)
     assert.match(sql, /apply_free_plan_trade_slot_downgrade/)
