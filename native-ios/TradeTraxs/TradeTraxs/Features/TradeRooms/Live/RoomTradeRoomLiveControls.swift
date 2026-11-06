@@ -11,40 +11,24 @@ struct RoomTradeRoomLiveControls: View {
     @Bindable var broadcastCoordinator: RoomBroadcastCoordinator
     @Environment(\.themeColors) private var colors
 
+    private var voiceLightGreen: Color {
+        colors.accent.opacity(0.72)
+    }
+
+    private var liveDarkGreen: Color {
+        colors.accent.opacity(0.95)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             HStack(spacing: ExperienceSpacing.sm) {
-                RoomLiveVoiceJoinButton(
-                    roomID: roomID,
-                    roomTitle: roomTitle,
-                    coordinator: liveVoiceCoordinator
-                )
+                voiceSlot
+                    .frame(maxWidth: .infinity)
 
-                if broadcastCoordinator.isWatchingRoom(roomID) {
-                    Button(action: onOpenStream) {
-                        HStack(spacing: 6) {
-                            Text("LIVE")
-                                .font(.system(size: 9, weight: .heavy, design: .rounded))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 2)
-                                .background(Capsule(style: .continuous).fill(Color.red.opacity(0.92)))
-                            Text("Watching")
-                                .font(.system(.caption, design: .rounded).weight(.semibold))
-                                .foregroundStyle(colors.accent)
-                        }
-                        .padding(.horizontal, ExperienceSpacing.sm)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule(style: .continuous)
-                                .strokeBorder(colors.accent.opacity(0.45), lineWidth: 1)
-                        )
-                    }
-                    .buttonStyle(.experiencePlain)
-                    .accessibilityIdentifier("tradeRooms.broadcast.watching")
+                if showLiveSlot {
+                    liveSlot
+                        .frame(maxWidth: .infinity)
                 }
-
-                Spacer(minLength: 0)
             }
 
             #if DEBUG
@@ -57,22 +41,71 @@ struct RoomTradeRoomLiveControls: View {
                     .lineLimit(2)
             }
             #endif
-
-            if isStreamLive, !broadcastCoordinator.isWatchingRoom(roomID) {
-                Button(action: onJoinStream) {
-                    Label("Join Stream", systemImage: "play.rectangle.fill")
-                        .font(.system(.caption, design: .rounded).weight(.semibold))
-                        .foregroundStyle(colors.primaryBackground)
-                        .padding(.horizontal, ExperienceSpacing.sm)
-                        .padding(.vertical, 6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Capsule(style: .continuous).fill(Color.red.opacity(0.9)))
-                }
-                .buttonStyle(.experiencePlain)
-                .accessibilityIdentifier("tradeRooms.broadcast.joinStream")
-            }
         }
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.bottom, ExperienceSpacing.xxs)
+    }
+
+    private var showLiveSlot: Bool {
+        isStreamLive || broadcastCoordinator.isWatchingRoom(roomID)
+    }
+
+    @ViewBuilder
+    private var voiceSlot: some View {
+        if liveVoiceCoordinator.isEngagedInVoice(for: roomID) {
+            RoomLiveVoiceJoinButton(
+                roomID: roomID,
+                roomTitle: roomTitle,
+                coordinator: liveVoiceCoordinator,
+                presentation: .tradeRoomRowEngaged
+            )
+        } else {
+            RoomLiveVoiceJoinButton(
+                roomID: roomID,
+                roomTitle: roomTitle,
+                coordinator: liveVoiceCoordinator,
+                presentation: .tradeRoomRowLight
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var liveSlot: some View {
+        if broadcastCoordinator.isWatchingRoom(roomID) {
+            Button(action: onOpenStream) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(colors.accent)
+                        .frame(width: 8, height: 8)
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                    Text("Watching")
+                        .fontWeight(.semibold)
+                }
+                .font(.system(.caption, design: .rounded))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous)
+                        .strokeBorder(colors.accent.opacity(0.55), lineWidth: 1.5)
+                )
+            }
+            .buttonStyle(.experiencePlain)
+            .accessibilityIdentifier("tradeRooms.broadcast.watching")
+        } else if isStreamLive {
+            Button(action: onJoinStream) {
+                Label("Join Live", systemImage: "dot.radiowaves.left.and.right")
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous)
+                            .fill(liveDarkGreen)
+                    )
+            }
+            .buttonStyle(.experiencePlain)
+            .accessibilityIdentifier("tradeRooms.broadcast.joinStream")
+        }
     }
 }

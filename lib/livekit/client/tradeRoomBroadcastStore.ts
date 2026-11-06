@@ -20,6 +20,11 @@ import {
   type BroadcastChatMessage,
 } from "./tradeRoomBroadcastChat.ts"
 import {
+  publishBroadcastHandState,
+  registerBroadcastHandHandlers,
+  type BroadcastHandState,
+} from "./tradeRoomBroadcastHand.ts"
+import {
   cleanupBroadcastVideoAttachments,
   countBroadcastAudience,
   reattachBroadcastVideoToElement,
@@ -52,8 +57,11 @@ export type BroadcastRoomStatus = {
 
 export type BroadcastRole = "none" | "broadcaster" | "viewer" | "conversation"
 
+export type BroadcastStudioPresentation = "hidden" | "studio" | "mini"
+
 export type BroadcastStoreSnapshot = {
   roomId: string | null
+  roomTitle: string | null
   role: BroadcastRole
   connectionState: ConnectionState
   isBusy: boolean
@@ -68,6 +76,10 @@ export type BroadcastStoreSnapshot = {
   chatMessages: BroadcastChatMessage[]
   generalVoiceOverlapWarning: string | null
   broadcasterPreviewError: string | null
+  studioPresentation: BroadcastStudioPresentation
+  localHandRaised: boolean
+  raisedHandIdentities: string[]
+  handFeedback: string | null
 }
 
 type Listener = () => void
@@ -92,7 +104,14 @@ let generalVoiceOverlapWarning: string | null = null
 let videoCleanup: (() => void) | null = null
 let audioCleanup: (() => void) | null = null
 let chatCleanup: (() => void) | null = null
+let handCleanup: (() => void) | null = null
 let localPreviewCleanup: (() => void) | null = null
+let studioPresentation: BroadcastStudioPresentation = "hidden"
+let roomTitle: string | null = null
+let localHandRaised = false
+let raisedHandIdentities: string[] = []
+let handFeedback: string | null = null
+let interactivePollTimer: ReturnType<typeof setInterval> | null = null
 let broadcasterPreviewElement: HTMLVideoElement | null = null
 let broadcasterPreviewError: string | null = null
 let currentSessionId: string | null = null
@@ -116,6 +135,11 @@ function buildSnapshot(): BroadcastStoreSnapshot {
     chatMessages,
     generalVoiceOverlapWarning,
     broadcasterPreviewError,
+    studioPresentation,
+    localHandRaised,
+    raisedHandIdentities,
+    handFeedback,
+    roomTitle,
   }
 }
 
@@ -156,6 +180,114 @@ function registerChat(activeRoom: Room) {
     chatMessages = trimBroadcastChatMessages([...chatMessages, message])
     emit()
   })
+}
+
+function applyRemoteHand(state: BroadcastHandState) {
+  const set = new Set(raisedHandIdentities)
+  if (state.raised) set.add(state.identity)
+  else set.delete(state.identity)
+  raisedHandIdentities = [...set]
+  emit()
+}
+
+function registerHand(activeRoom: Room) {
+  handCleanup?.()
+  handCleanup = registerBroadcastHandHandlers(activeRoom, applyRemoteHand)
+}
+
+async function syncHandAuthoritative(
+  accessToken: string,
+  sessionId: string,
+  raised: boolean
+): Promise<void> {
+  if (!roomId) return
+  try {
+    await fetch("/api/livekit/broadcast/hand", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ roomId, sessionId, raised }),
+    })
+  } catch {
+    // LiveKit data + poll reconcile if API fails transiently.
+  }
+}
+
+export async function refreshBroadcastInteractiveState(
+  accessToken: string
+): Promise<void> {
+  if (!roomId || !accessToken) return
+  try {
+    const res = await fetch(
+      `/api/livekit/broadcast/interactive-state?roomId=${encodeURIComponent(roomId)}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    )
+    if (!res.ok) return
+    const payload = (await res.json()) as {
+      snapshot?: { raisedHands?: Array<{ userId: string }> }
+    }
+    raisedHandIdentities = (payload.snapshot?.raisedHands ?? []).map((h) => h.userId)
+    emit()
+  } catch {
+    // ignore
+  }
+}
+
+function startInteractivePolling(accessToken: string) {
+  stopInteractivePolling()
+  void refreshBroadcastInteractiveState(accessToken)
+  interactivePollTimer = setInterval(() => {
+    void refreshBroadcastInteractiveState(accessToken)
+  }, 8000)
+}
+
+function stopInteractivePolling() {
+  if (interactivePollTimer) {
+    clearInterval(interactivePollTimer)
+    interactivePollTimer = null
+  }
+}
+
+export function setTradeRoomBroadcastStudioPresentation(
+  next: BroadcastStudioPresentation
+): void {
+  studioPresentation = next
+  emit()
+}
+
+export function setTradeRoomBroadcastRoomTitle(title: string | null): void {
+  roomTitle = title
+  emit()
+}
+
+export async function toggleTradeRoomBroadcastRaisedHand(options: {
+  accessToken: string
+  userId: string
+}): Promise<void> {
+  if (!broadcastRoom || !currentSessionId) return
+  if (role !== "viewer" && role !== "conversation") return
+  const identity = broadcastRoom.localParticipant.identity
+  if (!identity) return
+  const next = !localHandRaised
+  const published = await publishBroadcastHandState(broadcastRoom, identity, next)
+  if (!published.ok) {
+    error = published.error
+    emit()
+    return
+  }
+  localHandRaised = next
+  applyRemoteHand({ identity, raised: next })
+  handFeedback = next ? "Hand raised." : "Hand lowered."
+  emit()
+  await syncHandAuthoritative(options.accessToken, currentSessionId, next)
+  window.setTimeout(() => {
+    if (handFeedback) {
+      handFeedback = null
+      emit()
+    }
+  }, 2200)
 }
 
 function registerViewerMedia(
@@ -219,6 +351,9 @@ async function teardownBroadcastRoom() {
   audioCleanup = null
   chatCleanup?.()
   chatCleanup = null
+  handCleanup?.()
+  handCleanup = null
+  stopInteractivePolling()
   localPreviewCleanup?.()
   localPreviewCleanup = null
   broadcasterPreviewElement = null
@@ -245,6 +380,10 @@ async function teardownBroadcastRoom() {
   clearBroadcastChatProfileCache()
   currentSessionId = null
   broadcasterIdentityForRoom = null
+  studioPresentation = "hidden"
+  localHandRaised = false
+  raisedHandIdentities = []
+  handFeedback = null
 }
 
 export function subscribeTradeRoomBroadcast(listener: Listener): () => void {
@@ -417,6 +556,8 @@ export async function startTradeRoomBroadcast(options: {
 
     attachRoomSync(nextRoom, start.broadcasterUserId)
     registerChat(nextRoom)
+    registerHand(nextRoom)
+    studioPresentation = "studio"
 
     localPreviewCleanup?.()
     localPreviewCleanup = registerLocalBroadcastPreviewHandlers(
@@ -580,6 +721,7 @@ async function connectBroadcastViewer(options: {
 
   attachRoomSync(nextRoom, tokenPayload.broadcasterUserId)
   registerChat(nextRoom)
+  registerHand(nextRoom)
   registerViewerMedia(
     nextRoom,
     tokenPayload.broadcasterUserId,

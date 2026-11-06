@@ -14,6 +14,7 @@ import {
   leaveTradeRoomBroadcastViewer,
   refreshTradeRoomBroadcastStatus,
   startTradeRoomBroadcast,
+  setTradeRoomBroadcastRoomTitle,
   stopTradeRoomBroadcast,
   syncTradeRoomBroadcastLocalPreviewElement,
   syncTradeRoomBroadcastViewerVideoElement,
@@ -28,6 +29,7 @@ import type {
 
 type Props = {
   roomId: string
+  roomTitle?: string
   canGoLive: boolean
   accessToken: string | null
   viewerUserId: string | null
@@ -71,6 +73,7 @@ type TokenPayload = StatusPayload & {
 
 export default function TradeRoomBroadcastPanel({
   roomId,
+  roomTitle,
   canGoLive,
   accessToken,
   viewerUserId,
@@ -169,6 +172,7 @@ export default function TradeRoomBroadcastPanel({
       if (!accessToken) return
       setGoLiveOpen(false)
       onExpandedChange(true)
+      setTradeRoomBroadcastRoomTitle(roomTitle ?? "Trade Room")
       await startTradeRoomBroadcast({
         roomId,
         setup,

@@ -1,56 +1,110 @@
 import SwiftUI
 
+enum RoomLiveVoiceJoinPresentation {
+    case legacy
+    case tradeRoomRowLight
+    case tradeRoomRowEngaged
+}
+
 struct RoomLiveVoiceJoinButton: View {
     let roomID: RoomID
     let roomTitle: String
     @Bindable var coordinator: RoomLiveVoiceCoordinator
+    var presentation: RoomLiveVoiceJoinPresentation = .legacy
 
     @Environment(\.themeColors) private var colors
     @State private var showsVoiceControls = false
 
     var body: some View {
         if coordinator.isEngagedInVoice(for: roomID) {
-            Button {
-                showsVoiceControls = true
-            } label: {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(statusIndicatorColor)
-                        .frame(width: 8, height: 8)
-                    Image(systemName: "waveform")
-                        .foregroundStyle(colors.accent)
-                    Text(inRoomStatusTitle)
-                        .font(.system(.caption, design: .rounded).weight(.semibold))
-                        .foregroundStyle(colors.accent)
-                }
+            engagedButton
+        } else {
+            joinButton
+        }
+    }
+
+    @ViewBuilder
+    private var joinButton: some View {
+        Button {
+            Task {
+                await coordinator.join(roomID: roomID, roomTitle: roomTitle)
+            }
+        } label: {
+            joinLabel
+        }
+        .buttonStyle(.experiencePlain)
+        .disabled(coordinator.isJoining)
+        .accessibilityIdentifier("tradeRooms.liveVoice.join")
+    }
+
+    @ViewBuilder
+    private var engagedButton: some View {
+        Button {
+            showsVoiceControls = true
+        } label: {
+            engagedLabel
+        }
+        .buttonStyle(.experiencePlain)
+        .accessibilityIdentifier("tradeRooms.liveVoice.inVoice")
+        .sheet(isPresented: $showsVoiceControls) {
+            RoomLiveVoiceControlsSheet(coordinator: coordinator)
+        }
+    }
+
+    @ViewBuilder
+    private var joinLabel: some View {
+        switch presentation {
+        case .legacy:
+            Label(joinButtonTitle, systemImage: "headphones")
+                .font(.system(.caption, design: .rounded).weight(.semibold))
+                .foregroundStyle(colors.primaryBackground)
+                .padding(.horizontal, ExperienceSpacing.sm)
+                .padding(.vertical, 6)
+                .background(Capsule(style: .continuous).fill(colors.accent))
+        case .tradeRoomRowLight, .tradeRoomRowEngaged:
+            Label("Join Voice", systemImage: "headphones")
+                .font(.system(.caption, design: .rounded).weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous)
+                        .fill(colors.accent.opacity(0.72))
+                )
+        }
+    }
+
+    @ViewBuilder
+    private var engagedLabel: some View {
+        let content = HStack(spacing: 6) {
+            Circle()
+                .fill(statusIndicatorColor)
+                .frame(width: 8, height: 8)
+            Image(systemName: "headphones")
+            Text(inRoomStatusTitle)
+                .fontWeight(.semibold)
+        }
+        .font(.system(.caption, design: .rounded))
+
+        switch presentation {
+        case .legacy:
+            content
+                .foregroundStyle(colors.accent)
                 .padding(.horizontal, ExperienceSpacing.sm)
                 .padding(.vertical, 6)
                 .background(
                     Capsule(style: .continuous)
                         .strokeBorder(colors.accent.opacity(0.45), lineWidth: 1)
                 )
-            }
-            .buttonStyle(.experiencePlain)
-            .accessibilityIdentifier("tradeRooms.liveVoice.inVoice")
-            .sheet(isPresented: $showsVoiceControls) {
-                RoomLiveVoiceControlsSheet(coordinator: coordinator)
-            }
-        } else {
-            Button {
-                Task {
-                    await coordinator.join(roomID: roomID, roomTitle: roomTitle)
-                }
-            } label: {
-                Label(joinButtonTitle, systemImage: "headphones")
-                    .font(.system(.caption, design: .rounded).weight(.semibold))
-                    .foregroundStyle(colors.primaryBackground)
-                    .padding(.horizontal, ExperienceSpacing.sm)
-                    .padding(.vertical, 6)
-                    .background(Capsule(style: .continuous).fill(colors.accent))
-            }
-            .buttonStyle(.experiencePlain)
-            .disabled(coordinator.isJoining)
-            .accessibilityIdentifier("tradeRooms.liveVoice.join")
+        case .tradeRoomRowLight, .tradeRoomRowEngaged:
+            content
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous)
+                        .strokeBorder(colors.accent.opacity(0.55), lineWidth: 1.5)
+                )
         }
     }
 

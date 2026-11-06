@@ -3,7 +3,8 @@ import SwiftUI
 extension View {
     func tradeRoomBroadcastViewerSheet(
         coordinator: RoomBroadcastCoordinator,
-        currentUserProfile: CurrentUserProfileStore
+        currentUserProfile: CurrentUserProfileStore,
+        imagePipeline: any ImagePipeline
     ) -> some View {
         sheet(isPresented: Binding(
             get: { coordinator.isViewerPresented },
@@ -21,8 +22,12 @@ extension View {
                     roomTitle: session.roomTitle,
                     userId: currentUserProfile.profile?.id.rawValue,
                     displayName: currentUserProfile.profile?.displayName ?? "You",
+                    imagePipeline: imagePipeline,
                     coordinator: coordinator
                 )
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .interactiveDismissDisabled(false)
             }
         }
     }

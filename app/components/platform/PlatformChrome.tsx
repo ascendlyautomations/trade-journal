@@ -15,6 +15,7 @@ import { usePlatformPresentation } from "./usePlatformPresentation"
 import PlatformNavbar from "./PlatformNavbar"
 import NativeIosAppChrome from "./native/NativeIosAppChrome"
 import WebAppChrome from "./web/WebAppChrome"
+import TradeRoomBroadcastGlobalChromeHost from "../tradeRooms/live/TradeRoomBroadcastGlobalChromeHost.tsx"
 
 /**
  * Root app chrome presentation adapter.
@@ -61,6 +62,7 @@ export default function PlatformChrome({ children }: { children: ReactNode }) {
     <>
       <PlatformNavbar />
       <WebAppChrome>{children}</WebAppChrome>
+      <TradeRoomBroadcastGlobalChromeHost />
     </>
   )
 }

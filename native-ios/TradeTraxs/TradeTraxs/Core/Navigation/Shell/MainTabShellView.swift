@@ -26,7 +26,7 @@ struct MainTabShellView: View {
             if #available(iOS 26.0, *) {
                 tabView
                     .tabBarMinimizeBehavior(.never)
-                    .liveVoiceTabShellLayout(
+                    .liveVoiceTabShellLayoutIOS26(
                         showsDemoLeave: showsDemoExperienceChrome,
                         broadcastCoordinator: broadcastCoordinator,
                         liveVoiceCoordinator: liveVoiceCoordinator
@@ -34,7 +34,7 @@ struct MainTabShellView: View {
             } else {
                 tabView
                     .liveVoiceTabShellLayout(
-                        showsDemoLeave: false,
+                        showsDemoLeave: showsDemoExperienceChrome,
                         broadcastCoordinator: broadcastCoordinator,
                         liveVoiceCoordinator: liveVoiceCoordinator
                     )
@@ -42,9 +42,9 @@ struct MainTabShellView: View {
         }
         .tradeRoomBroadcastViewerSheet(
             coordinator: broadcastCoordinator,
-            currentUserProfile: currentUserProfile
+            currentUserProfile: currentUserProfile,
+            imagePipeline: appEnvironment.data.imagePipeline
         )
-        .tabViewStyle(.tabBarOnly)
         .globalUploadPageLayout()
         .experienceAppChrome(usesFeedOpaqueChrome: store.selectedTab == .feed)
         .globalUploadQueueSheet(coordinator: globalUploadCoordinator)
@@ -81,6 +81,10 @@ struct MainTabShellView: View {
             Text(reflectionError ?? "")
         }
         .vaultConfirmationOverlay(store: appEnvironment.data.vaultStore)
+        .broadcastStreamEndedOverlay(
+            notice: broadcastCoordinator.streamEndedNotice,
+            onClose: { broadcastCoordinator.acknowledgeStreamEndedNotice() }
+        )
         .saveSuccessToastOverlay()
         .onChange(of: store.selectedTab) { _, tab in
             MainThreadOperationTracker.push("tab.select.\(tab.rawValue)")
@@ -183,6 +187,7 @@ struct MainTabShellView: View {
                 coordinator.invokeCreateAction()
             }
         }
+        .tabViewStyle(.tabBarOnly)
     }
 
     private var tabSelection: Binding<TabIdentifier> {

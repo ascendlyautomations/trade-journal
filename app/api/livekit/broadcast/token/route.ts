@@ -50,6 +50,16 @@ export async function POST(req: Request) {
     return Response.json({ error: "No live stream is active in this room." }, { status: 404 })
   }
 
+  const { isUserBlockedFromBroadcastSession } = await import(
+    "@/lib/livekit/tradeRoomBroadcastInteractiveState.ts"
+  )
+  if (await isUserBlockedFromBroadcastSession(supabaseServiceRole, active.id, user.id)) {
+    return Response.json(
+      { error: "You have been removed from this livestream.", code: "removed_from_stream" },
+      { status: 403 }
+    )
+  }
+
   const session = await mintLiveKitBroadcastViewerToken(
     user.id,
     parsed.roomId,

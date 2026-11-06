@@ -48,10 +48,23 @@ export async function POST(req: Request) {
   }
 
   if (active.voiceMode !== "open_voice") {
-    return Response.json(
-      { error: "This stream is broadcast-only. Conversation is not available." },
-      { status: 403 }
+    const { hasActiveBroadcastSpeakerGrant } = await import(
+      "@/lib/livekit/tradeRoomBroadcastInteractiveState.ts"
     )
+    const granted = await hasActiveBroadcastSpeakerGrant(
+      supabaseServiceRole,
+      active.id,
+      user.id
+    )
+    if (!granted) {
+      return Response.json(
+        {
+          error:
+            "This stream is broadcast-only. Wait for a speaking invitation from the host.",
+        },
+        { status: 403 }
+      )
+    }
   }
 
   if (active.broadcasterUserId === user.id) {

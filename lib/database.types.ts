@@ -3883,6 +3883,102 @@ export type Database = {
           },
         ]
       }
+      room_live_broadcast_hands: {
+        Row: {
+          broadcast_session_id: string
+          raised_at: string
+          user_id: string
+        }
+        Insert: {
+          broadcast_session_id: string
+          raised_at?: string
+          user_id: string
+        }
+        Update: {
+          broadcast_session_id?: string
+          raised_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      room_live_broadcast_speaker_grants: {
+        Row: {
+          broadcast_session_id: string
+          granted_at: string
+          granted_by: string
+          id: string
+          revoked_at: string | null
+          user_id: string
+        }
+        Insert: {
+          broadcast_session_id: string
+          granted_at?: string
+          granted_by: string
+          id?: string
+          revoked_at?: string | null
+          user_id: string
+        }
+        Update: {
+          broadcast_session_id?: string
+          granted_at?: string
+          granted_by?: string
+          id?: string
+          revoked_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      room_live_broadcast_session_blocks: {
+        Row: {
+          blocked_at: string
+          blocked_by: string
+          broadcast_session_id: string
+          user_id: string
+        }
+        Insert: {
+          blocked_at?: string
+          blocked_by: string
+          broadcast_session_id: string
+          user_id: string
+        }
+        Update: {
+          blocked_at?: string
+          blocked_by?: string
+          broadcast_session_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      room_live_broadcast_invitations: {
+        Row: {
+          broadcast_session_id: string
+          id: string
+          invited_at: string
+          invited_by: string
+          responded_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          broadcast_session_id: string
+          id?: string
+          invited_at?: string
+          invited_by: string
+          responded_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          broadcast_session_id?: string
+          id?: string
+          invited_at?: string
+          invited_by?: string
+          responded_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       room_livekit_disconnect_outbox: {
         Row: {
           attempt_count: number

@@ -128,6 +128,52 @@ export async function setLiveKitBroadcastParticipantMic(
   })
 }
 
+export async function removeLiveKitBroadcastParticipant(
+  roomId: string,
+  targetUserId: string
+): Promise<void> {
+  const client = getLiveKitRoomServiceClient()
+  if (!client) {
+    throw new Error("LiveKit is not configured on the server.")
+  }
+  await client.removeParticipant(liveKitBroadcastRoomName(roomId), targetUserId)
+}
+
+export async function muteLiveKitBroadcastParticipantMicrophone(
+  roomId: string,
+  targetUserId: string,
+  muted: boolean
+): Promise<void> {
+  const client = getLiveKitRoomServiceClient()
+  if (!client) {
+    throw new Error("LiveKit is not configured on the server.")
+  }
+  const lkRoom = liveKitBroadcastRoomName(roomId)
+  if (muted) {
+    await client.updateParticipant(lkRoom, targetUserId, {
+      permission: {
+        canPublish: false,
+        canSubscribe: true,
+        canPublishData: true,
+        canPublishSources: [],
+      },
+    })
+    const participants = await client.listParticipants(lkRoom)
+    const target = participants.find((p) => p.identity === targetUserId)
+    for (const track of target?.tracks ?? []) {
+      if (track.sid && track.source === TrackSource.MICROPHONE) {
+        try {
+          await client.mutePublishedTrack(lkRoom, targetUserId, track.sid, true)
+        } catch {
+          // Participant may have already disconnected.
+        }
+      }
+    }
+  } else {
+    await setLiveKitBroadcastParticipantMic(roomId, targetUserId, true)
+  }
+}
+
 export async function countLiveKitBroadcastViewers(
   roomId: string,
   broadcasterUserId: string

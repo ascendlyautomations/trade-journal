@@ -86,6 +86,28 @@ nonisolated struct LiveKitBroadcastClient: Sendable {
         try await postToken(path: "/api/livekit/broadcast/join-conversation", roomID: roomID)
     }
 
+    func syncRaisedHand(roomID: RoomID, sessionId: String, raised: Bool) async throws {
+        struct Body: Encodable {
+            var roomId: String
+            var sessionId: String
+            var raised: Bool
+        }
+        let body = try JSONEncoder().encode(
+            Body(roomId: roomID.rawValue, sessionId: sessionId, raised: raised)
+        )
+        let response = try await transport.send(
+            host: .bff,
+            path: "/api/livekit/broadcast/hand",
+            method: .post,
+            headers: ["Content-Type": "application/json"],
+            body: body,
+            requiresAuthentication: true
+        )
+        guard (200 ... 299).contains(response.statusCode) else {
+            throw AppError.unknown(message: decodeError(response))
+        }
+    }
+
     func leaveConversation(roomID: RoomID) async throws -> LiveKitBroadcastTokenResponse? {
         struct Body: Encodable { var roomId: String }
         struct Envelope: Decodable {

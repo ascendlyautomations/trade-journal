@@ -207,6 +207,11 @@ export async function endTradeRoomBroadcastSession(
     return { ok: false, status: 500, error: "Could not end broadcast session." }
   }
 
+  const { clearBroadcastInteractiveStateForSession } = await import(
+    "./tradeRoomBroadcastInteractiveState.ts"
+  )
+  await clearBroadcastInteractiveStateForSession(admin, options.sessionId)
+
   return { ok: true }
 }
 

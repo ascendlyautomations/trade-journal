@@ -18,6 +18,15 @@ struct BroadcastWatchSession: Hashable, Sendable {
     var voiceMode: String?
 }
 
+struct BroadcastRosterParticipant: Identifiable, Hashable, Sendable {
+    var id: String { identity }
+    var identity: String
+    var displayName: String
+    var roleLabel: String
+    var isHandRaised: Bool
+    var isLocal: Bool
+}
+
 @Observable
 @MainActor
 final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
@@ -55,6 +64,11 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private(set) var isVideoRenderingEnabled = true
     private(set) var isStreamPlaybackMuted = false
     private(set) var isBroadcastHandRaised = false
+    private(set) var rosterParticipants: [BroadcastRosterParticipant] = []
+    private(set) var broadcastRaisedHandIdentities: Set<String> = []
+    private(set) var streamEndedNotice: BroadcastStreamEndedNotice?
+    /// Bumped to ask ``RoomBroadcastWatchView`` to exit immersive fullscreen before stream-ended UI.
+    private(set) var streamFullscreenDismissSignal: UInt = 0
 
     /// Video for UI — nil while minimized so SwiftUI detaches the renderer without disconnecting.
     var videoTrackForDisplay: VideoTrack? {
@@ -102,10 +116,19 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private var broadcasterIdentity: String?
     private var preferredVideoSource = "screen"
     private var playbackSessionHandle: SessionRequirementHandle?
-    private var raisedHandIdentities: Set<String> = []
+    private var raisedHandIdentities: Set<String> = [] {
+        didSet { broadcastRaisedHandIdentities = raisedHandIdentities }
+    }
+    private var consecutiveSuccessfulNotLivePolls = 0
+    private var isEndingWatchVoluntarily = false
+    private var streamEndedPopupPresentedSessionId: String?
     let chatProfileCache = BroadcastChatProfileCache()
 
     private init() {}
+
+    func acknowledgeStreamEndedNotice() {
+        streamEndedNotice = nil
+    }
 
     func configure(
         transport: SupabaseTransport,
@@ -176,9 +199,21 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                 polledStatus = next
                 statusPollRoomID = roomID
                 statusPollError = nil
+            } else if isWatching, watchSession?.roomID == roomID {
+                polledStatus = next
+                statusPollRoomID = roomID
+                statusPollError = nil
             }
-            if isWatching, watchSession?.roomID == roomID, !res.live {
-                await leaveWatch()
+
+            if isWatching, watchSession?.roomID == roomID {
+                consecutiveSuccessfulNotLivePolls = BroadcastStreamEndPolicy.nextConsecutiveNotLivePollCount(
+                    pollSucceeded: true,
+                    responseLive: res.live,
+                    previousCount: consecutiveSuccessfulNotLivePolls
+                )
+                if shouldEndWatchAfterStatusPoll(roomID: roomID, responseLive: res.live) {
+                    await handleRemoteStreamEnded()
+                }
             }
         } catch {
             if pollRoomID == roomID {
@@ -240,10 +275,13 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     }
 
     func leaveWatch() async {
+        isEndingWatchVoluntarily = true
+        defer { isEndingWatchVoluntarily = false }
         sessionPollTask?.cancel()
         sessionPollTask = nil
         isViewerPresented = false
         isVideoRenderingEnabled = true
+        consecutiveSuccessfulNotLivePolls = 0
         await teardown()
     }
 
@@ -267,6 +305,13 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                 )
             )
             applyLocalBroadcastHand(identity: identity, raised: next)
+            if let sessionId = currentSessionId, let roomID = watchSession?.roomID {
+                try? await client?.syncRaisedHand(
+                    roomID: roomID,
+                    sessionId: sessionId,
+                    raised: next
+                )
+            }
         } catch {
             lastError = "Could not update raise hand."
         }
@@ -453,6 +498,55 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         playbackSessionHandle = nil
     }
 
+    private func shouldEndWatchAfterStatusPoll(roomID: RoomID, responseLive: Bool) -> Bool {
+        let watchRoomID = watchSession?.roomID
+        if BroadcastStreamEndPolicy.shouldEndWatchFromStatusPoll(
+            isWatching: isWatching,
+            watchRoomID: watchRoomID,
+            polledRoomID: roomID,
+            responseLive: responseLive,
+            pollSucceeded: true,
+            consecutiveSuccessfulNotLivePolls: consecutiveSuccessfulNotLivePolls
+        ) {
+            return true
+        }
+        return BroadcastStreamEndPolicy.shouldEndWatchFromStatusPollWhileDisconnected(
+            isWatching: isWatching,
+            watchRoomID: watchRoomID,
+            polledRoomID: roomID,
+            responseLive: responseLive,
+            pollSucceeded: true,
+            connectionState: connectionState,
+            consecutiveSuccessfulNotLivePolls: consecutiveSuccessfulNotLivePolls
+        )
+    }
+
+    private func handleRemoteStreamEnded() async {
+        guard !isEndingWatchVoluntarily else { return }
+        guard isWatching else { return }
+        guard let sessionId = currentSessionId else { return }
+
+        sessionPollTask?.cancel()
+        sessionPollTask = nil
+
+        streamFullscreenDismissSignal &+= 1
+        isViewerPresented = false
+        isVideoRenderingEnabled = true
+
+        let roomTitle = watchSession?.roomTitle ?? "Trade Room"
+        await teardown()
+
+        guard BroadcastStreamEndPolicy.shouldPresentStreamEndedPopup(
+            isVoluntaryLeave: false,
+            alreadyPresentedForSessionId: streamEndedPopupPresentedSessionId,
+            sessionId: sessionId
+        ) else { return }
+
+        streamEndedPopupPresentedSessionId = sessionId
+        streamEndedNotice = BroadcastStreamEndedNotice(sessionId: sessionId, roomTitle: roomTitle)
+        consecutiveSuccessfulNotLivePolls = 0
+    }
+
     private func teardown() async {
         sessionPollTask?.cancel()
         sessionPollTask = nil
@@ -501,6 +595,9 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         } else {
             raisedHandIdentities.remove(identity)
         }
+        if let room, let broadcasterIdentity {
+            syncRoster(from: room, broadcasterIdentity: broadcasterIdentity)
+        }
     }
 
     private func applyRemoteBroadcastHand(identity: String, raised: Bool) {
@@ -508,6 +605,9 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             raisedHandIdentities.insert(identity)
         } else {
             raisedHandIdentities.remove(identity)
+        }
+        if let room, let broadcasterIdentity {
+            syncRoster(from: room, broadcasterIdentity: broadcasterIdentity)
         }
     }
 
@@ -521,6 +621,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private func syncViewerCount(from room: Room) {
         guard let broadcasterIdentity else {
             localViewerCount = 0
+            rosterParticipants = []
             return
         }
         var count = 0
@@ -533,6 +634,57 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             }
         }
         localViewerCount = count
+        syncRoster(from: room, broadcasterIdentity: broadcasterIdentity)
+    }
+
+    private func syncRoster(from room: Room, broadcasterIdentity: String) {
+        var items: [BroadcastRosterParticipant] = []
+        let localIdentity = room.localParticipant.identity?.stringValue ?? ""
+
+        func appendParticipant(identity: String, name: String, isLocal: Bool) {
+            let isBroadcaster = identity == broadcasterIdentity
+            let micPub = isLocal
+                ? room.localParticipant.audioTracks.first(where: { $0.source == .microphone })
+                : room.remoteParticipants.values
+                    .first(where: { $0.identity?.stringValue == identity })?
+                    .audioTracks.first(where: { $0.source == .microphone })
+            let isSpeaker = micPub?.track != nil && micPub?.isMuted == false
+            let role: String = {
+                if isBroadcaster { return "Broadcaster" }
+                if isSpeaker, isOpenVoiceStream { return "Speaker" }
+                return "Viewer"
+            }()
+            items.append(
+                BroadcastRosterParticipant(
+                    identity: identity,
+                    displayName: name.isEmpty ? identity : name,
+                    roleLabel: role,
+                    isHandRaised: raisedHandIdentities.contains(identity),
+                    isLocal: isLocal
+                )
+            )
+        }
+
+        appendParticipant(
+            identity: localIdentity,
+            name: room.localParticipant.name ?? localIdentity,
+            isLocal: true
+        )
+        for participant in room.remoteParticipants.values {
+            let identity = participant.identity?.stringValue ?? UUID().uuidString
+            if identity == localIdentity { continue }
+            appendParticipant(
+                identity: identity,
+                name: participant.name ?? identity,
+                isLocal: false
+            )
+        }
+        items.sort { lhs, rhs in
+            if lhs.roleLabel == "Broadcaster" { return true }
+            if rhs.roleLabel == "Broadcaster" { return false }
+            return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+        }
+        rosterParticipants = items
     }
 
     private func syncVideoTrack(from room: Room) {
@@ -613,12 +765,33 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     }
 
     nonisolated func room(_ room: Room, participantDidDisconnect participant: RemoteParticipant) {
-        Task { @MainActor in syncViewerCount(from: room) }
+        Task { @MainActor in
+            syncViewerCount(from: room)
+            let identity = participant.identity?.stringValue
+            if BroadcastStreamEndPolicy.shouldEndWatchFromBroadcasterDisconnect(
+                isWatching: isWatching,
+                isVoluntaryLeave: isEndingWatchVoluntarily,
+                disconnectedIdentity: identity,
+                broadcasterIdentity: broadcasterIdentity
+            ) {
+                await handleRemoteStreamEnded()
+            }
+        }
     }
 
     nonisolated func room(_ room: Room, didUpdateConnectionState connectionState: ConnectionState, from oldValue: ConnectionState) {
         Task { @MainActor in
             self.connectionState = connectionState
+            guard isWatching, !isEndingWatchVoluntarily else { return }
+            guard BroadcastStreamEndPolicy.shouldDeferStreamEndForConnectionState(connectionState) == false else {
+                return
+            }
+            if connectionState == .disconnected,
+               oldValue == .connected || oldValue == .reconnecting || oldValue == .disconnecting,
+               let roomID = watchSession?.roomID
+            {
+                await refreshStatus(roomID: roomID)
+            }
         }
     }
 }

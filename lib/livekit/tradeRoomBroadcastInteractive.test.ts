@@ -4,6 +4,7 @@ import {
   parseBroadcastChatPayload,
   BROADCAST_CHAT_MAX_LENGTH,
 } from "./client/tradeRoomBroadcastChat.ts"
+import { parseBroadcastHandPayload } from "./client/tradeRoomBroadcastHand.ts"
 import {
   normalizeTradeRoomBroadcastVideoSource,
   normalizeTradeRoomBroadcastVoiceMode,
@@ -15,6 +16,24 @@ describe("Trade Room broadcast — voice mode metadata", () => {
     assert.equal(normalizeTradeRoomBroadcastVoiceMode("unknown"), "broadcast_only")
     assert.equal(normalizeTradeRoomBroadcastVideoSource("camera"), "camera")
     assert.equal(normalizeTradeRoomBroadcastVideoSource(null), "screen")
+  })
+})
+
+describe("Trade Room broadcast — raise hand", () => {
+  it("rejects spoofed hand identity", () => {
+    const payload = new TextEncoder().encode(
+      JSON.stringify({ type: "hand_state", identity: "attacker", raised: true })
+    )
+    assert.equal(parseBroadcastHandPayload(payload, "real-user"), null)
+  })
+
+  it("accepts matching identity", () => {
+    const payload = new TextEncoder().encode(
+      JSON.stringify({ type: "hand_state", identity: "u1", raised: true })
+    )
+    const state = parseBroadcastHandPayload(payload, "u1")
+    assert.ok(state)
+    assert.equal(state.raised, true)
   })
 })
 
