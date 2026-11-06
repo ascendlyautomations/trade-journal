@@ -9,6 +9,18 @@ import {
 
 const ROOT_ID = "tradetraxs-broadcast-remote-audio"
 const attachedBySid = new Map<string, HTMLAudioElement>()
+let streamListenMuted = false
+
+export function setBroadcastStreamListenMuted(muted: boolean): void {
+  streamListenMuted = muted
+  for (const el of attachedBySid.values()) {
+    el.muted = muted
+  }
+}
+
+export function getBroadcastStreamListenMuted(): boolean {
+  return streamListenMuted
+}
 
 function audioRoot(): HTMLElement | null {
   if (typeof document === "undefined") return null
@@ -30,6 +42,7 @@ function attachRemoteAudio(track: RemoteTrack): void {
   if (!root) return
   const el = track.attach() as HTMLAudioElement
   el.autoplay = true
+  el.muted = streamListenMuted
   attachedBySid.set(sid, el)
   root.appendChild(el)
   void el.play().catch(() => {})
@@ -50,6 +63,7 @@ function detachRemoteAudio(track: RemoteTrack): void {
 export function cleanupBroadcastRemoteAudio(): void {
   attachedBySid.clear()
   document.getElementById(ROOT_ID)?.replaceChildren()
+  streamListenMuted = false
 }
 
 function isMicPublication(pub: RemoteTrackPublication): boolean {

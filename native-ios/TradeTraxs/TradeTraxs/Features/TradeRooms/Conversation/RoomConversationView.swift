@@ -108,6 +108,10 @@ struct RoomConversationView: View {
                     .padding(.horizontal, ExperienceSpacing.md)
                     .padding(.vertical, ExperienceSpacing.xs)
             }
+            RoomConversationSessionChrome(
+                broadcastCoordinator: broadcastCoordinator,
+                liveVoiceCoordinator: liveVoiceCoordinator
+            )
             if viewModel.shouldShowMessageComposer {
                 MessageComposerBar(
                     draft: $viewModel.draft,
@@ -412,7 +416,6 @@ struct RoomConversationView: View {
     private func header(for room: TradeRoom) -> some View {
         RoomConversationHeaderView(
             room: room,
-            channelTitle: viewModel.selectedChannel?.displayTitle,
             memberCountLabel: viewModel.memberCountLabel,
             joinButtonTitle: viewModel.joinButtonTitle,
             showsJoinButton: viewModel.showsJoinButton,

@@ -21,6 +21,8 @@ type Props = {
   displayName: string
   avatarUrl: string | null
   disabled?: boolean
+  authLoading?: boolean
+  className?: string
 }
 
 function ChatAvatar({
@@ -55,6 +57,8 @@ export default function TradeRoomBroadcastLiveChat({
   displayName,
   avatarUrl,
   disabled,
+  authLoading,
+  className,
 }: Props) {
   const [draft, setDraft] = useState("")
   const [sendError, setSendError] = useState<string | null>(null)
@@ -117,13 +121,15 @@ export default function TradeRoomBroadcastLiveChat({
   }, [userId, draft, displayName, disabled])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-white/10 bg-black/30">
+    <div
+      className={`flex min-h-0 flex-1 flex-col rounded-lg border border-white/10 bg-black/30 ${className ?? ""}`}
+    >
       <div className="border-b border-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
         Live chat
       </div>
       <div
         ref={listRef}
-        className="min-h-[120px] flex-1 overflow-y-auto px-3 py-2 md:min-h-[200px]"
+        className="min-h-0 flex-1 overflow-y-auto px-3 py-2"
       >
         {messages.length === 0 ? (
           <p className="text-xs text-gray-500">No messages yet.</p>
@@ -169,7 +175,13 @@ export default function TradeRoomBroadcastLiveChat({
                 void onSend()
               }
             }}
-            placeholder={userId ? "Say something…" : "Sign in to chat"}
+            placeholder={
+              userId
+                ? "Say something…"
+                : authLoading
+                  ? "Loading chat…"
+                  : "Sign in to chat"
+            }
             maxLength={500}
             className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-gray-600 disabled:opacity-50"
           />

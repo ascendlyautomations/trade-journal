@@ -24,20 +24,9 @@ struct MainTabShellView: View {
         // `tabBarMinimizeBehavior` is iOS 26+; on iOS 18 the tab bar never minimizes.
         Group {
             if #available(iOS 26.0, *) {
-                tabView
-                    .tabBarMinimizeBehavior(.never)
-                    .liveVoiceTabShellLayoutIOS26(
-                        showsDemoLeave: showsDemoExperienceChrome,
-                        broadcastCoordinator: broadcastCoordinator,
-                        liveVoiceCoordinator: liveVoiceCoordinator
-                    )
+                tabView.tabBarMinimizeBehavior(.never)
             } else {
                 tabView
-                    .liveVoiceTabShellLayout(
-                        showsDemoLeave: showsDemoExperienceChrome,
-                        broadcastCoordinator: broadcastCoordinator,
-                        liveVoiceCoordinator: liveVoiceCoordinator
-                    )
             }
         }
         .tradeRoomBroadcastViewerSheet(
@@ -92,6 +81,7 @@ struct MainTabShellView: View {
             AuthenticatedLaunchPhasing.noteActiveTab(tab)
             OwnerAccountFilterDropdownController.shared.dismiss()
             syncFeedScopedBarChrome(isFeedTab: tab == .feed)
+            MainTabBarLayoutMetrics.shared.refresh()
         }
         .onChange(of: ContentMutationStore.shared.revision) { _, _ in
             guard let profileID = currentUserProfile.profile?.id else { return }
@@ -188,6 +178,11 @@ struct MainTabShellView: View {
             }
         }
         .tabViewStyle(.tabBarOnly)
+        .liveVoiceTabShellLayout(
+            showsDemoLeave: showsDemoExperienceChrome,
+            broadcastCoordinator: broadcastCoordinator,
+            liveVoiceCoordinator: liveVoiceCoordinator
+        )
     }
 
     private var tabSelection: Binding<TabIdentifier> {

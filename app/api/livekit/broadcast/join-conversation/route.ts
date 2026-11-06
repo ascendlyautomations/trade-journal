@@ -47,10 +47,19 @@ export async function POST(req: Request) {
     return Response.json({ error: "No live stream is active." }, { status: 404 })
   }
 
-  if (active.voiceMode !== "open_voice") {
-    const { hasActiveBroadcastSpeakerGrant } = await import(
-      "@/lib/livekit/tradeRoomBroadcastInteractiveState.ts"
+  const { hasActiveBroadcastSpeakerGrant, isUserBlockedFromBroadcastSession } =
+    await import("@/lib/livekit/tradeRoomBroadcastInteractiveState.ts")
+
+  if (
+    await isUserBlockedFromBroadcastSession(supabaseServiceRole, active.id, user.id)
+  ) {
+    return Response.json(
+      { error: "You were removed from this stream." },
+      { status: 403 }
     )
+  }
+
+  if (active.voiceMode !== "open_voice") {
     const granted = await hasActiveBroadcastSpeakerGrant(
       supabaseServiceRole,
       active.id,
@@ -78,10 +87,12 @@ export async function POST(req: Request) {
     await setLiveKitBroadcastParticipantMic(parsed.roomId, user.id, true)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    return Response.json(
-      { error: `Could not grant microphone access: ${message}` },
-      { status: 503 }
-    )
+    if (!/not found|does not exist|404|participant/i.test(message)) {
+      return Response.json(
+        { error: `Could not grant microphone access: ${message}` },
+        { status: 503 }
+      )
+    }
   }
 
   const session = await mintLiveKitBroadcastConversationToken(
@@ -96,5 +107,10 @@ export async function POST(req: Request) {
   return Response.json({
     ...session,
     broadcastSessionId: active.id,
+    broadcasterUserId: active.broadcasterUserId,
+    broadcasterDisplayName: active.broadcasterDisplayName,
+    startedAt: active.startedAt,
+    voiceMode: active.voiceMode,
+    videoSource: active.videoSource,
   })
 }

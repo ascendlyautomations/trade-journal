@@ -3841,6 +3841,8 @@ export type Database = {
       }
       room_live_broadcasts: {
         Row: {
+          broadcaster_disconnect_check_at: string | null
+          broadcaster_disconnect_reason: string | null
           broadcaster_user_id: string
           ended_at: string | null
           ended_reason: string | null
@@ -3852,6 +3854,8 @@ export type Database = {
           voice_mode: string
         }
         Insert: {
+          broadcaster_disconnect_check_at?: string | null
+          broadcaster_disconnect_reason?: string | null
           broadcaster_user_id: string
           ended_at?: string | null
           ended_reason?: string | null
@@ -3863,6 +3867,8 @@ export type Database = {
           voice_mode?: string
         }
         Update: {
+          broadcaster_disconnect_check_at?: string | null
+          broadcaster_disconnect_reason?: string | null
           broadcaster_user_id?: string
           ended_at?: string | null
           ended_reason?: string | null

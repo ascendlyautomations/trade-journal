@@ -1,7 +1,12 @@
 import { getRouteUserAuth, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { isLiveKitConfigured } from "@/lib/livekit/config.ts"
-import { countLiveKitBroadcastViewers } from "@/lib/livekit/liveKitRoomService.ts"
+import {
+  countLiveKitBroadcastViewers,
+  isBroadcasterConnectedInBroadcastRoom,
+} from "@/lib/livekit/liveKitRoomService.ts"
 import { getActiveTradeRoomBroadcast } from "@/lib/livekit/tradeRoomBroadcastSession.ts"
+import { reconcileTradeRoomBroadcastSession } from "@/lib/livekit/tradeRoomBroadcastReconcile.ts"
+import { processBroadcasterDisconnectChecks } from "@/lib/livekit/tradeRoomBroadcastDisconnectCheck.ts"
 import { resolveTradeRoomBroadcastViewerAccess } from "@/lib/livekit/tradeRoomBroadcastAccess.ts"
 
 export const runtime = "nodejs"
@@ -31,13 +36,35 @@ export async function GET(req: Request) {
     return Response.json({ error: access.error }, { status: access.status })
   }
 
-  const active = await getActiveTradeRoomBroadcast(supabaseServiceRole, roomId)
-  if (!active) {
-    return Response.json({ live: false })
+  if (isLiveKitConfigured()) {
+    await processBroadcasterDisconnectChecks(supabaseServiceRole, {
+      roomId,
+      limit: 1,
+    })
   }
 
+  const reconcile = url.searchParams.get("reconcile") === "1"
+  if (reconcile) {
+    await reconcileTradeRoomBroadcastSession(supabaseServiceRole, {
+      roomId,
+      viewerUserId: user.id,
+      endIfBroadcasterAbsent: true,
+    })
+  }
+
+  const active = await getActiveTradeRoomBroadcast(supabaseServiceRole, roomId)
+  if (!active) {
+    return Response.json({ live: false, isBroadcaster: false })
+  }
+
+  const isBroadcaster = active.broadcasterUserId === user.id
   let viewerCount: number | null = null
+  let broadcasterConnected: boolean | null = null
   if (isLiveKitConfigured()) {
+    broadcasterConnected = await isBroadcasterConnectedInBroadcastRoom(
+      roomId,
+      active.broadcasterUserId
+    )
     viewerCount = await countLiveKitBroadcastViewers(
       roomId,
       active.broadcasterUserId
@@ -53,5 +80,9 @@ export async function GET(req: Request) {
     voiceMode: active.voiceMode,
     videoSource: active.videoSource,
     viewerCount,
+    isBroadcaster,
+    broadcasterConnected,
+    alreadyLiveElsewhere:
+      isBroadcaster && broadcasterConnected === true ? true : undefined,
   })
 }

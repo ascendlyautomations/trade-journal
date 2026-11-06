@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/database.types"
 import { getActiveTradeRoomBroadcast } from "./tradeRoomBroadcastSession.ts"
+import { listLiveKitBroadcastParticipantIdentities } from "./liveKitRoomService.ts"
 
 export type BroadcastInteractiveProfile = {
   userId: string
@@ -22,7 +23,7 @@ export type BroadcastInteractiveSnapshot = {
   removedFromStream: boolean
 }
 
-async function loadProfiles(
+export async function loadBroadcastInteractiveProfiles(
   admin: SupabaseClient<Database>,
   userIds: string[]
 ): Promise<Map<string, BroadcastInteractiveProfile>> {
@@ -183,12 +184,17 @@ export async function loadBroadcastInteractiveSnapshot(
     ) ?? null
 
   const profileIds = new Set<string>([active.broadcasterUserId])
+  for (const identity of await listLiveKitBroadcastParticipantIdentities(
+    active.roomId
+  )) {
+    profileIds.add(identity)
+  }
   for (const h of hands ?? []) profileIds.add(h.user_id)
   for (const g of grants ?? []) profileIds.add(g.user_id)
   for (const b of blocks ?? []) profileIds.add(b.user_id)
   for (const i of invites ?? []) profileIds.add(i.user_id)
 
-  const profileMap = await loadProfiles(admin, [...profileIds])
+  const profileMap = await loadBroadcastInteractiveProfiles(admin, [...profileIds])
 
   return {
     ok: true,

@@ -8,9 +8,12 @@ import {
 } from "livekit-client"
 import { createExternalStoreSnapshotCache } from "./externalStoreSnapshot.ts"
 import { broadcastStartErrorMessage } from "./tradeRoomBroadcastErrors.ts"
+import { setBroadcastPublisherCredentials } from "./tradeRoomBroadcastPublisherLifecycle.ts"
 import {
   cleanupBroadcastRemoteAudio,
+  getBroadcastStreamListenMuted,
   registerBroadcastRemoteAudioHandlers,
+  setBroadcastStreamListenMuted,
 } from "./tradeRoomBroadcastAudio.ts"
 import {
   clearBroadcastChatState,
@@ -42,7 +45,11 @@ import type {
   TradeRoomBroadcastVideoSource,
   TradeRoomBroadcastVoiceMode,
 } from "../tradeRoomBroadcastVoiceMode.ts"
-import { getTradeRoomLiveVoiceSnapshot } from "./tradeRoomLiveVoiceStore.ts"
+import {
+  getTradeRoomLiveVoiceSnapshot,
+  leaveTradeRoomLiveVoice,
+} from "./tradeRoomLiveVoiceStore.ts"
+import { fetchBroadcastConversationJoinPayload } from "./tradeRoomBroadcastJoinConversation.ts"
 
 export type BroadcastRoomStatus = {
   live: boolean
@@ -53,6 +60,8 @@ export type BroadcastRoomStatus = {
   viewerCount?: number | null
   voiceMode?: TradeRoomBroadcastVoiceMode
   videoSource?: TradeRoomBroadcastVideoSource
+  broadcasterConnected?: boolean | null
+  alreadyLiveElsewhere?: boolean
 }
 
 export type BroadcastRole = "none" | "broadcaster" | "viewer" | "conversation"
@@ -80,6 +89,45 @@ export type BroadcastStoreSnapshot = {
   localHandRaised: boolean
   raisedHandIdentities: string[]
   handFeedback: string | null
+  liveParticipants: BroadcastLiveParticipant[]
+  interactiveProfiles: Record<string, BroadcastInteractiveProfileLite>
+  streamListenMuted: boolean
+  viewerMicMuted: boolean
+  speakInviteNotice: BroadcastSpeakInviteNotice | null
+  viewerUserId: string | null
+  speakerGrantUserIds: string[]
+  sessionBlockUserIds: string[]
+  viewerStreamRemovalNotice: BroadcastViewerStreamRemovalNotice | null
+  speakerUpgradeInFlight: boolean
+}
+
+export type BroadcastViewerStreamRemovalNotice = {
+  kind: "removed" | "banned"
+  sessionId: string
+}
+
+export type BroadcastSpeakInviteNotice = {
+  sessionId: string
+  roomId: string
+  invitationId: string | null
+}
+
+export type BroadcastPassiveInteractiveContext = {
+  roomId: string
+  viewerUserId: string
+}
+
+export type BroadcastLiveParticipant = {
+  userId: string
+  displayName: string
+  isBroadcaster: boolean
+}
+
+export type BroadcastInteractiveProfileLite = {
+  userId: string
+  displayName: string
+  username: string | null
+  avatarUrl: string | null
 }
 
 type Listener = () => void
@@ -111,12 +159,29 @@ let roomTitle: string | null = null
 let localHandRaised = false
 let raisedHandIdentities: string[] = []
 let handFeedback: string | null = null
+let liveParticipants: BroadcastLiveParticipant[] = []
+let interactiveProfiles: Record<string, BroadcastInteractiveProfileLite> = {}
+let streamListenMuted = false
+let viewerMicMuted = false
+let speakInviteNotice: BroadcastSpeakInviteNotice | null = null
+let viewerUserId: string | null = null
+let viewerAccessToken: string | null = null
+let dismissedSpeakInviteSessionId: string | null = null
+let speakerUpgradeInFlight = false
 let interactivePollTimer: ReturnType<typeof setInterval> | null = null
+let speakerGrantUserIds: string[] = []
+let sessionBlockUserIds: string[] = []
+let boundViewerVideoElement: HTMLVideoElement | null = null
 let broadcasterPreviewElement: HTMLVideoElement | null = null
 let broadcasterPreviewError: string | null = null
 let currentSessionId: string | null = null
 let preferredVideoSource: TradeRoomBroadcastVideoSource = "screen"
 let broadcasterIdentityForRoom: string | null = null
+let viewerStreamRemovalNotice: BroadcastViewerStreamRemovalNotice | null = null
+let intentionalBroadcastRoomTeardown = false
+let viewerRemovalHandling = false
+let passiveInteractiveContext: BroadcastPassiveInteractiveContext | null = null
+let speakerAutoUpgradeAttemptedSessionId: string | null = null
 
 function buildSnapshot(): BroadcastStoreSnapshot {
   return {
@@ -140,6 +205,16 @@ function buildSnapshot(): BroadcastStoreSnapshot {
     raisedHandIdentities,
     handFeedback,
     roomTitle,
+    liveParticipants,
+    interactiveProfiles,
+    streamListenMuted,
+    viewerMicMuted,
+    speakInviteNotice,
+    viewerUserId,
+    speakerGrantUserIds,
+    sessionBlockUserIds,
+    viewerStreamRemovalNotice,
+    speakerUpgradeInFlight,
   }
 }
 
@@ -162,16 +237,144 @@ function syncAudienceCount(activeRoom: Room, broadcasterId: string) {
   localViewerCount = countBroadcastAudience(activeRoom, broadcasterId)
 }
 
+function syncLiveParticipantRoster(activeRoom: Room, broadcasterId: string) {
+  const roster: BroadcastLiveParticipant[] = []
+  const seen = new Set<string>()
+
+  const pushParticipant = (
+    userId: string,
+    fallbackName: string,
+    isBroadcaster: boolean
+  ) => {
+    if (!userId || seen.has(userId)) return
+    seen.add(userId)
+    roster.push({
+      userId,
+      displayName:
+        interactiveProfiles[userId]?.displayName ||
+        fallbackName ||
+        "Member",
+      isBroadcaster,
+    })
+  }
+
+  pushParticipant(
+    broadcasterId,
+    status.broadcasterDisplayName?.trim() ||
+      activeRoom.localParticipant.name?.trim() ||
+      "Broadcaster",
+    true
+  )
+
+  for (const participant of activeRoom.remoteParticipants.values()) {
+    const userId = participant.identity
+    pushParticipant(
+      userId,
+      participant.name?.trim() || "Member",
+      userId === broadcasterId
+    )
+  }
+
+  liveParticipants = roster
+}
+
 function attachRoomSync(activeRoom: Room, broadcasterId: string) {
   const sync = () => {
     connectionState = activeRoom.state
     syncAudienceCount(activeRoom, broadcasterId)
+    syncLiveParticipantRoster(activeRoom, broadcasterId)
     emit()
   }
   activeRoom.on(RoomEvent.ConnectionStateChanged, sync)
   activeRoom.on(RoomEvent.ParticipantConnected, sync)
   activeRoom.on(RoomEvent.ParticipantDisconnected, sync)
+  activeRoom.on(RoomEvent.Disconnected, () => {
+    void handleViewerKickedFromBroadcastRoom()
+  })
   sync()
+}
+
+async function handleViewerKickedFromBroadcastRoom(): Promise<void> {
+  if (
+    isPublishing ||
+    intentionalBroadcastRoomTeardown ||
+    speakerUpgradeInFlight
+  ) {
+    return
+  }
+  if (!isWatching && role !== "viewer" && role !== "conversation") return
+  if (viewerRemovalHandling) return
+
+  viewerRemovalHandling = true
+  try {
+    const sessionId = currentSessionId ?? ""
+    let kind: BroadcastViewerStreamRemovalNotice["kind"] = "removed"
+
+    if (
+      viewerUserId &&
+      sessionBlockUserIds.includes(viewerUserId)
+    ) {
+      kind = "banned"
+    } else if (viewerAccessToken && roomId) {
+      try {
+        const res = await fetch(
+          `/api/livekit/broadcast/interactive-state?roomId=${encodeURIComponent(roomId)}`,
+          { headers: { Authorization: `Bearer ${viewerAccessToken}` } }
+        )
+        if (res.ok) {
+          const payload = (await res.json()) as {
+            snapshot?: { removedFromStream?: boolean }
+          }
+          if (payload.snapshot?.removedFromStream) {
+            kind = "banned"
+          }
+        }
+      } catch {
+        // Default to removed when LiveKit dropped the participant.
+      }
+    }
+
+    await forceViewerOffStream({ kind, sessionId })
+  } finally {
+    viewerRemovalHandling = false
+  }
+}
+
+async function forceViewerOffStream(
+  notice: BroadcastViewerStreamRemovalNotice
+): Promise<void> {
+  if (isPublishing) return
+  if (
+    viewerStreamRemovalNotice?.sessionId === notice.sessionId &&
+    viewerStreamRemovalNotice.kind === notice.kind
+  ) {
+    return
+  }
+
+  const prevStatus = { ...status }
+  const activeVoiceRoomId = roomId
+
+  viewerStreamRemovalNotice = notice
+  speakInviteNotice = null
+  emit()
+
+  if (
+    activeVoiceRoomId &&
+    getTradeRoomLiveVoiceSnapshot().session?.roomId === activeVoiceRoomId
+  ) {
+    void leaveTradeRoomLiveVoice()
+  }
+
+  await teardownBroadcastRoom()
+
+  status = prevStatus.live ? prevStatus : { live: false }
+  viewerStreamRemovalNotice = notice
+  emit()
+}
+
+export function acknowledgeTradeRoomBroadcastViewerRemoval(): void {
+  viewerStreamRemovalNotice = null
+  emit()
 }
 
 function registerChat(activeRoom: Room) {
@@ -215,32 +418,155 @@ async function syncHandAuthoritative(
   }
 }
 
+export function setBroadcastPassiveInteractiveContext(
+  context: BroadcastPassiveInteractiveContext | null
+): void {
+  passiveInteractiveContext = context
+}
+
 export async function refreshBroadcastInteractiveState(
   accessToken: string
 ): Promise<void> {
-  if (!roomId || !accessToken) return
+  const effectiveRoomId = roomId ?? passiveInteractiveContext?.roomId
+  const effectiveViewerUserId =
+    viewerUserId ?? passiveInteractiveContext?.viewerUserId
+  if (!effectiveRoomId || !accessToken) return
   try {
     const res = await fetch(
-      `/api/livekit/broadcast/interactive-state?roomId=${encodeURIComponent(roomId)}`,
+      `/api/livekit/broadcast/interactive-state?roomId=${encodeURIComponent(effectiveRoomId)}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     )
     if (!res.ok) return
     const payload = (await res.json()) as {
-      snapshot?: { raisedHands?: Array<{ userId: string }> }
+      snapshot?: {
+        sessionId?: string
+        raisedHands?: Array<{ userId: string }>
+        speakerGrants?: string[]
+        sessionBlocks?: string[]
+        removedFromStream?: boolean
+        pendingInvitationForViewer?: { invitationId: string } | null
+      }
+      profiles?: Array<{
+        userId: string
+        username: string | null
+        displayName: string | null
+        avatarUrl: string | null
+      }>
     }
     raisedHandIdentities = (payload.snapshot?.raisedHands ?? []).map((h) => h.userId)
+    const sessionId = payload.snapshot?.sessionId ?? currentSessionId
+    const grants = payload.snapshot?.speakerGrants ?? []
+    speakerGrantUserIds = grants
+    sessionBlockUserIds = payload.snapshot?.sessionBlocks ?? []
+    const pendingInvite = payload.snapshot?.pendingInvitationForViewer
+    if (
+      payload.snapshot?.removedFromStream &&
+      isWatching &&
+      !isPublishing
+    ) {
+      await forceViewerOffStream({
+        kind: "banned",
+        sessionId: sessionId ?? currentSessionId ?? "",
+      })
+      return
+    }
+    const hasSpeakerGrant =
+      Boolean(effectiveViewerUserId) &&
+      grants.includes(effectiveViewerUserId as string)
+
+    if (
+      effectiveViewerUserId &&
+      !isPublishing &&
+      sessionId &&
+      role !== "broadcaster" &&
+      role !== "conversation" &&
+      !speakerUpgradeInFlight
+    ) {
+      const invited = hasSpeakerGrant || pendingInvite?.invitationId != null
+      if (
+        invited &&
+        dismissedSpeakInviteSessionId !== sessionId &&
+        !speakInviteNotice
+      ) {
+        speakInviteNotice = {
+          sessionId,
+          roomId: effectiveRoomId,
+          invitationId: pendingInvite?.invitationId ?? null,
+        }
+      }
+    }
+
+    if (
+      hasSpeakerGrant &&
+      isWatching &&
+      role === "viewer" &&
+      roomId === effectiveRoomId &&
+      boundViewerVideoElement &&
+      sessionId
+    ) {
+      void maybeAutoUpgradeViewerToSpeaker(accessToken, sessionId)
+    }
+    const nextProfiles: Record<string, BroadcastInteractiveProfileLite> = {
+      ...interactiveProfiles,
+    }
+    for (const profile of payload.profiles ?? []) {
+      nextProfiles[profile.userId] = {
+        userId: profile.userId,
+        username: profile.username,
+        displayName:
+          profile.displayName?.trim() ||
+          profile.username?.trim() ||
+          "Member",
+        avatarUrl: profile.avatarUrl,
+      }
+    }
+    interactiveProfiles = nextProfiles
+    if (broadcastRoom && broadcasterIdentityForRoom) {
+      syncLiveParticipantRoster(broadcastRoom, broadcasterIdentityForRoom)
+    }
     emit()
   } catch {
     // ignore
   }
 }
 
+async function maybeAutoUpgradeViewerToSpeaker(
+  accessToken: string,
+  sessionId: string
+): Promise<void> {
+  if (speakerAutoUpgradeAttemptedSessionId === sessionId) return
+  if (speakerUpgradeInFlight || isBusy || !roomId || !boundViewerVideoElement) {
+    return
+  }
+  speakerAutoUpgradeAttemptedSessionId = sessionId
+  speakerUpgradeInFlight = true
+  emit()
+  try {
+    await joinTradeRoomBroadcastConversation({
+      roomId,
+      videoElement: boundViewerVideoElement,
+      fetchJoin: () => fetchBroadcastConversationJoinPayload(accessToken, roomId),
+    })
+    speakInviteNotice = null
+    viewerMicMuted = false
+    error = null
+  } catch (err) {
+    speakerAutoUpgradeAttemptedSessionId = null
+    error =
+      err instanceof Error ? err.message : "Could not join as a speaker."
+  } finally {
+    speakerUpgradeInFlight = false
+    emit()
+  }
+}
+
 function startInteractivePolling(accessToken: string) {
   stopInteractivePolling()
+  viewerAccessToken = accessToken
   void refreshBroadcastInteractiveState(accessToken)
   interactivePollTimer = setInterval(() => {
     void refreshBroadcastInteractiveState(accessToken)
-  }, 8000)
+  }, 4000)
 }
 
 function stopInteractivePolling() {
@@ -304,10 +630,12 @@ function registerViewerMedia(
     videoElement,
     preferredVideoSource
   )
+  const includeOtherSpeakers =
+    voiceMode === "open_voice" || isInConversation || role === "conversation"
   audioCleanup = registerBroadcastRemoteAudioHandlers(
     activeRoom,
     broadcasterId,
-    voiceMode === "open_voice" && isInConversation
+    includeOtherSpeakers
   )
 }
 
@@ -342,6 +670,7 @@ async function releaseLocalTracks(activeRoom: Room) {
 }
 
 async function teardownBroadcastRoom() {
+  intentionalBroadcastRoomTeardown = true
   if (broadcastRoom) {
     await releaseLocalTracks(broadcastRoom)
   }
@@ -384,6 +713,22 @@ async function teardownBroadcastRoom() {
   localHandRaised = false
   raisedHandIdentities = []
   handFeedback = null
+  liveParticipants = []
+  interactiveProfiles = {}
+  streamListenMuted = false
+  viewerMicMuted = false
+  speakInviteNotice = null
+  viewerUserId = null
+  viewerAccessToken = null
+  dismissedSpeakInviteSessionId = null
+  speakerUpgradeInFlight = false
+  speakerGrantUserIds = []
+  sessionBlockUserIds = []
+  boundViewerVideoElement = null
+  speakerAutoUpgradeAttemptedSessionId = null
+  setBroadcastStreamListenMuted(false)
+  setBroadcastPublisherCredentials(null)
+  intentionalBroadcastRoomTeardown = false
 }
 
 export function subscribeTradeRoomBroadcast(listener: Listener): () => void {
@@ -467,6 +812,70 @@ export async function toggleTradeRoomBroadcastMicMuted(): Promise<void> {
   }
 }
 
+export function toggleTradeRoomBroadcastStreamListenMuted(): void {
+  streamListenMuted = !getBroadcastStreamListenMuted()
+  setBroadcastStreamListenMuted(streamListenMuted)
+  emit()
+}
+
+export async function toggleTradeRoomBroadcastViewerMicMuted(): Promise<void> {
+  if (!broadcastRoom || role !== "conversation") return
+  const next = !viewerMicMuted
+  try {
+    await broadcastRoom.localParticipant.setMicrophoneEnabled(!next)
+    viewerMicMuted = next
+    emit()
+  } catch (err) {
+    error = err instanceof Error ? err.message : "Could not toggle microphone."
+    emit()
+  }
+}
+
+export function dismissTradeRoomBroadcastSpeakInvite(): void {
+  if (speakInviteNotice?.sessionId) {
+    dismissedSpeakInviteSessionId = speakInviteNotice.sessionId
+  }
+  speakInviteNotice = null
+  emit()
+}
+
+export async function acceptTradeRoomBroadcastSpeakInvite(options: {
+  roomId: string
+  videoElement: HTMLVideoElement
+  accessToken: string
+  fetchConversationToken: () => Promise<{
+    token: string
+    livekitUrl: string
+    broadcastSessionId: string
+    broadcasterUserId: string
+    broadcasterDisplayName: string | null
+    startedAt: string
+    voiceMode?: TradeRoomBroadcastVoiceMode
+    videoSource?: TradeRoomBroadcastVideoSource
+  }>
+}): Promise<void> {
+  if (speakerUpgradeInFlight || isBusy) return
+  speakerUpgradeInFlight = true
+  emit()
+  try {
+    await joinTradeRoomBroadcastConversation({
+      roomId: options.roomId,
+      videoElement: options.videoElement,
+      fetchJoin: options.fetchConversationToken,
+    })
+    speakerAutoUpgradeAttemptedSessionId =
+      currentSessionId ?? speakInviteNotice?.sessionId ?? null
+    speakInviteNotice = null
+    viewerMicMuted = false
+  } catch (err) {
+    error =
+      err instanceof Error ? err.message : "Could not join as a speaker."
+  } finally {
+    speakerUpgradeInFlight = false
+    emit()
+  }
+}
+
 export type BroadcastGoLiveSetup = {
   videoSource: TradeRoomBroadcastVideoSource
   voiceMode: TradeRoomBroadcastVoiceMode
@@ -476,6 +885,7 @@ export type BroadcastGoLiveSetup = {
 export async function startTradeRoomBroadcast(options: {
   roomId: string
   setup: BroadcastGoLiveSetup
+  publisherAccessToken?: string | null
   fetchStart: () => Promise<{
     token: string
     livekitUrl: string
@@ -642,6 +1052,14 @@ export async function startTradeRoomBroadcast(options: {
       })
     })
 
+    if (options.publisherAccessToken) {
+      setBroadcastPublisherCredentials({
+        roomId: options.roomId,
+        sessionId: start.broadcastSessionId,
+        accessToken: options.publisherAccessToken,
+      })
+    }
+
     connectionState = nextRoom.state
     emit()
   } catch (err) {
@@ -722,6 +1140,7 @@ async function connectBroadcastViewer(options: {
   attachRoomSync(nextRoom, tokenPayload.broadcasterUserId)
   registerChat(nextRoom)
   registerHand(nextRoom)
+  boundViewerVideoElement = options.videoElement
   registerViewerMedia(
     nextRoom,
     tokenPayload.broadcasterUserId,
@@ -732,9 +1151,21 @@ async function connectBroadcastViewer(options: {
   if (options.asConversation) {
     try {
       await nextRoom.localParticipant.setMicrophoneEnabled(true)
+      viewerMicMuted = false
     } catch (err) {
       error = err instanceof Error ? err.message : "Could not enable microphone."
+      viewerMicMuted = true
     }
+    registerViewerMedia(
+      nextRoom,
+      tokenPayload.broadcasterUserId,
+      options.videoElement,
+      tokenPayload.voiceMode ?? "broadcast_only"
+    )
+  }
+
+  if (viewerAccessToken) {
+    startInteractivePolling(viewerAccessToken)
   }
 
   connectionState = nextRoom.state
@@ -744,6 +1175,8 @@ async function connectBroadcastViewer(options: {
 export async function watchTradeRoomBroadcast(options: {
   roomId: string
   videoElement: HTMLVideoElement
+  accessToken?: string | null
+  viewerUserId?: string | null
   fetchViewerToken: () => Promise<{
     token: string
     livekitUrl: string
@@ -778,6 +1211,10 @@ export async function watchTradeRoomBroadcast(options: {
   emit()
 
   try {
+    viewerUserId = options.viewerUserId ?? null
+    if (options.accessToken) {
+      viewerAccessToken = options.accessToken
+    }
     const tokenPayload = await options.fetchViewerToken()
     await connectBroadcastViewer({
       roomId: options.roomId,
@@ -897,7 +1334,6 @@ export async function stopTradeRoomBroadcast(options: {
   fetchStop: () => Promise<void>
   skipApi?: boolean
 }): Promise<void> {
-  if (isBusy && !options.skipApi) return
   isBusy = true
   emit()
 
@@ -925,9 +1361,14 @@ export async function leaveTradeRoomBroadcastViewer(): Promise<void> {
 }
 
 /** Call when the viewer <video> element mounts or changes. */
+export function getTradeRoomBroadcastViewerVideoElement(): HTMLVideoElement | null {
+  return boundViewerVideoElement
+}
+
 export function syncTradeRoomBroadcastViewerVideoElement(
   videoElement: HTMLVideoElement
 ): void {
+  boundViewerVideoElement = videoElement
   if (!broadcastRoom || !broadcasterIdentityForRoom || !isWatching) return
   if (role !== "viewer" && role !== "conversation") return
   reattachBroadcastVideoToElement(

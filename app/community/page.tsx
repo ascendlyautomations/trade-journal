@@ -83,9 +83,11 @@ import TradeRoomCreateWizard from "@/app/components/tradeRooms/TradeRoomCreateWi
 import ManageTradeRoomModal from "@/app/components/tradeRooms/ManageTradeRoomModal"
 import TradeRoomGeneralVoiceSidebarRow from "@/app/components/tradeRooms/live/TradeRoomGeneralVoiceSidebarRow"
 import TradeRoomBroadcastPanel from "@/app/components/tradeRooms/live/TradeRoomBroadcastPanel"
+import TradeRoomBroadcastViewerRemovalOverlay from "@/app/components/tradeRooms/live/TradeRoomBroadcastViewerRemovalOverlay.tsx"
 import TradeRoomLiveVoiceBar from "@/app/components/tradeRooms/live/TradeRoomLiveVoiceBar"
 import TradeRoomLiveVoiceSessionGuard from "@/app/components/tradeRooms/live/TradeRoomLiveVoiceSessionGuard"
 import { useTradeRoomLiveVoice } from "@/app/components/tradeRooms/live/useTradeRoomLiveVoice"
+import { useTradeRoomBroadcast } from "@/app/components/tradeRooms/live/useTradeRoomBroadcast.ts"
 import { isVoiceLiveSection } from "@/lib/livekit/client/liveVoiceSection.ts"
 import {
   normalizeTradeRoomLiveVoiceKind,
@@ -382,6 +384,8 @@ function CommunityContent() {
   const searchParams = useSearchParams()
   const { user, profile, loading: profileLoading } = useUserProfile()
   const liveVoice = useTradeRoomLiveVoice()
+  const tradeRoomBroadcast = useTradeRoomBroadcast()
+  const handledStreamRemovalKeyRef = useRef<string | null>(null)
   const { runUpload } = useUploadProgress()
   const username = profile?.username?.trim() || "User"
   const roomParam = searchParams.get("room")
@@ -423,6 +427,17 @@ function CommunityContent() {
   const [mobileRoomQuery, setMobileRoomQuery] = useState("")
   const [mobileSectionsOpen, setMobileSectionsOpen] = useState(false)
   const [broadcastPanelExpanded, setBroadcastPanelExpanded] = useState(false)
+
+  useEffect(() => {
+    const notice = tradeRoomBroadcast.viewerStreamRemovalNotice
+    if (!notice) return
+    const key = `${notice.sessionId}:${notice.kind}`
+    if (handledStreamRemovalKeyRef.current === key) return
+    handledStreamRemovalKeyRef.current = key
+    setBroadcastPanelExpanded(false)
+    setSelectedRoomId(null)
+    router.replace("/community")
+  }, [tradeRoomBroadcast.viewerStreamRemovalNotice, router])
   const [liveKitAccessToken, setLiveKitAccessToken] = useState<string | null>(
     null
   )
@@ -6058,6 +6073,7 @@ function CommunityContent() {
       />
       <TradeRoomLiveVoiceSessionGuard userId={user?.id} />
       <TradeRoomLiveVoiceBar />
+      <TradeRoomBroadcastViewerRemovalOverlay />
     </>
   )
 }

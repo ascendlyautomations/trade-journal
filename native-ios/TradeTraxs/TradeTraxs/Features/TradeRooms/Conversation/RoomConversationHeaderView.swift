@@ -4,7 +4,6 @@ import UIKit
 /// Compact Discord/iMessage-style room chrome — logo, name, members/info actions.
 struct RoomConversationHeaderView: View {
     let room: TradeRoom
-    let channelTitle: String?
     let memberCountLabel: String
     let joinButtonTitle: String
     let showsJoinButton: Bool
@@ -32,17 +31,10 @@ struct RoomConversationHeaderView: View {
                     .lineLimit(1)
                     .accessibilityAddTraits(.isHeader)
 
-                HStack(spacing: ExperienceSpacing.xs) {
-                    if let channelTitle, !channelTitle.isEmpty {
-                        Text(channelTitle)
-                            .experienceStyle(.caption2, color: colors.tertiaryText)
-                            .lineLimit(1)
-                    }
-                    if !memberCountLabel.isEmpty {
-                        Text(memberCountLabel)
-                            .experienceStyle(.caption2, color: colors.tertiaryText)
-                            .lineLimit(1)
-                    }
+                if !memberCountLabel.isEmpty {
+                    Text(memberCountLabel)
+                        .experienceStyle(.caption2, color: colors.tertiaryText)
+                        .lineLimit(1)
                 }
             }
             Spacer(minLength: ExperienceSpacing.xs)

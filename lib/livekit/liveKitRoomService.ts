@@ -174,6 +174,59 @@ export async function muteLiveKitBroadcastParticipantMicrophone(
   }
 }
 
+export async function listLiveKitBroadcastParticipantIdentities(
+  roomId: string
+): Promise<string[]> {
+  const client = getLiveKitRoomServiceClient()
+  if (!client) return []
+  try {
+    const participants = await client.listParticipants(
+      liveKitBroadcastRoomName(roomId)
+    )
+    return participants
+      .map((p) => p.identity?.trim())
+      .filter((id): id is string => Boolean(id))
+  } catch {
+    return []
+  }
+}
+
+export async function isBroadcasterConnectedInBroadcastRoom(
+  roomId: string,
+  broadcasterUserId: string
+): Promise<boolean> {
+  const client = getLiveKitRoomServiceClient()
+  if (!client) return false
+
+  try {
+    const participants = await client.listParticipants(
+      liveKitBroadcastRoomName(roomId)
+    )
+    return participants.some((p) => p.identity === broadcasterUserId)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (/not found|does not exist|404/i.test(message)) {
+      return false
+    }
+    console.warn("[livekit/broadcast] presence check failed", message)
+    return false
+  }
+}
+
+export async function deleteLiveKitBroadcastRoom(roomId: string): Promise<void> {
+  const client = getLiveKitRoomServiceClient()
+  if (!client) return
+  try {
+    await client.deleteRoom(liveKitBroadcastRoomName(roomId))
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (/not found|does not exist|404/i.test(message)) {
+      return
+    }
+    console.warn("[livekit/broadcast] delete room failed", message)
+  }
+}
+
 export async function countLiveKitBroadcastViewers(
   roomId: string,
   broadcasterUserId: string

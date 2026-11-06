@@ -6,6 +6,7 @@ import {
   createBroadcastSpeakInvitation,
   dismissBroadcastHand,
   grantBroadcastSpeaker,
+  loadBroadcastInteractiveProfiles,
   respondBroadcastSpeakInvitation,
   revokeBroadcastSpeaker,
 } from "./tradeRoomBroadcastInteractiveState.ts"
@@ -34,7 +35,10 @@ export async function executeBroadcastModeration(
     action: BroadcastModerationAction
     blockRejoin?: boolean
   }
-): Promise<{ ok: true; invitationId?: string } | { ok: false; status: number; error: string }> {
+): Promise<
+  | { ok: true; invitationId?: string; targetDisplayName?: string }
+  | { ok: false; status: number; error: string }
+> {
   const session = await assertActiveBroadcastSession(
     admin,
     options.roomId,
@@ -63,13 +67,50 @@ export async function executeBroadcastModeration(
       return r.ok ? { ok: true } : r
     }
     case "invite_speak": {
+      const profiles = await loadBroadcastInteractiveProfiles(admin, [
+        options.targetUserId,
+      ])
+      const targetProfile = profiles.get(options.targetUserId)
+      const targetDisplayName =
+        targetProfile?.displayName?.trim() ||
+        targetProfile?.username?.trim() ||
+        "Member"
+
+      const grant = await grantBroadcastSpeaker(admin, {
+        sessionId: options.sessionId,
+        targetUserId: options.targetUserId,
+        grantedBy: options.actorUserId,
+      })
+      if (!grant.ok) return grant
+
+      await dismissBroadcastHand(admin, {
+        sessionId: options.sessionId,
+        targetUserId: options.targetUserId,
+      })
+
+      try {
+        await setLiveKitBroadcastParticipantMic(
+          options.roomId,
+          options.targetUserId,
+          true
+        )
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        if (!/not found|does not exist|404|participant/i.test(message)) {
+          return { ok: false, status: 503, error: message }
+        }
+      }
+
       const invite = await createBroadcastSpeakInvitation(admin, {
         sessionId: options.sessionId,
         targetUserId: options.targetUserId,
         invitedBy: options.actorUserId,
       })
-      if (!invite.ok) return invite
-      return { ok: true, invitationId: invite.invitationId }
+      if (!invite.ok) {
+        return invite
+      }
+
+      return { ok: true, targetDisplayName, invitationId: invite.invitationId }
     }
     case "request_unmute": {
       const invite = await createBroadcastSpeakInvitation(admin, {

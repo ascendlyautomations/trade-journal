@@ -1,11 +1,10 @@
 import { getRouteUserAuth, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { isLiveKitConfigured } from "@/lib/livekit/config.ts"
-import { liveKitBroadcastRoomName } from "@/lib/livekit/liveKitRoomName.ts"
-import { getLiveKitRoomServiceClient } from "@/lib/livekit/liveKitRoomService.ts"
 import {
-  endTradeRoomBroadcastSession,
-  getActiveTradeRoomBroadcast,
-} from "@/lib/livekit/tradeRoomBroadcastSession.ts"
+  evictBroadcastRoomParticipants,
+  deleteLiveKitBroadcastRoomIfEmpty,
+} from "@/lib/livekit/tradeRoomBroadcastReconcile.ts"
+import { endTradeRoomBroadcastSession } from "@/lib/livekit/tradeRoomBroadcastSession.ts"
 import {
   resolveTradeRoomBroadcastControlAccess,
   resolveTradeRoomBroadcastViewerAccess,
@@ -72,13 +71,6 @@ export async function POST(req: Request) {
     { userId: user.id, roomId: parsed.roomId }
   )
 
-  const activeBefore = await getActiveTradeRoomBroadcast(
-    supabaseServiceRole,
-    parsed.roomId
-  )
-  const disconnectIdentity =
-    activeBefore?.broadcasterUserId ?? user.id
-
   const end = await endTradeRoomBroadcastSession(supabaseServiceRole, {
     roomId: parsed.roomId,
     sessionId: parsed.sessionId,
@@ -91,17 +83,8 @@ export async function POST(req: Request) {
     return Response.json({ error: end.error }, { status: end.status })
   }
 
-  const client = getLiveKitRoomServiceClient()
-  if (client) {
-    try {
-      await client.removeParticipant(
-        liveKitBroadcastRoomName(parsed.roomId),
-        disconnectIdentity
-      )
-    } catch {
-      // participant may already be disconnected
-    }
-  }
+  await evictBroadcastRoomParticipants(parsed.roomId)
+  await deleteLiveKitBroadcastRoomIfEmpty(parsed.roomId)
 
   return Response.json({ ok: true })
 }

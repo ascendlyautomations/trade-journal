@@ -207,10 +207,7 @@ final class RoomConversationViewModel {
     }
 
     var memberCountLabel: String {
-        let count = inboxStore.rooms.first(where: { $0.id == resolvedRoomID })?.memberCount
-            ?? room?.memberCount
-        guard let count else { return "" }
-        return "\(ProfileDisplay.compactCount(count)) members"
+        "#members"
     }
 
     var isMember: Bool {

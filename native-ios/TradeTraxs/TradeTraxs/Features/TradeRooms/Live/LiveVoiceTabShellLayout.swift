@@ -32,78 +32,126 @@ enum LiveVoiceTabShellLayout {
     }
 }
 
-// MARK: - iOS 26+ tab bar accessory (directly above tab bar, not over it)
-
-@available(iOS 26.0, *)
-struct LiveVoiceTabShellTabViewBottomAccessoryModifier: ViewModifier {
+/// Voice/stream bar is a bottom `safeAreaInset` so it sits flush on the tab bar or message composer (no floating gap).
+struct LiveVoiceTabShellLayoutModifier: ViewModifier {
     var showsDemoLeave: Bool
     @Bindable var broadcastCoordinator: RoomBroadcastCoordinator
     @Bindable var liveVoiceCoordinator: RoomLiveVoiceCoordinator
-    @Bindable private var chromeMetrics = TradeRoomLiveSessionChromeMetrics.shared
+    @Bindable private var sessionMetrics = TradeRoomLiveSessionChromeMetrics.shared
+    @Bindable private var tabBarMetrics = MainTabBarLayoutMetrics.shared
+
+    private var showsChrome: Bool {
+        LiveVoiceTabShellLayout.needsBottomAccessory(
+            showsDemoLeave: showsDemoLeave,
+            broadcastCoordinator: broadcastCoordinator,
+            liveVoiceCoordinator: liveVoiceCoordinator
+        )
+    }
+
+    /// Tab-level inset only when the tab bar is visible; in-room chrome is stacked on the composer instead.
+    private var showsTabShellChrome: Bool {
+        showsChrome && !sessionMetrics.roomConversationEmbedsSessionChrome
+    }
 
     func body(content: Content) -> some View {
         content
-            .tabViewBottomAccessory {
-                if LiveVoiceTabShellLayout.needsBottomAccessory(
-                    showsDemoLeave: showsDemoLeave,
-                    broadcastCoordinator: broadcastCoordinator,
-                    liveVoiceCoordinator: liveVoiceCoordinator
-                ) {
-                    LiveVoiceTabShellLayout.bottomAccessory(
-                        showsDemoLeave: showsDemoLeave,
-                        broadcastCoordinator: broadcastCoordinator,
-                        liveVoiceCoordinator: liveVoiceCoordinator
-                    )
-                    .background(LiveVoiceTabAccessoryHeightReporter())
-                }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                sessionChromeInset
             }
-            .environment(\.tradeRoomLiveSessionBottomInset, chromeMetrics.bottomInset)
+            .background {
+                MainTabBarLayoutMetricsProbe()
+            }
+            .environment(\.tradeRoomLiveSessionBottomInset, sessionMetrics.bottomInset)
+            .onChange(of: showsChrome) { _, _ in
+                syncSessionChromeInsetEstimate()
+                tabBarMetrics.refresh()
+            }
+            .onChange(of: sessionMetrics.roomConversationEmbedsSessionChrome) { _, _ in
+                syncSessionChromeInsetEstimate()
+                tabBarMetrics.refresh()
+            }
+            .onAppear {
+                syncSessionChromeInsetEstimate()
+                tabBarMetrics.refresh()
+            }
     }
-}
 
-@available(iOS 26.0, *)
-private struct LiveVoiceTabAccessoryHeightReporter: View {
-    var body: some View {
-        GeometryReader { proxy in
-            Color.clear
-                .onAppear {
-                    TradeRoomLiveSessionChromeMetrics.shared.setBottomInset(proxy.size.height)
-                }
-                .onChange(of: proxy.size.height) { _, height in
-                    TradeRoomLiveSessionChromeMetrics.shared.setBottomInset(height)
-                }
+    /// Chrome sits directly above the tab bar (spacer = window bottom → tab bar top), not on the home indicator.
+    @ViewBuilder
+    private var sessionChromeInset: some View {
+        if showsTabShellChrome {
+            VStack(spacing: 0) {
+                tabShellSessionChrome
+                Color.clear
+                    .frame(height: tabBarMetrics.tabBarTopInsetFromBottom)
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
+    private var tabShellSessionChrome: some View {
+        LiveVoiceTabShellLayout.bottomAccessory(
+            showsDemoLeave: showsDemoLeave,
+            broadcastCoordinator: broadcastCoordinator,
+            liveVoiceCoordinator: liveVoiceCoordinator
+        )
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear {
+                        TradeRoomLiveSessionChromeMetrics.shared.setBottomInset(proxy.size.height)
+                    }
+                    .onChange(of: proxy.size.height) { _, height in
+                        TradeRoomLiveSessionChromeMetrics.shared.setBottomInset(height)
+                    }
+            }
+        }
+    }
+
+    private func syncSessionChromeInsetEstimate() {
+        if !showsTabShellChrome {
+            TradeRoomLiveSessionChromeMetrics.shared.setBottomInset(0)
         }
     }
 }
 
-// MARK: - iOS 18–25 UIKit bridge (tab bar top anchor + additionalSafeAreaInsets)
-
-struct LiveVoiceTabShellLegacyTabBarAccessoryModifier: ViewModifier {
-    var showsDemoLeave: Bool
+/// Session chrome pinned directly above the room message composer (no gap vs tab-bar inset).
+struct RoomConversationSessionChrome: View {
+    @Bindable private var sessionMetrics = TradeRoomLiveSessionChromeMetrics.shared
     @Bindable var broadcastCoordinator: RoomBroadcastCoordinator
     @Bindable var liveVoiceCoordinator: RoomLiveVoiceCoordinator
-    @Bindable private var chromeMetrics = TradeRoomLiveSessionChromeMetrics.shared
 
-    func body(content: Content) -> some View {
-        content
-            .modifier(
-                LiveVoiceTabBarAccessoryBridgeModifier {
-                    if LiveVoiceTabShellLayout.needsBottomAccessory(
-                        showsDemoLeave: showsDemoLeave,
-                        broadcastCoordinator: broadcastCoordinator,
-                        liveVoiceCoordinator: liveVoiceCoordinator
-                    ) {
-                        LiveVoiceTabShellLayout.bottomAccessory(
-                            showsDemoLeave: showsDemoLeave,
-                            broadcastCoordinator: broadcastCoordinator,
-                            liveVoiceCoordinator: liveVoiceCoordinator
-                        )
-                    } else {
-                        Color.clear.frame(height: 0)
+    private var showsChrome: Bool {
+        broadcastCoordinator.showsBroadcastChrome || liveVoiceCoordinator.showsVoiceChrome
+    }
+
+    var body: some View {
+        Group {
+            if showsChrome {
+                LiveVoiceTabShellLayout.bottomAccessory(
+                    showsDemoLeave: false,
+                    broadcastCoordinator: broadcastCoordinator,
+                    liveVoiceCoordinator: liveVoiceCoordinator
+                )
+                .background {
+                    GeometryReader { proxy in
+                        Color.clear
+                            .onAppear {
+                                sessionMetrics.setBottomInset(proxy.size.height)
+                            }
+                            .onChange(of: proxy.size.height) { _, height in
+                                sessionMetrics.setBottomInset(height)
+                            }
                     }
                 }
-            )
-            .environment(\.tradeRoomLiveSessionBottomInset, chromeMetrics.bottomInset)
+            }
+        }
+        .onAppear {
+            sessionMetrics.setRoomConversationEmbedsSessionChrome(true)
+        }
+        .onDisappear {
+            sessionMetrics.setRoomConversationEmbedsSessionChrome(false)
+        }
     }
 }
 
@@ -114,22 +162,7 @@ extension View {
         liveVoiceCoordinator: RoomLiveVoiceCoordinator
     ) -> some View {
         modifier(
-            LiveVoiceTabShellLegacyTabBarAccessoryModifier(
-                showsDemoLeave: showsDemoLeave,
-                broadcastCoordinator: broadcastCoordinator,
-                liveVoiceCoordinator: liveVoiceCoordinator
-            )
-        )
-    }
-
-    @available(iOS 26.0, *)
-    func liveVoiceTabShellLayoutIOS26(
-        showsDemoLeave: Bool,
-        broadcastCoordinator: RoomBroadcastCoordinator,
-        liveVoiceCoordinator: RoomLiveVoiceCoordinator
-    ) -> some View {
-        modifier(
-            LiveVoiceTabShellTabViewBottomAccessoryModifier(
+            LiveVoiceTabShellLayoutModifier(
                 showsDemoLeave: showsDemoLeave,
                 broadcastCoordinator: broadcastCoordinator,
                 liveVoiceCoordinator: liveVoiceCoordinator

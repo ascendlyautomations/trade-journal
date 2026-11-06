@@ -6,6 +6,7 @@ import {
   type TradeRoomBroadcastVideoSource,
   type TradeRoomBroadcastVoiceMode,
 } from "./tradeRoomBroadcastVoiceMode.ts"
+import { isBroadcasterConnectedInBroadcastRoom } from "./liveKitRoomService.ts"
 
 export type ActiveTradeRoomBroadcast = {
   id: string
@@ -97,14 +98,45 @@ export async function claimTradeRoomBroadcastSession(
 
   const existing = await getActiveTradeRoomBroadcast(admin, roomId)
   if (existing) {
-    if (existing.broadcasterUserId === broadcasterUserId) {
-      return { ok: true, session: existing }
+    if (existing.broadcasterUserId !== broadcasterUserId) {
+      return {
+        ok: false,
+        status: 409,
+        error: "Someone is already live in this Trade Room.",
+      }
     }
-    return {
-      ok: false,
-      status: 409,
-      error: "Someone is already live in this Trade Room.",
+
+    const stillConnected = await isBroadcasterConnectedInBroadcastRoom(
+      roomId,
+      broadcasterUserId
+    )
+    if (stillConnected) {
+      return {
+        ok: false,
+        status: 409,
+        error:
+          "You are already live in another tab or device. End that stream before starting again.",
+      }
     }
+
+    const ended = await endTradeRoomBroadcastSession(admin, {
+      roomId,
+      sessionId: existing.id,
+      actorUserId: broadcasterUserId,
+      reason: "superseded_start",
+    })
+    if (!ended.ok) {
+      return {
+        ok: false,
+        status: 409,
+        error:
+          "A previous stream is still winding down. Wait a moment and try again.",
+      }
+    }
+    const { evictBroadcastRoomParticipants, deleteLiveKitBroadcastRoomIfEmpty } =
+      await import("./tradeRoomBroadcastReconcile.ts")
+    await evictBroadcastRoomParticipants(roomId)
+    await deleteLiveKitBroadcastRoomIfEmpty(roomId)
   }
 
   const { data, error } = await broadcastsTable(admin)
@@ -225,7 +257,7 @@ export async function endTradeRoomBroadcastIfActive(
     reason: string
   }
 ): Promise<boolean> {
-  const { error } = await broadcastsTable(admin)
+  const { data, error } = await broadcastsTable(admin)
     .update({
       ended_at: new Date().toISOString(),
       ended_reason: options.reason.slice(0, 120),
@@ -235,10 +267,21 @@ export async function endTradeRoomBroadcastIfActive(
     .eq("room_id", options.roomId)
     .eq("broadcaster_user_id", options.broadcasterUserId)
     .is("ended_at", null)
+    .select("id")
 
   if (error) {
     console.error("[livekit/broadcast] webhook end failed", error.message)
     return false
   }
+
+  if (!data?.length) {
+    return false
+  }
+
+  const { clearBroadcastInteractiveStateForSession } = await import(
+    "./tradeRoomBroadcastInteractiveState.ts"
+  )
+  await clearBroadcastInteractiveStateForSession(admin, options.sessionId)
+
   return true
 }

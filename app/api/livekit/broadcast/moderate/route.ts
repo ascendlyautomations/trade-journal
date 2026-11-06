@@ -74,5 +74,9 @@ export async function POST(req: Request) {
     return Response.json({ error: result.error }, { status: result.status })
   }
 
-  return Response.json({ ok: true, invitationId: result.invitationId ?? null })
+  return Response.json({
+    ok: true,
+    invitationId: result.invitationId ?? null,
+    targetDisplayName: result.targetDisplayName ?? null,
+  })
 }
