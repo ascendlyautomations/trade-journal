@@ -14,8 +14,10 @@ nonisolated enum ScorecardConsistency {
 
         let daysWithKeys = Set(trades.compactMap(\.tradingDayKey)).count
 
-        if tradingDayCount < 5 {
-            dataGaps.append("Log trades on at least 5 distinct trading days in this scope.")
+        if tradingDayCount < ScorecardConstants.minTradingDaysOverall {
+            let minDays = ScorecardConstants.minTradingDaysOverall
+            let dayLabel = minDays == 1 ? "day" : "days"
+            dataGaps.append("Log trades on at least \(minDays) distinct trading \(dayLabel) in this scope.")
         }
 
         subMetrics.append(
@@ -109,7 +111,7 @@ nonisolated enum ScorecardConsistency {
             } else if poolRate < 0.45 {
                 weaknesses.append("Plan adherence drops on trades after losses, review pause rules and triggers.")
             }
-        } else if trades.count >= 5 {
+        } else if !trades.isEmpty {
             dataGaps.append(
                 "Tag plan followed / not followed on at least \(ScorecardPlanAdherence.minPostLossPlanTagged) trades immediately after a loss to score consistency."
             )
@@ -120,11 +122,7 @@ nonisolated enum ScorecardConsistency {
             ? ScorecardReliabilitySupport.resolve(sampleSize: pool.observations.count)
             : .insufficient
 
-        let eligible =
-            tradingDayCount >= 5
-            && trades.count >= 5
-            && score != nil
-            && ScorecardReliabilitySupport.isDevelopingOrStrong(reliability)
+        let eligible = score != nil
 
         let coveragePercent =
             trades.isEmpty

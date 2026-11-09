@@ -18,7 +18,7 @@ enum TradeRoomObsBroadcastDiagnostics {
     }
 
     /// Redact RTMP keys and JWT-like secrets from debug body snippets.
-    static func redactedBodySnippet(_ data: Data, limit: Int = 240) -> String {
+    nonisolated static func redactedBodySnippet(_ data: Data, limit: Int = 240) -> String {
         guard let raw = String(data: data, encoding: .utf8) else { return "<non-utf8>" }
         let redacted = raw
             .replacingOccurrences(

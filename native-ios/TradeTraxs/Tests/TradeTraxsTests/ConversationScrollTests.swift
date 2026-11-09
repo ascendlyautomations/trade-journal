@@ -3,6 +3,24 @@ import XCTest
 
 @MainActor
 final class ConversationScrollTests: XCTestCase {
+    func testRestoreReadingHistoryIssuesAnchorWithoutBottomPin() {
+        let conversationID = ConversationID("room-channel-restore")
+        let anchor = MessageID("msg-anchor")
+        let newest = MessageID("msg-newest")
+        let coordinator = ConversationScrollCoordinator()
+        coordinator.resetForConversation(conversationID)
+
+        coordinator.restoreReadingHistory(
+            anchorMessageID: anchor,
+            newestMessageID: newest,
+            conversationID: conversationID
+        )
+
+        XCTAssertEqual(coordinator.mode, .readingHistory)
+        XCTAssertEqual(coordinator.desiredScrollPositionID, anchor.rawValue)
+        XCTAssertFalse(coordinator.desiredScrollAnimated)
+    }
+
     private let conversationA = ConversationID("conv-a")
     private let conversationB = ConversationID("conv-b")
     private let messageOld = MessageID("msg-old")

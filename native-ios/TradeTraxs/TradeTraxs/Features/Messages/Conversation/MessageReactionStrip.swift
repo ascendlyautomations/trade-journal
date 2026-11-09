@@ -42,7 +42,16 @@ struct MessageReactionConfiguration: Hashable {
     }
 }
 
-/// Compact inline reaction chips for the bottom of a message bubble.
+/// Layout metrics for floating reaction pills (DM + Trade Room bubbles).
+enum MessageReactionLayout {
+    /// Negative offset hangs pills slightly over the bubble bottom edge.
+    static let pillOverlap: CGFloat = 7
+    /// Clears the row beneath the bubble so pills never cover timestamps or the next message.
+    static let reservedSpaceBelowBubble: CGFloat = 13
+    static let chipHorizontalInset: CGFloat = 6
+}
+
+/// Compact floating reaction pills — shared by DMs and Trade Rooms.
 struct MessageReactionStrip: View {
     let summaries: [MessageReactionSummary]
     let isOutgoing: Bool
@@ -52,33 +61,43 @@ struct MessageReactionStrip: View {
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        MessageReactionFlowLayout(spacing: 4, rowSpacing: 4) {
+        MessageReactionFlowLayout(spacing: 3, rowSpacing: 3) {
             ForEach(summaries, id: \.emoji) { summary in
-                reactionChip(summary)
+                reactionPill(summary)
+                    .transition(
+                        .scale(scale: 0.82, anchor: .center)
+                            .combined(with: .opacity)
+                    )
             }
         }
+        .animation(.spring(response: 0.34, dampingFraction: 0.82), value: summaries)
     }
 
-    private func reactionChip(_ summary: MessageReactionSummary) -> some View {
+    private func reactionPill(_ summary: MessageReactionSummary) -> some View {
         Button {
             onToggle(summary.emoji)
         } label: {
-            HStack(spacing: 2) {
+            HStack(spacing: summary.count > 1 ? 3 : 0) {
                 Text(summary.emoji)
-                    .font(.caption)
-                Text("\(summary.count)")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(secondaryLabelColor)
+                    .font(.system(size: 13))
+                if summary.count > 1 {
+                    Text("\(summary.count)")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(countLabelColor(reactedByViewer: summary.reactedByViewer))
+                        .contentTransition(.numericText())
+                }
             }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(chipBackground(reactedByViewer: summary.reactedByViewer), in: Capsule())
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(pillBackground(reactedByViewer: summary.reactedByViewer), in: Capsule(style: .continuous))
             .overlay(
-                Capsule().stroke(
-                    summary.reactedByViewer ? chipBorderColor : Color.clear,
-                    lineWidth: 1
-                )
+                Capsule(style: .continuous)
+                    .strokeBorder(
+                        pillBorderColor(reactedByViewer: summary.reactedByViewer),
+                        lineWidth: summary.reactedByViewer ? 1 : 0.5
+                    )
             )
+            .shadow(color: Color.black.opacity(0.12), radius: 2, x: 0, y: 1)
         }
         .buttonStyle(.experiencePlain)
         .disabled(!isEnabled)
@@ -86,23 +105,91 @@ struct MessageReactionStrip: View {
         .accessibilityIdentifier("message.reaction.\(summary.emoji)")
     }
 
-    private func chipBackground(reactedByViewer: Bool) -> Color {
+    private func pillBackground(reactedByViewer: Bool) -> Color {
+        if reactedByViewer {
+            return isOutgoing
+                ? colors.onAccent.opacity(0.22)
+                : colors.accent.opacity(0.18)
+        }
+        return isOutgoing
+            ? colors.onAccent.opacity(0.12)
+            : colors.surfacePrimary.opacity(0.96)
+    }
+
+    private func pillBorderColor(reactedByViewer: Bool) -> Color {
+        if reactedByViewer {
+            return isOutgoing ? colors.onAccent.opacity(0.55) : colors.accent.opacity(0.45)
+        }
+        return isOutgoing
+            ? colors.onAccent.opacity(0.28)
+            : colors.border.opacity(0.85)
+    }
+
+    private func countLabelColor(reactedByViewer: Bool) -> Color {
         if isOutgoing {
             return reactedByViewer
-                ? colors.onAccent.opacity(0.28)
-                : colors.onAccent.opacity(0.14)
+                ? colors.onAccent.opacity(0.95)
+                : colors.onAccent.opacity(0.75)
         }
-        return reactedByViewer
-            ? colors.accent.opacity(0.22)
-            : colors.fillSecondary.opacity(0.9)
+        return reactedByViewer ? colors.accent : colors.secondaryText
+    }
+}
+
+/// Overlays grouped reaction pills on the message bubble corner (received → bottom-right, sent → bottom-left).
+struct MessageReactionFloatingOverlayModifier: ViewModifier {
+    let configuration: MessageReactionConfiguration?
+    let isOutgoing: Bool
+
+    private var summaries: [MessageReactionSummary] {
+        configuration?.summaries ?? []
     }
 
-    private var chipBorderColor: Color {
-        isOutgoing ? colors.onAccent.opacity(0.45) : colors.accent.opacity(0.35)
+    private var hasReactions: Bool {
+        !summaries.isEmpty
     }
 
-    private var secondaryLabelColor: Color {
-        isOutgoing ? colors.onAccent.opacity(0.88) : colors.secondaryText
+    private var cornerAlignment: Alignment {
+        isOutgoing ? .bottomLeading : .bottomTrailing
+    }
+
+    private var stripAlignment: Alignment {
+        isOutgoing ? .leading : .trailing
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: cornerAlignment) {
+                if let configuration, hasReactions {
+                    MessageReactionStrip(
+                        summaries: configuration.summaries,
+                        isOutgoing: isOutgoing,
+                        isEnabled: configuration.isEnabled,
+                        onToggle: configuration.onToggle
+                    )
+                    .padding(.horizontal, MessageReactionLayout.chipHorizontalInset)
+                    .frame(maxWidth: .infinity, alignment: stripAlignment)
+                    .offset(y: MessageReactionLayout.pillOverlap)
+                    .allowsHitTesting(configuration.isEnabled)
+                }
+            }
+            .padding(
+                .bottom,
+                hasReactions ? MessageReactionLayout.reservedSpaceBelowBubble : 0
+            )
+    }
+}
+
+extension View {
+    func messageReactionFloatingOverlay(
+        configuration: MessageReactionConfiguration?,
+        isOutgoing: Bool
+    ) -> some View {
+        modifier(
+            MessageReactionFloatingOverlayModifier(
+                configuration: configuration,
+                isOutgoing: isOutgoing
+            )
+        )
     }
 }
 

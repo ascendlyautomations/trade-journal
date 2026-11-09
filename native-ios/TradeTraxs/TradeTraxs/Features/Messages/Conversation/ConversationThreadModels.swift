@@ -57,6 +57,12 @@ enum ConversationThreadInitialScrollPhase: Equatable {
     case confirmed
 }
 
+/// Scroll UX when returning to a cached DM or Trade Room channel transcript.
+enum ChannelScrollRestoration: Equatable {
+    case pinToBottomOnOpen
+    case preserveReadingHistory(anchorMessageID: MessageID)
+}
+
 enum ConversationThreadScrollSupport {
     static let bottomProximityThreshold: CGFloat = 80
     static let userScrollReleaseThreshold: CGFloat = 120

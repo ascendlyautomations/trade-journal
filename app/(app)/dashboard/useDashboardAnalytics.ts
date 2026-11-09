@@ -36,6 +36,7 @@ import { formatDashboardEquityCurvePointDate } from "@/lib/dashboardLiveAccountV
 import {
   DASHBOARD_SESSION_DISPLAY_ORDER,
   normalizeSessionBucket,
+  type DashboardSessionBucket,
 } from "@/lib/dashboardSessionBuckets"
 import type {
   DashboardAccountRow,
@@ -495,7 +496,7 @@ export type DashboardAnalyticsResult = {
   holdTimeStats: HoldTimeStats
   maxDrawdown: number
   sessionBuckets: Record<
-    "London" | "NY" | "Asia",
+    DashboardSessionBucket,
     { totalTrades: number; wins: number; totalPnL: number }
   >
   bestSetup: DashboardBestSetup | null
@@ -508,7 +509,7 @@ export type DashboardAnalyticsResult = {
   streakData: DashboardStreakData | null
   hourData: TradingHoursSummary | null
   weekdayData: { day: "Mon" | "Tue" | "Wed" | "Thu" | "Fri"; pnl: number }[]
-  sessionPieData: { name: "London" | "NY" | "Asia"; value: number }[]
+  sessionPieData: { name: DashboardSessionBucket; value: number }[]
   insightBestSymbol: string | null
   insightBestSymbolAvg: number
   insightBestWeekday: string | null
@@ -712,11 +713,15 @@ const biggestLoss = losses.length > 0
       }))
       .sort((a, b) => b.totalPnL - a.totalPnL)
 
-    const sessionBuckets: Record<"London" | "NY" | "Asia", { totalTrades: number; wins: number; totalPnL: number }> = {
-      London: { totalTrades: 0, wins: 0, totalPnL: 0 },
-      NY: { totalTrades: 0, wins: 0, totalPnL: 0 },
-      Asia: { totalTrades: 0, wins: 0, totalPnL: 0 }
-    }
+    const sessionBuckets = Object.fromEntries(
+      DASHBOARD_SESSION_DISPLAY_ORDER.map((name) => [
+        name,
+        { totalTrades: 0, wins: 0, totalPnL: 0 },
+      ])
+    ) as Record<
+      DashboardSessionBucket,
+      { totalTrades: number; wins: number; totalPnL: number }
+    >
 
     filteredTrades.forEach((t) => {
       const b = normalizeSessionBucket(t.session)

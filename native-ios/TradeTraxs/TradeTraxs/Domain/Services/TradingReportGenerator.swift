@@ -8,12 +8,6 @@ nonisolated enum TradingReportGenerator {
         "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
     ]
 
-    private static let sessionLabels: [String: String] = [
-        "NY": "New York",
-        "London": "London",
-        "Asia": "Asia",
-    ]
-
     static func generateAll(
         trades: [Trade],
         now: Date = Date()
@@ -204,18 +198,11 @@ nonisolated enum TradingReportGenerator {
             }
         }()
         guard let picked else { return (nil, nil) }
-        return (sessionLabels[picked.key] ?? picked.key, picked.pnl)
+        return (TradingSessionCatalog.displayTitle(for: picked.key), picked.pnl)
     }
 
     private static func normalizeSessionBucket(_ raw: String?) -> String? {
-        let s = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !s.isEmpty else { return nil }
-        if s == "london" { return "London" }
-        if s == "asia" { return "Asia" }
-        if s == "ny" || s == "new york" || s == "ny am" || s == "am" || s == "after" {
-            return "NY"
-        }
-        return nil
+        TradingSessionLabel.canonicalLabel(fromStored: raw)
     }
 
     private static func mostTradedTicker(_ trades: [Trade]) -> String? {

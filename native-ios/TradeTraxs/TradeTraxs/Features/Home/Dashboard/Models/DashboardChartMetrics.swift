@@ -640,9 +640,11 @@ nonisolated enum DashboardChartMetrics {
     // MARK: - Legacy local expansion (non-V3 path only)
 
     private static func localSessionPerformance(_ trades: [Trade]) -> [DashboardSessionPerformanceRow] {
-        let labels = ["NY", "London", "Asia"]
+        let labels = TradingSessionCatalog.displayOrder
         return labels.compactMap { label in
-            let scoped = trades.filter { sessionLabel($0.sessionLabel) == label }
+            let scoped = trades.filter {
+                TradingSessionLabel.canonicalLabel(fromStored: $0.sessionLabel) == label
+            }
             guard !scoped.isEmpty else { return nil }
             let pnls = scoped.map { $0.realizedPnL?.amount ?? 0 }
             let wins = pnls.filter { $0 > 0 }.count
@@ -656,14 +658,6 @@ nonisolated enum DashboardChartMetrics {
                 winRate: scoped.isEmpty ? nil : Double(wins) / Double(scoped.count) * 100
             )
         }
-    }
-
-    private static func sessionLabel(_ raw: String?) -> String? {
-        let v = (raw ?? "").lowercased()
-        if v.contains("ny") || v.contains("new york") { return "NY" }
-        if v.contains("london") || v.contains("ldn") { return "London" }
-        if v.contains("asia") || v.contains("tokyo") { return "Asia" }
-        return nil
     }
 
     private static func localSymbolPerformance(_ trades: [Trade]) -> [DashboardSymbolPerformanceRow] {

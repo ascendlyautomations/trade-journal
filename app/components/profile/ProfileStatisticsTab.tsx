@@ -16,7 +16,7 @@ const ProfileEquityLineChart = dynamic(
 export type ProfileStatisticsMode = "all" | "eval" | "funded" | "live"
 
 type SessionBreakdownRow = {
-  label: "NY" | "London" | "Asia"
+  label: string
   count: number
   pct: number
 }

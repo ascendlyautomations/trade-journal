@@ -14,7 +14,9 @@ import {
 import {
   mapDashboardRowToScorecardTrade,
   mergeScorecardTrades,
+  postTripleLossWinRate,
 } from "./tradeMapping.ts"
+import { resolveScorecardReliability } from "./reliability.ts"
 import {
   scorecardScopeFiltersEqual,
   scorecardScopeKey,
@@ -22,8 +24,8 @@ import {
 import type { ScorecardTrade } from "./types.ts"
 import {
   SCORECARD_CATEGORY_WEIGHTS,
-  SCORECARD_MIN_NOMINAL_WEIGHT_OVERALL,
   SCORECARD_MIN_TRADES_OVERALL,
+  SCORECARD_MIN_TRADING_DAYS_OVERALL,
 } from "./types.ts"
 import type { PsychologyReportTrade } from "../psychology/reports/types.ts"
 
@@ -113,11 +115,16 @@ describe("scoreConsistencyCategory", () => {
     assert.ok(!cat.subMetrics.some((m) => m.label.includes("Win rate") && m.id !== "streak.after_three_losses_win_rate"))
   })
 
-  it("stays unscored with fewer than 10 post-loss tags", () => {
-    const trades = tradesWithPostLossTags(4, 1)
-    const cat = scoreConsistencyCategory(trades, 6, null)
-    assert.equal(cat.score, null)
-    assert.equal(cat.eligible, false)
+  it("stays unscored below 3 post-loss tags and scores at 3", () => {
+    const short = tradesWithPostLossTags(2, 1)
+    const unscored = scoreConsistencyCategory(short, 1, null)
+    assert.equal(unscored.score, null)
+    assert.equal(unscored.eligible, false)
+
+    const ready = scoreConsistencyCategory(tradesWithPostLossTags(3, 1), 1, null)
+    assert.equal(ready.score, 100)
+    assert.equal(ready.eligible, true)
+    assert.equal(ready.reliability, "earlySignal")
   })
 })
 
@@ -148,17 +155,18 @@ describe("scorePsychologyCategory", () => {
 })
 
 describe("scoreDisciplineCategory", () => {
-  it("requires 10 explicit plan tags", () => {
-    const trades = Array.from({ length: 9 }, (_, i) => makeTrade(i, { followedPlan: true }))
+  it("requires 3 explicit plan tags", () => {
+    const trades = Array.from({ length: 2 }, (_, i) => makeTrade(i, { followedPlan: true }))
     assert.equal(scoreDisciplineCategory(trades).score, null)
-    const ten = Array.from({ length: 10 }, (_, i) => makeTrade(i, { followedPlan: true }))
-    assert.equal(scoreDisciplineCategory(ten).score, 100)
+    const three = Array.from({ length: 3 }, (_, i) => makeTrade(i, { followedPlan: true, pnl: 40 }))
+    assert.equal(scoreDisciplineCategory(three).score, 100)
+    assert.equal(scoreDisciplineCategory(three).reliability, "earlySignal")
   })
 })
 
 describe("buildTradingScorecard overall", () => {
   it("returns building when trade count below overall minimum", () => {
-    const trades = Array.from({ length: 10 }, (_, i) => makeTrade(i))
+    const trades = Array.from({ length: 2 }, (_, i) => makeTrade(i))
     const result = buildTradingScorecard({
       scopeLabel: "Test",
       trades,
@@ -177,26 +185,32 @@ describe("buildTradingScorecard overall", () => {
     assert.ok(result.overall.statusMessage.includes(String(SCORECARD_MIN_TRADES_OVERALL)))
   })
 
-  it("blocks composite when only one category scores (partial coverage)", () => {
-    const trades = Array.from({ length: 10 }, (_, i) =>
-      makeTrade(i, { followedPlan: true })
+  it("produces an early overall score from one category", () => {
+    const trades = Array.from({ length: 3 }, (_, i) =>
+      makeTrade(i, { followedPlan: true, pnl: 40 })
     )
     const result = buildTradingScorecard({
       scopeLabel: "Test",
       trades,
       checkIns: [],
       analytics: {
-        periodTradingDayCount: 6,
+        periodTradingDayCount: SCORECARD_MIN_TRADING_DAYS_OVERALL,
         maxDrawdown: 0,
         avgWin: 80,
         avgLoss: -40,
-        totalTrades: 24,
+        totalTrades: trades.length,
         postTripleLossWinRate: null,
       },
     })
-    assert.equal(result.overall.status, "building")
-    assert.equal(result.overall.score, null)
-    assert.ok(result.overall.statusMessage.includes("nominal weight"))
+    assert.equal(result.overall.status, "ready")
+    assert.equal(result.overall.score, 100)
+    assert.equal(result.overall.reliability, "earlySignal")
+    assert.equal(result.overall.contributions.length, 1)
+    assert.equal(result.overall.contributions[0]?.id, "discipline")
+    assert.ok(Math.abs(result.overall.contributions[0]!.effectiveWeight - 1) < 0.01)
+    assert.equal(result.categories.find((c) => c.id === "consistency")?.score, null)
+    assert.equal(result.categories.find((c) => c.id === "risk")?.score, null)
+    assert.equal(result.categories.find((c) => c.id === "psychology")?.score, null)
   })
 
   it("produces overall when two categories score with enough nominal weight", () => {
@@ -227,7 +241,6 @@ describe("buildTradingScorecard overall", () => {
     assert.equal(result.overall.status, "ready")
     assert.ok(result.overall.score != null)
     assert.ok(result.overall.contributions.length >= 2)
-    assert.ok(result.overall.nominalWeightIncluded >= SCORECARD_MIN_NOMINAL_WEIGHT_OVERALL)
     const effectiveSum = result.overall.contributions.reduce(
       (s, c) => s + c.effectiveWeight,
       0
@@ -237,6 +250,31 @@ describe("buildTradingScorecard overall", () => {
     assert.equal(risk!.score, null)
     const psych = result.categories.find((c) => c.id === "psychology")
     assert.equal(psych!.score, null)
+  })
+})
+
+describe("scorecard reliability bands", () => {
+  it("uses 3, 8, and 20 as the band edges", () => {
+    assert.equal(resolveScorecardReliability(2), "insufficient")
+    assert.equal(resolveScorecardReliability(3), "earlySignal")
+    assert.equal(resolveScorecardReliability(7), "earlySignal")
+    assert.equal(resolveScorecardReliability(8), "developing")
+    assert.equal(resolveScorecardReliability(19), "developing")
+    assert.equal(resolveScorecardReliability(20), "strong")
+  })
+})
+
+describe("postTripleLossWinRate", () => {
+  it("stays hidden until the recovery window has 5 trades", () => {
+    const short = Array.from({ length: 5 }, (_, index) =>
+      makeTrade(index, { pnl: index < 3 ? -10 : 50 })
+    )
+    assert.equal(postTripleLossWinRate(short), null)
+
+    const full = Array.from({ length: 8 }, (_, index) =>
+      makeTrade(index, { pnl: index < 3 ? -10 : 50 })
+    )
+    assert.equal(postTripleLossWinRate(full), 1)
   })
 })
 

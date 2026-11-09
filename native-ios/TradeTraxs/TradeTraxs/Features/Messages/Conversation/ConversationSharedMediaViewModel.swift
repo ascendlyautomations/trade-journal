@@ -42,17 +42,37 @@ final class ConversationSharedMediaViewModel {
 
     func open() async {
         openCount += 1
+        thumbnailFailedIDs = []
+        selectedItem = nil
+
+        switch phase {
+        case .loading:
+            return
+        case .loaded, .empty:
+            await refreshFirstPage(background: true)
+            return
+        case .failed:
+            phase = .loading
+            await refreshFirstPage(background: false)
+            return
+        case .idle:
+            phase = .loading
+        }
+
         if let cached = await ConversationSharedMediaSessionCache.shared.snapshot(conversationID: conversationID) {
             items = cached.items
             hasMore = cached.hasMore
-            phase = items.isEmpty ? .empty : .loaded
-        } else if items.isEmpty {
-            hasMore = true
-            phase = .loading
+            if items.isEmpty {
+                await refreshFirstPage(background: false)
+            } else {
+                phase = .loaded
+                await refreshFirstPage(background: true)
+            }
+            return
         }
-        thumbnailFailedIDs = []
-        selectedItem = nil
-        await refreshFirstPage(background: phase != .loading)
+
+        hasMore = true
+        await refreshFirstPage(background: false)
     }
 
     func retry() async {

@@ -1,3 +1,8 @@
+import {
+  BroadcastCapturePreflightError,
+} from "./tradeRoomBroadcastCapturePermissions.ts"
+import type { TradeRoomBroadcastVideoSource } from "@/lib/livekit/tradeRoomBroadcastVoiceMode.ts"
+
 export function broadcastStartErrorMessageForTest(err: unknown): string {
   return broadcastStartErrorMessage(err)
 }
@@ -11,7 +16,13 @@ export class BroadcastNoActiveStreamError extends Error {
   }
 }
 
-export function broadcastStartErrorMessage(err: unknown): string {
+export function broadcastCaptureErrorMessage(
+  err: unknown,
+  videoSource?: TradeRoomBroadcastVideoSource | null
+): string {
+  if (err instanceof BroadcastCapturePreflightError) {
+    return err.message
+  }
   if (err instanceof Error) {
     const name = err.name
     const msg = err.message.toLowerCase()
@@ -20,20 +31,27 @@ export function broadcastStartErrorMessage(err: unknown): string {
       msg.includes("permission") ||
       msg.includes("permissions policy")
     ) {
-      if (
-        msg.includes("camera") ||
-        msg.includes("video") ||
-        msg.includes("permissions policy")
-      ) {
-        return "Camera access was blocked. Allow camera for this site in your browser settings, then reload the page."
+      const treatAsCamera =
+        videoSource === "camera" ||
+        (videoSource !== "screen" &&
+          (msg.includes("camera") ||
+            msg.includes("video") ||
+            msg.includes("permissions policy")))
+      if (treatAsCamera) {
+        return "Camera access was blocked. Allow camera for this site in your browser settings, then use Retry."
       }
       if (msg.includes("microphone") || msg.includes("audio")) {
-        return "Microphone access was blocked."
+        return "Microphone access was blocked. Allow microphone for this site in your browser settings, then use Retry."
       }
-      return "Screen sharing was blocked. Allow screen capture in your browser settings."
+      if (videoSource === "screen" || msg.includes("display")) {
+        return "Screen sharing was blocked. Allow screen capture in your browser settings. On macOS, enable Screen Recording for your browser under System Settings → Privacy & Security, then use Retry."
+      }
+      return "Capture was blocked. Check browser permissions for this site, then use Retry."
     }
     if (name === "NotFoundError" || msg.includes("cancel")) {
-      return "Sharing was cancelled."
+      return videoSource === "camera"
+        ? "Camera sharing was cancelled. Choose Retry to try again."
+        : "Screen sharing was cancelled. Choose Retry to pick a screen, window, or tab."
     }
     if (msg.includes("not supported")) {
       return "This capture source is not supported in this browser."
@@ -41,4 +59,8 @@ export function broadcastStartErrorMessage(err: unknown): string {
     return err.message
   }
   return "Could not start the live stream."
+}
+
+export function broadcastStartErrorMessage(err: unknown): string {
+  return broadcastCaptureErrorMessage(err, null)
 }

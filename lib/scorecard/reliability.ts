@@ -1,9 +1,9 @@
 import type { ScorecardReliability } from "./types.ts"
 
 export function resolveScorecardReliability(sampleSize: number): ScorecardReliability {
-  if (sampleSize < 5) return "insufficient"
-  if (sampleSize <= 9) return "earlySignal"
-  if (sampleSize <= 29) return "developing"
+  if (sampleSize < 3) return "insufficient"
+  if (sampleSize <= 7) return "earlySignal"
+  if (sampleSize <= 19) return "developing"
   return "strong"
 }
 
@@ -18,10 +18,6 @@ export function reliabilityLabel(reliability: ScorecardReliability): string {
     case "strong":
       return "Strong signal"
   }
-}
-
-export function isDevelopingOrStrong(reliability: ScorecardReliability): boolean {
-  return reliability === "developing" || reliability === "strong"
 }
 
 export function clampScore(value: number): number {

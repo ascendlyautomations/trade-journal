@@ -53,39 +53,72 @@ export default function TradeRoomBroadcastGoLiveDialog({
           <legend className="text-xs font-semibold uppercase tracking-wide text-gray-500">
             Video source
           </legend>
-          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 px-3 py-2 hover:bg-white/5">
+          <label
+            className={`flex cursor-pointer gap-2 rounded-lg border border-white/10 px-3 py-2 hover:bg-white/5 ${
+              videoSource === "screen" ? "items-start" : "items-center"
+            }`}
+          >
             <input
               type="radio"
               name="videoSource"
               checked={videoSource === "screen"}
               onChange={() => setVideoSource("screen")}
+              className={videoSource === "screen" ? "mt-1 shrink-0" : "shrink-0"}
             />
-            <span className="text-sm text-gray-200">Screen / window / tab</span>
+            <span className="text-sm text-gray-200">
+              <span className="font-medium text-white">Screen / window / tab</span>
+              {videoSource === "screen" ? (
+                <span className="mt-0.5 block text-xs text-gray-500">
+                  Make sure screen sharing is allowed in your browser and system
+                  settings. You may need to enable Screen Recording permissions on
+                  macOS.
+                </span>
+              ) : null}
+            </span>
           </label>
-          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 px-3 py-2 hover:bg-white/5">
+          <label
+            className={`flex cursor-pointer gap-2 rounded-lg border border-white/10 px-3 py-2 hover:bg-white/5 ${
+              videoSource === "camera" ? "items-start" : "items-center"
+            }`}
+          >
             <input
               type="radio"
               name="videoSource"
               checked={videoSource === "camera"}
               onChange={() => setVideoSource("camera")}
+              className={videoSource === "camera" ? "mt-1 shrink-0" : "shrink-0"}
             />
-            <span className="text-sm text-gray-200">Camera / webcam</span>
+            <span className="text-sm text-gray-200">
+              <span className="font-medium text-white">Camera / webcam</span>
+              {videoSource === "camera" ? (
+                <span className="mt-0.5 block text-xs text-gray-500">
+                  Make sure your browser has permission to access your camera and
+                  microphone before starting your stream.
+                </span>
+              ) : null}
+            </span>
           </label>
-          <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-white/10 px-3 py-2 hover:bg-white/5">
+          <label
+            className={`flex cursor-pointer gap-2 rounded-lg border border-white/10 px-3 py-2 hover:bg-white/5 ${
+              videoSource === "obs" ? "items-start" : "items-center"
+            }`}
+          >
             <input
               type="radio"
               name="videoSource"
               checked={videoSource === "obs"}
               onChange={() => setVideoSource("obs")}
-              className="mt-1 shrink-0"
+              className={videoSource === "obs" ? "mt-1 shrink-0" : "shrink-0"}
             />
             <span className="text-sm text-gray-200">
               <span className="font-medium text-white">OBS Studio</span>
-              <span className="mt-0.5 block text-xs text-gray-500">
-                Program video and audio from OBS via RTMP. You stay connected for
-                moderation, chat, and Invite to Talk — no browser screen or camera
-                capture required.
-              </span>
+              {videoSource === "obs" ? (
+                <span className="mt-0.5 block text-xs text-gray-500">
+                  Program video and audio from OBS via RTMP. You stay connected for
+                  moderation, chat, and Invite to Talk — no browser screen or camera
+                  capture required.
+                </span>
+              ) : null}
             </span>
           </label>
         </fieldset>
@@ -94,26 +127,48 @@ export default function TradeRoomBroadcastGoLiveDialog({
           <legend className="text-xs font-semibold uppercase tracking-wide text-gray-500">
             Voice
           </legend>
-          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 px-3 py-2 hover:bg-white/5">
+          <label
+            className={`flex cursor-pointer gap-2 rounded-lg border border-white/10 px-3 py-2 hover:bg-white/5 ${
+              voiceMode === "broadcast_only" ? "items-start" : "items-center"
+            }`}
+          >
             <input
               type="radio"
               name="voiceMode"
               checked={voiceMode === "broadcast_only"}
               onChange={() => setVoiceMode("broadcast_only")}
+              className={
+                voiceMode === "broadcast_only" ? "mt-1 shrink-0" : "shrink-0"
+              }
             />
             <span className="text-sm text-gray-200">
-              Broadcast only — viewers watch and chat
+              <span className="font-medium text-white">Broadcast only</span>
+              {voiceMode === "broadcast_only" ? (
+                <span className="mt-0.5 block text-xs text-gray-500">
+                  Viewers watch and chat
+                </span>
+              ) : null}
             </span>
           </label>
-          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 px-3 py-2 hover:bg-white/5">
+          <label
+            className={`flex cursor-pointer gap-2 rounded-lg border border-white/10 px-3 py-2 hover:bg-white/5 ${
+              voiceMode === "open_voice" ? "items-start" : "items-center"
+            }`}
+          >
             <input
               type="radio"
               name="voiceMode"
               checked={voiceMode === "open_voice"}
               onChange={() => setVoiceMode("open_voice")}
+              className={voiceMode === "open_voice" ? "mt-1 shrink-0" : "shrink-0"}
             />
             <span className="text-sm text-gray-200">
-              Open voice — viewers can join conversation
+              <span className="font-medium text-white">Open voice</span>
+              {voiceMode === "open_voice" ? (
+                <span className="mt-0.5 block text-xs text-gray-500">
+                  Viewers can join conversation
+                </span>
+              ) : null}
             </span>
           </label>
         </fieldset>

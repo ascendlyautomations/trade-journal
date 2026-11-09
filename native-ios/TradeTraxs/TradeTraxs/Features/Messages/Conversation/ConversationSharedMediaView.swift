@@ -8,17 +8,14 @@ struct ConversationSharedMediaView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.themeColors) private var colors
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 2),
-        GridItem(.flexible(), spacing: 2),
-        GridItem(.flexible(), spacing: 2),
-    ]
-
     var body: some View {
         NavigationStack {
             Group {
                 switch viewModel.phase {
-                case .idle, .loading where viewModel.items.isEmpty:
+                case .idle:
+                    ExperienceLoadingSpinner(label: "Loading shared media")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                case .loading where viewModel.items.isEmpty:
                     ExperienceLoadingSpinner(label: "Loading shared media")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .failed(let message):
@@ -47,7 +44,7 @@ struct ConversationSharedMediaView: View {
                 }
             }
         }
-        .task(id: viewModel.conversationID) {
+        .task {
             await viewModel.open()
         }
         .fullScreenCover(item: $viewModel.selectedItem) { item in
@@ -65,7 +62,10 @@ struct ConversationSharedMediaView: View {
 
     private var gallery: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 2) {
+            LazyVGrid(
+                columns: ConversationSharedMediaGalleryLayout.gridColumns,
+                spacing: ConversationSharedMediaGalleryLayout.interItemSpacing
+            ) {
                 ForEach(viewModel.visibleItems) { item in
                     ConversationSharedMediaCell(
                         item: item,
@@ -73,8 +73,6 @@ struct ConversationSharedMediaView: View {
                         showsPlaceholder: viewModel.isThumbnailFailed(item),
                         onFailed: { viewModel.markThumbnailFailed(item) }
                     )
-                    .aspectRatio(1, contentMode: .fill)
-                    .clipped()
                     .contentShape(Rectangle())
                     .onTapGesture {
                         ExperienceHaptics.play(.selection)
@@ -86,6 +84,7 @@ struct ConversationSharedMediaView: View {
                     }
                 }
             }
+            .padding(.horizontal, ConversationSharedMediaGalleryLayout.interItemSpacing)
             if viewModel.isLoadingMore {
                 ProgressView()
                     .frame(maxWidth: .infinity)
@@ -106,42 +105,61 @@ private struct ConversationSharedMediaCell: View {
     @State private var image: UIImage?
 
     var body: some View {
-        ZStack {
-            Color.black.opacity(0.2)
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else if showsPlaceholder {
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .overlay { cellContent }
+            .clipped()
+            .accessibilityAddTraits(.isImage)
+            .task(id: loadTaskID) {
+                await loadThumbnail()
+            }
+    }
+
+    @ViewBuilder
+    private var cellContent: some View {
+        if showsPlaceholder {
+            ZStack {
+                colors.fillPrimary
                 ExperienceIcon(icon: .photo, size: .md, color: colors.tertiaryText)
-            } else {
+            }
+        } else if let image {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+        } else {
+            ZStack {
+                colors.fillPrimary
                 ProgressView()
             }
         }
-        .task(id: item.imageURL) {
-            await loadThumbnail()
-        }
+    }
+
+    private var loadTaskID: String {
+        "\(item.id.rawValue)|\(item.imageURL)"
     }
 
     private func loadThumbnail() async {
-        let reference = item.mediaReference
-        let pixel = Int(120 * displayScale * 3)
-        let request = ImageRequest(
-            reference: reference,
+        guard !showsPlaceholder else { return }
+        if image != nil { return }
+        if let cached = ProfileBrowseMediaDisplayCache.uiImage(
+            reference: item.mediaReference,
+            purpose: .tradeScreenshot
+        ) {
+            image = cached
+            return
+        }
+        let pixelBudget = ProfileBrowseMediaLoader.gridPixelBudget(displayScale: displayScale)
+        let loaded = await ProfileBrowseMediaLoader.loadUIImage(
+            reference: item.mediaReference,
             purpose: .tradeScreenshot,
-            maxPixelSize: pixel,
-            deliveryQuality: .feedDisplay,
-            auditSurface: "conversation.sharedMedia",
-            auditMediaID: item.id.rawValue
+            maxPixelSize: pixelBudget,
+            displayScale: displayScale,
+            imagePipeline: imagePipeline,
+            existing: image
         )
-        do {
-            let data = try await imagePipeline.data(for: request)
-            if let ui = UIImage(data: data) {
-                image = ui
-            } else {
-                onFailed()
-            }
-        } catch {
+        if let loaded {
+            image = loaded
+        } else {
             onFailed()
         }
     }

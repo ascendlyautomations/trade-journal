@@ -13,6 +13,7 @@ struct MessageBubbleActionMenu: View {
     var deleteForEveryoneTitle: String = "Delete for Everyone"
     var onManageUser: (() -> Void)?
     var onReport: (() -> Void)?
+    var onReply: (() -> Void)?
     let onDismiss: () -> Void
 
     @Environment(\.themeColors) private var colors
@@ -54,6 +55,9 @@ struct MessageBubbleActionMenu: View {
                     Divider().opacity(0.35)
                 }
                 VStack(spacing: 0) {
+                    if let onReply {
+                        actionRow(title: "Reply", systemImage: "arrowshape.turn.up.left", role: nil, action: onReply)
+                    }
                     if let onCopy {
                         actionRow(title: "Copy", systemImage: "doc.on.doc", role: nil, action: onCopy)
                     }
@@ -95,7 +99,13 @@ struct MessageBubbleActionMenu: View {
     }
 
     private var showsActionRows: Bool {
-        onCopy != nil || onRetry != nil || onDelete != nil || onManageUser != nil || onReport != nil
+        onReply != nil
+            || onCopy != nil
+            || onRetry != nil
+            || onDelete != nil
+            || onDeleteForEveryone != nil
+            || onManageUser != nil
+            || onReport != nil
     }
 
     private func actionRow(

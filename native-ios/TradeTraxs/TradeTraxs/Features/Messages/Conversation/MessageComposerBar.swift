@@ -12,6 +12,7 @@ struct MessageComposerBar: View {
     var onSend: () -> Void
     var onSendImage: (UIImage) -> Void
     var onSendVoice: ((URL, TimeInterval) -> Void)?
+    var allowsVoiceRecording: Bool = true
     var onSendTrade: (() -> Void)?
 
     @Environment(\.themeColors) private var colors
@@ -258,6 +259,8 @@ struct MessageComposerBar: View {
     /// Mic stays inside the field until Send takes over for non-empty text.
     private var showsInlineMicrophone: Bool {
         onSendVoice != nil
+            && allowsVoiceRecording
+            && isEnabled
             && !(canSendText && isEnabled)
             && !liveVoiceCoordinator.isSessionActive
     }

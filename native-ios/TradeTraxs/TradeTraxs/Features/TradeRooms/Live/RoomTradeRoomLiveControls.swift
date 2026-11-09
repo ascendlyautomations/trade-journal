@@ -6,7 +6,9 @@ struct RoomTradeRoomLiveControls: View {
     let roomTitle: String
     var isStreamLive: Bool
     var isRoomOwner: Bool
+    var currentUserId: String?
     var onJoinStream: () -> Void
+    var onManageStream: () -> Void
     var onOpenStream: () -> Void
     var onStartStream: () -> Void
     @Bindable var liveVoiceCoordinator: RoomLiveVoiceCoordinator
@@ -71,8 +73,12 @@ struct RoomTradeRoomLiveControls: View {
         .accessibilityHidden(voiceRowDisabled)
     }
 
+    private var isOwnObsLiveStream: Bool {
+        broadcastCoordinator.isCurrentUserObsBroadcaster(for: roomID, userId: currentUserId)
+    }
+
     private var voiceRowDisabled: Bool {
-        broadcastCoordinator.isWatchingRoom(roomID)
+        broadcastCoordinator.isWatchingRoom(roomID) && !isOwnObsLiveStream
     }
 
     private var liveRowDisabled: Bool {
@@ -106,7 +112,21 @@ struct RoomTradeRoomLiveControls: View {
     @ViewBuilder
     private var liveSlot: some View {
         Group {
-            if broadcastCoordinator.isWatchingRoom(roomID) {
+            if isOwnObsLiveStream {
+                Button(action: onManageStream) {
+                    Label(manageStreamButtonTitle, systemImage: "slider.horizontal.3")
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .foregroundStyle(colors.onAccent)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous)
+                                .fill(liveDarkGreen)
+                        )
+                }
+                .buttonStyle(.experiencePlain)
+                .accessibilityIdentifier("tradeRooms.broadcast.manageStream")
+            } else if broadcastCoordinator.isWatchingRoom(roomID) {
                 Button(action: onOpenStream) {
                     HStack(spacing: 6) {
                         Circle()
@@ -153,5 +173,12 @@ struct RoomTradeRoomLiveControls: View {
             return "Join Live (\(count))"
         }
         return "Join Live"
+    }
+
+    private var manageStreamButtonTitle: String {
+        if let count = broadcastCoordinator.liveViewerCount(for: roomID) {
+            return "Manage Stream (\(count))"
+        }
+        return "Manage Stream"
     }
 }

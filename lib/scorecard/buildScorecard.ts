@@ -1,7 +1,4 @@
-import {
-  isDevelopingOrStrong,
-  resolveScorecardReliability,
-} from "./reliability.ts"
+import { resolveScorecardReliability } from "./reliability.ts"
 import { scoreConsistencyCategory } from "./consistency.ts"
 import { scoreDisciplineCategory } from "./discipline.ts"
 import { scorePsychologyCategory } from "./psychologyCategory.ts"
@@ -15,8 +12,6 @@ import type {
 } from "./types.ts"
 import {
   SCORECARD_CATEGORY_WEIGHTS,
-  SCORECARD_MIN_NOMINAL_WEIGHT_OVERALL,
-  SCORECARD_MIN_SCORED_CATEGORIES_OVERALL,
   SCORECARD_MIN_TRADES_OVERALL,
   SCORECARD_MIN_TRADING_DAYS_OVERALL,
 } from "./types.ts"
@@ -29,8 +24,6 @@ function computeOverall(
   const scored = categories.filter(
     (c) => c.score != null && c.eligible && c.reliability !== "insufficient"
   )
-
-  const hasDeveloping = categories.some((c) => isDevelopingOrStrong(c.reliability))
 
   const emptyContributions: ScorecardOverallContribution[] = []
 
@@ -76,23 +69,6 @@ function computeOverall(
   let nominalIncluded = 0
   for (const cat of scored) {
     nominalIncluded += SCORECARD_CATEGORY_WEIGHTS[cat.id]
-  }
-
-  const coverageTooNarrow =
-    scored.length < SCORECARD_MIN_SCORED_CATEGORIES_OVERALL ||
-    nominalIncluded < SCORECARD_MIN_NOMINAL_WEIGHT_OVERALL
-
-  if (coverageTooNarrow) {
-    const pct = Math.round(nominalIncluded * 100)
-    return baseBuilding(
-      `Building your score, ${scored.length} scored categor${scored.length === 1 ? "y" : "ies"} (${pct}% nominal weight). A composite needs at least ${SCORECARD_MIN_SCORED_CATEGORIES_OVERALL} categories and ${Math.round(SCORECARD_MIN_NOMINAL_WEIGHT_OVERALL * 100)}% nominal weight. See breakdowns below.`
-    )
-  }
-
-  if (!hasDeveloping) {
-    return baseBuilding(
-      "Building your score, at least one category needs developing-level sample size. See category breakdowns below."
-    )
   }
 
   let weightSum = 0

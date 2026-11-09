@@ -29,11 +29,13 @@ nonisolated enum ConversationThreadBootstrapApplier {
         for participant in bootstrap.data.participants {
             guard let profileWire = participant.profiles else { continue }
             let profileID = ProfileID(profileWire.id ?? participant.user_id)
+            let username = profileWire.username ?? "user"
+            let displayName = ProfileIdentitySanitizer.sanitizedPublicField(username) ?? username
             let profile = Profile(
                 id: profileID,
                 userID: UserID(profileID.rawValue),
-                username: profileWire.username ?? "user",
-                displayName: profileWire.username ?? "User",
+                username: username,
+                displayName: displayName,
                 bio: nil,
                 avatar: profileWire.avatar_url.flatMap {
                     MediaReference(id: $0, kind: .image, altText: nil)

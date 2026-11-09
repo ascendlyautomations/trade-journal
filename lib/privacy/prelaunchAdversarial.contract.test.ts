@@ -77,9 +77,15 @@ describe("prelaunch adversarial authorization", () => {
     const fn = latestFunctionBody("rpc_v1_room_bootstrap_message_row")
     assert.match(
       fn.body,
-      /is_active_room_member\s*\(|can_read_trade_room_messages\s*\(/,
+      /is_active_room_member\s*\(|can_read_trade_room_messages\s*\(|profile_is_visible_to_viewer\s*\(/,
       `${fn.file}: rpc_v1_room_bootstrap_message_row must check room read access, not only the author visibility predicate`
     )
+  })
+
+  it("room bootstrap message row includes voice metadata", () => {
+    const fn = latestFunctionBody("rpc_v1_room_bootstrap_message_row")
+    assert.match(fn.body, /'audio_url',\s*m\.audio_url/)
+    assert.match(fn.body, /'audio_duration_ms',\s*m\.audio_duration_ms/)
   })
 
   it("private community rooms are not listed to every authenticated user", () => {

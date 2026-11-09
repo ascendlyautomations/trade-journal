@@ -24,6 +24,7 @@ final class ConversationThreadSessionStore {
         var loadedAt: Date
         /// Monotonic per-conversation generation — bumped on every local patch.
         var contentGeneration: UInt64
+        var scrollRestoration: ChannelScrollRestoration = .pinToBottomOnOpen
 
         var isSoftStale: Bool {
             Date().timeIntervalSince(loadedAt) > ConversationThreadSessionStore.softStaleInterval
@@ -140,7 +141,8 @@ final class ConversationThreadSessionStore {
         hasMoreMessages: Bool
     ) {
         let key = Self.cacheKey(viewerID: viewerID, conversationID: conversationID)
-        let priorGeneration = snapshots[key]?.contentGeneration ?? 0
+        let prior = snapshots[key]
+        let priorGeneration = prior?.contentGeneration ?? 0
         save(
             Snapshot(
                 cacheKey: key,
@@ -149,7 +151,8 @@ final class ConversationThreadSessionStore {
                 nextCursor: nextCursor,
                 hasMoreMessages: hasMoreMessages,
                 loadedAt: Date(),
-                contentGeneration: priorGeneration &+ 1
+                contentGeneration: priorGeneration &+ 1,
+                scrollRestoration: prior?.scrollRestoration ?? .pinToBottomOnOpen
             )
         )
     }

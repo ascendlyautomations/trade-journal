@@ -62,7 +62,7 @@ nonisolated enum ScorecardRisk {
             )
         }
 
-        if rrCoverage < 0.25, trades.count >= 10 {
+        if rrCoverage < 0.25, trades.count >= 5 {
             dataGaps.append("Log planned R:R on more trades to improve risk documentation coverage.")
         }
 
@@ -81,7 +81,7 @@ nonisolated enum ScorecardRisk {
             )
         }
 
-        if maxDrawdown > 0, trades.count >= 5 {
+        if maxDrawdown > 0, trades.count >= 2 {
             subMetrics.append(
                 ScorecardSubMetric(
                     id: "risk.max_drawdown_context",
@@ -95,7 +95,7 @@ nonisolated enum ScorecardRisk {
             )
         }
 
-        if rrTarget.pairedCount >= 3, let attainment = rrTarget.avgTargetAttainmentRatio {
+        if rrTarget.pairedCount >= 2, let attainment = rrTarget.avgTargetAttainmentRatio {
             let attainmentDouble = NSDecimalNumber(decimal: attainment).doubleValue
             subMetrics.append(
                 ScorecardSubMetric(

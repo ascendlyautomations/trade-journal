@@ -430,6 +430,10 @@ enum CompositionRoot {
                 try await data.profiles.profiles(ids: ids)
             }
         )
+        TradeRoomObsBroadcastController.shared.configure(
+            viewerUserId: nil,
+            transport: transport
+        )
 
         authentication.manager.sessionBootstrap = AuthenticatedSessionBootstrap(
             profiles: data.profiles,

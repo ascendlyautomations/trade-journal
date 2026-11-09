@@ -2,7 +2,9 @@ import { clampScore, formatPercent, resolveScorecardReliability } from "./reliab
 import type { ScorecardCategoryResult, ScorecardTrade } from "./types.ts"
 import { SCORECARD_CATEGORY_WEIGHTS } from "./types.ts"
 
-const MIN_PLAN_TAGGED_FOR_SCORE = 10
+const MIN_PLAN_TAGGED_FOR_SCORE = 3
+const MIN_COVERAGE_WARNING_TRADES = 5
+const MIN_SECONDARY_INSIGHT = 2
 
 export function scoreDisciplineCategory(trades: readonly ScorecardTrade[]): ScorecardCategoryResult {
   const weight = SCORECARD_CATEGORY_WEIGHTS.discipline
@@ -30,7 +32,7 @@ export function scoreDisciplineCategory(trades: readonly ScorecardTrade[]): Scor
     sampleLabel: "tagged trades",
   })
 
-  if (planCoverage < 0.5 && trades.length >= 10) {
+  if (planCoverage < 0.5 && trades.length >= MIN_COVERAGE_WARNING_TRADES) {
     weaknesses.push(
       "Plan adherence is tagged on fewer than half of trades, interpret the score cautiously or tag more trades."
     )
@@ -57,7 +59,7 @@ export function scoreDisciplineCategory(trades: readonly ScorecardTrade[]): Scor
     )
   }
 
-  if (losses.length >= 3) {
+  if (losses.length >= MIN_SECONDARY_INSIGHT) {
     const mistakeOnLoss = losses.filter((t) => t.mistakeType).length / losses.length
     subMetrics.push({
       id: "discipline.mistake_logging_coverage",
@@ -70,7 +72,7 @@ export function scoreDisciplineCategory(trades: readonly ScorecardTrade[]): Scor
     })
   }
 
-  if (withConfidence.length >= 3) {
+  if (withConfidence.length >= MIN_SECONDARY_INSIGHT) {
     subMetrics.push({
       id: "discipline.confidence_coverage",
       label: "Trades with confidence logged (coverage)",
@@ -81,7 +83,7 @@ export function scoreDisciplineCategory(trades: readonly ScorecardTrade[]): Scor
     })
   }
 
-  if (withExecution.length >= 3) {
+  if (withExecution.length >= MIN_SECONDARY_INSIGHT) {
     const avg =
       withExecution.reduce((s, t) => s + (t.executionRating ?? 0), 0) / withExecution.length
     subMetrics.push({

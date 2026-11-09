@@ -15,6 +15,7 @@ struct MainTabShellView: View {
     @Bindable private var globalUploadCoordinator = GlobalUploadCoordinator.shared
     @Bindable private var liveVoiceCoordinator = RoomLiveVoiceCoordinator.shared
     @Bindable private var broadcastCoordinator = RoomBroadcastCoordinator.shared
+    @Bindable private var obsBroadcastController = TradeRoomObsBroadcastController.shared
     @Environment(\.appEnvironment) private var appEnvironment
     @State private var reflectionError: String?
 
@@ -31,6 +32,12 @@ struct MainTabShellView: View {
         }
         .tradeRoomBroadcastViewerSheet(
             coordinator: broadcastCoordinator,
+            currentUserProfile: currentUserProfile,
+            imagePipeline: appEnvironment.data.imagePipeline
+        )
+        .tradeRoomObsManageStreamSheet(
+            broadcastCoordinator: broadcastCoordinator,
+            obsController: obsBroadcastController,
             currentUserProfile: currentUserProfile,
             imagePipeline: appEnvironment.data.imagePipeline
         )

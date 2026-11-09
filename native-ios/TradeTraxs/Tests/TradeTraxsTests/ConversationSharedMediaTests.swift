@@ -2,6 +2,15 @@ import XCTest
 @testable import TradeTraxs
 
 final class ConversationSharedMediaTests: XCTestCase {
+    func testGalleryLayoutUsesThreeUniformColumns() {
+        XCTAssertEqual(ConversationSharedMediaGalleryLayout.columnCount, 3)
+        XCTAssertEqual(
+            ConversationSharedMediaGalleryLayout.gridColumns.count,
+            3
+        )
+        XCTAssertGreaterThan(ConversationSharedMediaGalleryLayout.interItemSpacing, 0)
+    }
+
     func testPaginationMergeDeduplicatesByMessageID() {
         let first = ConversationSharedMediaItem(
             id: MessageID("m1"),
@@ -92,6 +101,33 @@ final class ConversationSharedMediaTests: XCTestCase {
     }
 
     @MainActor
+    func testOpenFromIdleStartsLoadingThenLoaded() async {
+        let conversationID = ConversationID("conv-open-lifecycle")
+        let rpc = SharedMediaTestRPCClient(json: """
+        [{"message_id":"m1","sender_id":null,"image_url":"https://example.com/1.jpg","created_at":"2026-03-01T00:00:00Z"}]
+        """)
+        let vm = ConversationSharedMediaViewModel(conversationID: conversationID, rpc: rpc)
+        XCTAssertEqual(vm.phase, .idle)
+        await vm.open()
+        XCTAssertEqual(vm.phase, .loaded)
+        XCTAssertEqual(vm.visibleItems.count, 1)
+        XCTAssertEqual(vm.openCount, 1)
+    }
+
+    @MainActor
+    func testOpenWhileLoadingDoesNotDuplicateFirstPageFetch() async {
+        let conversationID = ConversationID("conv-open-inflight")
+        let rpc = SlowSharedMediaRPCClient()
+        let vm = ConversationSharedMediaViewModel(conversationID: conversationID, rpc: rpc)
+        let first = Task { await vm.open() }
+        await vm.open()
+        await first.value
+        XCTAssertEqual(vm.openCount, 2)
+        XCTAssertEqual(rpc.callCount, 1)
+        XCTAssertEqual(vm.phase, .loaded)
+    }
+
+    @MainActor
     func testThumbnailFailureKeepsItemsInGallery() async {
         let conversationID = ConversationID("conv-thumbs")
         let rpc = SharedMediaTestRPCClient(json: """
@@ -169,6 +205,24 @@ private final class StaleRefreshSharedMediaRPCClient: RPCClient, @unchecked Send
             )
         }
         return Data("[]".utf8)
+    }
+}
+
+private final class SlowSharedMediaRPCClient: RPCClient, @unchecked Sendable {
+    private(set) var callCount = 0
+
+    func call(functionName: String, parameters: [String: String]) async throws -> Data {
+        try await call(functionName: functionName, jsonBody: Data())
+    }
+
+    func call(functionName: String, jsonBody: Data) async throws -> Data {
+        callCount += 1
+        try await Task.sleep(nanoseconds: 200_000_000)
+        return Data(
+            """
+            [{"message_id":"m1","sender_id":null,"image_url":"https://example.com/1.jpg","created_at":"2026-03-01T00:00:00Z"}]
+            """.utf8
+        )
     }
 }
 

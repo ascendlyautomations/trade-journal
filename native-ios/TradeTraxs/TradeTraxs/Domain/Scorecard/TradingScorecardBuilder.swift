@@ -66,7 +66,6 @@ nonisolated enum TradingScorecardBuilder {
         let scored = categories.filter {
             $0.score != nil && $0.eligible && $0.reliability != .insufficient
         }
-        let hasDeveloping = categories.contains { ScorecardReliabilitySupport.isDevelopingOrStrong($0.reliability) }
 
         func baseBuilding(_ statusMessage: String, status: ScorecardOverallStatus = .building) -> ScorecardOverallResult {
             ScorecardOverallResult(
@@ -104,24 +103,6 @@ nonisolated enum TradingScorecardBuilder {
         var nominalIncluded = 0.0
         for category in scored {
             nominalIncluded += ScorecardConstants.categoryWeights[category.id] ?? 0
-        }
-
-        let coverageTooNarrow =
-            scored.count < ScorecardConstants.minScoredCategoriesOverall
-            || nominalIncluded < ScorecardConstants.minNominalWeightOverall
-
-        if coverageTooNarrow {
-            let pct = Int((nominalIncluded * 100).rounded())
-            let categoryWord = scored.count == 1 ? "category" : "categories"
-            return baseBuilding(
-                "Building your score, \(scored.count) scored \(categoryWord) (\(pct)% nominal weight). A composite needs at least \(ScorecardConstants.minScoredCategoriesOverall) categories and \(Int(ScorecardConstants.minNominalWeightOverall * 100))% nominal weight. See breakdowns below."
-            )
-        }
-
-        if !hasDeveloping {
-            return baseBuilding(
-                "Building your score, at least one category needs developing-level sample size. See category breakdowns below."
-            )
         }
 
         var weightSum = 0.0

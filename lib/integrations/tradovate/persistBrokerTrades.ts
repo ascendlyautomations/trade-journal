@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { getSessionFromDate } from "@/lib/getSession"
+import { DEFAULT_TRADING_SESSION, getSessionFromDate } from "@/lib/getSession"
 import { findCanonicalTradeIdForBrokerFillIds } from "@/lib/integrations/brokerExecutionIdentity"
 import type { ReconstructedLifecycleTrade } from "@/lib/integrations/tradovate/tradeReconstruction"
 import { mergeBrokerTradeFinancialFields } from "@/lib/integrations/tradovate/brokerTradeAuthoritativeMerge"
@@ -136,7 +136,8 @@ export async function upsertReconstructedBrokerTrades(
       lifecycle.entryTime,
       lifecycle.exitTime
     )
-    const session = getSessionFromDate(lifecycle.entryTime) || "NY"
+    const session =
+      getSessionFromDate(lifecycle.entryTime) || DEFAULT_TRADING_SESSION
     const tradeDate = tradeDateFromIso(lifecycle.entryTime)
 
     const brokerRow = {

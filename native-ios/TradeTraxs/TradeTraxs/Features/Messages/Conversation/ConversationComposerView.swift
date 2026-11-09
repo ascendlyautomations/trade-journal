@@ -6,7 +6,17 @@ struct ConversationComposerView: View {
     let imagePipeline: any ImagePipeline
 
     var body: some View {
-        MessageComposerBar(
+        VStack(spacing: 0) {
+            if let target = viewModel.replyTarget {
+                MessageReplyComposerStrip(
+                    authorName: target.authorName,
+                    preview: target.preview,
+                    onCancel: { viewModel.clearReply() }
+                )
+                .padding(.horizontal, ExperienceSpacing.xs)
+                .padding(.top, ExperienceSpacing.xxs)
+            }
+            MessageComposerBar(
             draft: $viewModel.draft,
             isSending: viewModel.isSending,
             onSend: {
@@ -21,7 +31,8 @@ struct ConversationComposerView: View {
             onSendTrade: {
                 viewModel.presentTradePicker()
             }
-        )
+            )
+        }
         .sheet(isPresented: $viewModel.showsTradePicker) {
             TradeSharePickerSheet(
                 trades: viewModel.tradePickerTrades,

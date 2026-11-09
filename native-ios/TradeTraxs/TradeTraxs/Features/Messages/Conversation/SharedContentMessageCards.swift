@@ -20,7 +20,12 @@ struct SharedContentUnavailableCard: View {
         }
         .padding(.horizontal, includesBackground ? ExperienceSpacing.sm + 2 : 0)
         .padding(.vertical, includesBackground ? ExperienceSpacing.sm : 0)
-        .frame(maxWidth: 280, alignment: .leading)
+        .frame(
+            maxWidth: includesBackground
+                ? ConversationBubbleMediaLayout.sharedCardBubbleMaxWidth
+                : .infinity,
+            alignment: .leading
+        )
         .background {
             if includesBackground {
                 RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
@@ -46,6 +51,7 @@ struct SharedPostMessageCard: View {
     var isOutgoing: Bool
     var includesBackground: Bool = true
     var headerTitle: String = "Shared a post"
+    var mediaLayoutWidth: CGFloat? = nil
 
     @Environment(\.themeColors) private var colors
 
@@ -55,17 +61,16 @@ struct SharedPostMessageCard: View {
 
             if let post {
                 if let media = post.media.first(where: { !$0.id.isEmpty }) {
-                    TradeImageView(
+                    AspectFitMediaView(
                         reference: media,
-                        imagePipeline: imagePipeline,
                         purpose: .postImage,
-                        contentMode: .fill,
-                        side: 160
+                        imagePipeline: imagePipeline,
+                        allowsFullResolutionViewer: false,
+                        layoutWidth: mediaLayoutWidth
                     )
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 160)
-                    .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+                    .clipShape(
+                        RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                    )
                 }
 
                 let caption = post.body.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -76,13 +81,17 @@ struct SharedPostMessageCard: View {
                         .multilineTextAlignment(.leading)
                 }
             } else {
-                Text("Loading post…")
-                    .experienceStyle(.subheadline, color: secondaryTextColor)
+                loadingPlaceholder(label: "Loading post…")
             }
         }
         .padding(.horizontal, includesBackground ? ExperienceSpacing.sm + 2 : 0)
         .padding(.vertical, includesBackground ? ExperienceSpacing.sm : 0)
-        .frame(maxWidth: 280, alignment: .leading)
+        .frame(
+            maxWidth: includesBackground
+                ? ConversationBubbleMediaLayout.sharedCardBubbleMaxWidth
+                : .infinity,
+            alignment: .leading
+        )
         .background {
             if includesBackground {
                 RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
@@ -113,6 +122,14 @@ struct SharedPostMessageCard: View {
         guard value.count > 140 else { return value }
         return String(value.prefix(140)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
     }
+
+    private func loadingPlaceholder(label: String) -> some View {
+        SharedContentMessageCardLoadingPlaceholder(
+            label: label,
+            isOutgoing: isOutgoing,
+            mediaLayoutWidth: mediaLayoutWidth
+        )
+    }
 }
 
 struct SharedReelMessageCard: View {
@@ -121,6 +138,7 @@ struct SharedReelMessageCard: View {
     let imagePipeline: any ImagePipeline
     var isOutgoing: Bool
     var includesBackground: Bool = true
+    var mediaLayoutWidth: CGFloat? = nil
 
     @Environment(\.themeColors) private var colors
 
@@ -135,17 +153,16 @@ struct SharedReelMessageCard: View {
 
             if let reel {
                 ZStack {
-                    TradeImageView(
+                    AspectFitMediaView(
                         reference: reel.thumbnail ?? reel.video,
-                        imagePipeline: imagePipeline,
                         purpose: .reelThumbnail,
-                        contentMode: .fill,
-                        side: 160
+                        imagePipeline: imagePipeline,
+                        allowsFullResolutionViewer: false,
+                        layoutWidth: mediaLayoutWidth
                     )
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 160)
-                    .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+                    .clipShape(
+                        RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                    )
 
                     Image(systemName: "play.fill")
                         .font(.title2.weight(.semibold))
@@ -169,13 +186,17 @@ struct SharedReelMessageCard: View {
                         .lineLimit(2)
                 }
             } else {
-                Text("Loading clip…")
-                    .experienceStyle(.subheadline, color: secondaryTextColor)
+                loadingPlaceholder(label: "Loading clip…")
             }
         }
         .padding(.horizontal, includesBackground ? ExperienceSpacing.sm + 2 : 0)
         .padding(.vertical, includesBackground ? ExperienceSpacing.sm : 0)
-        .frame(maxWidth: 280, alignment: .leading)
+        .frame(
+            maxWidth: includesBackground
+                ? ConversationBubbleMediaLayout.sharedCardBubbleMaxWidth
+                : .infinity,
+            alignment: .leading
+        )
         .background {
             if includesBackground {
                 RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
@@ -192,6 +213,14 @@ struct SharedReelMessageCard: View {
     private var tertiaryTextColor: Color {
         isOutgoing ? colors.onAccent.opacity(0.78) : colors.tertiaryText
     }
+
+    private func loadingPlaceholder(label: String) -> some View {
+        SharedContentMessageCardLoadingPlaceholder(
+            label: label,
+            isOutgoing: isOutgoing,
+            mediaLayoutWidth: mediaLayoutWidth
+        )
+    }
 }
 
 struct SharedAchievementMessageCard: View {
@@ -200,6 +229,7 @@ struct SharedAchievementMessageCard: View {
     let imagePipeline: any ImagePipeline
     var isOutgoing: Bool
     var includesBackground: Bool = true
+    var mediaLayoutWidth: CGFloat? = nil
 
     @Environment(\.themeColors) private var colors
 
@@ -214,17 +244,16 @@ struct SharedAchievementMessageCard: View {
 
             if let achievement {
                 if let image = achievement.image {
-                    TradeImageView(
+                    AspectFitMediaView(
                         reference: image,
-                        imagePipeline: imagePipeline,
                         purpose: .postImage,
-                        contentMode: .fill,
-                        side: 140
+                        imagePipeline: imagePipeline,
+                        allowsFullResolutionViewer: false,
+                        layoutWidth: mediaLayoutWidth
                     )
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 140)
-                    .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+                    .clipShape(
+                        RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                    )
                 }
 
                 Text(achievement.title)
@@ -247,13 +276,17 @@ struct SharedAchievementMessageCard: View {
                         .lineLimit(2)
                 }
             } else {
-                Text("Loading achievement…")
-                    .experienceStyle(.subheadline, color: secondaryTextColor)
+                loadingPlaceholder(label: "Loading achievement…")
             }
         }
         .padding(.horizontal, includesBackground ? ExperienceSpacing.sm + 2 : 0)
         .padding(.vertical, includesBackground ? ExperienceSpacing.sm : 0)
-        .frame(maxWidth: 280, alignment: .leading)
+        .frame(
+            maxWidth: includesBackground
+                ? ConversationBubbleMediaLayout.sharedCardBubbleMaxWidth
+                : .infinity,
+            alignment: .leading
+        )
         .background {
             if includesBackground {
                 RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
@@ -269,5 +302,42 @@ struct SharedAchievementMessageCard: View {
 
     private var tertiaryTextColor: Color {
         isOutgoing ? colors.onAccent.opacity(0.78) : colors.tertiaryText
+    }
+
+    private func loadingPlaceholder(label: String) -> some View {
+        SharedContentMessageCardLoadingPlaceholder(
+            label: label,
+            isOutgoing: isOutgoing,
+            mediaLayoutWidth: mediaLayoutWidth
+        )
+    }
+}
+
+/// Reserves inline media height while shared entities hydrate so scroll layout stays stable.
+struct SharedContentMessageCardLoadingPlaceholder: View {
+    let label: String
+    var isOutgoing: Bool
+    var mediaLayoutWidth: CGFloat? = nil
+
+    @Environment(\.themeColors) private var colors
+
+    private var placeholderMediaHeight: CGFloat {
+        guard let mediaLayoutWidth else { return 120 }
+        let maxHeight = min(UIScreen.main.bounds.height * 0.58, 720)
+        return ImageFidelityTrace.placeholderRowHeight(
+            containerWidthPoints: mediaLayoutWidth,
+            maxHeightPoints: maxHeight
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                .fill(isOutgoing ? colors.onAccent.opacity(0.12) : colors.fillPrimary)
+                .frame(width: mediaLayoutWidth, height: placeholderMediaHeight)
+                .frame(maxWidth: mediaLayoutWidth == nil ? .infinity : nil)
+            Text(label)
+                .experienceStyle(.subheadline, color: isOutgoing ? colors.onAccent.opacity(0.88) : colors.secondaryText)
+        }
     }
 }

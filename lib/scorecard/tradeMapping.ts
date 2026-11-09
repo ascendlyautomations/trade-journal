@@ -109,7 +109,7 @@ export function postTripleLossWinRate(trades: readonly ScorecardTrade[]): number
     const c = trades[i + 2].pnl
     if (a < 0 && b < 0 && c < 0) {
       const next = trades.slice(i + 3, i + 8)
-      if (next.length === 0) return null
+      if (next.length < 5) continue
       const wins = next.filter((t) => t.pnl > 0).length
       return wins / next.length
     }

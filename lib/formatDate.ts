@@ -1,3 +1,5 @@
+import { getSessionFromDate } from "./tradingSession"
+
 const EST_TIMEZONE = "America/New_York"
 
 export { formatEST } from "./formatEST.ts"
@@ -315,28 +317,6 @@ export function resolveTradingTimeSourceForKey(trade: {
 export function getTradingSession(
   dateString: string | null | undefined
 ): string | null {
-  if (!dateString) return null
-
-  const date = new Date(dateString)
-
-  const estDate = new Date(
-    date.toLocaleString("en-US", { timeZone: EST_TIMEZONE })
-  )
-
-  const hour = estDate.getHours()
-
-  if (hour >= 18 || hour < 2) {
-    return "Asia"
-  }
-
-  if (hour >= 2 && hour < 9) {
-    return "London"
-  }
-
-  if (hour >= 9 && hour < 16) {
-    return "NY"
-  }
-
-  return null
+  return getSessionFromDate(dateString)
 }
 

@@ -34,8 +34,8 @@ export default function TradeRoomBroadcastSpeakInviteBanner({
           <p className="font-semibold">You&apos;ve been invited to speak</p>
           <p className="mt-1 text-xs text-emerald-100/90">
             {videoReady
-              ? "Connecting you with microphone access… If nothing happens, tap Accept below."
-              : "Open the livestream first, then accept to use your microphone."}
+              ? "Accept to join with your microphone. Others will hear you on the stream."
+              : "Waiting for the studio player… accept when the stream is ready."}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {!videoReady && onNeedOpenStream ? (

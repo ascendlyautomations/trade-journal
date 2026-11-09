@@ -36,7 +36,12 @@ import { assertRequiredAccountValue } from "@/lib/createAccountForm"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { supabaseMutationFeedback } from "@/lib/supabaseMutationFeedback"
 import { useProGate } from "@/lib/useProGate"
-import { getSessionFromDate } from "@/lib/getSession"
+import {
+  DEFAULT_TRADING_SESSION,
+  getSessionFromDate,
+  TRADING_SESSION_LABELS,
+  tradingSessionDisplayName,
+} from "@/lib/getSession"
 import {
   buildDateTime,
   dateTimeFieldsFromTrade,
@@ -329,7 +334,7 @@ export default function InputTradeForm({
   const [rr, setRR] = useState("")
   const [maxRrReached, setMaxRrReached] = useState("")
   const [points, setPoints] = useState("")
-  const [session, setSession] = useState("NY")
+  const [session, setSession] = useState<string>(DEFAULT_TRADING_SESSION)
   const [sessionManuallySet, setSessionManuallySet] = useState(false)
   const [decimalError, setDecimalError] = useState("")
   const [confluences, setConfluences] = useState("")
@@ -726,7 +731,7 @@ export default function InputTradeForm({
       maxRr != null && maxRr !== "" ? String(maxRr).replace(/,/g, "") : ""
     )
     setPoints(t.points != null && t.points !== "" ? String(t.points) : "")
-    setSession(t.session || "NY")
+    setSession(t.session || DEFAULT_TRADING_SESSION)
     // Preserve the saved session; do not let auto-detect overwrite while editing.
     setSessionManuallySet(true)
     setConfluences(t.top_confluences ?? t.notes ?? "")
@@ -843,7 +848,7 @@ export default function InputTradeForm({
     setRR("")
     setMaxRrReached("")
     setPoints("")
-    setSession("NY")
+    setSession(DEFAULT_TRADING_SESSION)
     setSessionManuallySet(false)
     setConfluences("")
     setPublicDescription("")
@@ -1155,8 +1160,8 @@ export default function InputTradeForm({
       : null
     const cleanedSession = (session && String(session).trim()) || ""
     const sessionToSave = sessionManuallySet
-      ? cleanedSession || "NY"
-      : autoDetectedSession || cleanedSession || "NY"
+      ? cleanedSession || DEFAULT_TRADING_SESSION
+      : autoDetectedSession || cleanedSession || DEFAULT_TRADING_SESSION
     const tradeTypeToSave =
       tradeType != null && String(tradeType).trim() !== ""
         ? String(tradeType).trim()
@@ -2214,7 +2219,12 @@ export default function InputTradeForm({
   useEffect(() => {
     if (sessionManuallySet || !entryDateTime) return
     const detected = getSessionFromDate(entryDateTime)
-    if (detected && (session === "" || session === "NY")) {
+    if (
+      detected &&
+      (session === "" ||
+        session === "NY" ||
+        session === DEFAULT_TRADING_SESSION)
+    ) {
       setSession(detected)
     }
   }, [entryDateTime, session, sessionManuallySet])
@@ -2718,10 +2728,30 @@ export default function InputTradeForm({
               }}
               triggerClassName={SELECT_TRIGGER_COMPACT_CLASS}
               options={[
-                { label: "NY", value: "NY" },
-                { label: "London", value: "London" },
-                { label: "Asia", value: "Asia" },
-                { label: "After", value: "After" },
+                {
+                  label: tradingSessionDisplayName(TRADING_SESSION_LABELS.nyAM),
+                  value: TRADING_SESSION_LABELS.nyAM,
+                },
+                {
+                  label: tradingSessionDisplayName(TRADING_SESSION_LABELS.nyLunch),
+                  value: TRADING_SESSION_LABELS.nyLunch,
+                },
+                {
+                  label: tradingSessionDisplayName(TRADING_SESSION_LABELS.nyPM),
+                  value: TRADING_SESSION_LABELS.nyPM,
+                },
+                {
+                  label: tradingSessionDisplayName(TRADING_SESSION_LABELS.london),
+                  value: TRADING_SESSION_LABELS.london,
+                },
+                {
+                  label: tradingSessionDisplayName(TRADING_SESSION_LABELS.asia),
+                  value: TRADING_SESSION_LABELS.asia,
+                },
+                {
+                  label: tradingSessionDisplayName(TRADING_SESSION_LABELS.after),
+                  value: TRADING_SESSION_LABELS.after,
+                },
               ]}
             />
           </div>

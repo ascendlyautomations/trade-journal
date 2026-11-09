@@ -7,6 +7,55 @@ struct RoomBroadcastBar: View {
 
     var body: some View {
         HStack(spacing: ExperienceSpacing.sm) {
+            if coordinator.isObsHostBroadcastBarActive {
+                obsHostBarContent
+            } else {
+                viewerBarContent
+            }
+        }
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.vertical, ExperienceSpacing.sm)
+        .background(colors.navigationBackground.opacity(0.98))
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Color.red.opacity(0.45))
+                .frame(height: 1)
+        }
+        .accessibilityIdentifier("tradeRooms.broadcast.bar")
+    }
+
+    private var liveBadge: some View {
+        Text("LIVE")
+            .font(.system(size: 9, weight: .heavy, design: .rounded))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Capsule(style: .continuous).fill(Color.red.opacity(0.92)))
+    }
+
+    private var obsHostBarContent: some View {
+        Button {
+            coordinator.presentObsManageStreamFromBar()
+        } label: {
+            HStack(spacing: ExperienceSpacing.sm) {
+                liveBadge
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(coordinator.obsHostBarSession?.roomTitle ?? "Live stream")
+                        .experienceStyle(.caption, color: colors.primaryText)
+                        .lineLimit(1)
+                    Text("You're streaming")
+                        .experienceStyle(.caption2, color: colors.secondaryText)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .buttonStyle(.experiencePlain)
+        .accessibilityIdentifier("tradeRooms.broadcast.hostBar")
+    }
+
+    private var viewerBarContent: some View {
+        Group {
             Button {
                 coordinator.presentViewer()
             } label: {
@@ -60,23 +109,5 @@ struct RoomBroadcastBar: View {
             .buttonStyle(.experiencePlain)
             .accessibilityLabel("Leave stream")
         }
-        .padding(.horizontal, ExperienceSpacing.md)
-        .padding(.vertical, ExperienceSpacing.sm)
-        .background(colors.navigationBackground.opacity(0.98))
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(Color.red.opacity(0.45))
-                .frame(height: 1)
-        }
-        .accessibilityIdentifier("tradeRooms.broadcast.bar")
-    }
-
-    private var liveBadge: some View {
-        Text("LIVE")
-            .font(.system(size: 9, weight: .heavy, design: .rounded))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(Capsule(style: .continuous).fill(Color.red.opacity(0.92)))
     }
 }

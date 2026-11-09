@@ -7,6 +7,11 @@ import {
   type ExploreSessionFilter,
   type ExploreTradingStyleFilter,
 } from "@/lib/exploreFilters"
+import {
+  TRADING_SESSION_DISPLAY_ORDER,
+  tradingSessionDisplayName,
+  type TradingSessionLabel,
+} from "@/lib/tradingSession"
 
 const CHIP_BASE =
   "shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition"
@@ -35,9 +40,12 @@ const SESSION_OPTIONS: ReadonlyArray<{
   label: string
 }> = [
   { value: "all", label: "All Sessions" },
-  { value: "NY", label: "NY Session" },
-  { value: "London", label: "London" },
-  { value: "Asia", label: "Asia" },
+  ...TRADING_SESSION_DISPLAY_ORDER.filter((s) => s !== "After").map(
+    (value) => ({
+      value: value as TradingSessionLabel,
+      label: tradingSessionDisplayName(value),
+    })
+  ),
 ]
 
 const EXPERIENCE_OPTIONS: ReadonlyArray<{

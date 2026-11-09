@@ -1,14 +1,17 @@
 import type { DashboardSessionBucket } from "./dashboardSessionBuckets.ts"
+import { dashboardSessionDisplayName } from "./dashboardSessionBuckets.ts"
 
-/** Native session row order on phone: New York, London, Asia. */
-export const MOBILE_WEB_SESSION_ORDER = [
-  "NY",
+/** Native-aligned session row order on phone (NY sub-sessions, then London, Asia). */
+export const MOBILE_WEB_SESSION_ORDER: readonly DashboardSessionBucket[] = [
+  "NY AM",
+  "NY Lunch",
+  "NY PM",
   "London",
   "Asia",
-] as const satisfies readonly DashboardSessionBucket[]
+] as const
 
 export function mobileWebSessionTitle(name: DashboardSessionBucket): string {
-  return name === "NY" ? "New York" : name
+  return dashboardSessionDisplayName(name)
 }
 
 export function mobileWebSessionWinRate(stats: {

@@ -107,7 +107,7 @@ final class TradeHistoryExperienceTests: XCTestCase {
         let accountID = TradingAccountID("acct-funded")
         var trade = makeTrade(id: "t", profileID: profileID, side: .long, pnl: 250)
         trade.riskReward = 2.5
-        trade.sessionLabel = "NY"
+        trade.sessionLabel = "NY AM"
         trade.accountID = accountID
         trade.accountMode = .funded
 
@@ -117,7 +117,7 @@ final class TradeHistoryExperienceTests: XCTestCase {
         var filters = TradeHistoryFilters()
         filters.rrMin = 2
         filters.accountMode = .funded
-        filters.tradingSession = .ny
+        filters.tradingSession = .nyAM
         filters.pnlMin = 200
         filters.result = .wins
         let query = TradeHistoryQuery(filters: filters, searchText: "NQ")

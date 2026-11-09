@@ -23,14 +23,15 @@ final class AddTradeExperienceTests: XCTestCase {
     }
 
     func testSessionLabelMatchesWebBuckets() {
-        // 10:00 ET → NY; 19:00 ET → Asia
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "America/New_York")!
-        let ny = calendar.date(from: DateComponents(year: 2026, month: 6, day: 10, hour: 10))!
+        let nyAM = calendar.date(from: DateComponents(year: 2026, month: 6, day: 10, hour: 10))!
+        let nyLunch = calendar.date(from: DateComponents(year: 2026, month: 6, day: 10, hour: 12))!
         let asia = calendar.date(from: DateComponents(year: 2026, month: 6, day: 10, hour: 19))!
-        XCTAssertEqual(TradingSessionLabel.session(from: ny), "NY")
+        XCTAssertEqual(TradingSessionLabel.session(from: nyAM), "NY AM")
+        XCTAssertEqual(TradingSessionLabel.session(from: nyLunch), "NY Lunch")
         XCTAssertEqual(TradingSessionLabel.session(from: asia), "Asia")
-        XCTAssertEqual(TradingSessionLabel.easternTradeDateString(from: ny), "2026-06-10")
+        XCTAssertEqual(TradingSessionLabel.easternTradeDateString(from: nyAM), "2026-06-10")
     }
 
     func testInsertBodyIncludesCoreQuickTradeFields() {

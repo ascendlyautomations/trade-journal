@@ -163,7 +163,7 @@ export type ProfileStatisticsModeView = {
   maxLossStreak: number
   sessionTotal: number
   sessionBreakdown: Array<{
-    label: "NY" | "London" | "Asia"
+    label: string
     count: number
     pct: number
   }>
@@ -203,7 +203,7 @@ export function mapProfileStatisticsMode(
     if (!entry || typeof entry !== "object") continue
     const item = entry as Record<string, unknown>
     const label = item.label
-    if (label !== "NY" && label !== "London" && label !== "Asia") continue
+    if (typeof label !== "string" || !label.trim()) continue
     sessionBreakdown.push({
       label,
       count: finiteNumber(item.count) ?? 0,

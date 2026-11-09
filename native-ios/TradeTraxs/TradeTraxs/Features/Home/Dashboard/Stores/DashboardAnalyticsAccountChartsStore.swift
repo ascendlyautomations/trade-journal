@@ -53,8 +53,16 @@ final class DashboardAnalyticsAccountChartsStore {
         availabilityByKey[key] = .loaded
     }
 
-    func markFailed(accountID: TradingAccountID, revision: Int64) {
-        availabilityByKey[Key(accountID: normalized(accountID), revision: revision)] = .failed
+    func markFailed(accountID: TradingAccountID, revision: Int64, nonRetryable: Bool = false) {
+        let key = Key(accountID: normalized(accountID), revision: revision)
+        if let existing = chartsByKey[key],
+           DashboardAnalyticsChartsSupport.chartsReadyForPresentation(existing)
+        {
+            availabilityByKey[key] = .loaded
+            return
+        }
+        availabilityByKey[key] =
+            nonRetryable ? .failedNonRetryable : .failed
     }
 
     func markNotRequested(accountID: TradingAccountID, revision: Int64) {

@@ -63,12 +63,6 @@ enum DashboardAnalyticsAggregateChartsLoader {
         {
             return cached
         }
-        if let cached = store.charts(revision: revision),
-           DashboardAnalyticsChartsSupport.hasEquityPoints(cached),
-           !DashboardAnalyticsChartsSupport.hasVisualExpansionContract(cached)
-        {
-            store.dropCharts(revision: revision)
-        }
 
         let key = flightKey(revision: revision, viewerID: viewerID)
         let encoded = try await BackendV2SingleFlight.shared.coalesce(key: key) {
@@ -124,12 +118,6 @@ enum DashboardAnalyticsAccountChartsLoader {
            DashboardAnalyticsChartsSupport.chartsReadyForPresentation(cached)
         {
             return cached
-        }
-        if let cached = store.charts(accountID: accountID, revision: revision),
-           DashboardAnalyticsChartsSupport.hasEquityPoints(cached),
-           !DashboardAnalyticsChartsSupport.hasVisualExpansionContract(cached)
-        {
-            store.dropCharts(accountID: accountID, revision: revision)
         }
 
         let key = flightKey(accountID: accountID, revision: revision, viewerID: viewerID)

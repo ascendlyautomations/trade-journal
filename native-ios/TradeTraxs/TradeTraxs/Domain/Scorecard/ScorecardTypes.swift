@@ -104,8 +104,8 @@ nonisolated enum ScorecardConstants {
         .discipline: 0.2,
         .psychology: 0.3,
     ]
-    static let minTradesOverall = 20
-    static let minTradingDaysOverall = 5
-    static let minNominalWeightOverall = 0.45
-    static let minScoredCategoriesOverall = 2
+    /// Early overall score. Counts trades inside the selected timeframe.
+    static let minTradesOverall = 3
+    /// Early overall score. Counts trading days inside the selected timeframe.
+    static let minTradingDaysOverall = 1
 }

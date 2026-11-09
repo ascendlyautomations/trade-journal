@@ -18,6 +18,7 @@ import ExploreMoreTradeRoomsCard from "../components/ExploreMoreTradeRoomsCard"
 import EmptyState from "../components/ui/EmptyState"
 import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
 import { discoverableFromBroadcastStatusPayload } from "@/lib/livekit/tradeRoomBroadcastDiscoverable.ts"
+import { openTradeRoomBroadcastViewerStudio } from "@/lib/livekit/client/tradeRoomBroadcastStudioNavigation.ts"
 import { useIsNativeIos } from "@/lib/useIsNativeIos"
 import { MOBILE_WEB_NEUTRAL_PAGE_BG } from "@/lib/mobileWebPageSurface"
 import {
@@ -194,6 +195,7 @@ import { trackMobileWebAppStoreClick } from "@/lib/mobileWebAppInstallAnalytics"
 import { isPhoneWebTouchTarget } from "@/lib/mobileWebTouch"
 import { nativeIosAppStoreURL } from "@/lib/nativeIosAppStore"
 import { tradeRoomSharePath, tradeRoomShareUrl } from "@/lib/tradeRoomShareUrl"
+import { tradeRoomMemberCanShareMedia } from "@/lib/tradeRoomMediaPermissions"
 type Room = TradeRoomRow & {
   /** If present from API joins, used as sidebar avatar fallback after image_url */
   avatar_url?: string | null
@@ -429,7 +431,6 @@ function CommunityContent() {
   const [mobileRoomsOpen, setMobileRoomsOpen] = useState(false)
   const [mobileRoomQuery, setMobileRoomQuery] = useState("")
   const [mobileSectionsOpen, setMobileSectionsOpen] = useState(false)
-  const [broadcastPanelExpanded, setBroadcastPanelExpanded] = useState(false)
   const [liveWatchEndedNotice, setLiveWatchEndedNotice] = useState<string | null>(
     null
   )
@@ -441,7 +442,6 @@ function CommunityContent() {
     const key = `${notice.sessionId}:${notice.kind}`
     if (handledStreamRemovalKeyRef.current === key) return
     handledStreamRemovalKeyRef.current = key
-    setBroadcastPanelExpanded(false)
     setSelectedRoomId(null)
     router.replace("/community")
   }, [tradeRoomBroadcast.viewerStreamRemovalNotice, router])
@@ -1215,6 +1215,11 @@ function CommunityContent() {
     sections.length,
     currentSection?.allow_members_chat,
   ])
+
+  const canShareMediaInRoom = useMemo(
+    () => tradeRoomMemberCanShareMedia(selectedRoom, isOwner),
+    [selectedRoom, isOwner]
+  )
 
   useEffect(() => {
     setInviteOrigin(typeof window !== "undefined" ? window.location.origin : "")
@@ -3278,7 +3283,11 @@ function CommunityContent() {
       const discoverable = discoverableFromBroadcastStatusPayload(payload)
       if (discoverable) {
         setLiveWatchEndedNotice(null)
-        setBroadcastPanelExpanded(true)
+        void openTradeRoomBroadcastViewerStudio({
+          roomId: selectedRoomId,
+          accessToken: liveKitAccessToken,
+          viewerUserId: user?.id ?? null,
+        })
       } else {
         setLiveWatchEndedNotice("This livestream has ended.")
       }
@@ -3296,6 +3305,7 @@ function CommunityContent() {
     selectedRoomId,
     needsJoin,
     liveKitAccessToken,
+    user?.id,
     router,
   ])
 
@@ -3936,6 +3946,13 @@ function CommunityContent() {
     }
     if (sendingMessageRef.current || sendingMessage) return
     if (!user?.id || !selectedRoomId || !canPostInRoom) return
+    if (!canShareMediaInRoom) {
+      showPopup({
+        type: "error",
+        message: "This room does not allow members to share voice messages.",
+      })
+      return
+    }
     if (!payload.blob?.size) {
       showPopup({
         type: "error",
@@ -4945,8 +4962,6 @@ function CommunityContent() {
                     viewerUserId={user?.id ?? null}
                     viewerDisplayName={username}
                     viewerAvatarUrl={profile?.avatar_url ?? null}
-                    expanded={broadcastPanelExpanded}
-                    onExpandedChange={setBroadcastPanelExpanded}
                     canModerateStream={canModerateRoom}
                     canActOnTarget={canActOnMember}
                   />
@@ -5428,7 +5443,10 @@ function CommunityContent() {
                     onSend={() => void sendMessage()}
                     onSendVoice={(payload) => void sendVoiceMessage(payload)}
                     voiceDisabled={
-                      !canPostInRoom || sendingMessage || liveVoice.isConnected
+                      !canPostInRoom ||
+                      !canShareMediaInRoom ||
+                      sendingMessage ||
+                      liveVoice.isConnected
                     }
                     placeholder={
                       !selectedRoomId

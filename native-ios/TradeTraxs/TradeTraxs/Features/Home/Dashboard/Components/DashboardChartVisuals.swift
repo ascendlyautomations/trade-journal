@@ -197,7 +197,7 @@ struct DashboardSessionBarsView: View {
     }
 
     private func sessionTitle(_ label: String) -> String {
-        label == "NY" ? "New York" : label
+        TradingSessionCatalog.displayTitle(for: label)
     }
 
     private func toneColor(_ value: Double) -> Color {

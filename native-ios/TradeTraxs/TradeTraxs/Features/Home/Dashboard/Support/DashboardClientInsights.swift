@@ -328,13 +328,7 @@ nonisolated enum DashboardClientInsights {
     }
 
     private static func normalizedSession(_ raw: String?) -> String? {
-        let value = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return nil }
-        let lower = value.lowercased()
-        if lower.contains("ny") || lower.contains("new york") { return "NY" }
-        if lower.contains("london") || lower.contains("ldn") { return "London" }
-        if lower.contains("asia") || lower.contains("tokyo") { return "Asia" }
-        return value
+        TradingSessionLabel.canonicalLabel(fromStored: raw)
     }
 
     private static func money(_ value: Decimal) -> String {

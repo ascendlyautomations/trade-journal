@@ -11,9 +11,8 @@ struct ConversationView: View {
     @State private var lastScrollContentHeight: CGFloat = 0
     @State private var lastScrollSample: ScrollLayoutSample?
     @State private var userReleasedInitialPin = false
-    @State private var showsConversationActions = false
-    @State private var showsSharedMediaGallery = false
-    @State private var sharedMediaViewModel: ConversationSharedMediaViewModel?
+    @State private var threadScrollViewportHeight: CGFloat = 0
+    @State private var sharedMediaSheetPresentation: ConversationSharedMediaSheetPresentation?
     @State private var actionMenuMessageID: MessageID?
     private let imagePipeline: any ImagePipeline
     private let detailCache: DetailPresentationCache
@@ -112,77 +111,20 @@ struct ConversationView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 if !viewModel.isSelectionMode, viewModel.showsDirectMessageActions {
-                    Button {
-                        showsConversationActions = true
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(colors.primaryText)
-                    }
-                    .accessibilityLabel("Conversation actions")
-                    .accessibilityIdentifier("conversation.actions.menu")
+                    conversationActionsMenu
                 }
             }
         }
-        .confirmationDialog("Conversation", isPresented: $showsConversationActions, titleVisibility: .visible) {
-            Button("Select Messages") {
-                viewModel.enterSelectionMode()
-            }
-            Button("Shared Media") {
-                sharedMediaViewModel = ConversationSharedMediaViewModel(
-                    conversationID: viewModel.conversationID,
-                    rpc: viewModel.conversationSharedMediaRPC
-                )
-                showsSharedMediaGallery = true
-            }
-            Button(viewModel.isMuted ? "Unmute Conversation" : "Mute Conversation") {
-                viewModel.toggleMute()
-            }
-            if let peerProfileID = viewModel.peerProfileID {
-                Button("Report User", role: .destructive) {
-                    ExperienceHaptics.play(.selection)
-                    ContentReportSupport.presentUser(
-                        profileID: peerProfileID,
-                        displayName: viewModel.peerProfile?.displayName,
-                        presenter: appEnvironment.contentReportPresenter
-                    )
+        .sheet(item: $sharedMediaSheetPresentation) { presentation in
+            ConversationSharedMediaView(
+                viewModel: presentation.viewModel,
+                imagePipeline: imagePipeline,
+                onViewInChat: { messageID in
+                    sharedMediaSheetPresentation = nil
+                    viewModel.navigateToMessageFromSharedMedia(messageID)
                 }
-            }
-            if viewModel.blockedByMe {
-                Button("Unblock User") {
-                    viewModel.requestBlockToggle()
-                }
-            } else {
-                Button("Block User", role: .destructive) {
-                    viewModel.requestBlockToggle()
-                }
-            }
-            Button("Delete Conversation", role: .destructive) {
-                viewModel.requestDeleteConversation()
-            }
-            if viewModel.peerProfileID != nil {
-                Button("View Profile") {
-                    if let profileID = viewModel.peerProfileID {
-                        openPeerProfile(profileID)
-                    }
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
-        .sheet(
-            isPresented: $showsSharedMediaGallery,
-            onDismiss: { sharedMediaViewModel = nil }
-        ) {
-            if let sharedMediaViewModel {
-                ConversationSharedMediaView(
-                    viewModel: sharedMediaViewModel,
-                    imagePipeline: imagePipeline,
-                    onViewInChat: { messageID in
-                        viewModel.navigateToMessageFromSharedMedia(messageID)
-                    }
-                )
-                .accessibilityIdentifier("conversation.sharedMedia.sheet")
-            }
+            )
+            .accessibilityIdentifier("conversation.sharedMedia.sheet")
         }
         .alert(viewModel.blockConfirmationTitle, isPresented: $viewModel.showsBlockConfirmation) {
             Button(viewModel.blockedByMe ? "Unblock" : "Block", role: viewModel.blockedByMe ? nil : .destructive) {
@@ -253,7 +195,6 @@ struct ConversationView: View {
         }
         .task {
             resetInitialScrollSessionState()
-            viewModel.resetInitialScrollPhase()
             viewModel.loadIfNeeded()
             #if DEBUG
             await applyConversationScreenshotHooksIfNeeded()
@@ -414,7 +355,13 @@ struct ConversationView: View {
                                 onToggleSelection: {
                                     viewModel.toggleMessageSelection(bubble.id)
                                 },
-                                onReport: incomingMessageReportAction(for: bubble)
+                                onReport: incomingMessageReportAction(for: bubble),
+                                replyParentPresentation: viewModel.replyParentPresentation(for: bubble.message),
+                                onReplyParentTap: {
+                                    if let parentID = bubble.message.replyToMessageID {
+                                        viewModel.jumpToReplyParent(parentID)
+                                    }
+                                }
                             )
                             .background {
                                 if viewModel.highlightedMessageID == bubble.id {
@@ -455,7 +402,9 @@ struct ConversationView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, ExperienceSpacing.sm)
+                .conversationThreadBottomAlignedContent(viewportHeight: threadScrollViewportHeight)
             }
+            .conversationThreadScrollViewportReader($threadScrollViewportHeight)
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
             .messageBubbleActionMenuOverlay(
@@ -474,7 +423,8 @@ struct ConversationView: View {
                             canDeleteForMe: viewModel.canDeleteForMe(bubble),
                             canDeleteForEveryone: viewModel.canDeleteForEveryone(bubble),
                             onRetry: { Task { await viewModel.retry(bubble) } },
-                            onReport: incomingMessageReportAction(for: bubble)
+                            onReport: incomingMessageReportAction(for: bubble),
+                            onReply: { () in () }
                         )
                     )
                 }
@@ -496,6 +446,10 @@ struct ConversationView: View {
                             Task { await viewModel.deleteMessageForEveryone(bubble) }
                         },
                         onReport: incomingMessageReportAction(for: bubble),
+                        onReply: {
+                            viewModel.beginReply(to: bubble)
+                            actionMenuMessageID = nil
+                        },
                         onSelectEmoji: { emoji in
                             Task { await viewModel.toggleReaction(messageID: messageID, emoji: emoji) }
                         },
@@ -512,6 +466,9 @@ struct ConversationView: View {
                 )
             } action: { previous, signal in
                 let sample = signal.sample
+                if threadScrollViewportHeight <= 0, sample.containerHeight > 0 {
+                    threadScrollViewportHeight = sample.containerHeight
+                }
                 if viewModel.isInitialScrollPinningBottom {
                     if lastScrollSample.map({ ConversationThreadScrollSupport.geometrySignalsMatch($0, sample) }) != true {
                         lastScrollSample = sample
@@ -530,9 +487,10 @@ struct ConversationView: View {
             }
             .onChange(of: viewModel.phase) { _, phase in
                 guard phase == .loaded else { return }
+                viewModel.applyNavigationIntentIfNeeded()
                 if viewModel.showsEmpty {
                     viewModel.confirmInitialScrollPositionForEmptyThread()
-                } else {
+                } else if !viewModel.messages.isEmpty {
                     startInitialScrollPositioning(proxy: proxy, reason: "phase-loaded")
                 }
             }
@@ -556,8 +514,12 @@ struct ConversationView: View {
             .onChange(of: viewModel.pendingScrollMessageID) { _, messageID in
                 guard viewModel.isInitialScrollConfirmed, let messageID else { return }
                 DispatchQueue.main.async {
-                    withAnimation(ExperienceMotion.preferred(ExperienceMotion.navigation, reduceMotion: reduceMotion)) {
+                    if reduceMotion {
                         proxy.scrollTo(messageID.rawValue, anchor: .center)
+                    } else {
+                        withAnimation(ExperienceMotion.preferred(ExperienceMotion.navigation, reduceMotion: false)) {
+                            proxy.scrollTo(messageID.rawValue, anchor: .center)
+                        }
                     }
                     viewModel.clearPendingScroll()
                 }
@@ -572,7 +534,11 @@ struct ConversationView: View {
                 if viewModel.showsEmpty, viewModel.phase == .loaded {
                     viewModel.confirmInitialScrollPositionForEmptyThread()
                 } else if !viewModel.messages.isEmpty, viewModel.phase == .loaded {
-                    startInitialScrollPositioning(proxy: proxy, reason: "messageList-onAppear")
+                    if viewModel.isInitialScrollConfirmed {
+                        applyCoordinatorScrollCommand(proxy: proxy)
+                    } else {
+                        startInitialScrollPositioning(proxy: proxy, reason: "messageList-onAppear")
+                    }
                 }
             }
             .onDisappear {
@@ -588,6 +554,12 @@ struct ConversationView: View {
                 guard value.translation.height > 0 else { return }
                 releaseInitialBottomPinToUser(reason: "user-drag-up")
             }
+    }
+
+    private func tryStartInitialScrollWhenViewportReady(proxy: ScrollViewProxy) {
+        guard threadScrollViewportHeight > 0 else { return }
+        guard viewModel.phase == .loaded, !viewModel.messages.isEmpty else { return }
+        startInitialScrollPositioning(proxy: proxy, reason: "viewport-ready")
     }
 
     private func maintainInitialPinAfterRichContentHydration(proxy: ScrollViewProxy) {
@@ -670,6 +642,66 @@ struct ConversationView: View {
         navigationCoordinator?.pushRoom(roomID)
     }
 
+    @ViewBuilder
+    private var conversationActionsMenu: some View {
+        Menu {
+            if let profileID = viewModel.peerProfileID {
+                Button("View Profile") {
+                    openPeerProfile(profileID)
+                }
+            }
+            Button("Shared Media") {
+                let galleryViewModel = ConversationSharedMediaViewModel(
+                    conversationID: viewModel.conversationID,
+                    rpc: viewModel.conversationSharedMediaRPC
+                )
+                sharedMediaSheetPresentation = ConversationSharedMediaSheetPresentation(
+                    viewModel: galleryViewModel
+                )
+            }
+            Button(viewModel.isMuted ? "Unmute Conversation" : "Mute Conversation") {
+                viewModel.toggleMute()
+            }
+            Button("Select Messages") {
+                viewModel.enterSelectionMode()
+            }
+
+            Divider()
+
+            if let peerProfileID = viewModel.peerProfileID {
+                Button("Report User", role: .destructive) {
+                    ExperienceHaptics.play(.selection)
+                    ContentReportSupport.presentUser(
+                        profileID: peerProfileID,
+                        displayName: viewModel.peerProfile?.displayName,
+                        presenter: appEnvironment.contentReportPresenter
+                    )
+                }
+            }
+            if viewModel.blockedByMe {
+                Button("Unblock User") {
+                    viewModel.requestBlockToggle()
+                }
+            } else {
+                Button("Block User", role: .destructive) {
+                    viewModel.requestBlockToggle()
+                }
+            }
+
+            Divider()
+
+            Button("Delete Conversation", role: .destructive) {
+                viewModel.requestDeleteConversation()
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(colors.primaryText)
+        }
+        .accessibilityLabel("Conversation actions")
+        .accessibilityIdentifier("conversation.actions.menu")
+    }
+
     private var conversationHeaderTitle: some View {
         Group {
             if viewModel.showsDirectMessageActions, let profileID = viewModel.peerProfileID {
@@ -742,7 +774,9 @@ struct ConversationView: View {
 
     private func startInitialScrollPositioning(proxy: ScrollViewProxy, reason: String) {
         guard !viewModel.isInitialScrollConfirmed else { return }
+        guard !viewModel.shouldDeferInitialBottomPin else { return }
         guard !viewModel.messages.isEmpty else { return }
+        guard threadScrollViewportHeight > 0 else { return }
 
         if viewModel.initialScrollPhase == .pending {
             viewModel.beginInitialScrollPositioning()
@@ -760,8 +794,10 @@ struct ConversationView: View {
 
         switch viewModel.initialScrollPhase {
         case .pending:
-            break
+            tryStartInitialScrollWhenViewportReady(proxy: proxy)
         case .positioning:
+            guard threadScrollViewportHeight > 0 else { return }
+            guard sample.containerHeight > 0 else { return }
             guard sample.isNearBottom else { return }
             viewModel.beginInitialScrollSettling()
             scrollToLatest(proxy: proxy, animated: false, reason: "enter-settling")

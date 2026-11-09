@@ -1,6 +1,6 @@
 import { parseCsvNumeric } from "./parseCsvNumeric.ts"
 import { normalizeFuturesSymbol } from "./normalizeFuturesSymbol.ts"
-import { getSessionFromDate } from "./getSession.ts"
+import { DEFAULT_TRADING_SESSION, getSessionFromDate } from "./getSession.ts"
 import { calculateDirectionalPoints } from "./resolveTradePoints.ts"
 import { CSV_RR_HEADER_ALIASES, parseCsvRrValue } from "./csvRrAliases.ts"
 import { sanitizeCsvTextField } from "./csvFormulaSanitize.ts"
@@ -741,7 +741,7 @@ function parseTradeZellaRow(
     points: points != null && Number.isFinite(points) ? points : null,
     date: dateIso,
     created_at: created,
-    session: getSessionFromDate(executionTimes.entry_time) || "NY",
+    session: getSessionFromDate(executionTimes.entry_time) || DEFAULT_TRADING_SESSION,
     account_type: "imported",
     mode: "live",
     notes: "",
@@ -943,7 +943,7 @@ export function parseTradovateRow(row: CsvRow, userId: string): CsvTradeInsert {
         : "Short"
       : "Long")
 
-  const session = getSessionFromDate(normalized.entry_time) || "NY"
+  const session = getSessionFromDate(normalized.entry_time) || DEFAULT_TRADING_SESSION
 
   const duration_text = durationRaw?.trim() || null
   let duration_seconds = normalized.duration_seconds
@@ -1403,7 +1403,7 @@ function parseEnteredExitedFormatRow(
     exit_time: executionTimes.exit_time,
     date: executionTimes.entry_time,
     created_at: executionTimes.entry_time,
-    session: getSessionFromDate(executionTimes.entry_time) || "NY",
+    session: getSessionFromDate(executionTimes.entry_time) || DEFAULT_TRADING_SESSION,
     account_type: "imported",
     mode: "live",
     notes: "",
@@ -1577,7 +1577,7 @@ function buildFlexibleTradeInsert(
     session:
       sessionVal && sessionVal.length > 0
         ? sessionVal
-        : autoSession || "NY",
+        : autoSession || DEFAULT_TRADING_SESSION,
     account_type,
     mode,
     notes,

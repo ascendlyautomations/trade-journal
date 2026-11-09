@@ -16,14 +16,26 @@ nonisolated struct LiveKitBroadcastInteractiveStateResponse: Decodable, Sendable
         var voiceMode: String?
         var speakerGrants: [String]?
         var sessionBlocks: [String]?
+        var pendingInvitations: [HostPendingInvitation]?
+        var raisedHands: [RaisedHand]?
         var removedFromStream: Bool?
         /// True when the viewer is blocked from rejoining this broadcast session (moderation).
         var blockedFromBroadcastRejoin: Bool?
         /// True when this user currently appears as a LiveKit participant in the broadcast room.
         var presentInLiveKitBroadcastRoom: Bool?
-        var pendingInvitationForViewer: PendingInvitation?
+        var pendingInvitationForViewer: ViewerPendingInvitation?
 
-        nonisolated struct PendingInvitation: Decodable, Sendable {
+        nonisolated struct HostPendingInvitation: Decodable, Sendable {
+            var userId: String
+            var invitationId: String
+        }
+
+        nonisolated struct RaisedHand: Decodable, Sendable {
+            var userId: String
+            var raisedAt: String?
+        }
+
+        nonisolated struct ViewerPendingInvitation: Decodable, Sendable {
             var invitationId: String
         }
     }
@@ -34,6 +46,14 @@ nonisolated struct LiveKitBroadcastInteractiveStateResponse: Decodable, Sendable
         var displayName: String?
         var avatarUrl: String?
     }
+}
+
+nonisolated struct LiveKitBroadcastModerationResponse: Decodable, Sendable {
+    var ok: Bool?
+    var error: String?
+    var retryable: Bool?
+    var invitationId: String?
+    var targetDisplayName: String?
 }
 
 nonisolated struct LiveKitBroadcastInviteRespondResponse: Decodable, Sendable {

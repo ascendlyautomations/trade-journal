@@ -3,18 +3,17 @@
 import { useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient.ts"
-import { isAppCommunityPath } from "@/lib/communityPath.ts"
-import {
-  setTradeRoomBroadcastStudioPresentation,
-} from "@/lib/livekit/client/tradeRoomBroadcastStore.ts"
+import { minimizeTradeRoomBroadcastStudioForBrowsing } from "@/lib/livekit/client/tradeRoomBroadcastStudioNavigation.ts"
 import { useTradeRoomBroadcast } from "./useTradeRoomBroadcast.ts"
+import { useTradeRoomLiveVoice } from "./useTradeRoomLiveVoice.ts"
 import TradeRoomBroadcastGlobalChrome from "./TradeRoomBroadcastGlobalChrome.tsx"
 
 export default function TradeRoomBroadcastGlobalChromeHost() {
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const pathname = usePathname()
+  const pathnameRef = useRef(pathname)
   const broadcast = useTradeRoomBroadcast()
-  const viewerTheaterBeforeNavigateRef = useRef(false)
+  const voice = useTradeRoomLiveVoice()
 
   useEffect(() => {
     void supabase.auth.getSession().then(({ data }) => {
@@ -26,45 +25,34 @@ export default function TradeRoomBroadcastGlobalChromeHost() {
     return () => sub.subscription.unsubscribe()
   }, [])
 
+  /** Full studio → mini on route change so LiveKit/audio persist like General Voice. */
   useEffect(() => {
+    const pathChanged = pathnameRef.current !== pathname
+    pathnameRef.current = pathname
+    if (!pathChanged) return
+
     const watchingAsViewer =
       broadcast.isWatching &&
       (broadcast.role === "viewer" || broadcast.role === "conversation")
+    const hostingAsBroadcaster =
+      broadcast.isPublishing && broadcast.role === "broadcaster"
 
-    if (!broadcast.isPublishing && !watchingAsViewer) {
-      viewerTheaterBeforeNavigateRef.current = false
-    }
-
-    if (isAppCommunityPath(pathname)) {
-      if (
-        watchingAsViewer &&
-        viewerTheaterBeforeNavigateRef.current &&
-        broadcast.studioPresentation === "mini"
-      ) {
-        viewerTheaterBeforeNavigateRef.current = false
-        setTradeRoomBroadcastStudioPresentation("studio")
-      }
-      return
-    }
-
+    if (!watchingAsViewer && !hostingAsBroadcaster) return
     if (broadcast.studioPresentation !== "studio") return
 
-    if (broadcast.isPublishing && broadcast.role === "broadcaster") {
-      setTradeRoomBroadcastStudioPresentation("mini")
-      return
-    }
-
-    if (watchingAsViewer) {
-      viewerTheaterBeforeNavigateRef.current = true
-      setTradeRoomBroadcastStudioPresentation("mini")
-    }
+    minimizeTradeRoomBroadcastStudioForBrowsing()
   }, [
     pathname,
-    broadcast.isPublishing,
     broadcast.isWatching,
+    broadcast.isPublishing,
     broadcast.role,
     broadcast.studioPresentation,
   ])
 
-  return <TradeRoomBroadcastGlobalChrome accessToken={accessToken} />
+  return (
+    <TradeRoomBroadcastGlobalChrome
+      accessToken={accessToken}
+      voiceSessionActive={Boolean(voice.session)}
+    />
+  )
 }

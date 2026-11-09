@@ -1,7 +1,10 @@
 import { computeDemoDashboardStats } from "@/lib/demo/computeDemoDashboard"
 import { DEMO_TRADES } from "@/lib/demo/fixtures"
 import {
+  applyTradeToSessionBucket,
+  createEmptySessionBuckets,
   DASHBOARD_SESSION_DISPLAY_ORDER,
+  dashboardSessionDisplayName,
   normalizeSessionBucket,
   type DashboardSessionBucket,
 } from "@/lib/dashboardSessionBuckets"
@@ -22,25 +25,22 @@ const LONG_TO_SHORT: Record<string, (typeof WEEKDAY_SHORT)[number]> = {
 export function getMarketingDashboardData() {
   const stats = computeDemoDashboardStats(DEMO_TRADES)
 
-  const sessionBuckets = {
-    London: { totalTrades: 0, wins: 0, totalPnL: 0 },
-    NY: { totalTrades: 0, wins: 0, totalPnL: 0 },
-    Asia: { totalTrades: 0, wins: 0, totalPnL: 0 },
-  } as Record<DashboardSessionBucket, SessionBucketStats>
+  const sessionBuckets = createEmptySessionBuckets() as Record<
+    DashboardSessionBucket,
+    SessionBucketStats
+  >
 
   for (const trade of DEMO_TRADES) {
     const bucket = normalizeSessionBucket(trade.session)
     if (!bucket) continue
     const pnl = Number(trade.pnl) || 0
-    sessionBuckets[bucket].totalTrades += 1
-    sessionBuckets[bucket].totalPnL += pnl
-    if (pnl > 0) sessionBuckets[bucket].wins += 1
+    applyTradeToSessionBucket(sessionBuckets, bucket, pnl)
   }
 
   const sessionPieData: SessionPiePoint[] = DASHBOARD_SESSION_DISPLAY_ORDER.map(
     (name) => ({
       name,
-      value: sessionBuckets[name].totalTrades,
+      value: sessionBuckets[name]?.totalTrades ?? 0,
     })
   )
 
@@ -51,7 +51,8 @@ export function getMarketingDashboardData() {
     Thu: 0,
     Fri: 0,
   }
-  const weekdayInsightStats: Record<string, { pnl: number; trades: number }> = {}
+  const weekdayInsightStats: Record<string, { pnl: number; trades: number }> =
+    {}
 
   for (const trade of DEMO_TRADES) {
     const source = trade.exit_time ?? trade.entry_time ?? trade.created_at
@@ -75,14 +76,23 @@ export function getMarketingDashboardData() {
 
   const bestSession = DASHBOARD_SESSION_DISPLAY_ORDER.map((name) => {
     const b = sessionBuckets[name]
+    if (!b) return null
     const avg = b.totalTrades ? b.totalPnL / b.totalTrades : 0
     const winRate = b.totalTrades ? (b.wins / b.totalTrades) * 100 : 0
-    return { name, avg, winRate, trades: b.totalTrades }
+    return {
+      name: dashboardSessionDisplayName(name),
+      avg,
+      winRate,
+      trades: b.totalTrades,
+    }
   })
-    .filter((s) => s.trades > 0)
+    .filter((s): s is NonNullable<typeof s> => s != null && s.trades > 0)
     .sort((a, b) => b.avg - a.avg)[0]
 
-  const symbolMap = new Map<string, { pnl: number; trades: number; wins: number }>()
+  const symbolMap = new Map<
+    string,
+    { pnl: number; trades: number; wins: number }
+  >()
   for (const trade of DEMO_TRADES) {
     const ticker = String(trade.ticker || "—")
     const pnl = Number(trade.pnl) || 0

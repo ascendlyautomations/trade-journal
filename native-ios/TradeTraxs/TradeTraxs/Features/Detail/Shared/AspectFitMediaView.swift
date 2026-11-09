@@ -25,6 +25,10 @@ struct AspectFitMediaView: View {
     var showsPlaceholderWhenUnavailable: Bool = true
     /// Optional cap for inline detail previews (trade detail uses a shorter height).
     var maxDisplayHeightOverride: CGFloat? = nil
+    /// When set, loading / empty placeholders use this height (e.g. compact DM previews).
+    var loadingPlaceholderHeightOverride: CGFloat? = nil
+    /// When set (message lists), layout uses an explicit width so ``LazyVStack`` measures row height correctly.
+    var layoutWidth: CGFloat? = nil
     /// Double-tap Like callback (like-only). When set, single-tap still opens the viewer if allowed.
     var onDoubleTapLike: (() -> Void)? = nil
 
@@ -38,6 +42,10 @@ struct AspectFitMediaView: View {
 
     private var maxDisplayHeight: CGFloat {
         maxDisplayHeightOverride ?? min(UIScreen.main.bounds.height * 0.58, 720)
+    }
+
+    private var loadingPlaceholderHeight: CGFloat {
+        loadingPlaceholderHeightOverride ?? 200
     }
 
     var body: some View {
@@ -56,7 +64,8 @@ struct AspectFitMediaView: View {
                     .frame(height: 48)
             }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: layoutWidth == nil ? .infinity : nil)
+        .frame(width: layoutWidth)
         .contentShape(Rectangle())
         .overlay {
             LikeFeedbackOverlay(isVisible: showLikeHeart, reduceMotion: reduceMotion)
@@ -98,14 +107,31 @@ struct AspectFitMediaView: View {
 
     /// Width-driven aspect box — the image defines height, not a fixed frame.
     private func media(_ image: UIImage) -> some View {
-        Image(uiImage: image)
-            .resizable()
-            .interpolation(.high)
-            .antialiased(true)
-            // Natural bitmap aspect — do not invent a separate ratio from point size.
-            .aspectRatio(contentMode: .fit)
-            .frame(maxWidth: .infinity)
-            .frame(maxHeight: maxDisplayHeight)
+        let framed = Group {
+            if let layoutWidth, let pixelSize = ImageFidelityTrace.pixelSize(of: image) {
+                let display = ImageFidelityTrace.displaySize(
+                    imagePixel: pixelSize,
+                    containerWidthPoints: layoutWidth,
+                    maxHeightPoints: maxDisplayHeight,
+                    screenScale: displayScale
+                ).points
+                Image(uiImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .antialiased(true)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: display.width, height: display.height)
+            } else {
+                Image(uiImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .antialiased(true)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .frame(maxHeight: maxDisplayHeight)
+            }
+        }
+        return framed
             .background(Color.clear)
             .background {
                 GeometryReader { geo in
@@ -147,8 +173,8 @@ struct AspectFitMediaView: View {
             colors.fillPrimary
             ExperienceIcon(icon: emptyIcon, size: .xl, color: colors.tertiaryText)
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 200)
+        .frame(width: layoutWidth, height: resolvedPlaceholderHeight)
+        .frame(maxWidth: layoutWidth == nil ? .infinity : nil)
     }
 
     private var loading: some View {
@@ -156,8 +182,21 @@ struct AspectFitMediaView: View {
             colors.fillPrimary
             ExperienceLoadingSpinner()
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 200)
+        .frame(width: layoutWidth, height: resolvedPlaceholderHeight)
+        .frame(maxWidth: layoutWidth == nil ? .infinity : nil)
+    }
+
+    private var resolvedPlaceholderHeight: CGFloat {
+        if let loadingPlaceholderHeightOverride {
+            return loadingPlaceholderHeightOverride
+        }
+        if let layoutWidth {
+            return ImageFidelityTrace.placeholderRowHeight(
+                containerWidthPoints: layoutWidth,
+                maxHeightPoints: maxDisplayHeight
+            )
+        }
+        return loadingPlaceholderHeight
     }
 
     private func presentLikeFeedback() {

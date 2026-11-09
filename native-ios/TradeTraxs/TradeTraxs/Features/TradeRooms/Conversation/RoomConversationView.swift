@@ -11,6 +11,7 @@ struct RoomConversationView: View {
     @State private var lastScrollContentHeight: CGFloat = 0
     @State private var lastScrollSample: ConversationThreadScrollSupport.LayoutSample?
     @State private var userReleasedInitialPin = false
+    @State private var threadScrollViewportHeight: CGFloat = 0
     @State private var actionMenuMessageID: MessageID?
     private let imagePipeline: any ImagePipeline
     private let data: DataEnvironment?
@@ -32,7 +33,7 @@ struct RoomConversationView: View {
     @State private var navigationIntentEpoch: UInt64 = 0
     @State private var showsInviteShareSheet = false
     @State private var obsOwnerSheetStep: ObsOwnerSheetStep?
-    @State private var obsBroadcastController = TradeRoomObsBroadcastController()
+    @Bindable private var obsBroadcastController = TradeRoomObsBroadcastController.shared
 
     init(
         roomID: RoomID,
@@ -93,11 +94,18 @@ struct RoomConversationView: View {
                     roomTitle: room.name,
                     isStreamLive: broadcastCoordinator.isStreamLive(for: room.id),
                     isRoomOwner: viewModel.isOwner,
+                    currentUserId: obsBroadcastController.viewerUserId,
                     onJoinStream: {
                         Task {
                             await broadcastCoordinator.watch(roomID: room.id, roomTitle: room.name)
                             broadcastCoordinator.presentViewer()
                         }
+                    },
+                    onManageStream: {
+                        broadcastCoordinator.openObsManageStream(
+                            roomID: room.id,
+                            roomTitle: room.name
+                        )
                     },
                     onOpenStream: {
                         broadcastCoordinator.presentViewer()
@@ -137,7 +145,17 @@ struct RoomConversationView: View {
                 liveVoiceCoordinator: liveVoiceCoordinator
             )
             if viewModel.shouldShowMessageComposer {
-                MessageComposerBar(
+                VStack(spacing: 0) {
+                    if let target = viewModel.replyTarget {
+                        MessageReplyComposerStrip(
+                            authorName: target.authorName,
+                            preview: target.preview,
+                            onCancel: { viewModel.clearReply() }
+                        )
+                        .padding(.horizontal, ExperienceSpacing.xs)
+                        .padding(.top, ExperienceSpacing.xxs)
+                    }
+                    MessageComposerBar(
                     draft: $viewModel.draft,
                     isSending: viewModel.isSending,
                     isEnabled: viewModel.canPostInSelectedChannel,
@@ -151,10 +169,12 @@ struct RoomConversationView: View {
                     onSendVoice: { url, duration in
                         Task { await viewModel.sendVoice(localFileURL: url, duration: duration) }
                     },
+                    allowsVoiceRecording: viewModel.canRecordVoiceMessages,
                     onSendTrade: {
                         viewModel.presentTradePicker()
                     }
-                )
+                    )
+                }
             } else if viewModel.showsJoinToSendPrompt {
                 joinToSendBar
             }
@@ -250,7 +270,11 @@ struct RoomConversationView: View {
                 step: $obsOwnerSheetStep,
                 roomID: viewModel.roomID,
                 roomTitle: viewModel.room?.name ?? "Trade Room",
-                controller: obsBroadcastController
+                controller: obsBroadcastController,
+                broadcastCoordinator: broadcastCoordinator,
+                imagePipeline: imagePipeline,
+                chatUserId: broadcastChatUserId,
+                chatDisplayName: broadcastChatDisplayName
             )
         )
         .sheet(isPresented: $viewModel.showsTradePicker) {
@@ -408,32 +432,22 @@ struct RoomConversationView: View {
                     viewerUserId: authUserId,
                     transport: data.supabase.transport
                 )
+                obsBroadcastController.noteHostContext(
+                    roomID: viewModel.activeRoomID,
+                    roomTitle: viewModel.room?.name
+                )
             }
             await tryOpenLiveBroadcastFromNotificationIfReady()
         }
-        .onChange(of: viewModel.phase) { _, phase in
-            guard phase == .loaded, viewModel.room != nil else { return }
-            Task { await tryOpenLiveBroadcastFromNotificationIfReady() }
-        }
-        .onChange(of: viewModel.pendingOpenLiveBroadcast) { _, pending in
-            guard pending else { return }
-            Task { await tryOpenLiveBroadcastFromNotificationIfReady() }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-            handleWillEnterForeground()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .tradeRoomMetadataDidChange)) { notification in
-            guard let changedID = notification.object as? RoomID,
-                  changedID == viewModel.roomID
-            else { return }
-            Task { await viewModel.reloadRoomMetadataIfNeeded() }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .tradeRoomChannelsDidChange)) { notification in
-            guard let changedID = notification.object as? RoomID,
-                  changedID == viewModel.roomID
-            else { return }
-            Task { await viewModel.reloadChannelsIfNeeded() }
-        }
+        .modifier(
+            RoomConversationBroadcastLifecycleModifier(
+                viewModel: viewModel,
+                tryOpenLiveBroadcast: { await tryOpenLiveBroadcastFromNotificationIfReady() },
+                handleWillEnterForeground: handleWillEnterForeground,
+                reloadRoomMetadata: { await viewModel.reloadRoomMetadataIfNeeded() },
+                reloadChannels: { await viewModel.reloadChannelsIfNeeded() }
+            )
+        )
     }
 
     private var composerPlaceholder: String {
@@ -634,6 +648,12 @@ struct RoomConversationView: View {
                                     )
                                 },
                                 onReport: incomingRoomMessageReportAction(for: bubble),
+                                replyParentPresentation: viewModel.replyParentPresentation(for: bubble.message),
+                                onReplyParentTap: {
+                                    if let parentID = bubble.message.replyToMessageID {
+                                        viewModel.jumpToReplyParent(parentID)
+                                    }
+                                },
                                 onSenderAvatarTap: { profileID in
                                     viewModel.openProfile(profileID)
                                 }
@@ -676,7 +696,9 @@ struct RoomConversationView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, ExperienceSpacing.sm)
+                .conversationThreadBottomAlignedContent(viewportHeight: threadScrollViewportHeight)
             }
+            .conversationThreadScrollViewportReader($threadScrollViewportHeight)
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
             .messageBubbleActionMenuOverlay(
@@ -696,7 +718,8 @@ struct RoomConversationView: View {
                             canDeleteForEveryone: viewModel.canDeleteMessage(bubble),
                             onRetry: { Task { await viewModel.retry(bubble) } },
                             onManageUser: roomMessageManageAction(for: bubble),
-                            onReport: incomingRoomMessageReportAction(for: bubble)
+                            onReport: incomingRoomMessageReportAction(for: bubble),
+                            onReply: { () in () }
                         )
                     )
                 }
@@ -715,6 +738,10 @@ struct RoomConversationView: View {
                         onDeleteForEveryone: { viewModel.requestDeleteMessage(bubble) },
                         onManageUser: roomMessageManageAction(for: bubble),
                         onReport: incomingRoomMessageReportAction(for: bubble),
+                        onReply: {
+                            viewModel.beginReply(to: bubble)
+                            actionMenuMessageID = nil
+                        },
                         onSelectEmoji: { emoji in
                             Task { await viewModel.toggleReaction(messageID: messageID, emoji: emoji) }
                         },
@@ -731,6 +758,9 @@ struct RoomConversationView: View {
                 )
             } action: { previous, signal in
                 let sample = signal.sample
+                if threadScrollViewportHeight <= 0, sample.containerHeight > 0 {
+                    threadScrollViewportHeight = sample.containerHeight
+                }
                 if viewModel.isInitialScrollPinningBottom {
                     if lastScrollSample.map({ ConversationThreadScrollSupport.geometrySignalsMatch($0, sample) }) != true {
                         lastScrollSample = sample
@@ -774,6 +804,9 @@ struct RoomConversationView: View {
             }
             .onChange(of: viewModel.selectedChannelID) { _, _ in
                 resetInitialScrollSessionState()
+                if viewModel.isInitialScrollConfirmed {
+                    applyCoordinatorScrollCommand(proxy: proxy)
+                }
             }
             .onChange(of: viewModel.pendingScrollMessageID) { _, messageID in
                 guard viewModel.isInitialScrollConfirmed, let messageID else { return }
@@ -816,6 +849,12 @@ struct RoomConversationView: View {
         lastScrollContentHeight = 0
         lastScrollSample = nil
         userReleasedInitialPin = false
+    }
+
+    private func tryStartInitialScrollWhenViewportReady(proxy: ScrollViewProxy) {
+        guard threadScrollViewportHeight > 0 else { return }
+        guard viewModel.phase == .loaded, !viewModel.messages.isEmpty else { return }
+        startInitialScrollPositioning(proxy: proxy, reason: "viewport-ready")
     }
 
     private func releaseInitialBottomPinToUser(reason: String) {
@@ -862,7 +901,9 @@ struct RoomConversationView: View {
 
     private func startInitialScrollPositioning(proxy: ScrollViewProxy, reason: String) {
         guard !viewModel.isInitialScrollConfirmed else { return }
+        guard !viewModel.shouldDeferInitialBottomPin else { return }
         guard !viewModel.messages.isEmpty else { return }
+        guard threadScrollViewportHeight > 0 else { return }
 
         if viewModel.initialScrollPhase == .pending {
             viewModel.beginInitialScrollPositioning()
@@ -883,8 +924,10 @@ struct RoomConversationView: View {
 
         switch viewModel.initialScrollPhase {
         case .pending:
-            break
+            tryStartInitialScrollWhenViewportReady(proxy: proxy)
         case .positioning:
+            guard threadScrollViewportHeight > 0 else { return }
+            guard sample.containerHeight > 0 else { return }
             guard sample.isNearBottom else { return }
             viewModel.beginInitialScrollSettling()
             scrollToLatest(proxy: proxy, animated: false, reason: "enter-settling")
@@ -1056,6 +1099,12 @@ struct RoomConversationView: View {
         Task {
             await broadcastCoordinator.refreshStatus(roomID: viewModel.roomID)
             await liveVoiceCoordinator.refreshGeneralVoicePresenceIfStale(for: viewModel.roomID)
+            if broadcastCoordinator.isCurrentUserObsBroadcaster(
+                for: viewModel.roomID,
+                userId: obsBroadcastController.viewerUserId
+            ) {
+                await obsBroadcastController.refreshFromServer(roomID: viewModel.roomID)
+            }
         }
     }
 

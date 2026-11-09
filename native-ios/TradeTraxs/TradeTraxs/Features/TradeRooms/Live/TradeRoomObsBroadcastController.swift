@@ -7,6 +7,8 @@ import UIKit
 @Observable
 @MainActor
 final class TradeRoomObsBroadcastController {
+    static let shared = TradeRoomObsBroadcastController()
+
     enum Phase: Equatable {
         case idle
         case preparing
@@ -24,6 +26,8 @@ final class TradeRoomObsBroadcastController {
     private(set) var phase: Phase = .idle
     private(set) var errorMessage: String?
     private(set) var isBusy = false
+    /// True while `ensurePrivateObsSession` is running (status → start → credentials → preview).
+    private(set) var isEnsuringPrivateObsSession = false
 
     private(set) var broadcastSessionId: String?
     private(set) var broadcasterUserId: String?
@@ -42,12 +46,27 @@ final class TradeRoomObsBroadcastController {
     private(set) var foreignHostPreparing = false
     private var serverIngressId: String?
 
+    private(set) var hostContextRoomID: RoomID?
+    private(set) var hostContextRoomTitle: String?
+
     func configure(viewerUserId: String?, transport: SupabaseTransport?) {
         self.viewerUserId = viewerUserId
         if let transport {
             client = LiveKitBroadcastClient(transport: transport)
         } else {
             client = nil
+        }
+    }
+
+    /// Sheet closed without ending the broadcast — keep session phase for Manage Stream reopen.
+    func acknowledgeManagementSheetDismissed() {
+        obsPollTask?.cancel()
+        obsPollTask = nil
+        errorMessage = nil
+        if phase == .livePublic {
+            streamKey = nil
+            streamKeyRevealed = false
+            rtmpURL = nil
         }
     }
 
@@ -67,11 +86,33 @@ final class TradeRoomObsBroadcastController {
         visibility = nil
         foreignHostPreparing = false
         serverIngressId = nil
+        syncObsHostBarSession()
         Task { await broadcastCoordinator.disconnectObsHostPreview() }
+    }
+
+    func noteHostContext(roomID: RoomID, roomTitle: String?) {
+        hostContextRoomID = roomID
+        if let roomTitle, !roomTitle.isEmpty {
+            hostContextRoomTitle = roomTitle
+        }
+    }
+
+    private func syncObsHostBarSession() {
+        guard phase == .livePublic,
+              let sessionId = broadcastSessionId,
+              !sessionId.isEmpty,
+              let roomID = hostContextRoomID
+        else {
+            broadcastCoordinator.clearObsHostBarSession()
+            return
+        }
+        let title = hostContextRoomTitle ?? "Trade Room"
+        broadcastCoordinator.setObsHostBarSession(roomID: roomID, roomTitle: title)
     }
 
     /// Reconcile room state from server (existing preparing/public session, or idle).
     func refreshFromServer(roomID: RoomID) async {
+        noteHostContext(roomID: roomID, roomTitle: hostContextRoomTitle)
         guard let client else {
             errorMessage = "Sign in to manage streams."
             return
@@ -89,6 +130,7 @@ final class TradeRoomObsBroadcastController {
 
     /// Ensure a private OBS session exists and this device is connected for preview + credentials.
     func ensurePrivateObsSession(roomID: RoomID) async {
+        noteHostContext(roomID: roomID, roomTitle: hostContextRoomTitle)
         guard let client else {
             errorMessage = "Sign in to manage streams."
             return
@@ -100,7 +142,11 @@ final class TradeRoomObsBroadcastController {
 
         errorMessage = nil
         isBusy = true
-        defer { isBusy = false }
+        isEnsuringPrivateObsSession = true
+        defer {
+            isBusy = false
+            isEnsuringPrivateObsSession = false
+        }
 
         do {
             #if DEBUG
@@ -110,6 +156,10 @@ final class TradeRoomObsBroadcastController {
             await applyStatus(status, roomID: roomID)
 
             if phase == .livePublic {
+                if let sid = broadcastSessionId {
+                    startObsPolling(roomID: roomID, sessionId: sid)
+                }
+                syncObsHostBarSession()
                 return
             }
 
@@ -237,8 +287,12 @@ final class TradeRoomObsBroadcastController {
     }
 
     func endStream(roomID: RoomID) async {
-        guard let client, let sessionId = broadcastSessionId else {
-            resetForDismiss()
+        guard let client else { return }
+        if broadcastSessionId == nil {
+            await refreshFromServer(roomID: roomID)
+        }
+        guard let sessionId = broadcastSessionId else {
+            errorMessage = "No active stream session to end."
             return
         }
         errorMessage = nil
@@ -247,6 +301,7 @@ final class TradeRoomObsBroadcastController {
         do {
             try await client.stopBroadcast(roomID: roomID, sessionId: sessionId)
             await broadcastCoordinator.disconnectObsHostPreview()
+            await broadcastCoordinator.leaveWatch()
             await broadcastCoordinator.refreshStatus(roomID: roomID)
             resetForDismiss()
         } catch {
@@ -286,6 +341,7 @@ final class TradeRoomObsBroadcastController {
             streamKey = nil
             obsPollTask?.cancel()
             obsPollTask = nil
+            syncObsHostBarSession()
             await broadcastCoordinator.disconnectObsHostPreview()
             return
         }
@@ -298,6 +354,7 @@ final class TradeRoomObsBroadcastController {
             streamKeyRevealed = false
             obsPollTask?.cancel()
             obsPollTask = nil
+            syncObsHostBarSession()
             await broadcastCoordinator.disconnectObsHostPreview()
             await broadcastCoordinator.refreshStatus(roomID: roomID)
             return
@@ -318,6 +375,7 @@ final class TradeRoomObsBroadcastController {
             streamKeyRevealed = false
             obsPollTask?.cancel()
             obsPollTask = nil
+            syncObsHostBarSession()
             await broadcastCoordinator.disconnectObsHostPreview()
             if errorMessage == nil {
                 errorMessage = "Another host is already preparing a stream for this room."
@@ -332,6 +390,7 @@ final class TradeRoomObsBroadcastController {
             phase = .preparing
         } else {
             phase = .idle
+            syncObsHostBarSession()
             await broadcastCoordinator.disconnectObsHostPreview()
         }
     }

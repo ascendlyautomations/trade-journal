@@ -24,6 +24,7 @@ import {
 import { getBroadcastPublisherCredentials } from "@/lib/livekit/client/tradeRoomBroadcastPublisherLifecycle.ts"
 import { tradeRoomBroadcastGlobalChromeVisible } from "@/lib/livekit/client/tradeRoomBroadcastGlobalChromeVisibility.ts"
 import TradeRoomBroadcastHostSidebar from "./TradeRoomBroadcastHostSidebar.tsx"
+import TradeRoomBroadcastStudioShell from "./TradeRoomBroadcastStudioShell.tsx"
 import TradeRoomBroadcastViewerStudioChrome from "./TradeRoomBroadcastViewerStudioChrome.tsx"
 import TradeRoomBroadcastScreenOverlayControls from "./TradeRoomBroadcastScreenOverlayControls.tsx"
 import TradeRoomBroadcastShareScreenControls from "./TradeRoomBroadcastShareScreenControls.tsx"
@@ -33,9 +34,12 @@ import {
   moderationUiCanActOnMember,
   subscribeTradeRoomLiveModerationUiContext,
 } from "@/lib/livekit/client/tradeRoomLiveModerationUiContext.ts"
+import { tradeRoomBroadcastMiniPanelPosition } from "@/lib/livekit/client/tradeRoomBroadcastMiniPlayerLayout.ts"
+import { presentTradeRoomBroadcastStudio } from "@/lib/livekit/client/tradeRoomBroadcastStudioNavigation.ts"
 
 type Props = {
   accessToken: string | null
+  voiceSessionActive?: boolean
 }
 
 function connectionHeadline(state: ConnectionState): string {
@@ -54,10 +58,10 @@ function connectionHeadline(state: ConnectionState): string {
   }
 }
 
-const miniPanelPosition =
-  "fixed right-[max(0.5rem,env(safe-area-inset-right))] z-[9990] pointer-events-auto max-md:bottom-[calc(var(--app-tab-bar-offset,0px)+0.5rem)] md:bottom-[max(0.75rem,env(safe-area-inset-bottom))]"
-
-export default function TradeRoomBroadcastGlobalChrome({ accessToken }: Props) {
+export default function TradeRoomBroadcastGlobalChrome({
+  accessToken,
+  voiceSessionActive = false,
+}: Props) {
   const { user, profile, loading: profileLoading } = useUserProfile()
   const broadcast = useTradeRoomBroadcast()
   const moderationCtx = useSyncExternalStore(
@@ -140,13 +144,19 @@ export default function TradeRoomBroadcastGlobalChrome({ accessToken }: Props) {
         viewerUserId={user?.id ?? null}
         viewerDisplayName={chatDisplayName}
         viewerAvatarUrl={chatAvatarUrl}
-        canModerateStream={false}
+        canModerateStream={
+          moderationCtx.canModerateRoom || moderationCtx.canManageRoom
+        }
         canActOnTarget={(targetUserId) =>
           moderationUiCanActOnMember(moderationCtx, targetUserId)
         }
+        voiceSessionActive={voiceSessionActive}
       />
     )
   }
+
+  const miniPanelPosition = tradeRoomBroadcastMiniPanelPosition(voiceSessionActive)
+  const streamTitle = broadcast.roomTitle?.trim() || "Trade Room"
 
   const sessionId =
     broadcast.status.broadcastSessionId ??
@@ -288,12 +298,15 @@ export default function TradeRoomBroadcastGlobalChrome({ accessToken }: Props) {
           <TradeRoomBroadcastShareScreenControls compact className="mb-2 border-0 bg-transparent p-0" />
         </div>
         <div className="flex flex-wrap items-center gap-2 border-t border-white/10 bg-zinc-950/95 px-2 py-2">
+          <p className="min-w-0 flex-1 truncate text-[11px] font-medium text-white/90">
+            {streamTitle}
+          </p>
           <span className="text-[10px] text-white/50">{connLabel}</span>
           <span className="text-[10px] text-white/50">{elapsedDisplay}</span>
           <button
             type="button"
-            className="rounded-md bg-emerald-700 px-2 py-1 text-xs text-white"
-            onClick={() => setTradeRoomBroadcastStudioPresentation("studio")}
+            className="rounded-md bg-emerald-700 px-2 py-1 text-xs font-semibold text-white"
+            onClick={() => presentTradeRoomBroadcastStudio()}
           >
             Expand
           </button>
@@ -350,17 +363,18 @@ export default function TradeRoomBroadcastGlobalChrome({ accessToken }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-[9000] flex flex-col bg-zinc-950 text-white">
-      <header className="flex shrink-0 items-center gap-3 border-b border-white/10 px-4 py-3">
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{broadcast.roomTitle ?? "Trade Room"}</p>
-          <div className="flex items-center gap-2 text-xs text-white/70">
-            <span className="rounded bg-red-600 px-1.5 py-0.5 font-bold text-white">LIVE</span>
-            <span>{elapsedDisplay}</span>
-            <span>{broadcast.localViewerCount} watching</span>
-            <span className="text-white/50">{connLabel}</span>
-          </div>
-        </div>
+    <TradeRoomBroadcastStudioShell
+      mode="host"
+      title={broadcast.roomTitle ?? "Trade Room"}
+      headerMeta={
+        <>
+          <span className="rounded bg-red-600 px-1.5 py-0.5 font-bold text-white">LIVE</span>
+          <span>{elapsedDisplay}</span>
+          <span>{broadcast.localViewerCount} watching</span>
+          <span className="text-white/50">{connLabel}</span>
+        </>
+      }
+      headerActions={
         <button
           type="button"
           className="rounded-lg border border-white/15 p-2"
@@ -369,64 +383,69 @@ export default function TradeRoomBroadcastGlobalChrome({ accessToken }: Props) {
         >
           <Minimize2 size={18} />
         </button>
-      </header>
-
-      <div className="flex min-h-0 flex-1 flex-col p-3">
-        <div className="flex min-h-0 flex-1 gap-3">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {streamControls}
-            <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl bg-black">
-              <video ref={bindPreview} className="h-full w-full object-contain" autoPlay muted playsInline />
+      }
+      videoColumnPrefix={streamControls}
+      video={
+        <video
+          ref={bindPreview}
+          className="h-full w-full object-contain"
+          autoPlay
+          muted
+          playsInline
+        />
+      }
+      sidebar={
+        accessToken ? (
+          <TradeRoomBroadcastHostSidebar
+            accessToken={accessToken}
+            className="h-full min-h-0"
+            isBroadcaster
+            canModerateStream
+            canActOnTarget={(targetUserId) =>
+              moderationUiCanActOnMember(moderationCtx, targetUserId)
+            }
+            canModerateLiveParticipants
+            chat={{
+              userId: chatUserId,
+              displayName: chatDisplayName,
+              avatarUrl: chatAvatarUrl,
+              disabled: Boolean(profileLoading && !chatUserId),
+              authLoading: profileLoading && !chatUserId,
+            }}
+            onModerationMessage={postModerationChatLine}
+          />
+        ) : null
+      }
+      confirmDialog={
+        confirmEnd ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/70 p-4">
+            <div className="max-w-sm rounded-xl bg-zinc-900 p-4">
+              <h2 className="text-lg font-semibold">End stream?</h2>
+              <p className="mt-2 text-sm text-white/70">
+                Ends the server session even if LiveKit is disconnected.
+              </p>
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg px-3 py-2 text-sm"
+                  onClick={() => setConfirmEnd(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={broadcast.isBusy}
+                  className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold disabled:opacity-60"
+                  onClick={() => void endStream()}
+                >
+                  End stream
+                </button>
+              </div>
             </div>
           </div>
-
-          {accessToken ? (
-            <TradeRoomBroadcastHostSidebar
-              accessToken={accessToken}
-              className="h-full min-h-0 w-[min(380px,38vw)] shrink-0"
-              isBroadcaster
-              canModerateStream
-              canActOnTarget={(targetUserId) =>
-                moderationUiCanActOnMember(moderationCtx, targetUserId)
-              }
-              canModerateLiveParticipants
-              chat={{
-                userId: chatUserId,
-                displayName: chatDisplayName,
-                avatarUrl: chatAvatarUrl,
-                disabled: Boolean(profileLoading && !chatUserId),
-                authLoading: profileLoading && !chatUserId,
-              }}
-              onModerationMessage={postModerationChatLine}
-            />
-          ) : null}
-        </div>
-      </div>
-
-      {confirmEnd ? (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/70 p-4">
-          <div className="max-w-sm rounded-xl bg-zinc-900 p-4">
-            <h2 className="text-lg font-semibold">End stream?</h2>
-            <p className="mt-2 text-sm text-white/70">
-              Ends the server session even if LiveKit is disconnected.
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button type="button" className="rounded-lg px-3 py-2 text-sm" onClick={() => setConfirmEnd(false)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={broadcast.isBusy}
-                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold disabled:opacity-60"
-                onClick={() => void endStream()}
-              >
-                End stream
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
+        ) : null
+      }
+    />
   )
 }
 

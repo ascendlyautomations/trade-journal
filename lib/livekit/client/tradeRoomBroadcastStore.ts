@@ -11,9 +11,14 @@ import { createExternalStoreSnapshotCache } from "./externalStoreSnapshot.ts"
 import { classifyViewerBroadcastDisconnect } from "./tradeRoomBroadcastViewerDisconnect.ts"
 import { runSingleFlightByKey } from "./runSingleFlightByKey.ts"
 import {
+  broadcastCaptureErrorMessage,
   broadcastStartErrorMessage,
   BroadcastNoActiveStreamError,
 } from "./tradeRoomBroadcastErrors.ts"
+import {
+  assertTradeRoomBroadcastCapturePreflight,
+  isRecoverableBroadcastCaptureError,
+} from "./tradeRoomBroadcastCapturePermissions.ts"
 import {
   getBroadcastPublisherCredentials,
   setBroadcastPublisherCredentials,
@@ -2156,6 +2161,13 @@ export async function startTradeRoomBroadcast(options: {
     }
     generalVoiceOverlapWarning = generalVoiceWarningIfNeeded()
 
+    const setupVideoSource = options.setup.videoSource
+    if (setupVideoSource !== "obs") {
+      await assertTradeRoomBroadcastCapturePreflight(setupVideoSource, {
+        includeMicrophone: options.setup.enableBroadcasterMic,
+      })
+    }
+
     const start = await options.fetchStart()
     const isObsSession = start.videoSource === "obs"
     const startPublicLive =
@@ -2290,6 +2302,7 @@ export async function startTradeRoomBroadcast(options: {
         )
       }
 
+      let localPub: ReturnType<typeof findLocalBroadcastVideoPublication>
       try {
         if (start.videoSource === "camera") {
           await nextRoom.localParticipant.setCameraEnabled(true, {
@@ -2302,6 +2315,17 @@ export async function startTradeRoomBroadcast(options: {
             surfaceSwitching: "include",
           })
         }
+        localPub = findLocalBroadcastVideoPublication(
+          nextRoom,
+          start.videoSource
+        )
+        if (!localPub?.track) {
+          throw new Error(
+            start.videoSource === "screen"
+              ? "Screen share was cancelled or no video track was published."
+              : "Camera track was not published."
+          )
+        }
       } catch (videoErr) {
         const captureFailedAt = "browser getUserMedia (before LiveKit publish)"
         logBroadcast("broadcaster video publish failed", {
@@ -2313,62 +2337,70 @@ export async function startTradeRoomBroadcast(options: {
             videoErr instanceof Error ? videoErr.message : String(videoErr),
           captureFailedAt,
         })
-        const userMessage = broadcastStartErrorMessage(videoErr)
-        error = userMessage
-        broadcasterPreviewError = userMessage
-        studioPresentation = "hidden"
-        emit()
-        await options.fetchStop(start.broadcastSessionId).catch(() => {})
-        await teardownBroadcastRoom()
-        throw videoErr
+        const userMessage = broadcastCaptureErrorMessage(
+          videoErr,
+          start.videoSource
+        )
+        if (isRecoverableBroadcastCaptureError(videoErr)) {
+          publisherCaptureDegraded = true
+          broadcasterPreviewError = userMessage
+          error = null
+          studioPresentation =
+            start.videoSource === "camera" ? "studio" : "mini"
+          emit()
+        } else {
+          error = userMessage
+          broadcasterPreviewError = userMessage
+          studioPresentation = "hidden"
+          emit()
+          await options.fetchStop(start.broadcastSessionId).catch(() => {})
+          await teardownBroadcastRoom()
+          throw videoErr
+        }
+        localPub = undefined
       }
 
-      const localPub = findLocalBroadcastVideoPublication(
-        nextRoom,
-        start.videoSource
-      )
-      if (!localPub?.track) {
-        const reason =
-          start.videoSource === "screen"
-            ? "Screen share was cancelled or no video track was published."
-            : "Camera track was not published. Check browser camera permission."
-        logBroadcast("broadcaster missing local video publication", {
+      if (localPub?.track) {
+
+        if (isWebcamGoLive) {
+          localPreviewCleanup?.()
+          localPreviewCleanup = registerLocalBroadcastPreviewHandlers(
+            nextRoom,
+            () => broadcasterPreviewElement,
+            start.videoSource
+          )
+          studioPresentation = "studio"
+        }
+
+        logBroadcast("broadcaster local video published", {
           roomId: options.roomId,
-          reason,
-          videoSource: start.videoSource,
+          trackSource: String(localPub.source),
+          trackSid: localPub.trackSid,
         })
-        error = reason
-        broadcasterPreviewError = reason
-        studioPresentation = "hidden"
-        emit()
-        await options.fetchStop(start.broadcastSessionId).catch(() => {})
-        await teardownBroadcastRoom()
-        throw new Error(reason)
-      }
 
-      if (isWebcamGoLive) {
-        localPreviewCleanup?.()
-        localPreviewCleanup = registerLocalBroadcastPreviewHandlers(
-          nextRoom,
-          () => broadcasterPreviewElement,
-          start.videoSource
-        )
-        studioPresentation = "studio"
-      }
+        if (broadcasterPreviewElement) {
+          const preview = syncLocalBroadcastPreviewToElement(
+            nextRoom,
+            broadcasterPreviewElement,
+            start.videoSource
+          )
+          broadcasterPreviewError = preview.ok ? null : preview.reason
+        }
 
-      logBroadcast("broadcaster local video published", {
-        roomId: options.roomId,
-        trackSource: String(localPub.source),
-        trackSid: localPub.trackSid,
-      })
-
-      if (broadcasterPreviewElement) {
-        const preview = syncLocalBroadcastPreviewToElement(
-          nextRoom,
-          broadcasterPreviewElement,
-          start.videoSource
-        )
-        broadcasterPreviewError = preview.ok ? null : preview.reason
+        const localVideo = localPub.track
+        localVideo?.mediaStreamTrack.addEventListener("ended", () => {
+          publisherCaptureDegraded = true
+          const endedMsg =
+            start.videoSource === "screen"
+              ? "Screen sharing stopped. Choose Retry to share again, or End stream."
+              : "Camera stopped. Choose Retry or End stream."
+          broadcasterPreviewError = endedMsg
+          error = null
+          if (studioPresentation === "hidden") {
+            studioPresentation = "mini"
+          }
+          emit()
+        })
       }
 
       if (options.setup.enableBroadcasterMic) {
@@ -2381,21 +2413,6 @@ export async function startTradeRoomBroadcast(options: {
           console.warn("[broadcast] mic publish failed", micErr)
         }
       }
-
-      const localVideo = localPub.track
-      localVideo?.mediaStreamTrack.addEventListener("ended", () => {
-        publisherCaptureDegraded = true
-        const endedMsg =
-          start.videoSource === "screen"
-            ? "Screen sharing stopped. Choose Retry to share again, or End stream."
-            : "Camera stopped. Choose Retry or End stream."
-        broadcasterPreviewError = endedMsg
-        error = null
-        if (studioPresentation === "hidden") {
-          studioPresentation = "mini"
-        }
-        emit()
-      })
     }
 
     if (options.publisherAccessToken) {
@@ -2558,6 +2575,10 @@ async function connectBroadcastViewer(options: {
 
   if (viewerAccessToken) {
     setBroadcastInteractivePollDemand("viewer-session", true, viewerAccessToken)
+  }
+
+  if (!options.asConversation) {
+    studioPresentation = "studio"
   }
 
   connectionState = nextRoom.state
@@ -2824,16 +2845,21 @@ export async function retryTradeRoomBroadcasterCapture(): Promise<void> {
   error = null
   emit()
   try {
+    await assertTradeRoomBroadcastCapturePreflight(source, {
+      includeMicrophone: source === "camera",
+    })
     if (source === "camera") {
       await broadcastRoom.localParticipant.setCameraEnabled(true, {
         resolution: { width: 1280, height: 720, frameRate: 24 },
       })
     } else {
-      await broadcastRoom.localParticipant.setScreenShareEnabled(true, {
-        audio: false,
-        selfBrowserSurface: "include",
-        surfaceSwitching: "include",
-      })
+      await releaseBrowserScreenShareCapture(broadcastRoom, {
+        stopDisplayCapture: true,
+      }).catch(() => {})
+      await broadcastRoom.localParticipant.setScreenShareEnabled(
+        true,
+        BROWSER_SCREEN_SHARE_OPTS
+      )
     }
     const localPub = findLocalBroadcastVideoPublication(broadcastRoom, source)
     if (!localPub?.track) {
@@ -2900,10 +2926,9 @@ export async function retryTradeRoomBroadcasterCapture(): Promise<void> {
     publisherCaptureDegraded = false
     connectionState = broadcastRoom.state
   } catch (err) {
-    const msg =
-      err instanceof Error ? err.message : "Could not restart capture."
+    const msg = broadcastCaptureErrorMessage(err, source)
     broadcasterPreviewError = msg
-    error = msg
+    error = null
     publisherCaptureDegraded = true
   } finally {
     isBusy = false
@@ -3130,53 +3155,61 @@ export async function switchTradeRoomBroadcastScreenShareSurface(): Promise<void
   }
   if (screenShareWhileLiveBusy || screenCameraOverlayBusy) return
 
-  const hadOverlay = getScreenOverlaySessionActive()
+  const room = broadcastRoom
   screenShareWhileLiveBusy = true
   screenShareWhileLiveError = null
   emit()
   try {
-    if (hadOverlay) {
-      await disableScreenCameraOverlay(broadcastRoom)
-      screenCameraOverlayEnabled = false
-      screenCameraOverlayCameraVisible = false
-    }
+    // Browsers do not re-open the display picker while capture is still active.
+    // Same sequence as Stop sharing → Share screen: release capture, then publish.
+    await releaseBrowserScreenShareCapture(room, { stopDisplayCapture: true })
+    screenCameraOverlayEnabled = false
+    screenCameraOverlayCameraVisible = false
     try {
-      await broadcastRoom.localParticipant.setScreenShareEnabled(
-        true,
-        BROWSER_SCREEN_SHARE_OPTS
-      )
+      await promptBrowserScreenShareWithOverlay(room)
     } catch (err) {
-      if (isBroadcastScreenShareCancelled(err)) return
+      if (isBroadcastScreenShareCancelled(err)) {
+        preferredVideoSource = "screen"
+        status = { ...status, videoSource: "screen" }
+        publisherCaptureDegraded = true
+        broadcasterPreviewError =
+          "Screen share not selected. Use Change share or Retry to pick a source."
+        return
+      }
       throw err
     }
-    const screenPub = findLocalBroadcastVideoPublication(broadcastRoom, "screen")
+    const screenPub = findLocalBroadcastVideoPublication(room, "screen")
     if (!screenPub?.track) {
-      throw new Error("Screen share was cancelled or no video track was published.")
+      preferredVideoSource = "screen"
+      status = { ...status, videoSource: "screen" }
+      publisherCaptureDegraded = true
+      broadcasterPreviewError =
+        "Screen share not selected. Use Change share or Retry to pick a source."
+      return
     }
-    if (hadOverlay || screenCameraOverlayEnabled) {
-      await enableScreenCameraOverlay(
-        broadcastRoom,
-        screenCameraOverlayPosition
-      )
-      try {
-        await broadcastRoom.localParticipant.setCameraEnabled(false)
-      } catch {
-        // ignore
-      }
-      screenCameraOverlayEnabled = true
-      screenCameraOverlayCameraVisible = true
-      const rawScreen = getScreenOverlayRawScreenTrack()
-      if (rawScreen) bindBroadcasterScreenShareEnded(rawScreen)
-    }
-    resyncBroadcasterPreviewAfterProgramChange()
     publisherCaptureDegraded = false
     broadcasterPreviewError = null
+    screenShareWhileLiveError = null
+    logBroadcast("browser screen share surface changed", {
+      screenTrackSid: screenPub.trackSid ?? screenPub.track?.sid ?? null,
+    })
   } catch (err) {
     if (!isBroadcastScreenShareCancelled(err)) {
       screenShareWhileLiveError =
         err instanceof Error
           ? err.message
           : "Could not change the shared screen."
+      logBroadcast("change screen share surface failed", {
+        message: screenShareWhileLiveError,
+        errorName: err instanceof Error ? err.name : typeof err,
+      })
+    } else {
+      await room.localParticipant.setScreenShareEnabled(false).catch(() => {})
+      preferredVideoSource = "screen"
+      status = { ...status, videoSource: "screen" }
+      publisherCaptureDegraded = true
+      broadcasterPreviewError =
+        "Screen share not selected. Use Change share or Retry to pick a source."
     }
   } finally {
     screenShareWhileLiveBusy = false

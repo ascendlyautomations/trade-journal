@@ -1,8 +1,8 @@
 import Foundation
 
 nonisolated enum ScorecardPlanAdherence {
-    static let minPostLossPlanTagged = 10
-    static let minTripleLossWindowPlanTagged = 5
+    static let minPostLossPlanTagged = 3
+    static let minTripleLossWindowPlanTagged = 2
 
     enum ObservationSource: String, Sendable {
         case postLoss = "post_loss"

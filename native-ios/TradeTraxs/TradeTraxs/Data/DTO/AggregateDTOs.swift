@@ -814,6 +814,7 @@ nonisolated enum MessageDTO {
         var profile_post_id: String?
         var achievement_post_id: String?
         var reel_id: String?
+        var parent_message_id: String?
         var created_at: String?
         var is_read: Bool?
         var deleted_for_everyone: Bool?

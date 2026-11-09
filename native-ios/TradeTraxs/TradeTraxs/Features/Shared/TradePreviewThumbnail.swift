@@ -13,12 +13,13 @@ struct TradePreviewThumbnail: View {
         /// Selected-trade preview — 88×88
         case preview
         /// Message-card hero — full width, capped height
-        case messageHero(maxHeight: CGFloat = 168)
+        case messageHero(maxHeight: CGFloat? = nil)
     }
 
     let trade: Trade?
     let imagePipeline: any ImagePipeline
     var size: Size = .compact
+    var layoutWidth: CGFloat? = nil
     /// Override when the caller already resolved media (e.g. hydrated message bubble).
     var referenceOverride: MediaReference?
 
@@ -29,10 +30,14 @@ struct TradePreviewThumbnail: View {
         case .preview:
             tradeImageView(side: 88, contentMode: .fill)
         case .messageHero(let maxHeight):
-            tradeImageView(
-                width: 256,
-                height: maxHeight,
-                contentMode: .fit
+            AspectFitMediaView(
+                reference: resolvedReference,
+                purpose: .tradeScreenshot,
+                imagePipeline: imagePipeline,
+                accessibilityIdentifier: "conversation.tradeHero",
+                allowsFullResolutionViewer: false,
+                maxDisplayHeightOverride: maxHeight,
+                layoutWidth: layoutWidth
             )
         }
     }

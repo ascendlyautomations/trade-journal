@@ -2,14 +2,10 @@ import Foundation
 
 nonisolated enum ScorecardReliabilitySupport {
     static func resolve(sampleSize: Int) -> ScorecardReliability {
-        if sampleSize < 5 { return .insufficient }
-        if sampleSize <= 9 { return .earlySignal }
-        if sampleSize <= 29 { return .developing }
+        if sampleSize < 3 { return .insufficient }
+        if sampleSize <= 7 { return .earlySignal }
+        if sampleSize <= 19 { return .developing }
         return .strong
-    }
-
-    static func isDevelopingOrStrong(_ reliability: ScorecardReliability) -> Bool {
-        reliability == .developing || reliability == .strong
     }
 
     static func clampScore(_ value: Double) -> Int {

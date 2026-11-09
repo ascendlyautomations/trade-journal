@@ -370,6 +370,28 @@ final class ConversationExperienceTests: XCTestCase {
         XCTAssertNotNil(viewModel.deleteErrorMessage)
     }
 
+    func testBubbleMediaLayoutCapsWidthsToContentColumn() {
+        XCTAssertEqual(
+            ConversationBubbleMediaLayout.sharedCardMaxWidth(contentColumnMax: 400),
+            ConversationBubbleMediaLayout.sharedCardBubbleMaxWidth
+        )
+        XCTAssertEqual(
+            ConversationBubbleMediaLayout.sharedCardMaxWidth(contentColumnMax: 200),
+            200
+        )
+        let bubblePadding = ExperienceSpacing.sm + 2
+        let inner = ConversationBubbleMediaLayout.sharedCardInnerWidth(
+            outerMaxWidth: 280,
+            bubbleHorizontalPadding: bubblePadding
+        )
+        XCTAssertEqual(inner, 280 - (2 * bubblePadding))
+        let photoWidth = ConversationBubbleMediaLayout.photoMaxWidth(
+            contentColumnMax: 320,
+            bubbleMaxWidth: 240
+        )
+        XCTAssertEqual(photoWidth, 240)
+    }
+
     // MARK: - Helpers
 
     private func makeViewModel(

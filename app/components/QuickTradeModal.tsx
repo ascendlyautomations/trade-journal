@@ -880,7 +880,7 @@ export default function QuickTradeModal({
               rr: parseOptionalRr(rr),
               points: parsedPoints,
               contracts: parsedContracts,
-              session: "NY",
+              session: "NY AM",
               notes: description.trim() || null,
               public_description: description.trim() || null,
               image_url: null,

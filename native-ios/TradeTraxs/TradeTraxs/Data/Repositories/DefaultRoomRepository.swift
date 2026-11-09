@@ -14,7 +14,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
 
     /// Web `lib/roomMessageSelect.ts` — explicit embed hint avoids PGRST201.
     private static let messageSelect = """
-    id,room_id,user_id,seen_by,pinned,section_id,parent_message_id,type,trade_id,content,image_url,created_at,\
+    id,room_id,user_id,seen_by,pinned,section_id,parent_message_id,type,trade_id,content,image_url,audio_url,audio_duration_ms,created_at,\
     room_message_reactions!room_message_reactions_message_room_fkey(id,message_id,user_id,reaction)
     """
 
@@ -445,6 +445,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
     func send(_ message: RoomMessage) async throws -> RoomMessage {
         // Web community inserts use `user_id` + `section_id` (active channel).
         // Trade shares match `sendTradeMessage`.
+        let parentMessageID = message.parentMessageID?.rawValue
         if let tradeID = message.attachedTradeID {
             struct TradeBody: Encodable {
                 var room_id: String
@@ -453,6 +454,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 var trade_id: String
                 var content: String
                 var section_id: String?
+                var parent_message_id: String?
             }
             let body = TradeBody(
                 room_id: message.roomID.rawValue,
@@ -460,7 +462,8 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 type: "trade",
                 trade_id: tradeID.rawValue,
                 content: "Shared a trade",
-                section_id: message.channelID?.rawValue
+                section_id: message.channelID?.rawValue,
+                parent_message_id: parentMessageID
             )
             return try await insertRoomMessage(
                 body,
@@ -478,13 +481,15 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 var type: String
                 var content: String
                 var section_id: String?
+                var parent_message_id: String?
             }
             let body = ContentShareBody(
                 room_id: message.roomID.rawValue,
                 user_id: message.senderProfileID.rawValue,
                 type: shareType,
                 content: content,
-                section_id: message.channelID?.rawValue
+                section_id: message.channelID?.rawValue,
+                parent_message_id: parentMessageID
             )
             return try await insertRoomMessage(
                 body,
@@ -501,13 +506,15 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 var type: String
                 var content: String
                 var section_id: String?
+                var parent_message_id: String?
             }
             let body = StoryShareBody(
                 room_id: message.roomID.rawValue,
                 user_id: message.senderProfileID.rawValue,
                 type: StoryShareMessageSupport.messageType,
                 content: content,
-                section_id: message.channelID?.rawValue
+                section_id: message.channelID?.rawValue,
+                parent_message_id: parentMessageID
             )
             return try await insertRoomMessage(
                 body,
@@ -527,6 +534,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 var audio_url: String
                 var audio_duration_ms: Int?
                 var section_id: String?
+                var parent_message_id: String?
             }
             let durationMs = message.media.first?.altText.flatMap { Double($0) }.map {
                 Int(($0 * 1_000).rounded())
@@ -538,7 +546,8 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 content: "",
                 audio_url: audio.id,
                 audio_duration_ms: durationMs,
-                section_id: message.channelID?.rawValue
+                section_id: message.channelID?.rawValue,
+                parent_message_id: parentMessageID
             )
             return try await insertRoomMessage(
                 body,
@@ -554,6 +563,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 var image_url: String
                 var content: String?
                 var section_id: String?
+                var parent_message_id: String?
             }
             let body = ImageBody(
                 room_id: message.roomID.rawValue,
@@ -561,7 +571,8 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 type: "image",
                 image_url: imageMedia.id,
                 content: message.body,
-                section_id: message.channelID?.rawValue
+                section_id: message.channelID?.rawValue,
+                parent_message_id: parentMessageID
             )
             return try await insertRoomMessage(
                 body,
@@ -574,6 +585,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
             var user_id: String
             var content: String
             var section_id: String?
+            var parent_message_id: String?
         }
         guard let content = message.body?.trimmingCharacters(in: .whitespacesAndNewlines),
               !content.isEmpty
@@ -584,7 +596,8 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
             room_id: message.roomID.rawValue,
             user_id: message.senderProfileID.rawValue,
             content: content,
-            section_id: message.channelID?.rawValue
+            section_id: message.channelID?.rawValue,
+            parent_message_id: parentMessageID
         )
         return try await insertRoomMessage(
             body,

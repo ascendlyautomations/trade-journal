@@ -14,6 +14,10 @@ import {
   type ProfilePublicStatsAggregate,
 } from "@/lib/profilePublicStatistics"
 import { computeTradeOutcomeStreaks } from "@/lib/userStreaksLogic"
+import {
+  TRADING_SESSION_DISPLAY_ORDER,
+  normalizeTradingSessionLabel,
+} from "@/lib/tradingSession"
 
 function profitFactorFromTrades(
   trades: Array<{ pnl?: unknown }>
@@ -229,22 +233,7 @@ export function useProfileStatistics({
 
     const sessionCounts = analyticsTrades.reduce<Record<string, number>>(
       (counts, trade) => {
-        const raw = String(trade.session ?? "").toLowerCase().trim()
-        let label: "NY" | "London" | "Asia" | null = null
-        if (raw.includes("ny") || raw.includes("new york")) label = "NY"
-        else if (
-          raw.includes("london") ||
-          raw.includes("ldn") ||
-          raw.includes("uk")
-        ) {
-          label = "London"
-        } else if (
-          raw.includes("asia") ||
-          raw.includes("asian") ||
-          raw.includes("tokyo")
-        ) {
-          label = "Asia"
-        }
+        const label = normalizeTradingSessionLabel(trade.session)
         if (label) counts[label] = (counts[label] || 0) + 1
         return counts
       },
@@ -254,8 +243,7 @@ export function useProfileStatistics({
       (sum, count) => sum + count,
       0
     )
-    const sessionBreakdown = (["NY", "London", "Asia"] as const)
-      .map((label) => {
+    const sessionBreakdown = TRADING_SESSION_DISPLAY_ORDER.map((label) => {
         const count = sessionCounts[label] || 0
         const pct = sessionTotal > 0 ? (count / sessionTotal) * 100 : 0
         return { label, count, pct }

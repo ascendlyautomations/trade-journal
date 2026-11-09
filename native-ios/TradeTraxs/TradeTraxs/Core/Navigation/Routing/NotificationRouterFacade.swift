@@ -17,6 +17,7 @@ nonisolated struct NotificationRouterFacade: Sendable {
     ) -> Bool {
         registerRoomAliasIfNeeded(notification)
         seedRoomFocusIfNeeded(notification)
+        seedConversationFocusIfNeeded(notification)
 
         guard let destination = router.destination(for: notification) else {
             AppLog.navigation.error("Notification route failed for \(notification.category.rawValue, privacy: .public)")
@@ -83,6 +84,17 @@ nonisolated struct NotificationRouterFacade: Sendable {
                 )
             }
         }
+    }
+
+    @MainActor
+    private func seedConversationFocusIfNeeded(_ notification: NotificationDestination) {
+        guard notification.category == .directMessage,
+              let conversationID = notification.conversationID
+        else { return }
+        ConversationNavigationFocusStore.shared.seed(
+            conversationID: conversationID,
+            messageID: notification.messageID ?? notification.threadID
+        )
     }
 
     private static func hrefRequestsLiveWatch(_ href: String?) -> Bool {

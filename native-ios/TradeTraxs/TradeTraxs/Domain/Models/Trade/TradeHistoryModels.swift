@@ -242,7 +242,9 @@ nonisolated enum TradeHistoryAccountModeFilter: String, CaseIterable, Identifiab
 /// Trading session filter — matches authoritative `trades.session` labels.
 nonisolated enum TradeHistorySessionFilter: String, CaseIterable, Identifiable, Hashable, Sendable {
     case all
-    case ny
+    case nyAM = "ny am"
+    case nyLunch = "ny lunch"
+    case nyPM = "ny pm"
     case london
     case asia
     case after
@@ -252,7 +254,9 @@ nonisolated enum TradeHistorySessionFilter: String, CaseIterable, Identifiable, 
     var title: String {
         switch self {
         case .all: return "All"
-        case .ny: return "NY"
+        case .nyAM: return "NY AM"
+        case .nyLunch: return "NY Lunch"
+        case .nyPM: return "NY PM"
         case .london: return "London"
         case .asia: return "Asia"
         case .after: return "After"
@@ -261,14 +265,17 @@ nonisolated enum TradeHistorySessionFilter: String, CaseIterable, Identifiable, 
 
     func matches(sessionLabel: String?) -> Bool {
         guard self != .all else { return true }
-        let normalized = (sessionLabel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return false }
+        guard let canonical = TradingSessionLabel.canonicalLabel(fromStored: sessionLabel) else {
+            return false
+        }
         switch self {
         case .all: return true
-        case .ny: return normalized.localizedCaseInsensitiveCompare("NY") == .orderedSame
-        case .london: return normalized.localizedCaseInsensitiveCompare("London") == .orderedSame
-        case .asia: return normalized.localizedCaseInsensitiveCompare("Asia") == .orderedSame
-        case .after: return normalized.localizedCaseInsensitiveCompare("After") == .orderedSame
+        case .nyAM: return canonical == "NY AM"
+        case .nyLunch: return canonical == "NY Lunch"
+        case .nyPM: return canonical == "NY PM"
+        case .london: return canonical == "London"
+        case .asia: return canonical == "Asia"
+        case .after: return canonical == "After"
         }
     }
 }

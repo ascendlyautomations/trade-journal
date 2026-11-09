@@ -80,6 +80,20 @@ nonisolated enum ImageFidelityTrace {
         return (CGSize(width: width, height: height), px)
     }
 
+    /// Neutral 4:3 placeholder height for message rows while media bytes load (same width cap as loaded image).
+    static func placeholderRowHeight(
+        containerWidthPoints: CGFloat,
+        maxHeightPoints: CGFloat,
+        screenScale: CGFloat = 1
+    ) -> CGFloat {
+        displaySize(
+            imagePixel: PixelSize(width: 4, height: 3),
+            containerWidthPoints: containerWidthPoints,
+            maxHeightPoints: maxHeightPoints,
+            screenScale: screenScale
+        ).points.height
+    }
+
     static func compare(
         sourcePixels: PixelSize,
         displayPixels: PixelSize

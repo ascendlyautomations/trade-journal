@@ -27,6 +27,7 @@ enum MessageBubbleActionMenuSupport {
         onDeleteForEveryone: (() -> Void)?,
         onManageUser: (() -> Void)? = nil,
         onReport: (() -> Void)?,
+        onReply: (() -> Void)? = nil,
         onSelectEmoji: @escaping (String) -> Void,
         onDismiss: @escaping () -> Void
     ) -> MessageBubbleActionMenu {
@@ -47,6 +48,7 @@ enum MessageBubbleActionMenuSupport {
         let deleteForEveryoneAction: (() -> Void)? = canDeleteForEveryone ? onDeleteForEveryone : nil
         let manageAction: (() -> Void)? = onManageUser
         let reportAction: (() -> Void)? = !item.isOutgoing ? onReport : nil
+        let replyAction: (() -> Void)? = item.sendState == .sent ? onReply : nil
 
         return MessageBubbleActionMenu(
             supportedEmojis: emojis,
@@ -60,6 +62,7 @@ enum MessageBubbleActionMenuSupport {
             deleteForEveryoneTitle: deleteForEveryoneTitle,
             onManageUser: manageAction,
             onReport: reportAction,
+            onReply: replyAction,
             onDismiss: onDismiss
         )
     }
@@ -71,9 +74,11 @@ enum MessageBubbleActionMenuSupport {
         canDeleteForEveryone: Bool,
         onRetry: (() -> Void)?,
         onManageUser: (() -> Void)? = nil,
-        onReport: (() -> Void)?
+        onReport: (() -> Void)?,
+        onReply: (() -> Void)? = nil
     ) -> Int {
         var count = 0
+        if item.sendState == .sent, onReply != nil { count += 1 }
         if item.copyableMessageText != nil {
             count += 1
         }

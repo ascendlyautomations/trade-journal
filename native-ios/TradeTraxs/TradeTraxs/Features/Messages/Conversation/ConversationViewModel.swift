@@ -26,6 +26,7 @@ final class ConversationViewModel {
     private(set) var title: String = "Conversation"
     private(set) var subtitle: String?
     var draft = ""
+    var replyTarget: MessageReplySupport.Target?
     var isSending = false
     /// Remote image URL already stored for an optimistic message, so retry does not upload again.
     private var uploadedOutboundImageURLs: [MessageID: String] = [:]
@@ -35,6 +36,8 @@ final class ConversationViewModel {
     var selectedMessageIDs: Set<MessageID> = []
     var showsBatchDeleteConfirmation = false
     private(set) var pendingScrollMessageID: MessageID?
+    private var pendingNotificationMessageID: MessageID?
+    private var lastAcknowledgedNavigationIntentRevision: UInt64 = 0
     private(set) var highlightedMessageID: MessageID?
     var showsDeleteConversationConfirmation = false
     var isDeletingConversation = false
@@ -66,6 +69,11 @@ final class ConversationViewModel {
     /// True while the one-time open bottom pin is active (positioning or layout settling).
     var isInitialScrollPinningBottom: Bool {
         initialScrollPhase == .positioning || initialScrollPhase == .settling
+    }
+
+    /// Push / shared-media targets should not be overridden by the initial bottom pin.
+    var shouldDeferInitialBottomPin: Bool {
+        pendingScrollMessageID != nil || pendingNotificationMessageID != nil
     }
 
     /// Structured share hydration can resize the newest bubble after first layout.
@@ -108,6 +116,7 @@ final class ConversationViewModel {
     private var sharedContentHydrationTask: Task<Void, Never>?
     private var sharedContentHydrationBacklog: [Message] = []
     private var scrollAnchorTask: Task<Void, Never>?
+    private var pendingSessionScrollRestoration: ChannelScrollRestoration?
     private let sharedMediaAnchorMaxPages = 8
 
     init(
@@ -191,6 +200,88 @@ final class ConversationViewModel {
         scrollAnchorTask = Task { [weak self] in
             await self?.anchorMessageForSharedMedia(messageID)
         }
+    }
+
+    func jumpToReplyParent(_ messageID: MessageID) {
+        navigateToMessageFromSharedMedia(messageID)
+    }
+
+    func clearReply() {
+        replyTarget = nil
+    }
+
+    func beginReply(to item: ConversationBubbleItem) {
+        guard item.sendState == .sent, !isSelectionMode else { return }
+        let profile = senderProfile(for: item.message.senderProfileID)
+        let authorName = MessageReplySupport.composerReplyAuthorName(
+            item: item,
+            viewerID: viewerID,
+            profile: profile,
+            peerProfileID: peerProfileID,
+            peerUsername: conversation?.peerUsername,
+            conversationTitle: conversation?.title
+        )
+        replyTarget = MessageReplySupport.target(from: item, authorName: authorName)
+        ExperienceHaptics.play(.selection)
+    }
+
+    func replyParentPresentation(for message: Message) -> MessageReplySupport.ParentPresentation? {
+        guard let parentID = message.replyToMessageID else { return nil }
+        if suppressedMessageIDs.contains(parentID) {
+            return MessageReplySupport.parentPresentation(
+                parentMessageID: parentID,
+                parentItem: nil,
+                senderProfile: nil,
+                viewerID: viewerID,
+                peerProfileID: peerProfileID,
+                peerUsername: conversation?.peerUsername,
+                conversationTitle: conversation?.title
+            )
+        }
+        let parentMessage = messages.first(where: { $0.id == parentID })
+        let parentItem = parentMessage.flatMap { parent in
+            bubbleItemsByID[parent.id] ?? bubbleItem(for: parent.id)
+        }
+        let parentSenderProfile = parentMessage.flatMap { message in
+            senderProfile(for: message.senderProfileID)
+        }
+        return MessageReplySupport.parentPresentation(
+            parentMessageID: parentID,
+            parentItem: parentItem,
+            senderProfile: parentSenderProfile,
+            viewerID: viewerID,
+            peerProfileID: peerProfileID,
+            peerUsername: conversation?.peerUsername,
+            conversationTitle: conversation?.title
+        )
+    }
+
+    private var bubbleItemsByID: [MessageID: ConversationBubbleItem] {
+        var map: [MessageID: ConversationBubbleItem] = [:]
+        for item in timeline {
+            if case .message(let bubble) = item {
+                map[bubble.id] = bubble
+            }
+        }
+        return map
+    }
+
+    func senderProfile(for profileID: ProfileID) -> Profile? {
+        if let peerProfile, peerProfile.id == profileID {
+            return peerProfile
+        }
+        if let peerID = peerProfileID, peerID == profileID, let peerProfile {
+            return peerProfile
+        }
+        if let cached = detailCache.profile(id: profileID) {
+            return cached
+        }
+        if profileID.rawValue.hasPrefix("dev."),
+           let fixture = FollowListFixtures.profile(id: profileID)
+        {
+            return fixture
+        }
+        return nil
     }
 
     var isMuted: Bool {
@@ -286,6 +377,24 @@ final class ConversationViewModel {
     func loadIfNeeded() {
         guard loadTask == nil else { return }
         loadTask = Task { await performInitialLoad() }
+    }
+
+    func applyNavigationIntentIfNeeded() {
+        guard phase == .loaded else { return }
+        guard let intent = ConversationNavigationFocusStore.shared.pendingIntent(for: conversationID) else {
+            return
+        }
+        guard intent.revision > lastAcknowledgedNavigationIntentRevision else { return }
+
+        pendingNotificationMessageID = intent.messageID
+        ConversationNavigationFocusStore.shared.acknowledgeIntent(
+            for: conversationID,
+            revision: intent.revision
+        )
+        lastAcknowledgedNavigationIntentRevision = intent.revision
+
+        guard let target = intent.messageID else { return }
+        Task { await anchorNotificationMessage(target) }
     }
 
     func retryLoad() {
@@ -460,6 +569,7 @@ final class ConversationViewModel {
     func stopRealtime() {
         MessageRealtimeLog.unsubscribed(conversationID: conversationID, reason: "conversation-disappear")
         syncThreadSessionCache(context: "leave")
+        captureScrollRestorationOnClose()
         VoiceMessagePlaybackController.shared.stopAll()
         stopOutboundSharedContentObserver()
         realtimeTask?.cancel()
@@ -487,16 +597,26 @@ final class ConversationViewModel {
         guard !rejectGuestMutationIfNeeded() else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isSending else { return }
+        let replyTo = replyTarget?.messageID
         draft = ""
-        await send(body: text, imageURL: nil, localImageData: nil)
+        if replyTo != nil { clearReply() }
+        await send(body: text, imageURL: nil, localImageData: nil, replyToMessageID: replyTo)
     }
 
     func sendImage(_ image: UIImage) async {
         guard !rejectGuestMutationIfNeeded() else { return }
         guard !isMessagingBlocked else { return }
         guard let data = MediaImagePreparation.chatJPEGData(from: image) else { return }
-        await send(body: draft.trimmingCharacters(in: .whitespacesAndNewlines), imageURL: nil, localImageData: data)
+        let caption = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let replyTo = replyTarget?.messageID
         draft = ""
+        if replyTo != nil { clearReply() }
+        await send(
+            body: caption,
+            imageURL: nil,
+            localImageData: data,
+            replyToMessageID: replyTo
+        )
     }
 
     func sendVoice(localFileURL: URL, duration: TimeInterval) async {
@@ -548,6 +668,8 @@ final class ConversationViewModel {
     func sendTradeSummary(_ summary: TradeSummary) async {
         guard !rejectGuestMutationIfNeeded() else { return }
         guard let viewerID, !isSending else { return }
+        let replyTo = replyTarget?.messageID
+        if replyTo != nil { clearReply() }
         showsTradePicker = false
         sharedTrades[summary.id] = TradeSummaryMapper.previewTrade(from: summary)
         detailCache.seedPresentationSeed(summary)
@@ -568,7 +690,7 @@ final class ConversationViewModel {
                     tradeID: summary.id
                 ),
             ],
-            replyToMessageID: nil,
+            replyToMessageID: replyTo,
             createdAt: .now,
             isReadByViewer: true
         )
@@ -664,7 +786,7 @@ final class ConversationViewModel {
     }
 
     func authorProfile(for profileID: ProfileID) -> Profile? {
-        detailCache.profile(id: profileID)
+        senderProfile(for: profileID)
     }
 
     func retry(_ item: ConversationBubbleItem) async {
@@ -678,7 +800,8 @@ final class ConversationViewModel {
                 tempID: tempID,
                 body: item.text ?? "",
                 imageURL: uploadedURL,
-                localImageData: nil
+                localImageData: nil,
+                replyToMessageID: item.message.replyToMessageID
             )
             return
         }
@@ -727,7 +850,12 @@ final class ConversationViewModel {
         }
         removeMessage(id: item.id)
         sendStates.removeValue(forKey: item.id)
-        await send(body: body, imageURL: remoteImageURL, localImageData: nil)
+        await send(
+            body: body,
+            imageURL: remoteImageURL,
+            localImageData: nil,
+            replyToMessageID: item.message.replyToMessageID
+        )
     }
 
     private func retryableRemoteImageURL(for item: ConversationBubbleItem) -> String? {
@@ -919,6 +1047,39 @@ final class ConversationViewModel {
         await confirmDeleteSelectedForMe()
     }
 
+    private func anchorNotificationMessage(_ target: MessageID) async {
+        if messages.contains(where: { $0.id == target }) {
+            pendingNotificationMessageID = nil
+            applyMessageHighlight(target)
+            return
+        }
+
+        if let fetched = try? await messagesRepo.message(id: target, in: conversationID) {
+            commitMessages([fetched], recordScrollEvents: false)
+            if messages.contains(where: { $0.id == target }) {
+                pendingNotificationMessageID = nil
+                applyMessageHighlight(target)
+                return
+            }
+        }
+
+        var pages = 0
+        while hasMoreOlder, pages < sharedMediaAnchorMaxPages {
+            pages += 1
+            await loadOlderIfNeeded()
+            if messages.contains(where: { $0.id == target }) {
+                pendingNotificationMessageID = nil
+                applyMessageHighlight(target)
+                return
+            }
+        }
+
+        if messages.contains(where: { $0.id == target }) {
+            pendingNotificationMessageID = nil
+            applyMessageHighlight(target)
+        }
+    }
+
     private func anchorMessageForSharedMedia(_ target: MessageID) async {
         if messages.contains(where: { $0.id == target }) {
             applyMessageHighlight(target)
@@ -951,6 +1112,10 @@ final class ConversationViewModel {
     private func applyMessageHighlight(_ target: MessageID) {
         pendingScrollMessageID = target
         highlightedMessageID = target
+        if !isInitialScrollConfirmed {
+            initialScrollPhase = .confirmed
+            scrollCoordinator.completeInitialScrollPosition(conversationID: conversationID)
+        }
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 2_400_000_000)
             if highlightedMessageID == target {
@@ -1196,6 +1361,15 @@ final class ConversationViewModel {
         let current = await session.currentUserID
         let viewer = current.map { ProfileID($0.rawValue) }
         viewerID = viewer
+        if let viewer, pendingSessionScrollRestoration == nil {
+            let cacheKey = ConversationThreadSessionStore.cacheKey(
+                viewerID: viewer,
+                conversationID: conversationID
+            )
+            pendingSessionScrollRestoration = ConversationThreadSessionStore.shared
+                .restore(key: cacheKey)?
+                .scrollRestoration
+        }
         let demoInbox = viewer.map(DemoExperienceSupport.usesExploreDemoInbox) == true
         if !demoInbox {
             startRealtime()
@@ -1226,6 +1400,7 @@ final class ConversationViewModel {
                 phase = .loaded
             }
             startOutboundSharedContentObserver()
+            applyNavigationIntentIfNeeded()
         } catch ConversationThreadBootstrapLoader.LoaderError.rpcUnavailable {
             do {
                 try await loadFromRepository()
@@ -1381,6 +1556,7 @@ final class ConversationViewModel {
                 cursor: cached.nextCursor
             )
 #endif
+            pendingSessionScrollRestoration = cached.scrollRestoration
             applyBootstrapApplied(
                 ConversationThreadBootstrapApplier.Applied(
                     conversation: cached.conversation,
@@ -1549,6 +1725,7 @@ final class ConversationViewModel {
 #endif
 
         if result.cacheHit {
+            pendingSessionScrollRestoration = cached?.scrollRestoration
             applyBootstrapApplied(result.applied)
             Task { [weak self] in
                 self?.hydrateSharedContent(from: result.applied.messages)
@@ -1585,6 +1762,7 @@ final class ConversationViewModel {
             count: cached.messages.count
         )
 #endif
+        pendingSessionScrollRestoration = cached.scrollRestoration
         applyBootstrapApplied(
             ConversationThreadBootstrapApplier.Applied(
                 conversation: cached.conversation,
@@ -1651,6 +1829,10 @@ final class ConversationViewModel {
         } else {
             applyBootstrapMessages(applied.messages)
             notifyScrollContentApplied(source: .bootstrapApplied)
+            if loadTask != nil {
+                applyScrollRestorationIfNeeded(scrollRestoration: pendingSessionScrollRestoration)
+                pendingSessionScrollRestoration = nil
+            }
         }
         nextOlderCursor = applied.nextCursor
         hasMoreOlder = applied.hasMoreMessages
@@ -1967,6 +2149,44 @@ final class ConversationViewModel {
     }
 
     /// Sole write path for thread rows — web `mergeMessages` semantics.
+    private func scheduleSenderHydration(for messages: [Message]) {
+        guard let viewerID else { return }
+        guard !ConversationThreadSupport.isLocalDevelopment(viewerID) else { return }
+        Task { [weak self] in
+            await self?.hydrateMessageSenders(for: messages)
+        }
+    }
+
+    private func hydrateMessageSenders(for messages: [Message]) async {
+        let unique = Array(Set(messages.map(\.senderProfileID)))
+        var missing: [ProfileID] = []
+        for id in unique {
+            if senderProfile(for: id) != nil { continue }
+            missing.append(id)
+        }
+        guard !missing.isEmpty else { return }
+        do {
+            let fetched = try await SessionProfileStore.shared.profiles(
+                ids: missing,
+                detailCache: detailCache,
+                repository: profiles
+            )
+            var didUpdatePeer = false
+            for profile in fetched {
+                detailCache.seed(profile)
+                if profile.id == peerProfileID {
+                    peerProfile = profile
+                    didUpdatePeer = true
+                }
+            }
+            if didUpdatePeer || !fetched.isEmpty {
+                self.messages = messages
+            }
+        } catch {
+            return
+        }
+    }
+
     private func commitMessages(_ incoming: [Message], recordScrollEvents: Bool = true) {
         let previousIDs = Set(messages.map(\.id))
         let previousTempIDs = Set(
@@ -1985,6 +2205,7 @@ final class ConversationViewModel {
             sendStates.removeValue(forKey: tempID)
         }
         syncThreadSessionCache(context: "commit")
+        scheduleSenderHydration(for: messages)
         guard recordScrollEvents else { return }
         recordIncomingScrollEvents(incoming: incoming, previousIDs: previousIDs)
     }
@@ -2014,6 +2235,49 @@ final class ConversationViewModel {
             .cacheApplied(newestMessageID: newestMessageID, isEmpty: messages.isEmpty)
         }
         scrollCoordinator.handle(event, conversationID: conversationID)
+    }
+
+    private func captureScrollRestorationOnClose() {
+        guard BackendV2FeatureFlags.isEnabled(.messageThreads),
+              let viewerID
+        else { return }
+        let key = ConversationThreadSessionStore.cacheKey(
+            viewerID: viewerID,
+            conversationID: conversationID
+        )
+        guard var snapshot = ConversationThreadSessionStore.shared.restore(key: key) else { return }
+
+        guard isInitialScrollConfirmed else {
+            snapshot.scrollRestoration = .pinToBottomOnOpen
+            ConversationThreadSessionStore.shared.save(snapshot)
+            return
+        }
+
+        switch scrollCoordinator.mode {
+        case .paginationAnchorPending(let anchor):
+            snapshot.scrollRestoration = .preserveReadingHistory(anchorMessageID: anchor)
+        case .readingHistory:
+            if let anchor = messages.first?.id {
+                snapshot.scrollRestoration = .preserveReadingHistory(anchorMessageID: anchor)
+            } else {
+                snapshot.scrollRestoration = .pinToBottomOnOpen
+            }
+        default:
+            snapshot.scrollRestoration = .pinToBottomOnOpen
+        }
+        ConversationThreadSessionStore.shared.save(snapshot)
+    }
+
+    private func applyScrollRestorationIfNeeded(scrollRestoration: ChannelScrollRestoration?) {
+        guard !shouldDeferInitialBottomPin else { return }
+        guard case .preserveReadingHistory(let anchor) = scrollRestoration else { return }
+        guard messages.contains(where: { $0.id == anchor }) else { return }
+        initialScrollPhase = .confirmed
+        scrollCoordinator.restoreReadingHistory(
+            anchorMessageID: anchor,
+            newestMessageID: newestMessageID,
+            conversationID: conversationID
+        )
     }
 
     private func syncThreadSessionCache(context: String) {
@@ -2359,6 +2623,8 @@ final class ConversationViewModel {
 
     private func sendVoice(data: Data, duration: TimeInterval) async {
         guard let viewerID else { return }
+        let replyTo = replyTarget?.messageID
+        if replyTo != nil { clearReply() }
         isSending = true
         defer { isSending = false }
 
@@ -2377,7 +2643,7 @@ final class ConversationViewModel {
                     durationSeconds: duration
                 ),
             ],
-            replyToMessageID: nil,
+            replyToMessageID: replyTo,
             createdAt: .now,
             isReadByViewer: true
         )
@@ -2436,7 +2702,7 @@ final class ConversationViewModel {
                 kind: .voice,
                 body: nil,
                 attachments: updated.attachments,
-                replyToMessageID: nil,
+                replyToMessageID: replyTo,
                 createdAt: .now,
                 isReadByViewer: true
             )
@@ -2464,7 +2730,12 @@ final class ConversationViewModel {
         return true
     }
 
-    private func send(body: String, imageURL: String?, localImageData: Data?) async {
+    private func send(
+        body: String,
+        imageURL: String?,
+        localImageData: Data?,
+        replyToMessageID: MessageID? = nil
+    ) async {
         guard !rejectGuestMutationIfNeeded() else { return }
         guard let viewerID, !isMessagingBlocked else { return }
         let blocksComposer = localImageData == nil
@@ -2493,7 +2764,7 @@ final class ConversationViewModel {
             kind: attachments.isEmpty ? .text : .media,
             body: body.isEmpty ? nil : body,
             attachments: attachments,
-            replyToMessageID: nil,
+            replyToMessageID: replyToMessageID,
             createdAt: .now,
             isReadByViewer: true
         )
@@ -2516,7 +2787,8 @@ final class ConversationViewModel {
             tempID: tempID,
             body: body,
             imageURL: imageURL,
-            localImageData: localImageData
+            localImageData: localImageData,
+            replyToMessageID: replyToMessageID
         )
     }
 
@@ -2537,7 +2809,8 @@ final class ConversationViewModel {
             tempID: tempID,
             body: body,
             imageURL: nil,
-            localImageData: localImageData
+            localImageData: localImageData,
+            replyToMessageID: messages.first(where: { $0.id == tempID })?.replyToMessageID
         )
     }
 
@@ -2553,7 +2826,8 @@ final class ConversationViewModel {
         tempID: MessageID,
         body: String,
         imageURL: String?,
-        localImageData: Data?
+        localImageData: Data?,
+        replyToMessageID: MessageID?
     ) async {
         guard let viewerID else { return }
         do {
@@ -2578,7 +2852,7 @@ final class ConversationViewModel {
                 kind: resolvedImageURL == nil ? .text : .media,
                 body: body.isEmpty ? "" : body,
                 attachments: resolvedImageURL.map(OptimisticOutboundImageSendSupport.imageAttachments(for:)) ?? [],
-                replyToMessageID: nil,
+                replyToMessageID: replyToMessageID,
                 createdAt: .now,
                 isReadByViewer: true
             )
@@ -2693,6 +2967,7 @@ final class ConversationViewModel {
                         showsAvatar: showsAvatar,
                         showsTimestamp: showsTimestamp,
                         sendState: sendStates[message.id] ?? .sent,
+                        authorProfile: senderProfile(for: message.senderProfileID),
                         shareUserCaption: shareCaptions.captionByShareID[message.id]
                     )
                 )

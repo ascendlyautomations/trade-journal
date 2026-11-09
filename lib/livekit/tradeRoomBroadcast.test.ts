@@ -6,7 +6,10 @@ import {
   parseLiveKitRoomName,
 } from "./liveKitRoomName.ts"
 import { mayStartTradeRoomBroadcast } from "./tradeRoomSharedBroadcast.ts"
-import { broadcastStartErrorMessageForTest } from "./client/tradeRoomBroadcastErrors.ts"
+import {
+  broadcastCaptureErrorMessage,
+  broadcastStartErrorMessageForTest,
+} from "./client/tradeRoomBroadcastErrors.ts"
 
 describe("Trade Room broadcast — room naming", () => {
   it("uses tt/{roomId}/broadcast for LiveKit", () => {
@@ -72,5 +75,15 @@ describe("Trade Room broadcast — client errors", () => {
       broadcastStartErrorMessageForTest(policy),
       /camera access was blocked/i
     )
+  })
+
+  it("maps screen denial with macOS guidance when video source is screen", () => {
+    const denied = new Error("Denied")
+    denied.name = "NotAllowedError"
+    assert.match(
+      broadcastCaptureErrorMessage(denied, "screen"),
+      /screen sharing was blocked/i
+    )
+    assert.match(broadcastCaptureErrorMessage(denied, "screen"), /macos/i)
   })
 })

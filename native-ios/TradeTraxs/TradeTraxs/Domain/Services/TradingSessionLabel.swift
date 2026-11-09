@@ -1,20 +1,49 @@
 import Foundation
 
-/// Port of web `getSessionFromDate` / EST trade-date helpers used on manual create.
+/// Port of web `lib/tradingSession.ts` — ET wall-clock session labels on `trades.session`.
 nonisolated enum TradingSessionLabel {
+    static let defaultStored = "NY AM"
+
     private static let eastern = TimeZone(identifier: "America/New_York") ?? .gmt
 
-    /// Asia / London / NY / After from America/New_York wall clock (web `getSession.ts`).
+  /// Asia / London / NY AM / NY Lunch / NY PM / After (America/New_York).
     static func session(from date: Date) -> String? {
+        let minutes = easternMinutesSinceMidnight(on: date)
+        if minutes >= 18 * 60 || minutes < 2 * 60 { return "Asia" }
+        if minutes >= 2 * 60, minutes < 8 * 60 { return "London" }
+        if minutes >= 8 * 60, minutes < 11 * 60 + 30 { return "NY AM" }
+        if minutes >= 11 * 60 + 30, minutes < 13 * 60 + 30 { return "NY Lunch" }
+        if minutes >= 13 * 60 + 30, minutes < 17 * 60 { return "NY PM" }
+        if minutes >= 17 * 60, minutes < 18 * 60 { return "After" }
+        return nil
+    }
+
+    static func easternMinutesSinceMidnight(on date: Date) -> Int {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = eastern
         let hour = calendar.component(.hour, from: date)
         let minute = calendar.component(.minute, from: date)
-        let time = Double(hour) + Double(minute) / 60
-        if time >= 18 || time < 2 { return "Asia" }
-        if time >= 2 && time < 8.5 { return "London" }
-        if time >= 8.5 && time < 16 { return "NY" }
-        if time >= 16 && time < 18 { return "After" }
+        return hour * 60 + minute
+    }
+
+    /// Normalize stored / legacy session strings for analytics (parity with web).
+    static func canonicalLabel(fromStored raw: String?) -> String? {
+        let v = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !v.isEmpty else { return nil }
+
+        if v == "ny am" || v == "new york am" { return "NY AM" }
+        if v == "ny lunch" || v == "new york lunch" || v == "lunch" { return "NY Lunch" }
+        if v == "ny pm" || v == "new york pm" || v == "pm" { return "NY PM" }
+        if v == "london" || v == "ldn" || v == "uk" { return "London" }
+        if v == "asia" || v == "asian" || v == "tokyo" { return "Asia" }
+        if v == "after" { return "After" }
+
+        if v.contains("lunch"), v.contains("ny") || v.contains("new york") { return "NY Lunch" }
+        if v.contains("pm"), v.contains("ny") || v.contains("new york") { return "NY PM" }
+        if v.contains("am"), v.contains("ny") || v.contains("new york") { return "NY AM" }
+        if v == "ny" || v == "new york" || (v.contains("ny") && !v.contains("london")) {
+            return "NY AM"
+        }
         return nil
     }
 

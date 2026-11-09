@@ -341,23 +341,13 @@ nonisolated enum ProfileStatisticsMetrics {
     private static func sessionBreakdown(_ trades: [TradeInput]) -> (total: Int, rows: [SessionRow]) {
         var counts: [String: Int] = [:]
         for trade in trades {
-            let raw = (trade.session ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            let label: String?
-            if raw.contains("ny") || raw.contains("new york") {
-                label = "NY"
-            } else if raw.contains("london") || raw.contains("ldn") || raw.contains("uk") {
-                label = "London"
-            } else if raw.contains("asia") || raw.contains("asian") || raw.contains("tokyo") {
-                label = "Asia"
-            } else {
-                label = nil
+            guard let label = TradingSessionLabel.canonicalLabel(fromStored: trade.session) else {
+                continue
             }
-            if let label {
-                counts[label, default: 0] += 1
-            }
+            counts[label, default: 0] += 1
         }
         let total = counts.values.reduce(0, +)
-        let rows = ["NY", "London", "Asia"].compactMap { label -> SessionRow? in
+        let rows = TradingSessionCatalog.displayOrder.compactMap { label -> SessionRow? in
             let count = counts[label] ?? 0
             guard count > 0 else { return nil }
             let pct = total > 0 ? (Double(count) / Double(total)) * 100 : 0

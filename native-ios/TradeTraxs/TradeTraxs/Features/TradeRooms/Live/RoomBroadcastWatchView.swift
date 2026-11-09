@@ -13,20 +13,26 @@ struct RoomBroadcastWatchView: View {
     @State private var chatDraft = ""
     @State private var showsParticipants = false
     @State private var isFullscreen = false
-    @FocusState private var composerFocused: Bool
-
     var body: some View {
         VStack(spacing: 0) {
             streamHeader
-            videoSection
+            RoomBroadcastStudioVideoSection(
+                coordinator: coordinator,
+                isFullscreen: $isFullscreen
+            )
             if let error = coordinator.lastError {
                 Text(error)
                     .experienceStyle(.caption, color: colors.error)
                     .padding(.horizontal, ExperienceSpacing.md)
                     .padding(.vertical, ExperienceSpacing.xxs)
             }
-            chatList
-            composerBar
+            RoomBroadcastStudioChatPane(
+                coordinator: coordinator,
+                imagePipeline: imagePipeline,
+                userId: userId,
+                displayName: displayName,
+                chatDraft: $chatDraft
+            )
             streamToolbar
         }
         .background(colors.primaryBackground)
@@ -121,104 +127,6 @@ struct RoomBroadcastWatchView: View {
         .padding(.horizontal, ExperienceSpacing.sm)
         .padding(.vertical, ExperienceSpacing.xs)
         .background(colors.navigationBackground.opacity(0.98))
-    }
-
-    private var videoSection: some View {
-        ZStack(alignment: .bottomTrailing) {
-            Color.black
-            BroadcastStreamZoomableVideoView(
-                track: coordinator.videoTrackForDisplay,
-                isFullscreen: false
-            )
-            .id(coordinator.programVideoTrackRevision)
-            HStack(spacing: ExperienceSpacing.xs) {
-                if coordinator.isStreamPlaybackMuted {
-                    Image(systemName: "speaker.slash.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .padding(6)
-                        .background(Circle().fill(Color.black.opacity(0.55)))
-                }
-                Button {
-                    isFullscreen = true
-                } label: {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(8)
-                        .background(Circle().fill(Color.black.opacity(0.55)))
-                }
-                .buttonStyle(.experiencePlain)
-                .accessibilityLabel("Fullscreen")
-            }
-            .padding(ExperienceSpacing.sm)
-        }
-        .aspectRatio(16 / 9, contentMode: .fit)
-        .frame(maxWidth: .infinity)
-        .clipped()
-    }
-
-    private var chatList: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                    ForEach(coordinator.chatMessages) { msg in
-                        chatRow(msg)
-                            .id(msg.id)
-                    }
-                }
-                .padding(.horizontal, ExperienceSpacing.md)
-                .padding(.vertical, ExperienceSpacing.sm)
-            }
-            .frame(maxHeight: .infinity)
-            .onChange(of: coordinator.chatMessages.count) { _, _ in
-                if let last = coordinator.chatMessages.last?.id {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(last, anchor: .bottom)
-                    }
-                }
-            }
-        }
-    }
-
-    private var composerBar: some View {
-        HStack(alignment: .bottom, spacing: ExperienceSpacing.xxs) {
-            TextField("Message…", text: $chatDraft, axis: .vertical)
-                .lineLimit(1 ... 4)
-                .textFieldStyle(.plain)
-                .textInputAutocapitalization(.sentences)
-                .focused($composerFocused)
-                .disabled(userId == nil)
-                .padding(.horizontal, ExperienceSpacing.sm)
-                .padding(.vertical, ExperienceSpacing.xs)
-                .frame(
-                    minHeight: ExperienceAccessibility.minTouchTarget,
-                    alignment: .leading
-                )
-                .background(
-                    colors.fillSecondary,
-                    in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
-                )
-
-            if canSendChat {
-                Button(action: sendChat) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 30))
-                        .foregroundStyle(colors.accent)
-                        .experienceTouchTarget()
-                }
-                .buttonStyle(.experiencePlain)
-                .accessibilityLabel("Send")
-            }
-        }
-        .padding(.horizontal, ExperienceSpacing.xs)
-        .padding(.vertical, ExperienceSpacing.xs)
-        .background(colors.navigationBackground.opacity(0.96))
-    }
-
-    private var canSendChat: Bool {
-        guard userId != nil else { return false }
-        return !chatDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var streamToolbar: some View {
@@ -326,41 +234,6 @@ struct RoomBroadcastWatchView: View {
         }
     }
 
-    @ViewBuilder
-    private func chatRow(_ msg: BroadcastChatMessageItem) -> some View {
-        let profile = coordinator.chatProfileCache.profile(forUserId: msg.userId)
-        let name = profile?.displayName ?? msg.displayName
-        let username = profile?.username ?? msg.displayName
-        HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-            if let profile {
-                ExploreProfileAvatarView(
-                    profile: profile,
-                    imagePipeline: imagePipeline,
-                    diameter: 32
-                )
-            } else {
-                ExperienceAvatar(
-                    initials: ProfileDisplay.initials(displayName: name, username: username),
-                    size: 32
-                )
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(username.isEmpty ? name : username)
-                        .font(.system(.caption, design: .rounded).weight(.semibold))
-                        .foregroundStyle(colors.primaryText)
-                    Text(relativeTime(msg.sentAt))
-                        .font(.system(.caption2, design: .rounded))
-                        .foregroundStyle(colors.tertiaryText)
-                }
-                Text(msg.text)
-                    .font(.system(.subheadline, design: .rounded))
-                    .foregroundStyle(colors.secondaryText)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
     private func toolbarIcon(
         systemName: String,
         label: String,
@@ -394,23 +267,4 @@ struct RoomBroadcastWatchView: View {
         .buttonStyle(.experiencePlain)
     }
 
-    private func sendChat() {
-        guard let userId else { return }
-        let draft = chatDraft
-        chatDraft = ""
-        Task {
-            await coordinator.sendChat(
-                userId: userId,
-                displayName: displayName,
-                avatarUrl: nil,
-                text: draft
-            )
-        }
-    }
-
-    private func relativeTime(_ date: Date) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: Date())
-    }
 }

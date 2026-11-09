@@ -6,7 +6,7 @@ nonisolated enum LiveKitBFFResponse {
         let raw =
             response.httpURLResponse.value(forHTTPHeaderField: "Content-Type")
             ?? response.httpURLResponse.value(forHTTPHeaderField: "content-type")
-        return (raw as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown"
+        return raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown"
     }
 
     static func looksLikeHTML(_ response: HTTPResponse) -> Bool {

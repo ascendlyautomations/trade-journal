@@ -1,7 +1,28 @@
 import Foundation
+import SwiftUI
 
 nonisolated enum ConversationSharedMediaSupport {
     static let pageSize = 12
+}
+
+/// Uniform 3-column square thumbnail grid (profile browse parity).
+/// Drives ``View/sheet(item:)`` so the gallery view always mounts with a view model (avoids empty first presentation).
+@MainActor
+struct ConversationSharedMediaSheetPresentation: Identifiable {
+    let id = UUID()
+    let viewModel: ConversationSharedMediaViewModel
+}
+
+nonisolated enum ConversationSharedMediaGalleryLayout {
+    static let columnCount = 3
+    static let interItemSpacing: CGFloat = 2
+
+    static var gridColumns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), spacing: interItemSpacing),
+            count: columnCount
+        )
+    }
 }
 
 nonisolated struct ConversationSharedMediaCursor: Equatable, Sendable {

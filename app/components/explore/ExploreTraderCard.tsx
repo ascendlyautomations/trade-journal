@@ -10,6 +10,7 @@ import {
 import { countNoun } from "@/lib/countNoun"
 import { profilePath } from "@/lib/profileRoutes"
 import { normalizeTraderType } from "@/lib/traderType"
+import { tradingSessionDisplayName } from "@/lib/tradingSession"
 
 type ExploreTraderCardProps = {
   profile: ExploreProfile
@@ -47,9 +48,7 @@ export default function ExploreTraderCard({
   const tradingStyle =
     profile.trading_style?.trim() || profile.trading_model?.trim() || null
   const session = tradeMeta?.dominantSession
-    ? tradeMeta.dominantSession === "NY"
-      ? "NY Session"
-      : tradeMeta.dominantSession
+    ? tradingSessionDisplayName(tradeMeta.dominantSession)
     : null
 
   const detailParts: string[] = []

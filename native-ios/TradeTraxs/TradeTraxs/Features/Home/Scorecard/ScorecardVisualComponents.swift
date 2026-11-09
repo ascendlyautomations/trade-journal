@@ -341,8 +341,6 @@ struct ScorecardGateChipsRow: View {
 // MARK: - Helpers
 
 enum ScorecardVisualSupport {
-    private static let minPlanTaggedForDiscipline = 10
-
     static func buildingProgress(tradeCount: Int, tradingDayCount: Int) -> Double {
         let tradeGate = min(Double(tradeCount) / Double(ScorecardConstants.minTradesOverall), 1)
         let dayGate = min(Double(tradingDayCount) / Double(ScorecardConstants.minTradingDaysOverall), 1)
@@ -358,22 +356,12 @@ enum ScorecardVisualSupport {
             && tradingDayCount >= ScorecardConstants.minTradingDaysOverall
         guard historyMet else { return historyProgress }
 
-        let scored = result.categories.filter {
-            $0.score != nil && $0.eligible && $0.reliability != .insufficient
-        }
-        var nominalIncluded = 0.0
-        for category in scored {
-            nominalIncluded += ScorecardConstants.categoryWeights[category.id] ?? 0
-        }
-        let categoryProgress = min(
-            Double(scored.count) / Double(ScorecardConstants.minScoredCategoriesOverall),
-            1
-        )
-        let weightProgress = min(
-            nominalIncluded / ScorecardConstants.minNominalWeightOverall,
-            1
-        )
-        return min((categoryProgress + weightProgress) / 2, 1)
+        if !scoredCategories(for: result).isEmpty { return 1 }
+        let tagProgress = result.categories
+            .filter { $0.id == .consistency || $0.id == .discipline }
+            .map { categoryBarFillFraction($0) }
+            .max() ?? 0
+        return tagProgress
     }
 
     static func overallBuildingGateChips(result: ScorecardResult) -> [ScorecardGateChip] {
@@ -411,37 +399,12 @@ enum ScorecardVisualSupport {
             chips.append(
                 ScorecardGateChip(
                     id: "plan_tags",
-                    label: "\(tagged)/\(minPlanTaggedForDiscipline) plan tags",
-                    isMet: tagged >= minPlanTaggedForDiscipline
+                    label: "\(tagged)/\(ScorecardDiscipline.minPlanTaggedForScore) plan tags",
+                    isMet: tagged >= ScorecardDiscipline.minPlanTaggedForScore
                 )
             )
         }
 
-        let historyMet =
-            tradeCount >= ScorecardConstants.minTradesOverall
-            && tradingDayCount >= ScorecardConstants.minTradingDaysOverall
-        guard historyMet else { return chips }
-
-        let scored = result.categories.filter {
-            $0.score != nil && $0.eligible && $0.reliability != .insufficient
-        }
-        var nominalIncluded = 0.0
-        for category in scored {
-            nominalIncluded += ScorecardConstants.categoryWeights[category.id] ?? 0
-        }
-        let compositeMet =
-            scored.count >= ScorecardConstants.minScoredCategoriesOverall
-            && nominalIncluded >= ScorecardConstants.minNominalWeightOverall
-        if !compositeMet {
-            let pct = Int((nominalIncluded * 100).rounded())
-            chips.append(
-                ScorecardGateChip(
-                    id: "composite",
-                    label: "\(scored.count)/\(ScorecardConstants.minScoredCategoriesOverall) scored · \(pct)% wt",
-                    isMet: false
-                )
-            )
-        }
         return chips
     }
 
@@ -458,7 +421,7 @@ enum ScorecardVisualSupport {
             return min(Double(pool) / Double(ScorecardPlanAdherence.minPostLossPlanTagged), 1)
         case .discipline:
             let tagged = planTaggedTradeCount(category)
-            return min(Double(tagged) / Double(minPlanTaggedForDiscipline), 1)
+            return min(Double(tagged) / Double(ScorecardDiscipline.minPlanTaggedForScore), 1)
         case .risk, .psychology:
             return 0
         }
@@ -480,13 +443,13 @@ enum ScorecardVisualSupport {
         case .consistency:
             if let score = category.score { return "\(score)/100" }
             let pool = postLossScorePoolCount(category)
-            return "\(pool)/10 tags"
+            return "\(pool)/\(ScorecardPlanAdherence.minPostLossPlanTagged) tags"
         case .discipline:
             if let score = category.score { return "\(score)/100" }
             let tagged = planTaggedTradeCount(category)
-            return tagged >= minPlanTaggedForDiscipline
+            return tagged >= ScorecardDiscipline.minPlanTaggedForScore
                 ? "Scoring…"
-                : "\(tagged)/10 tags"
+                : "\(tagged)/\(ScorecardDiscipline.minPlanTaggedForScore) tags"
         }
     }
 
@@ -509,8 +472,8 @@ enum ScorecardVisualSupport {
             return "— · \(pool)/\(ScorecardPlanAdherence.minPostLossPlanTagged) tags"
         case .discipline:
             let tagged = planTaggedTradeCount(category)
-            if tagged < minPlanTaggedForDiscipline {
-                return "— · \(tagged)/\(minPlanTaggedForDiscipline) tags"
+            if tagged < ScorecardDiscipline.minPlanTaggedForScore {
+                return "— · \(tagged)/\(ScorecardDiscipline.minPlanTaggedForScore) tags"
             }
             return "—"
         case .risk, .psychology:
@@ -529,26 +492,7 @@ enum ScorecardVisualSupport {
             return nil
         }
 
-        let scored = scoredCategories(for: result)
-        if scored.isEmpty { return "Tag plan on trades" }
-
-        if scored.count < ScorecardConstants.minScoredCategoriesOverall {
-            if let consistency = result.categories.first(where: { $0.id == .consistency }),
-               consistency.score == nil
-            {
-                let pool = postLossScorePoolCount(consistency)
-                return "Need Consistency (\(pool)/10 after-loss tags)"
-            }
-            return "Need 2nd category"
-        }
-
-        var nominalIncluded = 0.0
-        for category in scored {
-            nominalIncluded += ScorecardConstants.categoryWeights[category.id] ?? 0
-        }
-        if nominalIncluded < ScorecardConstants.minNominalWeightOverall {
-            return "Need more category weight"
-        }
+        if scoredCategories(for: result).isEmpty { return "Tag plan on trades" }
         return nil
     }
 

@@ -25,19 +25,6 @@ enum DashboardAnalyticsAccountChartsCoordinator {
         rpc: any RPCClient
     ) async -> Bool {
         let store = DashboardAnalyticsAccountChartsStore.shared
-        if let cached = store.charts(accountID: selectedAccountID, revision: revision),
-           store.availability(accountID: selectedAccountID, revision: revision).isLoaded,
-           DashboardAnalyticsChartsSupport.hasEquityPoints(cached),
-           !DashboardAnalyticsChartsSupport.hasVisualExpansionContract(cached)
-        {
-            #if DEBUG
-            DashboardVisualExpansionDebug.logStaleChartsCache(
-                scope: "account:\(selectedAccountID.rawValue)",
-                revision: revision
-            )
-            #endif
-            store.dropCharts(accountID: selectedAccountID, revision: revision)
-        }
         if store.availability(accountID: selectedAccountID, revision: revision).isLoaded,
            let cached = store.charts(accountID: selectedAccountID, revision: revision),
            DashboardAnalyticsChartsSupport.chartsReadyForPresentation(cached)
@@ -57,7 +44,12 @@ enum DashboardAnalyticsAccountChartsCoordinator {
             )
         } catch {
             if token == selectionToken, inFlightAccountID == selectedAccountID {
-                store.markFailed(accountID: selectedAccountID, revision: revision)
+                let nonRetryable = DashboardAnalyticsChartsFailurePolicy.shouldNotRetry(error)
+                store.markFailed(
+                    accountID: selectedAccountID,
+                    revision: revision,
+                    nonRetryable: nonRetryable
+                )
             }
             return false
         }

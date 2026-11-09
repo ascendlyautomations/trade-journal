@@ -48,8 +48,16 @@ final class DashboardAnalyticsAggregateChartsStore {
         availabilityByKey[key] = .loaded
     }
 
-    func markFailed(revision: Int64) {
-        availabilityByKey[Key(revision: revision)] = .failed
+    func markFailed(revision: Int64, nonRetryable: Bool = false) {
+        let key = Key(revision: revision)
+        if let existing = chartsByKey[key],
+           DashboardAnalyticsChartsSupport.chartsReadyForPresentation(existing)
+        {
+            availabilityByKey[key] = .loaded
+            return
+        }
+        availabilityByKey[key] =
+            nonRetryable ? .failedNonRetryable : .failed
     }
 
     func seed(

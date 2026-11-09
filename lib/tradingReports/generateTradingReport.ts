@@ -1,4 +1,5 @@
 import { normalizeSessionBucket } from "@/lib/dashboardSessionBuckets"
+import { tradingSessionDisplayName } from "@/lib/tradingSession"
 import {
   getDashboardTradingDayKey,
   resolveDashboardTradeDate,
@@ -30,12 +31,6 @@ const WEEKDAY_LABELS = [
   "Friday",
   "Saturday",
 ] as const
-
-const SESSION_LABELS: Record<string, string> = {
-  NY: "New York",
-  London: "London",
-  Asia: "Asia",
-}
 
 function filterTradesForBounds(trades: any[], bounds: TradingReportPeriodBounds): any[] {
   return trades.filter((trade) => {
@@ -140,7 +135,7 @@ function pickExtremeSession(
 
   if (!pickedKey) return { label: null, pnl: null }
   return {
-    label: SESSION_LABELS[pickedKey] ?? pickedKey,
+    label: tradingSessionDisplayName(pickedKey),
     pnl: pickedPnl,
   }
 }

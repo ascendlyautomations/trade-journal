@@ -263,7 +263,7 @@ nonisolated enum TradeMapper: DTOMapper {
         let tradeDate = TradingSessionLabel.easternTradeDateString(from: draft.entryAt)
         let session = draft.sessionLabel
             ?? TradingSessionLabel.session(from: draft.entryAt)
-            ?? "NY"
+            ?? TradingSessionLabel.defaultStored
         let modeLabel = draft.accountModeLabel ?? draft.mode.rawValue
         let isPublic = draft.visibility == .public
         let accountFields = PublicAccountPrivacy.sanitizedTradeAccountFieldsForSave(
@@ -330,7 +330,7 @@ nonisolated enum TradeMapper: DTOMapper {
         let tradeDate = TradingSessionLabel.easternTradeDateString(from: draft.entryAt)
         let session = draft.sessionLabel
             ?? TradingSessionLabel.session(from: draft.entryAt)
-            ?? "NY"
+            ?? TradingSessionLabel.defaultStored
         let modeLabel = draft.accountModeLabel ?? draft.mode.rawValue
         let isPublic = draft.visibility == .public
         let accountFields = PublicAccountPrivacy.sanitizedTradeAccountFieldsForSave(
@@ -606,6 +606,11 @@ nonisolated enum MessageMapper: DTOMapper {
             mapMessageReaction($0, fallbackMessageID: MessageID(id))
         }
 
+        let replyToMessageID = dto.parent_message_id.flatMap { raw -> MessageID? in
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : MessageID(trimmed)
+        }
+
         return Message(
             id: MessageID(id),
             conversationID: ConversationID(conversationID),
@@ -613,7 +618,7 @@ nonisolated enum MessageMapper: DTOMapper {
             kind: kind,
             body: isTrade ? nil : (dto.body ?? dto.content),
             attachments: attachments,
-            replyToMessageID: nil,
+            replyToMessageID: replyToMessageID,
             createdAt: createdAt,
             isReadByViewer: dto.is_read ?? false,
             sharedContent: resolvedSharedContent,

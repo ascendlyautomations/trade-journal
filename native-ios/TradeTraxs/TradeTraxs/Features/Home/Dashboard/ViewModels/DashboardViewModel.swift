@@ -445,6 +445,12 @@ final class DashboardViewModel {
         if !points.isEmpty {
             lastDisplayedEquityHeroChartPoints = points
         }
+        if points.count < DashboardEquityChartRangeResolver.minimumTradeCountForEquityCurve,
+           let local = localTradeHistoryEquityHeroChartPoints()
+        {
+            lastDisplayedEquityHeroChartPoints = local
+            return local
+        }
         return points
     }
 
@@ -455,7 +461,7 @@ final class DashboardViewModel {
         switch selectedAccountChartsAvailability {
         case .loading:
             return true
-        case .failed:
+        case .failed, .failedNonRetryable:
             return false
         case .loaded:
             return !selectedChartOverlayLoaded
@@ -2411,7 +2417,11 @@ final class DashboardViewModel {
             return false
         }
         switch selectedAccountChartsAvailability {
-        case .notRequested, .failed:
+        case .notRequested:
+            return true
+        case .failedNonRetryable:
+            return false
+        case .failed:
             return true
         case .loading:
             return true
@@ -3099,7 +3109,29 @@ final class DashboardViewModel {
             )
             if !points.isEmpty { return points }
         }
+        if usesDashboardAnalyticsV3,
+           !selectedChartOverlayLoaded || selectedAccountChartsAvailability.isTerminalFailure
+        {
+            return localTradeHistoryEquityHeroChartPoints()
+        }
         return nil
+    }
+
+    /// Client-built equity series when V3 chart overlay is missing or failed — preserves trade-history curve.
+    private func localTradeHistoryEquityHeroChartPoints() -> [ProfileStatisticsMetrics.EquityPoint]? {
+        guard !tradeInputs.isEmpty else { return nil }
+        let chartSummary = DashboardChartMetrics.compute(
+            from: tradeInputs,
+            accountFilter: accountFilter,
+            dateRange: effectiveEquityChartRange,
+            payoutTotal: payoutTotal
+        )
+        let points = DashboardEquityHeroPresentation.chartPoints(
+            chartSummary.equityData,
+            propStartingBalance: equityHeroAccountStartingBalance
+        )
+        guard points.count >= DashboardEquityChartRangeResolver.minimumTradeCountForEquityCurve else { return nil }
+        return points
     }
 
     private func shouldMarkChartOverlayFetchSettled(forAccountID accountID: TradingAccountID?) -> Bool {
@@ -3109,7 +3141,7 @@ final class DashboardViewModel {
                 accountID: accountID,
                 revision: analyticsV3Revision
             ) {
-            case .loaded, .failed:
+            case .loaded, .failed, .failedNonRetryable:
                 return true
             case .loading, .notRequested:
                 return false
@@ -3117,7 +3149,7 @@ final class DashboardViewModel {
         }
         guard accountFilter == .all else { return false }
         switch DashboardAnalyticsAggregateChartsStore.shared.availability(revision: analyticsV3Revision) {
-        case .loaded, .failed:
+        case .loaded, .failed, .failedNonRetryable:
             return true
         case .loading, .notRequested:
             return false

@@ -378,6 +378,46 @@ nonisolated struct LiveKitBroadcastClient: Sendable {
         )
     }
 
+    func moderateBroadcast(
+        roomID: RoomID,
+        sessionId: String,
+        targetUserId: String,
+        action: BroadcastModerationAction,
+        blockRejoin: Bool = false
+    ) async throws -> LiveKitBroadcastModerationResponse {
+        struct Body: Encodable {
+            var roomId: String
+            var sessionId: String
+            var targetUserId: String
+            var action: String
+            var blockRejoin: Bool?
+        }
+        let body = try JSONEncoder().encode(
+            Body(
+                roomId: roomID.rawValue,
+                sessionId: sessionId,
+                targetUserId: targetUserId,
+                action: action.rawValue,
+                blockRejoin: blockRejoin ? true : nil
+            )
+        )
+        let path = "/api/livekit/broadcast/moderate"
+        let response = try await transport.send(
+            host: .bff,
+            path: path,
+            method: .post,
+            headers: ["Content-Type": "application/json"],
+            body: body,
+            requiresAuthentication: true
+        )
+        let decoded = try transport.decoder.decode(LiveKitBroadcastModerationResponse.self, from: response)
+        guard (200 ... 299).contains(response.statusCode), decoded.ok != false else {
+            let message = decoded.error ?? decodeAPIError(response)
+            throw AppError.unknown(message: message)
+        }
+        return decoded
+    }
+
     func respondToSpeakInvitation(
         invitationId: String,
         accept: Bool

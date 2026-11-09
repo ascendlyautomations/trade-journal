@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount"
-import { getSessionFromDate } from "@/lib/getSession"
+import { DEFAULT_TRADING_SESSION, getSessionFromDate } from "@/lib/getSession"
 import { buildDateTime } from "@/lib/inputTradeDateTime"
 import { prependTradeInCache } from "@/lib/appDataCache"
 import { isProActive } from "@/lib/subscription"
@@ -213,8 +213,8 @@ export async function saveManualTrade(
   const entryTimeIso = buildDateTime(input.entryDate, input.entryTime ?? "")
   const exitTimeIso = buildDateTime(input.exitDate, input.exitTime ?? "")
   const sessionToSave = entryTimeIso
-    ? getSessionFromDate(entryTimeIso) || "NY"
-    : "NY"
+    ? getSessionFromDate(entryTimeIso) || DEFAULT_TRADING_SESSION
+    : DEFAULT_TRADING_SESSION
   const parsedRr = parseOptionalRr(input.rr)
   const now = new Date()
 

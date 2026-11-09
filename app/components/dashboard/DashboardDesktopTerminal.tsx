@@ -8,6 +8,7 @@ import type { WeekdayChartPoint } from "@/app/components/dashboard/DashboardWeek
 import type { SessionBuckets } from "@/app/components/dashboard/DashboardSessionChart"
 import {
   DASHBOARD_SESSION_DISPLAY_ORDER,
+  dashboardSessionDisplayName,
   type DashboardSessionBucket,
 } from "@/lib/dashboardSessionBuckets"
 import type { HoldTimeStats } from "@/lib/dashboardHoldTimeStats"
@@ -196,7 +197,7 @@ function formatHour(hour: number, compact = false) {
 }
 
 function sessionLabel(name: DashboardSessionBucket) {
-  return name === "NY" ? "New York" : name
+  return dashboardSessionDisplayName(name)
 }
 
 function holdLabel(seconds: number | null) {

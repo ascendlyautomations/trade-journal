@@ -1,7 +1,9 @@
 import Foundation
 
 nonisolated enum ScorecardDiscipline {
-    private static let minPlanTaggedForScore = 10
+    static let minPlanTaggedForScore = 3
+    private static let minCoverageWarningTrades = 5
+    private static let minSecondaryInsight = 2
 
     static func score(trades: [ScorecardTrade]) -> ScorecardCategoryResult {
         let weight = ScorecardConstants.categoryWeights[.discipline] ?? 0.2
@@ -29,7 +31,7 @@ nonisolated enum ScorecardDiscipline {
             )
         )
 
-        if planCoverage < 0.5, trades.count >= 10 {
+        if planCoverage < 0.5, trades.count >= minCoverageWarningTrades {
             weaknesses.append(
                 "Plan adherence is tagged on fewer than half of trades, interpret the score cautiously or tag more trades."
             )
@@ -62,7 +64,7 @@ nonisolated enum ScorecardDiscipline {
             )
         }
 
-        if losses.count >= 3 {
+        if losses.count >= minSecondaryInsight {
             let mistakeOnLoss = Double(losses.filter { ($0.mistakeType ?? "").isEmpty == false }.count)
                 / Double(losses.count)
             subMetrics.append(
@@ -78,7 +80,7 @@ nonisolated enum ScorecardDiscipline {
             )
         }
 
-        if withConfidence.count >= 3 {
+        if withConfidence.count >= minSecondaryInsight {
             subMetrics.append(
                 ScorecardSubMetric(
                     id: "discipline.confidence_coverage",
@@ -93,7 +95,7 @@ nonisolated enum ScorecardDiscipline {
             )
         }
 
-        if withExecution.count >= 3 {
+        if withExecution.count >= minSecondaryInsight {
             let avg = withExecution.reduce(0.0) { $0 + ($1.executionRating ?? 0) } / Double(withExecution.count)
             subMetrics.append(
                 ScorecardSubMetric(

@@ -15,6 +15,7 @@ import { formatCurrency } from "@/lib/formatCurrency"
 import {
   DASHBOARD_SESSION_COLORS,
   DASHBOARD_SESSION_DISPLAY_ORDER,
+  dashboardSessionDisplayName,
   type DashboardSessionBucket,
 } from "@/lib/dashboardSessionBuckets"
 import {
@@ -56,12 +57,13 @@ export type DashboardSessionChartProps = {
 
 function sessionTitleColor(name: DashboardSessionBucket) {
   if (name === "London") return "text-blue-300"
-  if (name === "NY") return "text-emerald-400"
-  return "text-purple-300"
+  if (name === "Asia") return "text-purple-300"
+  if (name.startsWith("NY")) return "text-emerald-400"
+  return "text-slate-300"
 }
 
 function sessionDisplayName(name: DashboardSessionBucket) {
-  return name === "NY" ? "New York" : name
+  return dashboardSessionDisplayName(name)
 }
 
 function winRate(stats: SessionBucketStats) {
@@ -151,6 +153,7 @@ function SessionBreakdownCards({
     <div className="grid grid-cols-3 gap-1.5 md:gap-3">
       {DASHBOARD_SESSION_DISPLAY_ORDER.map((name) => {
         const s = sessionBuckets[name]
+        if (!s) return null
         const wr = winRate(s)
         return (
           <div
@@ -202,6 +205,7 @@ function deriveSessionSummary(sessionBuckets: SessionBuckets): SessionDerived {
 
   for (const name of DASHBOARD_SESSION_DISPLAY_ORDER) {
     const s = sessionBuckets[name]
+    if (!s) continue
     totalTrades += s.totalTrades
     totalPnL += s.totalPnL
 

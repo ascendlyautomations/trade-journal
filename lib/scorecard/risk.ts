@@ -74,7 +74,7 @@ export function scoreRiskCategory(
   }))
   const rrTarget = computeDashboardRrTargetAnalysis(dashboardRows)
 
-  if (rrCoverage < 0.25 && trades.length >= 10) {
+  if (rrCoverage < 0.25 && trades.length >= 5) {
     dataGaps.push("Log planned R:R on more trades to improve risk documentation coverage.")
   }
 
@@ -92,7 +92,7 @@ export function scoreRiskCategory(
     })
   }
 
-  if (maxDrawdown > 0 && trades.length >= 5) {
+  if (maxDrawdown > 0 && trades.length >= 2) {
     subMetrics.push({
       id: "risk.max_drawdown_context",
       label: "Max drawdown in scope (outcome context)",
@@ -104,7 +104,7 @@ export function scoreRiskCategory(
     })
   }
 
-  if (rrTarget.pairedCount >= 3 && rrTarget.avgTargetAttainmentRatio != null) {
+  if (rrTarget.pairedCount >= 2 && rrTarget.avgTargetAttainmentRatio != null) {
     subMetrics.push({
       id: "risk.target_attainment_context",
       label: "Average max R vs planned R (outcome context)",

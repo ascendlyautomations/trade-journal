@@ -2,33 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ConnectionState } from "livekit-client"
-import {
-  Copy,
-  Eye,
-  EyeOff,
-  Maximize2,
-  Mic,
-  MicOff,
-  Radio,
-  Volume2,
-  VolumeX,
-  X,
-} from "lucide-react"
+import { Copy, Eye, EyeOff, Mic, MicOff, Radio } from "lucide-react"
 import { useTradeRoomBroadcast } from "./useTradeRoomBroadcast.ts"
 import TradeRoomBroadcastGoLiveDialog, {
   type GoLiveDialogResult,
 } from "./TradeRoomBroadcastGoLiveDialog.tsx"
-import TradeRoomBroadcastLiveChat from "./TradeRoomBroadcastLiveChat.tsx"
-import TradeRoomBroadcastSpeakInviteBanner from "./TradeRoomBroadcastSpeakInviteBanner.tsx"
-import TradeRoomBroadcastHostSidebar from "./TradeRoomBroadcastHostSidebar.tsx"
-import TradeRoomBroadcastScreenOverlayControls from "./TradeRoomBroadcastScreenOverlayControls.tsx"
-import TradeRoomBroadcastShareScreenControls from "./TradeRoomBroadcastShareScreenControls.tsx"
 import {
-  sendTradeRoomBroadcastChatMessage,
   setBroadcastInteractivePollDemand,
   setBroadcastPassiveInteractiveContext,
-  joinTradeRoomBroadcastConversation,
-  leaveTradeRoomBroadcastConversation,
   leaveTradeRoomBroadcastViewer,
   refreshTradeRoomBroadcastStatus,
   startTradeRoomBroadcast,
@@ -37,14 +18,9 @@ import {
   setTradeRoomBroadcastStudioPresentation,
   stopTradeRoomBroadcast,
   syncTradeRoomBroadcastLocalPreviewElement,
-  syncTradeRoomBroadcastViewerVideoElement,
   setObsStreamKeyRevealed,
   copyObsFieldToClipboard,
   toggleTradeRoomBroadcastMicMuted,
-  toggleTradeRoomBroadcastStreamListenMuted,
-  toggleTradeRoomBroadcastViewerMicMuted,
-  toggleTradeRoomBroadcastRaisedHand,
-  watchTradeRoomBroadcast,
   acknowledgeViewerBroadcastConnectionLost,
   retryTradeRoomBroadcastConversationMicrophone,
   ensureObsIngressCredentials,
@@ -52,7 +28,10 @@ import {
 } from "@/lib/livekit/client/tradeRoomBroadcastStore.ts"
 import { getBroadcastPublisherCredentials } from "@/lib/livekit/client/tradeRoomBroadcastPublisherLifecycle.ts"
 import { logBroadcast } from "@/lib/livekit/client/tradeRoomBroadcastDiagnostics.ts"
-import { BroadcastNoActiveStreamError } from "@/lib/livekit/client/tradeRoomBroadcastErrors.ts"
+import {
+  openTradeRoomBroadcastHostStudio,
+  openTradeRoomBroadcastViewerStudio,
+} from "@/lib/livekit/client/tradeRoomBroadcastStudioNavigation.ts"
 import type {
   TradeRoomBroadcastVideoSource,
   TradeRoomBroadcastVoiceMode,
@@ -68,8 +47,6 @@ type Props = {
   viewerUserId: string | null
   viewerDisplayName: string
   viewerAvatarUrl: string | null
-  expanded: boolean
-  onExpandedChange: (open: boolean) => void
   canModerateStream?: boolean
   canActOnTarget?: (targetUserId: string) => boolean
 }
@@ -128,8 +105,6 @@ export default function TradeRoomBroadcastPanel({
   viewerUserId,
   viewerDisplayName,
   viewerAvatarUrl,
-  expanded,
-  onExpandedChange,
   canModerateStream = false,
   canActOnTarget = () => false,
 }: Props) {
@@ -153,19 +128,12 @@ export default function TradeRoomBroadcastPanel({
     primaryMediaPublisherConnected:
       broadcast.status.primaryMediaPublisherConnected,
   })
-  const hostCanUseModerationTools =
-    broadcast.isPublishing && publicLive && !obsPreparingHost
-  const canModerateLiveParticipants =
-    hostCanUseModerationTools || broadcast.isWatching
-  const streamModerationSidebarVisible =
-    Boolean(accessToken) &&
-    publicLive &&
-    !obsPreparingHost &&
-    broadcast.status.broadcastSessionId &&
-    expanded &&
-    (hostCanUseModerationTools ||
-      (canModerateStream && broadcast.status.live))
-
+  /** Private OBS prep UI (credentials + preview) — not tied to panel expand state. */
+  const obsPrivateSetupExpanded =
+    broadcast.obsBroadcastBootstrapping ||
+    (broadcast.isPublishing &&
+      broadcast.status.videoSource === "obs" &&
+      !publicLive)
   const encoderConnected =
     broadcast.status.primaryMediaPublisherConnected === true
   const waitingForObsEncoder =
@@ -185,8 +153,6 @@ export default function TradeRoomBroadcastPanel({
       if (!el) return
       if (broadcast.isPublishing) {
         syncTradeRoomBroadcastLocalPreviewElement(el)
-      } else {
-        syncTradeRoomBroadcastViewerVideoElement(el)
       }
     },
     [broadcast.isPublishing]
@@ -347,7 +313,6 @@ export default function TradeRoomBroadcastPanel({
     async (setup: GoLiveDialogResult) => {
       if (!accessToken) return
       setGoLiveOpen(false)
-      onExpandedChange(true)
       setTradeRoomBroadcastRoomTitle(roomTitle ?? "Trade Room")
       await startTradeRoomBroadcast({
         roomId,
@@ -371,7 +336,7 @@ export default function TradeRoomBroadcastPanel({
         },
       })
     },
-    [accessToken, roomId, roomTitle, fetchStop, onExpandedChange]
+    [accessToken, roomId, roomTitle, fetchStop]
   )
 
   const onStopLive = useCallback(async () => {
@@ -398,32 +363,6 @@ export default function TradeRoomBroadcastPanel({
   ])
 
   useEffect(() => {
-    if (!broadcast.viewerStreamRemovalNotice) return
-    onExpandedChange(false)
-  }, [broadcast.viewerStreamRemovalNotice, onExpandedChange])
-
-  useEffect(() => {
-    if (
-      !broadcast.speakInviteNotice ||
-      broadcast.isPublishing ||
-      broadcast.isInConversation ||
-      !publicLive
-    ) {
-      return
-    }
-    if (!expanded) {
-      onExpandedChange(true)
-    }
-  }, [
-    broadcast.speakInviteNotice,
-    publicLive,
-    broadcast.isPublishing,
-    broadcast.isInConversation,
-    expanded,
-    onExpandedChange,
-  ])
-
-  useEffect(() => {
     if (
       !accessToken ||
       !viewerUserId ||
@@ -437,9 +376,7 @@ export default function TradeRoomBroadcastPanel({
     }
     // Avoid hitting interactive-state while collapsed and not in the stream (reduces 404/log churn when status is briefly stale after a stream ends).
     const needsPassivePoll =
-      expanded ||
-      broadcast.isWatching ||
-      broadcast.speakInviteNotice != null
+      broadcast.isWatching || broadcast.speakInviteNotice != null
 
     if (!needsPassivePoll) {
       setBroadcastPassiveInteractiveContext(null)
@@ -461,181 +398,51 @@ export default function TradeRoomBroadcastPanel({
     publicLive,
     broadcast.isPublishing,
     broadcast.isWatching,
-    expanded,
     broadcast.speakInviteNotice,
   ])
 
   useEffect(() => {
     const wantsHostPoll =
-      Boolean(accessToken) &&
-      broadcast.isPublishing &&
-      expanded &&
-      publicLive
+      Boolean(accessToken) && broadcast.isPublishing && publicLive
     setBroadcastInteractivePollDemand("host-studio", wantsHostPoll, accessToken)
     return () => setBroadcastInteractivePollDemand("host-studio", false)
-  }, [accessToken, broadcast.isPublishing, expanded, publicLive, roomId])
+  }, [accessToken, broadcast.isPublishing, publicLive, roomId])
 
-  useEffect(() => {
-    if (!expanded || !broadcast.status.live || !publicLive || !accessToken) return
-    if (broadcast.isPublishing) return
-    const el = videoRef.current
-    if (!el) return
-
-    void watchTradeRoomBroadcast({
+  const onWatchStream = useCallback(() => {
+    if (!accessToken || !publicLive || broadcast.isPublishing) return
+    void openTradeRoomBroadcastViewerStudio({
       roomId,
-      videoElement: el,
       accessToken,
       viewerUserId,
-      fetchViewerToken: async () => {
-        const res = await authFetch(accessToken, "/api/livekit/broadcast/token", {
-          method: "POST",
-          body: JSON.stringify({ roomId }),
-        })
-        const payload = (await res.json().catch(() => ({}))) as TokenPayload
-        if (!res.ok) {
-          if (res.status === 404) {
-            throw new BroadcastNoActiveStreamError(
-              typeof payload.error === "string" && payload.error.trim()
-                ? payload.error
-                : undefined
-            )
-          }
-          throw new Error(payload.error || "Could not join the stream.")
-        }
-        return parseTokenResponse(payload)
-      },
     })
-  }, [
-    expanded,
-    broadcast.status.live,
-    publicLive,
-    broadcast.isPublishing,
-    accessToken,
-    roomId,
-    viewerUserId,
-  ])
+  }, [accessToken, publicLive, broadcast.isPublishing, roomId, viewerUserId])
 
-  const viewerTheaterDetached =
-    broadcast.isWatching &&
-    !broadcast.isPublishing &&
-    broadcast.studioPresentation !== "hidden"
+  const onManageStream = useCallback(() => {
+    openTradeRoomBroadcastHostStudio()
+  }, [])
+
+  const onLeaveStream = useCallback(async () => {
+    await leaveTradeRoomBroadcastViewer()
+    setTradeRoomBroadcastStudioPresentation("hidden")
+  }, [])
 
   useEffect(() => {
-    if (!broadcast.isPublishing || !expanded) return
+    if (!broadcast.isPublishing || !obsPrivateSetupExpanded) return
     const el = videoRef.current
     if (!el) return
     syncTradeRoomBroadcastLocalPreviewElement(el)
   }, [
     broadcast.isPublishing,
+    obsPrivateSetupExpanded,
     broadcast.connectionState,
-    expanded,
     broadcast.status.videoSource,
   ])
-
-  useEffect(() => {
-    if (!broadcast.isWatching || broadcast.isPublishing || viewerTheaterDetached) {
-      return
-    }
-    const el = videoRef.current
-    if (!el) return
-    syncTradeRoomBroadcastViewerVideoElement(el)
-  }, [
-    broadcast.isWatching,
-    broadcast.isPublishing,
-    broadcast.connectionState,
-    broadcast.studioPresentation,
-    viewerTheaterDetached,
-    expanded,
-  ])
-
-  const onCloseViewer = useCallback(async () => {
-    onExpandedChange(false)
-    await leaveTradeRoomBroadcastViewer()
-    setTradeRoomBroadcastStudioPresentation("hidden")
-  }, [onExpandedChange])
-
-  const onOpenTheater = useCallback(() => {
-    if (!broadcast.isWatching || broadcast.isPublishing) return
-    setTradeRoomBroadcastStudioPresentation("studio")
-  }, [broadcast.isPublishing, broadcast.isWatching])
-
-  const onJoinConversation = useCallback(async () => {
-    const el = videoRef.current
-    if (!accessToken || !el) return
-    await joinTradeRoomBroadcastConversation({
-      roomId,
-      videoElement: el,
-      fetchJoin: async () => {
-        const res = await authFetch(
-          accessToken,
-          "/api/livekit/broadcast/join-conversation",
-          { method: "POST", body: JSON.stringify({ roomId }) }
-        )
-        const payload = (await res.json().catch(() => ({}))) as TokenPayload
-        if (!res.ok) {
-          throw new Error(payload.error || "Could not join conversation.")
-        }
-        return parseTokenResponse(payload)
-      },
-    })
-  }, [accessToken, roomId])
-
-  const onLeaveConversation = useCallback(async () => {
-    const el = videoRef.current
-    if (!accessToken || !el) return
-    await leaveTradeRoomBroadcastConversation({
-      roomId,
-      videoElement: el,
-      fetchLeave: async () => {
-        const res = await authFetch(
-          accessToken,
-          "/api/livekit/broadcast/leave-conversation",
-          { method: "POST", body: JSON.stringify({ roomId }) }
-        )
-        const payload = (await res.json().catch(() => ({}))) as {
-          error?: string
-          viewerToken?: TokenPayload | null
-        }
-        if (!res.ok) {
-          throw new Error(payload.error || "Could not leave conversation.")
-        }
-        const vt = payload.viewerToken
-        return {
-          viewerToken: vt?.token
-            ? {
-                token: vt.token,
-                livekitUrl: vt.livekitUrl!,
-                broadcastSessionId: vt.broadcastSessionId!,
-                broadcasterUserId: vt.broadcasterUserId ?? "",
-                broadcasterDisplayName: vt.broadcasterDisplayName ?? null,
-                startedAt: vt.startedAt ?? new Date().toISOString(),
-                voiceMode: vt.voiceMode,
-                videoSource: vt.videoSource,
-                publicLive: vt.publicLive,
-                visibility: vt.visibility,
-              }
-            : null,
-        }
-      },
-    })
-  }, [accessToken, roomId])
 
   const ownerLiveElsewhere =
     Boolean(broadcast.status.alreadyLiveElsewhere) &&
     !broadcast.isPublishing &&
     viewerUserId != null &&
     broadcast.status.broadcasterUserId === viewerUserId
-  const isConnected =
-    broadcast.connectionState === ConnectionState.Connected ||
-    broadcast.connectionState === ConnectionState.Reconnecting
-
-  const showCaptureRetry =
-    broadcast.isPublishing &&
-    broadcast.status.videoSource !== "obs" &&
-    (broadcast.publisherCaptureDegraded ||
-      broadcast.connectionState === ConnectionState.Disconnected ||
-      Boolean(broadcast.broadcasterPreviewError))
-
   const viewerCount =
     broadcast.localViewerCount > 0
       ? broadcast.localViewerCount
@@ -643,26 +450,6 @@ export default function TradeRoomBroadcastPanel({
 
   const broadcasterLabel =
     broadcast.status.broadcasterDisplayName?.trim() || "Broadcaster"
-
-  /**
-   * Private OBS setup: show until `/broadcast/publish` makes the session public (`publicLive`).
-   * `obsBroadcastBootstrapping` covers the gap before `isPublishing` is true.
-   */
-  const obsPrivateSetupExpanded =
-    expanded &&
-    (broadcast.obsBroadcastBootstrapping ||
-      (broadcast.isPublishing &&
-        broadcast.status.videoSource === "obs" &&
-        !publicLive))
-  const showStreamChrome =
-    expanded &&
-    (publicLive ||
-      broadcast.obsBroadcastBootstrapping ||
-      (broadcast.isPublishing && broadcast.status.videoSource === "obs"))
-  const openVoice =
-    broadcast.status.voiceMode === "open_voice" &&
-    !broadcast.isPublishing &&
-    publicLive
 
   useEffect(() => {
     logBroadcast("broadcast panel render state", {
@@ -677,8 +464,6 @@ export default function TradeRoomBroadcastPanel({
       obsHostUiPhase: broadcast.obsHostUiPhase ?? null,
       obsPreparingHost,
       obsPrivateSetupExpanded,
-      showStreamChrome,
-      expanded,
       connectionState: broadcast.connectionState,
     })
   }, [
@@ -693,8 +478,6 @@ export default function TradeRoomBroadcastPanel({
     broadcast.connectionState,
     obsPreparingHost,
     obsPrivateSetupExpanded,
-    showStreamChrome,
-    expanded,
     publicLive,
   ])
 
@@ -828,30 +611,53 @@ export default function TradeRoomBroadcastPanel({
                 ) : null}
               </>
             ) : null}
-            {publicLive && !broadcast.isPublishing ? (
+            {publicLive && broadcast.isPublishing && !obsPreparingHost ? (
               <button
                 type="button"
-                onClick={() => onExpandedChange(!expanded)}
-                className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-gray-200 hover:bg-white/5"
+                onClick={onManageStream}
+                className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-600"
               >
-                {expanded ? "Hide stream" : "Watch stream"}
+                Manage stream
               </button>
+            ) : null}
+            {publicLive && !broadcast.isPublishing ? (
+              <>
+                <button
+                  type="button"
+                  disabled={broadcast.isBusy || !accessToken}
+                  onClick={onWatchStream}
+                  className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                >
+                  {broadcast.isWatching
+                    ? broadcast.studioPresentation === "studio"
+                      ? "Return to studio"
+                      : "Open studio"
+                    : "Watch stream"}
+                </button>
+                {broadcast.isWatching ? (
+                  <button
+                    type="button"
+                    disabled={broadcast.isBusy}
+                    onClick={() => void onLeaveStream()}
+                    className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-gray-200 hover:bg-white/5 disabled:opacity-50"
+                  >
+                    Leave stream
+                  </button>
+                ) : null}
+              </>
             ) : null}
           </div>
         </div>
 
         {broadcast.speakInviteNotice &&
-        accessToken &&
         publicLive &&
         !broadcast.isPublishing &&
-        !broadcast.isInConversation ? (
-          <TradeRoomBroadcastSpeakInviteBanner
-            roomId={roomId}
-            accessToken={accessToken}
-            invitationId={broadcast.speakInviteNotice?.invitationId}
-            busy={broadcast.isBusy || broadcast.speakerUpgradeInFlight}
-            onNeedOpenStream={() => onExpandedChange(true)}
-          />
+        !broadcast.isInConversation &&
+        !broadcast.isWatching ? (
+          <p className="mt-2 text-xs text-emerald-200">
+            You&apos;re invited to speak — tap <span className="font-semibold">Watch stream</span>{" "}
+            to open the studio and accept.
+          </p>
         ) : null}
 
         {broadcast.viewerBroadcastConnectionLost ? (
@@ -865,34 +671,7 @@ export default function TradeRoomBroadcastPanel({
               className="rounded-lg border border-amber-400/40 px-2.5 py-1 text-xs font-semibold text-amber-100 hover:bg-amber-500/10 disabled:opacity-50"
               onClick={() => {
                 acknowledgeViewerBroadcastConnectionLost()
-                onExpandedChange(true)
-                const el = videoRef.current
-                if (!el || !accessToken) return
-                void watchTradeRoomBroadcast({
-                  roomId,
-                  videoElement: el,
-                  accessToken,
-                  viewerUserId,
-                  fetchViewerToken: async () => {
-                    const res = await authFetch(
-                      accessToken,
-                      "/api/livekit/broadcast/token",
-                      { method: "POST", body: JSON.stringify({ roomId }) }
-                    )
-                    const payload = (await res.json().catch(() => ({}))) as TokenPayload
-                    if (!res.ok) {
-                      if (res.status === 404) {
-                        throw new BroadcastNoActiveStreamError(
-                          typeof payload.error === "string" && payload.error.trim()
-                            ? payload.error
-                            : undefined
-                        )
-                      }
-                      throw new Error(payload.error || "Could not join the stream.")
-                    }
-                    return parseTokenResponse(payload)
-                  },
-                })
+                onWatchStream()
               }}
             >
               Retry
@@ -960,7 +739,7 @@ export default function TradeRoomBroadcastPanel({
           </p>
         ) : null}
 
-        {showStreamChrome && obsPrivateSetupExpanded ? (
+        {obsPrivateSetupExpanded ? (
           <div className="mt-3 flex min-h-[280px] flex-col gap-3">
             <div className="rounded-lg border border-violet-500/30 bg-zinc-950/80 p-4 text-sm text-gray-200">
               <p className="font-semibold text-violet-200">OBS Studio — private setup</p>
@@ -1142,306 +921,6 @@ export default function TradeRoomBroadcastPanel({
                 muted
                 autoPlay
               />
-            </div>
-          </div>
-        ) : showStreamChrome ? (
-          <div className="mt-3 flex min-h-[280px] flex-col gap-3 lg:min-h-[360px] lg:flex-row lg:items-stretch">
-            <div className="flex min-h-0 flex-1 flex-col lg:min-w-0 lg:flex-[1.4]">
-              {broadcast.isPublishing && broadcast.obsStudio?.rtmpUrl ? (
-                <div className="mb-3 space-y-3 rounded-lg border border-violet-500/25 bg-violet-950/30 p-3 text-xs text-gray-200">
-                  <p className="font-semibold text-violet-200">OBS Studio — RTMP</p>
-                  <p className="text-gray-400">
-                    Program feed from OBS. Manage server URL and key from{" "}
-                    <span className="text-gray-300">Cancel setup</span> / new session if
-                    needed.
-                  </p>
-                </div>
-              ) : null}
-              {broadcast.isPublishing && !obsPreparingHost ? (
-                <>
-                  <TradeRoomBroadcastShareScreenControls className="mb-2" />
-                  <TradeRoomBroadcastScreenOverlayControls className="mb-2" />
-                </>
-              ) : null}
-              {broadcast.isPublishing && !obsPreparingHost ? (
-                <div className="mb-2 flex items-center gap-3">
-                  <div className="flex min-w-0 flex-wrap items-center gap-3 text-xs text-gray-400">
-                    <span>
-                      {broadcast.connectionState === ConnectionState.Connected
-                        ? "Connected"
-                        : broadcast.connectionState}
-                    </span>
-                    {broadcast.obsStudio ? (
-                      <span className="text-violet-300/90">
-                        OBS:{" "}
-                        {broadcast.obsStudio.phase === "live"
-                          ? "Live"
-                          : broadcast.obsStudio.phase === "preview_ready"
-                            ? "Preview ready"
-                            : broadcast.obsStudio.phase === "waiting_for_obs"
-                              ? "Waiting for encoder"
-                              : broadcast.obsStudio.phase === "encoder_disconnected"
-                                ? "Encoder disconnected"
-                                : broadcast.obsStudio.phase === "reconnecting"
-                                  ? "Reconnecting…"
-                                  : broadcast.obsStudio.phase === "creating_ingress"
-                                    ? "Preparing stream keys…"
-                                    : "Setting up…"}
-                      </span>
-                    ) : null}
-                    {hostCanUseModerationTools ? (
-                      <span className="inline-flex items-center gap-1 text-amber-300/90">
-                        {broadcast.raisedHandIdentities.length} hand
-                        {broadcast.raisedHandIdentities.length === 1 ? "" : "s"} raised
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
-                    {showCaptureRetry ? (
-                      <button
-                        type="button"
-                        disabled={broadcast.isBusy}
-                        onClick={() => void retryTradeRoomBroadcasterCapture()}
-                        className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-gray-200"
-                      >
-                        Retry
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      disabled={broadcast.isBusy}
-                      onClick={() => void toggleTradeRoomBroadcastMicMuted()}
-                      className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-1.5 text-xs text-gray-200"
-                    >
-                      {broadcast.broadcasterMicMuted ? (
-                        <MicOff className="h-4 w-4" />
-                      ) : (
-                        <Mic className="h-4 w-4" />
-                      )}
-                      {broadcast.broadcasterMicMuted ? "Mic off" : "Mic on"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={broadcast.isBusy}
-                      onClick={() => void onStopLive()}
-                      className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-500"
-                    >
-                      End stream
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-gray-200"
-                      onClick={() => setTradeRoomBroadcastStudioPresentation("studio")}
-                    >
-                      Open studio
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-              <div
-                ref={containerRef}
-                className="relative min-h-0 w-full flex-1 overflow-hidden rounded-lg border border-white/10 bg-black aspect-video lg:aspect-auto lg:min-h-[240px]"
-              >
-                {viewerTheaterDetached ? (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/90 px-4 text-center text-sm text-gray-300">
-                    <p>
-                      Stream is playing in{" "}
-                      {broadcast.studioPresentation === "mini"
-                        ? "the mini player"
-                        : "theater mode"}
-                      .
-                    </p>
-                    <div className="flex flex-wrap justify-center gap-2">
-                      <button
-                        type="button"
-                        className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white"
-                        onClick={() =>
-                          setTradeRoomBroadcastStudioPresentation("studio")
-                        }
-                      >
-                        Open theater
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-gray-200"
-                        onClick={() =>
-                          setTradeRoomBroadcastStudioPresentation("hidden")
-                        }
-                      >
-                        Show in room
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-                {!isConnected && broadcast.isWatching && !viewerTheaterDetached ? (
-                  <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-400">
-                    Connecting to stream…
-                  </div>
-                ) : null}
-                {broadcast.isPublishing && broadcast.broadcasterPreviewError ? (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/80 px-4 text-center text-sm text-amber-200">
-                    {broadcast.broadcasterPreviewError}
-                  </div>
-                ) : null}
-                <video
-                  ref={bindStreamVideoRef}
-                  className={`h-full w-full object-contain ${
-                    viewerTheaterDetached ? "pointer-events-none opacity-0" : ""
-                  }`}
-                  playsInline
-                  muted
-                  autoPlay
-                />
-                <div className="absolute right-2 top-2 flex gap-1">
-                  {!broadcast.isPublishing && broadcast.isWatching ? (
-                    <>
-                      <button
-                        type="button"
-                        disabled={
-                          broadcast.isInConversation &&
-                          !broadcast.viewerMicPublishReady
-                        }
-                        aria-label={
-                          broadcast.isInConversation
-                            ? !broadcast.viewerMicPublishReady
-                              ? "Microphone not ready"
-                              : broadcast.viewerMicMuted
-                                ? "Unmute your mic"
-                                : "Mute your mic"
-                            : broadcast.streamListenMuted
-                              ? "Unmute stream"
-                              : "Mute stream"
-                        }
-                        onClick={() => {
-                          if (broadcast.isInConversation) {
-                            void toggleTradeRoomBroadcastViewerMicMuted()
-                          } else {
-                            toggleTradeRoomBroadcastStreamListenMuted()
-                          }
-                        }}
-                        className="rounded-md bg-black/60 p-2 text-white hover:bg-black/80 disabled:opacity-40"
-                      >
-                        {broadcast.isInConversation ? (
-                          !broadcast.viewerMicPublishReady ? (
-                            <MicOff className="h-4 w-4 opacity-60" />
-                          ) : broadcast.viewerMicMuted ? (
-                            <MicOff className="h-4 w-4" />
-                          ) : (
-                            <Mic className="h-4 w-4" />
-                          )
-                        ) : broadcast.streamListenMuted ? (
-                          <VolumeX className="h-4 w-4" />
-                        ) : (
-                          <Volume2 className="h-4 w-4" />
-                        )}
-                      </button>
-                      {accessToken && viewerUserId ? (
-                        <button
-                          type="button"
-                          aria-label={
-                            broadcast.localHandRaised ? "Lower hand" : "Raise hand"
-                          }
-                          onClick={() =>
-                            void toggleTradeRoomBroadcastRaisedHand({
-                              accessToken,
-                              userId: viewerUserId,
-                            })
-                          }
-                          className={`rounded-md p-2 text-white hover:bg-black/80 ${
-                            broadcast.localHandRaised
-                              ? "bg-amber-500/80"
-                              : "bg-black/60"
-                          }`}
-                        >
-                          <span className="text-xs font-bold">✋</span>
-                        </button>
-                      ) : null}
-                    </>
-                  ) : null}
-                  {!broadcast.isPublishing && broadcast.isWatching ? (
-                    <button
-                      type="button"
-                      aria-label="Open theater mode"
-                      onClick={onOpenTheater}
-                      className="rounded-md bg-black/60 p-2 text-white hover:bg-black/80"
-                    >
-                      <Maximize2 className="h-4 w-4" />
-                    </button>
-                  ) : null}
-                  {!broadcast.isPublishing ? (
-                    <button
-                      type="button"
-                      aria-label="Close stream"
-                      onClick={() => void onCloseViewer()}
-                      className="rounded-md bg-black/60 p-2 text-white hover:bg-black/80"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex min-h-[220px] flex-col gap-2 lg:w-80 lg:shrink-0 lg:self-stretch">
-              {streamModerationSidebarVisible ? (
-                <TradeRoomBroadcastHostSidebar
-                  accessToken={accessToken!}
-                  className="min-h-0 flex-1"
-                  isBroadcaster={broadcast.isPublishing}
-                  canModerateStream={
-                    hostCanUseModerationTools || canModerateStream
-                  }
-                  canActOnTarget={canActOnTarget}
-                  canModerateLiveParticipants={canModerateLiveParticipants}
-                  chat={{
-                    userId: viewerUserId,
-                    displayName: viewerDisplayName,
-                    avatarUrl: viewerAvatarUrl,
-                    disabled: !isConnected,
-                  }}
-                  onModerationMessage={async (text) => {
-                    if (!viewerUserId) return
-                    await sendTradeRoomBroadcastChatMessage({
-                      userId: viewerUserId,
-                      displayName: viewerDisplayName,
-                      avatarUrl: viewerAvatarUrl,
-                      text,
-                    })
-                  }}
-                />
-              ) : (
-                <>
-                  {openVoice && !broadcast.isInConversation ? (
-                    <button
-                      type="button"
-                      disabled={broadcast.isBusy}
-                      onClick={() => void onJoinConversation()}
-                      className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200"
-                    >
-                      Join conversation
-                    </button>
-                  ) : null}
-                  {broadcast.isInConversation ? (
-                    <button
-                      type="button"
-                      disabled={broadcast.isBusy}
-                      onClick={() => void onLeaveConversation()}
-                      className="rounded-lg border border-white/15 px-3 py-2 text-xs text-gray-200"
-                    >
-                      Leave conversation
-                    </button>
-                  ) : null}
-                  <TradeRoomBroadcastLiveChat
-                    className="min-h-0 flex-1"
-                    messages={broadcast.chatMessages}
-                    userId={viewerUserId}
-                    displayName={viewerDisplayName}
-                    avatarUrl={viewerAvatarUrl}
-                    interactiveProfiles={broadcast.interactiveProfiles}
-                    disabled={!isConnected}
-                  />
-                </>
-              )}
             </div>
           </div>
         ) : null}

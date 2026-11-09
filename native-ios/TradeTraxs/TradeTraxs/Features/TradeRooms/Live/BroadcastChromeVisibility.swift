@@ -1,6 +1,15 @@
 import LiveKit
 
 enum BroadcastChromeVisibility {
+    static func shouldShowObsHostBar(
+        hasHostBarSession: Bool,
+        isLivePublic: Bool,
+        isManageSheetPresented: Bool
+    ) -> Bool {
+        guard hasHostBarSession, isLivePublic else { return false }
+        return !isManageSheetPresented
+    }
+
     static func shouldShowBar(
         isWatching: Bool,
         connectionState: ConnectionState,

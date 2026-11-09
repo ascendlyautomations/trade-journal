@@ -24,6 +24,11 @@ struct BroadcastWatchSession: Hashable, Sendable {
     var voiceMode: String?
 }
 
+struct ObsHostBarSession: Hashable, Sendable {
+    var roomID: RoomID
+    var roomTitle: String
+}
+
 struct BroadcastRosterParticipant: Identifiable, Hashable, Sendable {
     var id: String { identity }
     var identity: String
@@ -67,6 +72,32 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         guard let count = polledStatus.viewerCount else { return nil }
         return max(0, count)
     }
+
+    /// True when the signed-in user is hosting a discoverable OBS broadcast in this room.
+    func isCurrentUserObsBroadcaster(for roomID: RoomID, userId: String?) -> Bool {
+        Self.matchesCurrentUserObsBroadcast(
+            status: polledStatus,
+            statusRoomID: statusPollRoomID,
+            roomID: roomID,
+            userId: userId
+        )
+    }
+
+    nonisolated static func matchesCurrentUserObsBroadcast(
+        status: RoomBroadcastStatus,
+        statusRoomID: RoomID?,
+        roomID: RoomID,
+        userId: String?
+    ) -> Bool {
+        guard statusRoomID == roomID, status.isLive else { return false }
+        guard let userId else { return false }
+        let broadcaster = status.broadcasterUserId?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !broadcaster.isEmpty, broadcaster == userId else { return false }
+        let videoSource = status.videoSource?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let broadcastSource = status.broadcastSource?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return videoSource == "obs" || broadcastSource == "obs"
+    }
     private(set) var connectionState: ConnectionState = .disconnected
     private(set) var isWatching = false
     private(set) var isBusy = false
@@ -79,6 +110,8 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private(set) var isInConversation = false
     private(set) var isMicrophoneEnabledInStream = false
     private(set) var watchSession: BroadcastWatchSession?
+    private(set) var obsHostBarSession: ObsHostBarSession?
+    private(set) var isObsManageStreamPresented = false
     private(set) var isViewerPresented = false
     private(set) var isVideoRenderingEnabled = true
     private(set) var isStreamPlaybackMuted = false
@@ -90,6 +123,12 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private(set) var streamConnectionLostNotice: BroadcastStreamConnectionLostNotice?
     private(set) var speakInviteNotice: BroadcastSpeakInviteNotice?
     private(set) var speakInviteActionError: String?
+    private(set) var broadcastSpeakerGrantUserIds: Set<String> = []
+    private(set) var broadcastPendingSpeakInvitationIds: [String: String] = [:]
+    private(set) var broadcastSessionBlockUserIds: Set<String> = []
+    private(set) var interactiveRaisedHandUserIds: Set<String> = []
+    private(set) var broadcastModerationError: String?
+    private(set) var broadcastModerationBusyUserId: String?
     /// Bumped to ask ``RoomBroadcastWatchView`` to exit immersive fullscreen before stream-ended UI.
     private(set) var streamFullscreenDismissSignal: UInt = 0
 
@@ -106,13 +145,49 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         isVideoRenderingEnabled ? videoTrack : nil
     }
 
+    var isObsHostBroadcastBarActive: Bool {
+        BroadcastChromeVisibility.shouldShowObsHostBar(
+            hasHostBarSession: obsHostBarSession != nil,
+            isLivePublic: TradeRoomObsBroadcastController.shared.phase == .livePublic,
+            isManageSheetPresented: isObsManageStreamPresented
+        )
+    }
+
     var showsBroadcastChrome: Bool {
-        BroadcastChromeVisibility.shouldShowBar(
+        if isObsHostBroadcastBarActive { return true }
+        return BroadcastChromeVisibility.shouldShowBar(
             isWatching: isWatching,
             connectionState: connectionState,
             isBusy: isBusy,
             hasWatchSession: watchSession != nil
         )
+    }
+
+    func setObsHostBarSession(roomID: RoomID, roomTitle: String) {
+        let trimmed = roomTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        obsHostBarSession = ObsHostBarSession(
+            roomID: roomID,
+            roomTitle: trimmed.isEmpty ? "Trade Room" : trimmed
+        )
+    }
+
+    func clearObsHostBarSession() {
+        obsHostBarSession = nil
+    }
+
+    func openObsManageStream(roomID: RoomID, roomTitle: String) {
+        setObsHostBarSession(roomID: roomID, roomTitle: roomTitle)
+        TradeRoomObsBroadcastController.shared.noteHostContext(roomID: roomID, roomTitle: roomTitle)
+        isObsManageStreamPresented = true
+    }
+
+    func presentObsManageStreamFromBar() {
+        guard obsHostBarSession != nil else { return }
+        isObsManageStreamPresented = true
+    }
+
+    func setObsManageStreamPresented(_ presented: Bool) {
+        isObsManageStreamPresented = presented
     }
 
     var broadcastStatusLabel: String {
@@ -198,6 +273,68 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
 
     func acknowledgeSpeakInviteActionError() {
         speakInviteActionError = nil
+    }
+
+    func acknowledgeBroadcastModerationError() {
+        broadcastModerationError = nil
+    }
+
+    func isBroadcastSpeaker(userId: String) -> Bool {
+        broadcastSpeakerGrantUserIds.contains(userId)
+    }
+
+    func hasPendingSpeakInvitation(userId: String) -> Bool {
+        broadcastPendingSpeakInvitationIds[userId] != nil
+    }
+
+    func isUserBlockedFromBroadcastSession(userId: String) -> Bool {
+        broadcastSessionBlockUserIds.contains(userId)
+    }
+
+    /// Host/broadcaster moderation — reuses web `/api/livekit/broadcast/moderate`.
+    func executeBroadcastModeration(
+        roomID: RoomID,
+        targetUserId: String,
+        action: BroadcastModerationAction,
+        blockRejoin: Bool = false,
+        chatAnnouncement: String? = nil,
+        hostUserId: String?,
+        hostDisplayName: String
+    ) async {
+        guard let client else {
+            broadcastModerationError = "Livestream API is not configured."
+            return
+        }
+        guard let sessionId = currentSessionId ?? polledStatus.broadcastSessionId, !sessionId.isEmpty else {
+            broadcastModerationError = "No active broadcast session."
+            return
+        }
+        broadcastModerationBusyUserId = targetUserId
+        defer { broadcastModerationBusyUserId = nil }
+        do {
+            _ = try await client.moderateBroadcast(
+                roomID: roomID,
+                sessionId: sessionId,
+                targetUserId: targetUserId,
+                action: action,
+                blockRejoin: blockRejoin
+            )
+            broadcastModerationError = nil
+            await refreshInteractiveState(roomID: roomID)
+            if let chatAnnouncement,
+               let hostUserId,
+               !chatAnnouncement.isEmpty
+            {
+                await sendChat(
+                    userId: hostUserId,
+                    displayName: hostDisplayName,
+                    avatarUrl: nil,
+                    text: chatAnnouncement
+                )
+            }
+        } catch {
+            broadcastModerationError = error.localizedDescription
+        }
     }
 
     func declineSpeakInvitation() async {
@@ -719,13 +856,22 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     }
 
     private func refreshInteractiveState(roomID: RoomID) async {
-        guard let client, pollRoomID == roomID, polledStatus.isLive else { return }
-        guard let viewerId = interactiveViewerProfileID?.rawValue, !viewerId.isEmpty else { return }
-        guard !isInConversation else { return }
+        guard let client else { return }
+        let trackingRoom =
+            (pollRoomID == roomID) || (isWatching && watchSession?.roomID == roomID)
+        guard trackingRoom, polledStatus.isLive else { return }
 
         do {
             let response = try await client.fetchInteractiveState(roomID: roomID)
             guard let snapshot = response.snapshot else { return }
+
+            applyInteractiveModerationSnapshot(snapshot, profiles: response.profiles)
+            if let room, let broadcasterIdentity {
+                syncRoster(from: room, broadcasterIdentity: broadcasterIdentity)
+            }
+
+            guard let viewerId = interactiveViewerProfileID?.rawValue, !viewerId.isEmpty else { return }
+            guard !isInConversation else { return }
 
             if snapshot.blockedFromBroadcastRejoin == true, isWatching {
                 let removalSessionId = snapshot.sessionId ?? currentSessionId ?? ""
@@ -771,6 +917,26 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                 """
             )
             #endif
+        }
+    }
+
+    private func applyInteractiveModerationSnapshot(
+        _ snapshot: LiveKitBroadcastInteractiveStateResponse.Snapshot,
+        profiles: [LiveKitBroadcastInteractiveStateResponse.ProfileLite]?
+    ) {
+        broadcastSpeakerGrantUserIds = Set(snapshot.speakerGrants ?? [])
+        broadcastSessionBlockUserIds = Set(snapshot.sessionBlocks ?? [])
+        var pending: [String: String] = [:]
+        for invite in snapshot.pendingInvitations ?? [] {
+            let uid = invite.userId.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !uid.isEmpty else { continue }
+            pending[uid] = invite.invitationId
+        }
+        broadcastPendingSpeakInvitationIds = pending
+        interactiveRaisedHandUserIds = Set((snapshot.raisedHands ?? []).map(\.userId))
+        if let profiles, !profiles.isEmpty {
+            let ids = profiles.map(\.userId)
+            Task { await chatProfileCache.hydrate(userIds: ids) }
         }
     }
 
@@ -882,6 +1048,9 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         syncViewerCount(from: nextRoom)
         applyStreamPlaybackMute()
         syncBroadcastLiveActivity()
+        if polledStatus.isLive {
+            startInteractivePolling(roomID: roomID)
+        }
     }
 
     private func broadcastLiveActivityContentState() -> TradeTraxsLiveBroadcastActivityAttributes.ContentState {
@@ -1097,6 +1266,12 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         watchSession = nil
         isStreamPlaybackMuted = false
         speakInviteNotice = nil
+        broadcastSpeakerGrantUserIds = []
+        broadcastPendingSpeakInvitationIds = [:]
+        broadcastSessionBlockUserIds = []
+        interactiveRaisedHandUserIds = []
+        broadcastModerationError = nil
+        broadcastModerationBusyUserId = nil
         stopInteractivePolling()
         releasePlaybackAudio()
         await teardownRoomOnly()
@@ -1189,6 +1364,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             let isSpeaker = micPub?.track != nil && micPub?.isMuted == false
             let role: String = {
                 if isBroadcaster { return "Broadcaster" }
+                if broadcastSpeakerGrantUserIds.contains(identity) { return "Speaker" }
                 if isSpeaker, isOpenVoiceStream || isInConversation { return "Speaker" }
                 return "Viewer"
             }()

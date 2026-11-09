@@ -1116,7 +1116,7 @@ final class AddTradeViewModel {
         let ticker = symbolText.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard let quantity = Self.parseDecimal(contractsText, style: .tradeQuantity) else { return nil }
         let pnl = Self.parseDecimal(pnlText, style: .signedPnL) ?? 0
-        let sessionLabel = TradingSessionLabel.session(from: entryAt) ?? "NY"
+        let sessionLabel = TradingSessionLabel.session(from: entryAt) ?? TradingSessionLabel.defaultStored
         let resolvedTimeframe = TradeReviewCatalog.resolvedTimeframe(
             selection: timeframeSelection,
             custom: customTimeframeText

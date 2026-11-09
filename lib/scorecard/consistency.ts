@@ -8,7 +8,10 @@ import {
 } from "./planAdherence.ts"
 import { clampScore, formatPercent, resolveScorecardReliability } from "./reliability.ts"
 import type { ScorecardCategoryResult, ScorecardTrade } from "./types.ts"
-import { SCORECARD_CATEGORY_WEIGHTS } from "./types.ts"
+import {
+  SCORECARD_CATEGORY_WEIGHTS,
+  SCORECARD_MIN_TRADING_DAYS_OVERALL,
+} from "./types.ts"
 
 export function scoreConsistencyCategory(
   trades: readonly ScorecardTrade[],
@@ -25,8 +28,11 @@ export function scoreConsistencyCategory(
     trades.map((t) => t.tradingDayKey).filter((k): k is string => Boolean(k))
   ).size
 
-  if (tradingDayCount < 5) {
-    dataGaps.push("Log trades on at least 5 distinct trading days in this scope.")
+  if (tradingDayCount < SCORECARD_MIN_TRADING_DAYS_OVERALL) {
+    const dayLabel = SCORECARD_MIN_TRADING_DAYS_OVERALL === 1 ? "day" : "days"
+    dataGaps.push(
+      `Log trades on at least ${SCORECARD_MIN_TRADING_DAYS_OVERALL} distinct trading ${dayLabel} in this scope.`
+    )
   }
 
   subMetrics.push({
@@ -110,7 +116,7 @@ export function scoreConsistencyCategory(
     } else if (poolRate < 0.45) {
       weaknesses.push("Plan adherence drops on trades after losses, review pause rules and triggers.")
     }
-  } else if (trades.length >= 5) {
+  } else if (trades.length > 0) {
     dataGaps.push(
       `Tag plan followed / not followed on at least ${MIN_POST_LOSS_PLAN_TAGGED} trades immediately after a loss to score consistency.`
     )
@@ -121,11 +127,7 @@ export function scoreConsistencyCategory(
       ? resolveScorecardReliability(pool.observations.length)
       : "insufficient"
 
-  const eligible =
-    tradingDayCount >= 5 &&
-    trades.length >= 5 &&
-    score != null &&
-    isDevelopingOrStrong(reliability)
+  const eligible = score != null
 
   const coveragePercent =
     trades.length > 0
@@ -145,8 +147,4 @@ export function scoreConsistencyCategory(
     weaknesses,
     dataGaps,
   }
-}
-
-function isDevelopingOrStrong(reliability: ReturnType<typeof resolveScorecardReliability>): boolean {
-  return reliability === "developing" || reliability === "strong"
 }

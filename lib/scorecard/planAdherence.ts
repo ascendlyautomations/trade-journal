@@ -1,7 +1,7 @@
 import type { ScorecardTrade } from "./types.ts"
 
-export const MIN_POST_LOSS_PLAN_TAGGED = 10
-export const MIN_TRIPLE_LOSS_WINDOW_PLAN_TAGGED = 5
+export const MIN_POST_LOSS_PLAN_TAGGED = 3
+export const MIN_TRIPLE_LOSS_WINDOW_PLAN_TAGGED = 2
 
 export type PlanAdherenceObservation = {
   tradeId: string

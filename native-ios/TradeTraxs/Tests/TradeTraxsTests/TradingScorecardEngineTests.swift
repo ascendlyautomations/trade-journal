@@ -74,11 +74,20 @@ final class TradingScorecardEngineTests: XCTestCase {
         XCTAssertTrue(cat.subMetrics.contains { $0.id == "streak.after_three_losses_win_rate" })
     }
 
-    func testConsistencyUnscoredBelowTenPostLossTags() {
-        let trades = tradesWithPostLossTags(count: 4, followRate: 1)
-        let cat = ScorecardConsistency.score(trades: trades, tradingDayCount: 6, postTripleLossWinRate: nil)
-        XCTAssertNil(cat.score)
-        XCTAssertFalse(cat.eligible)
+    func testConsistencyUnscoredBelowThreePostLossTags() {
+        let short = tradesWithPostLossTags(count: 2, followRate: 1)
+        let unscored = ScorecardConsistency.score(trades: short, tradingDayCount: 1, postTripleLossWinRate: nil)
+        XCTAssertNil(unscored.score)
+        XCTAssertFalse(unscored.eligible)
+
+        let ready = ScorecardConsistency.score(
+            trades: tradesWithPostLossTags(count: 3, followRate: 1),
+            tradingDayCount: 1,
+            postTripleLossWinRate: nil
+        )
+        XCTAssertEqual(ready.score, 100)
+        XCTAssertTrue(ready.eligible)
+        XCTAssertEqual(ready.reliability, .earlySignal)
     }
 
     func testRiskNeverScoresPhase1() {
@@ -114,15 +123,19 @@ final class TradingScorecardEngineTests: XCTestCase {
         XCTAssertTrue(cat.subMetrics.contains { $0.id == "psych.phase1_mode" })
     }
 
-    func testDisciplineRequiresTenTags() {
-        let nine = (0..<9).map { makeTrade(index: $0) { $0.followedPlan = true } }
-        XCTAssertNil(ScorecardDiscipline.score(trades: nine).score)
-        let ten = (0..<10).map { makeTrade(index: $0) { $0.followedPlan = true } }
-        XCTAssertEqual(ScorecardDiscipline.score(trades: ten).score, 100)
+    func testDisciplineRequiresThreeTags() {
+        let two = (0..<2).map { makeTrade(index: $0) { $0.followedPlan = true } }
+        XCTAssertNil(ScorecardDiscipline.score(trades: two).score)
+        let three = (0..<3).map { makeTrade(index: $0) { trade in
+            trade.followedPlan = true
+            trade.pnl = 40
+        } }
+        XCTAssertEqual(ScorecardDiscipline.score(trades: three).score, 100)
+        XCTAssertEqual(ScorecardDiscipline.score(trades: three).reliability, .earlySignal)
     }
 
     func testOverallBuildingBelowTradeMinimum() {
-        let trades = (0..<10).map { makeTrade(index: $0) }
+        let trades = (0..<2).map { makeTrade(index: $0) }
         let result = TradingScorecardBuilder.build(
             input: ScorecardBuildInput(
                 scopeLabel: "Test",
@@ -156,10 +169,13 @@ final class TradingScorecardEngineTests: XCTestCase {
         XCTAssertTrue(result.overall.statusMessage.contains(String(ScorecardConstants.minTradesOverall)))
     }
 
-    func testOverallBlockedWithSingleScoredCategory() {
-        let trades = (0..<10).map { makeTrade(index: $0) { $0.followedPlan = true } }
+    func testOverallReadyWithOneCategory() {
+        let trades = (0..<3).map { makeTrade(index: $0) { trade in
+            trade.followedPlan = true
+            trade.pnl = 40
+        } }
         let emptyRR = DashboardRrTargetAnalysis(
-            tradeCount: 24,
+            tradeCount: 3,
             pairedCount: 0,
             pairedNonPositiveCount: 0,
             pairedPositiveCount: 0,
@@ -176,19 +192,26 @@ final class TradingScorecardEngineTests: XCTestCase {
                 trades: trades,
                 checkIns: [],
                 analytics: ScorecardAnalyticsContext(
-                    periodTradingDayCount: 6,
+                    periodTradingDayCount: 1,
                     maxDrawdown: 0,
                     avgWin: 80,
                     avgLoss: -40,
-                    totalTrades: 24,
+                    totalTrades: trades.count,
                     postTripleLossWinRate: nil,
                     rrTargetAnalysis: emptyRR
                 )
             ),
             domainTrades: []
         )
-        XCTAssertEqual(result.overall.status, .building)
-        XCTAssertTrue(result.overall.statusMessage.contains("nominal weight"))
+        XCTAssertEqual(result.overall.status, .ready)
+        XCTAssertEqual(result.overall.score, 100)
+        XCTAssertEqual(result.overall.reliability, .earlySignal)
+        XCTAssertEqual(result.overall.contributions.count, 1)
+        XCTAssertEqual(result.overall.contributions.first?.id, .discipline)
+        XCTAssertEqual(result.overall.contributions.first?.effectiveWeight ?? 0, 1, accuracy: 0.01)
+        XCTAssertNil(result.categories.first { $0.id == .consistency }?.score)
+        XCTAssertNil(result.categories.first { $0.id == .risk }?.score)
+        XCTAssertNil(result.categories.first { $0.id == .psychology }?.score)
     }
 
     func testOverallReadyWithTwoCategories() {
@@ -236,7 +259,6 @@ final class TradingScorecardEngineTests: XCTestCase {
         XCTAssertEqual(result.overall.status, .ready)
         XCTAssertNotNil(result.overall.score)
         XCTAssertGreaterThanOrEqual(result.overall.contributions.count, 2)
-        XCTAssertGreaterThanOrEqual(result.overall.nominalWeightIncluded, ScorecardConstants.minNominalWeightOverall)
         let effectiveSum = result.overall.contributions.reduce(0.0) { $0 + $1.effectiveWeight }
         XCTAssertLessThan(abs(effectiveSum - 1), 0.01)
         XCTAssertNil(result.categories.first { $0.id == .risk }?.score)
@@ -272,14 +294,20 @@ final class TradingScorecardEngineTests: XCTestCase {
         XCTAssertNil(ScorecardDiscipline.score(trades: trades).score)
     }
 
-    func testPostTripleLossWinRateFirstTripleLossWindow() {
-        let trades = (0..<5).map { index in
+    func testPostTripleLossWinRateRequiresFiveRecoveryTrades() {
+        let short = (0..<5).map { index in
             makeTrade(index: index) { trade in
                 trade.pnl = index < 3 ? -10 : 50
             }
         }
-        // Mirrors web `postTripleLossWinRate`: first 3 losses, then up to 5 follow-ups (here 2 wins).
-        XCTAssertEqual(ScorecardTradeMapper.postTripleLossWinRate(trades: trades), 1.0)
+        XCTAssertNil(ScorecardTradeMapper.postTripleLossWinRate(trades: short))
+
+        let full = (0..<8).map { index in
+            makeTrade(index: index) { trade in
+                trade.pnl = index < 3 ? -10 : 50
+            }
+        }
+        XCTAssertEqual(ScorecardTradeMapper.postTripleLossWinRate(trades: full), 1.0)
     }
 
     func testConsistencyBarGateUsesPostLossTagsNotDayCoverage() {
@@ -292,7 +320,7 @@ final class TradingScorecardEngineTests: XCTestCase {
         let cat = ScorecardConsistency.score(trades: trades, tradingDayCount: 7, postTripleLossWinRate: nil)
         XCTAssertNil(cat.score)
         XCTAssertGreaterThan(cat.coveragePercent, 80)
-        XCTAssertLessThan(ScorecardVisualSupport.categoryBarFillFraction(cat), 0.2)
+        XCTAssertEqual(ScorecardVisualSupport.categoryBarFillFraction(cat), 1.0 / 3.0, accuracy: 0.01)
     }
 
     func testDisciplineMistakeLoggingCoverageUsesMistakeType() {

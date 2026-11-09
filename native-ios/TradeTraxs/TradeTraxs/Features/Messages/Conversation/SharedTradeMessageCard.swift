@@ -8,6 +8,7 @@ struct SharedTradeMessageCard: View {
     let imagePipeline: any ImagePipeline
     var isOutgoing: Bool
     var includesBackground: Bool = true
+    var mediaLayoutWidth: CGFloat? = nil
 
     @Environment(\.themeColors) private var colors
 
@@ -18,10 +19,9 @@ struct SharedTradeMessageCard: View {
                     TradePreviewThumbnail(
                         trade: trade,
                         imagePipeline: imagePipeline,
-                        size: .messageHero()
+                        size: .messageHero(),
+                        layoutWidth: mediaLayoutWidth
                     )
-                    .frame(maxWidth: .infinity)
-                    .modifier(SharedTradeMediaBleedModifier(enabled: !includesBackground))
                 }
 
                 sharedTradeHeader
@@ -38,13 +38,21 @@ struct SharedTradeMessageCard: View {
                 }
             } else {
                 sharedTradeHeader
-                Text("Loading trade…")
-                    .experienceStyle(.subheadline, color: secondaryTextColor)
+                SharedContentMessageCardLoadingPlaceholder(
+                    label: "Loading trade…",
+                    isOutgoing: isOutgoing,
+                    mediaLayoutWidth: mediaLayoutWidth
+                )
             }
         }
         .padding(.horizontal, includesBackground ? ExperienceSpacing.sm + 2 : 0)
         .padding(.vertical, includesBackground ? ExperienceSpacing.sm : 0)
-        .frame(maxWidth: 280, alignment: .leading)
+        .frame(
+            maxWidth: includesBackground
+                ? ConversationBubbleMediaLayout.sharedCardBubbleMaxWidth
+                : .infinity,
+            alignment: .leading
+        )
         .background {
             if includesBackground {
                 RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
@@ -217,17 +225,3 @@ struct SharedTradeMessageCard: View {
     }
 }
 
-private struct SharedTradeMediaBleedModifier: ViewModifier {
-    let enabled: Bool
-
-    func body(content: Content) -> some View {
-        if enabled {
-            content
-                .padding(.horizontal, -(ExperienceSpacing.sm + 2))
-                .padding(.top, -ExperienceSpacing.sm)
-                .padding(.bottom, ExperienceSpacing.xxs)
-        } else {
-            content
-        }
-    }
-}
