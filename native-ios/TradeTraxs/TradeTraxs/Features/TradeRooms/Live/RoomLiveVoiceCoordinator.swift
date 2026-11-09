@@ -46,7 +46,6 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
     private(set) var lastError: String?
     private(set) var isJoining = false
     private(set) var isLeaving = false
-    private(set) var audioDiagnostics = TradeRoomLiveVoiceAudioSession.shared.diagnostics
 
     var showsPersistentBar: Bool {
         showsVoiceChrome
@@ -71,6 +70,89 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
 
     var participantCount: Int {
         participants.count
+    }
+
+    private struct CachedGeneralVoicePresence: Equatable {
+        var connectedCount: Int
+        var fetchedAt: Date
+    }
+
+    private static let generalVoicePresenceTTL: TimeInterval = 60
+
+    private var cachedPresenceByRoom: [RoomID: CachedGeneralVoicePresence] = [:]
+    /// Single ensure task per room (covers rapid open/disappear).
+    private var presenceEnsureTasks: [RoomID: Task<Void, Never>] = [:]
+    /// Dedupes concurrent GET /api/livekit/voice/presence for the same room.
+    private var presenceInFlight: [RoomID: Task<Void, Never>] = [:]
+
+    /// Members connected to General Voice (live session count when local user is in voice).
+    func generalVoiceConnectedCount(for roomID: RoomID) -> Int? {
+        if session?.roomID == roomID, connectionState == .connected {
+            return participants.count
+        }
+        if let cached = cachedPresenceByRoom[roomID] {
+            return cached.connectedCount
+        }
+        return nil
+    }
+
+    /// One best-effort presence read when opening a room — no background timer.
+    func startGeneralVoicePresencePolling(for roomID: RoomID) {
+        presenceEnsureTasks[roomID]?.cancel()
+        presenceEnsureTasks[roomID] = Task { @MainActor in
+            await self.ensureGeneralVoicePresenceCached(roomID: roomID, force: false)
+            self.presenceEnsureTasks.removeValue(forKey: roomID)
+        }
+    }
+
+    func stopGeneralVoicePresencePolling(for roomID: RoomID) {
+        presenceEnsureTasks[roomID]?.cancel()
+        presenceEnsureTasks.removeValue(forKey: roomID)
+    }
+
+    /// Foreground / tab return: refresh only when cache is older than ~60s.
+    func refreshGeneralVoicePresenceIfStale(for roomID: RoomID) async {
+        await ensureGeneralVoicePresenceCached(roomID: roomID, force: false)
+    }
+
+    private func ensureGeneralVoicePresenceCached(roomID: RoomID, force: Bool) async {
+        if isEngagedInVoice(for: roomID) {
+            cachedPresenceByRoom.removeValue(forKey: roomID)
+            return
+        }
+        if !force,
+           let cached = cachedPresenceByRoom[roomID],
+           Date().timeIntervalSince(cached.fetchedAt) < Self.generalVoicePresenceTTL
+        {
+            return
+        }
+        if let existing = presenceInFlight[roomID] {
+            await existing.value
+            return
+        }
+        let task = Task { @MainActor in
+            defer { self.presenceInFlight[roomID] = nil }
+            await self.performGeneralVoicePresenceFetch(roomID: roomID)
+        }
+        presenceInFlight[roomID] = task
+        await task.value
+    }
+
+    private func performGeneralVoicePresenceFetch(roomID: RoomID) async {
+        guard let tokenClient else { return }
+        if isEngagedInVoice(for: roomID) {
+            cachedPresenceByRoom.removeValue(forKey: roomID)
+            return
+        }
+        do {
+            let response = try await tokenClient.fetchVoicePresence(roomID: roomID)
+            cachedPresenceByRoom[roomID] = CachedGeneralVoicePresence(
+                connectedCount: max(0, response.connectedCount),
+                fetchedAt: Date()
+            )
+        } catch {
+            // Best-effort — avoid surfacing transient BFF errors in chrome.
+        }
     }
 
     /// Short status for chrome, Live Activity, and in-room indicators.
@@ -127,6 +209,10 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
             return
         }
 
+        if RoomBroadcastCoordinator.shared.isWatchingRoom(roomID) {
+            await RoomBroadcastCoordinator.shared.leaveWatch()
+        }
+
         if session != nil {
             await leave(reason: .replaced, clearError: true)
         }
@@ -158,7 +244,6 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
             try TradeRoomLiveVoiceAudioSession.shared.activate(
                 requiresRecording: tokenResponse.canPublish
             )
-            refreshAudioDiagnostics()
             guard operationGeneration == joinGeneration, !isLeaving else {
                 await teardownRoom(joinedRoom, clearError: true, liveActivityEpoch: liveActivityEpoch)
                 return
@@ -283,8 +368,7 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
         }
     }
 
-    func refreshAudioDiagnosticsForLifecycle() {
-        refreshAudioDiagnostics()
+    func refreshVoiceChromeAfterForeground() {
         syncLiveActivity()
     }
 
@@ -388,6 +472,7 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
     // MARK: - Private
 
     private func teardownRoom(_ activeRoom: Room?, clearError: Bool, liveActivityEpoch: UInt64) async {
+        let presenceRoomID = session?.roomID
         if let activeRoom {
             activeRoom.remove(delegate: self)
             for participant in activeRoom.remoteParticipants.values {
@@ -410,6 +495,12 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
         releaseLiveVoiceAudio()
         TradeTraxsLiveVoiceLiveActivityManager.shared.end(sessionEpoch: liveActivityEpoch)
         notifySessionDidChange()
+        if let presenceRoomID {
+            cachedPresenceByRoom.removeValue(forKey: presenceRoomID)
+            Task { @MainActor in
+                await self.ensureGeneralVoicePresenceCached(roomID: presenceRoomID, force: true)
+            }
+        }
     }
 
     private func downgradeToListenOnly(on activeRoom: Room, error: Error) {
@@ -420,14 +511,15 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
             session = current
         }
         lastError = microphoneUserMessage(error) + " You can still listen to the channel."
-        Task {
-            try? await activeRoom.localParticipant.setMicrophone(enabled: false)
-            try? TradeRoomLiveVoiceAudioSession.shared.updateRequiresRecording(false)
-            await MainActor.run {
-                self.refreshAudioDiagnostics()
-                self.syncParticipants()
-                self.syncLiveActivity()
+        Task { @MainActor in
+            _ = try? await activeRoom.localParticipant.setMicrophone(enabled: false)
+            do {
+                try TradeRoomLiveVoiceAudioSession.shared.updateRequiresRecording(false)
+            } catch {
+                // Best-effort downgrade after mic failure.
             }
+            self.syncParticipants()
+            self.syncLiveActivity()
         }
         syncParticipants()
     }
@@ -568,11 +660,5 @@ final class RoomLiveVoiceCoordinator: RoomDelegate, ParticipantDelegate {
 
     private func releaseLiveVoiceAudio() {
         TradeRoomLiveVoiceAudioSession.shared.deactivate()
-        refreshAudioDiagnostics()
-    }
-
-    private func refreshAudioDiagnostics() {
-        TradeRoomLiveVoiceAudioSession.shared.refreshDiagnostics()
-        audioDiagnostics = TradeRoomLiveVoiceAudioSession.shared.diagnostics
     }
 }

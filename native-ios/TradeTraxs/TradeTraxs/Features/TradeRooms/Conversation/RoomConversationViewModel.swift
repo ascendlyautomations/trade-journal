@@ -15,7 +15,9 @@ final class RoomConversationViewModel {
     let roomID: RoomID
 
     private(set) var phase: Phase = .idle
-    private(set) var room: TradeRoom?
+    private(set) var room: TradeRoom? {
+        didSet { registerResolvedRoomIdentity() }
+    }
     private(set) var membership: RoomMembership?
     private(set) var joinRequestState: TradeRoomJoinRequestState?
     private(set) var ownerProfile: Profile?
@@ -67,7 +69,16 @@ final class RoomConversationViewModel {
 
     /// Prefer resolved UUID after slug deep-link lookup.
     private var resolvedRoomID: RoomID { room?.id ?? roomID }
-    private var pendingDeepLinkFocus: RoomNavigationFocusStore.Focus?
+
+    /// Room id for LiveKit, bootstrap RPC, and broadcast status (UUID when known).
+    var activeRoomID: RoomID { resolvedRoomID }
+    private var lastAcknowledgedIntentRevision: UInt64 = 0
+    private var pendingNotificationMessageID: MessageID?
+    private(set) var pendingOpenLiveBroadcast = false
+
+    func clearPendingOpenLiveBroadcast() {
+        pendingOpenLiveBroadcast = false
+    }
 
     private let rooms: any RoomRepository
     private let profiles: any ProfileRepository
@@ -91,6 +102,8 @@ final class RoomConversationViewModel {
     private var isRoomLiveRealtimeActive = false
     private var loadTask: Task<Void, Never>?
     private var channelLoadTasks: [RoomChannelID: Task<Void, Never>] = [:]
+    /// Bumped on user channel changes so in-flight loads cannot apply to a stale selection.
+    private var channelDisplayGeneration: UInt64 = 0
     private var channelCaches: [RoomChannelID: ChannelThreadCache] = [:]
     private var channelMetadataCached = false
     private var isApplyingRealtime = false
@@ -140,7 +153,20 @@ final class RoomConversationViewModel {
         self.realtimeHub = realtimeHub
         self.inboxStore = inboxStore ?? .shared
         self.messagesRepo = messages
-        self.pendingDeepLinkFocus = RoomNavigationFocusStore.shared.consume(for: roomID)
+        if let peek = RoomNavigationFocusStore.shared.pendingIntent(for: roomID) {
+            pendingOpenLiveBroadcast = peek.openLiveBroadcast
+            RoomNotificationNavigationTrace.event(
+                .init(
+                    stage: "vm.init",
+                    roomID: roomID.rawValue,
+                    sectionID: peek.channelID?.rawValue,
+                    sectionName: peek.channelName,
+                    messageID: peek.messageID?.rawValue,
+                    vmIdentity: ObjectIdentifier(self),
+                    detail: "intent=present revision=\(peek.revision)"
+                )
+            )
+        }
         blockObserver = NotificationCenter.default.addObserver(
             forName: .userBlockListDidChange,
             object: nil,
@@ -207,7 +233,8 @@ final class RoomConversationViewModel {
     }
 
     var memberCountLabel: String {
-        "#members"
+        guard let count = room?.memberCount else { return "" }
+        return "\(ProfileDisplay.compactCount(count)) members"
     }
 
     var isMember: Bool {
@@ -420,6 +447,112 @@ final class RoomConversationViewModel {
         loadTask = Task { await performInitialLoad() }
     }
 
+    /// Covering this room stops its subscription. Reappearing must subscribe again.
+    /// Live voice and livestream sessions are owned by the shell coordinators and are left alone.
+    func resumeRealtimeIfNeeded() {
+        guard phase == .loaded else { return }
+        guard !isRoomLiveRealtimeActive || realtimeTask == nil else { return }
+        startRealtime()
+        startOutboundSharedContentObserver()
+    }
+
+    /// Applies the latest unacknowledged navigation intent for this room (notification / deep link).
+    func applyNavigationIntentIfNeeded() {
+        registerResolvedRoomIdentity()
+        guard phase == .loaded || (room != nil && !channels.isEmpty) else { return }
+        guard let intent = RoomNavigationFocusStore.shared.pendingIntent(
+            for: roomID,
+            resolvedRoomID: room?.id
+        ) else { return }
+        guard intent.revision > lastAcknowledgedIntentRevision else { return }
+
+        pendingOpenLiveBroadcast = intent.openLiveBroadcast
+
+        let wantsChannel = intent.channelID != nil
+            || !(intent.channelName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        if wantsChannel {
+            guard let channelID = resolveChannelID(for: intent) else { return }
+            pendingNotificationMessageID = intent.messageID
+
+            let previousChannelID = selectedChannelID
+            channelDisplayGeneration &+= 1
+            selectedChannelID = channelID
+            if channelID != previousChannelID {
+                resetThreadScrollPosition()
+            }
+            let policy: ChannelPresentationPolicy =
+                channelID == previousChannelID && channelCaches[channelID]?.loadState.isDisplayReady == true
+                ? .useCache
+                : .reload
+            presentChannel(
+                channelID,
+                isBootstrap: false,
+                policy: policy,
+                scrollTargetMessageID: intent.messageID
+            )
+
+            RoomNavigationFocusStore.shared.acknowledgeIntent(
+                for: roomID,
+                revision: intent.revision,
+                resolvedRoomID: room?.id
+            )
+            lastAcknowledgedIntentRevision = intent.revision
+
+            if displayedMessagesMatchSelectedChannel(channelID), intent.messageID == nil {
+                pendingNotificationMessageID = nil
+            }
+        } else {
+            RoomNavigationFocusStore.shared.acknowledgeIntent(
+                for: roomID,
+                revision: intent.revision,
+                resolvedRoomID: room?.id
+            )
+            lastAcknowledgedIntentRevision = intent.revision
+        }
+
+        RoomNotificationNavigationTrace.event(
+            .init(
+                stage: "vm.navigationIntentApplied",
+                roomID: roomID.rawValue,
+                sectionID: intent.channelID?.rawValue,
+                sectionName: intent.channelName,
+                messageID: intent.messageID?.rawValue,
+                selectedChannelID: selectedChannelID?.rawValue,
+                vmIdentity: ObjectIdentifier(self),
+                detail: "revision=\(intent.revision)"
+            )
+        )
+    }
+
+    func applyPendingNavigationFocusToLoadedRoom() {
+        applyNavigationIntentIfNeeded()
+    }
+
+    /// Repeat external entry while this screen is already visible.
+    func adoptPendingNavigationFocus() {
+        RoomNotificationNavigationTrace.event(
+            .init(
+                stage: "vm.adoptFocus",
+                roomID: roomID.rawValue,
+                selectedChannelID: selectedChannelID?.rawValue,
+                vmIdentity: ObjectIdentifier(self),
+                channelIDs: channels.map(\.id.rawValue),
+                detail: "phase=\(String(describing: phase))"
+            )
+        )
+        applyNavigationIntentIfNeeded()
+    }
+
+    private func registerResolvedRoomIdentity() {
+        guard let room else { return }
+        var ids = [roomID, room.id]
+        let slug = room.slug.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !slug.isEmpty {
+            ids.append(RoomID(slug))
+        }
+        RoomNavigationFocusStore.shared.registerRoomAlias(ids)
+    }
+
     func retryLoad() {
         guard loadTask == nil else { return }
         phase = .idle
@@ -460,12 +593,12 @@ final class RoomConversationViewModel {
                 selectedChannelID = previousSelected
             } else if let first = loaded.first {
                 selectedChannelID = first.id
-                if channelCaches[first.id]?.isLoaded != true {
+                if channelCaches[first.id]?.loadState.isDisplayReady != true {
                     replaceMessages([])
                     nextOlderCursor = nil
                     hasMoreOlder = true
                     pendingScrollMessageID = nil
-                    loadChannelMessagesIfNeeded(first.id)
+                    presentChannel(first.id, isBootstrap: false, policy: .reload)
                 }
             } else {
                 selectedChannelID = nil
@@ -479,20 +612,23 @@ final class RoomConversationViewModel {
     /// Switch channel without recreating the room shell — swaps message list + cache only.
     func selectChannel(_ channelID: RoomChannelID) {
         guard channelID != selectedChannelID else { return }
+        cancelPendingNavigationIntent(reason: "manualSelect")
+        channelDisplayGeneration &+= 1
+        for (otherID, task) in channelLoadTasks where otherID != channelID {
+            task.cancel()
+            channelLoadTasks.removeValue(forKey: otherID)
+        }
         ExperienceHaptics.play(.selection)
         persistActiveChannelCache(scrollAnchor: messages.last?.id)
         resetThreadScrollPosition()
         selectedChannelID = channelID
-        if let cached = channelCaches[channelID], cached.isLoaded {
-            apply(cache: cached)
-            notifyScrollContentApplied(isBootstrap: false)
-        } else {
-            replaceMessages([])
-            nextOlderCursor = nil
-            hasMoreOlder = true
-            pendingScrollMessageID = nil
-            loadChannelMessagesIfNeeded(channelID)
-        }
+        pendingScrollMessageID = nil
+        highlightedMessageID = nil
+        let policy: ChannelPresentationPolicy = {
+            guard let state = channelCaches[channelID]?.loadState else { return .reload }
+            return state.isDisplayReady ? .useCache : .reload
+        }()
+        presentChannel(channelID, isBootstrap: false, policy: policy)
     }
 
     func loadOlderIfNeeded() async {
@@ -1301,8 +1437,45 @@ final class RoomConversationViewModel {
         var nextOlderCursor: String?
         var hasMoreOlder: Bool
         var scrollAnchorMessageID: MessageID?
-        var isLoaded: Bool
+        var loadState: RoomChannelThreadLoadState
+
+        static func fromDisk(_ thread: SocialDiskCache.RoomChannelThreadBlob) -> ChannelThreadCache {
+            ChannelThreadCache(
+                messages: thread.messages,
+                nextOlderCursor: thread.nextOlderCursor,
+                hasMoreOlder: thread.hasMoreOlder,
+                scrollAnchorMessageID: thread.messages.last?.id,
+                loadState: RoomChannelThreadLoadState(
+                    diskIsLoaded: thread.isLoaded,
+                    messageCount: thread.messages.count
+                )
+            )
+        }
+
+        static func fromBootstrap(
+            messages: [Message],
+            nextOlderCursor: String?,
+            hasMoreOlder: Bool,
+            scrollAnchorMessageID: MessageID?,
+            isLoaded: Bool
+        ) -> ChannelThreadCache {
+            ChannelThreadCache(
+                messages: messages,
+                nextOlderCursor: nextOlderCursor,
+                hasMoreOlder: hasMoreOlder,
+                scrollAnchorMessageID: scrollAnchorMessageID,
+                loadState: RoomChannelThreadLoadState(diskIsLoaded: isLoaded, messageCount: messages.count)
+            )
+        }
     }
+
+    private enum ChannelPresentationPolicy {
+        case useCache
+        case reload
+    }
+
+    private let notificationAnchorMaxPages = 8
+    private let notificationAnchorPageSize = 40
 
     private func performInitialLoad() async {
         phase = .loading
@@ -1330,6 +1503,7 @@ final class RoomConversationViewModel {
             applyDiskSnapshot(disk)
             hydratedFromDisk = true
             phase = .loaded
+            applyNavigationIntentIfNeeded()
         }
 
         do {
@@ -1353,7 +1527,12 @@ final class RoomConversationViewModel {
                           ConversationThreadSessionStore.openThreadNeedsFullBootstrap(messageCount: messages.count),
                           let channelID = selectedChannelID
                 {
-                    try await fetchChannelMessages(channelID)
+                    let generation = channelDisplayGeneration
+                    try await fetchChannelMessages(
+                        channelID,
+                        displayGeneration: generation,
+                        isBootstrap: false
+                    )
                 } else if hydratedFromDisk, membership == nil {
                     SocialPersistedCacheCoordinator.invalidateRoomSnapshot(viewerID: viewer, roomID: roomID)
                     channelCaches = [:]
@@ -1374,6 +1553,9 @@ final class RoomConversationViewModel {
                 await hydrateSenders(for: messages)
                 hydrateSharedContent(from: messages)
             }
+            applyDefaultChannelSelectionIfNeeded()
+            applyNavigationIntentIfNeeded()
+            refreshDisplayedChannelFromSelection(isBootstrap: false)
             startRealtime()
             startOutboundSharedContentObserver()
         } catch {
@@ -1432,10 +1614,7 @@ final class RoomConversationViewModel {
 
         channels = DemoExploreTradeRoom.channels(roomID: roomID)
         channelMetadataCached = true
-        applyPendingDeepLinkFocusSelectingChannel()
-        if selectedChannelID == nil {
-            selectedChannelID = channels.first?.id
-        }
+        applyDefaultChannelSelectionIfNeeded(fallback: channels.first?.id)
 
         for channel in channels {
             let roomMessages = DemoExploreTradeRoom.messages(
@@ -1444,7 +1623,7 @@ final class RoomConversationViewModel {
                 channelID: channel.id
             )
             let mapped = roomMessages.map(RoomMessageMapping.displayMessage)
-            channelCaches[channel.id] = ChannelThreadCache(
+            channelCaches[channel.id] = ChannelThreadCache.fromBootstrap(
                 messages: mapped.sorted { $0.createdAt < $1.createdAt },
                 nextOlderCursor: nil,
                 hasMoreOlder: false,
@@ -1459,7 +1638,7 @@ final class RoomConversationViewModel {
             await hydrateSenders(for: cache.messages)
             hydrateSharedContent(from: cache.messages)
         }
-        applyPendingDeepLinkFocusHighlight()
+        applyNavigationIntentIfNeeded()
         phase = .loaded
         if let tradeID = DemoCanonicalDataset.trades().first?.id,
            let trade = try? await tradesRepo?.trade(id: tradeID)
@@ -1512,10 +1691,7 @@ final class RoomConversationViewModel {
 
         channels = TradeRoomsFixtures.channels(roomID: roomID)
         channelMetadataCached = true
-        applyPendingDeepLinkFocusSelectingChannel()
-        if selectedChannelID == nil {
-            selectedChannelID = channels.first?.id
-        }
+        applyDefaultChannelSelectionIfNeeded(fallback: channels.first?.id)
 
         for channel in channels {
             let roomMessages = TradeRoomsFixtures.messages(
@@ -1524,7 +1700,7 @@ final class RoomConversationViewModel {
                 channelID: channel.id
             )
             let mapped = roomMessages.map(RoomMessageMapping.displayMessage)
-            channelCaches[channel.id] = ChannelThreadCache(
+            channelCaches[channel.id] = ChannelThreadCache.fromBootstrap(
                 messages: mapped.sorted { $0.createdAt < $1.createdAt },
                 nextOlderCursor: nil,
                 hasMoreOlder: false,
@@ -1538,7 +1714,7 @@ final class RoomConversationViewModel {
             notifyScrollContentApplied(isBootstrap: true)
             await hydrateSenders(for: cache.messages)
         }
-        applyPendingDeepLinkFocusHighlight()
+        applyNavigationIntentIfNeeded()
         for trade in TradeShareFixtures.sampleTrades(ownerID: viewerID) {
             sharedTrades[trade.id] = trade
         }
@@ -1564,9 +1740,7 @@ final class RoomConversationViewModel {
             membership = nil
             channels = applied.channels
             channelMetadataCached = true
-            selectedChannelID = applied.selectedChannelID
-            applyPendingDeepLinkFocusSelectingChannel()
-            let incoming = ChannelThreadCache(
+            let incoming = ChannelThreadCache.fromBootstrap(
                 messages: applied.channelCache.messages,
                 nextOlderCursor: applied.channelCache.nextOlderCursor,
                 hasMoreOlder: applied.channelCache.hasMoreOlder,
@@ -1577,12 +1751,17 @@ final class RoomConversationViewModel {
             RoomTimelineTrace.log(stage: "bootstrapMapped", messages: incoming.messages, extra: "guestBootstrap")
             #endif
             let cache = reconcileChannelThreadCache(channelID: applied.selectedChannelID, incoming: incoming)
-            installChannelCache(cache, for: applied.selectedChannelID, isBootstrap: true)
-            await hydrateSenders(for: cache.messages)
-            hydrateSharedContent(from: cache.messages)
-            applyPendingDeepLinkFocusHighlight()
-            if let last = cache.messages.last {
-                patchInboxPreview(with: last)
+            channelCaches[applied.selectedChannelID] = cache
+            applyBootstrapActiveChannelUnlessIntent(applied.selectedChannelID)
+            applyNavigationIntentIfNeeded()
+            refreshDisplayedChannelFromSelection(isBootstrap: true)
+            if let selectedChannelID,
+               let displayed = channelCaches[selectedChannelID]
+            {
+                Task { await hydrateSenders(for: displayed.messages) }
+                if let last = displayed.messages.last {
+                    patchInboxPreview(with: last)
+                }
             }
             persistRoomSnapshotToDisk()
             return true
@@ -1615,9 +1794,7 @@ final class RoomConversationViewModel {
             }
             channels = applied.channels
             channelMetadataCached = true
-            selectedChannelID = applied.selectedChannelID
-            applyPendingDeepLinkFocusSelectingChannel()
-            let incoming = ChannelThreadCache(
+            let incoming = ChannelThreadCache.fromBootstrap(
                 messages: applied.channelCache.messages,
                 nextOlderCursor: applied.channelCache.nextOlderCursor,
                 hasMoreOlder: applied.channelCache.hasMoreOlder,
@@ -1628,16 +1805,20 @@ final class RoomConversationViewModel {
             RoomTimelineTrace.log(stage: "bootstrapMapped", messages: incoming.messages, extra: "memberBootstrap")
             #endif
             let cache = reconcileChannelThreadCache(channelID: applied.selectedChannelID, incoming: incoming)
+            channelCaches[applied.selectedChannelID] = cache
+            applyBootstrapActiveChannelUnlessIntent(applied.selectedChannelID)
             if canViewMessages {
-                installChannelCache(cache, for: applied.selectedChannelID, isBootstrap: true)
-                await hydrateSenders(for: cache.messages)
-                hydrateSharedContent(from: cache.messages)
-                applyPendingDeepLinkFocusHighlight()
-                if let last = cache.messages.last {
-                    patchInboxPreview(with: last)
+                applyNavigationIntentIfNeeded()
+                refreshDisplayedChannelFromSelection(isBootstrap: true)
+                if let selectedChannelID,
+                   let displayed = channelCaches[selectedChannelID]
+                {
+                    Task { await hydrateSenders(for: displayed.messages) }
+                    if let last = displayed.messages.last {
+                        patchInboxPreview(with: last)
+                    }
                 }
             } else {
-                channelCaches[applied.selectedChannelID] = cache
                 replaceMessages([])
                 hasMoreOlder = false
                 if membership == nil, applied.room.joinPolicy == .approval {
@@ -1694,9 +1875,10 @@ final class RoomConversationViewModel {
                 try? await tagStore.hydrateTags(roomID: activeRoomID, repository: management)
                 refreshViewerModeratorStatus()
             }
-            applyPendingDeepLinkFocusSelectingChannel()
-            if selectedChannelID == nil || !channels.contains(where: { $0.id == selectedChannelID }) {
-                selectedChannelID = channels.first?.id
+            if selectedChannelID == nil
+                || !channels.contains(where: { $0.id == selectedChannelID })
+            {
+                applyDefaultChannelSelectionIfNeeded(fallback: channels.first?.id)
             }
         }
 
@@ -1710,8 +1892,13 @@ final class RoomConversationViewModel {
             hasMoreOlder = false
             return
         }
-        try await fetchChannelMessages(channelID)
-        applyPendingDeepLinkFocusHighlight()
+        let generation = channelDisplayGeneration
+        try await fetchChannelMessages(channelID, displayGeneration: generation, isBootstrap: true)
+        finishNotificationChannelNavigation(
+            channelID: channelID,
+            generation: generation,
+            scrollTarget: pendingNotificationMessageID
+        )
     }
 
     private func reconcileMemberCount(source: RoomMemberCountProbe.Source) async {
@@ -1743,13 +1930,10 @@ final class RoomConversationViewModel {
         )
     }
 
-    /// Selects the deep-linked channel before the first message fetch.
-    private func applyPendingDeepLinkFocusSelectingChannel() {
-        guard let focus = pendingDeepLinkFocus else { return }
-        if let channelID = focus.channelID {
+    private func resolveChannelID(for intent: RoomNavigationFocusStore.Focus) -> RoomChannelID? {
+        if let channelID = intent.channelID {
             if channels.contains(where: { $0.id == channelID }) {
-                selectedChannelID = channelID
-                return
+                return channelID
             }
             let needle = channelID.rawValue.lowercased()
             if let match = channels.first(where: {
@@ -1757,31 +1941,190 @@ final class RoomConversationViewModel {
                     || $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == needle
                     || $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "#\(needle)"
             }) {
-                selectedChannelID = match.id
+                return match.id
             }
+        }
+
+        if let rawName = intent.channelName?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+            !rawName.isEmpty
+        {
+            let normalized = rawName.hasPrefix("#") ? String(rawName.dropFirst()) : rawName
+            if let match = channels.first(where: {
+                $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == normalized
+            }) {
+                return match.id
+            }
+        }
+
+        return nil
+    }
+
+    private func applyDefaultChannelSelectionIfNeeded(
+        diskPreferred: RoomChannelID? = nil,
+        serverPreferred: RoomChannelID? = nil,
+        fallback: RoomChannelID? = nil
+    ) {
+        guard !RoomNavigationFocusStore.shared.hasActiveChannelIntent(
+            for: roomID,
+            resolvedRoomID: room?.id
+        ) else { return }
+        guard selectedChannelID == nil
+            || !channels.contains(where: { $0.id == selectedChannelID })
+        else { return }
+
+        if let diskPreferred, channels.contains(where: { $0.id == diskPreferred }) {
+            selectedChannelID = diskPreferred
+        } else if let serverPreferred, channels.contains(where: { $0.id == serverPreferred }) {
+            selectedChannelID = serverPreferred
+        } else if let fallback, channels.contains(where: { $0.id == fallback }) {
+            selectedChannelID = fallback
+        } else {
+            selectedChannelID = channels.first?.id
         }
     }
 
-    /// Scrolls / highlights the deep-linked message after the channel thread loads.
-    private func applyPendingDeepLinkFocusHighlight() {
-        guard let focus = pendingDeepLinkFocus else { return }
-        pendingDeepLinkFocus = nil
-        if let messageID = focus.messageID {
-            pendingScrollMessageID = messageID
-            highlightedMessageID = messageID
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 2_400_000_000)
-                if highlightedMessageID == messageID {
-                    highlightedMessageID = nil
+    private func applyBootstrapActiveChannelUnlessIntent(_ serverActiveChannelID: RoomChannelID) {
+        applyDefaultChannelSelectionIfNeeded(serverPreferred: serverActiveChannelID)
+    }
+
+    private func refreshDisplayedChannelFromSelection(isBootstrap: Bool) {
+        guard let channelID = selectedChannelID else {
+            replaceMessages([])
+            return
+        }
+        presentChannel(channelID, isBootstrap: isBootstrap, policy: .useCache)
+    }
+
+    private func isDisplayGenerationCurrent(_ channelID: RoomChannelID, generation: UInt64) -> Bool {
+        generation == channelDisplayGeneration && selectedChannelID == channelID
+    }
+
+    /// Central channel presentation — manual selection, notifications, and bootstrap recovery share this path.
+    private func presentChannel(
+        _ channelID: RoomChannelID,
+        isBootstrap: Bool,
+        policy: ChannelPresentationPolicy,
+        scrollTargetMessageID: MessageID? = nil
+    ) {
+        let generation = channelDisplayGeneration
+        if policy == .useCache, let cache = channelCaches[channelID] {
+            switch cache.loadState {
+            case .loaded where !cache.messages.isEmpty:
+                if messages.isEmpty || !displayedMessagesMatchSelectedChannel(channelID) {
+                    resetThreadScrollPosition()
+                    apply(cache: cache)
+                    notifyScrollContentApplied(isBootstrap: isBootstrap)
+                    hydrateSharedContent(from: cache.messages)
                 }
+                finishNotificationChannelNavigation(
+                    channelID: channelID,
+                    generation: generation,
+                    scrollTarget: scrollTargetMessageID
+                )
+                return
+            case .loadedEmpty:
+                apply(cache: cache)
+                notifyScrollContentApplied(isBootstrap: isBootstrap)
+                finishNotificationChannelNavigation(
+                    channelID: channelID,
+                    generation: generation,
+                    scrollTarget: scrollTargetMessageID
+                )
+                return
+            case .loading:
+                return
+            case .unloaded, .failed, .loaded:
+                break
             }
+        }
+
+        if policy == .useCache,
+           channelCaches[channelID]?.loadState == .loading
+        {
+            return
+        }
+
+        replaceMessages([])
+        nextOlderCursor = nil
+        hasMoreOlder = true
+        pendingScrollMessageID = nil
+        initialScrollPhase = .pending
+        startChannelLoad(
+            channelID,
+            generation: generation,
+            isBootstrap: isBootstrap,
+            scrollTargetMessageID: scrollTargetMessageID ?? pendingNotificationMessageID
+        )
+    }
+
+    private func displayedMessagesMatchSelectedChannel(_ channelID: RoomChannelID) -> Bool {
+        messages.isEmpty
+            || messages.allSatisfy { $0.conversationID.rawValue == channelID.rawValue }
+    }
+
+    private func channelCacheUsableForDisplay(_ channelID: RoomChannelID) -> Bool {
+        guard let cache = channelCaches[channelID], cache.loadState.hasTranscript else { return false }
+        return !cache.messages.isEmpty
+    }
+
+    private func markChannelLoading(_ channelID: RoomChannelID) {
+        var cache = channelCaches[channelID] ?? ChannelThreadCache(
+            messages: [],
+            nextOlderCursor: nil,
+            hasMoreOlder: true,
+            scrollAnchorMessageID: nil,
+            loadState: .unloaded
+        )
+        cache.loadState = .loading
+        channelCaches[channelID] = cache
+    }
+
+    private func cancelPendingNavigationIntent(reason: String) {
+        pendingNotificationMessageID = nil
+        if let intent = RoomNavigationFocusStore.shared.pendingIntent(
+            for: roomID,
+            resolvedRoomID: room?.id
+        ) {
+            lastAcknowledgedIntentRevision = intent.revision
+        }
+        pendingOpenLiveBroadcast = false
+        RoomNavigationFocusStore.shared.cancelIntent(for: roomID, resolvedRoomID: room?.id)
+        RoomNotificationNavigationTrace.event(
+            .init(
+                stage: "vm.cancelIntent",
+                roomID: roomID.rawValue,
+                selectedChannelID: selectedChannelID?.rawValue,
+                detail: reason
+            )
+        )
+    }
+
+    private func finishNotificationChannelNavigation(
+        channelID: RoomChannelID,
+        generation: UInt64,
+        scrollTarget: MessageID?
+    ) {
+        let target = scrollTarget ?? pendingNotificationMessageID
+        guard let target else { return }
+        guard selectedChannelID == channelID, displayedMessagesMatchSelectedChannel(channelID) else { return }
+        Task { @MainActor in
+            await anchorNotificationMessage(target, channelID: channelID, generation: generation)
         }
     }
 
-    private func loadChannelMessagesIfNeeded(_ channelID: RoomChannelID) {
+    private func startChannelLoad(
+        _ channelID: RoomChannelID,
+        generation: UInt64,
+        isBootstrap: Bool,
+        scrollTargetMessageID: MessageID?
+    ) {
         guard canViewMessages else { return }
-        if channelCaches[channelID]?.isLoaded == true { return }
-        if channelLoadTasks[channelID] != nil { return }
+        channelLoadTasks[channelID]?.cancel()
+        channelLoadTasks[channelID] = nil
+        markChannelLoading(channelID)
+
         channelLoadTasks[channelID] = Task { [weak self] in
             guard let self else { return }
             defer { self.channelLoadTasks[channelID] = nil }
@@ -1800,35 +2143,62 @@ final class RoomConversationViewModel {
                     incoming: mapped,
                     viewerID: viewerID
                 )
+                let state: RoomChannelThreadLoadState = sorted.isEmpty ? .loadedEmpty : .loaded
                 let cache = ChannelThreadCache(
                     messages: sorted,
                     nextOlderCursor: nil,
                     hasMoreOlder: false,
                     scrollAnchorMessageID: sorted.last?.id,
-                    isLoaded: true
+                    loadState: state
                 )
                 channelCaches[channelID] = cache
-                if selectedChannelID == channelID {
-                    apply(cache: cache)
-                    notifyScrollContentApplied(isBootstrap: true)
-                }
+                guard isDisplayGenerationCurrent(channelID, generation: generation) else { return }
+                apply(cache: cache)
+                notifyScrollContentApplied(isBootstrap: isBootstrap)
                 await hydrateSenders(for: sorted)
+                finishNotificationChannelNavigation(
+                    channelID: channelID,
+                    generation: generation,
+                    scrollTarget: scrollTargetMessageID
+                )
                 return
             }
             do {
-                try await fetchChannelMessages(channelID)
+                try await fetchChannelMessages(
+                    channelID,
+                    displayGeneration: generation,
+                    isBootstrap: isBootstrap
+                )
+                guard isDisplayGenerationCurrent(channelID, generation: generation) else { return }
+                finishNotificationChannelNavigation(
+                    channelID: channelID,
+                    generation: generation,
+                    scrollTarget: scrollTargetMessageID
+                )
             } catch {
-                // Soft-fail channel load; room shell stays up.
+                var failed = channelCaches[channelID] ?? ChannelThreadCache(
+                    messages: [],
+                    nextOlderCursor: nil,
+                    hasMoreOlder: true,
+                    scrollAnchorMessageID: nil,
+                    loadState: .unloaded
+                )
+                failed.loadState = .failed
+                channelCaches[channelID] = failed
             }
         }
     }
 
-    private func fetchChannelMessages(_ channelID: RoomChannelID) async throws {
+    private func fetchChannelMessages(
+        _ channelID: RoomChannelID,
+        displayGeneration: UInt64,
+        isBootstrap: Bool
+    ) async throws {
         let channel = channels.first { $0.id == channelID }
         let page = try await rooms.messages(
             roomID: roomID,
             channel: channel,
-            page: PageRequest(limit: 50)
+            page: PageRequest(limit: notificationAnchorPageSize)
         )
         let mapped = page.items.map(RoomMessageMapping.displayMessage)
         let existing = channelCaches[channelID]?.messages ?? []
@@ -1843,22 +2213,159 @@ final class RoomConversationViewModel {
             extra: "fetchChannel existingCount=\(existing.count) incomingCount=\(mapped.count)"
         )
         #endif
+        let loadState: RoomChannelThreadLoadState = sorted.isEmpty ? .loadedEmpty : .loaded
         let cache = ChannelThreadCache(
             messages: sorted,
             nextOlderCursor: page.nextCursor ?? channelCaches[channelID]?.nextOlderCursor,
             hasMoreOlder: page.nextCursor != nil || (channelCaches[channelID]?.hasMoreOlder ?? false),
             scrollAnchorMessageID: sorted.last?.id,
-            isLoaded: true
+            loadState: loadState
         )
         channelCaches[channelID] = cache
-        if selectedChannelID == channelID {
-            apply(cache: cache)
-            notifyScrollContentApplied(isBootstrap: true)
-        }
+        guard isDisplayGenerationCurrent(channelID, generation: displayGeneration) else { return }
+        apply(cache: cache)
+        notifyScrollContentApplied(isBootstrap: isBootstrap)
         await hydrateSenders(for: sorted)
         hydrateSharedContent(from: sorted)
-        if let last = sorted.last, channelID == selectedChannelID {
+        if let last = sorted.last {
             patchInboxPreview(with: last)
+        }
+    }
+
+    private func anchorNotificationMessage(
+        _ target: MessageID,
+        channelID: RoomChannelID,
+        generation: UInt64
+    ) async {
+        guard isDisplayGenerationCurrent(channelID, generation: generation) else { return }
+        if messages.contains(where: { $0.id == target }) {
+            pendingNotificationMessageID = nil
+            applyNotificationHighlight(target)
+            return
+        }
+
+        if let viewerID,
+           !MessagesInboxSupport.isLocalDevelopmentProfile(viewerID),
+           !roomID.rawValue.hasPrefix("dev-")
+        {
+            if let roomMessage = try? await rooms.roomMessage(
+                roomID: resolvedRoomID,
+                messageID: RoomMessageID(target.rawValue)
+            ) {
+                await mergeFetchedRoomMessage(roomMessage, channelID: channelID, generation: generation)
+                if isDisplayGenerationCurrent(channelID, generation: generation),
+                   messages.contains(where: { $0.id == target })
+                {
+                    pendingNotificationMessageID = nil
+                    applyNotificationHighlight(target)
+                    return
+                }
+            }
+        }
+
+        var pages = 0
+        while hasMoreOlder, pages < notificationAnchorMaxPages {
+            guard isDisplayGenerationCurrent(channelID, generation: generation) else { return }
+            pages += 1
+            let loadedOlder = await fetchOlderPageForChannel(channelID, generation: generation)
+            if !loadedOlder { break }
+            if messages.contains(where: { $0.id == target }) {
+                pendingNotificationMessageID = nil
+                applyNotificationHighlight(target)
+                return
+            }
+        }
+
+        if messages.contains(where: { $0.id == target }) {
+            pendingNotificationMessageID = nil
+            applyNotificationHighlight(target)
+        }
+    }
+
+    private func mergeFetchedRoomMessage(
+        _ roomMessage: RoomMessage,
+        channelID: RoomChannelID,
+        generation: UInt64
+    ) async {
+        guard let viewerID else { return }
+        let mapped = RoomMessageMapping.displayMessage(from: roomMessage)
+        var cache = channelCaches[channelID] ?? ChannelThreadCache(
+            messages: [],
+            nextOlderCursor: nextOlderCursor,
+            hasMoreOlder: hasMoreOlder,
+            scrollAnchorMessageID: nil,
+            loadState: .loaded
+        )
+        cache.messages = ConversationMessageMerge.mergeMessages(
+            existing: cache.messages,
+            incoming: [mapped],
+            viewerID: viewerID
+        )
+        cache.loadState = cache.messages.isEmpty ? .loadedEmpty : .loaded
+        channelCaches[channelID] = cache
+        guard isDisplayGenerationCurrent(channelID, generation: generation) else { return }
+        apply(cache: cache)
+        notifyScrollContentApplied(isBootstrap: false)
+        hydrateSharedContent(from: cache.messages)
+        await hydrateSenders(for: cache.messages)
+    }
+
+    private func fetchOlderPageForChannel(
+        _ channelID: RoomChannelID,
+        generation: UInt64
+    ) async -> Bool {
+        guard isDisplayGenerationCurrent(channelID, generation: generation) else { return false }
+        guard let channel = channels.first(where: { $0.id == channelID }) else { return false }
+        guard let viewerID, !MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) else { return false }
+        var cache = channelCaches[channelID]
+        let cursor = cache?.nextOlderCursor ?? nextOlderCursor
+        guard cache?.hasMoreOlder != false || nextOlderCursor != nil else { return false }
+        do {
+            var page = PageRequest(limit: notificationAnchorPageSize)
+            page.cursor = cursor
+            let result = try await rooms.messages(roomID: roomID, channel: channel, page: page)
+            let mapped = result.items.map(RoomMessageMapping.displayMessage)
+            guard isDisplayGenerationCurrent(channelID, generation: generation) else { return false }
+            commitMessages(mapped, recordScrollEvents: false)
+            await hydrateSenders(for: mapped)
+            hydrateSharedContent(from: mapped)
+            var updated = cache ?? ChannelThreadCache(
+                messages: [],
+                nextOlderCursor: nil,
+                hasMoreOlder: true,
+                scrollAnchorMessageID: nil,
+                loadState: .loaded
+            )
+            updated.messages = messages
+            updated.nextOlderCursor = result.nextCursor
+            updated.hasMoreOlder = result.nextCursor != nil
+            updated.loadState = messages.isEmpty ? .loadedEmpty : .loaded
+            updated.scrollAnchorMessageID = messages.last?.id
+            channelCaches[channelID] = updated
+            nextOlderCursor = updated.nextOlderCursor
+            hasMoreOlder = updated.hasMoreOlder
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func applyNotificationHighlight(_ target: MessageID) {
+        pendingScrollMessageID = target
+        highlightedMessageID = target
+        RoomNotificationNavigationTrace.event(
+            .init(
+                stage: "vm.notificationChannelComplete",
+                roomID: roomID.rawValue,
+                messageID: target.rawValue,
+                selectedChannelID: selectedChannelID?.rawValue
+            )
+        )
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_400_000_000)
+            if highlightedMessageID == target {
+                highlightedMessageID = nil
+            }
         }
     }
 
@@ -1875,7 +2382,7 @@ final class RoomConversationViewModel {
             nextOlderCursor: nil,
             hasMoreOlder: true,
             scrollAnchorMessageID: nil,
-            isLoaded: false
+            loadState: .unloaded
         )
         existing.messages = messages
         existing.nextOlderCursor = nextOlderCursor
@@ -1883,7 +2390,7 @@ final class RoomConversationViewModel {
         if let scrollAnchor {
             existing.scrollAnchorMessageID = scrollAnchor
         }
-        existing.isLoaded = true
+        existing.loadState = messages.isEmpty ? .loadedEmpty : .loaded
         channelCaches[selectedChannelID] = existing
         persistRoomSnapshotToDisk()
     }
@@ -1893,31 +2400,29 @@ final class RoomConversationViewModel {
         membership = disk.membership
         channels = disk.channels
         channelMetadataCached = true
-        if let rawSelected = disk.selectedChannelID {
-            let selected = RoomChannelID(rawSelected)
-            selectedChannelID = selected
-        } else {
-            selectedChannelID = channels.first?.id
-        }
         var restoredCaches: [RoomChannelID: ChannelThreadCache] = [:]
         for (key, thread) in disk.channelThreads {
             let channelID = RoomChannelID(key)
-            restoredCaches[channelID] = ChannelThreadCache(
-                messages: thread.messages,
-                nextOlderCursor: thread.nextOlderCursor,
-                hasMoreOlder: thread.hasMoreOlder,
-                scrollAnchorMessageID: thread.messages.last?.id,
-                isLoaded: thread.isLoaded
-            )
+            restoredCaches[channelID] = ChannelThreadCache.fromDisk(thread)
         }
         channelCaches = restoredCaches
-        if let selectedChannelID, let cache = channelCaches[selectedChannelID] {
+        let diskChannel = disk.selectedChannelID.map { RoomChannelID($0) }
+        applyDefaultChannelSelectionIfNeeded(diskPreferred: diskChannel, fallback: channels.first?.id)
+        applyNavigationIntentIfNeeded()
+        refreshDisplayedChannelFromSelection(isBootstrap: false)
+        if pendingNotificationMessageID == nil,
+           RoomNavigationFocusStore.shared.pendingIntent(for: roomID, resolvedRoomID: room?.id) == nil,
+           let selectedChannelID,
+           let cache = channelCaches[selectedChannelID]
+        {
             #if DEBUG
             RoomTimelineTrace.log(stage: "diskLoaded", messages: cache.messages)
             #endif
-            apply(cache: cache)
-            notifyScrollContentApplied(isBootstrap: false)
-            hydrateSharedContent(from: cache.messages)
+            if messages.isEmpty {
+                apply(cache: cache)
+                notifyScrollContentApplied(isBootstrap: false)
+                hydrateSharedContent(from: cache.messages)
+            }
         }
     }
 
@@ -1931,7 +2436,7 @@ final class RoomConversationViewModel {
                     messages: entry.value.messages,
                     nextOlderCursor: entry.value.nextOlderCursor,
                     hasMoreOlder: entry.value.hasMoreOlder,
-                    isLoaded: entry.value.isLoaded
+                    isLoaded: entry.value.loadState.diskIsLoaded
                 )
             )
         })
@@ -1995,14 +2500,14 @@ final class RoomConversationViewModel {
             nextOlderCursor: nil,
             hasMoreOlder: true,
             scrollAnchorMessageID: nil,
-            isLoaded: true
+            loadState: .loaded
         )
         cache.messages = ConversationMessageMerge.mergeMessages(
             existing: cache.messages,
             incoming: [message],
             viewerID: viewerID
         )
-        cache.isLoaded = true
+        cache.loadState = cache.messages.isEmpty ? .loadedEmpty : .loaded
         cache.scrollAnchorMessageID = message.id
         channelCaches[channelID] = cache
 
@@ -2137,12 +2642,20 @@ final class RoomConversationViewModel {
             extra: "channel=\(channelID.rawValue) existingCount=\(existing?.messages.count ?? 0) incomingCount=\(incoming.messages.count)"
         )
         #endif
+        let loadState: RoomChannelThreadLoadState = {
+            if reconciled.isEmpty {
+                return incoming.loadState.isDisplayReady || existing?.loadState.isDisplayReady == true
+                    ? .loadedEmpty
+                    : .unloaded
+            }
+            return .loaded
+        }()
         return ChannelThreadCache(
             messages: reconciled,
             nextOlderCursor: incoming.nextOlderCursor ?? existing?.nextOlderCursor,
             hasMoreOlder: incoming.hasMoreOlder || (existing?.hasMoreOlder ?? false),
             scrollAnchorMessageID: reconciled.last?.id,
-            isLoaded: incoming.isLoaded || (existing?.isLoaded ?? false)
+            loadState: loadState
         )
     }
 
@@ -2960,7 +3473,8 @@ final class RoomConversationViewModel {
     private func reloadMessagesAfterMembershipGranted() async throws {
         guard canViewMessages, let channelID = selectedChannelID else { return }
         channelCaches.removeValue(forKey: channelID)
-        try await fetchChannelMessages(channelID)
+        let generation = channelDisplayGeneration
+        try await fetchChannelMessages(channelID, displayGeneration: generation, isBootstrap: false)
     }
 
     private func isAlreadyPendingJoinError(_ error: Error) -> Bool {

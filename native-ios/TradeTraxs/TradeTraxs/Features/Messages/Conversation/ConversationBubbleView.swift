@@ -17,7 +17,7 @@ struct ConversationBubbleView: View {
     var onLongPressForActionMenu: (() -> Void)? = nil
     var isActionMenuAnchorActive: Bool = false
     var canDelete: Bool = false
-    var deleteMenuTitle: String = "Delete"
+    var deleteMenuTitle: String = "Delete for Me"
     var onRetry: (() -> Void)?
     var onDelete: (() -> Void)?
     var onSharedTradeTap: ((TradeID) -> Void)? = nil

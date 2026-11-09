@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { memo, useEffect, useState } from "react"
 import FeedPostScreenshot from "@/app/components/feed/FeedPostScreenshot"
 import SharedTradeMessageCard from "@/app/components/SharedTradeMessageCard"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
@@ -12,6 +12,12 @@ import {
   roomSharedContentLabel,
   type RoomSharedContentReference,
 } from "@/lib/roomMessageSharedContent"
+import {
+  getCachedRoomSharedPostEmbed,
+  getOrCreateRoomSharedPostInflight,
+  setCachedRoomSharedPostEmbed,
+  stableRoomSharedContentKey,
+} from "@/lib/roomSharedContentEmbedCache"
 import {
   getSharedContentViewHref,
   SHARED_POST_UNAVAILABLE,
@@ -37,7 +43,7 @@ type RoomSharedContentCardProps = {
   className?: string
 }
 
-export default function RoomSharedContentCard({
+function RoomSharedContentCard({
   reference,
   viewerUserId,
   onViewTrade,
@@ -67,6 +73,23 @@ export default function RoomSharedContentCard({
   )
 }
 
+const RoomSharedContentCardMemo = memo(RoomSharedContentCard, (prev, next) => {
+  if (stableRoomSharedContentKey(prev.reference) !== stableRoomSharedContentKey(next.reference)) {
+    return false
+  }
+  return (
+    prev.viewerUserId === next.viewerUserId &&
+    prev.deferUntilVisible === next.deferUntilVisible &&
+    prev.className === next.className &&
+    prev.onViewTrade === next.onViewTrade &&
+    prev.onNavigate === next.onNavigate
+  )
+})
+
+RoomSharedContentCardMemo.displayName = "RoomSharedContentCard"
+
+export default RoomSharedContentCardMemo
+
 function RoomSharedPostLikeCard({
   reference,
   onNavigate,
@@ -76,16 +99,39 @@ function RoomSharedPostLikeCard({
   onNavigate: (href: string) => void
   className?: string
 }) {
-  const [post, setPost] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
+  const embedKey = stableRoomSharedContentKey(reference)
+  const initialCached = getCachedRoomSharedPostEmbed(embedKey)
+  const [post, setPost] = useState<unknown | null>(() =>
+    initialCached !== undefined ? initialCached : null
+  )
+  const [loading, setLoading] = useState(() => initialCached === undefined)
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
+    const key = embedKey
 
-    async function load() {
-      setLoading(true)
-      setPost(null)
+    const cached = getCachedRoomSharedPostEmbed(key)
+    if (cached !== undefined) {
+      setPost(cached)
+      setLoading(false)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    setLoading(true)
+    setPost(null)
+
+    /**
+     * Apply state from the shared inflight promise, not only from inside the factory.
+     * In React Strict Mode the effect runs twice: the first run sets `cancelled` before the
+     * factory resolves, so `if (!cancelled)` inside the factory skips setState forever while
+     * the second run reuses the same promise and must still hydrate the UI (cache may fill
+     * after the aborted run's cleanup).
+     */
+    const inflight = getOrCreateRoomSharedPostInflight(key, async () => {
+      let row: unknown = null
 
       if (reference.kind === "reel" && reference.reelId) {
         const { data } = await supabase
@@ -93,63 +139,45 @@ function RoomSharedPostLikeCard({
           .select(FEED_REELS_SELECT)
           .eq("id", reference.reelId)
           .maybeSingle()
-        if (!cancelled) {
-          setPost(data ? { ...data, feedKind: "reel" as const } : null)
-          setLoading(false)
-        }
-        return
-      }
-
-      if (reference.kind === "achievement_post" && reference.achievementPostId) {
+        row = data ? { ...data, feedKind: "reel" as const } : null
+      } else if (reference.kind === "achievement_post" && reference.achievementPostId) {
         const { data } = await supabase
           .from("achievement_posts")
           .select(FEED_ACHIEVEMENT_POSTS_SELECT)
           .eq("id", reference.achievementPostId)
           .maybeSingle()
-        if (!cancelled) {
-          setPost(data ?? null)
-          setLoading(false)
-        }
-        return
-      }
-
-      if (reference.kind === "profile_post" && reference.profilePostId) {
+        row = data ?? null
+      } else if (reference.kind === "profile_post" && reference.profilePostId) {
         const { data } = await supabase
           .from("profile_posts")
           .select("*, profiles(username, avatar_url)")
           .eq("id", reference.profilePostId)
           .maybeSingle()
-        if (!cancelled) {
-          setPost(data ?? null)
-          setLoading(false)
-        }
-        return
-      }
-
-      if (reference.kind === "post" && reference.postId) {
+        row = data ?? null
+      } else if (reference.kind === "post" && reference.postId) {
         const { data } = await supabase
           .from("posts")
           .select("*, profiles(username, avatar_url)")
           .eq("id", reference.postId)
           .maybeSingle()
-        if (!cancelled) {
-          setPost(data ?? null)
-          setLoading(false)
-        }
-        return
+        row = data ?? null
       }
 
-      if (!cancelled) {
-        setPost(null)
-        setLoading(false)
-      }
-    }
+      setCachedRoomSharedPostEmbed(key, row)
+      return row
+    })
 
-    void load()
+    void inflight.then((row) => {
+      if (cancelled) return
+      setPost(row ?? null)
+      setLoading(false)
+    })
+
     return () => {
       cancelled = true
     }
-  }, [reference])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- embedKey encodes kind + id; `reference` is unstable identity from parent
+  }, [embedKey])
 
   const shellClass =
     className ??
@@ -171,28 +199,29 @@ function RoomSharedPostLikeCard({
     )
   }
 
+  const postRow = post as Record<string, unknown>
   const isReel = reference.kind === "reel"
   const isAchievement = reference.kind === "achievement_post"
   const isProfile = reference.kind === "profile_post"
   const imageSrc = isReel
-    ? post.thumbnail_url != null
-      ? String(post.thumbnail_url)
+    ? postRow.thumbnail_url != null
+      ? String(postRow.thumbnail_url)
       : null
     : isProfile
-      ? profilePostPublicUrl(post.image_url)
-      : postScreenshotSrc(post.image_url)
-  const pnl = Number(post.pnl)
+      ? profilePostPublicUrl(postRow.image_url as string | null | undefined)
+      : postScreenshotSrc(postRow.image_url as string | null | undefined)
+  const pnl = Number(postRow.pnl)
   const isWin = !Number.isNaN(pnl) && pnl >= 0
   const showTradeStats =
     reference.kind === "post" && !Number.isNaN(pnl)
   const achievementTitle = isAchievement
     ? String(
-        (post as { achievements?: { title?: string } })?.achievements?.title ??
+        (postRow.achievements as { title?: string } | undefined)?.title ??
           "Achievement"
       )
     : null
   const reelCaption =
-    isReel && post.caption != null ? String(post.caption).trim() : ""
+    isReel && postRow.caption != null ? String(postRow.caption).trim() : ""
   const shareLabel = roomSharedContentLabel(reference.kind)
   const viewLabel = isReel
     ? "clip"
@@ -206,12 +235,20 @@ function RoomSharedPostLikeCard({
         <div className="p-3">
           <div className="mb-2 flex items-center justify-between gap-3">
             <ProfileUsernameLink
-              userId={String(post.user_id ?? post.profiles?.id ?? "")}
-              username={post.profiles?.username}
+              userId={String(
+                postRow.user_id ??
+                  (postRow.profiles as { id?: string } | undefined)?.id ??
+                  ""
+              )}
+              username={
+                (postRow.profiles as { username?: string } | undefined)?.username
+              }
               stopPropagation
               className="text-sm font-semibold text-white hover:underline"
             >
-              @{post.profiles?.username || "User"}
+              @
+              {(postRow.profiles as { username?: string } | undefined)?.username ||
+                "User"}
             </ProfileUsernameLink>
             <span className="shrink-0 text-xs text-gray-400">{shareLabel}</span>
           </div>
@@ -231,9 +268,9 @@ function RoomSharedPostLikeCard({
             />
           ) : null}
 
-          {post.content ? (
+          {postRow.content ? (
             <p className="mb-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-200">
-              {post.content}
+              {String(postRow.content)}
             </p>
           ) : null}
 
@@ -248,7 +285,9 @@ function RoomSharedPostLikeCard({
               <span className={isWin ? "text-green-400" : "text-red-400"}>
                 {formatSignedPnlDisplay(pnl)}
               </span>
-              <span className="text-gray-400">RR {formatRR(post.rr)}</span>
+              <span className="text-gray-400">
+                RR {formatRR(postRow.rr as string | number | null | undefined)}
+              </span>
             </div>
           ) : null}
 
@@ -256,7 +295,13 @@ function RoomSharedPostLikeCard({
             type="button"
             onClick={(e) => {
               e.stopPropagation()
-              onNavigate(getSharedContentViewHref(post))
+              onNavigate(
+                getSharedContentViewHref(
+                  postRow as unknown as Parameters<
+                    typeof getSharedContentViewHref
+                  >[0]
+                )
+              )
             }}
             className="w-full rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-300 transition hover:bg-blue-500/20 hover:text-blue-200"
           >

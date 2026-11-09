@@ -36,3 +36,18 @@ extension EnvironmentValues {
         set { self[TradeRoomLiveSessionBottomInsetKey.self] = newValue }
     }
 }
+
+extension View {
+    /// Room conversation embeds session chrome only while its tab is selected and the view is visible.
+    func syncTradeRoomSessionChromeEmbedding(tabIsActive: Bool) -> some View {
+        onAppear {
+            TradeRoomLiveSessionChromeMetrics.shared.setRoomConversationEmbedsSessionChrome(tabIsActive)
+        }
+        .onDisappear {
+            TradeRoomLiveSessionChromeMetrics.shared.setRoomConversationEmbedsSessionChrome(false)
+        }
+        .onChange(of: tabIsActive) { _, active in
+            TradeRoomLiveSessionChromeMetrics.shared.setRoomConversationEmbedsSessionChrome(active)
+        }
+    }
+}

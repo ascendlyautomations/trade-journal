@@ -4,6 +4,8 @@ type PublisherCredentials = {
   roomId: string
   sessionId: string
   accessToken: string
+  /** When false (OBS), closing the tab does not POST /broadcast/stop — ingress + session stay live. */
+  endSessionOnUnload?: boolean
 }
 
 let publisherCredentials: PublisherCredentials | null = null
@@ -28,7 +30,8 @@ function installBroadcastUnloadHandlers(): void {
 
   const sendStopBeacon = () => {
     const creds = publisherCredentials
-    if (!creds?.roomId || !creds.sessionId || !creds.accessToken) return
+    if (!creds?.roomId || !creds?.sessionId || !creds?.accessToken) return
+    if (creds.endSessionOnUnload === false) return
 
     const payload = JSON.stringify({
       roomId: creds.roomId,
@@ -51,7 +54,6 @@ function installBroadcastUnloadHandlers(): void {
     } catch {
       // ignore
     }
-
   }
 
   window.addEventListener("pagehide", (event) => {

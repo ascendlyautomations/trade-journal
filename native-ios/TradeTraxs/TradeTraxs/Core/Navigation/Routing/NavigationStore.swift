@@ -17,6 +17,12 @@ final class NavigationStore {
     /// Optional last-session tab preference (product setting; default Home).
     var restoresLastContentTab: Bool
 
+    /// Bumped by external navigation so the matching destination view and model are recreated.
+    /// Session-only — omitted from ``snapshot`` so restoration does not replay a refresh.
+    var externalDestinationEpochs: [String: Int] = [:]
+    /// Channel/message token for the latest external room open (keyed by ``ExternalDestinationIdentity`` room epoch key).
+    var externalRoomFocusTokens: [String: String] = [:]
+
     init(state: NavigationState = .initial, restoresLastContentTab: Bool = false) {
         self.sessionPhase = state.sessionPhase
         self.selectedTab = state.selectedTab == .create ? state.previousContentTab : state.selectedTab
@@ -54,5 +60,26 @@ final class NavigationStore {
         if tab.isContentTab {
             previousContentTab = tab
         }
+    }
+
+    func bumpExternalDestinationEpoch(_ key: String) {
+        guard !key.isEmpty else { return }
+        var epochs = externalDestinationEpochs
+        epochs[key, default: 0] += 1
+        externalDestinationEpochs = epochs
+    }
+
+    /// Stable view identity. The epoch segment changes only after an external open of this destination.
+    func externalDestinationIdentity(for key: String) -> String {
+        let focusToken = externalRoomFocusTokens[key] ?? ""
+        let focusPart = focusToken.isEmpty ? "" : "|\(focusToken)"
+        return "\(key)\(focusPart)#\(externalDestinationEpochs[key] ?? 0)"
+    }
+
+    func recordExternalRoomFocusToken(routeEpochKey: String, token: String) {
+        guard !routeEpochKey.isEmpty else { return }
+        var tokens = externalRoomFocusTokens
+        tokens[routeEpochKey] = token
+        externalRoomFocusTokens = tokens
     }
 }

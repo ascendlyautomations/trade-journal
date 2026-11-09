@@ -18,10 +18,13 @@ enum MessageBubbleActionMenuSupport {
     static func menu(
         item: ConversationBubbleItem,
         reactionConfiguration: MessageReactionConfiguration?,
-        canDelete: Bool,
-        deleteMenuTitle: String,
+        canDeleteForMe: Bool,
+        deleteForMeTitle: String,
+        canDeleteForEveryone: Bool,
+        deleteForEveryoneTitle: String,
         onRetry: (() -> Void)?,
-        onDelete: (() -> Void)?,
+        onDeleteForMe: (() -> Void)?,
+        onDeleteForEveryone: (() -> Void)?,
         onManageUser: (() -> Void)? = nil,
         onReport: (() -> Void)?,
         onSelectEmoji: @escaping (String) -> Void,
@@ -40,7 +43,8 @@ enum MessageBubbleActionMenuSupport {
         }()
 
         let retryAction: (() -> Void)? = item.sendState == .failed ? onRetry : nil
-        let deleteAction: (() -> Void)? = canDelete ? onDelete : nil
+        let deleteForMeAction: (() -> Void)? = canDeleteForMe ? onDeleteForMe : nil
+        let deleteForEveryoneAction: (() -> Void)? = canDeleteForEveryone ? onDeleteForEveryone : nil
         let manageAction: (() -> Void)? = onManageUser
         let reportAction: (() -> Void)? = !item.isOutgoing ? onReport : nil
 
@@ -50,8 +54,10 @@ enum MessageBubbleActionMenuSupport {
             onSelectEmoji: onSelectEmoji,
             onCopy: copyAction,
             onRetry: retryAction,
-            onDelete: deleteAction,
-            deleteTitle: deleteMenuTitle,
+            onDelete: deleteForMeAction,
+            deleteTitle: deleteForMeTitle,
+            onDeleteForEveryone: deleteForEveryoneAction,
+            deleteForEveryoneTitle: deleteForEveryoneTitle,
             onManageUser: manageAction,
             onReport: reportAction,
             onDismiss: onDismiss
@@ -61,7 +67,8 @@ enum MessageBubbleActionMenuSupport {
     static func actionCount(
         item: ConversationBubbleItem,
         reactionConfiguration: MessageReactionConfiguration?,
-        canDelete: Bool,
+        canDeleteForMe: Bool,
+        canDeleteForEveryone: Bool,
         onRetry: (() -> Void)?,
         onManageUser: (() -> Void)? = nil,
         onReport: (() -> Void)?
@@ -71,7 +78,8 @@ enum MessageBubbleActionMenuSupport {
             count += 1
         }
         if item.sendState == .failed, onRetry != nil { count += 1 }
-        if canDelete { count += 1 }
+        if canDeleteForMe { count += 1 }
+        if canDeleteForEveryone { count += 1 }
         if onManageUser != nil { count += 1 }
         if !item.isOutgoing, onReport != nil { count += 1 }
         _ = reactionConfiguration

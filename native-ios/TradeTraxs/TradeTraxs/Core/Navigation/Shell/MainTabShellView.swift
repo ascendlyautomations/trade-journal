@@ -74,6 +74,18 @@ struct MainTabShellView: View {
             notice: broadcastCoordinator.streamEndedNotice,
             onClose: { broadcastCoordinator.acknowledgeStreamEndedNotice() }
         )
+        .broadcastStreamRemovalOverlay(
+            notice: broadcastCoordinator.streamRemovalNotice,
+            onClose: { broadcastCoordinator.acknowledgeStreamRemovalNotice() }
+        )
+        .broadcastStreamConnectionLostOverlay(
+            notice: broadcastCoordinator.streamConnectionLostNotice,
+            onRetry: {
+                Task { await broadcastCoordinator.retryWatchAfterConnectionLoss() }
+            },
+            onClose: { broadcastCoordinator.acknowledgeStreamConnectionLostNotice() }
+        )
+        .broadcastSpeakInviteOverlay(coordinator: broadcastCoordinator)
         .saveSuccessToastOverlay()
         .onChange(of: store.selectedTab) { _, tab in
             MainThreadOperationTracker.push("tab.select.\(tab.rawValue)")
@@ -82,6 +94,12 @@ struct MainTabShellView: View {
             OwnerAccountFilterDropdownController.shared.dismiss()
             syncFeedScopedBarChrome(isFeedTab: tab == .feed)
             MainTabBarLayoutMetrics.shared.refresh()
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(120))
+                MainTabBarLayoutMetrics.shared.refresh()
+                try? await Task.sleep(for: .milliseconds(280))
+                MainTabBarLayoutMetrics.shared.refresh()
+            }
         }
         .onChange(of: ContentMutationStore.shared.revision) { _, _ in
             guard let profileID = currentUserProfile.profile?.id else { return }
@@ -173,9 +191,17 @@ struct MainTabShellView: View {
             }
         }
         .background {
-            CreateTabSelectionGate {
-                coordinator.invokeCreateAction()
-            }
+            CreateTabSelectionGate(
+                isEnabled: CreateTabGateNavigationPolicy.shouldAllowCreateTabShield(
+                    selectedTab: store.selectedTab,
+                    paths: store.paths
+                ),
+                messagesPathDepth: store.paths.messages.count,
+                selectedTabName: store.selectedTab.rawValue,
+                onCreate: {
+                    coordinator.invokeCreateAction(source: .createTabGateShield)
+                }
+            )
         }
         .tabViewStyle(.tabBarOnly)
         .liveVoiceTabShellLayout(
@@ -217,6 +243,7 @@ struct HomeNavigationStack: View {
             )
             .navigationDestination(for: HomeRoute.self) { route in
                 homeDestination(route)
+                    .id(store.externalDestinationIdentity(for: ExternalDestinationIdentity.epochKey(for: route)))
             }
         }
         .environment(\.stackNavigation, StackNavigation.home(store: store))
@@ -365,7 +392,10 @@ struct HomeNavigationStack: View {
                 roomID: roomID,
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator,
-                navigationHost: .home
+                navigationHost: .home,
+                externalPresentationIdentity: store.externalDestinationIdentity(
+                    for: ExternalDestinationIdentity.epochKey(for: route)
+                )
             )
         case .rooms:
             TradeRoomsHomeView(
@@ -468,6 +498,7 @@ struct FeedNavigationStack: View {
             )
             .navigationDestination(for: FeedRoute.self) { route in
                 feedDestination(route)
+                    .id(store.externalDestinationIdentity(for: ExternalDestinationIdentity.epochKey(for: route)))
             }
         }
         .environment(\.stackNavigation, StackNavigation.feed(store: store))
@@ -545,7 +576,10 @@ struct FeedNavigationStack: View {
                 roomID: roomID,
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator,
-                navigationHost: .feed
+                navigationHost: .feed,
+                externalPresentationIdentity: store.externalDestinationIdentity(
+                    for: ExternalDestinationIdentity.epochKey(for: route)
+                )
             )
         case .roomMembers(let roomID):
             RoomMembersView(
@@ -645,6 +679,7 @@ struct MessagesNavigationStack: View {
             )
             .navigationDestination(for: MessagesRoute.self) { route in
                 messagesDestination(route)
+                    .id(store.externalDestinationIdentity(for: ExternalDestinationIdentity.epochKey(for: route)))
             }
         }
         .environment(\.stackNavigation, StackNavigation.messages(store: store))
@@ -698,7 +733,10 @@ struct MessagesNavigationStack: View {
             RoomConversationView(
                 roomID: roomID,
                 data: appEnvironment.data,
-                navigationCoordinator: coordinator
+                navigationCoordinator: coordinator,
+                externalPresentationIdentity: store.externalDestinationIdentity(
+                    for: ExternalDestinationIdentity.epochKey(for: route)
+                )
             )
         case .roomMembers(let roomID):
             RoomMembersView(
@@ -798,6 +836,7 @@ struct ProfileNavigationStack: View {
             )
             .navigationDestination(for: ProfileRoute.self) { route in
                 profileDestination(route)
+                    .id(store.externalDestinationIdentity(for: ExternalDestinationIdentity.epochKey(for: route)))
             }
         }
         .environment(\.stackNavigation, StackNavigation.profile(store: store))
@@ -871,7 +910,10 @@ struct ProfileNavigationStack: View {
                 roomID: roomID,
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator,
-                navigationHost: .profile
+                navigationHost: .profile,
+                externalPresentationIdentity: store.externalDestinationIdentity(
+                    for: ExternalDestinationIdentity.epochKey(for: route)
+                )
             )
         case .roomMembers(let roomID):
             RoomMembersView(
@@ -979,6 +1021,9 @@ struct ProfileNavigationStack: View {
 /// A rejected `TabView` selection still paints the empty Create page for one frame, which is the flash.
 /// This control sits on top of that tab item, so the current page never changes and the composer opens over it.
 private struct CreateTabSelectionGate: UIViewRepresentable {
+    var isEnabled: Bool
+    var messagesPathDepth: Int
+    var selectedTabName: String
     var onCreate: () -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -994,13 +1039,20 @@ private struct CreateTabSelectionGate: UIViewRepresentable {
 
     func updateUIView(_ uiView: UIView, context: Context) {
         context.coordinator.onCreate = onCreate
+        context.coordinator.isEnabled = isEnabled
+        context.coordinator.messagesPathDepth = messagesPathDepth
+        context.coordinator.selectedTabName = selectedTabName
         context.coordinator.install(from: uiView)
     }
 
     final class Coordinator: NSObject {
         var onCreate: () -> Void
+        var isEnabled = true
+        var messagesPathDepth = 0
+        var selectedTabName = ""
         private var overlay: OverlayView?
         private weak var host: UITabBarController?
+        private var lastTouchPoint: CGPoint = .zero
 
         init(onCreate: @escaping () -> Void) {
             self.onCreate = onCreate
@@ -1010,21 +1062,46 @@ private struct CreateTabSelectionGate: UIViewRepresentable {
             DispatchQueue.main.async { [weak self, weak view] in
                 guard let self, let view, view.window != nil else { return }
                 guard let tab = Self.tabBarController(in: view.window?.rootViewController) else { return }
-                if self.host !== tab || self.overlay?.superview == nil {
+                let tabBar = tab.tabBar
+                if self.host !== tab || self.overlay?.superview !== tabBar {
                     self.overlay?.removeFromSuperview()
-                    let overlay = OverlayView()
+                    let overlay = OverlayView(tabBarController: tab)
+                    overlay.shield.addTarget(self, action: #selector(Coordinator.touchedDown(_:for:)), for: .touchDown)
                     overlay.shield.addTarget(self, action: #selector(Coordinator.tapped), for: .touchUpInside)
-                    overlay.frame = tab.view.bounds
+                    overlay.frame = tabBar.bounds
                     overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-                    tab.view.addSubview(overlay)
+                    tabBar.addSubview(overlay)
                     self.overlay = overlay
                     self.host = tab
                 }
+                self.overlay?.isSwiftUINavigationGateEnabled = self.isEnabled
+                self.overlay?.messagesPathDepth = self.messagesPathDepth
+                self.overlay?.selectedTabName = self.selectedTabName
                 self.overlay?.refresh()
             }
         }
 
+        @objc private func touchedDown(_ sender: UIControl, for event: UIEvent) {
+            guard let touch = event.allTouches?.first else { return }
+            lastTouchPoint = touch.location(in: nil)
+        }
+
         @objc private func tapped() {
+            guard let overlay else { return }
+            let tabBar = host?.tabBar
+            let context = CreateTabShieldTouchContext(
+                swiftUINavigationGateEnabled: isEnabled,
+                uiKitPolicyAllowed: overlay.lastUIKitPolicyAllowed,
+                tabBarHidden: tabBar?.isHidden ?? true,
+                tabBarAlpha: tabBar?.alpha ?? 0,
+                tabBarFrameInWindow: tabBar?.convert(tabBar?.bounds ?? .zero, to: nil) ?? .zero,
+                shieldFrameInWindow: overlay.shield.convert(overlay.shield.bounds, to: nil),
+                touchPointInWindow: lastTouchPoint,
+                hitTestViewDescription: "CreateTabShield",
+                messagesPathDepth: messagesPathDepth,
+                selectedTab: selectedTabName
+            )
+            CreateActionInvokeDiagnostics.recordShieldTouch(context)
             onCreate()
         }
 
@@ -1041,9 +1118,15 @@ private struct CreateTabSelectionGate: UIViewRepresentable {
     final class OverlayView: UIView {
         let shield = UIButton(type: .custom)
         private weak var blockedControl: UIView?
+        private weak var tabBarController: UITabBarController?
+        var isSwiftUINavigationGateEnabled = true
+        var messagesPathDepth = 0
+        var selectedTabName = ""
+        private(set) var lastUIKitPolicyAllowed = false
 
-        override init(frame: CGRect) {
-            super.init(frame: frame)
+        init(tabBarController: UITabBarController) {
+            self.tabBarController = tabBarController
+            super.init(frame: .zero)
             isUserInteractionEnabled = true
             backgroundColor = .clear
             shield.backgroundColor = .clear
@@ -1054,6 +1137,7 @@ private struct CreateTabSelectionGate: UIViewRepresentable {
         required init?(coder: NSCoder) { nil }
 
         override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+            guard isUserInteractionEnabled, !shield.frame.isEmpty else { return nil }
             let hit = super.hitTest(point, with: event)
             return hit === self ? nil : hit
         }
@@ -1064,7 +1148,27 @@ private struct CreateTabSelectionGate: UIViewRepresentable {
         }
 
         func refresh() {
-            guard let tabBar = enclosingTabBar else { return }
+            guard isSwiftUINavigationGateEnabled else {
+                lastUIKitPolicyAllowed = false
+                disableCreateShield()
+                return
+            }
+            guard let tabBar = tabBarController?.tabBar ?? enclosingTabBar else {
+                lastUIKitPolicyAllowed = false
+                disableCreateShield()
+                return
+            }
+            let uiKitAllowed = CreateTabSelectionGatePolicy.allowsCreateShield(
+                tabBar: tabBar,
+                tabBarController: tabBarController
+            )
+            lastUIKitPolicyAllowed = uiKitAllowed
+            guard uiKitAllowed else {
+                disableCreateShield()
+                return
+            }
+            isUserInteractionEnabled = true
+            shield.isUserInteractionEnabled = true
             superview?.bringSubviewToFront(self)
             let createTitle = TabIdentifier.create.displayName
             let control = Self.createControl(in: tabBar, title: createTitle)
@@ -1095,8 +1199,15 @@ private struct CreateTabSelectionGate: UIViewRepresentable {
             }
             shield.frame = frame
             bringSubviewToFront(shield)
-            if superview?.subviews.last !== self {
-                superview?.bringSubviewToFront(self)
+        }
+
+        private func disableCreateShield() {
+            shield.frame = .zero
+            shield.isUserInteractionEnabled = false
+            isUserInteractionEnabled = false
+            if let control = blockedControl {
+                control.isUserInteractionEnabled = true
+                blockedControl = nil
             }
         }
 

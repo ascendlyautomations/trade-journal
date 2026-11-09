@@ -26,14 +26,19 @@ enum BroadcastStreamEndPolicy {
     }
 
     /// After the broadcaster's LiveKit participant disconnects while the viewer is still connected.
+    /// For OBS, the host may disconnect while the program feed (ingress) stays live — do not end watch.
     static func shouldEndWatchFromBroadcasterDisconnect(
         isWatching: Bool,
         isVoluntaryLeave: Bool,
         disconnectedIdentity: String?,
-        broadcasterIdentity: String?
+        broadcasterIdentity: String?,
+        broadcastSourceIsObs: Bool
     ) -> Bool {
         guard isWatching, !isVoluntaryLeave else { return false }
         guard let disconnectedIdentity, let broadcasterIdentity else { return false }
+        if broadcastSourceIsObs, disconnectedIdentity == broadcasterIdentity {
+            return false
+        }
         return disconnectedIdentity == broadcasterIdentity
     }
 
@@ -88,5 +93,30 @@ enum BroadcastStreamEndPolicy {
 struct BroadcastStreamEndedNotice: Identifiable, Equatable, Sendable {
     var id: String { sessionId }
     let sessionId: String
+    let roomTitle: String
+}
+
+/// LiveKit dropped while the broadcast may still be live (network); viewer can retry watch.
+struct BroadcastStreamConnectionLostNotice: Identifiable, Equatable, Sendable {
+    var id: String { sessionId }
+    let roomID: RoomID
+    let sessionId: String
+    let roomTitle: String
+}
+
+/// Shown when the viewer is kicked from the live stream (still live for others).
+struct BroadcastStreamRemovalNotice: Identifiable, Equatable, Sendable {
+    var id: String { "\(sessionId)-\(blocked ? "blocked" : "removed")" }
+    let sessionId: String
+    let roomTitle: String
+    /// True when the viewer was blocked and cannot rejoin this session.
+    let blocked: Bool
+}
+
+struct BroadcastSpeakInviteNotice: Identifiable, Equatable, Sendable {
+    var id: String { "\(sessionId)-\(invitationId ?? "grant")" }
+    let sessionId: String
+    let roomID: RoomID
+    let invitationId: String?
     let roomTitle: String
 }

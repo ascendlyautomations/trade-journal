@@ -51,6 +51,12 @@ nonisolated struct NotificationRouter: NotificationRouting {
                 }
                 return .profile(.activity)
             }
+            if type == "room_live" {
+                if let roomID = notification.roomID {
+                    return .messages(.room(roomID))
+                }
+                return .tab(.messages)
+            }
             if type == "trade_room_join_accepted" {
                 if let roomID = notification.roomID {
                     return .messages(.room(roomID))

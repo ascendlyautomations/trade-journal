@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic"
 type ParsedDisconnectMemberBody = {
   roomId: string
   userId: string
+  scope?: "all" | "voice"
 }
 
 function parseDisconnectMemberBody(raw: unknown): ParsedDisconnectMemberBody | null {
@@ -16,8 +17,10 @@ function parseDisconnectMemberBody(raw: unknown): ParsedDisconnectMemberBody | n
   const b = raw as Record<string, unknown>
   const roomId = typeof b.roomId === "string" ? b.roomId.trim() : ""
   const userId = typeof b.userId === "string" ? b.userId.trim() : ""
+  const scopeRaw = typeof b.scope === "string" ? b.scope.trim() : ""
+  const scope = scopeRaw === "voice" ? "voice" : "all"
   if (!roomId || !userId) return null
-  return { roomId, userId }
+  return { roomId, userId, scope }
 }
 
 /**
@@ -48,7 +51,7 @@ export async function POST(req: Request) {
     )
   }
 
-  const { roomId, userId: targetUserId } = parsed
+  const { roomId, userId: targetUserId, scope } = parsed
 
   const access = await resolveDisconnectMemberAccess(supabaseServiceRole, {
     actorUserId: user.id,
@@ -60,11 +63,19 @@ export async function POST(req: Request) {
     return Response.json({ error: access.error }, { status: access.status })
   }
 
+  if (scope === "voice" && access.userId === user.id) {
+    return Response.json(
+      { error: "Self-disconnect uses the default leave flow." },
+      { status: 400 }
+    )
+  }
+
   await disconnectTradeRoomMemberFromLiveKit(
     supabaseServiceRole,
     access.roomId,
     access.userId,
-    access.userId === user.id ? "leave" : "moderation"
+    access.userId === user.id ? "leave" : "moderation",
+    { scope }
   )
 
   return Response.json({ ok: true })

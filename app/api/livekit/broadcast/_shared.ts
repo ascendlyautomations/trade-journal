@@ -11,7 +11,7 @@ export function parseStartBody(
 ): {
   roomId: string
   voiceMode: "broadcast_only" | "open_voice"
-  videoSource: "screen" | "camera"
+  videoSource: "screen" | "camera" | "obs"
 } | null {
   if (!raw || typeof raw !== "object") return null
   const b = raw as Record<string, unknown>
@@ -23,8 +23,9 @@ export function parseStartBody(
     voiceModeRaw === "open_voice" ? "open_voice" : ("broadcast_only" as const)
   const videoSourceRaw =
     typeof b.videoSource === "string" ? b.videoSource.trim().toLowerCase() : "screen"
-  const videoSource =
-    videoSourceRaw === "camera" ? "camera" : ("screen" as const)
+  let videoSource: "screen" | "camera" | "obs" = "screen"
+  if (videoSourceRaw === "camera") videoSource = "camera"
+  else if (videoSourceRaw === "obs") videoSource = "obs"
   return { roomId, voiceMode, videoSource }
 }
 

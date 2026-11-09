@@ -312,6 +312,577 @@ final class TradeRoomsExperienceTests: XCTestCase {
         })
     }
 
+    func testNotificationFocusOpensTradesSubRoomOnFreshConversationLoad() async {
+        RoomNavigationFocusStore.shared.clear()
+        defer { RoomNavigationFocusStore.shared.clear() }
+
+        let tradesSection = "dev-room-desk-trades"
+        RoomNavigationFocusStore.shared.seed(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            sectionID: tradesSection,
+            messageID: nil
+        )
+
+        let store = MessagesInboxStore.shared
+        TradeRoomsFixtures.seedInbox(store)
+
+        let viewModel = RoomConversationViewModel(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            rooms: TradeRoomsStubRoomRepository(),
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: TradeRoomsFixtures.viewerID.rawValue),
+            uploadService: TradeRoomsStubUploadService(),
+            objectStorage: TradeRoomsStubObjectStorage(),
+            detailCache: DetailPresentationCache(),
+            inboxStore: store
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+
+        XCTAssertEqual(viewModel.selectedChannel?.name.lowercased(), "trades")
+        XCTAssertFalse(viewModel.messages.isEmpty)
+        XCTAssertTrue(
+            viewModel.messages.allSatisfy {
+                $0.conversationID == ConversationID(tradesSection)
+            }
+        )
+    }
+
+    func testNotificationPayloadEndToEndGeneralThenTradesSubRooms() async {
+        RoomNavigationFocusStore.shared.clear()
+        defer { RoomNavigationFocusStore.shared.clear() }
+
+        let store = MessagesInboxStore.shared
+        TradeRoomsFixtures.seedInbox(store)
+
+        let trades = "dev-room-desk-trades"
+        let general = "dev-room-desk-general"
+
+        RoomNavigationFocusStore.shared.seed(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            sectionID: general,
+            messageID: nil,
+            sectionName: "general"
+        )
+        let viewModel = RoomConversationViewModel(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            rooms: TradeRoomsStubRoomRepository(),
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: TradeRoomsFixtures.viewerID.rawValue),
+            uploadService: TradeRoomsStubUploadService(),
+            objectStorage: TradeRoomsStubObjectStorage(),
+            detailCache: DetailPresentationCache(),
+            inboxStore: store
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+        XCTAssertEqual(viewModel.selectedChannelID?.rawValue, general)
+        XCTAssertEqual(viewModel.selectedChannel?.name.lowercased(), "general")
+        XCTAssertTrue(
+            viewModel.messages.allSatisfy {
+                $0.conversationID == ConversationID(general)
+            }
+        )
+        XCTAssertTrue(viewModel.messages.allSatisfy {
+            $0.conversationID.rawValue == viewModel.selectedChannelID?.rawValue
+        })
+
+        let userInfo: [AnyHashable: Any] = [
+            "type": "room_mention",
+            "href": "/community?room=desk&section=\(trades)&message=trade-msg-1",
+            "roomId": TradeRoomsFixtures.deskRoomID.rawValue,
+            "roomSlug": "desk",
+            "sectionId": trades,
+            "messageId": "trade-msg-1",
+            "sectionName": "trades",
+        ]
+        let parsed = PushNotificationPayloadParser.parse(userInfo: userInfo)
+        XCTAssertEqual(parsed.sectionID, trades)
+
+        RoomNavigationFocusStore.shared.seed(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            sectionID: parsed.sectionID,
+            messageID: parsed.messageID,
+            sectionName: parsed.rawUserInfo["section_name"]
+        )
+        viewModel.applyPendingNavigationFocusToLoadedRoom()
+        await waitFor {
+            viewModel.selectedChannel?.name.lowercased() == "trades" && !viewModel.messages.isEmpty
+        }
+        XCTAssertEqual(viewModel.selectedChannelID?.rawValue, trades)
+        XCTAssertTrue(
+            viewModel.messages.allSatisfy {
+                $0.conversationID == ConversationID(trades)
+            }
+        )
+        XCTAssertTrue(viewModel.messages.allSatisfy {
+            $0.conversationID.rawValue == viewModel.selectedChannelID?.rawValue
+        })
+    }
+
+    func testManualChannelSwitchAfterNotificationFocusReloadsMessages() async {
+        RoomNavigationFocusStore.shared.clear()
+        defer { RoomNavigationFocusStore.shared.clear() }
+
+        let store = MessagesInboxStore.shared
+        TradeRoomsFixtures.seedInbox(store)
+        let trades = "dev-room-desk-trades"
+
+        RoomNavigationFocusStore.shared.seed(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            sectionID: trades,
+            messageID: nil,
+            sectionName: "trades"
+        )
+
+        let viewModel = RoomConversationViewModel(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            rooms: TradeRoomsStubRoomRepository(),
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: TradeRoomsFixtures.viewerID.rawValue),
+            uploadService: TradeRoomsStubUploadService(),
+            objectStorage: TradeRoomsStubObjectStorage(),
+            detailCache: DetailPresentationCache(),
+            inboxStore: store
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded && viewModel.selectedChannel?.name.lowercased() == "trades" }
+
+        let general = viewModel.channels.first { $0.name.lowercased() == "general" }
+        XCTAssertNotNil(general)
+        viewModel.selectChannel(general!.id)
+        await waitFor { !viewModel.messages.isEmpty && viewModel.selectedChannelID == general?.id }
+        XCTAssertTrue(
+            viewModel.messages.allSatisfy {
+                $0.conversationID == ConversationID(general!.id.rawValue)
+            }
+        )
+
+        let tradesChannel = viewModel.channels.first { $0.name.lowercased() == "trades" }
+        XCTAssertNotNil(tradesChannel)
+        viewModel.selectChannel(tradesChannel!.id)
+        await waitFor { !viewModel.messages.isEmpty && viewModel.selectedChannelID == tradesChannel?.id }
+        XCTAssertTrue(
+            viewModel.messages.allSatisfy {
+                $0.conversationID == ConversationID(tradesChannel!.id.rawValue)
+            }
+        )
+    }
+
+    func testInRoomSecondAndThirdNotificationTransitionsGeneralTradesGeneral() async {
+        RoomNavigationFocusStore.shared.clear()
+        defer { RoomNavigationFocusStore.shared.clear() }
+
+        let store = MessagesInboxStore.shared
+        TradeRoomsFixtures.seedInbox(store)
+
+        let trades = "dev-room-desk-trades"
+        let general = "dev-room-desk-general"
+
+        let viewModel = RoomConversationViewModel(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            rooms: TradeRoomsStubRoomRepository(),
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: TradeRoomsFixtures.viewerID.rawValue),
+            uploadService: TradeRoomsStubUploadService(),
+            objectStorage: TradeRoomsStubObjectStorage(),
+            detailCache: DetailPresentationCache(),
+            inboxStore: store
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+        XCTAssertEqual(viewModel.selectedChannelID?.rawValue, general)
+        XCTAssertTrue(viewModel.messages.allSatisfy { $0.conversationID.rawValue == general })
+
+        var navStore = NavigationStore()
+        navStore.sessionPhase = .authenticated
+        let coordinator = NavigationCoordinator(store: navStore)
+        let facade = NotificationRouterFacade(router: NotificationRouter())
+
+        XCTAssertTrue(
+            facade.route(
+                NotificationDestination(
+                    category: .roomMention,
+                    threadID: "msg-trades-2",
+                    tradeID: nil,
+                    postID: nil,
+                    reelID: nil,
+                    profileID: nil,
+                    conversationID: nil,
+                    roomID: TradeRoomsFixtures.deskRoomID,
+                    reportID: nil,
+                    sectionID: trades,
+                    messageID: "msg-trades-2",
+                    rawUserInfo: ["type": "room_mention", "section_name": "trades"]
+                ),
+                using: coordinator,
+                store: navStore
+            )
+        )
+        XCTAssertNotNil(RoomNavigationFocusStore.shared.pendingFocus(for: TradeRoomsFixtures.deskRoomID))
+        viewModel.adoptPendingNavigationFocus()
+        await waitFor {
+            viewModel.selectedChannelID?.rawValue == trades
+                && viewModel.messages.allSatisfy { $0.conversationID.rawValue == trades }
+        }
+        XCTAssertEqual(viewModel.selectedChannel?.name.lowercased(), "trades")
+
+        XCTAssertTrue(
+            facade.route(
+                NotificationDestination(
+                    category: .roomMessage,
+                    threadID: "msg-general-2",
+                    tradeID: nil,
+                    postID: nil,
+                    reelID: nil,
+                    profileID: nil,
+                    conversationID: nil,
+                    roomID: TradeRoomsFixtures.deskRoomID,
+                    reportID: nil,
+                    sectionID: general,
+                    messageID: "msg-general-2",
+                    rawUserInfo: ["type": "room_message", "section_name": "general"]
+                ),
+                using: coordinator,
+                store: navStore
+            )
+        )
+        viewModel.adoptPendingNavigationFocus()
+        await waitFor {
+            viewModel.selectedChannelID?.rawValue == general
+                && viewModel.messages.allSatisfy { $0.conversationID.rawValue == general }
+        }
+        XCTAssertEqual(viewModel.selectedChannel?.name.lowercased(), "general")
+    }
+
+    func testNotificationFocusSelectedChannelMatchesSwitcherNotFirstChannel() async {
+        RoomNavigationFocusStore.shared.clear()
+        defer { RoomNavigationFocusStore.shared.clear() }
+
+        let trades = "dev-room-desk-trades"
+        RoomNavigationFocusStore.shared.seed(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            sectionID: trades,
+            messageID: nil,
+            sectionName: "trades"
+        )
+
+        let store = MessagesInboxStore.shared
+        TradeRoomsFixtures.seedInbox(store)
+
+        let viewModel = RoomConversationViewModel(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            rooms: TradeRoomsStubRoomRepository(),
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: TradeRoomsFixtures.viewerID.rawValue),
+            uploadService: TradeRoomsStubUploadService(),
+            objectStorage: TradeRoomsStubObjectStorage(),
+            detailCache: DetailPresentationCache(),
+            inboxStore: store
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+
+        let firstChannel = viewModel.channels.first
+        XCTAssertNotEqual(viewModel.selectedChannelID, firstChannel?.id)
+        XCTAssertEqual(viewModel.selectedChannel?.name.lowercased(), "trades")
+        XCTAssertEqual(viewModel.selectedChannelID?.rawValue, trades)
+        XCTAssertFalse(viewModel.messages.isEmpty)
+        XCTAssertTrue(viewModel.messages.allSatisfy {
+            $0.conversationID.rawValue == viewModel.selectedChannelID?.rawValue
+        })
+    }
+
+    func testNavigationIntentGeneralTradesAnnouncementsThenManualSelect() async {
+        RoomNavigationFocusStore.shared.clear()
+        defer { RoomNavigationFocusStore.shared.clear() }
+
+        let store = MessagesInboxStore.shared
+        TradeRoomsFixtures.seedInbox(store)
+
+        let general = "dev-room-desk-general"
+        let trades = "dev-room-desk-trades"
+        let announcements = "dev-room-desk-announcements"
+
+        let viewModel = RoomConversationViewModel(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            rooms: TradeRoomsStubRoomRepository(),
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: TradeRoomsFixtures.viewerID.rawValue),
+            uploadService: TradeRoomsStubUploadService(),
+            objectStorage: TradeRoomsStubObjectStorage(),
+            detailCache: DetailPresentationCache(),
+            inboxStore: store
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+        XCTAssertEqual(viewModel.selectedChannelID?.rawValue, general)
+
+        RoomNavigationFocusStore.shared.seed(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            sectionID: trades,
+            messageID: nil,
+            sectionName: "trades"
+        )
+        viewModel.applyNavigationIntentIfNeeded()
+        await waitFor {
+            viewModel.selectedChannelID?.rawValue == trades && !viewModel.messages.isEmpty
+        }
+
+        RoomNavigationFocusStore.shared.seed(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            sectionID: announcements,
+            messageID: nil,
+            sectionName: "announcements"
+        )
+        viewModel.applyNavigationIntentIfNeeded()
+        await waitFor {
+            viewModel.selectedChannel?.name.lowercased() == "announcements" && !viewModel.messages.isEmpty
+        }
+        XCTAssertTrue(
+            viewModel.messages.allSatisfy {
+                $0.conversationID == ConversationID(announcements)
+            }
+        )
+
+        let generalChannel = viewModel.channels.first { $0.name.lowercased() == "general" }
+        XCTAssertNotNil(generalChannel)
+        viewModel.selectChannel(generalChannel!.id)
+        await waitFor { viewModel.selectedChannelID == generalChannel?.id && !viewModel.messages.isEmpty }
+        XCTAssertNil(RoomNavigationFocusStore.shared.pendingIntent(for: TradeRoomsFixtures.deskRoomID))
+        XCTAssertTrue(
+            viewModel.messages.allSatisfy {
+                $0.conversationID == ConversationID(general)
+            }
+        )
+    }
+
+    func testSeededNavigationIntentOverridesDefaultFirstChannelOnLoad() async {
+        RoomNavigationFocusStore.shared.clear()
+        defer { RoomNavigationFocusStore.shared.clear() }
+
+        let trades = "dev-room-desk-trades"
+        RoomNavigationFocusStore.shared.seed(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            sectionID: trades,
+            messageID: nil,
+            sectionName: "trades"
+        )
+
+        let store = MessagesInboxStore.shared
+        TradeRoomsFixtures.seedInbox(store)
+
+        let viewModel = RoomConversationViewModel(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            rooms: TradeRoomsStubRoomRepository(),
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: TradeRoomsFixtures.viewerID.rawValue),
+            uploadService: TradeRoomsStubUploadService(),
+            objectStorage: TradeRoomsStubObjectStorage(),
+            detailCache: DetailPresentationCache(),
+            inboxStore: store
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+
+        XCTAssertNotEqual(viewModel.selectedChannelID?.rawValue, "dev-room-desk-general")
+        XCTAssertEqual(viewModel.selectedChannelID?.rawValue, trades)
+        XCTAssertEqual(viewModel.channels.first?.name.lowercased(), "general")
+    }
+
+    func testDiskSnapshotYieldsToPendingNavigationIntent() async {
+        RoomNavigationFocusStore.shared.clear()
+        defer { RoomNavigationFocusStore.shared.clear() }
+
+        let viewer = ProfileID("22222222-2222-2222-2222-222222222222")
+        let roomID = RoomID("33333333-3333-3333-3333-333333333333")
+        let general = RoomChannelID("\(roomID.rawValue)-general")
+        let trades = RoomChannelID("\(roomID.rawValue)-trades")
+
+        let room = TradeRoom(
+            id: roomID,
+            ownerProfileID: viewer,
+            name: "Disk Nav Room",
+            slug: "disk-nav-room",
+            description: nil,
+            image: nil,
+            memberCount: 4,
+            showsOnProfile: true,
+            createdAt: .now
+        )
+        let channels = [
+            RoomChannel(id: general, roomID: roomID, name: "general", position: 0, allowMembersChat: true),
+            RoomChannel(id: trades, roomID: roomID, name: "trades", position: 1, allowMembersChat: true),
+        ]
+        let generalMessages = TradeRoomsFixtures.messages(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            viewerID: viewer,
+            channelID: RoomChannelID("dev-room-desk-general")
+        ).map(RoomMessageMapping.displayMessage)
+        let generalThread = SocialDiskCache.RoomChannelThreadBlob(
+            channelID: general.rawValue,
+            messages: generalMessages,
+            nextOlderCursor: nil,
+            hasMoreOlder: false,
+            isLoaded: true
+        )
+        SocialPersistedCacheCoordinator.invalidateRoomSnapshot(viewerID: viewer, roomID: roomID)
+        SocialPersistedCacheCoordinator.persistRoomSnapshot(
+            viewerID: viewer,
+            roomID: roomID,
+            room: room,
+            membership: RoomMembership(
+                roomID: roomID,
+                profileID: viewer,
+                role: .member,
+                joinedAt: .now,
+                notificationsEnabled: true
+            ),
+            channels: channels,
+            selectedChannelID: general,
+            channelThreads: [general: generalThread]
+        )
+        defer { SocialPersistedCacheCoordinator.invalidateRoomSnapshot(viewerID: viewer, roomID: roomID) }
+
+        RoomNavigationFocusStore.shared.seed(
+            roomID: roomID,
+            sectionID: trades.rawValue,
+            messageID: nil,
+            sectionName: "trades"
+        )
+
+        let rooms = DiskNavigationRoomRepository(roomID: roomID, viewerID: viewer)
+        let viewModel = RoomConversationViewModel(
+            roomID: roomID,
+            rooms: rooms,
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: viewer.rawValue),
+            uploadService: TradeRoomsStubUploadService(),
+            objectStorage: TradeRoomsStubObjectStorage(),
+            detailCache: DetailPresentationCache(),
+            inboxStore: MessagesInboxStore.shared
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+        await waitFor {
+            viewModel.selectedChannelID == trades && !viewModel.messages.isEmpty
+        }
+        XCTAssertEqual(viewModel.selectedChannel?.name.lowercased(), "trades")
+    }
+
+    func testNotificationAnchorHighlightsSeededFixtureMessage() async {
+        RoomNavigationFocusStore.shared.clear()
+        defer { RoomNavigationFocusStore.shared.clear() }
+
+        let store = MessagesInboxStore.shared
+        TradeRoomsFixtures.seedInbox(store)
+        let target = MessageID("dev-room-desk-m4")
+        let trades = "dev-room-desk-trades"
+
+        RoomNavigationFocusStore.shared.seed(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            sectionID: trades,
+            messageID: target.rawValue,
+            sectionName: "trades"
+        )
+
+        let viewModel = RoomConversationViewModel(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            rooms: TradeRoomsStubRoomRepository(),
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: TradeRoomsFixtures.viewerID.rawValue),
+            uploadService: TradeRoomsStubUploadService(),
+            objectStorage: TradeRoomsStubObjectStorage(),
+            detailCache: DetailPresentationCache(),
+            inboxStore: store
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+        await waitFor(timeout: 3) {
+            viewModel.messages.contains { $0.id == target }
+                && (viewModel.pendingScrollMessageID == target || viewModel.highlightedMessageID == target)
+        }
+    }
+
+    func testRapidChannelSwitchDoesNotLeakOtherChannelMessages() async {
+        let store = MessagesInboxStore.shared
+        TradeRoomsFixtures.seedInbox(store)
+
+        let viewModel = RoomConversationViewModel(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            rooms: TradeRoomsStubRoomRepository(),
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: TradeRoomsFixtures.viewerID.rawValue),
+            uploadService: TradeRoomsStubUploadService(),
+            objectStorage: TradeRoomsStubObjectStorage(),
+            detailCache: DetailPresentationCache(),
+            inboxStore: store
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+
+        let general = viewModel.channels.first { $0.name.lowercased() == "general" }!
+        let trades = viewModel.channels.first { $0.name.lowercased() == "trades" }!
+        let announcements = viewModel.channels.first { $0.name.lowercased() == "announcements" }!
+
+        viewModel.selectChannel(trades.id)
+        viewModel.selectChannel(announcements.id)
+        viewModel.selectChannel(general.id)
+        await waitFor {
+            viewModel.selectedChannelID == general.id
+                && viewModel.messages.allSatisfy { $0.conversationID.rawValue == general.id.rawValue }
+        }
+    }
+
+    func testNavigationIntentSwitchesSubRoomWhileRoomAlreadyLoaded() async {
+        RoomNavigationFocusStore.shared.clear()
+        defer { RoomNavigationFocusStore.shared.clear() }
+
+        let store = MessagesInboxStore.shared
+        TradeRoomsFixtures.seedInbox(store)
+
+        let viewModel = RoomConversationViewModel(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            rooms: TradeRoomsStubRoomRepository(),
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: TradeRoomsFixtures.viewerID.rawValue),
+            uploadService: TradeRoomsStubUploadService(),
+            objectStorage: TradeRoomsStubObjectStorage(),
+            detailCache: DetailPresentationCache(),
+            inboxStore: store
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+
+        XCTAssertEqual(viewModel.selectedChannel?.name.lowercased(), "general")
+        let generalConversationID = viewModel.messages.first?.conversationID
+
+        let tradesChannel = viewModel.channels.first { $0.name.lowercased() == "trades" }
+        XCTAssertNotNil(tradesChannel)
+
+        RoomNavigationFocusStore.shared.seed(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            sectionID: tradesChannel!.id.rawValue,
+            messageID: nil
+        )
+        viewModel.applyPendingNavigationFocusToLoadedRoom()
+        await waitFor {
+            viewModel.selectedChannelID == tradesChannel?.id && !viewModel.messages.isEmpty
+        }
+
+        XCTAssertEqual(viewModel.selectedChannelID, tradesChannel?.id)
+        XCTAssertEqual(viewModel.selectedChannel?.name.lowercased(), "trades")
+        XCTAssertTrue(
+            viewModel.messages.allSatisfy {
+                $0.conversationID == ConversationID(tradesChannel!.id.rawValue)
+            }
+        )
+        XCTAssertTrue(viewModel.messages.allSatisfy {
+            $0.conversationID.rawValue == viewModel.selectedChannelID?.rawValue
+        })
+        XCTAssertNotEqual(viewModel.messages.first?.conversationID, generalConversationID)
+    }
+
     func testChannelSwitchPreservesCachedMessages() async {
         let store = MessagesInboxStore.shared
         TradeRoomsFixtures.seedInbox(store)
@@ -1018,6 +1589,148 @@ private struct TradeRoomsStubMessageRepository: MessageRepository {
         conversationID: ConversationID,
         enabled: Bool
     ) async throws {}
+}
+
+private struct DiskNavigationRoomRepository: RoomRepository, Sendable {
+    let roomID: RoomID
+    let viewerID: ProfileID
+    private let fallback = TradeRoomsStubRoomRepository()
+
+    func room(id: RoomID) async throws -> TradeRoom {
+        if id == roomID {
+            return TradeRoom(
+                id: roomID,
+                ownerProfileID: viewerID,
+                name: "Disk Nav Room",
+                slug: "disk-nav-room",
+                description: nil,
+                image: nil,
+                memberCount: 4,
+                showsOnProfile: true,
+                createdAt: .now
+            )
+        }
+        return try await fallback.room(id: id)
+    }
+
+    func rooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom> {
+        try await fallback.rooms(for: profileID, page: page)
+    }
+
+    func memberRooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom> {
+        try await fallback.memberRooms(for: profileID, page: page)
+    }
+
+    func activeMemberCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int] {
+        try await fallback.activeMemberCounts(for: roomIDs)
+    }
+
+    func activeMembers(roomID: RoomID, ownerProfileID: ProfileID) async throws -> [RoomManagedMember] {
+        try await fallback.activeMembers(roomID: roomID, ownerProfileID: ownerProfileID)
+    }
+
+    func unreadCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int] {
+        try await fallback.unreadCounts(for: roomIDs)
+    }
+
+    func markRead(roomID: RoomID) async throws {
+        try await fallback.markRead(roomID: roomID)
+    }
+
+    func channels(roomID: RoomID) async throws -> [RoomChannel] {
+        [
+            RoomChannel(
+                id: RoomChannelID("\(roomID.rawValue)-general"),
+                roomID: roomID,
+                name: "general",
+                position: 0,
+                allowMembersChat: true
+            ),
+            RoomChannel(
+                id: RoomChannelID("\(roomID.rawValue)-trades"),
+                roomID: roomID,
+                name: "trades",
+                position: 1,
+                allowMembersChat: true
+            ),
+        ]
+    }
+
+    func membership(roomID: RoomID, profileID: ProfileID) async throws -> RoomMembership? {
+        RoomMembership(
+            roomID: roomID,
+            profileID: profileID,
+            role: .member,
+            joinedAt: .now,
+            notificationsEnabled: true
+        )
+    }
+
+    func join(roomID: RoomID, profileID: ProfileID) async throws -> RoomMembership {
+        try await membership(roomID: roomID, profileID: profileID)!
+    }
+
+    func leave(roomID: RoomID, profileID: ProfileID) async throws {}
+
+    func messages(roomID: RoomID, page: PageRequest) async throws -> CursorPage<RoomMessage> {
+        try await messages(roomID: roomID, channel: nil, page: page)
+    }
+
+    func messages(
+        roomID: RoomID,
+        channel: RoomChannel?,
+        page: PageRequest
+    ) async throws -> CursorPage<RoomMessage> {
+        guard roomID == self.roomID, let channel else {
+            return try await fallback.messages(roomID: roomID, channel: channel, page: page)
+        }
+        let deskChannel = TradeRoomsFixtures.channels(roomID: TradeRoomsFixtures.deskRoomID)
+            .first { $0.name.lowercased() == channel.name.lowercased() }?.id
+        let items = TradeRoomsFixtures.messages(
+            roomID: TradeRoomsFixtures.deskRoomID,
+            viewerID: viewerID,
+            channelID: deskChannel
+        )
+        return CursorPage(items: items, nextCursor: nil)
+    }
+
+    func roomMessage(roomID: RoomID, messageID: RoomMessageID) async throws -> RoomMessage? {
+        try await fallback.roomMessage(roomID: roomID, messageID: messageID)
+    }
+
+    func send(_ message: RoomMessage) async throws -> RoomMessage { message }
+
+    func insertMessageReaction(
+        roomID: RoomID,
+        messageID: RoomMessageID,
+        userID: ProfileID,
+        reaction: String
+    ) async throws -> RoomMessageReaction {
+        try await fallback.insertMessageReaction(
+            roomID: roomID,
+            messageID: messageID,
+            userID: userID,
+            reaction: reaction
+        )
+    }
+
+    func deleteMessageReaction(id: String) async throws {
+        try await fallback.deleteMessageReaction(id: id)
+    }
+
+    func moderate(
+        roomID: RoomID,
+        messageID: RoomMessageID?,
+        targetProfileID: ProfileID?,
+        action: RoomModerationAction
+    ) async throws {
+        try await fallback.moderate(
+            roomID: roomID,
+            messageID: messageID,
+            targetProfileID: targetProfileID,
+            action: action
+        )
+    }
 }
 
 private struct TradeRoomsStubRoomRepository: RoomRepository {

@@ -48,6 +48,8 @@ nonisolated protocol MessageRepository: Sendable {
     func deleteConversation(id: ConversationID) async throws
     /// Web `deleteForEveryone` — soft-delete own DM (`messages.deleted_for_everyone = true`).
     func deleteMessageForEveryone(_ messageID: MessageID, in conversationID: ConversationID) async throws
+    /// Web `deleteForMe` — per-user hide via `message_deletions`.
+    func deleteMessageForMe(_ messageID: MessageID, in conversationID: ConversationID) async throws
     /// Web `setConversationNotificationsEnabled` — per-user mute via `conversation_member_preferences`.
     func setConversationNotificationsEnabled(
         conversationID: ConversationID,
@@ -121,5 +123,9 @@ extension MessageRepository {
 
     func deleteMessageReaction(id: String) async throws {
         throw AppError.notImplemented(feature: "deleteMessageReaction")
+    }
+
+    func deleteMessageForMe(_ messageID: MessageID, in conversationID: ConversationID) async throws {
+        throw AppError.notImplemented(feature: "deleteMessageForMe")
     }
 }

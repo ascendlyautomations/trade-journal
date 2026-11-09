@@ -2,12 +2,15 @@
 
 import { Headphones } from "lucide-react"
 import TradeRoomLiveVoiceJoinButton from "./TradeRoomLiveVoiceJoinButton.tsx"
+import { formatGeneralVoicePresenceLabel } from "@/lib/livekit/client/formatGeneralVoicePresenceLabel.ts"
 import { TRADE_ROOM_VOICE_USER_LABEL } from "@/lib/livekit/tradeRoomSharedLiveVoice.ts"
-import { useTradeRoomLiveVoice } from "./useTradeRoomLiveVoice.ts"
+import { useTradeRoomLiveVoiceStableConnection } from "./useTradeRoomLiveVoice.ts"
+import { useTradeRoomGeneralVoicePresence } from "./useTradeRoomGeneralVoicePresence.ts"
 
 type Props = {
   roomId: string
   roomName: string | null
+  accessToken?: string | null
   disabled?: boolean
   fetchToken: () => Promise<{
     token: string
@@ -20,10 +23,17 @@ type Props = {
 export default function TradeRoomGeneralVoiceSidebarRow({
   roomId,
   roomName,
+  accessToken,
   disabled,
   fetchToken,
 }: Props) {
-  const voice = useTradeRoomLiveVoice()
+  const voice = useTradeRoomLiveVoiceStableConnection()
+  const presence = useTradeRoomGeneralVoicePresence({
+    roomId,
+    accessToken: accessToken ?? null,
+    enabled: !disabled,
+  })
+  const presenceLabel = formatGeneralVoicePresenceLabel(presence.connectedCount)
   const active =
     voice.session?.roomId === roomId &&
     (voice.isConnected || voice.isBusy)
@@ -38,9 +48,16 @@ export default function TradeRoomGeneralVoiceSidebarRow({
     >
       <div className="flex items-center gap-2 px-1">
         <Headphones className="h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
-        <span className="truncate text-sm font-medium text-emerald-100">
-          {TRADE_ROOM_VOICE_USER_LABEL}
-        </span>
+        <div className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium text-emerald-100">
+            {TRADE_ROOM_VOICE_USER_LABEL}
+          </span>
+          {presenceLabel ? (
+            <span className="block truncate text-[11px] text-emerald-200/70">
+              {presenceLabel}
+            </span>
+          ) : null}
+        </div>
       </div>
       <div className="px-1">
         <TradeRoomLiveVoiceJoinButton

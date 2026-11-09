@@ -249,13 +249,16 @@ final class PushNotificationCenter: NSObject {
 
     private func route(userInfo: [AnyHashable: Any]) {
         let destination = PushNotificationPayloadParser.parse(userInfo: userInfo)
-        if let roomID = destination.roomID {
-            RoomNavigationFocusStore.shared.seed(
-                roomID: roomID,
+        RoomNotificationNavigationTrace.event(
+            .init(
+                stage: "apns.parsed",
+                roomID: destination.roomID?.rawValue,
                 sectionID: destination.sectionID,
-                messageID: destination.messageID ?? destination.threadID
+                sectionName: destination.rawUserInfo["section_name"],
+                messageID: destination.messageID,
+                detail: "type=\(destination.rawUserInfo["type"] ?? "?") href=\(destination.rawUserInfo["href"] ?? "")"
             )
-        }
+        )
         _ = routerFacade.route(
             destination,
             using: navigation.coordinator,

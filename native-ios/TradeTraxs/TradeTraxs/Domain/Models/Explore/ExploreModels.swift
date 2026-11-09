@@ -278,6 +278,96 @@ nonisolated enum TradeRoomDiscoveryMode: String, CaseIterable, Hashable, Sendabl
     }
 }
 
+/// Public live broadcast surfaced on Explore (`GET /api/explore/live-traders`).
+nonisolated struct ExploreLiveTraderNow: Hashable, Sendable, Identifiable {
+    var id: String { broadcastSessionId }
+
+    var broadcastSessionId: String
+    var roomID: RoomID
+    var roomSlug: String?
+    var roomName: String
+    var broadcasterProfileID: ProfileID
+    var broadcasterDisplayName: String?
+    var broadcasterUsername: String?
+    var broadcasterAvatarURL: String?
+    var viewerCount: Int?
+    var startedAt: String
+    var videoSource: String
+}
+
+/// BFF envelope for `GET /api/explore/live-traders` — decoded with `SupabaseTransport` default keys.
+nonisolated struct ExploreLiveTradersNowEnvelope: Decodable, Sendable {
+    var items: [ExploreLiveTraderNowAPIRow]?
+}
+
+nonisolated struct ExploreLiveTraderNowAPIRow: Decodable, Sendable {
+    var broadcastSessionId: String
+    var roomId: String
+    var roomSlug: String?
+    var roomName: String
+    var broadcasterUserId: String
+    var broadcasterDisplayName: String?
+    var broadcasterUsername: String?
+    var broadcasterAvatarUrl: String?
+    var viewerCount: Int?
+    var startedAt: String
+    var videoSource: String?
+
+    enum CodingKeys: String, CodingKey {
+        case broadcastSessionId
+        case roomId
+        case roomSlug
+        case roomName
+        case broadcasterUserId
+        case broadcasterDisplayName
+        case broadcasterUsername
+        case broadcasterAvatarUrl
+        case viewerCount
+        case startedAt
+        case videoSource
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        broadcastSessionId = try container.decode(String.self, forKey: .broadcastSessionId)
+        roomId = try container.decode(String.self, forKey: .roomId)
+        roomSlug = try container.decodeIfPresent(String.self, forKey: .roomSlug)
+        roomName = try container.decode(String.self, forKey: .roomName)
+        broadcasterUserId = try container.decode(String.self, forKey: .broadcasterUserId)
+        broadcasterDisplayName = try container.decodeIfPresent(String.self, forKey: .broadcasterDisplayName)
+        broadcasterUsername = try container.decodeIfPresent(String.self, forKey: .broadcasterUsername)
+        broadcasterAvatarUrl = try container.decodeIfPresent(String.self, forKey: .broadcasterAvatarUrl)
+        startedAt = try container.decode(String.self, forKey: .startedAt)
+        videoSource = try container.decodeIfPresent(String.self, forKey: .videoSource)
+        if let count = try? container.decodeIfPresent(Int.self, forKey: .viewerCount) {
+            viewerCount = count
+        } else if let count = try? container.decodeIfPresent(Double.self, forKey: .viewerCount) {
+            viewerCount = Int(count)
+        } else {
+            viewerCount = nil
+        }
+    }
+
+    func toDomain() -> ExploreLiveTraderNow {
+        ExploreLiveTraderNow(
+            broadcastSessionId: broadcastSessionId,
+            roomID: RoomID(roomId),
+            roomSlug: roomSlug,
+            roomName: roomName,
+            broadcasterProfileID: ProfileID(broadcasterUserId),
+            broadcasterDisplayName: broadcasterDisplayName,
+            broadcasterUsername: broadcasterUsername,
+            broadcasterAvatarURL: broadcasterAvatarUrl,
+            viewerCount: viewerCount,
+            startedAt: startedAt,
+            videoSource: {
+                let trimmed = videoSource?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return trimmed.isEmpty ? "camera" : trimmed
+            }()
+        )
+    }
+}
+
 nonisolated struct ExploreSocialCounts: Hashable, Sendable {
     var followers: [ProfileID: Int]
     var following: [ProfileID: Int]

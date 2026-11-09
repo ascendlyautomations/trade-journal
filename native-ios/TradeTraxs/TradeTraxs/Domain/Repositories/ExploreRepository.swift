@@ -31,6 +31,9 @@ nonisolated protocol ExploreRepository: Sendable {
 
     /// Public room name/slug search via `search_public_trade_rooms`.
     func searchRooms(query: String, limit: Int) async throws -> [ExploreRoomSuggestion]
+
+    /// Active public live broadcasts for Explore (`GET /api/explore/live-traders`).
+    func liveTradersNow(limit: Int) async throws -> [ExploreLiveTraderNow]
 }
 
 extension ExploreRepository {
@@ -62,4 +65,6 @@ extension ExploreRepository {
             popularNextCursor: nil
         )
     }
+
+    func liveTradersNow(limit: Int) async throws -> [ExploreLiveTraderNow] { [] }
 }

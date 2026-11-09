@@ -5,6 +5,7 @@ import OSLog
 ///
 /// Ordinary in-app navigation appends exactly one route to the active tab path.
 /// It does not switch tabs, replace paths, or insert hidden parent screens.
+/// Notification, universal-link, and pending-after-auth entry uses ``openExternal(_:)``.
 @Observable
 final class NavigationCoordinator {
     private let store: NavigationStore
@@ -63,6 +64,69 @@ final class NavigationCoordinator {
         }
     }
 
+    /// Notification, universal-link, and pending-after-auth entry.
+    ///
+    /// Removes an existing visit to the same destination on every tab, then shows one copy.
+    /// Dismisses navigation sheets and full-screen covers. Live voice and the broadcast viewer
+    /// stay connected because those sessions live on the tab shell, not in this store.
+    func openExternal(_ destination: AppDestination) {
+        switch destination {
+        case .auth, .pop, .popToRoot, .dismissPresentation:
+            open(destination)
+            return
+        default:
+            break
+        }
+
+        guard allowsContentNavigation else {
+            stashForAuthentication(destination)
+            return
+        }
+
+        dismissPresentation()
+
+        switch destination {
+        case .tab(let tab):
+            selectTab(tab)
+        case .sheet, .fullScreen, .compose, .settingsStack:
+            open(destination)
+        case .home(let route):
+            selectTab(.home)
+            reconcileStacks(for: .home(route))
+            let normalizedHome = Self.normalizedHomeRoute(route)
+            if store.paths.home.last != normalizedHome {
+                pushHome(normalizedHome)
+            }
+            bumpExternalEpoch(for: .home(normalizedHome))
+        case .feed(let route):
+            selectTab(.feed)
+            reconcileStacks(for: .feed(route))
+            let normalizedFeed = Self.normalizedFeedRoute(route)
+            if store.paths.feed.last != normalizedFeed {
+                pushFeed(normalizedFeed)
+            }
+            bumpExternalEpoch(for: .feed(normalizedFeed))
+        case .messages(let route):
+            selectTab(.messages)
+            reconcileStacks(for: .messages(route))
+            let normalizedRoute = Self.normalizedMessagesRoute(route)
+            if store.paths.messages.last != normalizedRoute {
+                pushMessages(normalizedRoute)
+            }
+            bumpExternalEpoch(for: .messages(normalizedRoute))
+        case .profile(let route):
+            selectTab(.profile)
+            reconcileStacks(for: .profile(route))
+            let normalizedProfile = Self.normalizedProfileRoute(route)
+            if store.paths.profile.last != normalizedProfile {
+                pushProfile(normalizedProfile)
+            }
+            bumpExternalEpoch(for: .profile(normalizedProfile))
+        case .auth, .pop, .popToRoot, .dismissPresentation:
+            break
+        }
+    }
+
     /// Explore Mode main tabs — remains ``SessionPhase/unauthenticated`` (no authenticated services).
     /// Stack pushes still run while ``AppLaunchController/isDemoExperienceActive`` is true.
     func markExploreExperience() {
@@ -75,6 +139,7 @@ final class NavigationCoordinator {
         store.paths.feed = []
         store.paths.messages = []
         store.paths.profile = []
+        store.externalDestinationEpochs = [:]
         store.pendingAfterAuth = nil
         didEnterAuthenticatedShell = false
     }
@@ -97,7 +162,7 @@ final class NavigationCoordinator {
         if let pending = store.pendingAfterAuth {
             store.pendingAfterAuth = nil
             DeepLinkLaunchTrace.event("pending.consumed", detail: String(describing: pending.asAppDestination))
-            open(pending.asAppDestination)
+            openExternal(pending.asAppDestination)
             DeepLinkLaunchTrace.event("navigation.executed", detail: "pendingAfterAuth")
         } else if snapshot == nil, !store.restoresLastContentTab {
             store.selectedTab = .home
@@ -115,6 +180,7 @@ final class NavigationCoordinator {
         store.paths.resetAuth(to: .login)
         store.selectedTab = .home
         store.previousContentTab = .home
+        store.externalDestinationEpochs = [:]
         if clearPendingAfterAuth {
             store.pendingAfterAuth = nil
         }
@@ -127,7 +193,7 @@ final class NavigationCoordinator {
 
     func selectTab(_ tab: TabIdentifier) {
         if tab == .create {
-            invokeCreateAction()
+            invokeCreateAction(source: .tabSelection)
             return
         }
         if store.selectedTab != tab {
@@ -139,8 +205,9 @@ final class NavigationCoordinator {
     }
 
     /// Create tab is an action — presents chooser and keeps content tab selected.
-    func invokeCreateAction() {
+    func invokeCreateAction(source: CreateActionSource = .unknown) {
         if DemoProtectedNavigation.interceptComposeIfNeeded(.chooser) { return }
+        CreateActionInvokeDiagnostics.recordInvoke(source: source)
         emit(.createActionInvoked)
         present(sheet: .composeChooser)
     }
@@ -197,7 +264,7 @@ final class NavigationCoordinator {
         if let pending = store.pendingAfterAuth {
             store.pendingAfterAuth = nil
             DeepLinkLaunchTrace.event("pending.consumed", detail: String(describing: pending.asAppDestination))
-            open(pending.asAppDestination)
+            openExternal(pending.asAppDestination)
             DeepLinkLaunchTrace.event("navigation.executed", detail: "pendingAfterRepair")
         }
     }
@@ -786,6 +853,106 @@ final class NavigationCoordinator {
     }
 
     // MARK: - Private
+
+    private func reconcileStacks(for destination: AppDestination) {
+        store.paths.home = ExternalDestinationIdentity.droppingMatchedVisit(store.paths.home, destination: destination)
+        store.paths.feed = ExternalDestinationIdentity.droppingMatchedVisit(store.paths.feed, destination: destination)
+        store.paths.messages = ExternalDestinationIdentity.droppingMatchedVisit(store.paths.messages, destination: destination)
+        store.paths.profile = ExternalDestinationIdentity.droppingMatchedVisit(store.paths.profile, destination: destination)
+    }
+
+    private func bumpExternalEpoch(for destination: AppDestination) {
+        if let roomID = Self.roomID(forExternalEpoch: destination) {
+            recordExternalRoomFocusPresentation(for: roomID)
+        }
+        for key in ExternalDestinationIdentity.epochKeys(for: destination) {
+            let nextEpoch = (store.externalDestinationEpochs[key] ?? 0) + 1
+            store.bumpExternalDestinationEpoch(key)
+            let focusToken = store.externalRoomFocusTokens[key] ?? ""
+            let presentation = store.externalDestinationIdentity(for: key)
+            if key.hasPrefix("room:") {
+                let roomKey = String(key.dropFirst("room:".count))
+                let pending = RoomNavigationFocusStore.shared.pendingFocus(for: RoomID(roomKey))
+                RoomNotificationNavigationTrace.event(
+                    .init(
+                        stage: "openExternal.epoch",
+                        roomID: roomKey,
+                        sectionID: pending?.channelID?.rawValue,
+                        sectionName: pending?.channelName,
+                        messageID: pending?.messageID?.rawValue,
+                        destination: String(describing: destination),
+                        presentationID: presentation,
+                        epoch: nextEpoch,
+                        focusToken: focusToken.isEmpty ? nil : focusToken
+                    )
+                )
+            }
+        }
+    }
+
+    private static func normalizedHomeRoute(_ route: HomeRoute) -> HomeRoute {
+        switch route {
+        case .room(let id):
+            return .room(RoomNavigationFocusStore.shared.canonicalRoomID(id))
+        default:
+            return route
+        }
+    }
+
+    private static func normalizedFeedRoute(_ route: FeedRoute) -> FeedRoute {
+        switch route {
+        case .room(let id):
+            return .room(RoomNavigationFocusStore.shared.canonicalRoomID(id))
+        default:
+            return route
+        }
+    }
+
+    private static func normalizedMessagesRoute(_ route: MessagesRoute) -> MessagesRoute {
+        switch route {
+        case .room(let id):
+            return .room(RoomNavigationFocusStore.shared.canonicalRoomID(id))
+        default:
+            return route
+        }
+    }
+
+    private static func normalizedProfileRoute(_ route: ProfileRoute) -> ProfileRoute {
+        switch route {
+        case .room(let id):
+            return .room(RoomNavigationFocusStore.shared.canonicalRoomID(id))
+        default:
+            return route
+        }
+    }
+
+    private func recordExternalRoomFocusPresentation(for roomID: RoomID) {
+        guard let focus = RoomNavigationFocusStore.shared.pendingFocus(for: roomID) else { return }
+        var parts: [String] = []
+        if let channelID = focus.channelID {
+            parts.append("c:\(channelID.rawValue)")
+        }
+        if let name = focus.channelName {
+            parts.append("n:\(name)")
+        }
+        if let messageID = focus.messageID {
+            parts.append("m:\(messageID.rawValue)")
+        }
+        let token = parts.joined(separator: "&")
+        guard !token.isEmpty else { return }
+        for key in RoomNavigationFocusStore.shared.epochKeys(forRoom: roomID) {
+            store.recordExternalRoomFocusToken(routeEpochKey: key, token: token)
+        }
+    }
+
+    private static func roomID(forExternalEpoch destination: AppDestination) -> RoomID? {
+        switch destination {
+        case .home(.room(let id)), .feed(.room(let id)), .messages(.room(let id)), .profile(.room(let id)):
+            return id
+        default:
+            return nil
+        }
+    }
 
     /// Cold deep link / external settings URL — intentional Profile tab + constructed stack.
     private func openSettingsDeepLink(_ routes: [SettingsRoute]) {

@@ -16,6 +16,12 @@ import {
 } from "@/lib/publicAccountPrivacy"
 import { rpcTradeOwnerRead } from "@/lib/tradeOwnerRead"
 import { SHARED_TRADE_UNAVAILABLE } from "@/lib/sharedContentNavigation"
+import {
+  getCachedSharedTradeEmbed,
+  getOrCreateSharedTradeInflight,
+  setCachedSharedTradeEmbed,
+  tradeEmbedCacheKey,
+} from "@/lib/roomSharedContentEmbedCache"
 import { supabase } from "@/lib/supabaseClient"
 import { asJsonObject } from "@/lib/supabaseProjectedQuery"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
@@ -79,10 +85,29 @@ export default function SharedTradeMessageCard({
     (layout === "dm"
       ? "w-full max-w-[min(100%,22rem)]"
       : "w-full min-w-[15rem] max-w-[min(100%,19.5rem)]")
-  const [trade, setTrade] = useState<any>(initialTrade)
-  const [tradeLoading, setTradeLoading] = useState(
-    () => !initialTrade && Boolean(tradeId != null && String(tradeId).trim())
+
+  const resolvedTradeId = tradeId != null ? String(tradeId).trim() : ""
+  const embedViewerKey = viewerUserId?.trim() || "__anon__"
+  const tradeMemoryCacheKey =
+    resolvedTradeId.length > 0
+      ? tradeEmbedCacheKey(resolvedTradeId, viewerUserId)
+      : ""
+
+  const cachedTradeFromStore =
+    tradeMemoryCacheKey && !initialTrade
+      ? getCachedSharedTradeEmbed(tradeMemoryCacheKey)
+      : undefined
+
+  const [trade, setTrade] = useState<any>(
+    () =>
+      initialTrade ??
+      (cachedTradeFromStore !== undefined ? cachedTradeFromStore : null)
   )
+  const [tradeLoading, setTradeLoading] = useState(() => {
+    if (initialTrade) return false
+    if (cachedTradeFromStore !== undefined) return false
+    return Boolean(resolvedTradeId)
+  })
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null)
   const [canLoad, setCanLoad] = useState(!deferUntilVisible)
   const deferredCardRef = useRef<HTMLDivElement | null>(null)
@@ -90,8 +115,6 @@ export default function SharedTradeMessageCard({
   const onTradeLoadedRef = useRef(onTradeLoaded)
   initialTradeRef.current = initialTrade
   onTradeLoadedRef.current = onTradeLoaded
-
-  const resolvedTradeId = tradeId != null ? String(tradeId).trim() : ""
 
   useEffect(() => {
     if (!deferUntilVisible || canLoad) return
@@ -121,10 +144,21 @@ export default function SharedTradeMessageCard({
       return
     }
 
+    const cacheKey = tradeEmbedCacheKey(resolvedTradeId, viewerUserId)
+
     const cachedTrade = initialTradeRef.current
     if (cachedTrade) {
       setTrade(cachedTrade)
       setTradeLoading(false)
+      setCachedSharedTradeEmbed(cacheKey, cachedTrade, embedViewerKey)
+      return
+    }
+
+    const memoryCached = getCachedSharedTradeEmbed(cacheKey)
+    if (memoryCached !== undefined) {
+      setTrade(memoryCached)
+      setTradeLoading(false)
+      onTradeLoadedRef.current?.(memoryCached)
       return
     }
 
@@ -132,15 +166,13 @@ export default function SharedTradeMessageCard({
     setTradeLoading(true)
     setTrade(null)
 
-    void (async () => {
+    const inflight = getOrCreateSharedTradeInflight(cacheKey, async () => {
       const { data } = await supabase
         .from(TRADES_PUBLIC_READ_RELATION)
         .select(PUBLIC_TRADE_SELECT)
         .eq("id", resolvedTradeId)
         .maybeSingle()
         .overrideTypes<Record<string, unknown> | null, { merge: false }>()
-
-      if (cancelled) return
 
       const tradeRow = asJsonObject(data)
       const isOwner =
@@ -158,15 +190,21 @@ export default function SharedTradeMessageCard({
         ? sanitizeTradeForViewer(resolved, { isOwner: !!isOwner })
         : null
 
-      setTrade(sanitized)
+      setCachedSharedTradeEmbed(cacheKey, sanitized, embedViewerKey)
+      return sanitized
+    })
+
+    void inflight.then((sanitized) => {
+      if (cancelled) return
+      setTrade(sanitized ?? null)
       setTradeLoading(false)
-      onTradeLoadedRef.current?.(sanitized)
-    })()
+      onTradeLoadedRef.current?.(sanitized ?? null)
+    })
 
     return () => {
       cancelled = true
     }
-  }, [canLoad, resolvedTradeId, viewerUserId])
+  }, [canLoad, resolvedTradeId, viewerUserId, embedViewerKey])
 
   if (!canLoad) {
     return (

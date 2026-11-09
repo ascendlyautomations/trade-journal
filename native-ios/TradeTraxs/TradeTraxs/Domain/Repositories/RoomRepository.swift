@@ -37,6 +37,8 @@ nonisolated protocol RoomRepository: Sendable {
         channel: RoomChannel?,
         page: PageRequest
     ) async throws -> CursorPage<RoomMessage>
+    /// Single room message row — used to hydrate push notification targets absent from the first page.
+    func roomMessage(roomID: RoomID, messageID: RoomMessageID) async throws -> RoomMessage?
     func send(_ message: RoomMessage) async throws -> RoomMessage
     /// Author delete — `room_messages` row removed (RLS: message author).
     func deleteMessage(roomID: RoomID, messageID: RoomMessageID) async throws
@@ -77,6 +79,10 @@ extension RoomRepository {
     func lastMessageActivity(for roomIDs: [RoomID]) async throws -> [RoomID: Date] { [:] }
     func activeMembers(roomID: RoomID, ownerProfileID: ProfileID) async throws -> [RoomManagedMember] {
         []
+    }
+
+    func roomMessage(roomID: RoomID, messageID: RoomMessageID) async throws -> RoomMessage? {
+        nil
     }
 
     func requestJoin(roomID: RoomID) async throws -> TradeRoomJoinRequestState {

@@ -12,6 +12,8 @@ struct ConversationView: View {
     @State private var lastScrollSample: ScrollLayoutSample?
     @State private var userReleasedInitialPin = false
     @State private var showsConversationActions = false
+    @State private var showsSharedMediaGallery = false
+    @State private var sharedMediaViewModel: ConversationSharedMediaViewModel?
     @State private var actionMenuMessageID: MessageID?
     private let imagePipeline: any ImagePipeline
     private let detailCache: DetailPresentationCache
@@ -126,6 +128,13 @@ struct ConversationView: View {
             Button("Select Messages") {
                 viewModel.enterSelectionMode()
             }
+            Button("Shared Media") {
+                sharedMediaViewModel = ConversationSharedMediaViewModel(
+                    conversationID: viewModel.conversationID,
+                    rpc: viewModel.conversationSharedMediaRPC
+                )
+                showsSharedMediaGallery = true
+            }
             Button(viewModel.isMuted ? "Unmute Conversation" : "Mute Conversation") {
                 viewModel.toggleMute()
             }
@@ -160,6 +169,21 @@ struct ConversationView: View {
             }
             Button("Cancel", role: .cancel) {}
         }
+        .sheet(
+            isPresented: $showsSharedMediaGallery,
+            onDismiss: { sharedMediaViewModel = nil }
+        ) {
+            if let sharedMediaViewModel {
+                ConversationSharedMediaView(
+                    viewModel: sharedMediaViewModel,
+                    imagePipeline: imagePipeline,
+                    onViewInChat: { messageID in
+                        viewModel.navigateToMessageFromSharedMedia(messageID)
+                    }
+                )
+                .accessibilityIdentifier("conversation.sharedMedia.sheet")
+            }
+        }
         .alert(viewModel.blockConfirmationTitle, isPresented: $viewModel.showsBlockConfirmation) {
             Button(viewModel.blockedByMe ? "Unblock" : "Block", role: viewModel.blockedByMe ? nil : .destructive) {
                 Task { await viewModel.confirmBlockToggle() }
@@ -178,11 +202,22 @@ struct ConversationView: View {
         } message: {
             Text("This will remove this conversation from your messages.")
         }
-        .alert(viewModel.batchDeleteConfirmationTitle, isPresented: $viewModel.showsBatchDeleteConfirmation) {
-            Button("Delete", role: .destructive) {
-                Task { await viewModel.confirmDeleteSelectedMessages() }
+        .confirmationDialog(
+            viewModel.batchDeleteConfirmationTitle,
+            isPresented: $viewModel.showsBatchDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            if viewModel.offersDeleteForEveryoneInBatch {
+                Button("Delete for Everyone", role: .destructive) {
+                    Task { await viewModel.confirmDeleteSelectedForEveryone() }
+                }
+            }
+            Button("Delete for Me", role: .destructive) {
+                Task { await viewModel.confirmDeleteSelectedForMe() }
             }
             Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(viewModel.batchDeleteConfirmationMessage)
         }
         .alert(
             "Couldn't delete conversation",
@@ -332,7 +367,7 @@ struct ConversationView: View {
                                     Task { await viewModel.retry(bubble) }
                                 },
                                 onDelete: {
-                                    Task { await viewModel.deleteMessage(bubble) }
+                                    Task { await viewModel.deleteMessageForMe(bubble) }
                                 },
                                 onSharedTradeTap: { tradeID in
                                     #if DEBUG
@@ -381,6 +416,18 @@ struct ConversationView: View {
                                 },
                                 onReport: incomingMessageReportAction(for: bubble)
                             )
+                            .background {
+                                if viewModel.highlightedMessageID == bubble.id {
+                                    RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                                        .fill(colors.accent.opacity(0.16))
+                                        .padding(.horizontal, ExperienceSpacing.xs)
+                                        .transition(.opacity)
+                                }
+                            }
+                            .animation(
+                                ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
+                                value: viewModel.highlightedMessageID
+                            )
                             .id(bubble.id.rawValue)
                             .onAppear {
                                 guard viewModel.isInitialScrollPinningBottom else { return }
@@ -424,7 +471,8 @@ struct ConversationView: View {
                         actionCount: MessageBubbleActionMenuSupport.actionCount(
                             item: bubble,
                             reactionConfiguration: reactions,
-                            canDelete: viewModel.canDeleteMessage(bubble),
+                            canDeleteForMe: viewModel.canDeleteForMe(bubble),
+                            canDeleteForEveryone: viewModel.canDeleteForEveryone(bubble),
                             onRetry: { Task { await viewModel.retry(bubble) } },
                             onReport: incomingMessageReportAction(for: bubble)
                         )
@@ -436,10 +484,17 @@ struct ConversationView: View {
                     MessageBubbleActionMenuSupport.menu(
                         item: bubble,
                         reactionConfiguration: reactions,
-                        canDelete: viewModel.canDeleteMessage(bubble),
-                        deleteMenuTitle: "Delete",
+                        canDeleteForMe: viewModel.canDeleteForMe(bubble),
+                        deleteForMeTitle: "Delete for Me",
+                        canDeleteForEveryone: viewModel.canDeleteForEveryone(bubble),
+                        deleteForEveryoneTitle: "Delete for Everyone",
                         onRetry: { Task { await viewModel.retry(bubble) } },
-                        onDelete: { Task { await viewModel.deleteMessage(bubble) } },
+                        onDeleteForMe: {
+                            Task { await viewModel.deleteMessageForMe(bubble) }
+                        },
+                        onDeleteForEveryone: {
+                            Task { await viewModel.deleteMessageForEveryone(bubble) }
+                        },
                         onReport: incomingMessageReportAction(for: bubble),
                         onSelectEmoji: { emoji in
                             Task { await viewModel.toggleReaction(messageID: messageID, emoji: emoji) }
@@ -497,6 +552,15 @@ struct ConversationView: View {
             }
             .onChange(of: viewModel.sharedAchievements.count) { _, _ in
                 maintainInitialPinAfterRichContentHydration(proxy: proxy)
+            }
+            .onChange(of: viewModel.pendingScrollMessageID) { _, messageID in
+                guard viewModel.isInitialScrollConfirmed, let messageID else { return }
+                DispatchQueue.main.async {
+                    withAnimation(ExperienceMotion.preferred(ExperienceMotion.navigation, reduceMotion: reduceMotion)) {
+                        proxy.scrollTo(messageID.rawValue, anchor: .center)
+                    }
+                    viewModel.clearPendingScroll()
+                }
             }
             .overlay(alignment: .bottom) {
                 if viewModel.scrollCoordinator.showsNewMessagesIndicator {

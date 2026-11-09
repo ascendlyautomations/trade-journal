@@ -395,6 +395,19 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
         try await messages(roomID: roomID, channel: nil, page: page)
     }
 
+    func roomMessage(roomID: RoomID, messageID: RoomMessageID) async throws -> RoomMessage? {
+        let rows: [RoomDTO.Message] = try await supabase.database.select(
+            RoomDTO.Message.self,
+            from: "room_messages",
+            query: [
+                SupabaseQuery.select(Self.messageSelect),
+                SupabaseQuery.eq("id", messageID.rawValue),
+                SupabaseQuery.eq("room_id", roomID.rawValue),
+            ]
+        )
+        return rows.first.flatMap(mapMessage)
+    }
+
     func messages(
         roomID: RoomID,
         channel: RoomChannel?,

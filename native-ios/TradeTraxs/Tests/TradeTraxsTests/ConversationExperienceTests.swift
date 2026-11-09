@@ -224,7 +224,7 @@ final class ConversationExperienceTests: XCTestCase {
         XCTAssertEqual(MessagesInboxStore.shared.unreadCount(for: after), 0)
     }
 
-    func testCanDeleteMessageOnlyOwnSentMessages() async {
+    func testDeleteEligibilityMatchesWebDmSemantics() async {
         MessagesInboxFixtures.seedStore(MessagesInboxStore.shared)
         let viewModel = makeViewModel(
             conversationID: ConversationID("dev-dm-ada"),
@@ -240,8 +240,11 @@ final class ConversationExperienceTests: XCTestCase {
         let incoming = bubbles.first { !$0.isOutgoing }!
         let outgoing = bubbles.first { $0.isOutgoing && $0.sendState == .sent }!
 
-        XCTAssertFalse(viewModel.canDeleteMessage(incoming))
-        XCTAssertTrue(viewModel.canDeleteMessage(outgoing))
+        XCTAssertTrue(viewModel.canDeleteForMe(incoming))
+        XCTAssertFalse(viewModel.canDeleteForEveryone(incoming))
+        XCTAssertTrue(viewModel.canDeleteForMe(outgoing))
+        XCTAssertTrue(viewModel.canDeleteForEveryone(outgoing))
+        XCTAssertTrue(viewModel.canSelectMessageInBatch(incoming))
     }
 
     func testDeleteMessageRemovesOutgoingFromLocalTimeline() async {

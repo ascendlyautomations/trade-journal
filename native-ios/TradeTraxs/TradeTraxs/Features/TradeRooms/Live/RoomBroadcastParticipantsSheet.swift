@@ -34,6 +34,7 @@ struct RoomBroadcastParticipantsSheet: View {
                                         .foregroundStyle(colors.accent)
                                 }
                             }
+                            .experienceDashboardListRow()
                         }
                     }
                 }
@@ -54,6 +55,8 @@ struct RoomBroadcastParticipantsSheet: View {
                     }
                 }
             }
+            .experienceInsetGroupedListStyle(pageBackground: true)
+            .experienceScreenBackground()
             .navigationTitle("Participants")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

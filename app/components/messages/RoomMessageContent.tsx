@@ -1,5 +1,6 @@
 "use client"
 
+import { memo, useCallback, useRef } from "react"
 import VoiceMessageBubble from "@/app/components/messages/VoiceMessageBubble"
 import RoomSharedContentCard from "@/app/components/messages/RoomSharedContentCard"
 import StoryShareMessageCard from "@/app/components/messages/StoryShareMessageCard"
@@ -12,6 +13,33 @@ import {
 } from "@/lib/roomMessageSharedContent"
 import { resolveStorySharePayload } from "@/lib/storyShareMessage"
 import { canEditRoomMessage } from "@/lib/roomModeration"
+
+function roomMessageContentCompareProps(
+  prev: RoomMessageContentProps,
+  next: RoomMessageContentProps
+): boolean {
+  const pm = prev.msg
+  const nm = next.msg
+  if (
+    pm.id !== nm.id ||
+    pm.user_id !== nm.user_id ||
+    pm.type !== nm.type ||
+    pm.content !== nm.content ||
+    pm.image_url !== nm.image_url ||
+    pm.audio_url !== nm.audio_url ||
+    pm.audio_duration_ms !== nm.audio_duration_ms ||
+    pm.trade_id !== nm.trade_id ||
+    pm.send_status !== nm.send_status ||
+    (pm.trades?.id ?? null) !== (nm.trades?.id ?? null)
+  ) {
+    return false
+  }
+  if (prev.viewerUserId !== next.viewerUserId) return false
+  if (prev.nativeIos !== next.nativeIos) return false
+  if (prev.editingMessageId !== next.editingMessageId) return false
+  if (prev.editingMessageContent !== next.editingMessageContent) return false
+  return true
+}
 
 export type RoomMessageContentMessage = {
   id: string
@@ -42,7 +70,7 @@ type RoomMessageContentProps = {
   onRetryFailed?: () => void
 }
 
-export default function RoomMessageContent({
+function RoomMessageContent({
   msg,
   viewerUserId,
   nativeIos = false,
@@ -61,6 +89,12 @@ export default function RoomMessageContent({
   const caption = roomMessageDisplayText(msg)
   const storyPayload = resolveStorySharePayload(msg)
 
+  const lightboxRef = useRef(setLightboxImageUrl)
+  lightboxRef.current = setLightboxImageUrl
+  const stableSetLightbox = useCallback((url: string | null) => {
+    lightboxRef.current(url)
+  }, [])
+
   return (
     <div className="text-sm">
       {msg.type === "image" ? (
@@ -70,7 +104,7 @@ export default function RoomMessageContent({
             onClick={(e) => {
               e.stopPropagation()
               if (msg.image_url) {
-                setLightboxImageUrl(msg.image_url)
+                stableSetLightbox(msg.image_url)
               }
             }}
             className="mt-1 block max-w-full cursor-zoom-in"
@@ -168,3 +202,5 @@ export default function RoomMessageContent({
     </div>
   )
 }
+
+export default memo(RoomMessageContent, roomMessageContentCompareProps)

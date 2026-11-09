@@ -66,22 +66,41 @@ export function cleanupBroadcastRemoteAudio(): void {
   streamListenMuted = false
 }
 
-function isMicPublication(pub: RemoteTrackPublication): boolean {
-  return pub.source === Track.Source.Microphone
+export type BroadcastRemoteAudioContext = {
+  broadcasterUserId: string
+  broadcastSource?: "browser" | "obs"
+  primaryMediaPublisherIdentity?: string | null
+}
+
+function shouldAttachRemoteBroadcastAudio(
+  ctx: BroadcastRemoteAudioContext,
+  participant: RemoteParticipant,
+  pub: RemoteTrackPublication
+): boolean {
+  if (pub.kind !== Track.Kind.Audio) return false
+  const hostId = ctx.broadcasterUserId
+  const programId = ctx.primaryMediaPublisherIdentity?.trim() || ""
+  const isObs = ctx.broadcastSource === "obs" && programId !== ""
+
+  // OBS program feed: Ingress may publish audio with non-microphone TrackSource — play all audio tracks once.
+  if (isObs && participant.identity === programId) {
+    return true
+  }
+
+  if (pub.source === Track.Source.Microphone) {
+    // Browser host mic, or OBS host moderation mic, or invited / open-voice speakers.
+    return true
+  }
+
+  return false
 }
 
 export function registerBroadcastRemoteAudioHandlers(
   room: Room,
-  broadcasterIdentity: string,
-  includeConversationParticipants: boolean
+  ctx: BroadcastRemoteAudioContext
 ): () => void {
-  const shouldAttach = (participant: RemoteParticipant, pub: RemoteTrackPublication) => {
-    if (pub.source === Track.Source.Microphone) {
-      if (participant.identity === broadcasterIdentity) return true
-      return includeConversationParticipants
-    }
-    return false
-  }
+  const shouldAttach = (participant: RemoteParticipant, pub: RemoteTrackPublication) =>
+    shouldAttachRemoteBroadcastAudio(ctx, participant, pub)
 
   const onSubscribed = (
     track: RemoteTrack,
@@ -89,7 +108,6 @@ export function registerBroadcastRemoteAudioHandlers(
     participant: RemoteParticipant
   ) => {
     if (track.kind !== Track.Kind.Audio) return
-    if (!isMicPublication(pub)) return
     if (!shouldAttach(participant, pub)) return
     attachRemoteAudio(track)
   }
@@ -100,7 +118,6 @@ export function registerBroadcastRemoteAudioHandlers(
     participant: RemoteParticipant
   ) => {
     if (track.kind !== Track.Kind.Audio) return
-    if (!isMicPublication(pub)) return
     if (!shouldAttach(participant, pub)) return
     detachRemoteAudio(track)
   }

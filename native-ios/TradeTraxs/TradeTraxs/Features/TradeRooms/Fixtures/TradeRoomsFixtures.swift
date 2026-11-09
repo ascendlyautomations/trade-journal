@@ -31,17 +31,24 @@ nonisolated enum TradeRoomsFixtures {
                 allowMembersChat: true
             ),
             RoomChannel(
+                id: RoomChannelID("\(roomID.rawValue)-announcements"),
+                roomID: roomID,
+                name: "announcements",
+                position: 2,
+                allowMembersChat: false
+            ),
+            RoomChannel(
                 id: RoomChannelID("\(roomID.rawValue)-wins"),
                 roomID: roomID,
                 name: "wins",
-                position: 2,
+                position: 3,
                 allowMembersChat: true
             ),
             RoomChannel(
                 id: RoomChannelID("\(roomID.rawValue)-education"),
                 roomID: roomID,
                 name: "education",
-                position: 3,
+                position: 4,
                 allowMembersChat: true
             ),
         ]
@@ -55,6 +62,7 @@ nonisolated enum TradeRoomsFixtures {
         let channels = channels(roomID: roomID)
         let general = channels.first { $0.isGeneral }?.id
         let trades = channels.first { $0.name.lowercased() == "trades" }?.id
+        let announcements = channels.first { $0.name.lowercased() == "announcements" }?.id
         let wins = channels.first { $0.name.lowercased() == "wins" }?.id
         let peer = ProfileID("dev.follower.ada")
         let now = Date()
@@ -118,6 +126,18 @@ nonisolated enum TradeRoomsFixtures {
             ),
             RoomMessage(
                 id: RoomMessageID("\(roomID.rawValue)-m5"),
+                roomID: roomID,
+                senderProfileID: viewerID,
+                body: "Weekly schedule: macro review Tuesday 9:30 ET.",
+                attachedTradeID: nil,
+                media: [],
+                parentMessageID: nil,
+                channelID: announcements,
+                isPinned: true,
+                createdAt: now.addingTimeInterval(-300)
+            ),
+            RoomMessage(
+                id: RoomMessageID("\(roomID.rawValue)-m6"),
                 roomID: roomID,
                 senderProfileID: peer,
                 body: "Clean R-multiple on the London open.",

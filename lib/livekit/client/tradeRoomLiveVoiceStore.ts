@@ -24,6 +24,7 @@ import {
   registerLiveVoiceRemoteAudioHandlers,
   type LiveVoiceRemoteAudioDiagnostics,
 } from "./tradeRoomLiveVoiceRemoteAudio.ts"
+import { invalidateGeneralVoicePresenceCache } from "./generalVoicePresenceCache.ts"
 
 export type LiveVoiceSessionMeta = {
   roomId: string
@@ -49,8 +50,26 @@ export type LiveVoiceStoreSnapshot = {
   isBusy: boolean
 }
 
+/** Subscription channel without participant list — avoids re-rendering trade room chat on ActiveSpeakersChanged. */
+export type LiveVoiceStableSnapshot = {
+  session: LiveVoiceSessionMeta | null
+  connectionState: ConnectionState
+  isMicrophoneEnabled: boolean
+  error: string | null
+  isBusy: boolean
+  /** Connect/disconnect count only; does not change when speaking toggles. */
+  participantCount: number
+}
+
+export type LiveVoiceParticipantSnapshot = {
+  participants: LiveVoiceParticipantView[]
+}
+
 type Listener = () => void
 
+const stableListeners = new Set<Listener>()
+const participantListeners = new Set<Listener>()
+/** @deprecated Full-store subscribers (prefer stable + participant hooks). */
 const listeners = new Set<Listener>()
 
 let room: Room | null = null
@@ -58,6 +77,7 @@ let session: LiveVoiceSessionMeta | null = null
 let connectionState: ConnectionState = ConnectionState.Disconnected
 let isMicrophoneEnabled = false
 let participants: LiveVoiceParticipantView[] = []
+let participantCount = 0
 let error: string | null = null
 let isBusy = false
 let devDiagnostics: LiveVoiceRemoteAudioDiagnostics | null = null
@@ -84,13 +104,61 @@ function buildStoreSnapshot(): LiveVoiceStoreSnapshot {
   }
 }
 
-const snapshotCache = createExternalStoreSnapshotCache(buildStoreSnapshot)
+function buildStableSnapshot(): LiveVoiceStableSnapshot {
+  return {
+    session,
+    connectionState,
+    isMicrophoneEnabled,
+    error,
+    isBusy,
+    participantCount,
+  }
+}
 
-function emit() {
+function buildParticipantSnapshot(): LiveVoiceParticipantSnapshot {
+  return { participants }
+}
+
+const snapshotCache = createExternalStoreSnapshotCache(buildStoreSnapshot)
+const stableSnapshotCache = createExternalStoreSnapshotCache(buildStableSnapshot)
+const participantSnapshotCache = createExternalStoreSnapshotCache(
+  buildParticipantSnapshot
+)
+
+function publishFullSnapshot() {
   snapshotCache.publish(buildStoreSnapshot)
   for (const listener of listeners) {
     listener()
   }
+}
+
+function emitStableOnly() {
+  stableSnapshotCache.publish(buildStableSnapshot)
+  for (const listener of stableListeners) {
+    listener()
+  }
+  publishFullSnapshot()
+}
+
+function emitParticipantsOnly() {
+  participantSnapshotCache.publish(buildParticipantSnapshot)
+  for (const listener of participantListeners) {
+    listener()
+  }
+  publishFullSnapshot()
+}
+
+/** Connection + participant list + counts (join/leave/connect/disconnect/mute errors). */
+function emitAllChannels() {
+  stableSnapshotCache.publish(buildStableSnapshot)
+  for (const listener of stableListeners) {
+    listener()
+  }
+  participantSnapshotCache.publish(buildParticipantSnapshot)
+  for (const listener of participantListeners) {
+    listener()
+  }
+  publishFullSnapshot()
 }
 
 function participantView(local: Participant, isLocal: boolean): LiveVoiceParticipantView {
@@ -112,26 +180,33 @@ function refreshParticipants(activeRoom: Room) {
     list.push(participantView(p as RemoteParticipant, false))
   }
   participants = list
+  participantCount = list.length
 }
 
 function attachRoomHandlers(activeRoom: Room) {
-  const sync = () => {
+  const syncStableAndParticipants = () => {
     connectionState = activeRoom.state
     refreshParticipants(activeRoom)
     refreshDevDiagnostics(activeRoom)
-    emit()
+    emitAllChannels()
   }
-  activeRoom
-    .on(RoomEvent.ConnectionStateChanged, sync)
-    .on(RoomEvent.ParticipantConnected, sync)
-    .on(RoomEvent.ParticipantDisconnected, sync)
-    .on(RoomEvent.ActiveSpeakersChanged, sync)
-    .on(RoomEvent.TrackMuted, sync)
-    .on(RoomEvent.TrackUnmuted, sync)
-    .on(RoomEvent.LocalTrackPublished, sync)
-    .on(RoomEvent.LocalTrackUnpublished, sync)
 
-  registerLiveVoiceRemoteAudioHandlers(activeRoom, sync)
+  const syncParticipantsOnly = () => {
+    refreshParticipants(activeRoom)
+    emitParticipantsOnly()
+  }
+
+  activeRoom
+    .on(RoomEvent.ConnectionStateChanged, syncStableAndParticipants)
+    .on(RoomEvent.ParticipantConnected, syncStableAndParticipants)
+    .on(RoomEvent.ParticipantDisconnected, syncStableAndParticipants)
+    .on(RoomEvent.ActiveSpeakersChanged, syncParticipantsOnly)
+    .on(RoomEvent.TrackMuted, syncParticipantsOnly)
+    .on(RoomEvent.TrackUnmuted, syncParticipantsOnly)
+    .on(RoomEvent.LocalTrackPublished, syncParticipantsOnly)
+    .on(RoomEvent.LocalTrackUnpublished, syncParticipantsOnly)
+
+  registerLiveVoiceRemoteAudioHandlers(activeRoom, syncStableAndParticipants)
 }
 
 function detachRoomHandlers(activeRoom: Room) {
@@ -144,8 +219,28 @@ export function subscribeTradeRoomLiveVoice(listener: Listener): () => void {
   return () => listeners.delete(listener)
 }
 
+export function subscribeTradeRoomLiveVoiceStable(listener: Listener): () => void {
+  stableListeners.add(listener)
+  return () => stableListeners.delete(listener)
+}
+
+export function subscribeTradeRoomLiveVoiceParticipants(
+  listener: Listener
+): () => void {
+  participantListeners.add(listener)
+  return () => participantListeners.delete(listener)
+}
+
 export function getTradeRoomLiveVoiceSnapshot(): LiveVoiceStoreSnapshot {
   return snapshotCache.getSnapshot()
+}
+
+export function getTradeRoomLiveVoiceStableSnapshot(): LiveVoiceStableSnapshot {
+  return stableSnapshotCache.getSnapshot()
+}
+
+export function getTradeRoomLiveVoiceParticipantsSnapshot(): LiveVoiceParticipantSnapshot {
+  return participantSnapshotCache.getSnapshot()
 }
 
 /** Development-only LiveKit audio pipeline stats (null in production). */
@@ -157,8 +252,9 @@ export async function leaveTradeRoomLiveVoice(options?: {
   retainError?: boolean
 }): Promise<void> {
   isBusy = true
-  emit()
+  emitStableOnly()
   const keepError = options?.retainError === true
+  const roomIdForPresence = session?.roomId
   try {
     if (room) {
       detachRoomHandlers(room)
@@ -167,17 +263,21 @@ export async function leaveTradeRoomLiveVoice(options?: {
   } catch (err) {
     console.warn("[live-voice] disconnect", err)
   } finally {
+    if (roomIdForPresence) {
+      invalidateGeneralVoicePresenceCache(roomIdForPresence)
+    }
     room = null
     session = null
     connectionState = ConnectionState.Disconnected
     isMicrophoneEnabled = false
     participants = []
+    participantCount = 0
     devDiagnostics = null
     if (!keepError) {
       error = null
     }
     isBusy = false
-    emit()
+    emitAllChannels()
   }
 }
 
@@ -229,7 +329,7 @@ export async function joinTradeRoomLiveVoice(options: {
 
   isBusy = true
   error = null
-  emit()
+  emitStableOnly()
 
   let joinedRoom: Room | null = null
 
@@ -291,14 +391,16 @@ export async function joinTradeRoomLiveVoice(options: {
     }
     room = null
     session = null
+    invalidateGeneralVoicePresenceCache(options.roomId)
     connectionState = ConnectionState.Disconnected
     isMicrophoneEnabled = false
     participants = []
+    participantCount = 0
     devDiagnostics = null
   } finally {
     isBusy = false
     refreshDevDiagnostics(room)
-    emit()
+    emitAllChannels()
   }
 }
 
@@ -314,7 +416,7 @@ export async function resumeTradeRoomLiveVoicePlayback(): Promise<void> {
       err instanceof Error ? err.message : "Could not enable audio playback."
   }
   refreshDevDiagnostics(room)
-  emit()
+  emitStableOnly()
 }
 
 export async function setTradeRoomLiveVoiceMuted(muted: boolean): Promise<void> {
@@ -324,7 +426,7 @@ export async function setTradeRoomLiveVoiceMuted(muted: boolean): Promise<void> 
     isMicrophoneEnabled = !muted
     error = null
     refreshParticipants(room)
-    emit()
+    emitAllChannels()
   } catch (err) {
     if (isLiveVoiceMicrophoneAccessError(err)) {
       isMicrophoneEnabled = false
@@ -334,11 +436,11 @@ export async function setTradeRoomLiveVoiceMuted(muted: boolean): Promise<void> 
       error =
         liveVoiceMicrophoneErrorMessage(err) + LIVE_VOICE_LISTEN_ONLY_SUFFIX
       refreshParticipants(room)
-      emit()
+      emitAllChannels()
       return
     }
     console.error("[live-voice] mute", err)
     error = err instanceof Error ? err.message : "Could not change microphone."
-    emit()
+    emitStableOnly()
   }
 }

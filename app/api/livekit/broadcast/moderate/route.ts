@@ -71,7 +71,13 @@ export async function POST(req: Request) {
   })
 
   if (!result.ok) {
-    return Response.json({ error: result.error }, { status: result.status })
+    return Response.json(
+      {
+        error: result.error,
+        retryable: result.retryable === true,
+      },
+      { status: result.status }
+    )
   }
 
   return Response.json({

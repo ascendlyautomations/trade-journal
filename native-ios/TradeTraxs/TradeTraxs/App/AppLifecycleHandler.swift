@@ -31,12 +31,13 @@ final class AppLifecycleHandler {
                 try? TradeRoomLiveVoiceAudioSession.shared.updateRequiresRecording(
                     voice.session?.canPublish == true
                 )
-                voice.refreshAudioDiagnosticsForLifecycle()
+                voice.refreshVoiceChromeAfterForeground()
                 voice.refreshLiveActivityAfterForeground()
             }
             let broadcast = RoomBroadcastCoordinator.shared
             if let roomID = broadcast.watchSession?.roomID {
                 await broadcast.refreshStatus(roomID: roomID)
+                broadcast.refreshBroadcastLiveActivityAfterForeground()
             }
             await pushNotifications?.refreshAuthorizationStatus()
             if AuthBootstrapReadiness.allowsAuthenticatedBackgroundWork() {

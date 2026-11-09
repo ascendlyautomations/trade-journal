@@ -779,6 +779,9 @@ struct AppRootView: View {
         if LiveVoiceDeepLinkHandler.handle(url) {
             return
         }
+        if LiveBroadcastDeepLinkHandler.handle(url) {
+            return
+        }
         _ = navigation.deepLinkRouter.route(
             url: url,
             using: navigation.coordinator,

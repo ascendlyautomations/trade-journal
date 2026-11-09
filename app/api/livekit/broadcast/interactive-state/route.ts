@@ -28,6 +28,7 @@ export async function GET(req: Request) {
     return Response.json({ error: loaded.error }, { status: loaded.status })
   }
 
+  // 200 with snapshot: null means no active broadcast (avoids noisy 404s when idle).
   return Response.json({
     snapshot: loaded.snapshot,
     profiles: loaded.profiles,

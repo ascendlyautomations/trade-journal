@@ -168,6 +168,18 @@ export function buildPushAlertCopy(target: PushNotificationTarget): {
     }
   }
 
+  if (type === "room_live") {
+    const json = parseJsonContent(target.content)
+    const room =
+      stringField(json, "room_name") ||
+      stringField(json, "room_slug") ||
+      "Trade Room"
+    return {
+      title: who,
+      body: `is live in ${room}! Tap to watch.`,
+    }
+  }
+
   if (type === "room_message") {
     const meta = parseRoomMessageContent(target.content)
     const room = meta.room_name?.trim() || "Trade Room"
@@ -326,6 +338,16 @@ export function buildPushDeepLinkHref(target: PushNotificationTarget): string {
 
   if (type === "trade_room_join_declined") {
     return "/notifications"
+  }
+
+  if (type === "room_live") {
+    const json = parseJsonContent(target.content)
+    const slug = stringField(json, "room_slug")
+    if (slug) return buildTradeRoomHref(slug, { live: true })
+    if (target.room_id) {
+      return `/community?room=${String(target.room_id)}&live=1`
+    }
+    return "/community"
   }
 
   if (type === "room_message" || type === "room_mention") {

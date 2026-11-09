@@ -1,4 +1,5 @@
 import { RoomServiceClient, TrackSource } from "livekit-server-sdk"
+import { primaryPublisherHasPublishableVideo } from "./obsPrimaryMediaReadiness.ts"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/database.types"
 import { readLiveKitServerConfig } from "./config.ts"
@@ -7,6 +8,7 @@ import {
   liveKitBroadcastRoomName,
   liveKitRoomName,
 } from "./liveKitRoomName.ts"
+import { summarizeGeneralVoicePresence } from "./tradeRoomGeneralVoicePresence.ts"
 
 let cachedClient: RoomServiceClient | null = null
 
@@ -43,6 +45,70 @@ async function listLegacyVoiceSectionIdsForRoom(
       return kind === "voice_open" || kind === "voice_stage"
     })
     .map((row) => row.id)
+}
+
+/** Removes a user from General Voice (+ legacy section voice rooms), not broadcast. */
+export async function disconnectUserFromTradeRoomGeneralVoice(
+  admin: SupabaseClient<Database>,
+  roomId: string,
+  userId: string
+): Promise<{ attempted: number; removed: number; errors: string[] }> {
+  const client = getLiveKitRoomServiceClient()
+  if (!client) {
+    return {
+      attempted: 0,
+      removed: 0,
+      errors: ["LiveKit is not configured on the server."],
+    }
+  }
+
+  const lkRoomNames = new Set<string>([liveKitRoomName(roomId)])
+  for (const sectionId of await listLegacyVoiceSectionIdsForRoom(admin, roomId)) {
+    lkRoomNames.add(legacySectionLiveKitRoomName(roomId, sectionId))
+  }
+
+  const errors: string[] = []
+  let removed = 0
+
+  for (const lkRoom of lkRoomNames) {
+    try {
+      await client.removeParticipant(lkRoom, userId)
+      removed += 1
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      if (/not found|does not exist|404/i.test(message)) {
+        continue
+      }
+      errors.push(`${lkRoom}: ${message}`)
+    }
+  }
+
+  return { attempted: lkRoomNames.size, removed, errors }
+}
+
+export async function muteLiveKitGeneralVoiceParticipantMicrophone(
+  roomId: string,
+  targetUserId: string,
+  muted: boolean
+): Promise<void> {
+  const client = getLiveKitRoomServiceClient()
+  if (!client) {
+    throw new Error("LiveKit is not configured on the server.")
+  }
+  const lkRoom = liveKitRoomName(roomId)
+  if (muted) {
+    const participants = await client.listParticipants(lkRoom)
+    const target = participants.find((p) => p.identity === targetUserId)
+    for (const track of target?.tracks ?? []) {
+      if (track.sid && track.source === TrackSource.MICROPHONE) {
+        try {
+          await client.mutePublishedTrack(lkRoom, targetUserId, track.sid, true)
+        } catch {
+          // Participant may have disconnected.
+        }
+      }
+    }
+  }
 }
 
 /** Removes a user from the Trade Room shared LiveKit voice room (+ legacy section rooms). */
@@ -106,6 +172,25 @@ export async function setLiveKitStagePublish(
       canPublishSources: canPublish ? [TrackSource.MICROPHONE] : [],
     },
   })
+}
+
+export function isLiveKitParticipantAbsentError(message: string): boolean {
+  return /not found|does not exist|404|participant/i.test(message)
+}
+
+/** Updates mic publish permission only when the identity is already in the broadcast room. */
+export async function setLiveKitBroadcastParticipantMicWhenConnected(
+  roomId: string,
+  targetUserId: string,
+  canPublishMic: boolean
+): Promise<{ attempted: boolean; skippedAbsent: boolean; livekitRoom: string }> {
+  const livekitRoom = liveKitBroadcastRoomName(roomId)
+  const identities = await listLiveKitBroadcastParticipantIdentities(roomId)
+  if (!identities.includes(targetUserId)) {
+    return { attempted: false, skippedAbsent: true, livekitRoom }
+  }
+  await setLiveKitBroadcastParticipantMic(roomId, targetUserId, canPublishMic)
+  return { attempted: true, skippedAbsent: false, livekitRoom }
 }
 
 export async function setLiveKitBroadcastParticipantMic(
@@ -191,26 +276,78 @@ export async function listLiveKitBroadcastParticipantIdentities(
   }
 }
 
-export async function isBroadcasterConnectedInBroadcastRoom(
+export type LiveKitBroadcastPresence = {
+  /** Host browser/SDK participant (broadcaster_user_id). */
+  hostConnected: boolean
+  /** OBS / Ingress primary publisher when configured (distinct identity). */
+  primaryMediaPublisherConnected: boolean
+  /** True if either host or primary program publisher is in the room. */
+  broadcasterConnected: boolean
+  viewerCount: number
+}
+
+/** Single LiveKit listParticipants call for broadcast room (avoids duplicate work on status/reconcile). */
+export async function getLiveKitBroadcastRoomPresence(
   roomId: string,
-  broadcasterUserId: string
-): Promise<boolean> {
+  broadcasterUserId: string,
+  options?: { primaryMediaPublisherIdentity?: string | null }
+): Promise<LiveKitBroadcastPresence | null> {
   const client = getLiveKitRoomServiceClient()
-  if (!client) return false
+  if (!client) return null
+
+  const primaryId = options?.primaryMediaPublisherIdentity?.trim() || null
 
   try {
     const participants = await client.listParticipants(
       liveKitBroadcastRoomName(roomId)
     )
-    return participants.some((p) => p.identity === broadcasterUserId)
+    const hostConnected = participants.some(
+      (p) => p.identity === broadcasterUserId
+    )
+    const primaryParticipant = primaryId
+      ? participants.find((p) => p.identity === primaryId)
+      : undefined
+    const primaryMediaPublisherConnected = primaryId
+      ? primaryPublisherHasPublishableVideo(primaryParticipant)
+      : false
+    const broadcasterConnected = hostConnected || primaryMediaPublisherConnected
+    const viewerCount = participants.filter((p) => {
+      if (p.identity === broadcasterUserId) return false
+      if (primaryId && p.identity === primaryId) return false
+      return true
+    }).length
+    return {
+      hostConnected,
+      primaryMediaPublisherConnected,
+      broadcasterConnected,
+      viewerCount,
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     if (/not found|does not exist|404/i.test(message)) {
-      return false
+      return {
+        hostConnected: false,
+        primaryMediaPublisherConnected: false,
+        broadcasterConnected: false,
+        viewerCount: 0,
+      }
     }
     console.warn("[livekit/broadcast] presence check failed", message)
-    return false
+    return null
   }
+}
+
+export async function isBroadcasterConnectedInBroadcastRoom(
+  roomId: string,
+  broadcasterUserId: string,
+  primaryMediaPublisherIdentity?: string | null
+): Promise<boolean> {
+  const presence = await getLiveKitBroadcastRoomPresence(
+    roomId,
+    broadcasterUserId,
+    { primaryMediaPublisherIdentity: primaryMediaPublisherIdentity ?? undefined }
+  )
+  return presence?.broadcasterConnected ?? false
 }
 
 export async function deleteLiveKitBroadcastRoom(roomId: string): Promise<void> {
@@ -227,24 +364,32 @@ export async function deleteLiveKitBroadcastRoom(roomId: string): Promise<void> 
   }
 }
 
-export async function countLiveKitBroadcastViewers(
-  roomId: string,
-  broadcasterUserId: string
-): Promise<number | null> {
+export async function countLiveKitGeneralVoicePresence(
+  roomId: string
+): Promise<{ connectedCount: number; speakingCount: number } | null> {
   const client = getLiveKitRoomServiceClient()
   if (!client) return null
 
   try {
-    const participants = await client.listParticipants(
-      liveKitBroadcastRoomName(roomId)
-    )
-    return participants.filter((p) => p.identity !== broadcasterUserId).length
+    const participants = await client.listParticipants(liveKitRoomName(roomId))
+    return summarizeGeneralVoicePresence(participants)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     if (/not found|does not exist|404/i.test(message)) {
-      return 0
+      return { connectedCount: 0, speakingCount: 0 }
     }
-    console.warn("[livekit/broadcast] list participants failed", message)
+    console.warn("[livekit/voice] presence lookup failed", message)
     return null
   }
+}
+
+export async function countLiveKitBroadcastViewers(
+  roomId: string,
+  broadcasterUserId: string,
+  primaryMediaPublisherIdentity?: string | null
+): Promise<number | null> {
+  const presence = await getLiveKitBroadcastRoomPresence(roomId, broadcasterUserId, {
+    primaryMediaPublisherIdentity: primaryMediaPublisherIdentity ?? undefined,
+  })
+  return presence?.viewerCount ?? null
 }

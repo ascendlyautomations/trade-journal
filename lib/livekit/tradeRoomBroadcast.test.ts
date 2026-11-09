@@ -62,4 +62,15 @@ describe("Trade Room broadcast — client errors", () => {
       /cancel/i
     )
   })
+
+  it("maps Permissions-Policy camera blocks to camera copy", () => {
+    const policy = new Error(
+      "Permissions policy violation: camera is not allowed in this document."
+    )
+    policy.name = "NotAllowedError"
+    assert.match(
+      broadcastStartErrorMessageForTest(policy),
+      /camera access was blocked/i
+    )
+  })
 })

@@ -24,11 +24,6 @@ struct RoomLiveVoiceBar: View {
                             .frame(width: 6, height: 6)
                         Text(coordinator.voiceConnectionStatusLabel)
                             .experienceStyle(.caption2, color: colors.secondaryText)
-                        Text("·")
-                            .experienceStyle(.caption2, color: colors.tertiaryText)
-                        Text("\(coordinator.participantCount) in voice")
-                            .experienceStyle(.caption2, color: colors.tertiaryText)
-                            .lineLimit(1)
                     }
                     }
                 }
@@ -89,16 +84,6 @@ struct RoomLiveVoiceBar: View {
                     }
                 }
             }
-
-            #if DEBUG
-            if coordinator.audioDiagnostics.isActive {
-                Text(
-                    "Audio: \(coordinator.audioDiagnostics.requiresRecording ? "mic+speaker" : "listen") · route \(coordinator.audioDiagnostics.lastRouteSummary ?? "—")"
-                )
-                .experienceStyle(.caption2, color: colors.tertiaryText)
-                .lineLimit(2)
-            }
-            #endif
         }
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.vertical, ExperienceSpacing.sm)

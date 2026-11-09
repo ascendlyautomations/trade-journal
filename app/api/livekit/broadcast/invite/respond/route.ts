@@ -1,6 +1,13 @@
 import { getRouteUserAuth, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { acceptBroadcastSpeakInvitation } from "@/lib/livekit/tradeRoomBroadcastModeration.ts"
-import { respondBroadcastSpeakInvitation } from "@/lib/livekit/tradeRoomBroadcastInteractiveState.ts"
+import {
+  respondBroadcastSpeakInvitation,
+  revokeBroadcastSpeaker,
+} from "@/lib/livekit/tradeRoomBroadcastInteractiveState.ts"
+import {
+  muteLiveKitBroadcastParticipantMicrophone,
+  setLiveKitBroadcastParticipantMic,
+} from "@/lib/livekit/liveKitRoomService.ts"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -45,7 +52,25 @@ export async function POST(req: Request) {
     if (!declined.ok) {
       return Response.json({ error: declined.error }, { status: declined.status })
     }
-    return Response.json({ ok: true, declined: true })
+    const revoked = await revokeBroadcastSpeaker(supabaseServiceRole, {
+      sessionId: declined.sessionId,
+      targetUserId: user.id,
+    })
+    if (!revoked.ok) {
+      return Response.json({ error: revoked.error }, { status: revoked.status })
+    }
+    try {
+      await setLiveKitBroadcastParticipantMic(declined.roomId, user.id, false)
+      await muteLiveKitBroadcastParticipantMicrophone(declined.roomId, user.id, true)
+    } catch {
+      /* participant may not be in room */
+    }
+    return Response.json({
+      ok: true,
+      declined: true,
+      broadcastSessionId: declined.sessionId,
+      roomId: declined.roomId,
+    })
   }
 
   const { data: profileRow } = await supabaseServiceRole
@@ -77,6 +102,13 @@ export async function POST(req: Request) {
     livekitUrl: accepted.token.livekitUrl,
     broadcastSessionId: accepted.sessionId,
     roomId: accepted.roomId,
+    broadcasterUserId: accepted.broadcasterUserId,
+    broadcasterDisplayName: accepted.broadcasterDisplayName,
+    startedAt: accepted.startedAt,
+    voiceMode: accepted.voiceMode,
+    videoSource: accepted.videoSource,
+    broadcastSource: accepted.broadcastSource,
+    primaryMediaPublisherIdentity: accepted.primaryMediaPublisherIdentity,
     canPublish: accepted.token.canPublish,
     role: accepted.token.role,
   })

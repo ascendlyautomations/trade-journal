@@ -12,6 +12,8 @@ export type BroadcastConversationJoinPayload = {
   startedAt: string
   voiceMode?: TradeRoomBroadcastVoiceMode
   videoSource?: TradeRoomBroadcastVideoSource
+  broadcastSource?: "browser" | "obs"
+  primaryMediaPublisherIdentity?: string | null
 }
 
 export async function fetchBroadcastConversationJoinPayload(
@@ -36,6 +38,8 @@ export async function fetchBroadcastConversationJoinPayload(
     startedAt?: string
     voiceMode?: TradeRoomBroadcastVoiceMode
     videoSource?: TradeRoomBroadcastVideoSource
+    broadcastSource?: "browser" | "obs"
+    primaryMediaPublisherIdentity?: string | null
   }
   if (!res.ok || !payload.token || !payload.livekitUrl || !payload.broadcastSessionId) {
     throw new Error(payload.error || "Could not join as a speaker.")
@@ -49,5 +53,7 @@ export async function fetchBroadcastConversationJoinPayload(
     startedAt: payload.startedAt ?? new Date().toISOString(),
     voiceMode: payload.voiceMode,
     videoSource: payload.videoSource,
+    broadcastSource: payload.broadcastSource,
+    primaryMediaPublisherIdentity: payload.primaryMediaPublisherIdentity,
   }
 }

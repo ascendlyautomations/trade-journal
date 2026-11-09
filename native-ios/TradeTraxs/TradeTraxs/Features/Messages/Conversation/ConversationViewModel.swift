@@ -34,6 +34,8 @@ final class ConversationViewModel {
     var isSelectionMode = false
     var selectedMessageIDs: Set<MessageID> = []
     var showsBatchDeleteConfirmation = false
+    private(set) var pendingScrollMessageID: MessageID?
+    private(set) var highlightedMessageID: MessageID?
     var showsDeleteConversationConfirmation = false
     var isDeletingConversation = false
     var deleteConversationErrorMessage: String?
@@ -105,6 +107,8 @@ final class ConversationViewModel {
     private var outboundSharedContentObserver: NSObjectProtocol?
     private var sharedContentHydrationTask: Task<Void, Never>?
     private var sharedContentHydrationBacklog: [Message] = []
+    private var scrollAnchorTask: Task<Void, Never>?
+    private let sharedMediaAnchorMaxPages = 8
 
     init(
         conversationID: ConversationID,
@@ -142,6 +146,18 @@ final class ConversationViewModel {
         applyImmediateOpeningPresentation()
     }
 
+#if DEBUG
+    func testing_seedMessages(_ incoming: [Message], viewerID: ProfileID) {
+        self.viewerID = viewerID
+        phase = .loaded
+        messages = ConversationMessageMerge.mergeMessages(
+            existing: messages,
+            incoming: incoming,
+            viewerID: viewerID
+        )
+    }
+#endif
+
     var timeline: [ConversationTimelineItem] {
         buildTimeline(from: messages)
     }
@@ -162,6 +178,19 @@ final class ConversationViewModel {
     var showsDirectMessageActions: Bool {
         guard let conversation else { return false }
         return !conversation.isGroup
+    }
+
+    var conversationSharedMediaRPC: (any RPCClient)? { rpc }
+
+    func clearPendingScroll() {
+        pendingScrollMessageID = nil
+    }
+
+    func navigateToMessageFromSharedMedia(_ messageID: MessageID) {
+        scrollAnchorTask?.cancel()
+        scrollAnchorTask = Task { [weak self] in
+            await self?.anchorMessageForSharedMedia(messageID)
+        }
     }
 
     var isMuted: Bool {
@@ -203,13 +232,30 @@ final class ConversationViewModel {
         return count == 0 ? "Select Messages" : "\(count) Selected"
     }
 
-    var selectedDeletableMessages: [ConversationBubbleItem] {
-        selectedMessageBubbles.filter(canDeleteMessage)
+    var selectedEligibleMessages: [ConversationBubbleItem] {
+        selectedMessageBubbles.filter(canSelectMessageInBatch)
+    }
+
+    /// Backward-compatible name for selection chrome.
+    var selectedDeletableMessages: [ConversationBubbleItem] { selectedEligibleMessages }
+
+    var offersDeleteForEveryoneInBatch: Bool {
+        let eligible = selectedEligibleMessages
+        guard !eligible.isEmpty else { return false }
+        return eligible.allSatisfy(canDeleteForEveryone)
     }
 
     var batchDeleteConfirmationTitle: String {
-        let count = selectedDeletableMessages.count
+        let count = selectedEligibleMessages.count
         return "Delete \(count) Message\(count == 1 ? "" : "s")?"
+    }
+
+    var batchDeleteConfirmationMessage: String {
+        let count = selectedEligibleMessages.count
+        if offersDeleteForEveryoneInBatch {
+            return "Choose whether to remove \(count) message\(count == 1 ? "" : "s") for everyone or only on your device."
+        }
+        return "This hides \(count) message\(count == 1 ? "" : "s") from your view of the conversation. Other participants are not affected."
     }
 
     var peerProfileID: ProfileID? {
@@ -783,17 +829,45 @@ final class ConversationViewModel {
         )
     }
 
-    func canDeleteMessage(_ item: ConversationBubbleItem) -> Bool {
-        guard item.isOutgoing else { return false }
+    func canSelectMessageInBatch(_ item: ConversationBubbleItem) -> Bool {
         guard item.message.kind != .system else { return false }
-        if item.sendState == .failed { return true }
+        if item.sendState == .failed { return item.isOutgoing }
         guard item.sendState == .sent else { return false }
         guard !ConversationMessageMerge.isOptimisticMessageID(item.message.id) else { return false }
         return true
     }
 
+    func canDeleteForMe(_ item: ConversationBubbleItem) -> Bool {
+        canSelectMessageInBatch(item)
+    }
+
+    func canDeleteForEveryone(_ item: ConversationBubbleItem) -> Bool {
+        guard item.isOutgoing else { return false }
+        guard item.message.kind != .system else { return false }
+        guard item.sendState == .sent else { return false }
+        guard !ConversationMessageMerge.isOptimisticMessageID(item.message.id) else { return false }
+        return true
+    }
+
+    /// Long-press menu: at least one delete action is available.
+    func canDeleteMessage(_ item: ConversationBubbleItem) -> Bool {
+        canDeleteForMe(item)
+    }
+
+    func deleteMessageForMe(_ item: ConversationBubbleItem) async {
+        await deleteMessages([item], scope: .forMe)
+    }
+
+    func deleteMessageForEveryone(_ item: ConversationBubbleItem) async {
+        await deleteMessages([item], scope: .forEveryone)
+    }
+
     func deleteMessage(_ item: ConversationBubbleItem) async {
-        await deleteMessages([item])
+        if canDeleteForEveryone(item) {
+            await deleteMessages([item], scope: .forEveryone)
+        } else {
+            await deleteMessages([item], scope: .forMe)
+        }
     }
 
     func enterSelectionMode() {
@@ -820,17 +894,69 @@ final class ConversationViewModel {
     }
 
     func requestDeleteSelectedMessages() {
-        guard !selectedDeletableMessages.isEmpty else { return }
+        guard !selectedEligibleMessages.isEmpty else { return }
         ExperienceHaptics.play(.warning)
         showsBatchDeleteConfirmation = true
     }
 
-    func confirmDeleteSelectedMessages() async {
+    func confirmDeleteSelectedForMe() async {
         showsBatchDeleteConfirmation = false
-        let items = selectedDeletableMessages
+        let items = selectedEligibleMessages
         guard !items.isEmpty else { return }
-        await deleteMessages(items)
+        await deleteMessages(items, scope: .forMe)
         cancelSelectionMode()
+    }
+
+    func confirmDeleteSelectedForEveryone() async {
+        showsBatchDeleteConfirmation = false
+        let items = selectedEligibleMessages
+        guard !items.isEmpty else { return }
+        await deleteMessages(items, scope: .forEveryone)
+        cancelSelectionMode()
+    }
+
+    func confirmDeleteSelectedMessages() async {
+        await confirmDeleteSelectedForMe()
+    }
+
+    private func anchorMessageForSharedMedia(_ target: MessageID) async {
+        if messages.contains(where: { $0.id == target }) {
+            applyMessageHighlight(target)
+            return
+        }
+
+        if let fetched = try? await messagesRepo.message(id: target, in: conversationID) {
+            commitMessages([fetched], recordScrollEvents: false)
+            if messages.contains(where: { $0.id == target }) {
+                applyMessageHighlight(target)
+                return
+            }
+        }
+
+        var pages = 0
+        while hasMoreOlder, pages < sharedMediaAnchorMaxPages {
+            pages += 1
+            await loadOlderIfNeeded()
+            if messages.contains(where: { $0.id == target }) {
+                applyMessageHighlight(target)
+                return
+            }
+        }
+
+        if messages.contains(where: { $0.id == target }) {
+            applyMessageHighlight(target)
+        }
+    }
+
+    private func applyMessageHighlight(_ target: MessageID) {
+        pendingScrollMessageID = target
+        highlightedMessageID = target
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_400_000_000)
+            if highlightedMessageID == target {
+                highlightedMessageID = nil
+            }
+        }
     }
 
     func toggleMute() {
@@ -957,13 +1083,23 @@ final class ConversationViewModel {
         }
     }
 
-    private func deleteMessages(_ items: [ConversationBubbleItem]) async {
+    private enum MessageDeleteScope {
+        case forMe
+        case forEveryone
+    }
+
+    private func deleteMessages(_ items: [ConversationBubbleItem], scope: MessageDeleteScope) async {
         guard !items.isEmpty else { return }
         deleteErrorMessage = nil
 
         var remoteSnapshots: [Message] = []
         for item in items {
-            guard canDeleteMessage(item) else { continue }
+            switch scope {
+            case .forMe:
+                guard canDeleteForMe(item) else { continue }
+            case .forEveryone:
+                guard canDeleteForEveryone(item) else { continue }
+            }
             if item.sendState == .failed {
                 removeMessage(id: item.id)
                 continue
@@ -988,12 +1124,17 @@ final class ConversationViewModel {
         var failed: [Message] = []
         await withTaskGroup(of: (Message, Bool).self) { group in
             for message in remoteSnapshots {
-                group.addTask { [conversationID, messagesRepo] in
+                group.addTask { [conversationID, messagesRepo, scope] in
                     do {
-                        try await messagesRepo.deleteMessageForEveryone(
-                            message.id,
-                            in: conversationID
-                        )
+                        switch scope {
+                        case .forMe:
+                            try await messagesRepo.deleteMessageForMe(message.id, in: conversationID)
+                        case .forEveryone:
+                            try await messagesRepo.deleteMessageForEveryone(
+                                message.id,
+                                in: conversationID
+                            )
+                        }
                         return (message, true)
                     } catch {
                         return (message, false)

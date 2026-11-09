@@ -563,4 +563,24 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
         }
         return try await attachRoomDisplayImages(to: suggestions)
     }
+
+    func liveTradersNow(limit: Int) async throws -> [ExploreLiveTraderNow] {
+        guard let transport = supabase.transport else { return [] }
+        let capped = max(1, min(limit, 24))
+        let path = "/api/explore/live-traders?limit=\(capped)"
+        let response = try await transport.send(
+            host: .bff,
+            path: path,
+            method: .get,
+            headers: [:],
+            body: nil,
+            requiresAuthentication: true
+        )
+        guard (200 ... 299).contains(response.statusCode) else { return [] }
+        if response.data.isEmpty {
+            return []
+        }
+        let envelope = try transport.decoder.decode(ExploreLiveTradersNowEnvelope.self, from: response)
+        return (envelope.items ?? []).map { $0.toDomain() }
+    }
 }

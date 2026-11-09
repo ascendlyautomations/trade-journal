@@ -5,5 +5,6 @@ import WidgetKit
 struct TradeTraxsLiveVoiceWidgetBundle: WidgetBundle {
     var body: some Widget {
         TradeTraxsLiveVoiceLiveActivityWidget()
+        TradeTraxsLiveBroadcastLiveActivityWidget()
     }
 }

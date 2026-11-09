@@ -1,16 +1,18 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
-import Image from "next/image"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "@/lib/supabaseClient.ts"
+import { SafeProfileAvatar } from "@/app/components/SafeProfileAvatar.tsx"
 import {
   getTradeRoomBroadcastRoom,
   sendTradeRoomBroadcastChatMessage,
+  type BroadcastInteractiveProfileLite,
 } from "@/lib/livekit/client/tradeRoomBroadcastStore.ts"
 import type { BroadcastChatMessage } from "@/lib/livekit/client/tradeRoomBroadcastChat.ts"
 import {
   peekBroadcastChatProfile,
   resolveBroadcastChatProfiles,
+  normalizeBroadcastChatAvatarUrl,
   seedBroadcastChatProfile,
   type BroadcastChatProfile,
 } from "@/lib/livekit/client/tradeRoomBroadcastChatProfiles.ts"
@@ -20,34 +22,66 @@ type Props = {
   userId: string | null
   displayName: string
   avatarUrl: string | null
+  /** From API / interactive-state (service role); fills gaps when client profiles IN() returns nothing under RLS. */
+  interactiveProfiles?: Record<string, BroadcastInteractiveProfileLite>
   disabled?: boolean
   authLoading?: boolean
   className?: string
 }
 
+function mergeChatProfileForUser(args: {
+  userId: string
+  fetched: BroadcastChatProfile | undefined
+  interactive: BroadcastInteractiveProfileLite | undefined
+  messageSample: BroadcastChatMessage | undefined
+}): BroadcastChatProfile {
+  const { userId, fetched, interactive, messageSample } = args
+  const displayName =
+    fetched?.displayName?.trim() ||
+    interactive?.displayName?.trim() ||
+    interactive?.username?.trim() ||
+    messageSample?.displayName?.trim() ||
+    "Member"
+  const rawAvatar =
+    fetched?.avatarUrl ??
+    interactive?.avatarUrl ??
+    messageSample?.avatarUrl ??
+    null
+  return {
+    userId,
+    displayName,
+    avatarUrl: normalizeBroadcastChatAvatarUrl(rawAvatar),
+  }
+}
+
 function ChatAvatar({
   profile,
+  messageAvatarUrl,
+  displayNameForInitial,
 }: {
   profile: BroadcastChatProfile | undefined
+  messageAvatarUrl: string | null
+  displayNameForInitial: string
 }) {
-  const label = profile?.displayName?.charAt(0)?.toUpperCase() ?? "?"
-  const src = profile?.avatarUrl
-  if (src) {
-    return (
-      <Image
-        src={src}
-        alt=""
-        width={28}
-        height={28}
-        className="h-7 w-7 shrink-0 rounded-full object-cover"
-        unoptimized
-      />
-    )
-  }
+  const label =
+    profile?.displayName?.charAt(0)?.toUpperCase() ??
+    displayNameForInitial.charAt(0)?.toUpperCase() ??
+    "?"
+  const src =
+    profile?.avatarUrl ??
+    (messageAvatarUrl ? normalizeBroadcastChatAvatarUrl(messageAvatarUrl) : null)
   return (
-    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-gray-300">
-      {label}
-    </span>
+    <SafeProfileAvatar
+      src={src}
+      alt=""
+      displaySizePx={56}
+      className="h-7 w-7 shrink-0"
+      fallback={
+        <span className="flex h-full w-full items-center justify-center bg-white/10 text-xs font-semibold text-gray-300">
+          {label}
+        </span>
+      }
+    />
   )
 }
 
@@ -57,6 +91,7 @@ export default function TradeRoomBroadcastLiveChat({
   displayName,
   avatarUrl,
   disabled,
+  interactiveProfiles,
   authLoading,
   className,
 }: Props) {
@@ -71,7 +106,7 @@ export default function TradeRoomBroadcastLiveChat({
       seedBroadcastChatProfile({
         userId,
         displayName,
-        avatarUrl,
+        avatarUrl: normalizeBroadcastChatAvatarUrl(avatarUrl),
       })
     }
   }, [userId, displayName, avatarUrl])
@@ -93,6 +128,27 @@ export default function TradeRoomBroadcastLiveChat({
     }
   }, [messages])
 
+  const mergedByUserId = useMemo(() => {
+    const unique = [...new Set(messages.map((m) => m.userId))]
+    const map = new Map<string, BroadcastChatProfile>()
+    const firstMessageByUser = new Map<string, BroadcastChatMessage>()
+    for (const m of messages) {
+      if (!firstMessageByUser.has(m.userId)) firstMessageByUser.set(m.userId, m)
+    }
+    for (const id of unique) {
+      map.set(
+        id,
+        mergeChatProfileForUser({
+          userId: id,
+          fetched: profiles.get(id),
+          interactive: interactiveProfiles?.[id],
+          messageSample: firstMessageByUser.get(id),
+        })
+      )
+    }
+    return map
+  }, [messages, profiles, interactiveProfiles])
+
   useEffect(() => {
     const el = listRef.current
     if (!el) return
@@ -110,16 +166,16 @@ export default function TradeRoomBroadcastLiveChat({
     const result = await sendTradeRoomBroadcastChatMessage({
       userId,
       displayName: verified?.displayName ?? displayName,
-      avatarUrl: null,
-      text: draft,
+      avatarUrl:
+        verified?.avatarUrl ?? normalizeBroadcastChatAvatarUrl(avatarUrl),
+      text: draft.trim(),
     })
     if (result.ok) {
       setDraft("")
     } else {
       setSendError(result.error)
     }
-  }, [userId, draft, displayName, disabled])
-
+  }, [userId, draft, displayName, disabled, avatarUrl])
   return (
     <div
       className={`flex min-h-0 flex-1 flex-col rounded-lg border border-white/10 bg-black/30 ${className ?? ""}`}
@@ -136,11 +192,18 @@ export default function TradeRoomBroadcastLiveChat({
         ) : (
           <ul className="space-y-3">
             {messages.map((m) => {
-              const profile = profiles.get(m.userId)
-              const name = profile?.displayName ?? m.displayName
+              const profile = mergedByUserId.get(m.userId)
+              const name =
+                profile?.displayName?.trim() ||
+                m.displayName?.trim() ||
+                "Member"
               return (
                 <li key={m.id} className="flex gap-2 text-sm">
-                  <ChatAvatar profile={profile} />
+                  <ChatAvatar
+                    profile={profile}
+                    messageAvatarUrl={m.avatarUrl}
+                    displayNameForInitial={name}
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-baseline gap-2">
                       <span className="font-medium text-gray-200">{name}</span>

@@ -458,6 +458,42 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
         }
     }
 
+    func deleteMessageForMe(_ messageID: MessageID, in conversationID: ConversationID) async throws {
+        guard let userID = await session.currentUserID else {
+            throw AppError.domain(.permission(.notAuthenticated))
+        }
+        struct Row: Encodable, Sendable {
+            var message_id: String
+            var user_id: String
+        }
+        let row = Row(message_id: messageID.rawValue, user_id: userID.rawValue)
+        AppLog.networking.info(
+            """
+            messages.deleteForMe begin \
+            message=\(SafeInboxLog.hash(messageID.rawValue), privacy: .public) \
+            convo=\(SafeInboxLog.hash(conversationID.rawValue), privacy: .public)
+            """
+        )
+        do {
+            try await supabase.database.insert(row, into: "message_deletions")
+            AppLog.networking.info(
+                """
+                messages.deleteForMe ok \
+                message=\(SafeInboxLog.hash(messageID.rawValue), privacy: .public)
+                """
+            )
+        } catch {
+            AppLog.networking.error(
+                """
+                messages.deleteForMe failed \
+                message=\(SafeInboxLog.hash(messageID.rawValue), privacy: .public) \
+                error=\(String(describing: error), privacy: .public)
+                """
+            )
+            throw error
+        }
+    }
+
     func deleteMessageForEveryone(_ messageID: MessageID, in conversationID: ConversationID) async throws {
         guard let userID = await session.currentUserID else {
             throw AppError.domain(.permission(.notAuthenticated))

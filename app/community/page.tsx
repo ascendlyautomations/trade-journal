@@ -5,6 +5,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -16,6 +17,7 @@ import CreateFirstTradeRoomCard from "../components/CreateFirstTradeRoomCard"
 import ExploreMoreTradeRoomsCard from "../components/ExploreMoreTradeRoomsCard"
 import EmptyState from "../components/ui/EmptyState"
 import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
+import { discoverableFromBroadcastStatusPayload } from "@/lib/livekit/tradeRoomBroadcastDiscoverable.ts"
 import { useIsNativeIos } from "@/lib/useIsNativeIos"
 import { MOBILE_WEB_NEUTRAL_PAGE_BG } from "@/lib/mobileWebPageSurface"
 import {
@@ -84,9 +86,7 @@ import ManageTradeRoomModal from "@/app/components/tradeRooms/ManageTradeRoomMod
 import TradeRoomGeneralVoiceSidebarRow from "@/app/components/tradeRooms/live/TradeRoomGeneralVoiceSidebarRow"
 import TradeRoomBroadcastPanel from "@/app/components/tradeRooms/live/TradeRoomBroadcastPanel"
 import TradeRoomBroadcastViewerRemovalOverlay from "@/app/components/tradeRooms/live/TradeRoomBroadcastViewerRemovalOverlay.tsx"
-import TradeRoomLiveVoiceBar from "@/app/components/tradeRooms/live/TradeRoomLiveVoiceBar"
-import TradeRoomLiveVoiceSessionGuard from "@/app/components/tradeRooms/live/TradeRoomLiveVoiceSessionGuard"
-import { useTradeRoomLiveVoice } from "@/app/components/tradeRooms/live/useTradeRoomLiveVoice"
+import { useTradeRoomLiveVoiceStableConnection } from "@/app/components/tradeRooms/live/useTradeRoomLiveVoice"
 import { useTradeRoomBroadcast } from "@/app/components/tradeRooms/live/useTradeRoomBroadcast.ts"
 import { isVoiceLiveSection } from "@/lib/livekit/client/liveVoiceSection.ts"
 import {
@@ -109,6 +109,7 @@ import {
   canModerateTradeRoom,
   memberHasModeratorTag,
 } from "@/lib/tradeRoomModerationPermission"
+import { canManageTradeRoom } from "@/lib/tradeRoomManagementPermission"
 import { attemptTradeRoomJoin, roomRequiresJoinApproval } from "@/lib/tradeRoomJoinFlow"
 import { fetchTradeRoomInviteLookup } from "@/lib/tradeRoomInviteLookup"
 import RoomNotificationSettingsSheet from "@/app/components/RoomNotificationSettingsSheet"
@@ -122,6 +123,7 @@ import {
   scrollToReplyTarget,
   type ReplyTarget,
 } from "@/lib/replyReference"
+import { scrollContainerToBottom } from "@/lib/conversationScroll"
 import {
   isScrollContainerNearBottom,
   scrollRoomMessageInContainer,
@@ -383,12 +385,13 @@ function CommunityContent() {
   )
   const searchParams = useSearchParams()
   const { user, profile, loading: profileLoading } = useUserProfile()
-  const liveVoice = useTradeRoomLiveVoice()
+  const liveVoice = useTradeRoomLiveVoiceStableConnection()
   const tradeRoomBroadcast = useTradeRoomBroadcast()
   const handledStreamRemovalKeyRef = useRef<string | null>(null)
   const { runUpload } = useUploadProgress()
   const username = profile?.username?.trim() || "User"
   const roomParam = searchParams.get("room")
+  const liveParam = searchParams.get("live")
   const sectionParam = searchParams.get("section")
   const messageParam = searchParams.get("message")
   const setupMode = searchParams.get("setup") === "true"
@@ -427,6 +430,10 @@ function CommunityContent() {
   const [mobileRoomQuery, setMobileRoomQuery] = useState("")
   const [mobileSectionsOpen, setMobileSectionsOpen] = useState(false)
   const [broadcastPanelExpanded, setBroadcastPanelExpanded] = useState(false)
+  const [liveWatchEndedNotice, setLiveWatchEndedNotice] = useState<string | null>(
+    null
+  )
+  const consumedLiveDeepLinkRef = useRef<string | null>(null)
 
   useEffect(() => {
     const notice = tradeRoomBroadcast.viewerStreamRemovalNotice
@@ -556,6 +563,9 @@ function CommunityContent() {
   const scrollContextRef = useRef<string | null>(null)
   const didInitialScrollRef = useRef(false)
   const userNearBottomRef = useRef(true)
+  const messagesPrevCountRef = useRef(0)
+  const prevLastMainMessageIdRef = useRef<string>("")
+  const prevLastPinnedMessageIdRef = useRef<string>("")
   const loadingOlderMessagesRef = useRef(false)
   const loadOlderRoomMessagesRef = useRef<() => void>(() => {})
 
@@ -718,6 +728,17 @@ function CommunityContent() {
     return null
   }, [rooms, selectedRoomId, inviteTargetRoom])
 
+  const canManageRoom = useMemo(
+    () =>
+      canManageTradeRoom({
+        viewerId: user?.id,
+        ownerUserId: selectedRoom?.owner_user_id,
+        roomKind: selectedRoom?.room_kind,
+        isPlatformAdmin: isAdmin,
+      }),
+    [user?.id, selectedRoom?.owner_user_id, selectedRoom?.room_kind, isAdmin]
+  )
+
   const canModerateRoom = useMemo(
     () =>
       canModerateTradeRoom({
@@ -752,7 +773,7 @@ function CommunityContent() {
         targetUserId,
         targetTagIds: tagIdsForMember(targetUserId),
         tags: roomMemberTags,
-        canManageRoom: isOwner,
+        canManageRoom,
         canModerateRoom,
       }),
     [
@@ -760,7 +781,7 @@ function CommunityContent() {
       selectedRoom?.owner_user_id,
       tagIdsForMember,
       roomMemberTags,
-      isOwner,
+      canManageRoom,
       canModerateRoom,
     ]
   )
@@ -782,6 +803,50 @@ function CommunityContent() {
       })
     }
   }, [selectedRoomId, selectedRoom?.slug])
+
+  useEffect(() => {
+    void import("@/lib/livekit/client/tradeRoomLiveModerationUiContext.ts").then(
+      ({ setTradeRoomLiveModerationUiContext }) => {
+        if (!selectedRoomId) {
+          setTradeRoomLiveModerationUiContext(null)
+          return
+        }
+        setTradeRoomLiveModerationUiContext({
+          roomId: selectedRoomId,
+          accessToken: liveKitAccessToken,
+          viewerUserId: user?.id ?? null,
+          ownerUserId: selectedRoom?.owner_user_id ?? null,
+          canModerateRoom,
+          canManageRoom,
+          liveVoiceKind:
+            (selectedRoom as { live_voice_kind?: string | null } | null)
+              ?.live_voice_kind ?? null,
+          tags: roomMemberTags.map((t) => ({ id: t.id, name: t.name })),
+          memberTagAssignments: memberTagAssignments.map((row) => ({
+            user_id: row.user_id,
+            tag_id: row.tag_id,
+          })),
+        })
+      }
+    )
+    return () => {
+      void import("@/lib/livekit/client/tradeRoomLiveModerationUiContext.ts").then(
+        ({ setTradeRoomLiveModerationUiContext }) => {
+          setTradeRoomLiveModerationUiContext(null)
+        }
+      )
+    }
+  }, [
+    selectedRoomId,
+    liveKitAccessToken,
+    user?.id,
+    selectedRoom?.owner_user_id,
+    canModerateRoom,
+    canManageRoom,
+    roomMemberTags,
+    memberTagAssignments,
+    selectedRoom,
+  ])
 
   /** Owner’s room(s) first; does not change fetch order in state, only sidebar display. */
   const sortedSidebarRooms = useMemo(() => {
@@ -2630,7 +2695,7 @@ function CommunityContent() {
     if (
       !canAssignRoomMemberTag({
         tagName: tag.name,
-        canManageRoom: isOwner,
+        canManageRoom,
         canModerateRoom,
       })
     ) {
@@ -3185,6 +3250,56 @@ function CommunityContent() {
   }, [roomParam, rooms, loadingRooms, user?.id, router])
 
   useEffect(() => {
+    setLiveWatchEndedNotice(null)
+  }, [selectedRoomId])
+
+  useEffect(() => {
+    if (liveParam !== "1" || !selectedRoomId || needsJoin || !liveKitAccessToken) {
+      return
+    }
+    const key = `${selectedRoomId}:live`
+    if (consumedLiveDeepLinkRef.current === key) return
+    consumedLiveDeepLinkRef.current = key
+
+    let cancelled = false
+    void (async () => {
+      const res = await fetch(
+        `/api/livekit/broadcast/status?roomId=${encodeURIComponent(selectedRoomId)}`,
+        {
+          headers: { Authorization: `Bearer ${liveKitAccessToken}` },
+        }
+      )
+      const payload = (await res.json().catch(() => ({}))) as {
+        live?: boolean
+        publicLive?: boolean
+        visibility?: string
+      }
+      if (cancelled) return
+      const discoverable = discoverableFromBroadcastStatusPayload(payload)
+      if (discoverable) {
+        setLiveWatchEndedNotice(null)
+        setBroadcastPanelExpanded(true)
+      } else {
+        setLiveWatchEndedNotice("This livestream has ended.")
+      }
+      const params = new URLSearchParams(window.location.search)
+      params.delete("live")
+      const qs = params.toString()
+      router.replace(qs ? `/community?${qs}` : "/community", { scroll: false })
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    liveParam,
+    selectedRoomId,
+    needsJoin,
+    liveKitAccessToken,
+    router,
+  ])
+
+  useEffect(() => {
     if (!needsJoin || !inviteTargetRoom?.id || !user?.id) {
       setViewerJoinStatus(null)
       return
@@ -3445,7 +3560,12 @@ function CommunityContent() {
   // Match Messages (`app/messages/[id]/page.tsx`): scroll only the messages
   // overflow container — never scrollIntoView on inner content, or mobile Safari
   // will scroll the document and hide the Navbar.
-  useEffect(() => {
+  //
+  // Only auto-scroll when the *tail* of the list changes (new message / order) or
+  // on first paint after open — not on every metadata patch (reactions, etc.), which
+  // used to fire `setTimeout(..., 50)` and made the pane jump. ResizeObserver keeps the
+  // bottom pinned when the composer or panels change height (DMs use the same pattern).
+  useLayoutEffect(() => {
     const el = messagesScrollRef.current
     if (!el || loadingMessages || !selectedRoomId) return
 
@@ -3454,24 +3574,46 @@ function CommunityContent() {
       scrollContextRef.current = contextKey
       didInitialScrollRef.current = false
       userNearBottomRef.current = true
+      messagesPrevCountRef.current = 0
+      prevLastMainMessageIdRef.current = ""
+      prevLastPinnedMessageIdRef.current = ""
     }
 
-    const runScroll = () => {
-      if (!didInitialScrollRef.current) {
-        didInitialScrollRef.current = true
-        pendingScrollMessageIdRef.current = null
-        el.scrollTop = el.scrollHeight
-        userNearBottomRef.current = true
-        return
-      }
+    const mainCount = messages.length
+    const pinnedCount = pinnedMessages.length
+    const totalCount = mainCount + pinnedCount
+    const lastMainId =
+      mainCount > 0 ? String(messages[mainCount - 1]!.id) : ""
+    const lastPinnedId =
+      pinnedCount > 0 ? String(pinnedMessages[pinnedCount - 1]!.id) : ""
 
-      if (userNearBottomRef.current) {
-        el.scrollTop = el.scrollHeight
-      }
+    const tailChanged =
+      totalCount !== messagesPrevCountRef.current ||
+      lastMainId !== prevLastMainMessageIdRef.current ||
+      lastPinnedId !== prevLastPinnedMessageIdRef.current
+
+    messagesPrevCountRef.current = totalCount
+    prevLastMainMessageIdRef.current = lastMainId
+    prevLastPinnedMessageIdRef.current = lastPinnedId
+
+    const scrollToBottomIfPinned = () => {
+      if (loadingOlderMessagesRef.current) return
+      if (!isScrollContainerNearBottom(el)) return
+      scrollContainerToBottom(el, {})
+      userNearBottomRef.current = true
     }
 
-    const id = window.setTimeout(runScroll, 50)
-    return () => window.clearTimeout(id)
+    if (!didInitialScrollRef.current) {
+      didInitialScrollRef.current = true
+      pendingScrollMessageIdRef.current = null
+      scrollContainerToBottom(el, {})
+      userNearBottomRef.current = true
+      return
+    }
+
+    if (tailChanged) {
+      scrollToBottomIfPinned()
+    }
   }, [
     messages,
     pinnedMessages,
@@ -3479,6 +3621,21 @@ function CommunityContent() {
     selectedRoomId,
     selectedSectionId,
   ])
+
+  useEffect(() => {
+    const el = messagesScrollRef.current
+    if (!el || loadingMessages || !selectedRoomId) return
+
+    const observer = new ResizeObserver(() => {
+      if (loadingOlderMessagesRef.current) return
+      if (!isScrollContainerNearBottom(el)) return
+      scrollContainerToBottom(el, {})
+      userNearBottomRef.current = true
+    })
+
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [loadingMessages, selectedRoomId, selectedSectionId])
 
   const sendTyping = useCallback(() => {
     if (!typingChannelRef.current || !selectedRoomId) return
@@ -4716,6 +4873,7 @@ function CommunityContent() {
                       <TradeRoomGeneralVoiceSidebarRow
                         roomId={selectedRoomId}
                         roomName={selectedRoom?.name ?? null}
+                        accessToken={liveKitAccessToken}
                         disabled={needsJoin}
                         fetchToken={fetchLiveKitVoiceToken}
                       />
@@ -4773,7 +4931,12 @@ function CommunityContent() {
                 </div>
               ) : null}
 
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                {liveWatchEndedNotice ? (
+                  <div className="mx-3 mt-2 shrink-0 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+                    {liveWatchEndedNotice}
+                  </div>
+                ) : null}
                 {selectedRoomId && !needsJoin ? (
                   <TradeRoomBroadcastPanel
                     roomId={selectedRoomId}
@@ -4784,6 +4947,8 @@ function CommunityContent() {
                     viewerAvatarUrl={profile?.avatar_url ?? null}
                     expanded={broadcastPanelExpanded}
                     onExpandedChange={setBroadcastPanelExpanded}
+                    canModerateStream={canModerateRoom}
+                    canActOnTarget={canActOnMember}
                   />
                 ) : null}
                 {sections.length > 1 ? (
@@ -4826,6 +4991,7 @@ function CommunityContent() {
                               <TradeRoomGeneralVoiceSidebarRow
                                 roomId={selectedRoomId}
                                 roomName={selectedRoom?.name ?? null}
+                                accessToken={liveKitAccessToken}
                                 disabled={needsJoin}
                                 fetchToken={fetchLiveKitVoiceToken}
                               />
@@ -4871,9 +5037,10 @@ function CommunityContent() {
                   </div>
                 ) : null}
 
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
               <NativeIosPullToRefresh
                 scrollRef={messagesScrollRef}
-                className="tt-trade-rooms-chat min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-3 max-md:px-3"
+                className="tt-trade-rooms-chat min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-3 max-md:px-3"
                 onRefresh={async () => {
                   if (!user?.id) return
                   await refreshSidebarMemberRooms(user.id)
@@ -5215,8 +5382,6 @@ function CommunityContent() {
                 </>
               )}
               </NativeIosPullToRefresh>
-              </div>
-                </div>
 
                 {selectedRoomId &&
                 !needsJoin &&
@@ -5310,8 +5475,11 @@ function CommunityContent() {
                   </div>
                   </>
                 )}
-              </>
-            )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
             </div>
             </>
             )}
@@ -5534,7 +5702,7 @@ function CommunityContent() {
                         const assignableTags = roomMemberTags.filter((tag) =>
                           canAssignRoomMemberTag({
                             tagName: tag.name,
-                            canManageRoom: isOwner,
+                            canManageRoom,
                             canModerateRoom,
                           })
                         )
@@ -6071,8 +6239,6 @@ function CommunityContent() {
         imageUrl={lightboxImageUrl}
         onClose={() => setLightboxImageUrl(null)}
       />
-      <TradeRoomLiveVoiceSessionGuard userId={user?.id} />
-      <TradeRoomLiveVoiceBar />
       <TradeRoomBroadcastViewerRemovalOverlay />
     </>
   )

@@ -3841,42 +3841,60 @@ export type Database = {
       }
       room_live_broadcasts: {
         Row: {
+          broadcast_source: string
           broadcaster_disconnect_check_at: string | null
           broadcaster_disconnect_reason: string | null
           broadcaster_user_id: string
           ended_at: string | null
           ended_reason: string | null
+          go_live_notified_at: string | null
           id: string
+          ingress_status_snapshot: string | null
           last_livekit_signal_at: string | null
+          livekit_ingress_id: string | null
+          primary_media_publisher_identity: string | null
           room_id: string
           started_at: string
           video_source: string
+          visibility: string
           voice_mode: string
         }
         Insert: {
+          broadcast_source?: string
           broadcaster_disconnect_check_at?: string | null
           broadcaster_disconnect_reason?: string | null
           broadcaster_user_id: string
           ended_at?: string | null
           ended_reason?: string | null
+          go_live_notified_at?: string | null
           id?: string
+          ingress_status_snapshot?: string | null
           last_livekit_signal_at?: string | null
+          livekit_ingress_id?: string | null
+          primary_media_publisher_identity?: string | null
           room_id: string
           started_at?: string
           video_source?: string
+          visibility?: string
           voice_mode?: string
         }
         Update: {
+          broadcast_source?: string
           broadcaster_disconnect_check_at?: string | null
           broadcaster_disconnect_reason?: string | null
           broadcaster_user_id?: string
           ended_at?: string | null
           ended_reason?: string | null
+          go_live_notified_at?: string | null
           id?: string
+          ingress_status_snapshot?: string | null
           last_livekit_signal_at?: string | null
+          livekit_ingress_id?: string | null
+          primary_media_publisher_identity?: string | null
           room_id?: string
           started_at?: string
           video_source?: string
+          visibility?: string
           voice_mode?: string
         }
         Relationships: [

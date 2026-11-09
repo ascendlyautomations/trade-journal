@@ -9,6 +9,7 @@ import {
   normalizeTradeRoomBroadcastVideoSource,
   normalizeTradeRoomBroadcastVoiceMode,
 } from "./tradeRoomBroadcastVoiceMode.ts"
+import { isLiveKitParticipantAbsentError } from "./liveKitRoomService.ts"
 
 describe("Trade Room broadcast — voice mode metadata", () => {
   it("normalizes voice and video source", () => {

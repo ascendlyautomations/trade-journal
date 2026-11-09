@@ -908,6 +908,25 @@ export function parseRoomMessageContent(
   }
 }
 
+export type RoomLiveBroadcastMeta = {
+  room_id?: string
+  room_slug?: string
+  room_name?: string
+  broadcast_session_id?: string
+}
+
+export function parseRoomLiveBroadcastContent(
+  content: string | null | undefined
+): RoomLiveBroadcastMeta | null {
+  if (!content?.trim()) return null
+  try {
+    const parsed = JSON.parse(content) as RoomLiveBroadcastMeta
+    return parsed && typeof parsed === "object" ? parsed : null
+  } catch {
+    return null
+  }
+}
+
 export type AffiliateNotificationMeta = {
   title?: string | null
   body?: string | null
@@ -1038,6 +1057,7 @@ export function buildTradeRoomHref(
   opts?: {
     sectionId?: string | null
     messageId?: string | null
+    live?: boolean
   }
 ): string {
   const slug = roomSlug.trim()
@@ -1051,6 +1071,8 @@ export function buildTradeRoomHref(
 
   const messageId = opts?.messageId?.trim()
   if (messageId) params.set("message", messageId)
+
+  if (opts?.live) params.set("live", "1")
 
   return `/community?${params.toString()}`
 }
@@ -1275,6 +1297,16 @@ export function getNotificationHref(
         sectionId: meta.section_id,
         messageId: meta.message_id,
       })
+    }
+    return "/community"
+  }
+
+  if (n.type === "room_live") {
+    const meta = parseRoomLiveBroadcastContent(n.content)
+    const slug = meta?.room_slug?.trim()
+    if (slug) return buildTradeRoomHref(slug, { live: true })
+    if (n.room_id) {
+      return `/community?room=${encodeURIComponent(n.room_id)}&live=1`
     }
     return "/community"
   }

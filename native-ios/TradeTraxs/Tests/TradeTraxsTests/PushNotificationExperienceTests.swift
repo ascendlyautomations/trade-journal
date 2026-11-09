@@ -80,6 +80,50 @@ final class PushNotificationExperienceTests: XCTestCase {
         XCTAssertEqual(destination.messageID, "msg-9")
     }
 
+    func testPayloadParserMapsProductionRoomMessageTopLevelSectionFields() {
+        let destination = PushNotificationPayloadParser.parse(userInfo: [
+            "type": "room_message",
+            "notificationType": "room_message",
+            "href": "/community?room=desk&section=ann-uuid&message=msg-42",
+            "roomId": "11111111-1111-1111-1111-111111111111",
+            "roomSlug": "desk",
+            "sectionId": "ann-uuid",
+            "messageId": "msg-42",
+            "sectionName": "announcements",
+        ])
+        XCTAssertEqual(destination.sectionID, "ann-uuid")
+        XCTAssertEqual(destination.messageID, "msg-42")
+        XCTAssertEqual(destination.rawUserInfo["section_name"], "announcements")
+    }
+
+    func testRoomMessageNotificationFacadeSeedsFocusFromRealisticPayload() {
+        RoomNavigationFocusStore.shared.clear()
+        defer { RoomNavigationFocusStore.shared.clear() }
+
+        var store = NavigationStore()
+        store.sessionPhase = .authenticated
+        let coordinator = NavigationCoordinator(store: store)
+        let facade = NotificationRouterFacade(router: NotificationRouter())
+
+        let userInfo: [AnyHashable: Any] = [
+            "type": "room_message",
+            "href": "/community?room=desk&section=dev-room-desk-trades&message=trade-msg-1",
+            "roomId": TradeRoomsFixtures.deskRoomID.rawValue,
+            "roomSlug": "desk",
+            "sectionId": "dev-room-desk-trades",
+            "messageId": "trade-msg-1",
+            "sectionName": "trades",
+        ]
+        let destination = PushNotificationPayloadParser.parse(userInfo: userInfo)
+        XCTAssertTrue(facade.route(destination, using: coordinator, store: store))
+
+        let focus = RoomNavigationFocusStore.shared.consume(for: TradeRoomsFixtures.deskRoomID)
+        XCTAssertEqual(focus?.channelID, RoomChannelID("dev-room-desk-trades"))
+        XCTAssertEqual(focus?.channelName, "trades")
+        XCTAssertEqual(focus?.messageID, MessageID("trade-msg-1"))
+        XCTAssertFalse(store.externalRoomFocusTokens.isEmpty)
+    }
+
     func testPayloadParserMapsTradeLike() {
         let destination = PushNotificationPayloadParser.parse(userInfo: [
             "type": "like",
@@ -202,6 +246,21 @@ final class PushNotificationExperienceTests: XCTestCase {
         )
     }
 
+    func testRoomNavigationIntentRevisionIncrementsOnReseed() {
+        RoomNavigationFocusStore.shared.clear()
+        defer { RoomNavigationFocusStore.shared.clear() }
+        let room = RoomID("room-1")
+        RoomNavigationFocusStore.shared.seed(roomID: room, sectionID: "general", messageID: nil)
+        let firstRevision = RoomNavigationFocusStore.shared.intentRevision(for: room)
+        RoomNavigationFocusStore.shared.seed(roomID: room, sectionID: "trades", messageID: nil)
+        let secondRevision = RoomNavigationFocusStore.shared.intentRevision(for: room)
+        XCTAssertGreaterThan(secondRevision, firstRevision)
+        XCTAssertEqual(
+            RoomNavigationFocusStore.shared.pendingIntent(for: room)?.channelID,
+            RoomChannelID("trades")
+        )
+    }
+
     func testRoomFocusStoreConsumeOnce() {
         RoomNavigationFocusStore.shared.clear()
         RoomNavigationFocusStore.shared.seed(
@@ -214,6 +273,21 @@ final class PushNotificationExperienceTests: XCTestCase {
         XCTAssertEqual(first?.channelID, RoomChannelID("general"))
         XCTAssertEqual(first?.messageID, MessageID("msg-1"))
         XCTAssertNil(second)
+    }
+
+    func testRoomFocusStoreConsumeMatchesResolvedRoomID() {
+        let uuid = RoomID("11111111-1111-1111-1111-111111111111")
+        let slug = RoomID("futures-desk")
+        RoomNavigationFocusStore.shared.clear()
+        RoomNavigationFocusStore.shared.seed(
+            roomID: uuid,
+            sectionID: nil,
+            messageID: nil,
+            openLiveBroadcast: true
+        )
+        XCTAssertNil(RoomNavigationFocusStore.shared.consume(for: slug))
+        let focus = RoomNavigationFocusStore.shared.consume(for: slug, resolvedRoomID: uuid)
+        XCTAssertEqual(focus?.openLiveBroadcast, true)
     }
 
     func testForegroundPolicySilencesLikes() {

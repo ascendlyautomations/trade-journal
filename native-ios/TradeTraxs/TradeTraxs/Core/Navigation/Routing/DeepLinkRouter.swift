@@ -64,7 +64,7 @@ struct DeepLinkRouter: Sendable {
             return true
         }
 
-        coordinator.open(destination)
+        coordinator.openExternal(destination)
         DeepLinkLaunchTrace.event("navigation.executed", path: path)
         return true
     }
@@ -82,7 +82,9 @@ struct DeepLinkRouter: Sendable {
         let query = url.queryItemsDictionary
         let section = query["section"]
         let message = query["message"]
-        guard section != nil || message != nil else { return }
+        let openLive =
+            query["live"] == "1" || query["live"]?.lowercased() == "true"
+        guard section != nil || message != nil || openLive else { return }
 
         let roomID: RoomID?
         switch destination {
@@ -99,7 +101,8 @@ struct DeepLinkRouter: Sendable {
         RoomNavigationFocusStore.shared.seed(
             roomID: roomID,
             sectionID: section,
-            messageID: message
+            messageID: message,
+            openLiveBroadcast: openLive
         )
     }
 }

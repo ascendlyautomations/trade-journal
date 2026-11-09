@@ -6,7 +6,7 @@ enum RoomChannelLiveKind: String, Codable, Sendable, Hashable {
     case voiceOpen = "voice_open"
     case voiceStage = "voice_stage"
 
-    init(rawDatabaseValue: String?) {
+    nonisolated init(rawDatabaseValue: String?) {
         let normalized = (rawDatabaseValue ?? "text").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         switch normalized {
         case Self.voiceOpen.rawValue:
@@ -18,7 +18,7 @@ enum RoomChannelLiveKind: String, Codable, Sendable, Hashable {
         }
     }
 
-    var supportsLiveVoice: Bool {
+    nonisolated var supportsLiveVoice: Bool {
         switch self {
         case .voiceOpen, .voiceStage:
             return true

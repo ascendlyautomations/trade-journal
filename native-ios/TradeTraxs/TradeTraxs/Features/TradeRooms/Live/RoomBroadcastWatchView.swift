@@ -61,6 +61,19 @@ struct RoomBroadcastWatchView: View {
                 dismiss()
             }
         }
+        .onChange(of: coordinator.streamRemovalNotice?.id) { _, noticeID in
+            if noticeID != nil {
+                isFullscreen = false
+                dismiss()
+            }
+        }
+        .overlay {
+            if let notice = coordinator.speakInviteNotice {
+                BroadcastSpeakInviteOverlay(notice: notice, coordinator: coordinator)
+                    .zIndex(100_000)
+            }
+        }
+        .animation(.snappy(duration: 0.28), value: coordinator.speakInviteNotice?.id)
     }
 
     private var streamHeader: some View {
@@ -117,6 +130,7 @@ struct RoomBroadcastWatchView: View {
                 track: coordinator.videoTrackForDisplay,
                 isFullscreen: false
             )
+            .id(coordinator.programVideoTrackRevision)
             HStack(spacing: ExperienceSpacing.xs) {
                 if coordinator.isStreamPlaybackMuted {
                     Image(systemName: "speaker.slash.fill")
@@ -168,21 +182,43 @@ struct RoomBroadcastWatchView: View {
     }
 
     private var composerBar: some View {
-        HStack(spacing: ExperienceSpacing.xs) {
+        HStack(alignment: .bottom, spacing: ExperienceSpacing.xxs) {
             TextField("Message…", text: $chatDraft, axis: .vertical)
                 .lineLimit(1 ... 4)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
+                .textInputAutocapitalization(.sentences)
                 .focused($composerFocused)
                 .disabled(userId == nil)
-            Button("Send") {
-                sendChat()
+                .padding(.horizontal, ExperienceSpacing.sm)
+                .padding(.vertical, ExperienceSpacing.xs)
+                .frame(
+                    minHeight: ExperienceAccessibility.minTouchTarget,
+                    alignment: .leading
+                )
+                .background(
+                    colors.fillSecondary,
+                    in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+                )
+
+            if canSendChat {
+                Button(action: sendChat) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundStyle(colors.accent)
+                        .experienceTouchTarget()
+                }
+                .buttonStyle(.experiencePlain)
+                .accessibilityLabel("Send")
             }
-            .font(.system(.subheadline, design: .rounded).weight(.semibold))
-            .disabled(userId == nil || chatDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
-        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.horizontal, ExperienceSpacing.xs)
         .padding(.vertical, ExperienceSpacing.xs)
         .background(colors.navigationBackground.opacity(0.96))
+    }
+
+    private var canSendChat: Bool {
+        guard userId != nil else { return false }
+        return !chatDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var streamToolbar: some View {
@@ -251,6 +287,7 @@ struct RoomBroadcastWatchView: View {
                 track: coordinator.videoTrackForDisplay,
                 isFullscreen: true
             )
+            .id(coordinator.programVideoTrackRevision)
             .ignoresSafeArea()
 
             VStack(spacing: ExperienceSpacing.sm) {
@@ -281,6 +318,11 @@ struct RoomBroadcastWatchView: View {
                 .padding(.bottom, ExperienceSpacing.xl)
             }
             .padding(ExperienceSpacing.md)
+
+            if let notice = coordinator.speakInviteNotice {
+                BroadcastSpeakInviteOverlay(notice: notice, coordinator: coordinator)
+                    .zIndex(100_000)
+            }
         }
     }
 

@@ -3,6 +3,7 @@
 import { Mic } from "lucide-react"
 import {
   acceptTradeRoomBroadcastSpeakInvite,
+  declineTradeRoomBroadcastSpeakInvite,
   dismissTradeRoomBroadcastSpeakInvite,
   getTradeRoomBroadcastViewerVideoElement,
 } from "@/lib/livekit/client/tradeRoomBroadcastStore.ts"
@@ -11,6 +12,7 @@ import { fetchBroadcastConversationJoinPayload } from "@/lib/livekit/client/trad
 type Props = {
   roomId: string
   accessToken: string
+  invitationId?: string | null
   busy?: boolean
   onNeedOpenStream?: () => void
 }
@@ -18,6 +20,7 @@ type Props = {
 export default function TradeRoomBroadcastSpeakInviteBanner({
   roomId,
   accessToken,
+  invitationId,
   busy,
   onNeedOpenStream,
 }: Props) {
@@ -58,6 +61,7 @@ export default function TradeRoomBroadcastSpeakInviteBanner({
                   roomId,
                   videoElement,
                   accessToken,
+                  invitationId,
                   fetchConversationToken: () =>
                     fetchBroadcastConversationJoinPayload(accessToken, roomId),
                 })
@@ -68,9 +72,19 @@ export default function TradeRoomBroadcastSpeakInviteBanner({
             <button
               type="button"
               className="rounded-lg border border-white/20 px-3 py-1.5 text-xs text-emerald-100"
-              onClick={() => dismissTradeRoomBroadcastSpeakInvite()}
+              onClick={() => {
+                const id = invitationId?.trim()
+                if (id) {
+                  void declineTradeRoomBroadcastSpeakInvite({
+                    accessToken,
+                    invitationId: id,
+                  })
+                } else {
+                  dismissTradeRoomBroadcastSpeakInvite()
+                }
+              }}
             >
-              Not now
+              Decline
             </button>
           </div>
         </div>

@@ -106,7 +106,8 @@ final class BroadcastStreamEndPolicyTests: XCTestCase {
                 isWatching: true,
                 isVoluntaryLeave: false,
                 disconnectedIdentity: "broadcaster-1",
-                broadcasterIdentity: "broadcaster-1"
+                broadcasterIdentity: "broadcaster-1",
+                broadcastSourceIsObs: false
             )
         )
         XCTAssertFalse(
@@ -114,7 +115,20 @@ final class BroadcastStreamEndPolicyTests: XCTestCase {
                 isWatching: true,
                 isVoluntaryLeave: true,
                 disconnectedIdentity: "broadcaster-1",
-                broadcasterIdentity: "broadcaster-1"
+                broadcasterIdentity: "broadcaster-1",
+                broadcastSourceIsObs: false
+            )
+        )
+    }
+
+    func testObsHostDisconnectDoesNotEndWatch() {
+        XCTAssertFalse(
+            BroadcastStreamEndPolicy.shouldEndWatchFromBroadcasterDisconnect(
+                isWatching: true,
+                isVoluntaryLeave: false,
+                disconnectedIdentity: "host-uuid",
+                broadcasterIdentity: "host-uuid",
+                broadcastSourceIsObs: true
             )
         )
     }

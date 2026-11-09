@@ -16,21 +16,32 @@ struct RoomConversationView: View {
     private let data: DataEnvironment?
     private let navigationCoordinator: NavigationCoordinator?
     private let navigationHost: TradeRoomNavigationHost
+    /// Bumped by ``NavigationCoordinator/openExternal`` per channel focus; drives focus re-application.
+    private let externalPresentationIdentity: String
 
     @Environment(\.themeColors) private var colors
     @Environment(\.appEnvironment) private var appEnvironment
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.tabIsActive) private var tabIsActive
     @Bindable private var liveVoiceCoordinator = RoomLiveVoiceCoordinator.shared
     @Bindable private var broadcastCoordinator = RoomBroadcastCoordinator.shared
     @State private var broadcastChatUserId: String?
     @State private var broadcastChatDisplayName = "You"
+    @State private var liveDeepLinkEndedNotice: String?
+    @State private var handledLiveDeepLink = false
+    @State private var navigationIntentEpoch: UInt64 = 0
+    @State private var showsInviteShareSheet = false
+    @State private var obsOwnerSheetStep: ObsOwnerSheetStep?
+    @State private var obsBroadcastController = TradeRoomObsBroadcastController()
 
     init(
         roomID: RoomID,
         data: DataEnvironment,
         navigationCoordinator: NavigationCoordinator? = nil,
-        navigationHost: TradeRoomNavigationHost = .messages
+        navigationHost: TradeRoomNavigationHost = .messages,
+        externalPresentationIdentity: String = ""
     ) {
+        self.externalPresentationIdentity = externalPresentationIdentity
         _viewModel = State(
             initialValue: RoomConversationViewModel(
                 roomID: roomID,
@@ -63,6 +74,7 @@ struct RoomConversationView: View {
         self.data = nil
         self.navigationCoordinator = nil
         self.navigationHost = .messages
+        self.externalPresentationIdentity = ""
     }
 
     var body: some View {
@@ -80,6 +92,7 @@ struct RoomConversationView: View {
                     roomID: room.id,
                     roomTitle: room.name,
                     isStreamLive: broadcastCoordinator.isStreamLive(for: room.id),
+                    isRoomOwner: viewModel.isOwner,
                     onJoinStream: {
                         Task {
                             await broadcastCoordinator.watch(roomID: room.id, roomTitle: room.name)
@@ -89,9 +102,20 @@ struct RoomConversationView: View {
                     onOpenStream: {
                         broadcastCoordinator.presentViewer()
                     },
+                    onStartStream: {
+                        obsOwnerSheetStep = .methodSelection
+                    },
                     liveVoiceCoordinator: liveVoiceCoordinator,
                     broadcastCoordinator: broadcastCoordinator
                 )
+                if let liveDeepLinkEndedNotice {
+                    Text(liveDeepLinkEndedNotice)
+                        .font(.system(.caption, design: .rounded))
+                        .foregroundStyle(colors.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, ExperienceSpacing.md)
+                        .padding(.bottom, ExperienceSpacing.xxs)
+                }
                 if !viewModel.channels.isEmpty {
                     RoomChannelSwitcherView(
                         channels: viewModel.channels,
@@ -136,6 +160,7 @@ struct RoomConversationView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .syncTradeRoomSessionChromeEmbedding(tabIsActive: tabIsActive)
         .experienceScreenBackground(fillsContentArea: false)
         .experienceNavigationTitle(viewModel.title)
         .toolbar(.hidden, for: .tabBar)
@@ -178,6 +203,21 @@ struct RoomConversationView: View {
                     .accessibilityIdentifier("tradeRooms.conversation.moderate")
                 } else if viewModel.isMember {
                     Menu {
+                        if let room = viewModel.room,
+                           RoomInfoViewModel.inviteURL(slug: room.slug, roomID: room.id) != nil {
+                            Button("Share Link", systemImage: "square.and.arrow.up") {
+                                showsInviteShareSheet = true
+                            }
+                            Button("Copy Link", systemImage: "link") {
+                                copyInviteLink(for: room)
+                            }
+                        }
+                        if viewModel.viewerID != nil, let room = viewModel.room {
+                            Button("Create Feed Post", systemImage: "text.badge.plus") {
+                                createFeedPost(for: room)
+                            }
+                        }
+                        Divider()
                         Button(
                             "Leave Room",
                             systemImage: "rectangle.portrait.and.arrow.right",
@@ -199,6 +239,20 @@ struct RoomConversationView: View {
                 }
             }
         }
+        .sheet(isPresented: $showsInviteShareSheet) {
+            if let room = viewModel.room,
+               let inviteURL = RoomInfoViewModel.inviteURL(slug: room.slug, roomID: room.id) {
+                TradeRoomInviteActivityShareSheet(items: [inviteURL])
+            }
+        }
+        .modifier(
+            RoomObsOwnerSheetModifier(
+                step: $obsOwnerSheetStep,
+                roomID: viewModel.roomID,
+                roomTitle: viewModel.room?.name ?? "Trade Room",
+                controller: obsBroadcastController
+            )
+        )
         .sheet(isPresented: $viewModel.showsTradePicker) {
             TradeSharePickerSheet(
                 trades: viewModel.tradePickerTrades,
@@ -308,24 +362,65 @@ struct RoomConversationView: View {
                 contentRevealed = true
             }
         }
-        .task {
+        .task(id: navigationPipelineID) {
+            RoomNotificationNavigationTrace.event(
+                .init(
+                    stage: "view.presentationTask",
+                    roomID: viewModel.roomID.rawValue,
+                    presentationID: externalPresentationIdentity.isEmpty ? nil : externalPresentationIdentity,
+                    selectedChannelID: viewModel.selectedChannelID?.rawValue,
+                    vmIdentity: ObjectIdentifier(viewModel),
+                    detail: "load+intent revision=\(navigationIntentEpoch)"
+                )
+            )
             resetInitialScrollSessionState()
             viewModel.loadIfNeeded()
+            viewModel.resumeRealtimeIfNeeded()
+            viewModel.applyNavigationIntentIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .roomNavigationFocusDidSeed)) { note in
+            guard let seededRoom = note.object as? RoomID else { return }
+            guard RoomNavigationFocusStore.shared.sameRoom(seededRoom, viewModel.roomID) else { return }
+            navigationIntentEpoch = RoomNavigationFocusStore.shared.intentRevision(
+                for: viewModel.roomID,
+                resolvedRoomID: viewModel.room?.id
+            )
         }
         .onDisappear {
             viewModel.stopRealtime()
             broadcastCoordinator.stopPolling()
+            liveVoiceCoordinator.stopGeneralVoicePresencePolling(for: viewModel.roomID)
         }
-        .task(id: viewModel.roomID) {
-            broadcastCoordinator.startPolling(roomID: viewModel.roomID)
+        .task(id: viewModel.activeRoomID) {
+            liveVoiceCoordinator.startGeneralVoicePresencePolling(for: viewModel.activeRoomID)
+            broadcastCoordinator.startPolling(
+                roomID: viewModel.activeRoomID,
+                roomTitle: viewModel.room?.name
+            )
             if let data {
-                broadcastChatUserId = await data.session.currentUserID?.rawValue
+                let profileID = await data.session.currentUserID.map {
+                    ProfileID(rawValue: $0.rawValue)
+                }
+                broadcastCoordinator.setInteractiveViewerProfileID(profileID)
+                broadcastChatUserId = profileID?.rawValue
+                let authUserId = await data.session.currentUserID.map(\.rawValue)
+                obsBroadcastController.configure(
+                    viewerUserId: authUserId,
+                    transport: data.supabase.transport
+                )
             }
+            await tryOpenLiveBroadcastFromNotificationIfReady()
+        }
+        .onChange(of: viewModel.phase) { _, phase in
+            guard phase == .loaded, viewModel.room != nil else { return }
+            Task { await tryOpenLiveBroadcastFromNotificationIfReady() }
+        }
+        .onChange(of: viewModel.pendingOpenLiveBroadcast) { _, pending in
+            guard pending else { return }
+            Task { await tryOpenLiveBroadcastFromNotificationIfReady() }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-            Task {
-                await broadcastCoordinator.refreshStatus(roomID: viewModel.roomID)
-            }
+            handleWillEnterForeground()
         }
         .onReceive(NotificationCenter.default.publisher(for: .tradeRoomMetadataDidChange)) { notification in
             guard let changedID = notification.object as? RoomID,
@@ -426,9 +521,6 @@ struct RoomConversationView: View {
             },
             onMembersTap: { viewModel.openMembers() },
             onInfoTap: { viewModel.openRoomInfo() },
-            inviteShareURL: RoomInfoViewModel.inviteURL(slug: room.slug, roomID: room.id),
-            onCopyInviteLink: { copyInviteLink(for: room) },
-            onCreateFeedPost: viewModel.viewerID == nil ? nil : { createFeedPost(for: room) },
             imagePipeline: imagePipeline
         )
     }
@@ -600,7 +692,8 @@ struct RoomConversationView: View {
                         actionCount: MessageBubbleActionMenuSupport.actionCount(
                             item: bubble,
                             reactionConfiguration: reactions,
-                            canDelete: viewModel.canDeleteMessage(bubble),
+                            canDeleteForMe: false,
+                            canDeleteForEveryone: viewModel.canDeleteMessage(bubble),
                             onRetry: { Task { await viewModel.retry(bubble) } },
                             onManageUser: roomMessageManageAction(for: bubble),
                             onReport: incomingRoomMessageReportAction(for: bubble)
@@ -613,10 +706,13 @@ struct RoomConversationView: View {
                     MessageBubbleActionMenuSupport.menu(
                         item: bubble,
                         reactionConfiguration: reactions,
-                        canDelete: viewModel.canDeleteMessage(bubble),
-                        deleteMenuTitle: "Delete Message",
+                        canDeleteForMe: false,
+                        deleteForMeTitle: "Delete for Me",
+                        canDeleteForEveryone: viewModel.canDeleteMessage(bubble),
+                        deleteForEveryoneTitle: "Delete Message",
                         onRetry: { Task { await viewModel.retry(bubble) } },
-                        onDelete: { viewModel.requestDeleteMessage(bubble) },
+                        onDeleteForMe: nil,
+                        onDeleteForEveryone: { viewModel.requestDeleteMessage(bubble) },
                         onManageUser: roomMessageManageAction(for: bubble),
                         onReport: incomingRoomMessageReportAction(for: bubble),
                         onSelectEmoji: { emoji in
@@ -931,5 +1027,70 @@ struct RoomConversationView: View {
             actionMenuMessageID = nil
             viewModel.requestManageMember(bubble)
         }
+    }
+
+    private var navigationPipelineID: String {
+        let base = externalPresentationIdentity.isEmpty ? "room-static" : externalPresentationIdentity
+        return "\(base)#i\(navigationIntentEpoch)"
+    }
+
+    private func handleWillEnterForeground() {
+        let hasStoreFocus = RoomNavigationFocusStore.shared.pendingFocus(for: viewModel.roomID) != nil
+        let presentation = externalPresentationIdentity.isEmpty ? nil : externalPresentationIdentity
+        RoomNotificationNavigationTrace.event(
+            .init(
+                stage: "view.willEnterForeground",
+                roomID: viewModel.roomID.rawValue,
+                presentationID: presentation,
+                selectedChannelID: viewModel.selectedChannelID?.rawValue,
+                vmIdentity: ObjectIdentifier(viewModel),
+                detail: hasStoreFocus ? "storeFocus=present" : "storeFocus=absent"
+            )
+        )
+        viewModel.resumeRealtimeIfNeeded()
+        navigationIntentEpoch = RoomNavigationFocusStore.shared.intentRevision(
+            for: viewModel.roomID,
+            resolvedRoomID: viewModel.room?.id
+        )
+        viewModel.applyNavigationIntentIfNeeded()
+        Task {
+            await broadcastCoordinator.refreshStatus(roomID: viewModel.roomID)
+            await liveVoiceCoordinator.refreshGeneralVoicePresenceIfStale(for: viewModel.roomID)
+        }
+    }
+
+    private func tryOpenLiveBroadcastFromNotificationIfReady() async {
+        guard !handledLiveDeepLink, viewModel.pendingOpenLiveBroadcast else { return }
+        guard viewModel.phase == .loaded, viewModel.room != nil else { return }
+        if await openLiveBroadcastFromDeepLinkIfNeeded() {
+            handledLiveDeepLink = true
+            viewModel.clearPendingOpenLiveBroadcast()
+        }
+    }
+
+    /// - Returns: `true` when the deep-link intent is fully handled (live viewer presented or stream not live).
+    @MainActor
+    private func openLiveBroadcastFromDeepLinkIfNeeded() async -> Bool {
+        let roomID = viewModel.activeRoomID
+        let roomTitle = viewModel.room?.name ?? "Trade Room"
+        await broadcastCoordinator.refreshStatus(roomID: roomID)
+        guard broadcastCoordinator.isStreamLive(for: roomID) else {
+            liveDeepLinkEndedNotice = nil
+            return true
+        }
+        liveDeepLinkEndedNotice = nil
+        if broadcastCoordinator.isWatchingRoomConnected(roomID) {
+            broadcastCoordinator.presentViewer()
+            return true
+        }
+        if broadcastCoordinator.isBusy {
+            return false
+        }
+        await broadcastCoordinator.watch(roomID: roomID, roomTitle: roomTitle)
+        guard broadcastCoordinator.isWatchingRoom(roomID) else {
+            return false
+        }
+        broadcastCoordinator.presentViewer()
+        return true
     }
 }

@@ -55,6 +55,12 @@ struct ExploreHomeView: View {
         .refreshable {
             await viewModel.refresh()
         }
+        .onAppear {
+            viewModel.exploreScreenDidAppear()
+        }
+        .onDisappear {
+            viewModel.exploreScreenDidDisappear()
+        }
         .task {
             viewModel.loadIfNeeded()
             #if DEBUG
@@ -130,6 +136,13 @@ struct ExploreHomeView: View {
             LazyVStack(alignment: .leading, spacing: ExperienceSpacing.md) {
                 leaderboardsSection
 
+                if viewModel.liveTradersLoading
+                    || viewModel.liveTradersError != nil
+                    || !viewModel.liveTradersNow.isEmpty
+                {
+                    liveTradersSection
+                }
+
                 if let message = viewModel.tradersFailedMessage, viewModel.suggestedTraders.isEmpty {
                     inlineSectionError(message)
                 } else if !viewModel.suggestedTraders.isEmpty {
@@ -159,6 +172,56 @@ struct ExploreHomeView: View {
             viewModel.openLeaderboards()
         }
         .accessibilityIdentifier("explore.leaderboards.section")
+    }
+
+    @ViewBuilder
+    private var liveTradersSection: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            ExploreSectionHeader(
+                title: "Live Traders Now",
+                subtitle: "Public livestreams happening in Trade Rooms"
+            )
+            .padding(.horizontal, ExperienceSpacing.md)
+
+            if viewModel.liveTradersLoading, viewModel.liveTradersNow.isEmpty {
+                HStack(spacing: ExperienceSpacing.sm) {
+                    ForEach(0 ..< 3, id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                            .fill(colors.fillSecondary)
+                            .frame(width: 168, height: ExploreLiveTraderCard.railHeight)
+                    }
+                }
+                .padding(.horizontal, ExperienceSpacing.md)
+                .redacted(reason: .placeholder)
+            } else if let message = viewModel.liveTradersError, viewModel.liveTradersNow.isEmpty {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                    Text(message)
+                        .experienceStyle(.subheadline, color: colors.secondaryText)
+                    Button("Retry") { viewModel.retryLiveTraders() }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(colors.accent)
+                }
+                .padding(.horizontal, ExperienceSpacing.md)
+            } else if !viewModel.liveTradersNow.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+                        ForEach(viewModel.liveTradersNow) { trader in
+                            ExploreLiveTraderCard(
+                                item: trader,
+                                imagePipeline: imagePipeline,
+                                onOpenProfile: { viewModel.openLiveTraderProfile(trader) },
+                                onWatch: { viewModel.watchLiveTrader(trader) }
+                            )
+                        }
+                    }
+                    .padding(.horizontal, ExperienceSpacing.md)
+                }
+                .frame(height: dynamicTypeSize.isAccessibilitySize ? nil : ExploreLiveTraderCard.railHeight)
+                .accessibilityIdentifier("explore.liveTraders.rail")
+            }
+        }
+        .padding(.bottom, ExperienceSpacing.sm)
+        .accessibilityIdentifier("explore.liveTraders.section")
     }
 
     private var tradersSection: some View {

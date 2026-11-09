@@ -4,7 +4,9 @@ import WidgetKit
 
 private enum LiveVoiceActivityColors {
     static let background = Color(red: 0.07, green: 0.08, blue: 0.11)
-    static let accent = Color(red: 0.20, green: 0.78, blue: 0.55)
+    /// App brand blue (matches experience light accent).
+    static let brandBlue = Color(red: 10 / 255, green: 110 / 255, blue: 138 / 255)
+    static let connectedGreen = Color(red: 0.20, green: 0.78, blue: 0.55)
     static let leave = Color(red: 0.95, green: 0.32, blue: 0.32)
     static let secondary = Color.white.opacity(0.72)
 }
@@ -18,23 +20,35 @@ struct TradeTraxsLiveVoiceLiveActivityWidget: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    brandMark(size: 22)
+                    brandMark(size: 26)
+                        .padding(.leading, 4)
                 }
                 DynamicIslandExpandedRegion(.center) {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        brandStatusRow(
+                            connectionLabel: context.state.connectionLabel,
+                            participantCount: context.state.participantCount,
+                            showParticipantCount: false,
+                            brandFont: .caption.weight(.semibold),
+                            statusFont: .caption2.weight(.medium)
+                        )
                         Text(context.attributes.tradeRoomName)
                             .font(.caption.weight(.semibold))
-                            .lineLimit(1)
-                        Text("\(context.state.participantCount) · \(context.state.connectionLabel)")
-                            .font(.caption2)
-                            .foregroundStyle(LiveVoiceActivityColors.secondary)
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.78)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    connectionDot(isConnected: context.state.connectionLabel == "Connected")
+                    participantCountView(context.state.participantCount, font: .caption.weight(.semibold))
+                        .padding(.trailing, 4)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     liveActivityControls(state: context.state, compact: true)
+                        .padding(.horizontal, 6)
+                        .padding(.bottom, 4)
                 }
             } compactLeading: {
                 brandMark(size: 18)
@@ -50,40 +64,70 @@ struct TradeTraxsLiveVoiceLiveActivityWidget: Widget {
     private func lockScreenView(
         context: ActivityViewContext<TradeTraxsLiveVoiceActivityAttributes>
     ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                brandMark(size: 24)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("TradeTraxs")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(LiveVoiceActivityColors.accent)
-                    HStack(spacing: 4) {
-                        connectionDot(isConnected: context.state.connectionLabel == "Connected")
-                        Text(context.state.connectionLabel)
-                            .font(.caption2)
-                            .foregroundStyle(LiveVoiceActivityColors.secondary)
-                    }
-                }
-                Spacer(minLength: 0)
-                Label("\(context.state.participantCount)", systemImage: "person.2.fill")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(LiveVoiceActivityColors.secondary)
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                brandStatusRow(
+                    connectionLabel: context.state.connectionLabel,
+                    participantCount: context.state.participantCount,
+                    showParticipantCount: true,
+                    brandFont: .subheadline.weight(.semibold),
+                    statusFont: .footnote.weight(.medium)
+                )
+                Text(context.attributes.tradeRoomName)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-
-            Text(context.attributes.tradeRoomName)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.white)
-                .lineLimit(2)
-                .minimumScaleFactor(0.85)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             liveActivityControls(state: context.state, compact: false)
         }
-        .padding(.vertical, 2)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+    }
+
+    @ViewBuilder
+    private func brandStatusRow(
+        connectionLabel: String,
+        participantCount: Int,
+        showParticipantCount: Bool,
+        brandFont: Font,
+        statusFont: Font
+    ) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text("TradeTraxs")
+                .font(brandFont)
+                .foregroundStyle(LiveVoiceActivityColors.brandBlue)
+            HStack(spacing: 6) {
+                connectionDot(isConnected: connectionLabel == "Connected")
+                Text(connectionLabel)
+                    .font(statusFont)
+                    .foregroundStyle(LiveVoiceActivityColors.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+            Spacer(minLength: 10)
+            if showParticipantCount {
+                participantCountView(participantCount, font: statusFont)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func participantCountView(_ count: Int, font: Font) -> some View {
+        Label("\(count)", systemImage: "person.2.fill")
+            .font(font)
+            .foregroundStyle(LiveVoiceActivityColors.secondary)
+            .labelStyle(.titleAndIcon)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
     }
 
     @ViewBuilder
     private func brandMark(size: CGFloat) -> some View {
-        Image("TradeTraxsLogo")
+        Image("AppLogo")
             .resizable()
             .scaledToFit()
             .frame(width: size, height: size)
@@ -94,8 +138,9 @@ struct TradeTraxsLiveVoiceLiveActivityWidget: Widget {
     @ViewBuilder
     private func connectionDot(isConnected: Bool) -> some View {
         Circle()
-            .fill(isConnected ? LiveVoiceActivityColors.accent : Color.orange)
+            .fill(isConnected ? LiveVoiceActivityColors.connectedGreen : Color.orange)
             .frame(width: 8, height: 8)
+            .accessibilityHidden(true)
     }
 
     @ViewBuilder
@@ -103,24 +148,37 @@ struct TradeTraxsLiveVoiceLiveActivityWidget: Widget {
         state: TradeTraxsLiveVoiceActivityAttributes.ContentState,
         compact: Bool
     ) -> some View {
-        HStack(spacing: compact ? 6 : 10) {
+        let spacing: CGFloat = compact ? 8 : 10
+        let verticalPad: CGFloat = compact ? 9 : 11
+        let iconSize: CGFloat = compact ? 14 : 16
+        let minHeight: CGFloat = compact ? 54 : 58
+        HStack(spacing: spacing) {
             controlLink(
                 url: "tradetraxs://live-voice/mute",
                 title: state.isMicrophoneEnabled ? "Mute" : "Unmute",
                 systemImage: state.isMicrophoneEnabled ? "mic.slash.fill" : "mic.fill",
-                tint: .white
+                tint: .white,
+                iconSize: iconSize,
+                verticalPad: verticalPad,
+                minHeight: minHeight
             )
             controlLink(
                 url: "tradetraxs://live-voice/hand",
                 title: state.isHandRaised ? "Lower" : "Hand",
                 systemImage: "hand.raised.fill",
-                tint: state.isHandRaised ? LiveVoiceActivityColors.accent : .white
+                tint: state.isHandRaised ? LiveVoiceActivityColors.connectedGreen : .white,
+                iconSize: iconSize,
+                verticalPad: verticalPad,
+                minHeight: minHeight
             )
             controlLink(
                 url: "tradetraxs://live-voice/leave",
                 title: "Leave",
                 systemImage: "phone.down.fill",
-                tint: LiveVoiceActivityColors.leave
+                tint: LiveVoiceActivityColors.leave,
+                iconSize: iconSize,
+                verticalPad: verticalPad,
+                minHeight: minHeight
             )
         }
         .font(compact ? .caption2.weight(.semibold) : .caption.weight(.semibold))
@@ -131,23 +189,25 @@ struct TradeTraxsLiveVoiceLiveActivityWidget: Widget {
         url: String,
         title: String,
         systemImage: String,
-        tint: Color
+        tint: Color,
+        iconSize: CGFloat,
+        verticalPad: CGFloat,
+        minHeight: CGFloat
     ) -> some View {
         Link(destination: URL(string: url)!) {
-            VStack(spacing: 4) {
+            VStack(spacing: 5) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: iconSize, weight: .semibold))
                 Text(title)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .minimumScaleFactor(0.72)
             }
             .foregroundStyle(tint)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, compactControlPadding)
+            .frame(maxWidth: .infinity, minHeight: minHeight)
+            .padding(.vertical, verticalPad)
+            .padding(.horizontal, 6)
             .background(Color.white.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
     }
-
-    private var compactControlPadding: CGFloat { 8 }
 }

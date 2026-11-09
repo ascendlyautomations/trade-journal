@@ -2,25 +2,39 @@
 
 import { ConnectionState } from "livekit-client"
 import { useSyncExternalStore } from "react"
+import type { LiveVoiceStableSnapshot } from "@/lib/livekit/client/tradeRoomLiveVoiceStore.ts"
 import {
   getTradeRoomLiveVoiceDiagnostics,
-  getTradeRoomLiveVoiceSnapshot,
+  getTradeRoomLiveVoiceParticipantsSnapshot,
+  getTradeRoomLiveVoiceStableSnapshot,
   joinTradeRoomLiveVoice,
   leaveTradeRoomLiveVoice,
   resumeTradeRoomLiveVoicePlayback,
   setTradeRoomLiveVoiceMuted,
-  subscribeTradeRoomLiveVoice,
+  subscribeTradeRoomLiveVoiceParticipants,
+  subscribeTradeRoomLiveVoiceStable,
 } from "@/lib/livekit/client/tradeRoomLiveVoiceStore.ts"
 
+/**
+ * Full General Voice snapshot: connection state + participants (speaking/muted).
+ * Use only in floating voice UI (`TradeRoomLiveVoiceBar`). Subscribes to
+ * `ActiveSpeakersChanged` via participant channel.
+ */
 export function useTradeRoomLiveVoice() {
-  const snapshot = useSyncExternalStore(
-    subscribeTradeRoomLiveVoice,
-    getTradeRoomLiveVoiceSnapshot,
-    getTradeRoomLiveVoiceSnapshot
+  const stable = useSyncExternalStore(
+    subscribeTradeRoomLiveVoiceStable,
+    getTradeRoomLiveVoiceStableSnapshot,
+    getTradeRoomLiveVoiceStableSnapshot
+  )
+  const { participants } = useSyncExternalStore(
+    subscribeTradeRoomLiveVoiceParticipants,
+    getTradeRoomLiveVoiceParticipantsSnapshot,
+    getTradeRoomLiveVoiceParticipantsSnapshot
   )
 
   return {
-    ...snapshot,
+    ...stable,
+    participants,
     join: joinTradeRoomLiveVoice,
     leave: leaveTradeRoomLiveVoice,
     resumePlayback: resumeTradeRoomLiveVoicePlayback,
@@ -30,7 +44,39 @@ export function useTradeRoomLiveVoice() {
         ? null
         : getTradeRoomLiveVoiceDiagnostics(),
     isConnected:
-      snapshot.session != null &&
-      snapshot.connectionState === ConnectionState.Connected,
+      stable.session != null &&
+      stable.connectionState === ConnectionState.Connected,
+  }
+}
+
+type TradeRoomLiveVoiceStableConnection = LiveVoiceStableSnapshot & {
+  join: typeof joinTradeRoomLiveVoice
+  leave: typeof leaveTradeRoomLiveVoice
+  resumePlayback: typeof resumeTradeRoomLiveVoicePlayback
+  setMuted: typeof setTradeRoomLiveVoiceMuted
+  isConnected: boolean
+}
+
+/**
+ * Connection/session/busy/error only — **does not** re-render when someone
+ * speaks (active speaker). Use on Trade Room page for composer gating, sidebar,
+ * join buttons, etc.
+ */
+export function useTradeRoomLiveVoiceStableConnection(): TradeRoomLiveVoiceStableConnection {
+  const stable = useSyncExternalStore(
+    subscribeTradeRoomLiveVoiceStable,
+    getTradeRoomLiveVoiceStableSnapshot,
+    getTradeRoomLiveVoiceStableSnapshot
+  )
+
+  return {
+    ...stable,
+    join: joinTradeRoomLiveVoice,
+    leave: leaveTradeRoomLiveVoice,
+    resumePlayback: resumeTradeRoomLiveVoicePlayback,
+    setMuted: setTradeRoomLiveVoiceMuted,
+    isConnected:
+      stable.session != null &&
+      stable.connectionState === ConnectionState.Connected,
   }
 }

@@ -44,7 +44,14 @@ final class ExploreViewModel {
     private var searchGeneration: UInt64 = 0
     private var enrichTask: Task<Void, Never>?
     private var hydrateTask: Task<Void, Never>?
+    private var liveTradersTask: Task<Void, Never>?
+    @ObservationIgnored private var liveTradersVisitFetched = false
+    @ObservationIgnored private var liveTradersLoadGeneration: UInt64 = 0
     private var inFlightFollow: Set<ProfileID> = []
+
+    private(set) var liveTradersNow: [ExploreLiveTraderNow] = []
+    private(set) var liveTradersLoading = false
+    private(set) var liveTradersError: String?
 
     #if DEBUG
     private(set) var lastProbe: ExploreLoadProbe.Snapshot?
@@ -151,6 +158,18 @@ final class ExploreViewModel {
         bootstrapTask = Task { await bootstrap() }
     }
 
+    /// Called when Explore becomes visible — one fetch per visit (see `exploreScreenDidDisappear`).
+    func exploreScreenDidAppear() {
+        loadLiveTradersForVisit()
+    }
+
+    func exploreScreenDidDisappear() {
+        liveTradersVisitFetched = false
+        liveTradersLoadGeneration &+= 1
+        liveTradersTask?.cancel()
+        liveTradersTask = nil
+    }
+
     func resolvedProfile(for trader: ExploreTraderSuggestion) -> Profile {
         var merged = trader.profile
         if let cached = detailCache.profile(id: trader.id) {
@@ -161,10 +180,12 @@ final class ExploreViewModel {
 
     func refresh() async {
         bootstrapTask?.cancel()
+        liveTradersTask?.cancel()
         store.invalidate()
         phase = .loading
         await DiscoveryBlockedPeersObserver.sync(messages: messages, force: true)
         await bootstrap()
+        loadLiveTradersForVisit(force: true)
     }
 
     func searchChanged() {
@@ -322,6 +343,42 @@ final class ExploreViewModel {
         navigationCoordinator.open(.feed(.room(room.id)))
     }
 
+    func openLiveTraderProfile(_ item: ExploreLiveTraderNow) {
+        ExperienceHaptics.play(.selection)
+        if item.broadcasterProfileID == viewerID {
+            navigationCoordinator.open(.tab(.profile))
+            navigationCoordinator.open(.popToRoot(.profile))
+            return
+        }
+        navigationCoordinator.open(.feed(.profile(item.broadcasterProfileID)))
+    }
+
+    func watchLiveTrader(_ item: ExploreLiveTraderNow) {
+        ExperienceHaptics.play(.selection)
+        RoomNavigationFocusStore.shared.seed(
+            roomID: item.roomID,
+            sectionID: nil,
+            messageID: nil,
+            openLiveBroadcast: true
+        )
+        navigationCoordinator.open(.feed(.room(item.roomID)))
+    }
+
+    func retryLiveTraders() {
+        loadLiveTradersForVisit(force: true)
+    }
+
+    private func loadLiveTradersForVisit(force: Bool = false) {
+        if liveTradersVisitFetched, !force { return }
+        if liveTradersLoading, !force { return }
+        liveTradersTask?.cancel()
+        liveTradersLoadGeneration &+= 1
+        let generation = liveTradersLoadGeneration
+        liveTradersTask = Task {
+            await loadLiveTraders(generation: generation)
+        }
+    }
+
     func joinSearchRoom(_ room: ExploreRoomSuggestion) async {
         guard let viewerID else { return }
         let prior = joinState(for: room.id)
@@ -373,6 +430,37 @@ final class ExploreViewModel {
     }
 
     // MARK: - Private
+
+    private func loadLiveTraders(generation: UInt64) async {
+        liveTradersLoading = true
+        liveTradersError = nil
+        defer {
+            liveTradersLoading = false
+            liveTradersTask = nil
+        }
+        do {
+            let items = try await explore.liveTradersNow(limit: 12)
+            guard generation == liveTradersLoadGeneration else { return }
+            guard !Task.isCancelled else { return }
+            liveTradersNow = items
+            liveTradersError = nil
+            liveTradersVisitFetched = true
+        } catch {
+            guard generation == liveTradersLoadGeneration else { return }
+            guard !Self.shouldSuppressLiveTradersError(error) else { return }
+            liveTradersNow = []
+            liveTradersError = "Couldn't load live traders."
+        }
+    }
+
+    private static func shouldSuppressLiveTradersError(_ error: Error) -> Bool {
+        if Task.isCancelled { return true }
+        if error is CancellationError { return true }
+        if case AppError.cancelled = error { return true }
+        if case AppError.transport(let network) = error, network == .cancelled { return true }
+        if let network = error as? NetworkError, network == .cancelled { return true }
+        return false
+    }
 
     private func bootstrap() async {
         #if DEBUG

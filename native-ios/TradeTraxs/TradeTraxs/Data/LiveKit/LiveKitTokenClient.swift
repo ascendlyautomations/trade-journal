@@ -1,5 +1,10 @@
 import Foundation
 
+nonisolated struct LiveKitVoicePresenceResponse: Decodable, Sendable {
+    var connectedCount: Int
+    var speakingCount: Int
+}
+
 nonisolated struct LiveKitVoiceTokenResponse: Decodable, Sendable {
     var token: String
     var livekitUrl: String
@@ -40,5 +45,27 @@ nonisolated struct LiveKitTokenClient: Sendable {
         }
 
         return try transport.decoder.decode(LiveKitVoiceTokenResponse.self, from: response)
+    }
+
+    func fetchVoicePresence(roomID: RoomID) async throws -> LiveKitVoicePresenceResponse {
+        let encoded =
+            roomID.rawValue.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+            ?? roomID.rawValue
+        let response = try await transport.send(
+            host: .bff,
+            path: "/api/livekit/voice/presence?roomId=\(encoded)",
+            method: .get,
+            headers: [:],
+            body: nil,
+            requiresAuthentication: true
+        )
+
+        guard (200 ... 299).contains(response.statusCode) else {
+            let message =
+                String(data: response.data, encoding: .utf8) ?? "Could not read voice presence."
+            throw AppError.unknown(message: message)
+        }
+
+        return try transport.decoder.decode(LiveKitVoicePresenceResponse.self, from: response)
     }
 }

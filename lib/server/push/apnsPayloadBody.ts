@@ -13,6 +13,12 @@ export type ApnsAlertPayload = {
   senderId?: string
   threadId?: string
   collapseId?: string
+  /** Trade Room `room_sections.id` — mirrors `href` query `section`. */
+  sectionId?: string
+  /** Trade Room message id — mirrors `href` query `message`. */
+  messageId?: string
+  /** Display-only channel label (e.g. general) for client fallback matching. */
+  sectionName?: string
 }
 
 /** Central APNs JSON body — all user-facing alerts must include `aps.sound`. */
@@ -42,5 +48,8 @@ export function buildApnsAlertPayloadBody(payload: ApnsAlertPayload): string {
       : {}),
     ...(payload.joinRequestId ? { joinRequestId: payload.joinRequestId } : {}),
     ...(payload.senderId ? { senderId: payload.senderId } : {}),
+    ...(payload.sectionId ? { sectionId: payload.sectionId } : {}),
+    ...(payload.messageId ? { messageId: payload.messageId } : {}),
+    ...(payload.sectionName ? { sectionName: payload.sectionName } : {}),
   })
 }

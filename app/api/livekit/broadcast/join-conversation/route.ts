@@ -1,6 +1,7 @@
 import { getRouteUserAuth, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { isLiveKitConfigured } from "@/lib/livekit/config.ts"
-import { setLiveKitBroadcastParticipantMic } from "@/lib/livekit/liveKitRoomService.ts"
+import { setLiveKitBroadcastParticipantMicWhenConnected } from "@/lib/livekit/liveKitRoomService.ts"
+import { liveKitBroadcastRoomName } from "@/lib/livekit/liveKitRoomName.ts"
 import { mintLiveKitBroadcastConversationToken } from "@/lib/livekit/mintLiveKitBroadcastToken.ts"
 import { getActiveTradeRoomBroadcast } from "@/lib/livekit/tradeRoomBroadcastSession.ts"
 import { resolveTradeRoomBroadcastViewerAccess } from "@/lib/livekit/tradeRoomBroadcastAccess.ts"
@@ -42,8 +43,12 @@ export async function POST(req: Request) {
     return Response.json({ error: access.error }, { status: access.status })
   }
 
-  const active = await getActiveTradeRoomBroadcast(supabaseServiceRole, parsed.roomId)
-  if (!active) {
+  const active = await getActiveTradeRoomBroadcast(
+    supabaseServiceRole,
+    parsed.roomId,
+    { viewerUserId: user.id }
+  )
+  if (!active || active.visibility === "preparing") {
     return Response.json({ error: "No live stream is active." }, { status: 404 })
   }
 
@@ -84,15 +89,37 @@ export async function POST(req: Request) {
   }
 
   try {
-    await setLiveKitBroadcastParticipantMic(parsed.roomId, user.id, true)
+    const micUpdate = await setLiveKitBroadcastParticipantMicWhenConnected(
+      parsed.roomId,
+      user.id,
+      true
+    )
+    console.info("[livekit/broadcast/join-conversation] mic permissions", {
+      endpoint: "POST /api/livekit/broadcast/join-conversation",
+      broadcastSessionId: active.id,
+      roomId: parsed.roomId,
+      livekitRoom: micUpdate.livekitRoom,
+      viewerUserId: user.id,
+      livekitIdentity: user.id,
+      participantInRoom: micUpdate.attempted,
+      skippedAbsentParticipant: micUpdate.skippedAbsent,
+    })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    if (!/not found|does not exist|404|participant/i.test(message)) {
-      return Response.json(
-        { error: `Could not grant microphone access: ${message}` },
-        { status: 503 }
-      )
-    }
+    console.error("[livekit/broadcast/join-conversation] mic update failed", {
+      endpoint: "POST /api/livekit/broadcast/join-conversation",
+      httpStatus: 503,
+      broadcastSessionId: active.id,
+      roomId: parsed.roomId,
+      livekitRoom: liveKitBroadcastRoomName(parsed.roomId),
+      viewerUserId: user.id,
+      livekitIdentity: user.id,
+      error: message,
+    })
+    return Response.json(
+      { error: `Could not grant microphone access: ${message}` },
+      { status: 503 }
+    )
   }
 
   const session = await mintLiveKitBroadcastConversationToken(
@@ -112,5 +139,9 @@ export async function POST(req: Request) {
     startedAt: active.startedAt,
     voiceMode: active.voiceMode,
     videoSource: active.videoSource,
+    broadcastSource: active.broadcastSource,
+    primaryMediaPublisherIdentity: active.primaryMediaPublisherIdentity,
+    visibility: active.visibility,
+    publicLive: active.visibility === "public",
   })
 }

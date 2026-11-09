@@ -85,6 +85,9 @@ enum PushNotificationPayloadParser {
         var raw = strings
         if let sectionID { raw["section_id"] = sectionID }
         if let messageID { raw["message_id"] = messageID }
+        if let sectionName = firstNonEmpty(strings["sectionName"], strings["section_name"]) {
+            raw["section_name"] = sectionName
+        }
         if let commentID { raw["comment_id"] = commentID }
         if let href { raw["href"] = href }
         if let achievementPostID {
@@ -137,6 +140,8 @@ enum PushNotificationPayloadParser {
             return .directMessage
         case "room_message":
             return .roomMessage
+        case "room_live":
+            return .activity
         case "room_mention":
             return .roomMention
         case "follow_request":

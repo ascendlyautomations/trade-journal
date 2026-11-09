@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/database.types"
 import { getActiveTradeRoomBroadcast } from "./tradeRoomBroadcastSession.ts"
 import { listLiveKitBroadcastParticipantIdentities } from "./liveKitRoomService.ts"
+import { normalizeTradeRoomBroadcastVideoSource } from "./tradeRoomBroadcastVoiceMode.ts"
 
 export type BroadcastInteractiveProfile = {
   userId: string
@@ -14,20 +15,43 @@ export type BroadcastInteractiveSnapshot = {
   sessionId: string
   roomId: string
   broadcasterUserId: string
+  /** browser vs obs — Phase 2 playback uses primaryMediaPublisherIdentity when obs. */
+  broadcastSource: "browser" | "obs"
+  primaryMediaPublisherIdentity: string | null
+  livekitIngressId: string | null
+  ingressStatusSnapshot: string | null
   voiceMode: "broadcast_only" | "open_voice"
   raisedHands: Array<{ userId: string; raisedAt: string }>
   speakerGrants: string[]
   sessionBlocks: string[]
   pendingInvitations: Array<{ userId: string; invitationId: string }>
   pendingInvitationForViewer: { invitationId: string } | null
+  /** True when the viewer is blocked from rejoining this broadcast session. */
+  blockedFromBroadcastRejoin: boolean
+  /** True when this user currently appears as a LiveKit participant in the broadcast room. */
+  presentInLiveKitBroadcastRoom: boolean
+  /**
+   * @deprecated Same as `blockedFromBroadcastRejoin` (historic name). Prefer `blockedFromBroadcastRejoin`
+   * or `presentInLiveKitBroadcastRoom` for removal vs block.
+   */
   removedFromStream: boolean
 }
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export async function loadBroadcastInteractiveProfiles(
   admin: SupabaseClient<Database>,
   userIds: string[]
 ): Promise<Map<string, BroadcastInteractiveProfile>> {
-  const unique = [...new Set(userIds.filter(Boolean))]
+  const unique = [
+    ...new Set(
+      userIds.filter((id) => {
+        const t = id?.trim()
+        return Boolean(t && UUID_RE.test(t))
+      })
+    ),
+  ]
   const map = new Map<string, BroadcastInteractiveProfile>()
   if (unique.length === 0) return map
 
@@ -55,9 +79,18 @@ export async function assertActiveBroadcastSession(
   | { ok: true; broadcasterUserId: string; voiceMode: "broadcast_only" | "open_voice" }
   | { ok: false; status: number; error: string }
 > {
-  const active = await getActiveTradeRoomBroadcast(admin, roomId)
+  const active = await getActiveTradeRoomBroadcast(admin, roomId, {
+    activeScope: "any",
+  })
   if (!active || active.id !== sessionId) {
     return { ok: false, status: 404, error: "Broadcast session is not active." }
+  }
+  if (active.visibility === "preparing") {
+    return {
+      ok: false,
+      status: 404,
+      error: "This stream is not live yet.",
+    }
   }
   return {
     ok: true,
@@ -141,12 +174,25 @@ export async function loadBroadcastInteractiveSnapshot(
   admin: SupabaseClient<Database>,
   options: { roomId: string; viewerUserId: string }
 ): Promise<
-  | { ok: true; snapshot: BroadcastInteractiveSnapshot; profiles: BroadcastInteractiveProfile[] }
+  | {
+      ok: true
+      snapshot: BroadcastInteractiveSnapshot | null
+      profiles: BroadcastInteractiveProfile[]
+    }
   | { ok: false; status: number; error: string }
 > {
-  const active = await getActiveTradeRoomBroadcast(admin, options.roomId)
+  const active = await getActiveTradeRoomBroadcast(admin, options.roomId, {
+    viewerUserId: options.viewerUserId,
+  })
   if (!active) {
-    return { ok: false, status: 404, error: "No live stream is active." }
+    return { ok: true, snapshot: null, profiles: [] }
+  }
+
+  if (
+    active.visibility === "preparing" &&
+    active.broadcasterUserId !== options.viewerUserId
+  ) {
+    return { ok: true, snapshot: null, profiles: [] }
   }
 
   const blocked = await isUserBlockedFromBroadcastSession(
@@ -154,6 +200,9 @@ export async function loadBroadcastInteractiveSnapshot(
     active.id,
     options.viewerUserId
   )
+
+  const liveKitIdentities = await listLiveKitBroadcastParticipantIdentities(active.roomId)
+  const presentInLiveKitBroadcastRoom = liveKitIdentities.includes(options.viewerUserId)
 
   const [{ data: hands }, { data: grants }, { data: blocks }, { data: invites }] =
     await Promise.all([
@@ -184,9 +233,7 @@ export async function loadBroadcastInteractiveSnapshot(
     ) ?? null
 
   const profileIds = new Set<string>([active.broadcasterUserId])
-  for (const identity of await listLiveKitBroadcastParticipantIdentities(
-    active.roomId
-  )) {
+  for (const identity of liveKitIdentities) {
     profileIds.add(identity)
   }
   for (const h of hands ?? []) profileIds.add(h.user_id)
@@ -202,6 +249,10 @@ export async function loadBroadcastInteractiveSnapshot(
       sessionId: active.id,
       roomId: active.roomId,
       broadcasterUserId: active.broadcasterUserId,
+      broadcastSource: active.broadcastSource,
+      primaryMediaPublisherIdentity: active.primaryMediaPublisherIdentity,
+      livekitIngressId: active.livekitIngressId,
+      ingressStatusSnapshot: active.ingressStatusSnapshot,
       voiceMode: active.voiceMode,
       raisedHands: (hands ?? []).map((h) => ({
         userId: h.user_id,
@@ -215,6 +266,8 @@ export async function loadBroadcastInteractiveSnapshot(
       pendingInvitationForViewer: pendingForViewer
         ? { invitationId: pendingForViewer.id }
         : null,
+      blockedFromBroadcastRejoin: blocked,
+      presentInLiveKitBroadcastRoom,
       removedFromStream: blocked,
     },
     profiles: [...profileMap.values()],
@@ -328,12 +381,23 @@ export async function respondBroadcastSpeakInvitation(
     accept: boolean
   }
 ): Promise<
-  | { ok: true; sessionId: string; roomId: string }
+    | {
+      ok: true
+      sessionId: string
+      roomId: string
+      broadcasterUserId: string
+      startedAt: string
+      voiceMode: "broadcast_only" | "open_voice"
+      videoSource: "screen" | "camera" | "obs"
+      broadcasterDisplayName: string | null
+      broadcastSource: "browser" | "obs"
+      primaryMediaPublisherIdentity: string | null
+    }
   | { ok: false; status: number; error: string }
 > {
   const { data: row, error: loadErr } = await admin
     .from("room_live_broadcast_invitations")
-    .select("id, broadcast_session_id, user_id, status")
+    .select("id, broadcast_session_id, user_id, status, invited_by")
     .eq("id", options.invitationId)
     .maybeSingle()
 
@@ -343,7 +407,9 @@ export async function respondBroadcastSpeakInvitation(
 
   const { data: sessionRow } = await admin
     .from("room_live_broadcasts")
-    .select("id, room_id, ended_at")
+    .select(
+      "id, room_id, ended_at, broadcaster_user_id, started_at, voice_mode, video_source, broadcast_source, primary_media_publisher_identity"
+    )
     .eq("id", row.broadcast_session_id)
     .maybeSingle()
 
@@ -361,10 +427,37 @@ export async function respondBroadcastSpeakInvitation(
     return { ok: false, status: 500, error: "Could not respond to invitation." }
   }
 
+  const { data: profileRow } = await admin
+    .from("profiles")
+    .select("username, name")
+    .eq("id", sessionRow.broadcaster_user_id)
+    .maybeSingle()
+
+  const broadcasterDisplayName =
+    profileRow?.name?.trim() || profileRow?.username?.trim() || null
+
+  const broadcastSource =
+    (sessionRow.broadcast_source as string | undefined)?.trim().toLowerCase() ===
+    "obs"
+      ? ("obs" as const)
+      : ("browser" as const)
+
   return {
     ok: true,
     sessionId: sessionRow.id,
     roomId: sessionRow.room_id,
+    broadcasterUserId: sessionRow.broadcaster_user_id,
+    startedAt: sessionRow.started_at,
+    voiceMode:
+      sessionRow.voice_mode === "open_voice" ? "open_voice" : "broadcast_only",
+    videoSource: normalizeTradeRoomBroadcastVideoSource(
+      sessionRow.video_source as string
+    ),
+    broadcasterDisplayName,
+    broadcastSource,
+    primaryMediaPublisherIdentity:
+      (sessionRow.primary_media_publisher_identity as string | null)?.trim() ||
+      null,
   }
 }
 

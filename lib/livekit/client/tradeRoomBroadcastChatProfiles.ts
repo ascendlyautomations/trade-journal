@@ -1,9 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { normalizeAvatarSrc } from "../../profileAvatarUrl.ts"
 
 export type BroadcastChatProfile = {
   userId: string
   displayName: string
   avatarUrl: string | null
+}
+
+/** Same URL rules as SafeProfileAvatar / feed (Supabase paths + public URLs). */
+export function normalizeBroadcastChatAvatarUrl(
+  src: string | null | undefined
+): string | null {
+  return normalizeAvatarSrc(src)
 }
 
 const cache = new Map<string, BroadcastChatProfile>()
@@ -57,7 +65,7 @@ export async function resolveBroadcastChatProfiles(
     const profile: BroadcastChatProfile = {
       userId: row.id,
       displayName,
-      avatarUrl: row.avatar_url ?? null,
+      avatarUrl: normalizeBroadcastChatAvatarUrl(row.avatar_url),
     }
     cache.set(row.id, profile)
     result.set(row.id, profile)

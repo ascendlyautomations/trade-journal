@@ -349,6 +349,12 @@ actor NetworkConcurrencyCoordinator {
             return .visible
         }
 
+        // User-initiated live voice / broadcast control — must not sit in the background
+        // lane where SwiftUI task cancellation can drop in-flight setup.
+        if path.hasPrefix("/api/livekit/") {
+            return .visible
+        }
+
         return .background
     }
 

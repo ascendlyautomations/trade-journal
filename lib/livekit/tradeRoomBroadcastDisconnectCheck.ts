@@ -159,12 +159,15 @@ export async function processOneBroadcasterDisconnectCheck(
   row: BroadcastDisconnectDueRow
 ): Promise<DisconnectCheckOutcome> {
   const checkAtMs = new Date(row.broadcaster_disconnect_check_at).getTime()
-  const active = await getActiveTradeRoomBroadcast(admin, row.room_id)
+  const active = await getActiveTradeRoomBroadcast(admin, row.room_id, {
+    activeScope: "any",
+  })
   const connected =
     active?.id === row.id
       ? await isBroadcasterConnectedInBroadcastRoom(
           row.room_id,
-          row.broadcaster_user_id
+          row.broadcaster_user_id,
+          active.primaryMediaPublisherIdentity
         )
       : false
 

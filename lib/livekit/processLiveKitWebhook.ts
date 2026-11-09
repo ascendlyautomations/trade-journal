@@ -3,12 +3,19 @@ import type { Database } from "@/lib/database.types"
 import { WebhookReceiver } from "livekit-server-sdk"
 import { readLiveKitServerConfig } from "./config.ts"
 import { parseLiveKitBroadcastRoomName } from "./liveKitRoomName.ts"
-import { getActiveTradeRoomBroadcast } from "./tradeRoomBroadcastSession.ts"
+import {
+  getActiveTradeRoomBroadcast,
+  updateBroadcastIngressSnapshot,
+} from "./tradeRoomBroadcastSession.ts"
+import {
+  isObsIngressPublisherIdentity,
+} from "./tradeRoomBroadcastObsIdentity.ts"
 import {
   clearBroadcasterDisconnectCheck,
   isStaleLiveKitBroadcastWebhookEvent,
   scheduleBroadcasterDisconnectCheck,
 } from "./tradeRoomBroadcastDisconnectCheck.ts"
+import { ingressStatusLabel } from "./liveKitIngressService.ts"
 
 export type LiveKitBroadcastWebhookResult =
   | {
@@ -48,7 +55,9 @@ export async function handleLiveKitWebhookForBroadcast(
     return { ok: true, handled: false }
   }
 
-  const active = await getActiveTradeRoomBroadcast(admin, parsed.roomId)
+  const active = await getActiveTradeRoomBroadcast(admin, parsed.roomId, {
+    activeScope: "any",
+  })
   if (!active) {
     return { ok: true, handled: false }
   }
@@ -62,12 +71,48 @@ export async function handleLiveKitWebhookForBroadcast(
     return { ok: true, handled: false }
   }
 
-  const identity = event.participant?.identity?.trim()
-  if (identity !== active.broadcasterUserId) {
-    return { ok: true, handled: false }
+  const eventName = event.event
+
+  if (eventName === "ingress_started" || eventName === "ingress_ended") {
+    const ingressId = event.ingressInfo?.ingressId?.trim() || ""
+    const expectedIngress = active.livekitIngressId?.trim() || ""
+    if (!ingressId || !expectedIngress || ingressId !== expectedIngress) {
+      return { ok: true, handled: false }
+    }
+
+    if (eventName === "ingress_started") {
+      const label = ingressStatusLabel(event.ingressInfo)
+      await updateBroadcastIngressSnapshot(admin, {
+        roomId: parsed.roomId,
+        sessionId: active.id,
+        ingressStatusLabel: label,
+      })
+      return { ok: true, handled: true }
+    }
+
+    await scheduleBroadcasterDisconnectCheck(admin, {
+      roomId: parsed.roomId,
+      sessionId: active.id,
+      reason: "livekit_ingress_ended",
+    })
+    return {
+      ok: true,
+      handled: true,
+      deferredDisconnectCheck: {
+        roomId: parsed.roomId,
+        sessionId: active.id,
+      },
+    }
   }
 
-  const eventName = event.event
+  const identity = event.participant?.identity?.trim()
+  const primaryId = active.primaryMediaPublisherIdentity?.trim() || ""
+  const isHost = identity === active.broadcasterUserId
+  const isPrimaryProgram =
+    primaryId !== "" && identity === primaryId && isObsIngressPublisherIdentity(primaryId)
+  if (!isHost && !isPrimaryProgram) {
+    return { ok: true, handled: false }
+  }
 
   if (eventName === "participant_joined") {
     await clearBroadcasterDisconnectCheck(admin, {
@@ -81,7 +126,8 @@ export async function handleLiveKitWebhookForBroadcast(
   const trackType = String(event.track?.type ?? "")
   const shouldScheduleLeaveGrace =
     eventName === "participant_left" ||
-    (eventName === "track_unpublished" &&
+    (isHost &&
+      eventName === "track_unpublished" &&
       (trackSource.includes("SCREEN_SHARE") || trackType.includes("SCREEN")))
 
   if (!shouldScheduleLeaveGrace) {

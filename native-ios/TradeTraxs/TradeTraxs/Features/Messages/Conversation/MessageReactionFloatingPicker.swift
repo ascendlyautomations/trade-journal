@@ -9,6 +9,8 @@ struct MessageBubbleActionMenu: View {
     var onRetry: (() -> Void)?
     var onDelete: (() -> Void)?
     var deleteTitle: String = "Delete"
+    var onDeleteForEveryone: (() -> Void)?
+    var deleteForEveryoneTitle: String = "Delete for Everyone"
     var onManageUser: (() -> Void)?
     var onReport: (() -> Void)?
     let onDismiss: () -> Void
@@ -60,6 +62,14 @@ struct MessageBubbleActionMenu: View {
                     }
                     if let onDelete {
                         actionRow(title: deleteTitle, systemImage: "trash", role: .destructive, action: onDelete)
+                    }
+                    if let onDeleteForEveryone {
+                        actionRow(
+                            title: deleteForEveryoneTitle,
+                            systemImage: "trash",
+                            role: .destructive,
+                            action: onDeleteForEveryone
+                        )
                     }
                     if let onManageUser {
                         actionRow(title: "Manage User", systemImage: "person.crop.circle", role: nil, action: onManageUser)

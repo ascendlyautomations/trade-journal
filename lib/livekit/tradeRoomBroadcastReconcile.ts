@@ -3,6 +3,7 @@ import type { Database } from "@/lib/database.types"
 import {
   endTradeRoomBroadcastSession,
   getActiveTradeRoomBroadcast,
+  updateBroadcastIngressSnapshot,
 } from "./tradeRoomBroadcastSession.ts"
 import {
   deleteLiveKitBroadcastRoom,
@@ -10,7 +11,11 @@ import {
 } from "./liveKitRoomService.ts"
 import { liveKitBroadcastRoomName } from "./liveKitRoomName.ts"
 import { getLiveKitRoomServiceClient } from "./liveKitRoomService.ts"
-
+import {
+  getIngressInfo,
+  ingressStatusLabel,
+  isIngressWaitingForEncoder,
+} from "./liveKitIngressService.ts"
 export type BroadcastReconcileResult =
   | { state: "none" }
   | {
@@ -30,15 +35,32 @@ export async function reconcileTradeRoomBroadcastSession(
     endIfBroadcasterAbsent?: boolean
   }
 ): Promise<BroadcastReconcileResult> {
-  const active = await getActiveTradeRoomBroadcast(admin, options.roomId)
+  const active = await getActiveTradeRoomBroadcast(admin, options.roomId, {
+    viewerUserId: options.viewerUserId,
+  })
   if (!active) {
     return { state: "none" }
   }
 
   const isOwner = active.broadcasterUserId === options.viewerUserId
+
+  if (active.visibility === "preparing") {
+    const broadcasterConnected = await isBroadcasterConnectedInBroadcastRoom(
+      options.roomId,
+      active.broadcasterUserId,
+      active.primaryMediaPublisherIdentity
+    )
+    return {
+      state: "already_live",
+      sessionId: active.id,
+      broadcasterConnected,
+      isOwner,
+    }
+  }
   const broadcasterConnected = await isBroadcasterConnectedInBroadcastRoom(
     options.roomId,
-    active.broadcasterUserId
+    active.broadcasterUserId,
+    active.primaryMediaPublisherIdentity
   )
 
   if (broadcasterConnected) {
@@ -56,6 +78,30 @@ export async function reconcileTradeRoomBroadcastSession(
       sessionId: active.id,
       broadcasterConnected: false,
       isOwner,
+    }
+  }
+
+  if (
+    active.broadcastSource === "obs" &&
+    active.livekitIngressId?.trim() &&
+    isOwner
+  ) {
+    const ingressRes = await getIngressInfo(active.livekitIngressId.trim())
+    if (ingressRes.ok && ingressRes.info) {
+      const label = ingressStatusLabel(ingressRes.info)
+      await updateBroadcastIngressSnapshot(admin, {
+        roomId: options.roomId,
+        sessionId: active.id,
+        ingressStatusLabel: label,
+      })
+    }
+    if (ingressRes.ok && ingressRes.info && isIngressWaitingForEncoder(ingressRes.info)) {
+      return {
+        state: "already_live",
+        sessionId: active.id,
+        broadcasterConnected: false,
+        isOwner,
+      }
     }
   }
 

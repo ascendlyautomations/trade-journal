@@ -7,12 +7,18 @@ import {
 } from "livekit-client"
 import type { TradeRoomBroadcastVideoSource } from "../tradeRoomBroadcastVoiceMode.ts"
 import {
+  isBroadcastDiagnosticsEnabled,
   logBroadcast,
   logBroadcastVideoElementHealth,
 } from "./tradeRoomBroadcastDiagnostics.ts"
 
-let attachedLocalTrackSid: string | null = null
+let attachedLocalTrackKey: string | null = null
 let attachedPreviewElement: HTMLVideoElement | null = null
+
+/** Stable per-session key — `track.sid` is assigned after publish and must not toggle detach logic. */
+export function localBroadcastPreviewTrackKey(track: LocalVideoTrack): string {
+  return track.mediaStreamTrack.id
+}
 
 export function findLocalBroadcastVideoPublication(
   room: Room,
@@ -36,17 +42,39 @@ export function findLocalBroadcastVideoPublication(
   return pubs.find((p) => p.track != null)
 }
 
+/** Published program track for the browser host (screen compositor when live, else camera). */
+export function findLocalBroadcastProgramVideoPublication(
+  room: Room
+): LocalTrackPublication | undefined {
+  const screen = findLocalBroadcastVideoPublication(room, "screen")
+  const screenTrack = screen?.track ?? screen?.videoTrack
+  const screenMedia = screenTrack?.mediaStreamTrack
+  if (screenMedia && screenMedia.readyState === "live") {
+    return screen
+  }
+  return findLocalBroadcastVideoPublication(room, "camera")
+}
+
 export function attachLocalBroadcastVideoTrack(
   track: LocalVideoTrack,
   videoEl: HTMLVideoElement
 ): void {
-  const sid = track.sid ?? track.mediaStreamTrack.id
-  if (attachedLocalTrackSid === sid && attachedPreviewElement === videoEl) {
+  const trackKey = localBroadcastPreviewTrackKey(track)
+  const publishedSid = track.sid ?? null
+  if (attachedLocalTrackKey === trackKey && attachedPreviewElement === videoEl) {
     void videoEl.play().catch(() => {})
     return
   }
 
-  if (attachedPreviewElement && attachedPreviewElement !== videoEl) {
+  /**
+   * Broadcaster may sync the same local camera/screen track to multiple `<video>` nodes
+   * (e.g. Trade Room panel + global studio). LiveKit supports multi-attach; detaching from
+   * the previous element would clear `srcObject` there and leave a black preview.
+   */
+  const sameTrackAsLastAttach =
+    attachedLocalTrackKey != null && attachedLocalTrackKey === trackKey
+
+  if (attachedPreviewElement && attachedPreviewElement !== videoEl && !sameTrackAsLastAttach) {
     try {
       track.detach(attachedPreviewElement)
     } catch {
@@ -59,11 +87,12 @@ export function attachLocalBroadcastVideoTrack(
   videoEl.playsInline = true
   videoEl.autoplay = true
 
-  attachedLocalTrackSid = sid
+  attachedLocalTrackKey = trackKey
   attachedPreviewElement = videoEl
 
   logBroadcast("local preview attached", {
-    trackSid: sid,
+    trackKey,
+    publishedSid,
     trackSource: track.source?.toString?.() ?? String(track.source),
   })
 
@@ -79,20 +108,22 @@ export function attachLocalBroadcastVideoTrack(
 }
 
 export function detachLocalBroadcastPreview(): void {
-  attachedLocalTrackSid = null
+  attachedLocalTrackKey = null
   attachedPreviewElement = null
 }
 
 export function syncLocalBroadcastPreviewToElement(
   room: Room,
   videoEl: HTMLVideoElement,
-  preferredSource: TradeRoomBroadcastVideoSource
+  preferredSource?: TradeRoomBroadcastVideoSource
 ): { ok: true } | { ok: false; reason: string } {
-  const pub = findLocalBroadcastVideoPublication(room, preferredSource)
+  const pub = preferredSource
+    ? findLocalBroadcastVideoPublication(room, preferredSource)
+    : findLocalBroadcastProgramVideoPublication(room)
   const track = pub?.videoTrack ?? (pub?.track as LocalVideoTrack | undefined)
   if (!track) {
     logBroadcast("local preview sync — no published local video track", {
-      preferredSource,
+      preferredSource: preferredSource ?? "program",
       publicationCount: room.localParticipant.videoTrackPublications.size,
       publicationSources: [...room.localParticipant.videoTrackPublications.values()].map(
         (p) => ({
@@ -105,13 +136,19 @@ export function syncLocalBroadcastPreviewToElement(
   }
 
   attachLocalBroadcastVideoTrack(track, videoEl)
+  if (isBroadcastDiagnosticsEnabled()) {
+    logBroadcastVideoElementHealth(
+      `local preview sync (${preferredSource ?? "program"})`,
+      videoEl
+    )
+  }
   return { ok: true }
 }
 
 export function registerLocalBroadcastPreviewHandlers(
   room: Room,
   getVideoElement: () => HTMLVideoElement | null,
-  preferredSource: TradeRoomBroadcastVideoSource
+  preferredSource?: TradeRoomBroadcastVideoSource
 ): () => void {
   const resync = () => {
     const el = getVideoElement()

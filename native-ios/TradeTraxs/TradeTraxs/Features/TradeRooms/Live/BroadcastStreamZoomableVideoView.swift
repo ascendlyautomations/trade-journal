@@ -18,7 +18,12 @@ struct BroadcastStreamZoomableVideoView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: ZoomableBroadcastVideoContainer, context: Context) {
-        uiView.videoView.track = track
+        if uiView.videoView.track !== track {
+            uiView.videoView.track = nil
+            uiView.videoView.track = track
+        } else {
+            uiView.videoView.track = track
+        }
         uiView.setNeedsLayout()
     }
 

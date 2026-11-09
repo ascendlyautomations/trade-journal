@@ -36,6 +36,7 @@ public struct TradeTraxsLiveVoiceActivityAttributes: ActivityAttributes {
     }
 }
 
-public enum TradeTraxsLiveVoiceActivityConstants {
-    public static let handSignalTopic = "tt_general_voice_hand"
+public enum TradeTraxsLiveVoiceActivityConstants: Sendable {
+    /// Nonisolated so LiveKit `RoomDelegate` callbacks can compare topics off the main actor.
+    public nonisolated static let handSignalTopic = "tt_general_voice_hand"
 }

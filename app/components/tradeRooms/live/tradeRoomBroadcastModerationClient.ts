@@ -19,7 +19,7 @@ export async function postBroadcastModeration(
   }
 ): Promise<
   | { ok: true; targetDisplayName?: string | null; invitationId?: string | null }
-  | { ok: false; error: string }
+  | { ok: false; error: string; retryable?: boolean }
 > {
   const res = await fetch("/api/livekit/broadcast/moderate", {
     method: "POST",
@@ -31,11 +31,17 @@ export async function postBroadcastModeration(
   })
   const payload = (await res.json().catch(() => ({}))) as {
     error?: string
+    retryable?: boolean
     targetDisplayName?: string | null
     invitationId?: string | null
   }
   if (!res.ok) {
-    return { ok: false, error: payload.error || "Moderation request failed." }
+    const base = payload.error || "Moderation request failed."
+    const error =
+      payload.retryable === true
+        ? `${base} You can retry this action.`
+        : base
+    return { ok: false, error, retryable: payload.retryable === true }
   }
   return {
     ok: true,

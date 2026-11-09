@@ -76,14 +76,14 @@ struct LiveVoiceTabShellLayoutModifier: ViewModifier {
             }
     }
 
-    /// Chrome sits directly above the tab bar (spacer = window bottom → tab bar top), not on the home indicator.
+    /// Chrome + tab-bar clearance (bar height only — not home indicator — so it sits flush on the tab strip).
     @ViewBuilder
     private var sessionChromeInset: some View {
         if showsTabShellChrome {
             VStack(spacing: 0) {
                 tabShellSessionChrome
                 Color.clear
-                    .frame(height: tabBarMetrics.tabBarTopInsetFromBottom)
+                    .frame(height: tabBarMetrics.tabBarStripHeight)
                     .accessibilityHidden(true)
             }
         }
@@ -145,12 +145,6 @@ struct RoomConversationSessionChrome: View {
                     }
                 }
             }
-        }
-        .onAppear {
-            sessionMetrics.setRoomConversationEmbedsSessionChrome(true)
-        }
-        .onDisappear {
-            sessionMetrics.setRoomConversationEmbedsSessionChrome(false)
         }
     }
 }

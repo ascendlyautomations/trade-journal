@@ -537,7 +537,7 @@ struct TradeTraxsApp: App {
             try? await appEnvironment.authentication.coordinator.continueAsDevelopmentSessionIfAllowed()
             try? await Task.sleep(nanoseconds: 1_200_000_000)
             if wantsChooser {
-                appEnvironment.navigation.coordinator.invokeCreateAction()
+                appEnvironment.navigation.coordinator.invokeCreateAction(source: .uiTestLaunch)
             } else if wantsPost {
                 appEnvironment.navigation.coordinator.openCompose(.post)
             } else if wantsAchievement {

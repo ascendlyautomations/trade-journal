@@ -1,4 +1,5 @@
 import { Room, RoomEvent, type RemoteParticipant } from "livekit-client"
+import { normalizeBroadcastChatAvatarUrl } from "./tradeRoomBroadcastChatProfiles.ts"
 
 export const BROADCAST_CHAT_TOPIC = "tt_broadcast_chat"
 export const BROADCAST_CHAT_MAX_LENGTH = 500
@@ -44,7 +45,7 @@ export function parseBroadcastChatPayload(
       id: `${raw.userId}-${raw.sentAt}`,
       userId: raw.userId,
       displayName: raw.displayName?.trim() || "Member",
-      avatarUrl: raw.avatarUrl ?? null,
+      avatarUrl: normalizeBroadcastChatAvatarUrl(raw.avatarUrl ?? null),
       text,
       sentAt: raw.sentAt,
     }

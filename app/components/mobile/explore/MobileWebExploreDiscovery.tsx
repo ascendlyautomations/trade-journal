@@ -7,6 +7,8 @@ import type { ExploreProfile } from "@/lib/exploreDiscover"
 import { countNoun } from "@/lib/countNoun"
 import { profilePath } from "@/lib/profileRoutes"
 import { Trophy } from "lucide-react"
+import ExploreLiveTradersNowSection from "@/app/components/explore/ExploreLiveTradersNowSection"
+import type { ExploreLiveTraderNow } from "@/lib/exploreLiveTradersNowClient"
 
 type MobileWebExploreDiscoveryProps = {
   traders: ExploreProfile[]
@@ -19,6 +21,10 @@ type MobileWebExploreDiscoveryProps = {
   onLoadMore?: () => void
   loadingMore?: boolean
   showLoadMore?: boolean
+  liveTraders?: ExploreLiveTraderNow[]
+  liveTradersLoading?: boolean
+  liveTradersError?: string | null
+  onRetryLiveTraders?: () => void
 }
 
 export default function MobileWebExploreDiscovery({
@@ -32,6 +38,10 @@ export default function MobileWebExploreDiscovery({
   onLoadMore,
   loadingMore = false,
   showLoadMore = false,
+  liveTraders = [],
+  liveTradersLoading = false,
+  liveTradersError = null,
+  onRetryLiveTraders,
 }: MobileWebExploreDiscoveryProps) {
   return (
     <div className="flex flex-col gap-5">
@@ -54,6 +64,13 @@ export default function MobileWebExploreDiscovery({
           ›
         </span>
       </Link>
+
+      <ExploreLiveTradersNowSection
+        items={liveTraders}
+        loading={liveTradersLoading}
+        error={liveTradersError}
+        onRetry={() => onRetryLiveTraders?.()}
+      />
 
       {traders.length > 0 ? (
         <section>

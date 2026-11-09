@@ -17,6 +17,7 @@ import {
   buildPushDeepLinkHref,
   type PushNotificationTarget,
 } from "@/lib/server/push/pushCopy"
+import { parseRoomMessageContent } from "@/lib/notificationsDisplay"
 
 /**
  * Unified APNs push input. Callers supply recipient + notification metadata;
@@ -54,6 +55,7 @@ function preferenceKeyForType(
     case "follow_request_accepted":
       return "follow_request_accepts_enabled"
     case "room_message":
+    case "room_live":
       return "room_messages_enabled"
     case "room_mention":
       return "room_mentions_enabled"
@@ -335,11 +337,12 @@ export async function dispatchPushNotification(
     let collapseId: string | undefined
     let followRequestId: string | undefined
     let joinRequestId: string | undefined
+    let sectionId: string | undefined
+    let messageId: string | undefined
+    let sectionName: string | undefined
 
     if (isMessaging) {
       conversationId = meta.conversationId
-      roomId = meta.roomId
-      roomSlug = meta.roomSlug
       threadId = meta.threadId
       collapseId = meta.collapseId
       // DM grouping only: stable APS thread-id. Do not set collapse-id — that
@@ -350,6 +353,29 @@ export async function dispatchPushNotification(
     } else {
       followRequestId = meta.followRequestId
       joinRequestId = meta.joinRequestId
+    }
+
+    const metaRoomId = meta.roomId?.trim() ?? ""
+    const dispatchRoomId =
+      typeof input.room_id === "string" ? input.room_id.trim() : ""
+    roomId = metaRoomId || dispatchRoomId || undefined
+    roomSlug = meta.roomSlug?.trim() || undefined
+
+    if (input.type === "room_message" || input.type === "room_mention") {
+      const roomMeta = parseRoomMessageContent(input.content)
+      const resolvedSectionId = roomMeta.section_id?.trim()
+      const resolvedMessageId = roomMeta.message_id?.trim()
+      const resolvedSectionName = roomMeta.section_name?.trim()
+      if (resolvedSectionId) sectionId = resolvedSectionId
+      if (resolvedMessageId) messageId = resolvedMessageId
+      if (resolvedSectionName) sectionName = resolvedSectionName
+    }
+
+    if (input.type === "room_live") {
+      if (meta.collapseId) {
+        collapseId = meta.collapseId
+        threadId = threadId ?? meta.collapseId
+      }
     }
 
     if (isFollow) {
@@ -392,6 +418,9 @@ export async function dispatchPushNotification(
           followRequestId,
           joinRequestId,
           senderId,
+          sectionId,
+          messageId,
+          sectionName,
         })
         if (isFollow) {
           if (result.ok) {

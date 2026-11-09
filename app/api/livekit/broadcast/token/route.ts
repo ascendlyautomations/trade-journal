@@ -45,9 +45,16 @@ export async function POST(req: Request) {
     return Response.json({ error: access.error }, { status: access.status })
   }
 
-  const active = await getActiveTradeRoomBroadcast(supabaseServiceRole, parsed.roomId)
-  if (!active) {
-    return Response.json({ error: "No live stream is active in this room." }, { status: 404 })
+  const active = await getActiveTradeRoomBroadcast(
+    supabaseServiceRole,
+    parsed.roomId,
+    { viewerUserId: user.id }
+  )
+  if (!active || active.visibility === "preparing") {
+    return Response.json(
+      { error: "No live stream is active in this room." },
+      { status: 404 }
+    )
   }
 
   const { isUserBlockedFromBroadcastSession } = await import(
@@ -81,5 +88,9 @@ export async function POST(req: Request) {
     startedAt: active.startedAt,
     voiceMode: active.voiceMode,
     videoSource: active.videoSource,
+    broadcastSource: active.broadcastSource,
+    primaryMediaPublisherIdentity: active.primaryMediaPublisherIdentity,
+    visibility: active.visibility,
+    publicLive: active.visibility === "public",
   })
 }

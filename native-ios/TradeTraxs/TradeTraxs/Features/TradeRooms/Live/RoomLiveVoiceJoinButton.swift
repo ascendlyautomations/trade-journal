@@ -62,14 +62,14 @@ struct RoomLiveVoiceJoinButton: View {
                 .padding(.vertical, 6)
                 .background(Capsule(style: .continuous).fill(colors.accent))
         case .tradeRoomRowLight, .tradeRoomRowEngaged:
-            Label("Join Voice", systemImage: "headphones")
+            Label(tradeRoomJoinVoiceTitle, systemImage: "headphones")
                 .font(.system(.caption, design: .rounded).weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.onAccent)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
                 .background(
                     RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous)
-                        .fill(colors.accent.opacity(0.72))
+                        .fill(colors.accent.opacity(0.95))
                 )
         }
     }
@@ -98,7 +98,7 @@ struct RoomLiveVoiceJoinButton: View {
                 )
         case .tradeRoomRowLight, .tradeRoomRowEngaged:
             content
-                .foregroundStyle(.white)
+                .foregroundStyle(colors.textPrimary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
                 .background(
@@ -112,7 +112,15 @@ struct RoomLiveVoiceJoinButton: View {
         if coordinator.isJoining, coordinator.session?.roomID != roomID {
             return "Joining…"
         }
-        return coordinator.isJoining ? "Joining…" : "Join Voice"
+        return coordinator.isJoining ? "Joining…" : tradeRoomJoinVoiceTitle
+    }
+
+    private var tradeRoomJoinVoiceTitle: String {
+        if coordinator.isJoining { return "Joining…" }
+        if let count = coordinator.generalVoiceConnectedCount(for: roomID) {
+            return "Join Voice (\(count))"
+        }
+        return "Join Voice"
     }
 
     private var inRoomStatusTitle: String {

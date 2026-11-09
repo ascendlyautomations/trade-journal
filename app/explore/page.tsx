@@ -6,6 +6,7 @@ import ExploreDiscoverBar from "../components/explore/ExploreDiscoverBar"
 import ExploreSearchResultsPanel from "../components/explore/ExploreSearchResultsPanel"
 import ExploreSuggestedRoomsSection from "../components/explore/ExploreSuggestedRoomsSection"
 import ExploreTopPerformersSection from "../components/explore/ExploreTopPerformersSection"
+import ExploreLiveTradersNowSection from "../components/explore/ExploreLiveTradersNowSection"
 import ExploreTraderCard from "../components/explore/ExploreTraderCard"
 import MobileWebExploreDiscovery from "../components/mobile/explore/MobileWebExploreDiscovery"
 import { countNoun } from "@/lib/countNoun"
@@ -60,6 +61,11 @@ import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { scheduleDeferredWork } from "@/lib/scheduleDeferredWork"
+import {
+  ExploreLiveTradersFetchError,
+  fetchExploreLiveTradersNow,
+} from "@/lib/exploreLiveTradersNowClient"
+import type { ExploreLiveTraderNow } from "@/lib/exploreLiveTradersNowClient"
 
 const EXPLORE_PAGE_SIZE = 16
 
@@ -131,6 +137,11 @@ export default function ExplorePage() {
   )
   const [weeklyTopLoading, setWeeklyTopLoading] = useState(true)
   const [weeklyTopError, setWeeklyTopError] = useState<string | null>(null)
+  const [liveTraders, setLiveTraders] = useState<ExploreLiveTraderNow[]>([])
+  const [liveTradersLoading, setLiveTradersLoading] = useState(true)
+  const [liveTradersError, setLiveTradersError] = useState<string | null>(null)
+  const liveTradersVisitFetchedRef = useRef(false)
+  const liveTradersInFlightRef = useRef(false)
   const [memberRoomIds, setMemberRoomIds] = useState<Set<string>>(new Set())
 
   const suggestedBatchSize = useMemo(
@@ -196,6 +207,50 @@ export default function ExplorePage() {
       setWeeklyTopLoading(false)
     }
   }, [currentUserId])
+
+  const loadLiveTradersNow = useCallback(async (force = false) => {
+    if (!force && liveTradersVisitFetchedRef.current) return
+    if (liveTradersInFlightRef.current && !force) return
+
+    if (isDemoModeActive() && !user?.id) {
+      setLiveTraders([])
+      setLiveTradersError(null)
+      setLiveTradersLoading(false)
+      liveTradersVisitFetchedRef.current = true
+      return
+    }
+
+    liveTradersInFlightRef.current = true
+    setLiveTradersLoading(true)
+    setLiveTradersError(null)
+    try {
+      const items = await fetchExploreLiveTradersNow(12)
+      setLiveTraders(items)
+      liveTradersVisitFetchedRef.current = true
+    } catch (error) {
+      if (
+        !(error instanceof ExploreLiveTradersFetchError) ||
+        error.status >= 500
+      ) {
+        console.error("[explore] live traders:", error)
+      }
+      setLiveTraders([])
+      setLiveTradersError("Couldn't load live traders. Please try again.")
+      liveTradersVisitFetchedRef.current = true
+    } finally {
+      liveTradersInFlightRef.current = false
+      setLiveTradersLoading(false)
+    }
+  }, [user?.id])
+
+  useEffect(() => {
+    liveTradersVisitFetchedRef.current = false
+    void loadLiveTradersNow()
+    return () => {
+      liveTradersVisitFetchedRef.current = false
+      liveTradersInFlightRef.current = false
+    }
+  }, [loadLiveTradersNow])
 
   async function loadMemberRoomIds(userId: string | null) {
     if (!userId || isDemoModeActive()) {
@@ -733,7 +788,7 @@ export default function ExplorePage() {
         </section>
 
         {!loading ? (
-          <div className="hidden md:block">
+          <div className="hidden md:flex md:flex-col md:gap-3">
             <ExploreTopPerformersSection
               performers={weeklyTopPayload.performers}
               periodTitle={weeklyTopPayload.periodTitle}
@@ -742,6 +797,12 @@ export default function ExplorePage() {
               loading={weeklyTopLoading}
               error={weeklyTopError}
               onRetry={() => void loadWeeklyTopPerformers()}
+            />
+            <ExploreLiveTradersNowSection
+              items={liveTraders}
+              loading={liveTradersLoading}
+              error={liveTradersError}
+              onRetry={() => void loadLiveTradersNow(true)}
             />
           </div>
         ) : null}
@@ -801,6 +862,10 @@ export default function ExplorePage() {
                 onLoadMore={() => void handleLoadMore()}
                 loadingMore={loadingMore}
                 showLoadMore={showLoadMore}
+                liveTraders={liveTraders}
+                liveTradersLoading={liveTradersLoading}
+                liveTradersError={liveTradersError}
+                onRetryLiveTraders={() => void loadLiveTradersNow(true)}
               />
             </div>
             {displayedTraders.length === 0 ? (

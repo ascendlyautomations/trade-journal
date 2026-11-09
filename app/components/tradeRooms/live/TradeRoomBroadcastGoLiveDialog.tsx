@@ -71,6 +71,23 @@ export default function TradeRoomBroadcastGoLiveDialog({
             />
             <span className="text-sm text-gray-200">Camera / webcam</span>
           </label>
+          <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-white/10 px-3 py-2 hover:bg-white/5">
+            <input
+              type="radio"
+              name="videoSource"
+              checked={videoSource === "obs"}
+              onChange={() => setVideoSource("obs")}
+              className="mt-1 shrink-0"
+            />
+            <span className="text-sm text-gray-200">
+              <span className="font-medium text-white">OBS Studio</span>
+              <span className="mt-0.5 block text-xs text-gray-500">
+                Program video and audio from OBS via RTMP. You stay connected for
+                moderation, chat, and Invite to Talk — no browser screen or camera
+                capture required.
+              </span>
+            </span>
+          </label>
         </fieldset>
 
         <fieldset className="mt-4 space-y-2">
@@ -131,7 +148,11 @@ export default function TradeRoomBroadcastGoLiveDialog({
             }
             className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
           >
-            {busy ? "Starting…" : "Start stream"}
+            {busy
+              ? "Starting…"
+              : videoSource === "obs"
+                ? "Set up OBS"
+                : "Start stream"}
           </button>
         </div>
       </div>
