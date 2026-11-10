@@ -124,6 +124,8 @@ import { useDashboardAnalytics } from "./useDashboardAnalytics"
 import DashboardLiveAccountValueMetric from "../../components/dashboard/DashboardLiveAccountValueMetric"
 import { useDashboardLiveAccountBundle } from "../../components/dashboard/useDashboardLiveAccountBundle"
 import { resolveDashboardLiveSingleAccountId } from "@/lib/dashboardLiveAccountValue"
+import { supportsLiveWithdrawal } from "@/lib/accountPayoutPolicy"
+import MobileWebDashboardEquityDrawdownSettingsSheet from "@/app/components/mobile/dashboard/MobileWebDashboardEquityDrawdownSettingsSheet"
 import {
   readLivePersonalDrawdownGearFromAccount,
   type LivePersonalDrawdownConfig,
@@ -321,6 +323,7 @@ export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState("")
   const [showPublicOnly, setShowPublicOnly] = useState(false)
   const [showControls, setShowControls] = useState(false)
+  const [equityDrawdownSheetOpen, setEquityDrawdownSheetOpen] = useState(false)
   const [showEquity, setShowEquity] = useState(true)
   const [showDrawdown, setShowDrawdown] = useState(true)
   const [showInsights, setShowInsights] = useState(true)
@@ -1278,7 +1281,82 @@ export default function Dashboard() {
 
   function cancelDashboardGearPanel() {
     setShowControls(false)
+    setEquityDrawdownSheetOpen(false)
   }
+
+  const equitySettingsLiveAccountId = useMemo(
+    () =>
+      resolveDashboardLiveSingleAccountId({
+        userId: user?.id,
+        accountFilter,
+        accountById,
+        propFirmAccountId: propFirmAccount?.id,
+      }),
+    [user?.id, accountFilter, accountById, propFirmAccount?.id]
+  )
+
+  const canConfigureEquityDrawdownSettings = useMemo(() => {
+    if (!equitySettingsLiveAccountId) return false
+    const acc = accountById[equitySettingsLiveAccountId]
+    return Boolean(acc && supportsLiveWithdrawal(acc))
+  }, [equitySettingsLiveAccountId, accountById])
+
+  const equitySettingsAccountName =
+    (equitySettingsLiveAccountId &&
+      accountById[equitySettingsLiveAccountId]?.name) ||
+    "Live account"
+
+  const hydrateGearDraftFromDashboard = useCallback(() => {
+    const liveGearAccountId = resolveDashboardLiveSingleAccountId({
+      userId: user?.id,
+      accountFilter,
+      accountById,
+      propFirmAccountId: propFirmAccount?.id,
+    })
+    const liveGearAccount = liveGearAccountId
+      ? accountById[liveGearAccountId]
+      : null
+    const liveGear = readLivePersonalDrawdownGearFromAccount(liveGearAccount)
+    setGearDraft({
+      timeFilter,
+      accountFilter,
+      accountTypeFilter,
+      showPublicOnly,
+      showEquity,
+      showDrawdown,
+      showInsights,
+      showSessions,
+      showBestSetup,
+      showWorstSetup,
+      showWarnings,
+      livePersonalDrawdown: liveGearAccountId != null,
+      liveDrawdownType: liveGear.limitType,
+      drawdownLimit: liveGear.limitAmountRaw
+        ? sanitizeDrawdownLimitInput(liveGear.limitAmountRaw)
+        : "",
+    })
+  }, [
+    user?.id,
+    accountFilter,
+    accountById,
+    propFirmAccount?.id,
+    timeFilter,
+    accountTypeFilter,
+    showPublicOnly,
+    showEquity,
+    showDrawdown,
+    showInsights,
+    showSessions,
+    showBestSetup,
+    showWorstSetup,
+    showWarnings,
+  ])
+
+  const openEquityDrawdownSettings = useCallback(() => {
+    if (!canConfigureEquityDrawdownSettings) return
+    hydrateGearDraftFromDashboard()
+    setEquityDrawdownSheetOpen(true)
+  }, [canConfigureEquityDrawdownSettings, hydrateGearDraftFromDashboard])
 
   const recentTradesList = useMemo(
     () =>
@@ -1601,6 +1679,8 @@ export default function Dashboard() {
     liveAccountValue={dashboardRiskMetricSlots.liveAccountValue}
     drawdownLimitLineY={drawdownLimitLineY}
     showPersonalDrawdownFloor={showPersonalDrawdownFloor}
+    showEquityDrawdownSettings={canConfigureEquityDrawdownSettings}
+    onOpenEquityDrawdownSettings={openEquityDrawdownSettings}
     timeframeLabel={timeframeLabel}
     winCount={winCount}
     lossCount={lossCount}
@@ -1748,6 +1828,8 @@ export default function Dashboard() {
             payoutsTotal={
               dashboardPayoutsTotal === undefined ? null : dashboardPayoutsTotal
             }
+            showEquityDrawdownSettings={canConfigureEquityDrawdownSettings}
+            onOpenEquityDrawdownSettings={openEquityDrawdownSettings}
           />
           <div className="tt-dash-hide-desktop-v1">{recentTradesSection}</div>
           {recentTradesJournal}
@@ -1788,6 +1870,24 @@ export default function Dashboard() {
           </div>
       </div>
       </NativeIosPullToRefresh>
+
+      <MobileWebDashboardEquityDrawdownSettingsSheet
+        open={equityDrawdownSheetOpen}
+        accountName={equitySettingsAccountName}
+        gearDraft={gearDraft}
+        setGearDraft={setGearDraft}
+        ddInputFocused={ddInputFocused}
+        setDdInputFocused={setDdInputFocused}
+        saving={savingGearSettings}
+        hasUser={Boolean(user)}
+        onSave={() => {
+          void saveDashboardGearPanel()
+          setEquityDrawdownSheetOpen(false)
+        }}
+        onCancel={() => {
+          cancelDashboardGearPanel()
+        }}
+      />
 
       <DashboardModals
         importOpen={showImportModal}

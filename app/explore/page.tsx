@@ -8,7 +8,8 @@ import ExploreSuggestedRoomsSection from "../components/explore/ExploreSuggested
 import ExploreTopPerformersSection from "../components/explore/ExploreTopPerformersSection"
 import ExploreLiveTradersNowSection from "../components/explore/ExploreLiveTradersNowSection"
 import ExploreTraderCard from "../components/explore/ExploreTraderCard"
-import MobileWebExploreDiscovery from "../components/mobile/explore/MobileWebExploreDiscovery"
+import MobileWebExploreHome from "../components/mobile/explore/MobileWebExploreHome"
+import { MOBILE_WEB_NEUTRAL_PAGE_BG } from "@/lib/mobileWebPageSurface"
 import { countNoun } from "@/lib/countNoun"
 import EmptyState from "../components/ui/EmptyState"
 import { SkeletonExplorePage, SkeletonTraderCard } from "../components/ui/skeletons"
@@ -346,7 +347,12 @@ export default function ExplorePage() {
     void loadMemberRoomIds(cached.currentUserId)
     scheduleDeferredWork(() => {
       void loadTradeMetaRows()
-      void loadWeeklyTopPerformers()
+      if (
+        typeof window !== "undefined" &&
+        window.matchMedia("(min-width: 768px)").matches
+      ) {
+        void loadWeeklyTopPerformers()
+      }
     }, 1000)
   }
 
@@ -462,7 +468,12 @@ export default function ExplorePage() {
       setLoading(false)
       void loadMemberRoomIds(uid)
       scheduleDeferredWork(() => {
-        void loadWeeklyTopPerformers()
+        if (
+          typeof window !== "undefined" &&
+          window.matchMedia("(min-width: 768px)").matches
+        ) {
+          void loadWeeklyTopPerformers()
+        }
       }, 400)
       return
     }
@@ -540,7 +551,12 @@ export default function ExplorePage() {
     void loadMemberRoomIds(user?.id ?? null)
     scheduleDeferredWork(() => {
       void loadTradeMetaRows()
-      void loadWeeklyTopPerformers()
+      if (
+        typeof window !== "undefined" &&
+        window.matchMedia("(min-width: 768px)").matches
+      ) {
+        void loadWeeklyTopPerformers()
+      }
     }, 1000)
   }
 
@@ -671,9 +687,71 @@ export default function ExplorePage() {
 
   const hasSearchResults = results.length > 0 || roomResults.length > 0
 
+  const mobileFiltersSlot =
+    filtersOpen && !loading ? (
+      <div
+        id="explore-filters-panel-mobile"
+        className="border-b border-white/10 bg-[color:var(--tt-surface,#0d1117)] px-3 py-3 md:hidden"
+      >
+        <ExploreDiscoverBar
+          filters={draftFilters}
+          onChange={(patch) =>
+            setDraftFilters((prev) => ({ ...prev, ...patch }))
+          }
+          availability={filterAvailability}
+        />
+        <div className="mt-3 flex justify-end">
+          <button
+            type="button"
+            onClick={applyDiscoverFilters}
+            className="rounded-xl bg-[color:var(--tt-accent,#4ec4e0)] px-4 py-2 text-sm font-semibold text-[#0d1117]"
+          >
+            Apply Filters
+          </button>
+        </div>
+      </div>
+    ) : null
+
   return (
-    <div className="tt-phase1-dark w-full px-2 pb-3 pt-0 text-white md:pb-10 max-md:px-3">
-      <div className="relative z-0 mx-auto mt-2.5 flex w-full min-w-0 max-w-[1600px] flex-col gap-3 px-1 md:gap-4 md:px-6 xl:px-8 2xl:px-12 max-md:mt-1 max-md:px-0">
+  <>
+    <MobileWebExploreHome
+      search={search}
+      onSearchChange={setSearch}
+      loadingSearch={loadingSearch}
+      searchFinished={searchFinished}
+      exploreSearchError={exploreSearchError}
+      onRetrySearch={() => void runExploreSearch(search.trim())}
+      hasSearchResults={hasSearchResults}
+      searchProfiles={results}
+      searchRooms={roomResults}
+      currentUserId={currentUserId}
+      followingIds={followingIds}
+      requestedIds={requestedIds}
+      followsYouIds={followsYouIds}
+      memberRoomIds={memberRoomIds}
+      onFollowingChange={handleFollowingChange}
+      onRequestedChange={handleRequestedChange}
+      onJoinSearchRoom={handleJoinSearchRoom}
+      loading={loading}
+      exploreLoadError={exploreLoadError}
+      onRetryLoad={() => void init()}
+      visibleTraders={visibleTraders}
+      onLoadMoreTraders={() => void handleLoadMore()}
+      loadingMoreTraders={loadingMore}
+      showLoadMoreTraders={showLoadMore}
+      liveTraders={liveTraders}
+      liveTradersLoading={liveTradersLoading}
+      liveTradersError={liveTradersError}
+      onRetryLiveTraders={() => void loadLiveTradersNow(true)}
+      onRefresh={() => init()}
+      onToggleFilters={toggleFiltersPanel}
+      filtersOpen={filtersOpen}
+      filtersSlot={mobileFiltersSlot}
+    />
+    <div
+      className={`tt-phase1-dark hidden w-full px-2 pb-3 pt-0 text-white md:block md:pb-10 ${MOBILE_WEB_NEUTRAL_PAGE_BG}`}
+    >
+      <div className="relative z-0 mx-auto mt-2.5 flex w-full min-w-0 max-w-[1600px] flex-col gap-3 px-1 md:gap-4 md:px-6 xl:px-8 2xl:px-12">
         <header className="hidden md:block">
           <h1 className="text-lg font-semibold text-white md:text-xl">
             Explore
@@ -850,26 +928,8 @@ export default function ExplorePage() {
           />
         ) : (
           <>
-            <div className="md:hidden">
-              <MobileWebExploreDiscovery
-                traders={visibleTraders}
-                currentUserId={currentUserId}
-                followingIds={followingIds}
-                requestedIds={requestedIds}
-                followsYouIds={followsYouIds}
-                onFollowingChange={handleFollowingChange}
-                onRequestedChange={handleRequestedChange}
-                onLoadMore={() => void handleLoadMore()}
-                loadingMore={loadingMore}
-                showLoadMore={showLoadMore}
-                liveTraders={liveTraders}
-                liveTradersLoading={liveTradersLoading}
-                liveTradersError={liveTradersError}
-                onRetryLiveTraders={() => void loadLiveTradersNow(true)}
-              />
-            </div>
             {displayedTraders.length === 0 ? (
-              <div className="hidden md:block">
+              <div>
                 <EmptyState
                   title="No traders match these filters"
                   description="Try a broader category or clear your filters."
@@ -926,5 +986,6 @@ export default function ExplorePage() {
         )}
       </div>
     </div>
+  </>
   )
 }

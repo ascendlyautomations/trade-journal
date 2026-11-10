@@ -12,6 +12,21 @@
 }
 
 @media (max-width: 767px) {
+  html:not(.tt-native-ios) {
+    --tt-surface: #0d1117;
+    --tt-surface-nested: #1a222c;
+    --tt-text: #f0f3f6;
+    --tt-text-muted: #c0cad6;
+    --tt-text-tertiary: #a8b3c2;
+    --tt-accent: #4ec4e0;
+    --tt-navbar: #0b1f3a;
+    --app-global-upload-offset: 0px;
+  }
+
+  html:not(.tt-native-ios).tt-mobile-web-upload-bar {
+    --app-global-upload-offset: 3.25rem;
+  }
+
   /*
    * Stop a slightly-wide child from shifting the whole page sideways.
    * clip on the root does not turn the tab bar or portaled sheets into

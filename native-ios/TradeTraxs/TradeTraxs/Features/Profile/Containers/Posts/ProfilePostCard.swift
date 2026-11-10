@@ -8,6 +8,7 @@ struct ProfilePostCard: View {
     let engagementStore: EngagementStore
     let vaultStore: VaultStore
     let onOpen: () -> Void
+    let onShare: () -> Void
     var isOwner: Bool = true
     var onDelete: (() -> Void)? = nil
     var isDeleteInProgress: Bool = false
@@ -78,6 +79,7 @@ struct ProfilePostCard: View {
                     store: engagementStore,
                     vaultStore: vaultStore,
                     onCommentTap: onOpen,
+                    onShareTap: onShare,
                     vaultRef: ProfileCardMediaPresence.engagementVaultRef(
                         for: target,
                         profileIsOwner: isOwner

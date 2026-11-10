@@ -15,6 +15,7 @@ export const NOTIFICATION_PREFERENCES_SELECT = `
   room_messages_enabled,
   room_mentions_enabled,
   room_joins_enabled,
+  room_live_streams_enabled,
   achievement_likes_enabled,
   achievement_comments_enabled,
   achievement_unlocks_enabled,
@@ -41,6 +42,7 @@ export type NotificationPreferences = {
   room_messages_enabled: boolean
   room_mentions_enabled: boolean
   room_joins_enabled: boolean
+  room_live_streams_enabled: boolean
   achievement_likes_enabled: boolean
   achievement_comments_enabled: boolean
   achievement_unlocks_enabled: boolean
@@ -76,6 +78,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: Omit<
   room_messages_enabled: true,
   room_mentions_enabled: true,
   room_joins_enabled: true,
+  room_live_streams_enabled: true,
   achievement_likes_enabled: true,
   achievement_comments_enabled: true,
   achievement_unlocks_enabled: true,
@@ -108,6 +111,7 @@ export function mapNotificationPreferencesRow(
     room_messages_enabled: bool(row?.room_messages_enabled),
     room_mentions_enabled: bool(row?.room_mentions_enabled),
     room_joins_enabled: bool(row?.room_joins_enabled),
+    room_live_streams_enabled: bool(row?.room_live_streams_enabled),
     achievement_likes_enabled: bool(row?.achievement_likes_enabled),
     achievement_comments_enabled: bool(row?.achievement_comments_enabled),
     achievement_unlocks_enabled: bool(row?.achievement_unlocks_enabled),

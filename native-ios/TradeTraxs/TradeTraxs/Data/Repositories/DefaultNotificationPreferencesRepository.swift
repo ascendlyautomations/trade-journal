@@ -21,6 +21,7 @@ nonisolated struct DefaultNotificationPreferencesRepository: NotificationPrefere
         "room_messages_enabled",
         "room_mentions_enabled",
         "room_joins_enabled",
+        "room_live_streams_enabled",
         "achievement_likes_enabled",
         "achievement_comments_enabled",
         "achievement_unlocks_enabled",
@@ -125,6 +126,7 @@ nonisolated struct DefaultNotificationPreferencesRepository: NotificationPrefere
         apply(.roomMessagesEnabled, dto.room_messages_enabled)
         apply(.roomMentionsEnabled, dto.room_mentions_enabled)
         apply(.roomJoinsEnabled, dto.room_joins_enabled)
+        apply(.roomLiveStreamsEnabled, dto.room_live_streams_enabled)
         apply(.achievementLikesEnabled, dto.achievement_likes_enabled)
         apply(.achievementCommentsEnabled, dto.achievement_comments_enabled)
         apply(.achievementUnlocksEnabled, dto.achievement_unlocks_enabled)
@@ -156,6 +158,7 @@ nonisolated struct NotificationPreferencesDTO: Codable, Sendable {
     var room_messages_enabled: Bool?
     var room_mentions_enabled: Bool?
     var room_joins_enabled: Bool?
+    var room_live_streams_enabled: Bool?
     var achievement_likes_enabled: Bool?
     var achievement_comments_enabled: Bool?
     var achievement_unlocks_enabled: Bool?

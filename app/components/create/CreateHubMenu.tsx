@@ -16,7 +16,10 @@ import {
   PlaySquare,
   Trophy,
   ArrowDownCircle,
+  Zap,
+  FileSpreadsheet,
 } from "lucide-react"
+import { openMobileWebQuickTrade } from "@/lib/mobileWebQuickTrade"
 import {
   NAV_DROPDOWN_PANEL,
   NAV_ITEM_ACTIVE,
@@ -212,6 +215,20 @@ export default function CreateHubMenu({
       subtitle: "Log a completed trade",
       href: CREATE_ROUTE.addTrade,
       icon: <TradeLucideIcon />,
+    },
+    {
+      id: "quick-trade",
+      label: "Quick Trade",
+      subtitle: "Fast journal entry",
+      onSelect: () => openMobileWebQuickTrade(),
+      icon: <Zap className="h-5 w-5" aria-hidden />,
+    },
+    {
+      id: "import-csv",
+      label: "Import CSV",
+      subtitle: "Bulk import from a file",
+      href: "/import",
+      icon: <FileSpreadsheet className="h-5 w-5" aria-hidden />,
     },
     {
       id: "post",

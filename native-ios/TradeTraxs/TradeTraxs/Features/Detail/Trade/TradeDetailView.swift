@@ -340,7 +340,14 @@ struct TradeDetailView: View {
                 TradeDetailMediaView(
                     mediaID: trade.id.rawValue,
                     reference: media,
-                    imagePipeline: imagePipeline
+                    imagePipeline: imagePipeline,
+                    onDoubleTapLike: {
+                        Task {
+                            await data.engagementStore.ensureLiked(
+                                on: socialEngagementTarget(for: trade.id)
+                            )
+                        }
+                    }
                 )
                 socialEngagementBar(for: trade, scrollProxy: scrollProxy)
             }
@@ -350,7 +357,13 @@ struct TradeDetailView: View {
                     trade: trade,
                     accountLine: trade.mode == .copyTraded
                         ? viewModel.socialCopyTradeModeSummary
-                        : viewModel.accountIdentityLine
+                        : viewModel.accountIdentityLine,
+                    linkedReel: viewModel.visibleLinkedReel,
+                    imagePipeline: imagePipeline,
+                    onOpenLinkedClip: {
+                        guard let reel = viewModel.visibleLinkedReel else { return }
+                        viewModel.openLinkedClip(reel.id)
+                    }
                 )
                 .accessibilityIdentifier("detail.trade.headline")
 

@@ -225,6 +225,7 @@ final class ManageRoomViewModel {
                 roomID: roomID,
                 ownerProfileID: room.ownerProfileID
             )
+            applyCachedTagsToMembers()
             bans = try await rooms.bannedMembers(roomID: roomID)
             await syncAuthoritativeMemberCount(listCount: members.count)
         } catch {
@@ -262,10 +263,16 @@ final class ManageRoomViewModel {
             )
             try await tagStore.hydrateTags(roomID: roomID, repository: rooms)
             tags = tagStore.tags(for: roomID)
-            await refreshMembersAndBans()
+            applyCachedTagsToMembers()
         } catch {
             statusMessage = ConversationThreadSupport.message(for: error)
         }
+    }
+
+    /// Re-reads per-member tags from ``SessionRoomMemberTagsStore`` (e.g. after save or store revision).
+    func syncMemberTagsFromStore() {
+        tags = tagStore.tags(for: roomID)
+        applyCachedTagsToMembers()
     }
 
     func saveDetails() async {
@@ -386,8 +393,21 @@ final class ManageRoomViewModel {
         canBanMember(member)
     }
 
+    func canManageTagsForMember(_ member: RoomManagedMember) -> Bool {
+        guard let room else { return false }
+        return TradeRoomModerationPermission.canManageTagsForMember(
+            canManageRoom: canManageRoom,
+            canModerateRoom: canManageRoom,
+            viewerID: viewerID,
+            roomOwnerProfileID: room.ownerProfileID,
+            targetProfileID: member.profile.id,
+            targetMemberTags: member.tags
+        )
+    }
+
     func canShowManageMember(_ member: RoomManagedMember) -> Bool {
-        canManageRoom && (canBanMember(member) || canRemoveMember(member))
+        if canManageTagsForMember(member) { return true }
+        return canManageRoom && (canBanMember(member) || canRemoveMember(member))
     }
 
     func confirmMemberAction() async {
@@ -512,29 +532,45 @@ final class ManageRoomViewModel {
         }
     }
 
-    func toggleTag(_ tag: RoomMemberTag, for member: RoomManagedMember) async {
-        guard canManageRoom else { return }
+    func savedTagIDs(for profileID: ProfileID) -> Set<RoomMemberTagID> {
+        Set(tagStore.tags(for: profileID, roomID: roomID).map(\.id))
+    }
+
+    func saveMemberTagAssignments(
+        for member: RoomManagedMember,
+        selectedTagIDs: Set<RoomMemberTagID>
+    ) async -> Bool {
+        guard canManageRoom else { return false }
+        let targetIDs = selectedTagIDs
+        let currentIDs = savedTagIDs(for: member.profile.id)
+
+        guard targetIDs != currentIDs else { return true }
+
         isMutatingTag = true
         defer { isMutatingTag = false }
         do {
-            if member.tags.contains(where: { $0.id == tag.id }) {
-                try await rooms.removeMemberTagAssignment(
-                    roomID: roomID,
-                    profileID: member.profile.id,
-                    tagID: tag.id
-                )
-            } else {
+            for tagID in targetIDs.subtracting(currentIDs) {
                 try await rooms.assignMemberTag(
                     roomID: roomID,
                     profileID: member.profile.id,
-                    tagID: tag.id
+                    tagID: tagID
                 )
             }
-            await refreshTags()
-            ExperienceHaptics.play(.selection)
+            for tagID in currentIDs.subtracting(targetIDs) {
+                try await rooms.removeMemberTagAssignment(
+                    roomID: roomID,
+                    profileID: member.profile.id,
+                    tagID: tagID
+                )
+            }
+            tagStore.setMemberTagIDs(targetIDs, profileID: member.profile.id, roomID: roomID)
+            syncMemberTagsFromStore()
+            ExperienceHaptics.play(.success)
+            return true
         } catch {
             statusMessage = ConversationThreadSupport.message(for: error)
             ExperienceHaptics.play(.error)
+            return false
         }
     }
 
@@ -707,6 +743,14 @@ final class ManageRoomViewModel {
         members.first { $0.profile.id == profileID }
     }
 
+    private func applyCachedTagsToMembers() {
+        members = members.map { member in
+            var updated = member
+            updated.tags = tagStore.tags(for: member.profile.id, roomID: roomID)
+            return updated
+        }
+    }
+
     private func performLoad() async {
         phase = .loading
         viewerID = await session.currentUserID.map { ProfileID($0.rawValue) }
@@ -735,6 +779,7 @@ final class ManageRoomViewModel {
             try await tagStore.hydrateTags(roomID: roomID, repository: rooms)
             tags = tagStore.tags(for: roomID)
             await refreshMembersAndBans()
+            applyCachedTagsToMembers()
             await refreshJoinRequests()
             phase = .loaded
         } catch {

@@ -17,6 +17,8 @@ final class ActivityInboxStore {
     private(set) var pendingFollowRequestCount = 0
     /// True once the Activity feed page has been hydrated (not merely unread count).
     private(set) var hasLoaded = false
+    /// True after a full first-page fetch (network/RPC) this session — disk cache alone does not set this.
+    private(set) var hasAuthoritativeFeedForSession = false
     /// True once unread count (+ Realtime) is available for the Dashboard bell.
     private(set) var hasBootstrappedUnread = false
     private(set) var lastLoadedAt: Date?
@@ -55,6 +57,7 @@ final class ActivityInboxStore {
             self.hasMore = nextCursor != nil
             self.pendingFollowRequestCount = max(0, pendingFollowRequestCount)
             hasLoaded = true
+            hasAuthoritativeFeedForSession = true
             hasBootstrappedUnread = true
             lastLoadedAt = .now
         }
@@ -357,17 +360,36 @@ final class ActivityInboxStore {
         let viewerID = ProfileID(userID)
 
         if feedPresentation, startedForUserID == userID, hasLoaded {
-            startRealtime(
+            await presentAuthoritativeFeedIfNeeded(
                 userID: userID,
+                viewerID: viewerID,
                 notifications: notifications,
+                followRequests: followRequests,
                 session: session,
-                realtimeHub: realtimeHub
+                realtimeHub: realtimeHub,
+                detailCache: detailCache,
+                rpc: rpc
             )
             return
         }
 
         if startedForUserID == userID, hasLoaded { return }
-        guard !isStarting else { return }
+        if isStarting {
+            await awaitInFlightStartIfNeeded()
+            if feedPresentation {
+                await presentAuthoritativeFeedIfNeeded(
+                    userID: userID,
+                    viewerID: viewerID,
+                    notifications: notifications,
+                    followRequests: followRequests,
+                    session: session,
+                    realtimeHub: realtimeHub,
+                    detailCache: detailCache,
+                    rpc: rpc
+                )
+            }
+            return
+        }
         isStarting = true
         defer { isStarting = false }
 
@@ -391,6 +413,7 @@ final class ActivityInboxStore {
             unreadCount = 0
             pendingFollowRequestCount = 0
             hasLoaded = false
+            hasAuthoritativeFeedForSession = false
             hasBootstrappedUnread = false
             nextCursor = nil
             hasMore = true
@@ -403,13 +426,24 @@ final class ActivityInboxStore {
         }
 
         if hasLoaded {
-            startRealtime(
-                userID: userID,
-                notifications: notifications,
-                session: session,
-                realtimeHub: realtimeHub
-            )
-            if !feedPresentation {
+            if feedPresentation {
+                await presentAuthoritativeFeedIfNeeded(
+                    userID: userID,
+                    viewerID: viewerID,
+                    notifications: notifications,
+                    followRequests: followRequests,
+                    session: session,
+                    realtimeHub: realtimeHub,
+                    detailCache: detailCache,
+                    rpc: rpc
+                )
+            } else {
+                startRealtime(
+                    userID: userID,
+                    notifications: notifications,
+                    session: session,
+                    realtimeHub: realtimeHub
+                )
                 await catchUpActivityIfNeeded(
                     viewerID: viewerID,
                     detailCache: detailCache,
@@ -473,8 +507,8 @@ final class ActivityInboxStore {
                 pendingFollowRequestCount: followCount
             )
         } catch {
-            // Soft-fail — keep prior cache if any.
-            if !hasLoaded {
+            // Soft-fail — keep prior cache; do not mark loaded when the feed is still empty.
+            if !hasLoaded, !items.isEmpty {
                 hasLoaded = true
             }
         }
@@ -547,6 +581,7 @@ final class ActivityInboxStore {
             unreadCount = 0
             pendingFollowRequestCount = 0
             hasLoaded = false
+            hasAuthoritativeFeedForSession = false
             hasBootstrappedUnread = false
             nextCursor = nil
             hasMore = true
@@ -663,6 +698,7 @@ final class ActivityInboxStore {
         unreadCount = 0
         pendingFollowRequestCount = 0
         hasLoaded = false
+        hasAuthoritativeFeedForSession = false
         hasBootstrappedUnread = false
         lastLoadedAt = nil
         nextCursor = nil
@@ -688,6 +724,39 @@ final class ActivityInboxStore {
         Task.detached(priority: .utility) {
             SocialDiskCache.saveActivity(blob)
         }
+    }
+
+    private func awaitInFlightStartIfNeeded() async {
+        while isStarting {
+            await Task.yield()
+        }
+    }
+
+    /// When the Activity screen is visible, ensure a full first-page sync after disk/session cache only.
+    private func presentAuthoritativeFeedIfNeeded(
+        userID: String,
+        viewerID: ProfileID,
+        notifications: any NotificationRepository,
+        followRequests: (any FollowRequestRepository)?,
+        session: any SessionProviding,
+        realtimeHub: RealtimeHub?,
+        detailCache: DetailPresentationCache?,
+        rpc: (any RPCClient)?
+    ) async {
+        startRealtime(
+            userID: userID,
+            notifications: notifications,
+            session: session,
+            realtimeHub: realtimeHub
+        )
+        guard !hasAuthoritativeFeedForSession else { return }
+        await syncPresentedFeed(
+            viewerID: viewerID,
+            notifications: notifications,
+            followRequests: followRequests,
+            detailCache: detailCache,
+            rpc: rpc
+        )
     }
 
     /// Authoritative first-page sync when Activity is on screen (replace, not merge-only catch-up).

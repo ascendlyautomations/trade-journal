@@ -8,8 +8,13 @@ final class TradeTraxsLiveBroadcastLiveActivityManager {
 
     private var currentActivity: Activity<TradeTraxsLiveBroadcastActivityAttributes>?
     private var boundSessionEpoch: UInt64?
+    private var lastPublishedContent: TradeTraxsLiveBroadcastActivityAttributes.ContentState?
 
     private init() {}
+
+    func isActive(sessionEpoch: UInt64) -> Bool {
+        boundSessionEpoch == sessionEpoch && currentActivity != nil
+    }
 
     var isSupported: Bool {
         ActivityAuthorizationInfo().areActivitiesEnabled
@@ -38,15 +43,47 @@ final class TradeTraxsLiveBroadcastLiveActivityManager {
             )
             currentActivity = activity
             boundSessionEpoch = sessionEpoch
+            lastPublishedContent = content
             AppLog.application.info("Live Activity started for livestream epoch=\(sessionEpoch)")
         } catch {
             AppLog.application.error("Livestream Live Activity start failed: \(error.localizedDescription)")
         }
     }
 
+    /// Keeps a single Live Activity per ``sessionEpoch``: updates in place when already bound, starts only when allowed and missing.
+    func sync(
+        tradeRoomName: String,
+        roomID: String,
+        sessionEpoch: UInt64,
+        content: TradeTraxsLiveBroadcastActivityAttributes.ContentState,
+        allowNewActivity: Bool
+    ) {
+        guard isSupported else { return }
+        if boundSessionEpoch == sessionEpoch, currentActivity != nil {
+            publishUpdate(sessionEpoch: sessionEpoch, content: content)
+            return
+        }
+        guard allowNewActivity, content.isLive else { return }
+        start(
+            tradeRoomName: tradeRoomName,
+            roomID: roomID,
+            sessionEpoch: sessionEpoch,
+            content: content
+        )
+    }
+
     func update(sessionEpoch: UInt64, content: TradeTraxsLiveBroadcastActivityAttributes.ContentState) {
+        publishUpdate(sessionEpoch: sessionEpoch, content: content)
+    }
+
+    private func publishUpdate(
+        sessionEpoch: UInt64,
+        content: TradeTraxsLiveBroadcastActivityAttributes.ContentState
+    ) {
         guard isSupported else { return }
         guard boundSessionEpoch == sessionEpoch, let activity = currentActivity else { return }
+        if lastPublishedContent == content { return }
+        lastPublishedContent = content
         Task {
             await activity.update(.init(state: content, staleDate: nil))
         }
@@ -69,15 +106,12 @@ final class TradeTraxsLiveBroadcastLiveActivityManager {
             endAllImmediately()
             return
         }
-        if boundSessionEpoch == sessionEpoch, currentActivity != nil {
-            update(sessionEpoch: sessionEpoch, content: content)
-            return
-        }
-        start(
+        sync(
             tradeRoomName: tradeRoomName,
             roomID: roomID,
             sessionEpoch: sessionEpoch,
-            content: content
+            content: content,
+            allowNewActivity: content.isLive
         )
     }
 
@@ -89,5 +123,6 @@ final class TradeTraxsLiveBroadcastLiveActivityManager {
         }
         currentActivity = nil
         boundSessionEpoch = nil
+        lastPublishedContent = nil
     }
 }

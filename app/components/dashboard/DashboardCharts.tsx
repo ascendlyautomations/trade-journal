@@ -86,6 +86,8 @@ type DashboardChartsProps = Omit<
   lossCount?: number
   rrTargetAnalysis?: DashboardRrTargetAnalysis
   payoutsTotal?: number | null
+  showEquityDrawdownSettings?: boolean
+  onOpenEquityDrawdownSettings?: () => void
 }
 
 function ChartSkeleton({ className }: { className: string }) {
@@ -138,6 +140,8 @@ function DashboardCharts({
   lossCount = 0,
   rrTargetAnalysis,
   payoutsTotal = null,
+  showEquityDrawdownSettings = false,
+  onOpenEquityDrawdownSettings,
 }: DashboardChartsProps) {
   const weekdayChart = deferredSectionsReady ? (
     <MobileWebDashboardWeekdays data={weekdayData} totalTrades={totalTrades} />
@@ -173,6 +177,8 @@ function DashboardCharts({
       drawdownLimitLineY={drawdownLimitLineY}
       equityCurveUsesAccountBalance={equityCurveUsesAccountBalance}
       showPersonalDrawdownFloor={showPersonalDrawdownFloor}
+      showDrawdownSettingsButton={showEquityDrawdownSettings}
+      onOpenDrawdownSettings={onOpenEquityDrawdownSettings}
     />
   ) : (
     <ChartSkeleton className="h-48" />

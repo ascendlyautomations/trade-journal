@@ -67,7 +67,7 @@ function SearchRoomAvatar({ room }: { room: PopularTradeRoom }) {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="border-b border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+    <p className="border-b border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 max-md:border-[color:color-mix(in_srgb,var(--tt-text)_8%,transparent)] max-md:bg-[color:var(--tt-surface-nested,#1a222c)] max-md:text-[color:var(--tt-text-tertiary,#a8b3c2)]">
       {children}
     </p>
   )

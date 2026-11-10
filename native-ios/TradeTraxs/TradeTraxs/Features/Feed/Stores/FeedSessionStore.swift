@@ -161,6 +161,8 @@ final class FeedSessionStore {
             return SharedContentSeed(item: item, tradeSummary: nil, post: post, reel: nil, achievement: nil)
         case (.reel(let id), .clip(let item, let reel)) where reel.id == id:
             return SharedContentSeed(item: item, tradeSummary: nil, post: nil, reel: reel, achievement: nil)
+        case (.traderProfile, _):
+            return nil
         case (.achievementPost(let id), .achievement(let item, let achievement)) where PostID(item.id) == id:
             return SharedContentSeed(item: item, tradeSummary: nil, post: nil, reel: nil, achievement: achievement)
         case (.trade(let id), .trade(_, let summary)) where summary.id == id:

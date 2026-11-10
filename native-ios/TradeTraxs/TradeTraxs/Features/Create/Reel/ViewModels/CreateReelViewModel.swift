@@ -301,6 +301,10 @@ final class CreateReelViewModel {
             formError = "Choose a video first, then link a trade."
             return
         }
+        guard trade.visibility == .public else {
+            formError = Self.privateTradeLinkErrorMessage
+            return
+        }
         current.linkedTradeID = trade.id
         current.linkedTradeSummary = Self.summary(for: trade)
         current.caption = captionText
@@ -399,7 +403,8 @@ final class CreateReelViewModel {
         defer { isLoadingTrades = false }
         guard let viewerID else { return }
         if viewerID.rawValue.hasPrefix("dev.") {
-            pickerTrades = CreateReelFixtures.sampleTrades(owner: viewerID)
+            pickerTrades = Self.publicTradesOnly(CreateReelFixtures.sampleTrades(owner: viewerID))
+            reconcileLinkedTradeAfterPickerReload()
             return
         }
         do {
@@ -407,9 +412,10 @@ final class CreateReelViewModel {
                 ownedBy: viewerID,
                 accountID: nil,
                 page: PageRequest(limit: 30),
-                publicOnly: false
+                publicOnly: true
             )
-            pickerTrades = page.items
+            pickerTrades = Self.publicTradesOnly(page.items)
+            reconcileLinkedTradeAfterPickerReload()
         } catch {
             pickerTrades = []
         }
@@ -738,6 +744,22 @@ final class CreateReelViewModel {
             return
         }
 
+        if let linkedTradeID = publishDraftBase.linkedTradeID {
+            let isPublic = await resolveLinkedTradeIsPublic(
+                tradeID: linkedTradeID,
+                viewerID: viewerID
+            )
+            guard isPublic == true else {
+                if isPublic == false {
+                    formError = Self.privateTradeLinkErrorMessage
+                    clearLinkedTrade()
+                } else {
+                    formError = "Couldn't verify the linked trade. Try again."
+                }
+                return
+            }
+        }
+
         didHandOffBackgroundPublish = true
         formError = nil
 
@@ -973,6 +995,48 @@ final class CreateReelViewModel {
         return true
     }
 
+    private func reconcileLinkedTradeAfterPickerReload() {
+        guard let linkedID = draft?.linkedTradeID else { return }
+        guard !pickerTrades.contains(where: { $0.id == linkedID }) else { return }
+        if let cached = detailCache.trade(id: linkedID), cached.visibility == .public {
+            return
+        }
+        clearLinkedTrade()
+        formError = Self.privateTradeLinkErrorMessage
+    }
+
+    private func resolveLinkedTradeIsPublic(
+        tradeID: TradeID,
+        viewerID: ProfileID
+    ) async -> Bool? {
+        if let match = pickerTrades.first(where: { $0.id == tradeID }) {
+            return match.visibility == .public
+        }
+        if let cached = detailCache.trade(id: tradeID) {
+            return cached.visibility == .public
+        }
+        if viewerID.rawValue.hasPrefix("dev.") {
+            return true
+        }
+        if let flag = try? await feed.tradePublicFlagForReelLink(
+            tradeID: tradeID,
+            ownerID: viewerID
+        ) {
+            return flag
+        }
+        if let trade = try? await trades.trade(id: tradeID) {
+            return trade.visibility == .public
+        }
+        return nil
+    }
+
+    private static let privateTradeLinkErrorMessage =
+        "Only shared (public) trades can be linked to a clip. Share the trade from your journal, or remove the link."
+
+    private static func publicTradesOnly(_ trades: [Trade]) -> [Trade] {
+        trades.filter { $0.visibility == .public }
+    }
+
     private static func elapsedMilliseconds(since start: ContinuousClock.Instant) -> Double {
         let elapsed = ContinuousClock.now - start
         return Double(elapsed.components.seconds) * 1000
@@ -1013,6 +1077,9 @@ final class CreateReelViewModel {
             case .unknown(let message) where !message.isEmpty:
                 if message.contains("already has a clip") {
                     return "This trade already has a clip attached."
+                }
+                if message.contains("shared (public) trades") {
+                    return message
                 }
                 if message.contains("Couldn't read") || message.contains("helper application") {
                     return "Couldn't import that video. Please select it again."

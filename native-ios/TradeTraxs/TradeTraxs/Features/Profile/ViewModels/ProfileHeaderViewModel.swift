@@ -13,7 +13,7 @@ final class ProfileHeaderViewModel {
     private let navigationCoordinator: NavigationCoordinator
     private let detailCache: DetailPresentationCache
 
-    var isSharePresented: Bool = false
+    var shareTarget: SharedContentShareTarget?
     var pendingUnfollowConfirm = false
     var showsBlockConfirmation = false
     private(set) var isOpeningMessage = false
@@ -127,8 +127,10 @@ final class ProfileHeaderViewModel {
     }
 
     func presentShare() {
+        guard let profile = store.profile else { return }
         ExperienceHaptics.play(.selection)
-        isSharePresented = true
+        detailCache.seed(profile)
+        shareTarget = SharedContentShareTarget.trader(profile: profile)
     }
 
     func openFollowers() {

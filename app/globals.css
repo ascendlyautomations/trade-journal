@@ -14,6 +14,7 @@
   --app-tab-bar-height: 0px;
   /* Total space reserved under scrollable app content (tab row + home indicator). */
   --app-tab-bar-offset: 0px;
+  --app-live-session-chrome-offset: 0px;
   /*
    * Full-bleed page shells (messages, community, etc.).
    * Web: navbar height only (matches historical 100dvh-4rem).

@@ -80,6 +80,8 @@ struct CreateReelView: View {
                     trades: viewModel.pickerTrades,
                     imagePipeline: imagePipeline,
                     isLoading: viewModel.isLoadingTrades,
+                    emptyTitle: "No shared trades",
+                    emptyMessage: "Share a trade from your journal first, then link it here.",
                     onSelect: { trade in
                         viewModel.selectLinkedTrade(trade)
                         showsTradePicker = false

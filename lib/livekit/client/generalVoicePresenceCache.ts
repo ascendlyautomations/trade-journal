@@ -11,10 +11,15 @@ export const generalVoicePresenceCache = new Map<
   string,
   GeneralVoicePresenceSnapshot
 >()
+export type GeneralVoicePresenceFetchResult = {
+  snapshot: GeneralVoicePresenceSnapshot | null
+  unauthorized?: boolean
+}
+
 /** One in-flight request per room so remounts / duplicate hooks share the same GET. */
 export const generalVoicePresenceFetchByRoom = new Map<
   string,
-  Promise<GeneralVoicePresenceSnapshot | null>
+  Promise<GeneralVoicePresenceFetchResult>
 >()
 
 /** After leaving LiveKit voice, drop cached counts so the UI refetches promptly */

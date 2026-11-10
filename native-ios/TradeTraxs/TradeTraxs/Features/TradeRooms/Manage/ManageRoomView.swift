@@ -15,9 +15,11 @@ struct ManageRoomView: View {
     private let imagePipeline: any ImagePipeline
 
     @Environment(\.themeColors) private var colors
+    @Bindable private var roomMemberTagStore = SessionRoomMemberTagsStore.shared
     @State private var navigationSection: ManageRoomSection?
     @State private var selectedMember: RoomManagedMember?
     @State private var memberForTags: RoomManagedMember?
+    @State private var memberTagDraftSelection: Set<RoomMemberTagID> = []
     @State private var photoItem: PhotosPickerItem?
     @State private var cropSourceImage: UIImage?
     @State private var editingTag: RoomMemberTag?
@@ -70,6 +72,9 @@ struct ManageRoomView: View {
         .experienceScreenBackground()
         .experienceNavigationTitle("Manage Room")
         .task { viewModel.loadIfNeeded() }
+        .onChange(of: roomMemberTagStore.revision) { _, _ in
+            viewModel.syncMemberTagsFromStore()
+        }
         .navigationDestination(item: $navigationSection) { section in
             switch section {
             case .details: detailsScreen
@@ -117,12 +122,36 @@ struct ManageRoomView: View {
                     .experienceNavigationTitle("Manage Tags")
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button("Done") { memberForTags = nil }
+                            Button("Cancel") {
+                                memberForTags = nil
+                            }
+                            .disabled(viewModel.isMutatingTag)
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Save") {
+                                Task {
+                                    let saved = await viewModel.saveMemberTagAssignments(
+                                        for: member,
+                                        selectedTagIDs: memberTagDraftSelection
+                                    )
+                                    if saved {
+                                        memberForTags = nil
+                                    }
+                                }
+                            }
+                            .fontWeight(.semibold)
+                            .disabled(viewModel.isMutatingTag)
                         }
                     }
             }
             .experienceScreenBackground()
             .presentationBackground(colors.sheetBackground)
+            .onAppear {
+                memberTagDraftSelection = viewModel.savedTagIDs(for: member.profile.id)
+            }
+            .onChange(of: member.id) { _, _ in
+                memberTagDraftSelection = viewModel.savedTagIDs(for: member.profile.id)
+            }
         }
         .sheet(item: $editingTag) { tag in
             tagEditorSheet(tag)
@@ -213,6 +242,8 @@ struct ManageRoomView: View {
                         photoItem = nil
                     }
                 }
+            } header: {
+                Text("Room")
             }
 
             Section("Discovery") {
@@ -259,6 +290,8 @@ struct ManageRoomView: View {
                     .lineLimit(4...8)
                     .accessibilityIdentifier("tradeRooms.manage.details.rules")
                 }
+            } header: {
+                Text("Rules")
             }
 
             Section("Member Permissions") {
@@ -268,9 +301,10 @@ struct ManageRoomView: View {
             }
 
         }
-        .listSectionSpacing(ExperienceSpacing.xs)
+        .listSectionSpacing(ExperienceSpacing.xxs)
+        .contentMargins(.top, ExperienceSpacing.xxs, for: .scrollContent)
         .scrollDismissesKeyboard(.interactively)
-        .experienceTradeTraxsFormStyle(pageBackground: false)
+        .experienceTradeTraxsFormStyle(pageBackground: true)
         .experienceNavigationTitle("Edit Room Details")
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -325,6 +359,9 @@ struct ManageRoomView: View {
                 }
             }
         }
+        .experienceInsetGroupedListStyle(pageBackground: true)
+        .listSectionSpacing(ExperienceSpacing.xxs)
+        .contentMargins(.top, ExperienceSpacing.xxs, for: .scrollContent)
         .experienceNavigationTitle("Tags")
     }
 
@@ -466,7 +503,7 @@ struct ManageRoomView: View {
                 viewModel.requestMemberAction(.ban(member.profile.id))
             },
             onDismiss: { selectedMember = nil },
-            onManageTags: viewModel.canManageRoom
+            onManageTags: viewModel.canManageTagsForMember(member)
                 ? {
                     let managed = member
                     selectedMember = nil
@@ -482,19 +519,12 @@ struct ManageRoomView: View {
     }
 
     private func memberTagsEditor(_ member: RoomManagedMember) -> some View {
-        List {
-            ForEach(viewModel.tags) { tag in
-                let assigned = member.tags.contains(where: { $0.id == tag.id })
-                Button {
-                    Task { await viewModel.toggleTag(tag, for: member) }
-                } label: {
-                    RoomMemberTagAssignPickerRow(tag: tag, assigned: assigned)
-                }
-                .disabled(viewModel.isMutatingTag)
-            }
-        }
-        .experienceInsetGroupedListStyle(pageBackground: true)
-        .scrollContentBackground(.hidden)
+        RoomMemberTagAssignmentEditor(
+            tags: viewModel.tags,
+            selectedTagIDs: $memberTagDraftSelection,
+            isSaving: viewModel.isMutatingTag
+        )
+        .task { await viewModel.refreshTags() }
     }
 
     @ViewBuilder

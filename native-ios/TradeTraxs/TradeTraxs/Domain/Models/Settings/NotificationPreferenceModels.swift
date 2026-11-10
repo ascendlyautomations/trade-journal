@@ -17,6 +17,7 @@ nonisolated enum NotificationPreferenceKey: String, Hashable, Codable, Sendable,
     case roomMessagesEnabled = "room_messages_enabled"
     case roomMentionsEnabled = "room_mentions_enabled"
     case roomJoinsEnabled = "room_joins_enabled"
+    case roomLiveStreamsEnabled = "room_live_streams_enabled"
     case achievementLikesEnabled = "achievement_likes_enabled"
     case achievementCommentsEnabled = "achievement_comments_enabled"
     case achievementUnlocksEnabled = "achievement_unlocks_enabled"
@@ -100,7 +101,12 @@ nonisolated enum NotificationPreferenceCategory: String, Hashable, Codable, Send
                 .followRequestAcceptsEnabled,
             ]
         case .rooms:
-            return [.roomMessagesEnabled, .roomMentionsEnabled, .roomJoinsEnabled]
+            return [
+                .roomMessagesEnabled,
+                .roomMentionsEnabled,
+                .roomJoinsEnabled,
+                .roomLiveStreamsEnabled,
+            ]
         case .achievements:
             return [
                 .achievementLikesEnabled,
@@ -131,6 +137,7 @@ extension NotificationPreferenceKey {
         case .roomMessagesEnabled: return "Room Messages"
         case .roomMentionsEnabled: return "Room Mentions"
         case .roomJoinsEnabled: return "Room Joins"
+        case .roomLiveStreamsEnabled: return "Live Stream Notifications"
         case .achievementLikesEnabled: return "Achievement Likes"
         case .achievementCommentsEnabled: return "Achievement Comments"
         case .achievementUnlocksEnabled: return "Achievement Unlocks"

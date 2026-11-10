@@ -15,6 +15,7 @@ struct ClipDetailView: View {
     @State private var contentRevealed = false
     @State private var showsDeleteConfirm = false
     @State private var isDisplayingVideoFrame = false
+    @State private var shareTarget: SharedContentShareTarget?
 
     init(reelID: ReelID, data: DataEnvironment, navigationCoordinator: NavigationCoordinator) {
         _viewModel = State(
@@ -122,6 +123,13 @@ struct ClipDetailView: View {
         } message: {
             Text(viewModel.deleteErrorMessage ?? "")
         }
+        .sheet(item: $shareTarget) { target in
+            SharedContentShareSheet(
+                target: target,
+                data: data,
+                onClose: { shareTarget = nil }
+            )
+        }
         .accessibilityIdentifier("detail.clip.root")
     }
 
@@ -199,6 +207,7 @@ struct ClipDetailView: View {
                         scrollProxy.scrollTo(Self.commentsAnchorID, anchor: .top)
                     }
                 },
+                onShareTap: { presentShare(for: reel) },
                 vaultRef: VaultContentRef(contentType: .reel, contentID: reel.id.rawValue)
             )
 
@@ -308,6 +317,11 @@ struct ClipDetailView: View {
               let tradeID = reel.linkedTradeID
         else { return nil }
         return data.detailCache.trade(id: tradeID)
+    }
+
+    private func presentShare(for reel: Reel) {
+        data.detailCache.seed(reel)
+        shareTarget = SharedContentShareTarget.profile(reel: reel, author: viewModel.author)
     }
 
     private func openLinkedTrade(_ tradeID: TradeID) {

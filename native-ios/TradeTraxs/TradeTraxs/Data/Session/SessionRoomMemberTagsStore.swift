@@ -9,6 +9,8 @@ final class SessionRoomMemberTagsStore {
 
     private var tagsByRoom: [RoomID: [RoomMemberTag]] = [:]
     private var assignmentsByRoom: [RoomID: [RoomMemberTagAssignment]] = [:]
+    /// Bumped whenever tag definitions or assignments change — drives SwiftUI refresh.
+    private(set) var revision: UInt64 = 0
 
     func tags(for roomID: RoomID) -> [RoomMemberTag] {
         tagsByRoom[roomID] ?? []
@@ -28,14 +30,38 @@ final class SessionRoomMemberTagsStore {
     func replace(roomID: RoomID, tags: [RoomMemberTag], assignments: [RoomMemberTagAssignment]) {
         tagsByRoom[roomID] = tags
         assignmentsByRoom[roomID] = assignments
+        revision &+= 1
     }
 
     func replaceTags(_ tags: [RoomMemberTag], roomID: RoomID) {
         tagsByRoom[roomID] = tags
+        revision &+= 1
     }
 
     func replaceAssignments(_ assignments: [RoomMemberTagAssignment], roomID: RoomID) {
         assignmentsByRoom[roomID] = assignments
+        revision &+= 1
+    }
+
+    /// Applies a saved tag selection locally so lists and chat update before/without another fetch.
+    func setMemberTagIDs(
+        _ tagIDs: Set<RoomMemberTagID>,
+        profileID: ProfileID,
+        roomID: RoomID
+    ) {
+        var assignments = assignmentsByRoom[roomID] ?? []
+        assignments.removeAll { $0.profileID == profileID }
+        for tagID in tagIDs {
+            assignments.append(
+                RoomMemberTagAssignment(
+                    roomID: roomID,
+                    profileID: profileID,
+                    tagID: tagID
+                )
+            )
+        }
+        assignmentsByRoom[roomID] = assignments
+        revision &+= 1
     }
 
     func invalidate(roomID: RoomID? = nil) {
@@ -46,6 +72,7 @@ final class SessionRoomMemberTagsStore {
             tagsByRoom.removeAll()
             assignmentsByRoom.removeAll()
         }
+        revision &+= 1
     }
 }
 

@@ -49,6 +49,7 @@ import {
   registerBroadcastVideoHandlers,
 } from "./tradeRoomBroadcastVideo.ts"
 import { logBroadcast } from "./tradeRoomBroadcastDiagnostics.ts"
+import { getSupabaseApiAccessToken } from "@/lib/supabaseBearerFetch"
 import {
   detachLocalBroadcastPreview,
   findLocalBroadcastVideoPublication,
@@ -206,6 +207,7 @@ export type BroadcastStoreSnapshot = {
   sessionBlockUserIds: string[]
   viewerStreamRemovalNotice: BroadcastViewerStreamRemovalNotice | null
   viewerBroadcastConnectionLost: BroadcastViewerConnectionLost | null
+  viewerStreamEndedNotice: BroadcastViewerStreamEndedNotice | null
   speakerUpgradeInFlight: boolean
   obsStudio: ObsStudioState | null
   /** True only while OBS private session is being started (before isPublishing). */
@@ -236,6 +238,11 @@ export type BroadcastViewerConnectionLost = {
   sessionId: string
 }
 
+export type BroadcastViewerStreamEndedNotice = {
+  sessionId: string
+  roomTitle: string
+}
+
 export type BroadcastSpeakInviteNotice = {
   sessionId: string
   roomId: string
@@ -254,7 +261,11 @@ export type BroadcastInteractivePollOwner =
   | "host-studio"
   | "global-studio"
 
-const BROADCAST_INTERACTIVE_POLL_MS = 4000
+const BROADCAST_INTERACTIVE_POLL_MS_SESSION = 4_000
+const BROADCAST_INTERACTIVE_POLL_MS_PASSIVE = 8_000
+const ROOM_STATUS_POLL_MS_IDLE = 60_000
+const ROOM_STATUS_POLL_MS_OBS_PREP = 5_000
+const INTERACTIVE_DRIVEN_STATUS_REFRESH_MIN_MS = 30_000
 
 export type BroadcastLiveParticipant = {
   userId: string
@@ -311,6 +322,16 @@ let speakerUpgradeInFlight = false
 let interactivePollTimer: ReturnType<typeof setInterval> | null = null
 const interactivePollOwners = new Set<BroadcastInteractivePollOwner>()
 let interactivePollAccessToken: string | null = null
+let interactivePollIntervalMsActive = BROADCAST_INTERACTIVE_POLL_MS_PASSIVE
+let lastInteractiveDrivenStatusRefresh = 0
+let roomStatusPollTimer: ReturnType<typeof setInterval> | null = null
+let roomStatusPollActive = false
+let roomStatusPollRoomId: string | null = null
+let roomStatusPollCanReconcile = false
+let roomStatusPollMode: "idle" | "obs-prep" = "idle"
+let roomStatusPollAccessToken: string | null = null
+let roomStatusPollPausedAuth = false
+let roomStatusPollInFlight = false
 let viewerStatusRefreshTimer: ReturnType<typeof setTimeout> | null = null
 let viewerStatusRefreshInFlight = false
 let speakerGrantUserIds: string[] = []
@@ -343,6 +364,9 @@ export {
 let broadcasterIdentityForRoom: string | null = null
 let viewerStreamRemovalNotice: BroadcastViewerStreamRemovalNotice | null = null
 let viewerBroadcastConnectionLost: BroadcastViewerConnectionLost | null = null
+let viewerStreamEndedNotice: BroadcastViewerStreamEndedNotice | null = null
+let presentedStreamEndedSessionId: string | null = null
+let voluntaryViewerBroadcastLeave = false
 let intentionalBroadcastRoomTeardown = false
 let viewerRemovalHandling = false
 let passiveInteractiveContext: BroadcastPassiveInteractiveContext | null = null
@@ -481,6 +505,7 @@ function buildSnapshot(): BroadcastStoreSnapshot {
     sessionBlockUserIds,
     viewerStreamRemovalNotice,
     viewerBroadcastConnectionLost,
+    viewerStreamEndedNotice,
     speakerUpgradeInFlight,
     obsStudio: buildObsStudioSnapshot(),
     obsBroadcastBootstrapping,
@@ -639,6 +664,34 @@ function attachRoomSync(activeRoom: Room, broadcasterId: string) {
   sync()
 }
 
+function presentViewerStreamEndedNotice(sessionId: string): void {
+  const sid = sessionId.trim()
+  if (!sid || voluntaryViewerBroadcastLeave) return
+  if (presentedStreamEndedSessionId === sid) return
+  presentedStreamEndedSessionId = sid
+  viewerStreamEndedNotice = {
+    sessionId: sid,
+    roomTitle: roomTitle?.trim() || "Trade Room",
+  }
+  viewerBroadcastConnectionLost = null
+  emit()
+}
+
+export function acknowledgeTradeRoomBroadcastStreamEnded(): void {
+  viewerStreamEndedNotice = null
+  emit()
+}
+
+/** Deep links / UI when we know the stream ended but were never connected as a viewer. */
+export function presentTradeRoomBroadcastStreamEndedNotice(
+  sessionId: string,
+  roomTitleOverride?: string | null
+): void {
+  const title = roomTitleOverride?.trim()
+  if (title) roomTitle = title
+  presentViewerStreamEndedNotice(sessionId.trim() || "stream-ended")
+}
+
 async function handleViewerBroadcastLiveKitDisconnected(): Promise<void> {
   if (
     isPublishing ||
@@ -721,8 +774,10 @@ async function handleViewerBroadcastLiveKitDisconnected(): Promise<void> {
 
     switch (action.type) {
       case "stream_ended":
-        viewerBroadcastConnectionLost = null
+        presentViewerStreamEndedNotice(watchingSessionId)
         await teardownBroadcastRoom({ preserveViewerCredentials: true })
+        isWatching = false
+        emit()
         break
       case "removed":
         viewerBroadcastConnectionLost = null
@@ -761,6 +816,8 @@ async function forceViewerOffStream(
   const activeVoiceRoomId = roomId
 
   viewerStreamRemovalNotice = notice
+  viewerBroadcastConnectionLost = null
+  viewerStreamEndedNotice = null
   speakInviteNotice = null
   emit()
 
@@ -951,6 +1008,181 @@ function isLiteBroadcastStatusPayload(next: BroadcastRoomStatus): boolean {
   )
 }
 
+function interactivePollIntervalMs(): number {
+  if (
+    interactivePollOwners.has("host-studio") ||
+    interactivePollOwners.has("viewer-session")
+  ) {
+    return BROADCAST_INTERACTIVE_POLL_MS_SESSION
+  }
+  return BROADCAST_INTERACTIVE_POLL_MS_PASSIVE
+}
+
+function maybeRefreshStatusAfterInteractiveInactive(): void {
+  const now = Date.now()
+  if (now - lastInteractiveDrivenStatusRefresh < INTERACTIVE_DRIVEN_STATUS_REFRESH_MIN_MS) {
+    return
+  }
+  if (!status.live) return
+  lastInteractiveDrivenStatusRefresh = now
+  void refreshBroadcastStatusAfterViewerSignal()
+}
+
+/** Shared GET /api/livekit/broadcast/status for panel + centralized room polling. */
+export async function fetchTradeRoomBroadcastRoomStatus(
+  targetRoomId: string,
+  options: {
+    reconcile?: boolean
+    lite?: boolean
+    canReconcile?: boolean
+  } = {}
+): Promise<BroadcastRoomStatus> {
+  const bearerToken = await getSupabaseApiAccessToken()
+  if (!bearerToken) {
+    roomStatusPollPausedAuth = true
+    throw new Error("Sign in required for stream status.")
+  }
+  const reconcile = Boolean(options.canReconcile && options.reconcile)
+  const lite = Boolean(options.lite && !reconcile)
+  const reconcileQuery = reconcile ? "&reconcile=1" : ""
+  const liteQuery = lite ? "&lite=1" : ""
+  const res = await fetch(
+    `/api/livekit/broadcast/status?roomId=${encodeURIComponent(targetRoomId)}${reconcileQuery}${liteQuery}`,
+    { headers: { Authorization: `Bearer ${bearerToken}` } }
+  )
+  const payload = (await res.json().catch(() => ({}))) as Record<string, unknown> & {
+    error?: string
+  }
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      roomStatusPollPausedAuth = true
+    }
+    throw new Error(
+      typeof payload.error === "string"
+        ? payload.error
+        : "Could not load stream status."
+    )
+  }
+  roomStatusPollPausedAuth = false
+  return statusPayloadFromApiJson(payload)
+}
+
+function stopRoomBroadcastStatusPolling(): void {
+  roomStatusPollActive = false
+  roomStatusPollRoomId = null
+  roomStatusPollAccessToken = null
+  if (roomStatusPollTimer) {
+    clearInterval(roomStatusPollTimer)
+    roomStatusPollTimer = null
+  }
+}
+
+async function runRoomBroadcastStatusPollTick(
+  reconcile: boolean,
+  lite: boolean
+): Promise<void> {
+  if (
+    roomStatusPollPausedAuth ||
+    !roomStatusPollActive ||
+    !roomStatusPollRoomId?.trim()
+  ) {
+    return
+  }
+  if (roomStatusPollInFlight) return
+  roomStatusPollInFlight = true
+  try {
+    await refreshTradeRoomBroadcastStatus(() =>
+      fetchTradeRoomBroadcastRoomStatus(roomStatusPollRoomId, {
+        reconcile,
+        lite,
+        canReconcile: roomStatusPollCanReconcile,
+      })
+    )
+  } catch {
+    // refreshTradeRoomBroadcastStatus surfaces UI error; keep polling unless auth pause.
+  } finally {
+    roomStatusPollInFlight = false
+  }
+}
+
+function reconcileRoomBroadcastStatusPolling(immediate = false): void {
+  if (
+    !roomStatusPollActive ||
+    !roomStatusPollRoomId?.trim() ||
+    !roomStatusPollAccessToken?.trim()
+  ) {
+    stopRoomBroadcastStatusPolling()
+    return
+  }
+  if (
+    roomStatusPollMode === "idle" &&
+    roomId === roomStatusPollRoomId &&
+    broadcastRoom &&
+    (isWatching || isPublishing)
+  ) {
+    stopRoomBroadcastStatusPolling()
+    return
+  }
+
+  const interval =
+    roomStatusPollMode === "obs-prep"
+      ? ROOM_STATUS_POLL_MS_OBS_PREP
+      : ROOM_STATUS_POLL_MS_IDLE
+
+  if (roomStatusPollTimer) {
+    clearInterval(roomStatusPollTimer)
+    roomStatusPollTimer = null
+  }
+
+  if (immediate) {
+    if (roomStatusPollMode === "obs-prep") {
+      void runRoomBroadcastStatusPollTick(false, false)
+    } else {
+      void runRoomBroadcastStatusPollTick(true, false)
+    }
+  }
+
+  roomStatusPollTimer = window.setInterval(() => {
+    if (roomStatusPollPausedAuth) return
+    if (roomStatusPollMode === "obs-prep") {
+      void runRoomBroadcastStatusPollTick(false, false)
+    } else {
+      void runRoomBroadcastStatusPollTick(false, true)
+    }
+  }, interval)
+}
+
+/**
+ * Single owner for passive room GET /status (replaces per-panel timers).
+ * Skip when the user already has a LiveKit broadcast session for this room.
+ */
+export function setBroadcastRoomStatusPollDemand(
+  wantsPoll: boolean,
+  config?: {
+    roomId: string
+    accessToken: string | null
+    canReconcile: boolean
+    mode: "idle" | "obs-prep"
+  }
+): void {
+  if (!wantsPoll || !config?.roomId?.trim() || !config.accessToken?.trim()) {
+    stopRoomBroadcastStatusPolling()
+    return
+  }
+  const nextRoom = config.roomId.trim()
+  const resumed =
+    roomStatusPollActive &&
+    roomStatusPollRoomId === nextRoom &&
+    roomStatusPollMode === config.mode
+  roomStatusPollActive = true
+  roomStatusPollRoomId = nextRoom
+  roomStatusPollAccessToken = config.accessToken.trim()
+  roomStatusPollCanReconcile = config.canReconcile
+  roomStatusPollMode = config.mode
+  roomStatusPollPausedAuth = false
+  reconcileRoomBroadcastStatusPolling(!resumed)
+}
+
 function scheduleViewerBroadcastStatusRefresh(): void {
   if (viewerStatusRefreshTimer) {
     clearTimeout(viewerStatusRefreshTimer)
@@ -1012,7 +1244,7 @@ export async function refreshBroadcastInteractiveState(
           syncLiveParticipantRoster(broadcastRoom, broadcasterIdentityForRoom)
         }
         emit()
-        void refreshBroadcastStatusAfterViewerSignal()
+        maybeRefreshStatusAfterInteractiveInactive()
       }
       return
     }
@@ -1044,7 +1276,7 @@ export async function refreshBroadcastInteractiveState(
         syncLiveParticipantRoster(broadcastRoom, broadcasterIdentityForRoom)
       }
       emit()
-      void refreshBroadcastStatusAfterViewerSignal()
+      maybeRefreshStatusAfterInteractiveInactive()
       return
     }
 
@@ -1170,18 +1402,24 @@ async function maybeAutoUpgradeViewerToSpeaker(
 function startInteractivePolling(accessToken: string) {
   const token = accessToken.trim()
   if (!token) return
-  if (interactivePollTimer && interactivePollAccessToken === token) {
+  const intervalMs = interactivePollIntervalMs()
+  if (
+    interactivePollTimer &&
+    interactivePollAccessToken === token &&
+    interactivePollIntervalMsActive === intervalMs
+  ) {
     return
   }
   stopInteractivePolling()
   interactivePollAccessToken = token
+  interactivePollIntervalMsActive = intervalMs
   if (!viewerAccessToken?.trim()) {
     viewerAccessToken = token
   }
   void refreshBroadcastInteractiveState(token)
   interactivePollTimer = setInterval(() => {
     void refreshBroadcastInteractiveState(token)
-  }, BROADCAST_INTERACTIVE_POLL_MS)
+  }, intervalMs)
 }
 
 function stopInteractivePolling() {
@@ -1189,6 +1427,7 @@ function stopInteractivePolling() {
     clearInterval(interactivePollTimer)
     interactivePollTimer = null
   }
+  interactivePollIntervalMsActive = BROADCAST_INTERACTIVE_POLL_MS_PASSIVE
 }
 
 export function setTradeRoomBroadcastStudioPresentation(
@@ -1397,6 +1636,7 @@ async function teardownBroadcastRoom(options?: {
   handCleanup = null
   interactivePollOwners.delete("viewer-session")
   reconcileBroadcastInteractivePolling()
+  stopRoomBroadcastStatusPolling()
   if (viewerStatusRefreshTimer) {
     clearTimeout(viewerStatusRefreshTimer)
     viewerStatusRefreshTimer = null
@@ -1589,7 +1829,18 @@ export function setTradeRoomBroadcastStatus(next: BroadcastRoomStatus): void {
     obsPublishRequestInFlight = false
   }
   if (!merged.live && isWatching) {
-    void teardownBroadcastRoom().then(() => emit())
+    const sid =
+      currentSessionId ??
+      prev.broadcastSessionId ??
+      merged.broadcastSessionId ??
+      ""
+    if (sid && !voluntaryViewerBroadcastLeave) {
+      presentViewerStreamEndedNotice(sid)
+    }
+    void teardownBroadcastRoom({ preserveViewerCredentials: true }).then(() => {
+      isWatching = false
+      emit()
+    })
   }
   if (
     merged.live &&
@@ -2937,11 +3188,17 @@ export async function retryTradeRoomBroadcasterCapture(): Promise<void> {
 }
 
 export async function leaveTradeRoomBroadcastViewer(): Promise<void> {
-  await teardownBroadcastRoom()
-  isWatching = false
-  role = "none"
-  roomId = null
-  emit()
+  voluntaryViewerBroadcastLeave = true
+  try {
+    await teardownBroadcastRoom()
+    isWatching = false
+    role = "none"
+    roomId = null
+    viewerBroadcastConnectionLost = null
+    emit()
+  } finally {
+    voluntaryViewerBroadcastLeave = false
+  }
 }
 
 /** Call when the viewer <video> element mounts or changes. */

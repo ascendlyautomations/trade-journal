@@ -58,6 +58,7 @@ const PREFERENCE_SECTIONS: ToggleSection[] = [
       { key: "room_messages_enabled", label: "Room Messages" },
       { key: "room_mentions_enabled", label: "Room Mentions" },
       { key: "room_joins_enabled", label: "Room Joins" },
+      { key: "room_live_streams_enabled", label: "Live Stream Notifications" },
     ],
   },
   {

@@ -55,8 +55,9 @@ function preferenceKeyForType(
     case "follow_request_accepted":
       return "follow_request_accepts_enabled"
     case "room_message":
-    case "room_live":
       return "room_messages_enabled"
+    case "room_live":
+      return "room_live_streams_enabled"
     case "room_mention":
       return "room_mentions_enabled"
     case "room_join":

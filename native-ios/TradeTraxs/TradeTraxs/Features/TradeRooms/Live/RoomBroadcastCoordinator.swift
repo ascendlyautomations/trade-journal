@@ -139,6 +139,10 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private(set) var obsHostPreviewVideoTrack: VideoTrack?
     private(set) var obsHostPreviewConnectionState: ConnectionState = .disconnected
     private var obsHostPreviewProgramIdentity: String?
+    private var obsHostPreviewSessionId: String?
+    private var obsHostPreviewConnectTask: Task<Void, Error>?
+    private var obsHostPreviewConnectSessionId: String?
+    private var obsHostPreviewConnectFlightId: UUID?
 
     /// Video for UI — nil while minimized so SwiftUI detaches the renderer without disconnecting.
     var videoTrackForDisplay: VideoTrack? {
@@ -217,6 +221,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private var room: Room?
     private var roomDiscoveryRefreshTask: Task<Void, Never>?
     private var interactivePollTask: Task<Void, Never>?
+    private var interactivePollRoomID: RoomID?
     /// Dedupes concurrent GET /api/livekit/broadcast/status (foreground + room open, etc.).
     private var isStatusFetchInFlight = false
     private var interactiveViewerProfileID: ProfileID?
@@ -243,6 +248,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private var streamConnectionLostPopupPresentedSessionId: String?
     private var selectedProgramVideoPublicationSid: String?
     private var broadcastLiveActivityEpoch: UInt64 = 0
+    private var lastInteractiveSnapshotFingerprint: String?
     let chatProfileCache = BroadcastChatProfileCache()
 
     private init() {}
@@ -421,21 +427,116 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         token: LiveKitBroadcastStartResponse,
         programPublisherIdentity: String?
     ) async throws {
-        await disconnectObsHostPreview()
-        let nextRoom = Room()
-        let bag = ObsHostPreviewRoomDelegate()
-        nextRoom.add(delegate: bag)
-        obsHostPreviewDelegateBag = bag
-        obsHostPreviewRoom = nextRoom
+        let sessionId = token.broadcastSessionId?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedSessionId = sessionId?.isEmpty == false ? sessionId : nil
+
+        if let normalizedSessionId,
+           obsHostPreviewSessionId == normalizedSessionId,
+           let room = obsHostPreviewRoom,
+           room.connectionState == .connected
+        {
+            applyObsHostPreviewProgramIdentity(
+                token: token,
+                programPublisherIdentity: programPublisherIdentity
+            )
+            syncObsHostPreviewVideo(from: room)
+            return
+        }
+
+        if let obsHostPreviewConnectTask,
+           obsHostPreviewConnectSessionId == normalizedSessionId
+        {
+            do {
+                try await obsHostPreviewConnectTask.value
+            } catch is CancellationError {
+                if obsHostPreviewConnectionState == .connected,
+                   obsHostPreviewSessionId == normalizedSessionId
+                {
+                    return
+                }
+                throw CancellationError()
+            } catch {
+                if obsHostPreviewConnectionState == .connected,
+                   obsHostPreviewSessionId == normalizedSessionId
+                {
+                    return
+                }
+                throw error
+            }
+            return
+        }
+
+        let flightId = UUID()
+        let connectTask = Task { @MainActor in
+            try await self.performObsHostPreviewConnect(
+                token: token,
+                programPublisherIdentity: programPublisherIdentity
+            )
+        }
+        obsHostPreviewConnectTask = connectTask
+        obsHostPreviewConnectSessionId = normalizedSessionId
+        obsHostPreviewConnectFlightId = flightId
+        defer {
+            if obsHostPreviewConnectFlightId == flightId {
+                obsHostPreviewConnectTask = nil
+                obsHostPreviewConnectSessionId = nil
+                obsHostPreviewConnectFlightId = nil
+            }
+        }
+        try await connectTask.value
+    }
+
+    private func applyObsHostPreviewProgramIdentity(
+        token: LiveKitBroadcastStartResponse,
+        programPublisherIdentity: String?
+    ) {
         if let sid = token.broadcastSessionId?.trimmingCharacters(in: .whitespacesAndNewlines), !sid.isEmpty {
             obsHostPreviewProgramIdentity = BroadcastObsProgramVideo.resolvedProgramPublisherIdentity(
                 sessionId: sid,
                 primaryFromToken: programPublisherIdentity,
                 primaryFromStatus: nil
             )
-        } else {
-            obsHostPreviewProgramIdentity = programPublisherIdentity?.trimmingCharacters(in: .whitespacesAndNewlines)
+        } else if let programPublisherIdentity {
+            obsHostPreviewProgramIdentity = programPublisherIdentity
+                .trimmingCharacters(in: .whitespacesAndNewlines)
         }
+    }
+
+    private func performObsHostPreviewConnect(
+        token: LiveKitBroadcastStartResponse,
+        programPublisherIdentity: String?
+    ) async throws {
+        let sessionId = token.broadcastSessionId?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedSessionId = sessionId?.isEmpty == false ? sessionId : nil
+
+        if let room = obsHostPreviewRoom,
+           room.connectionState == .connected,
+           obsHostPreviewSessionId == normalizedSessionId
+        {
+            applyObsHostPreviewProgramIdentity(
+                token: token,
+                programPublisherIdentity: programPublisherIdentity
+            )
+            syncObsHostPreviewVideo(from: room)
+            return
+        }
+
+        if obsHostPreviewSessionId != normalizedSessionId {
+            await disconnectObsHostPreview()
+        }
+
+        let nextRoom = Room()
+        let bag = ObsHostPreviewRoomDelegate()
+        nextRoom.add(delegate: bag)
+        obsHostPreviewDelegateBag = bag
+        obsHostPreviewRoom = nextRoom
+        obsHostPreviewSessionId = normalizedSessionId
+        applyObsHostPreviewProgramIdentity(
+            token: token,
+            programPublisherIdentity: programPublisherIdentity
+        )
         obsHostPreviewConnectionState = nextRoom.connectionState
         AudioManager.prepare()
         _ = try? obsHostPreviewPlaybackHandle?.release()
@@ -451,8 +552,13 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     }
 
     func disconnectObsHostPreview() async {
+        obsHostPreviewConnectTask?.cancel()
+        obsHostPreviewConnectTask = nil
+        obsHostPreviewConnectSessionId = nil
+        obsHostPreviewConnectFlightId = nil
         obsHostPreviewVideoTrack = nil
         obsHostPreviewProgramIdentity = nil
+        obsHostPreviewSessionId = nil
         _ = try? obsHostPreviewPlaybackHandle?.release()
         obsHostPreviewPlaybackHandle = nil
         if let r = obsHostPreviewRoom, let bag = obsHostPreviewDelegateBag {
@@ -529,12 +635,21 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         }
     }
 
+    /// Stops Trade Room conversation–scoped discovery polling.
+    /// Keeps interactive + status tracking while the user continues watching via global broadcast chrome.
     func stopPolling() {
         roomDiscoveryRefreshTask?.cancel()
         roomDiscoveryRefreshTask = nil
-        stopInteractivePolling()
         pollRoomID = nil
         pollRoomTitle = nil
+
+        if isWatching, let watchRoomID = watchSession?.roomID {
+            statusPollRoomID = watchRoomID
+            ensureInteractivePolling(for: watchRoomID)
+            return
+        }
+
+        stopInteractivePolling()
         statusPollRoomID = nil
     }
 
@@ -585,7 +700,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                 statusPollRoomID = roomID
                 statusPollError = nil
                 if next.isLive {
-                    startInteractivePolling(roomID: roomID)
+                    ensureInteractivePolling(for: roomID)
                 } else {
                     stopInteractivePolling()
                     speakInviteNotice = nil
@@ -594,6 +709,12 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                 polledStatus = next
                 statusPollRoomID = roomID
                 statusPollError = nil
+                if next.isLive {
+                    ensureInteractivePolling(for: roomID)
+                } else {
+                    stopInteractivePolling()
+                    speakInviteNotice = nil
+                }
             }
 
             if isWatching, watchSession?.roomID == roomID,
@@ -648,6 +769,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         }
 
         broadcastLiveActivityEpoch &+= 1
+        lastInteractiveSnapshotFingerprint = nil
         watchSession = BroadcastWatchSession(
             roomID: roomID,
             roomTitle: roomTitle,
@@ -837,15 +959,43 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         }
     }
 
+    private func ensureInteractivePolling(for roomID: RoomID) {
+        guard polledStatus.isLive else {
+            stopInteractivePolling()
+            return
+        }
+        guard isWatching, watchSession?.roomID == roomID else {
+            guard pollRoomID == roomID else { return }
+            startInteractivePolling(roomID: roomID)
+            return
+        }
+        startInteractivePolling(roomID: roomID)
+    }
+
     private func startInteractivePolling(roomID: RoomID) {
+        if let existing = interactivePollTask, !existing.isCancelled,
+           interactivePollRoomID == roomID
+        {
+            return
+        }
+        interactivePollRoomID = roomID
         interactivePollTask?.cancel()
         interactivePollTask = Task { [weak self] in
             guard let self else { return }
+            var statusPollTick = 0
             await self.refreshInteractiveState(roomID: roomID)
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(3))
                 guard !Task.isCancelled else { break }
+                let stillTracking =
+                    (self.pollRoomID == roomID)
+                    || (self.isWatching && self.watchSession?.roomID == roomID)
+                guard stillTracking else { break }
                 await self.refreshInteractiveState(roomID: roomID)
+                statusPollTick += 1
+                if self.isWatching, self.watchSession?.roomID == roomID, statusPollTick.isMultiple(of: 5) {
+                    await self.refreshStatus(roomID: roomID)
+                }
             }
         }
     }
@@ -853,6 +1003,8 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private func stopInteractivePolling() {
         interactivePollTask?.cancel()
         interactivePollTask = nil
+        interactivePollRoomID = nil
+        lastInteractiveSnapshotFingerprint = nil
     }
 
     private func refreshInteractiveState(roomID: RoomID) async {
@@ -865,9 +1017,14 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             let response = try await client.fetchInteractiveState(roomID: roomID)
             guard let snapshot = response.snapshot else { return }
 
-            applyInteractiveModerationSnapshot(snapshot, profiles: response.profiles)
-            if let room, let broadcasterIdentity {
-                syncRoster(from: room, broadcasterIdentity: broadcasterIdentity)
+            let fingerprint = interactiveSnapshotFingerprint(snapshot)
+            let snapshotUnchanged = fingerprint == lastInteractiveSnapshotFingerprint
+            if !snapshotUnchanged {
+                lastInteractiveSnapshotFingerprint = fingerprint
+                applyInteractiveModerationSnapshot(snapshot, profiles: response.profiles)
+                if let room, let broadcasterIdentity {
+                    syncRoster(from: room, broadcasterIdentity: broadcasterIdentity)
+                }
             }
 
             guard let viewerId = interactiveViewerProfileID?.rawValue, !viewerId.isEmpty else { return }
@@ -918,6 +1075,23 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             )
             #endif
         }
+    }
+
+    private func interactiveSnapshotFingerprint(
+        _ snapshot: LiveKitBroadcastInteractiveStateResponse.Snapshot
+    ) -> String {
+        let grants = (snapshot.speakerGrants ?? []).sorted().joined(separator: ",")
+        let blocks = (snapshot.sessionBlocks ?? []).sorted().joined(separator: ",")
+        let hands = (snapshot.raisedHands ?? []).map(\.userId).sorted().joined(separator: ",")
+        let pending = (snapshot.pendingInvitations ?? [])
+            .map { "\($0.userId):\($0.invitationId)" }
+            .sorted()
+            .joined(separator: ",")
+        let viewerInvite = snapshot.pendingInvitationForViewer?.invitationId ?? ""
+        let sessionId = snapshot.sessionId ?? ""
+        let removed = snapshot.removedFromStream == true
+        let blocked = snapshot.blockedFromBroadcastRejoin == true
+        return "\(sessionId)|\(grants)|\(blocks)|\(hands)|\(pending)|\(viewerInvite)|\(removed)|\(blocked)"
     }
 
     private func applyInteractiveModerationSnapshot(
@@ -1049,7 +1223,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         applyStreamPlaybackMute()
         syncBroadcastLiveActivity()
         if polledStatus.isLive {
-            startInteractivePolling(roomID: roomID)
+            ensureInteractivePolling(for: roomID)
         }
     }
 
@@ -1075,19 +1249,13 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             TradeTraxsLiveBroadcastLiveActivityManager.shared.end(sessionEpoch: broadcastLiveActivityEpoch)
             return
         }
-        if connectionState == .connected {
-            TradeTraxsLiveBroadcastLiveActivityManager.shared.start(
-                tradeRoomName: session.roomTitle,
-                roomID: session.roomID.rawValue,
-                sessionEpoch: broadcastLiveActivityEpoch,
-                content: content
-            )
-        } else {
-            TradeTraxsLiveBroadcastLiveActivityManager.shared.update(
-                sessionEpoch: broadcastLiveActivityEpoch,
-                content: content
-            )
-        }
+        TradeTraxsLiveBroadcastLiveActivityManager.shared.sync(
+            tradeRoomName: session.roomTitle,
+            roomID: session.roomID.rawValue,
+            sessionEpoch: broadcastLiveActivityEpoch,
+            content: content,
+            allowNewActivity: connectionState == .connected
+        )
     }
 
     private func applyPlaybackAudioPolicy(mayPublishMicrophone: Bool) {

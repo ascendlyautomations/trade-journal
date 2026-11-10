@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ConnectionState } from "livekit-client"
-import { Copy, Eye, EyeOff, Mic, MicOff, Radio } from "lucide-react"
+import { Mic, MicOff, Radio } from "lucide-react"
+import TradeRoomObsPrivateSetupContent from "./TradeRoomObsPrivateSetupContent.tsx"
+import MobileWebObsBroadcastSetupSheet from "@/app/components/mobile/tradeRooms/MobileWebObsBroadcastSetupSheet.tsx"
+import { usePhoneWebTouchTarget } from "@/lib/usePhoneWebTouchTarget"
 import { useTradeRoomBroadcast } from "./useTradeRoomBroadcast.ts"
 import TradeRoomBroadcastGoLiveDialog, {
   type GoLiveDialogResult,
@@ -10,6 +13,8 @@ import TradeRoomBroadcastGoLiveDialog, {
 import {
   setBroadcastInteractivePollDemand,
   setBroadcastPassiveInteractiveContext,
+  setBroadcastRoomStatusPollDemand,
+  fetchTradeRoomBroadcastRoomStatus,
   leaveTradeRoomBroadcastViewer,
   refreshTradeRoomBroadcastStatus,
   startTradeRoomBroadcast,
@@ -18,8 +23,6 @@ import {
   setTradeRoomBroadcastStudioPresentation,
   stopTradeRoomBroadcast,
   syncTradeRoomBroadcastLocalPreviewElement,
-  setObsStreamKeyRevealed,
-  copyObsFieldToClipboard,
   toggleTradeRoomBroadcastMicMuted,
   acknowledgeViewerBroadcastConnectionLost,
   retryTradeRoomBroadcastConversationMicrophone,
@@ -38,6 +41,7 @@ import type {
 } from "@/lib/livekit/tradeRoomBroadcastVoiceMode.ts"
 import { tradeRoomObsGoLiveToRoomEnabled } from "@/lib/livekit/tradeRoomObsGoLiveReadiness.ts"
 import { tradeRoomGoLiveButtonDisabled } from "@/lib/livekit/client/tradeRoomGoLiveButtonDisabled.ts"
+import { getSupabaseApiAccessToken } from "@/lib/supabaseBearerFetch"
 
 type Props = {
   roomId: string
@@ -109,6 +113,8 @@ export default function TradeRoomBroadcastPanel({
   canActOnTarget = () => false,
 }: Props) {
   const broadcast = useTradeRoomBroadcast()
+  const phoneWeb = usePhoneWebTouchTarget()
+  const [obsSetupSheetOpen, setObsSetupSheetOpen] = useState(false)
   const isLive = broadcast.status.live
   /** Viewer-discoverable / room-public: backend canonical `publicLive` only (see `setTradeRoomBroadcastStatus`). */
   const publicLive = broadcast.status.publicLive === true
@@ -160,55 +166,40 @@ export default function TradeRoomBroadcastPanel({
 
   const fetchStatus = useCallback(
     async (reconcile = false, lite = false) => {
-    if (!accessToken) {
-      return { live: false }
-    }
-    const reconcileQuery = canGoLive && reconcile ? "&reconcile=1" : ""
-    const liteQuery =
-      !reconcile && lite ? "&lite=1" : ""
-    const res = await authFetch(
-      accessToken,
-      `/api/livekit/broadcast/status?roomId=${encodeURIComponent(roomId)}${reconcileQuery}${liteQuery}`
-    )
-    const payload = (await res.json().catch(() => ({}))) as StatusPayload
-    logBroadcast("status API response", {
-      roomId,
-      httpStatus: res.status,
-      live: payload.live ?? null,
-      broadcastSessionId: payload.broadcastSessionId ?? null,
-      videoSource: payload.videoSource ?? null,
-      visibility: payload.visibility ?? null,
-      publicLive: payload.publicLive ?? null,
-    })
-    if (!res.ok) {
-      throw new Error(payload.error || "Could not load stream status.")
-    }
-    return {
-      live: Boolean(payload.live),
-      publicLive:
-        typeof payload.publicLive === "boolean" ? payload.publicLive : undefined,
-      visibility: payload.visibility,
-      broadcastSessionId: payload.broadcastSessionId,
-      broadcasterUserId: payload.broadcasterUserId,
-      broadcasterDisplayName: payload.broadcasterDisplayName,
-      startedAt: payload.startedAt,
-      viewerCount: payload.viewerCount,
-      voiceMode: payload.voiceMode,
-      videoSource: payload.videoSource,
-      broadcastSource: payload.broadcastSource,
-      primaryMediaPublisherIdentity: payload.primaryMediaPublisherIdentity,
-      livekitIngressId: payload.livekitIngressId,
-      ingressStatusSnapshot: payload.ingressStatusSnapshot,
-      hostConnected: payload.hostConnected,
-      primaryMediaPublisherConnected: payload.primaryMediaPublisherConnected,
-      broadcasterConnected: payload.broadcasterConnected,
-      alreadyLiveElsewhere: payload.alreadyLiveElsewhere,
-    }
-  },
-    [accessToken, roomId, canGoLive]
+      if (statusAuthPausedRef.current) {
+        return { live: false }
+      }
+      try {
+        const next = await fetchTradeRoomBroadcastRoomStatus(roomId, {
+          reconcile,
+          lite,
+          canReconcile: canGoLive,
+        })
+        statusAuthPausedRef.current = false
+        logBroadcast("status API response", {
+          roomId,
+          live: next.live ?? null,
+          broadcastSessionId: next.broadcastSessionId ?? null,
+          videoSource: next.videoSource ?? null,
+          visibility: next.visibility ?? null,
+          publicLive: next.publicLive ?? null,
+        })
+        return next
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Could not load stream status."
+        if (message.includes("Sign in required")) {
+          statusAuthPausedRef.current = true
+          return { live: false }
+        }
+        throw err
+      }
+    },
+    [roomId, canGoLive]
   )
 
   const statusFetchInFlightRef = useRef(false)
+  const statusAuthPausedRef = useRef(false)
 
   const runStatusRefresh = useCallback(
     async (reconcile: boolean, lite: boolean) => {
@@ -259,24 +250,39 @@ export default function TradeRoomBroadcastPanel({
     runStatusRefresh,
   ])
 
-  useEffect(() => {
-    if (!accessToken || !roomId) return
-    void runStatusRefresh(true, false)
-    const id = window.setInterval(() => {
-      void runStatusRefresh(false, true)
-    }, 30_000)
-    return () => window.clearInterval(id)
-  }, [accessToken, roomId, runStatusRefresh])
+  const inThisRoomLiveKitSession =
+    broadcast.roomId === roomId &&
+    (broadcast.isWatching || broadcast.isPublishing)
 
-  /** OBS prep: lite polls omit LiveKit presence; poll full status so Go live enables when encoder publishes. */
   useEffect(() => {
-    if (!accessToken || !roomId || !obsPreparingHost) return
-    void runStatusRefresh(false, false)
-    const id = window.setInterval(() => {
-      void runStatusRefresh(false, false)
-    }, 3000)
-    return () => window.clearInterval(id)
-  }, [accessToken, roomId, obsPreparingHost, runStatusRefresh])
+    statusAuthPausedRef.current = false
+  }, [accessToken, roomId])
+
+  /** One shared GET /status timer per room (store); skip while connected on LiveKit for this room. */
+  useEffect(() => {
+    if (!accessToken || !roomId || statusAuthPausedRef.current) {
+      setBroadcastRoomStatusPollDemand(false)
+      return
+    }
+    if (inThisRoomLiveKitSession && !obsPreparingHost) {
+      setBroadcastRoomStatusPollDemand(false)
+      return
+    }
+    const mode = obsPreparingHost ? "obs-prep" : "idle"
+    setBroadcastRoomStatusPollDemand(true, {
+      roomId,
+      accessToken,
+      canReconcile: canGoLive,
+      mode,
+    })
+    return () => setBroadcastRoomStatusPollDemand(false)
+  }, [
+    accessToken,
+    roomId,
+    canGoLive,
+    obsPreparingHost,
+    inThisRoomLiveKitSession,
+  ])
 
   const fetchStop = useCallback(
     async (sessionId: string) => {
@@ -311,16 +317,21 @@ export default function TradeRoomBroadcastPanel({
 
   const runGoLive = useCallback(
     async (setup: GoLiveDialogResult) => {
-      if (!accessToken) return
+      const bearerToken =
+        (await getSupabaseApiAccessToken()) ?? accessToken?.trim() ?? null
+      if (!bearerToken) return
       setGoLiveOpen(false)
+      if (phoneWeb && setup.videoSource === "obs") {
+        setObsSetupSheetOpen(true)
+      }
       setTradeRoomBroadcastRoomTitle(roomTitle ?? "Trade Room")
       await startTradeRoomBroadcast({
         roomId,
         setup,
-        publisherAccessToken: accessToken,
+        publisherAccessToken: bearerToken,
         fetchStop,
         fetchStart: async () => {
-          const res = await authFetch(accessToken, "/api/livekit/broadcast/start", {
+          const res = await authFetch(bearerToken, "/api/livekit/broadcast/start", {
             method: "POST",
             body: JSON.stringify({
               roomId,
@@ -336,7 +347,7 @@ export default function TradeRoomBroadcastPanel({
         },
       })
     },
-    [accessToken, roomId, roomTitle, fetchStop]
+    [accessToken, phoneWeb, roomId, roomTitle, fetchStop]
   )
 
   const onStopLive = useCallback(async () => {
@@ -375,6 +386,12 @@ export default function TradeRoomBroadcastPanel({
       return
     }
     // Avoid hitting interactive-state while collapsed and not in the stream (reduces 404/log churn when status is briefly stale after a stream ends).
+    if (broadcast.isWatching && broadcast.roomId === roomId) {
+      setBroadcastPassiveInteractiveContext(null)
+      setBroadcastInteractivePollDemand("passive-panel", false)
+      return
+    }
+
     const needsPassivePoll =
       broadcast.isWatching || broadcast.speakInviteNotice != null
 
@@ -660,7 +677,7 @@ export default function TradeRoomBroadcastPanel({
           </p>
         ) : null}
 
-        {broadcast.viewerBroadcastConnectionLost ? (
+        {broadcast.viewerBroadcastConnectionLost && !phoneWeb ? (
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <p className="text-xs text-amber-200">
               Connection lost. You can try watching again.
@@ -739,189 +756,54 @@ export default function TradeRoomBroadcastPanel({
           </p>
         ) : null}
 
-        {obsPrivateSetupExpanded ? (
-          <div className="mt-3 flex min-h-[280px] flex-col gap-3">
-            <div className="rounded-lg border border-violet-500/30 bg-zinc-950/80 p-4 text-sm text-gray-200">
-              <p className="font-semibold text-violet-200">OBS Studio — private setup</p>
-              <p className="mt-2 text-xs text-gray-400">
-                Viewers cannot see this room until you tap{" "}
-                <span className="font-semibold text-white">Go live to room</span> in the
-                bar above. Use{" "}
-                <span className="font-semibold text-white">Cancel setup</span> to revoke
-                ingress and end this session.
-              </p>
-              {broadcast.obsBroadcastBootstrapping ? (
-                <p className="mt-3 text-xs text-gray-500">
-                  Connecting to TradeTraxs…
-                </p>
-              ) : null}
-              {broadcast.obsStudio?.credentialsBusy ? (
-                <p className="mt-3 text-xs text-amber-200/90">
-                  Generating OBS credentials…
-                </p>
-              ) : null}
-              {broadcast.obsStudio?.credentialsError ? (
-                <div
-                  className={`mt-3 space-y-2 rounded border p-3 text-xs ${
-                    broadcast.obsStudio.credentialsLostOrUnavailable
-                      ? "border-amber-400/35 bg-amber-950/35"
-                      : "border-red-400/30 bg-red-950/40"
-                  }`}
-                >
-                  <p
-                    className={
-                      broadcast.obsStudio.credentialsLostOrUnavailable
-                        ? "text-amber-100/95"
-                        : "text-red-200"
-                    }
-                  >
-                    {broadcast.obsStudio.credentialsError}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={broadcast.isBusy || broadcast.obsStudio.credentialsBusy}
-                      onClick={() => void retryObsCredentials()}
-                      className="rounded border border-white/20 px-2 py-1 text-xs font-semibold text-white hover:bg-white/10 disabled:opacity-50"
-                    >
-                      {broadcast.obsStudio.credentialsLostOrUnavailable
-                        ? "Try again"
-                        : "Retry"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={broadcast.isBusy || broadcast.obsStudio.credentialsBusy}
-                      onClick={() => void regenerateObsCredentials()}
-                      className="rounded border border-amber-400/40 px-2 py-1 text-xs font-semibold text-amber-100 hover:bg-amber-500/10 disabled:opacity-50"
-                    >
-                      Regenerate stream key
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-              {broadcast.obsStudio?.rtmpUrl ? (
-                <div className="mt-4 space-y-3 text-xs">
-                  <p className="text-gray-400">
-                    In OBS: <span className="text-gray-300">Settings → Stream</span>.
-                    Set <span className="text-gray-300">Service</span> to{" "}
-                    <span className="text-gray-300">Custom...</span>. Paste the server
-                    URL and stream key, then click{" "}
-                    <span className="text-gray-300">Start Streaming</span> in OBS.
-                  </p>
-                  <div className="space-y-1">
-                    <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                      Server (RTMP URL)
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <code className="max-w-full flex-1 break-all rounded bg-black/50 px-2 py-1 text-[11px] text-violet-200">
-                        {broadcast.obsStudio.rtmpUrl}
-                      </code>
-                      <button
-                        type="button"
-                        className="inline-flex shrink-0 items-center gap-1 rounded border border-white/15 px-2 py-1 text-[11px] hover:bg-white/5"
-                        onClick={() =>
-                          void copyObsFieldToClipboard(broadcast.obsStudio!.rtmpUrl!)
-                        }
-                      >
-                        <Copy className="h-3 w-3" aria-hidden />
-                        Copy
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                      <span>Stream key</span>
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1 rounded border border-white/10 px-2 py-0.5 normal-case text-gray-300 hover:bg-white/5"
-                        onClick={() =>
-                          setObsStreamKeyRevealed(
-                            !broadcast.obsStudio?.revealedStreamKey
-                          )
-                        }
-                      >
-                        {broadcast.obsStudio?.revealedStreamKey ? (
-                          <>
-                            <EyeOff className="h-3 w-3" /> Hide
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="h-3 w-3" /> Show
-                          </>
-                        )}
-                      </button>
-                    </div>
-                    {broadcast.obsStudio.revealedStreamKey ? (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <code className="max-w-full flex-1 break-all rounded bg-black/50 px-2 py-1 text-[11px] text-amber-100">
-                          {broadcast.obsStudio.revealedStreamKey}
-                        </code>
-                        <button
-                          type="button"
-                          className="inline-flex shrink-0 items-center gap-1 rounded border border-white/15 px-2 py-1 text-[11px] hover:bg-white/5"
-                          onClick={() =>
-                            void copyObsFieldToClipboard(
-                              broadcast.obsStudio!.revealedStreamKey!
-                            )
-                          }
-                        >
-                          <Copy className="h-3 w-3" aria-hidden />
-                          Copy
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="text-gray-500">
-                        Hidden — click Show to reveal. Do not share this key outside
-                        OBS.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ) : !broadcast.obsStudio?.credentialsBusy &&
-                !broadcast.obsBroadcastBootstrapping &&
-                !broadcast.obsStudio?.credentialsError ? (
-                <p className="mt-3 text-xs text-gray-500">
-                  Waiting for streaming credentials…
-                </p>
-              ) : null}
-            </div>
-
-            <div
-              className={`text-xs ${
-                encoderConnected
-                  ? "font-medium text-emerald-300/90"
-                  : "text-amber-200/90"
-              }`}
+        {obsPrivateSetupExpanded && phoneWeb ? (
+          <div className="mt-3 md:hidden">
+            <button
+              type="button"
+              onClick={() => setObsSetupSheetOpen(true)}
+              className="w-full rounded-xl border border-violet-400/35 bg-violet-950/30 px-4 py-3 text-left text-sm font-semibold text-violet-100 hover:bg-violet-950/50"
             >
-              {encoderConnected
-                ? "OBS connected — private preview below."
-                : waitingForObsEncoder
-                  ? "Waiting for OBS — start streaming in OBS with the credentials above."
-                  : "Waiting for OBS encoder…"}
-            </div>
-
-            <div
-              ref={containerRef}
-              className="relative min-h-[220px] w-full overflow-hidden rounded-lg border border-white/10 bg-black aspect-video lg:min-h-[320px]"
-            >
-              {broadcast.isPublishing && broadcast.broadcasterPreviewError ? (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80 px-4 text-center text-sm text-amber-200">
-                  {broadcast.broadcasterPreviewError}
-                </div>
-              ) : null}
-              {!encoderConnected && obsPreparingHost ? (
-                <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center bg-black/70 px-4 text-center text-sm text-gray-300">
-                  No preview yet — connect OBS to see your program feed here (private).
-                </div>
-              ) : null}
+              OBS setup — RTMP &amp; stream key
+            </button>
+            {!obsSetupSheetOpen ? (
               <video
                 ref={bindStreamVideoRef}
-                className="h-full w-full object-contain"
+                className="pointer-events-none fixed h-px w-px opacity-0"
                 playsInline
                 muted
                 autoPlay
+                aria-hidden
+                tabIndex={-1}
               />
-            </div>
+            ) : null}
+            <MobileWebObsBroadcastSetupSheet
+              open={obsSetupSheetOpen}
+              onClose={() => setObsSetupSheetOpen(false)}
+            >
+              <TradeRoomObsPrivateSetupContent
+                videoRef={bindStreamVideoRef}
+                containerRef={containerRef}
+                onRetryCredentials={retryObsCredentials}
+                onRegenerateCredentials={regenerateObsCredentials}
+                obsPreparingHost={obsPreparingHost}
+                encoderConnected={encoderConnected}
+                waitingForObsEncoder={waitingForObsEncoder}
+              />
+            </MobileWebObsBroadcastSetupSheet>
+          </div>
+        ) : null}
+
+        {obsPrivateSetupExpanded ? (
+          <div className="mt-3 hidden min-h-[280px] flex-col gap-3 md:flex">
+            <TradeRoomObsPrivateSetupContent
+              videoRef={bindStreamVideoRef}
+              containerRef={containerRef}
+              onRetryCredentials={retryObsCredentials}
+              onRegenerateCredentials={regenerateObsCredentials}
+              obsPreparingHost={obsPreparingHost}
+              encoderConnected={encoderConnected}
+              waitingForObsEncoder={waitingForObsEncoder}
+            />
           </div>
         ) : null}
       </div>

@@ -237,6 +237,17 @@ final class PostsContainerViewModel {
         navigationCoordinator.pushPostDetail(post.id)
     }
 
+    func sharePost(_ post: Post) -> SharedContentShareTarget {
+        ExperienceHaptics.play(.selection)
+        detailCache.seed(post)
+        let author = profileAuthor(for: post.authorProfileID)
+        return SharedContentShareTarget.profile(post: post, author: author)
+    }
+
+    private func profileAuthor(for profileID: ProfileID) -> Profile? {
+        detailCache.profile(id: profileID)
+    }
+
     func addPost() {
         navigationCoordinator.openCompose(.post)
     }

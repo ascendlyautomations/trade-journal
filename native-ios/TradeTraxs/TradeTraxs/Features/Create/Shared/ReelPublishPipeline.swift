@@ -26,6 +26,28 @@ enum ReelPublishPipeline {
         onProgress: ((Double) -> Void)? = nil
     ) async throws -> Reel {
         onProgress?(0.1)
+
+        var resolvedTradeIsPublic = tradeIsPublic
+        if let tradeID {
+            let tradeFlag = try await feed.tradePublicFlagForReelLink(
+                tradeID: tradeID,
+                ownerID: authorID
+            )
+            guard let tradeFlag else {
+                throw AppError.domain(.notFound(entity: "trade", id: tradeID.rawValue))
+            }
+            let privateLinkMessage =
+                "Only shared (public) trades can be linked to a clip. Share the trade from your journal, or remove the link."
+            if tradeFlag == false {
+                throw AppError.domain(.conflict(message: privateLinkMessage))
+            }
+            if resolvedTradeIsPublic == nil {
+                resolvedTradeIsPublic = tradeFlag
+            } else if resolvedTradeIsPublic == false {
+                throw AppError.domain(.conflict(message: privateLinkMessage))
+            }
+        }
+
         let uploaded: UploadedMedia
         do {
             uploaded = try await uploadMedia(
@@ -48,7 +70,7 @@ enum ReelPublishPipeline {
 
         let visibility: ContentVisibility = {
             if tradeID != nil {
-                return (tradeIsPublic == true) ? .public : .private
+                return (resolvedTradeIsPublic == true) ? .public : .private
             }
             return .public
         }()
@@ -81,14 +103,13 @@ enum ReelPublishPipeline {
                 reelID: inserted.id.rawValue
             )
 
-            let verified = try await feed.reel(id: inserted.id)
-            guard verified.reel.authorProfileID == authorID else {
+            guard inserted.authorProfileID == authorID else {
                 throw AppError.unknown(message: "Published clip could not be verified.")
             }
 
             onProgress?(1)
             ReelPublishDiagnostics.logCompleted(publishID: publishID)
-            return verified.reel
+            return inserted
         } catch {
             ReelPublishDiagnostics.logFailed(
                 publishID: publishID,

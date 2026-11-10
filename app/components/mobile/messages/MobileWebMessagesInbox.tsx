@@ -192,13 +192,22 @@ export default function MobileWebMessagesInbox({
             : "Start chatting with traders in the community."}
         </p>
         {!searchActive ? (
-          <Link
-            href="/explore"
-            prefetch={false}
-            className="mt-3 inline-block text-[15px] font-medium text-[#4EC4E0]"
-          >
-            Explore Traders
-          </Link>
+          <div className="mt-3 flex flex-col items-center gap-2">
+            <Link
+              href="/community"
+              prefetch={false}
+              className="text-[15px] font-medium text-[#4EC4E0]"
+            >
+              Browse Trade Rooms
+            </Link>
+            <Link
+              href="/explore"
+              prefetch={false}
+              className="text-[15px] font-medium text-[#4EC4E0]/80"
+            >
+              Explore Traders
+            </Link>
+          </div>
         ) : null}
       </div>
     )
@@ -243,9 +252,9 @@ export default function MobileWebMessagesInbox({
         </section>
       ) : null}
 
-      {sections.joinedRooms.length > 0 ? (
-        <section>
-          <p className={`${SECTION_LABEL} flex items-center gap-1.5`}>
+      <section>
+        <div className="flex items-center justify-between gap-2 px-4 pb-1 pt-3">
+          <p className={`${SECTION_LABEL} flex items-center gap-1.5 !p-0 !pt-0`}>
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
@@ -264,6 +273,16 @@ export default function MobileWebMessagesInbox({
             </svg>
             Trade Rooms
           </p>
+          <Link
+            href="/community"
+            prefetch={false}
+            className="shrink-0 text-[13px] font-semibold text-[#4EC4E0]"
+          >
+            See all
+          </Link>
+        </div>
+        {sections.joinedRooms.length > 0 ? (
+          <>
           {visibleJoinedRooms.map((room) => (
             <TradeRoomRow key={room.id} room={room} />
           ))}
@@ -273,8 +292,17 @@ export default function MobileWebMessagesInbox({
               onToggle={() => setTradeRoomsExpanded((open) => !open)}
             />
           ) : null}
-        </section>
-      ) : null}
+          </>
+        ) : !searchActive ? (
+          <Link
+            href="/community"
+            prefetch={false}
+            className="mx-3 flex min-h-11 items-center rounded-[14px] border border-white/10 bg-white/5 px-3 text-[15px] font-medium text-[#4EC4E0]"
+          >
+            Browse Trade Rooms
+          </Link>
+        ) : null}
+      </section>
     </div>
   )
 }

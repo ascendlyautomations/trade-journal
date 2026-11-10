@@ -16,14 +16,60 @@ struct SharedContentShareTarget: Identifiable, Equatable, Sendable {
         case .achievementPost(let id): return "achievementPost:\(id.rawValue)"
         case .reel(let id): return "reel:\(id.rawValue)"
         case .trade(let id): return "trade:\(id.rawValue)"
+        case .traderProfile(let id): return "traderProfile:\(id.rawValue)"
         }
     }
 
+    static func trader(profile: Profile) -> SharedContentShareTarget {
+        let username = profile.username.trimmingCharacters(in: .whitespacesAndNewlines)
+        let handle = username.isEmpty ? "A trader" : "@\(username)"
+        return SharedContentShareTarget(
+            reference: .traderProfile(profile.id),
+            contentLink: .traderProfile(username: username),
+            shareTitle: "Share Profile",
+            externalShareText: "\(profile.displayName) (\(handle)) on TradeTraxs",
+            roomTradeID: nil
+        )
+    }
+
+    static func profile(post: Post, author: Profile?) -> SharedContentShareTarget {
+        SharedContentShareTarget(
+            reference: .profilePost(post.id),
+            contentLink: .post(post.id),
+            shareTitle: "Share Post",
+            externalShareText: "\(authorHandle(author))'s post on TradeTraxs",
+            roomTradeID: nil
+        )
+    }
+
+    static func profile(reel: Reel, author: Profile?) -> SharedContentShareTarget {
+        SharedContentShareTarget(
+            reference: .reel(reel.id),
+            contentLink: .reel(reel.id),
+            shareTitle: "Share Clip",
+            externalShareText: "\(authorHandle(author))'s clip on TradeTraxs",
+            roomTradeID: nil
+        )
+    }
+
+    static func profile(
+        achievement: Achievement,
+        author: Profile?,
+        achievementPostID: PostID
+    ) -> SharedContentShareTarget {
+        let title = achievement.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let suffix = title.isEmpty ? "an achievement" : "“\(title)”"
+        return SharedContentShareTarget(
+            reference: .achievementPost(achievementPostID),
+            contentLink: .achievement(achievement.id),
+            shareTitle: "Share Achievement",
+            externalShareText: "\(authorHandle(author)) shared \(suffix) on TradeTraxs",
+            roomTradeID: nil
+        )
+    }
+
     static func from(entry: FeedTimelineEntry, author: Profile?) -> SharedContentShareTarget {
-        let handle = author.flatMap { profile in
-            let username = profile.username.trimmingCharacters(in: .whitespacesAndNewlines)
-            return username.isEmpty ? nil : "@\(username)"
-        } ?? "A trader"
+        let handle = authorHandle(author)
 
         switch entry {
         case .trade(let item, let summary):
@@ -61,5 +107,12 @@ struct SharedContentShareTarget: Identifiable, Equatable, Sendable {
                 roomTradeID: nil
             )
         }
+    }
+
+    private static func authorHandle(_ author: Profile?) -> String {
+        author.flatMap { profile in
+            let username = profile.username.trimmingCharacters(in: .whitespacesAndNewlines)
+            return username.isEmpty ? nil : "@\(username)"
+        } ?? "A trader"
     }
 }

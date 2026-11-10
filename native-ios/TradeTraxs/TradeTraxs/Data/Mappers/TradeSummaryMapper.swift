@@ -194,7 +194,8 @@ nonisolated enum TradeSummaryMapper {
             strategy: detail.strategy,
             entryPrice: detail.entryPrice,
             exitPrice: detail.exitPrice,
-            sessionLabel: detail.sessionLabel
+            sessionLabel: detail.sessionLabel,
+            maxRrReached: detail.maxRrReached
         )
     }
 
@@ -207,6 +208,7 @@ nonisolated enum TradeSummaryMapper {
             entryPrice: trade.entryPrice,
             exitPrice: trade.exitPrice,
             sessionLabel: trade.sessionLabel,
+            maxRrReached: trade.maxRrReached,
             copyTrade: trade.copyTrade
         )
     }

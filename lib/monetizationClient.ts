@@ -1,6 +1,9 @@
 "use client"
 
-import { supabase } from "./supabaseClient"
+import {
+  getSupabaseApiAccessToken,
+  isAuthenticatedMemberUser,
+} from "./supabaseBearerFetch"
 import {
   MONETIZATION_FLAGS_FAIL_CLOSED,
   type EffectiveMonetizationFlags,
@@ -11,10 +14,10 @@ const cacheByUser = new Map<string, EffectiveMonetizationFlags>()
 export async function fetchMonetizationFlags(
   userId: string
 ): Promise<EffectiveMonetizationFlags> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-  const token = session?.access_token
+  if (!isAuthenticatedMemberUser({ id: userId })) {
+    return { ...MONETIZATION_FLAGS_FAIL_CLOSED }
+  }
+  const token = await getSupabaseApiAccessToken()
   if (!token) return { ...MONETIZATION_FLAGS_FAIL_CLOSED }
 
   try {

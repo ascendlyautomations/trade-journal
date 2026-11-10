@@ -23,6 +23,7 @@ struct ConversationBubbleView: View {
     var onSharedTradeTap: ((TradeID) -> Void)? = nil
     var onSharedContentTap: ((SharedContentReference) -> Void)? = nil
     var onSharedStoryTap: ((StoryShareMessageSupport.Payload) -> Void)? = nil
+    var onSharedProfileTap: ((ProfileShareMessageSupport.Payload) -> Void)? = nil
     var isSelectionMode: Bool = false
     var isSelected: Bool = false
     var onToggleSelection: (() -> Void)? = nil
@@ -118,7 +119,8 @@ struct ConversationBubbleView: View {
     }
 
     private func bubbleColumn(alignment: HorizontalAlignment) -> some View {
-        VStack(alignment: alignment, spacing: reactionSummaries.isEmpty ? 4 : 2) {
+        let hasReactionStrip = !reactionSummaries.isEmpty
+        return VStack(alignment: alignment, spacing: 0) {
             if item.showsAuthorName, !item.isOutgoing {
                 HStack(spacing: ExperienceSpacing.xxs) {
                     Text(ConversationThreadSupport.senderDisplayName(for: resolvedAuthor))
@@ -134,13 +136,32 @@ struct ConversationBubbleView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, ExperienceSpacing.xxs)
             }
             replyReferenceBlock
+                .padding(.bottom, replyParentPresentation == nil ? 0 : ExperienceSpacing.xxs)
             bubbleContent
                 .fixedSize(horizontal: false, vertical: true)
+            messageReactionAttachment
             if item.showsTimestamp || item.sendState != .sent {
                 timestampRow
+                    .padding(.top, hasReactionStrip ? ExperienceSpacing.xxs : 4)
             }
+        }
+        .padding(.bottom, hasReactionStrip ? MessageReactionLayout.reservedSpaceBelowBubble : 0)
+    }
+
+    @ViewBuilder
+    private var messageReactionAttachment: some View {
+        if let configuration = reactionConfiguration, !reactionSummaries.isEmpty {
+            MessageReactionBubbleAttachment(
+                configuration: configuration,
+                isOutgoing: item.isOutgoing,
+                columnMaxWidth: contentColumnMaxWidth
+            )
+            .offset(y: -MessageReactionLayout.pillBubbleEdgeOverlap)
+            .padding(.top, MessageReactionLayout.pillVerticalOffset)
+            .zIndex(1)
         }
     }
 
@@ -193,10 +214,18 @@ struct ConversationBubbleView: View {
                       let payload = StoryShareMessageSupport.decode(from: item.message.body)
             {
                 storyShareBubble(payload: payload)
+            } else if item.message.kind == .profileShare,
+                      let payload = ProfileShareMessageSupport.decode(from: item.message.body)
+            {
+                profileShareBubble(payload: payload)
             } else if item.message.kind != .storyReply,
                       let payload = StoryShareMessageSupport.decode(from: item.message.body)
             {
                 storyShareBubble(payload: payload)
+            } else if item.message.kind != .profileShare,
+                      let payload = ProfileShareMessageSupport.decode(from: item.message.body)
+            {
+                profileShareBubble(payload: payload)
             } else if let reference = item.voiceReference {
                 voiceBubble(reference: reference, duration: item.voiceDuration)
             } else if let reference = item.imageReference, item.message.kind != .tradeShare {
@@ -234,8 +263,11 @@ struct ConversationBubbleView: View {
         guard item.voiceReference == nil, item.imageReference == nil else { return false }
         guard item.message.kind != .tradeShare else { return false }
         guard !SharedContentMessageSupport.isInternallySharedContent(item.message) else { return false }
-        guard item.message.kind != .storyReply, item.message.kind != .storyShare else { return false }
+        guard item.message.kind != .storyReply, item.message.kind != .storyShare,
+              item.message.kind != .profileShare
+        else { return false }
         guard StoryShareMessageSupport.decode(from: item.message.body) == nil else { return false }
+        guard ProfileShareMessageSupport.decode(from: item.message.body) == nil else { return false }
         guard let text = item.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
         return true
     }
@@ -274,45 +306,39 @@ struct ConversationBubbleView: View {
         let bubbleFill = item.isOutgoing ? colors.accent : colors.incomingMessageBubble
         let bubbleShape = RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
 
-        withFloatingReactions {
-            VStack(alignment: alignment, spacing: 6) {
-                if embedsReplyInsideTextBubble, let presentation = replyParentPresentation {
-                    MessageReplyReferenceView(
-                        presentation: presentation,
-                        isOutgoing: item.isOutgoing,
-                        onTap: { onReplyParentTap?() }
-                    )
-                }
-                messageText
+        VStack(alignment: alignment, spacing: 6) {
+            if embedsReplyInsideTextBubble, let presentation = replyParentPresentation {
+                MessageReplyReferenceView(
+                    presentation: presentation,
+                    isOutgoing: item.isOutgoing,
+                    onTap: { onReplyParentTap?() }
+                )
             }
-            .padding(.horizontal, ExperienceSpacing.sm + 2)
-            .padding(.top, ExperienceSpacing.sm)
-            .padding(.bottom, ExperienceSpacing.sm)
-            .background(bubbleFill, in: bubbleShape)
-            .fixedSize(horizontal: preserveTextWidth, vertical: false)
+            messageText
         }
+        .padding(.horizontal, ExperienceSpacing.sm + 2)
+        .padding(.top, ExperienceSpacing.sm)
+        .padding(.bottom, ExperienceSpacing.sm)
+        .background(bubbleFill, in: bubbleShape)
+        .fixedSize(horizontal: preserveTextWidth, vertical: false)
     }
 
     private func voiceBubble(reference: MediaReference, duration: TimeInterval?) -> some View {
-        withFloatingReactions {
-            VoiceMessageBubbleView(
-                messageID: item.id,
-                audioReference: reference,
-                durationSeconds: duration,
-                isOutgoing: item.isOutgoing
-            )
-        }
+        VoiceMessageBubbleView(
+            messageID: item.id,
+            audioReference: reference,
+            durationSeconds: duration,
+            isOutgoing: item.isOutgoing
+        )
     }
 
     private func storyReplyBubble(payload: StoryReplyMessageSupport.Payload) -> some View {
-        withFloatingReactions {
-            StoryReplyMessageBubbleView(
-                payload: payload,
-                viewerProfileID: viewerProfileID,
-                isOutgoing: item.isOutgoing,
-                imagePipeline: imagePipeline
-            )
-        }
+        StoryReplyMessageBubbleView(
+            payload: payload,
+            viewerProfileID: viewerProfileID,
+            isOutgoing: item.isOutgoing,
+            imagePipeline: imagePipeline
+        )
     }
 
     private func storyShareBubble(payload: StoryShareMessageSupport.Payload) -> some View {
@@ -333,13 +359,41 @@ struct ConversationBubbleView: View {
     }
 
     private func storyShareBubbleContent(payload: StoryShareMessageSupport.Payload) -> some View {
-        withFloatingReactions {
-            StoryShareMessageBubbleView(
-                payload: payload,
-                isOutgoing: item.isOutgoing,
-                imagePipeline: imagePipeline
-            )
+        StoryShareMessageBubbleView(
+            payload: payload,
+            isOutgoing: item.isOutgoing,
+            imagePipeline: imagePipeline
+        )
+    }
+
+    private func profileShareBubble(payload: ProfileShareMessageSupport.Payload) -> some View {
+        Group {
+            if isSelectionMode {
+                profileShareBubbleContent(payload: payload)
+            } else {
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    onSharedProfileTap?(payload)
+                } label: {
+                    profileShareBubbleContent(payload: payload)
+                }
+                .buttonStyle(.experiencePlain)
+            }
         }
+        .accessibilityIdentifier("conversation.bubble.profileShare")
+    }
+
+    private func profileShareBubbleContent(payload: ProfileShareMessageSupport.Payload) -> some View {
+        ProfileShareMessageBubbleView(
+            payload: payload,
+            isOutgoing: item.isOutgoing,
+            imagePipeline: imagePipeline
+        )
+        .frame(maxWidth: bubbleMaxWidth, alignment: .leading)
+        .background(
+            item.isOutgoing ? colors.accent : colors.incomingMessageBubble,
+            in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+        )
     }
 
     private func imageBubble(reference: MediaReference) -> some View {
@@ -347,22 +401,20 @@ struct ConversationBubbleView: View {
             contentColumnMax: contentColumnMaxWidth,
             bubbleMaxWidth: bubbleMaxWidth
         )
-        let alignment: HorizontalAlignment = item.isOutgoing ? .trailing : .leading
+        let alignment: Alignment = item.isOutgoing ? .trailing : .leading
         let bubbleShape = RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
 
-        return withFloatingReactions {
-            AspectFitMediaView(
-                reference: reference,
-                purpose: .tradeScreenshot,
-                imagePipeline: imagePipeline,
-                accessibilityIdentifier: "conversation.bubble.image",
-                emptyIcon: .photo,
-                allowsFullResolutionViewer: true,
-                layoutWidth: photoWidth
-            )
-            .clipShape(bubbleShape)
-            .frame(width: photoWidth, alignment: item.isOutgoing ? .trailing : .leading)
-        }
+        return AspectFitMediaView(
+            reference: reference,
+            purpose: .tradeScreenshot,
+            imagePipeline: imagePipeline,
+            accessibilityIdentifier: "conversation.bubble.image",
+            emptyIcon: .photo,
+            allowsFullResolutionViewer: true,
+            layoutWidth: photoWidth
+        )
+        .clipShape(bubbleShape)
+        .frame(width: photoWidth, alignment: alignment)
     }
 
     private func tradeShareBubble(tradeID: TradeID) -> some View {
@@ -376,28 +428,26 @@ struct ConversationBubbleView: View {
     }
 
     private func tradeShareBubbleContent(tradeID: TradeID) -> some View {
-        withFloatingReactions {
-            VStack(alignment: .leading, spacing: 0) {
-                SharedTradeMessageCard(
-                    trade: sharedTrade,
-                    tradeID: tradeID,
-                    messageID: item.id,
-                    imagePipeline: imagePipeline,
-                    isOutgoing: item.isOutgoing,
-                    includesBackground: false,
-                    mediaLayoutWidth: sharedCardInnerMediaWidth
-                )
-                sharedContentUserCaptionBlock()
-            }
-            .padding(.horizontal, ExperienceSpacing.sm + 2)
-            .padding(.top, ExperienceSpacing.sm)
-            .padding(.bottom, ExperienceSpacing.sm)
-            .frame(width: tradeBubbleMaxWidth, alignment: .leading)
-            .background(
-                item.isOutgoing ? colors.accent : colors.incomingMessageBubble,
-                in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+        VStack(alignment: .leading, spacing: 0) {
+            SharedTradeMessageCard(
+                trade: sharedTrade,
+                tradeID: tradeID,
+                messageID: item.id,
+                imagePipeline: imagePipeline,
+                isOutgoing: item.isOutgoing,
+                includesBackground: false,
+                mediaLayoutWidth: sharedCardInnerMediaWidth
             )
+            sharedContentUserCaptionBlock()
         }
+        .padding(.horizontal, ExperienceSpacing.sm + 2)
+        .padding(.top, ExperienceSpacing.sm)
+        .padding(.bottom, ExperienceSpacing.sm)
+        .frame(width: tradeBubbleMaxWidth, alignment: .leading)
+        .background(
+            item.isOutgoing ? colors.accent : colors.incomingMessageBubble,
+            in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+        )
     }
 
     private var sharedPostBubble: some View {
@@ -498,20 +548,18 @@ struct ConversationBubbleView: View {
     }
 
     private func sharedContentBubbleContent<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        withFloatingReactions {
-            VStack(alignment: .leading, spacing: 0) {
-                content()
-                sharedContentUserCaptionBlock()
-            }
-            .padding(.horizontal, ExperienceSpacing.sm + 2)
-            .padding(.top, ExperienceSpacing.sm)
-            .padding(.bottom, ExperienceSpacing.sm)
-            .frame(width: tradeBubbleMaxWidth, alignment: .leading)
-            .background(
-                item.isOutgoing ? colors.accent : colors.incomingMessageBubble,
-                in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
-            )
+        VStack(alignment: .leading, spacing: 0) {
+            content()
+            sharedContentUserCaptionBlock()
         }
+        .padding(.horizontal, ExperienceSpacing.sm + 2)
+        .padding(.top, ExperienceSpacing.sm)
+        .padding(.bottom, ExperienceSpacing.sm)
+        .frame(width: tradeBubbleMaxWidth, alignment: .leading)
+        .background(
+            item.isOutgoing ? colors.accent : colors.incomingMessageBubble,
+            in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+        )
     }
 
     @ViewBuilder
@@ -529,31 +577,18 @@ struct ConversationBubbleView: View {
     }
 
     private var reactionsOnlyBubble: some View {
-        withFloatingReactions {
-            Color.clear
-                .frame(width: 44, height: 32)
-                .padding(.horizontal, ExperienceSpacing.sm + 2)
-                .padding(.vertical, ExperienceSpacing.xs)
-                .background(
-                    item.isOutgoing ? colors.accent : colors.incomingMessageBubble,
-                    in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
-                )
-        }
+        Color.clear
+            .frame(width: 44, height: 32)
+            .padding(.horizontal, ExperienceSpacing.sm + 2)
+            .padding(.vertical, ExperienceSpacing.xs)
+            .background(
+                item.isOutgoing ? colors.accent : colors.incomingMessageBubble,
+                in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous)
+            )
     }
 
     private var reactionSummaries: [MessageReactionSummary] {
         reactionConfiguration?.summaries ?? []
-    }
-
-    @ViewBuilder
-    private func withFloatingReactions<Content: View>(
-        @ViewBuilder _ content: () -> Content
-    ) -> some View {
-        content()
-            .messageReactionFloatingOverlay(
-                configuration: reactionConfiguration,
-                isOutgoing: item.isOutgoing
-            )
     }
 
     /// Maximum bubble width (~72% of screen). Short messages stay intrinsic; long text wraps at this cap.

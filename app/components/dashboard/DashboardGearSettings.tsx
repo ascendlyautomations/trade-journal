@@ -29,6 +29,92 @@ export type DashboardGearSettingsProps = {
   embedded?: boolean
 }
 
+export function DashboardEquityDrawdownFields({
+  gearDraft,
+  setGearDraft,
+  ddInputFocused,
+  setDdInputFocused,
+  hasUser,
+  livePersonalDrawdown,
+  inputId = "dashboard-max-dd",
+}: {
+  gearDraft: GearDraftState | null
+  setGearDraft: Dispatch<SetStateAction<GearDraftState | null>>
+  ddInputFocused: boolean
+  setDdInputFocused: (focused: boolean) => void
+  hasUser: boolean
+  livePersonalDrawdown: boolean
+  inputId?: string
+}) {
+  if (!gearDraft) {
+    return <p className="text-xs text-gray-400">Loading…</p>
+  }
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-black/25 p-3">
+      <p className={DASHBOARD_GEAR_SECTION_TITLE}>Drawdown floor</p>
+      <p className="mt-1 text-[11px] leading-snug text-gray-400">
+        {livePersonalDrawdown
+          ? "Personal drawdown for this Live account (informational floor on the equity curve). Leave blank to clear."
+          : "Profile-wide max drawdown reference when no single Live account is selected. Leave blank for no limit."}
+      </p>
+      {livePersonalDrawdown ? (
+        <div className="mt-2 flex gap-2">
+          {(["fixed", "trailing"] as const).map((type) => (
+            <button
+              key={type}
+              type="button"
+              disabled={!hasUser}
+              onClick={() =>
+                setGearDraft((d) => (d ? { ...d, liveDrawdownType: type } : d))
+              }
+              className={`flex-1 rounded-lg border px-2 py-2 text-xs font-medium capitalize transition disabled:opacity-50 ${
+                gearDraft.liveDrawdownType === type
+                  ? "border-blue-400/60 bg-blue-500/20 text-blue-100"
+                  : "border-white/10 bg-black/20 text-gray-300 hover:bg-white/5"
+              }`}
+            >
+              {type === "fixed" ? "Fixed" : "Trailing"}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <label htmlFor={inputId} className="sr-only">
+        Max drawdown limit
+      </label>
+      <input
+        id={inputId}
+        type="text"
+        inputMode="decimal"
+        autoComplete="off"
+        placeholder="$0"
+        disabled={!hasUser}
+        value={formatDrawdownLimitForDisplay(
+          gearDraft.drawdownLimit,
+          ddInputFocused
+        )}
+        onFocus={() => setDdInputFocused(true)}
+        onBlur={() => {
+          setDdInputFocused(false)
+          setGearDraft((d) =>
+            d
+              ? {
+                  ...d,
+                  drawdownLimit: finalizeDrawdownLimitInput(d.drawdownLimit),
+                }
+              : d
+          )
+        }}
+        onChange={(e) => {
+          const next = sanitizeDrawdownLimitInput(e.target.value)
+          setGearDraft((d) => (d ? { ...d, drawdownLimit: next } : d))
+        }}
+        className="mt-2 w-full rounded-lg border border-white/10 bg-[#020617] px-3 py-2 text-sm text-white tabular-nums placeholder:text-gray-400 focus:border-blue-400/50 focus:outline-none focus:ring-1 focus:ring-blue-400/40 disabled:opacity-50"
+      />
+    </div>
+  )
+}
+
 function PreferencesForm({
   gearDraft,
   setGearDraft,
@@ -127,69 +213,15 @@ function PreferencesForm({
         </label>
       </div>
 
-      <div className="mb-3 rounded-lg border border-white/10 bg-black/25 p-3">
-        <p className={DASHBOARD_GEAR_SECTION_TITLE}>Risk</p>
-        <p className="mt-1 text-[11px] leading-snug text-gray-400">
-          {livePersonalDrawdown
-            ? "Personal drawdown for this Live account (informational floor on the equity curve). Leave blank to clear."
-            : "Profile-wide max drawdown reference when no single Live account is selected. Leave blank for no limit."}
-        </p>
-        {livePersonalDrawdown ? (
-          <div className="mt-2 flex gap-2">
-            {(["fixed", "trailing"] as const).map((type) => (
-              <button
-                key={type}
-                type="button"
-                disabled={!hasUser}
-                onClick={() =>
-                  setGearDraft((d) =>
-                    d ? { ...d, liveDrawdownType: type } : d
-                  )
-                }
-                className={`flex-1 rounded-lg border px-2 py-2 text-xs font-medium capitalize transition disabled:opacity-50 ${
-                  gearDraft.liveDrawdownType === type
-                    ? "border-blue-400/60 bg-blue-500/20 text-blue-100"
-                    : "border-white/10 bg-black/20 text-gray-300 hover:bg-white/5"
-                }`}
-              >
-                {type === "fixed" ? "Fixed" : "Trailing"}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        <label htmlFor={inputId} className="sr-only">
-          Max drawdown limit
-        </label>
-        <input
-          id={inputId}
-          type="text"
-          inputMode="decimal"
-          autoComplete="off"
-          placeholder="$0"
-          disabled={!hasUser}
-          value={formatDrawdownLimitForDisplay(
-            gearDraft.drawdownLimit,
-            ddInputFocused
-          )}
-          onFocus={() => setDdInputFocused(true)}
-          onBlur={() => {
-            setDdInputFocused(false)
-            setGearDraft((d) =>
-              d
-                ? {
-                    ...d,
-                    drawdownLimit: finalizeDrawdownLimitInput(d.drawdownLimit),
-                  }
-                : d
-            )
-          }}
-          onChange={(e) => {
-            const next = sanitizeDrawdownLimitInput(e.target.value)
-            setGearDraft((d) => (d ? { ...d, drawdownLimit: next } : d))
-          }}
-          className="mt-2 w-full rounded-lg border border-white/10 bg-[#020617] px-3 py-2 text-sm text-white tabular-nums placeholder:text-gray-400 focus:border-blue-400/50 focus:outline-none focus:ring-1 focus:ring-blue-400/40 disabled:opacity-50"
-        />
-      </div>
+      <DashboardEquityDrawdownFields
+        gearDraft={gearDraft}
+        setGearDraft={setGearDraft}
+        ddInputFocused={ddInputFocused}
+        setDdInputFocused={setDdInputFocused}
+        hasUser={hasUser}
+        livePersonalDrawdown={livePersonalDrawdown}
+        inputId={inputId}
+      />
 
       <div className="mt-1 border-t border-white/10 pt-3">
         <div className="flex gap-2">

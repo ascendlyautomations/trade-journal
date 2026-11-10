@@ -33,6 +33,8 @@ import {
   toggleTradeRoomBroadcastViewerMicMuted,
 } from "@/lib/livekit/client/tradeRoomBroadcastStore.ts"
 import { tradeRoomBroadcastGlobalChromeVisible } from "@/lib/livekit/client/tradeRoomBroadcastGlobalChromeVisibility.ts"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
+import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
 
 type Props = {
   accessToken: string | null
@@ -69,6 +71,9 @@ export default function TradeRoomBroadcastViewerStudioChrome({
   canActOnTarget = () => false,
   voiceSessionActive = false,
 }: Props) {
+  const maxMd = useMaxMdViewport()
+  const nativeIos = useIsNativeIos()
+  const mobilePersistentBar = maxMd && !nativeIos
   const broadcast = useTradeRoomBroadcast()
   const miniPanelPosition = tradeRoomBroadcastMiniPanelPosition(voiceSessionActive)
   const chromeActive = useMemo(
@@ -289,6 +294,7 @@ export default function TradeRoomBroadcastViewerStudioChrome({
   )
 
   if (broadcast.studioPresentation === "mini") {
+    if (mobilePersistentBar) return null
     return (
       <div
         className={`${miniPanelPosition} w-[min(320px,calc(100vw-24px))] overflow-hidden rounded-xl border border-red-500/25 bg-zinc-950 shadow-2xl`}

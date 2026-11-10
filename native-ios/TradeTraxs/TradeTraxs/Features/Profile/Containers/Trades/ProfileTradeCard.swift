@@ -50,6 +50,9 @@ struct ProfileTradeCard: View {
     var isProfilePinned: Bool = false
     /// Grouped copy-action mode line from Profile display grouping — not recomputed from ``TradeSummary/accountMode``.
     var copyTradeModeSummaryLine: String? = nil
+    var detailCache: DetailPresentationCache? = nil
+    var profileViewerID: ProfileID? = nil
+    var onOpenLinkedClip: ((ReelID) -> Void)? = nil
 
     init(
         summary: TradeSummary,
@@ -65,7 +68,10 @@ struct ProfileTradeCard: View {
         onReport: (() -> Void)? = nil,
         profilePin: ProfilePinCallbacks? = nil,
         isProfilePinned: Bool = false,
-        copyTradeModeSummaryLine: String? = nil
+        copyTradeModeSummaryLine: String? = nil,
+        detailCache: DetailPresentationCache? = nil,
+        profileViewerID: ProfileID? = nil,
+        onOpenLinkedClip: ((ReelID) -> Void)? = nil
     ) {
         self.summary = summary
         self.imagePipeline = imagePipeline
@@ -81,9 +87,21 @@ struct ProfileTradeCard: View {
         self.profilePin = profilePin
         self.isProfilePinned = isProfilePinned
         self.copyTradeModeSummaryLine = copyTradeModeSummaryLine
+        self.detailCache = detailCache
+        self.profileViewerID = profileViewerID
+        self.onOpenLinkedClip = onOpenLinkedClip
     }
 
     @Environment(\.themeColors) private var colors
+
+    private var visibleLinkedReel: Reel? {
+        guard let detailCache else { return nil }
+        return FeedLinkedContentResolver.visibleLinkedReel(
+            for: summary.id,
+            cache: detailCache,
+            viewerID: profileViewerID
+        )
+    }
 
     private var isPinnedToProfile: Bool {
         isProfilePinned || (profilePin?.isPinned(.trade, summary.id.rawValue) ?? false)
@@ -137,11 +155,24 @@ struct ProfileTradeCard: View {
                     onSingleTap: onOpen
                 )
 
+                if let visibleLinkedReel,
+                   let onOpenLinkedClip
+                {
+                    FeedLinkedClipCompactPreview(
+                        reel: visibleLinkedReel,
+                        imagePipeline: imagePipeline,
+                        onOpen: { onOpenLinkedClip(visibleLinkedReel.id) },
+                        thumbnailSide: 34
+                    )
+                    .accessibilityIdentifier("profile.trade.linkedClip.\(visibleLinkedReel.id.rawValue)")
+                }
+
                 EngagementBar(
                     target: target,
                     store: engagementStore,
                     vaultStore: vaultStore,
                     onCommentTap: onOpen,
+                    onShareTap: onShare,
                     vaultRef: ProfileCardMediaPresence.engagementVaultRef(
                         for: target,
                         profileIsOwner: showsOwnerActions
@@ -260,12 +291,16 @@ struct ProfileTradeCard: View {
                 )
             }
 
-            TradeExecutionMetricsTwoRowGrid(
-                summary: summary,
-                priceDisplay: .profileCardRounded
-            )
-            .accessibilityIdentifier("profile.trade.executionMetrics")
+            executionMetricsGrid
+                .accessibilityIdentifier("profile.trade.executionMetrics")
         }
+    }
+
+    private var executionMetricsGrid: some View {
+        TradeExecutionMetricsTwoRowGrid(
+            summary: summary,
+            priceDisplay: .profileCardRounded
+        )
     }
 
     @ViewBuilder
@@ -379,3 +414,4 @@ private struct ProfileTradeHeadlineRow: View {
         .accessibilityElement(children: .combine)
     }
 }
+

@@ -7,6 +7,7 @@ struct ManageRoomChannelsView: View {
     @Binding var showsCreateChannel: Bool
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
     @State private var isEditingChannels = false
     @State private var expandedChannelID: RoomChannelID?
 
@@ -42,7 +43,9 @@ struct ManageRoomChannelsView: View {
                 }
             }
         }
-        .experienceInsetGroupedListStyle(pageBackground: false)
+        .experienceInsetGroupedListStyle(pageBackground: true)
+        .listSectionSpacing(ExperienceSpacing.xxs)
+        .contentMargins(.top, ExperienceSpacing.xxs, for: .scrollContent)
         .experienceNavigationTitle("Channels")
         .toolbar {
             if viewModel.canManageRoom {
@@ -83,8 +86,18 @@ struct ManageRoomChannelsView: View {
             }
 
             if isExpanded {
-                permissionEditor(for: channel)
-                channelManagementActions(channel: channel, index: index, total: total)
+                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                    permissionEditor(for: channel)
+                    channelManagementActions(channel: channel, index: index, total: total)
+                }
+                .padding(ExperienceSpacing.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background {
+                    if colorScheme == .light {
+                        RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                            .fill(colors.fillPrimary)
+                    }
+                }
             }
         }
         .padding(.vertical, ExperienceSpacing.xxs)

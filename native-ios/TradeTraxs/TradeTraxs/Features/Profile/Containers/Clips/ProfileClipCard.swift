@@ -7,10 +7,19 @@ struct ProfileClipCard: View {
     let engagementStore: EngagementStore
     let vaultStore: VaultStore
     let onOpen: () -> Void
+    let onShare: () -> Void
     var isOwner: Bool = true
+    var onDelete: (() -> Void)? = nil
+    var isDeleteInProgress: Bool = false
     var onReport: (() -> Void)? = nil
+    var profilePin: ProfilePinCallbacks? = nil
+    var isProfilePinned: Bool = false
 
     @Environment(\.themeColors) private var colors
+
+    private var isPinnedToProfile: Bool {
+        isProfilePinned || (profilePin?.isPinned(.reel, reel.id.rawValue) ?? false)
+    }
 
     private var target: InteractionTarget { .reel(reel.id) }
 
@@ -33,9 +42,16 @@ struct ProfileClipCard: View {
                     .accessibilityHidden(true)
                 } metadata: {
                     VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                        Text(ClipDisplayTitle.text(for: reel, cache: detailCache))
-                            .experienceStyle(.headline, color: colors.primaryText)
-                            .lineLimit(3)
+                        HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
+                            Text(ClipDisplayTitle.text(for: reel, cache: detailCache))
+                                .experienceStyle(.headline, color: colors.primaryText)
+                                .lineLimit(3)
+                                .multilineTextAlignment(.leading)
+                            if isPinnedToProfile {
+                                ProfileContentPinIndicator()
+                            }
+                            Spacer(minLength: 0)
+                        }
 
                         HStack(spacing: ExperienceSpacing.xs) {
                             Text(TradeDisplay.dateText(reel.createdAt))
@@ -44,10 +60,10 @@ struct ProfileClipCard: View {
                                 Text(Self.formatDuration(seconds))
                                     .experienceStyle(.caption, color: colors.tertiaryText)
                             }
-                            if reel.linkedTradeID != nil {
-                                ExperienceTag(title: "Trade", tone: .info)
-                            }
                             Spacer(minLength: 0)
+                        }
+                        if reel.linkedTradeID != nil {
+                            ExperienceTag(title: "Linked Trade", tone: .info)
                         }
                     }
                 }
@@ -63,6 +79,7 @@ struct ProfileClipCard: View {
                     store: engagementStore,
                     vaultStore: vaultStore,
                     onCommentTap: onOpen,
+                    onShareTap: onShare,
                     vaultRef: ProfileCardMediaPresence.engagementVaultRef(
                         for: target,
                         profileIsOwner: isOwner
@@ -74,6 +91,27 @@ struct ProfileClipCard: View {
             ContentOverflowMenu(
                 isOwner: isOwner,
                 onReport: onReport,
+                deleteTitle: "Delete Clip",
+                onDelete: isOwner && !isDeleteInProgress ? onDelete : nil,
+                onPin: profilePin.map { pin in
+                    {
+                        pin.requestPin(
+                            .reel,
+                            reel.id.rawValue,
+                            ProfilePinnedPreviewBuilder.from(reel: reel)
+                        )
+                    }
+                },
+                onUnpin: profilePin.map { pin in
+                    {
+                        pin.requestPin(
+                            .reel,
+                            reel.id.rawValue,
+                            ProfilePinnedPreviewBuilder.from(reel: reel)
+                        )
+                    }
+                },
+                isPinnedToProfile: isPinnedToProfile,
                 accessibilityIdentifier: "profile.clip.overflow.\(reel.id.rawValue)"
             )
             .padding(ExperienceSpacing.xxs)

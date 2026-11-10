@@ -170,6 +170,20 @@ final class AchievementsContainerViewModel {
         navigationCoordinator.pushAchievementDetail(achievement.id)
     }
 
+    func shareAchievement(_ achievement: Achievement) -> SharedContentShareTarget {
+        ExperienceHaptics.play(.selection)
+        detailCache.seed(achievement)
+        let postReference = detailCache.achievementPostIDs(for: achievement.id).first
+            ?? PostID(achievement.id.rawValue)
+        let author = detailCache.profile(id: achievement.ownerProfileID)
+            ?? detailCache.profile(id: profileID)
+        return SharedContentShareTarget.profile(
+            achievement: achievement,
+            author: author,
+            achievementPostID: postReference
+        )
+    }
+
     func addAchievement() {
         navigationCoordinator.openCompose(.achievement)
     }

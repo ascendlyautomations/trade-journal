@@ -11,6 +11,7 @@ struct PostsContainerView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appEnvironment) private var appEnvironment
     @State private var browseLayout = ProfileBrowseLayoutStore.layout(for: .posts)
+    @State private var shareTarget: SharedContentShareTarget?
 
     private var gridColumns: [GridItem] {
         [
@@ -43,6 +44,7 @@ struct PostsContainerView: View {
                             ProfilePostGridTile(
                                 post: post,
                                 imagePipeline: imagePipeline,
+                                engagementStore: engagementStore,
                                 isPinned: isProfilePinned(post),
                                 onOpen: { viewModel.openPost(post) }
                             )
@@ -92,6 +94,13 @@ struct PostsContainerView: View {
         } message: {
             Text(viewModel.deleteErrorMessage ?? "")
         }
+        .sheet(item: $shareTarget) { target in
+            SharedContentShareSheet(
+                target: target,
+                data: appEnvironment.data,
+                onClose: { shareTarget = nil }
+            )
+        }
     }
 
     private var postList: some View {
@@ -103,6 +112,7 @@ struct PostsContainerView: View {
                     engagementStore: engagementStore,
                     vaultStore: vaultStore,
                     onOpen: { viewModel.openPost(post) },
+                    onShare: { shareTarget = viewModel.sharePost(post) },
                     isOwner: viewModel.isOwner,
                     onDelete: viewModel.isOwner
                         ? {

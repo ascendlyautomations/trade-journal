@@ -360,6 +360,11 @@ final class RoomConversationViewModel {
         )
     }
 
+    /// Call when ``SessionRoomMemberTagsStore`` assignments change (e.g. after managing member tags).
+    func noteMemberTagsDidChange() {
+        refreshViewerModeratorStatus()
+    }
+
     /// Member/owner shell — composer may still be read-only on announcement channels.
     var canShowComposer: Bool {
         guard selectedChannel != nil else { return false }
@@ -1110,7 +1115,8 @@ final class RoomConversationViewModel {
                 profile: profile,
                 role: profileID == room?.ownerProfileID ? .owner : .member,
                 joinedAt: nil,
-                isOnline: false
+                isOnline: false,
+                tags: tagStore.tags(for: profileID, roomID: roomID)
             )
         }
         return nil

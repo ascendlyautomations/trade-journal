@@ -125,7 +125,7 @@ nonisolated enum TradePointsAndRealizedRr {
         parseRr: (String) -> Decimal?
     ) -> (points: String?, rr: String?, maxRr: String?) {
         let pnlValue = pnl ?? 0
-        let requireMax = pnlValue <= 0
+        let requireMax = pnlValue < 0
         var pointsError: String?
         var rrError: String?
         var maxError: String?
@@ -136,14 +136,8 @@ nonisolated enum TradePointsAndRealizedRr {
         if positiveTargetedRr(parseRr(rrText)) == nil {
             rrError = "Targeted Risk/Reward is required (positive number)."
         }
-        if requireMax {
-            if nonnegativeMaxRr(parseRr(maxRrText)) == nil {
-                maxError = "Max R:R Reached is required for breakeven and losing trades (0 or greater)."
-            }
-        } else if !maxRrText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  parseRr(maxRrText) == nil
-        {
-            maxError = "Enter a valid Max R:R Reached (0 or greater)."
+        if requireMax, nonnegativeMaxRr(parseRr(maxRrText)) == nil {
+            maxError = "Max R:R Reached is required for losing trades (0 or greater)."
         }
 
         return (pointsError, rrError, maxError)

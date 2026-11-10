@@ -41,7 +41,6 @@ struct AppRootView: View {
         // so safe-area insets are not compensated twice.
         .experienceScreenBackground()
         .experienceKeyboardDismissOnTapOutside()
-        .experienceKeyboardDoneToolbar()
         .animation(
             ThemeAnimation.preferred(reduceMotion: reduceMotion),
             value: themeManager.selectedIdentifier
@@ -382,6 +381,7 @@ struct AppRootView: View {
                 )
             }
         }
+        .experienceKeyboardDoneToolbar()
     }
 
     private var demoExperienceShell: some View {
@@ -394,6 +394,7 @@ struct AppRootView: View {
         )
         .ownerAccountFilterDropdownOverlay()
         .demoExperienceShellChrome()
+        .experienceKeyboardDoneToolbar()
         .id(launchController.demoSnapshotRevision)
     }
 

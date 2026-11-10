@@ -19,7 +19,7 @@ nonisolated struct TradeHistoryFilters: Hashable, Sendable {
     var accountMode: TradeHistoryAccountModeFilter = .all
     var tradingSession: TradeHistorySessionFilter = .all
     var visibility: TradeHistoryVisibilityFilter = .any
-    /// Trades that have a screenshot (`trades.image_url`).
+    /// When enabled, only trades with a screenshot (`trades.image_url`).
     var pictureOnly: Bool = false
     var sort: TradeHistorySort = .newest
 
@@ -80,7 +80,7 @@ nonisolated struct TradeHistoryFilters: Hashable, Sendable {
             chips.append(.init(id: "visibility", title: visibility.title))
         }
         if pictureOnly {
-            chips.append(.init(id: "pictureOnly", title: "Picture Only"))
+            chips.append(.init(id: "pictureOnly", title: "Trades With Pictures"))
         }
         return chips
     }

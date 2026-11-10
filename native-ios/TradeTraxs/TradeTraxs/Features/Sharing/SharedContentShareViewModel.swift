@@ -604,11 +604,38 @@ final class SharedContentShareViewModel {
 
     // MARK: - Message builders
 
+    private func encodedTraderProfileShare() -> String? {
+        guard case .traderProfile(let profileID) = target.reference else { return nil }
+        if let profile = detailCache.profile(id: profileID) {
+            return ProfileShareMessageSupport.encode(profile: profile)
+        }
+        return ProfileShareMessageSupport.encode(
+            profileID: profileID,
+            username: nil,
+            displayName: nil,
+            avatarURL: nil
+        )
+    }
+
     private func makeOptimisticSharedMessage(
         conversationID: ConversationID,
         viewerID: ProfileID
     ) -> Message {
         let reference = target.reference
+        if case .traderProfile = reference {
+            return Message(
+                id: MessageID("temp-\(UUID().uuidString)"),
+                conversationID: conversationID,
+                senderProfileID: viewerID,
+                kind: .profileShare,
+                body: encodedTraderProfileShare(),
+                attachments: [],
+                replyToMessageID: nil,
+                createdAt: .now,
+                isReadByViewer: true,
+                sharedContent: nil
+            )
+        }
         let attachments: [MessageAttachment]
         if reference.messageKind == .tradeShare, case .trade(let tradeID) = reference {
             attachments = [
@@ -641,6 +668,23 @@ final class SharedContentShareViewModel {
         channelID: RoomChannelID,
         viewerID: ProfileID
     ) -> RoomMessage {
+        if case .traderProfile = target.reference {
+            let encoded = encodedTraderProfileShare() ?? "{}"
+            return RoomMessage(
+                id: RoomMessageID("temp-\(UUID().uuidString)"),
+                roomID: room.id,
+                senderProfileID: viewerID,
+                body: encoded,
+                attachedTradeID: nil,
+                media: [],
+                parentMessageID: nil,
+                channelID: channelID,
+                isPinned: false,
+                createdAt: .now,
+                shareType: ProfileShareMessageSupport.messageType
+            )
+        }
+
         if let tradeID = target.roomTradeID {
             return RoomMessage(
                 id: RoomMessageID("temp-\(UUID().uuidString)"),

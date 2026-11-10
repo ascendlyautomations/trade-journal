@@ -31,7 +31,7 @@ extension FeedTimelineEntry {
         case .post(_, let post):
             raw = post.body
         case .clip(_, let reel):
-            raw = reel.caption
+            raw = ReelCaptionDisplay.bodyText(for: reel)
         case .achievement(_, let achievement):
             raw = achievement.description
         }

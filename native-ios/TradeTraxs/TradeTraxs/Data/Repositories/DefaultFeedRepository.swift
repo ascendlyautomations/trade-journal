@@ -843,14 +843,29 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
     }
 
     func reel(id: ReelID) async throws -> ReelLoadResult {
-        let row: ProfileReelRow = try await supabase.database.selectOne(
-            ProfileReelRow.self,
-            from: "reels",
-            query: [
-                SupabaseQuery.select(Self.profileReelsSelect),
-                SupabaseQuery.eq("id", id.rawValue),
-            ]
-        )
+        let row: ProfileReelRow
+        do {
+            row = try await supabase.database.selectOne(
+                ProfileReelRow.self,
+                from: "reels",
+                query: [
+                    SupabaseQuery.select(Self.profileReelsSelect),
+                    SupabaseQuery.eq("id", id.rawValue),
+                ]
+            )
+        } catch {
+            AppLog.networking.error(
+                "Reel embed load failed — falling back — \(String(describing: error), privacy: .public)"
+            )
+            row = try await supabase.database.selectOne(
+                ProfileReelRow.self,
+                from: "reels",
+                query: [
+                    SupabaseQuery.select(Self.reelRowSelect),
+                    SupabaseQuery.eq("id", id.rawValue),
+                ]
+            )
+        }
         guard let mapped = mapReel(row) else {
             throw AppError.domain(.notFound(entity: "reel", id: id.rawValue))
         }
@@ -940,14 +955,25 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         }
         // thumbnail_url is NOT NULL — fall back to video URL (web publishReel).
         let thumb = reel.thumbnail?.id ?? reel.video.id
+
+        var visibility = reel.visibility == .private ? "private" : "public"
+        if let tradeID = reel.linkedTradeID {
+            guard try await tradeOwnedByAuthor(tradeID: tradeID, authorID: reel.authorProfileID) else {
+                throw AppError.domain(.notFound(entity: "trade", id: tradeID.rawValue))
+            }
+            let tradeIsPublic = try await tradeIsPublicFlag(tradeID: tradeID)
+            visibility = tradeIsPublic ? "public" : "private"
+        }
+        let caption = ReelPublishPipeline.normalizedCaption(reel.caption ?? "")
+
         let body = Body(
             user_id: reel.authorProfileID.rawValue,
             video_url: reel.video.id,
             thumbnail_url: thumb,
-            caption: ReelPublishPipeline.normalizedCaption(reel.caption ?? ""),
+            caption: caption,
             trade_id: reel.linkedTradeID?.rawValue,
             duration_seconds: reel.durationSeconds,
-            visibility: reel.visibility == .private ? "private" : "public",
+            visibility: visibility,
             kind: nil
         )
         let row: ProfileReelRow = try await supabase.database.insert(
@@ -1137,6 +1163,10 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
     }
 
     func tradeHasAttachedReel(_ tradeID: TradeID) async throws -> Bool {
+        guard let userID = await session.currentUserID else {
+            return false
+        }
+        let ownerID = ProfileID(userID.rawValue)
         struct Row: Codable { var id: String? }
         let rows: [Row] = try await supabase.database.select(
             Row.self,
@@ -1144,10 +1174,33 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             query: [
                 SupabaseQuery.select("id"),
                 SupabaseQuery.eq("trade_id", tradeID.rawValue),
+                SupabaseQuery.eq("user_id", ownerID.rawValue),
                 URLQueryItem(name: "limit", value: "1"),
             ]
         )
         return !rows.isEmpty
+    }
+
+    func tradePublicFlagForReelLink(tradeID: TradeID, ownerID: ProfileID) async throws -> Bool? {
+        guard try await tradeOwnedByAuthor(tradeID: tradeID, authorID: ownerID) else {
+            return nil
+        }
+        return try await tradeIsPublicFlag(tradeID: tradeID)
+    }
+
+    private func tradeOwnedByAuthor(tradeID: TradeID, authorID: ProfileID) async throws -> Bool {
+        struct Row: Decodable { var id: String? }
+        let rows: [Row] = try await supabase.database.select(
+            Row.self,
+            from: "trades",
+            query: [
+                SupabaseQuery.select("id"),
+                SupabaseQuery.eq("id", tradeID.rawValue),
+                SupabaseQuery.eq("user_id", authorID.rawValue),
+                URLQueryItem(name: "limit", value: "1"),
+            ]
+        )
+        return rows.first?.id != nil
     }
 
     // MARK: - Profile reel DTOs (web `ReelRow` + trade embed)
@@ -1211,7 +1264,16 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         let caption: String? = {
             let raw = row.caption?.trimmingCharacters(in: .whitespacesAndNewlines)
             if raw?.isEmpty == false { return raw }
-            return resolveTradeCaption(row)
+            if ReelCaptionLegacySupport.shouldFillCaptionFromLinkedTrade(
+                tradeID: row.trade_id,
+                createdAt: row.created_at,
+                dbCaption: row.caption
+            ) {
+                return ReelCaptionLegacySupport.tradePublicCaption(
+                    from: Self.resolveTradeJoin(row)?.public_description
+                )
+            }
+            return nil
         }()
         return Reel(
             id: ReelID(reelID),
@@ -1237,14 +1299,6 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
 
     private static func resolveTradeJoin(_ row: ProfileReelRow) -> ReelTradeJoin? {
         row.trades?.trades.first
-    }
-
-    private func resolveTradeCaption(_ row: ProfileReelRow) -> String? {
-        let tradeID = row.trade_id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !tradeID.isEmpty else { return nil }
-        let raw = Self.resolveTradeJoin(row)?.public_description?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return (raw?.isEmpty == false) ? raw : nil
     }
 
     private func mapEmbeddedTrade(from row: ProfileReelRow) -> Trade? {

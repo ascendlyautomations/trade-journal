@@ -1,6 +1,7 @@
 "use client"
 
 import { ConnectionState } from "livekit-client"
+import { useRouter } from "next/navigation"
 import {
   ChevronDown,
   ChevronUp,
@@ -100,7 +101,14 @@ function connectionStatusLabel(
   }
 }
 
-export default function TradeRoomLiveVoiceBar() {
+type TradeRoomLiveVoiceBarProps = {
+  placement?: "fixed" | "embedded" | "shell"
+}
+
+export default function TradeRoomLiveVoiceBar({
+  placement = "fixed",
+}: TradeRoomLiveVoiceBarProps) {
+  const router = useRouter()
   const voice = useTradeRoomLiveVoice()
   const moderationCtx = useSyncExternalStore(
     subscribeTradeRoomLiveModerationUiContext,
@@ -180,12 +188,23 @@ export default function TradeRoomLiveVoiceBar() {
   )
   const participantCount = voice.participants.length
 
-  const panelPositionClasses =
-    "fixed right-[max(0.5rem,env(safe-area-inset-right))] z-[9990] pointer-events-auto max-md:bottom-[calc(var(--app-tab-bar-offset,0px)+0.5rem)] md:bottom-[max(0.75rem,env(safe-area-inset-bottom))]"
+  const inFlow = placement === "embedded" || placement === "shell"
+  const panelPositionClasses = inFlow
+    ? "relative z-auto w-full pointer-events-auto"
+    : "fixed right-[max(0.5rem,env(safe-area-inset-right))] z-[9990] pointer-events-auto max-md:bottom-[calc(var(--app-tab-bar-offset,0px)+0.5rem)] md:bottom-[max(0.75rem,env(safe-area-inset-bottom))]"
 
-  if (minimized) {
+  const openVoiceRoom = () => {
+    const roomId = voice.session?.roomId
+    if (!roomId) return
+    router.push(`/community?room=${encodeURIComponent(roomId)}`)
+  }
+
+  if (minimized && !inFlow) {
     return (
-      <div className={panelPositionClasses}>
+      <div
+        className={panelPositionClasses}
+        style={inFlow ? { maxWidth: "100%" } : undefined}
+      >
         <button
           type="button"
           onClick={() => setMinimized(false)}
@@ -223,7 +242,9 @@ export default function TradeRoomLiveVoiceBar() {
   return (
     <div
       className={panelPositionClasses}
-      style={{ maxWidth: "min(calc(100vw - 1rem), 22rem)" }}
+      style={{
+        maxWidth: inFlow ? "100%" : "min(calc(100vw - 1rem), 22rem)",
+      }}
     >
       <div
         className="flex w-full flex-col rounded-xl border border-emerald-500/30 bg-zinc-950 text-zinc-50 shadow-xl"
@@ -300,9 +321,19 @@ export default function TradeRoomLiveVoiceBar() {
             aria-hidden
           />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-emerald-100">
-              {voice.session.roomLabel}
-            </p>
+            {inFlow ? (
+              <button
+                type="button"
+                onClick={openVoiceRoom}
+                className="truncate text-left text-sm font-semibold text-emerald-100"
+              >
+                {voice.session.roomLabel}
+              </button>
+            ) : (
+              <p className="truncate text-sm font-semibold text-emerald-100">
+                {voice.session.roomLabel}
+              </p>
+            )}
             <p className="mt-0.5 truncate text-xs leading-tight text-zinc-400">
               {status}
             </p>
@@ -312,14 +343,16 @@ export default function TradeRoomLiveVoiceBar() {
                 : `${participantCount} in voice`}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setMinimized(true)}
-            className="shrink-0 rounded-lg p-1 text-zinc-400 transition hover:bg-white/10 hover:text-zinc-200"
-            aria-label="Minimize General Voice panel"
-          >
-            <ChevronDown className="h-4 w-4 text-zinc-300" aria-hidden />
-          </button>
+          {inFlow ? null : (
+            <button
+              type="button"
+              onClick={() => setMinimized(true)}
+              className="shrink-0 rounded-lg p-1 text-zinc-400 transition hover:bg-white/10 hover:text-zinc-200"
+              aria-label="Minimize General Voice panel"
+            >
+              <ChevronDown className="h-4 w-4 text-zinc-300" aria-hidden />
+            </button>
+          )}
         </div>
 
         <button

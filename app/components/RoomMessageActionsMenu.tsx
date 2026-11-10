@@ -57,7 +57,7 @@ export default function RoomMessageActionsMenu({
           e.stopPropagation()
           setActiveMenuId(menuOpen ? null : message.id)
         }}
-        className={`rounded px-1.5 py-0.5 text-xs text-gray-400 transition-opacity hover:text-gray-200 ${
+        className={`rounded px-1.5 py-0.5 text-xs text-gray-400 transition-opacity hover:text-gray-200 max-md:opacity-100 ${
           menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         }`}
         aria-label="Message actions"

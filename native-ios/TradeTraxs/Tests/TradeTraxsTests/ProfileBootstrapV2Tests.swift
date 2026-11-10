@@ -251,6 +251,7 @@ final class ProfileBootstrapV2Tests: XCTestCase {
         let clipsVM = ClipsContainerViewModel(
             profileID: owner,
             feed: environment.data.feed,
+            session: environment.data.session,
             navigationCoordinator: environment.navigation.coordinator,
             detailCache: DetailPresentationCache(),
             isOwner: true

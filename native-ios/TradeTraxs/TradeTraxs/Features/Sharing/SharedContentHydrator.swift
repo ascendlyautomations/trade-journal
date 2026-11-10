@@ -239,7 +239,7 @@ enum SharedContentHydrator {
                 pendingReels.insert(id)
             case .achievementPost(let id):
                 pendingAchievementPosts.insert(id)
-            case .trade:
+            case .trade, .traderProfile:
                 break
             }
         }
@@ -549,6 +549,8 @@ enum SharedContentHydrator {
             }
         case .trade:
             break
+        case .traderProfile:
+            return true
         }
 
         await hydrateLinkedTradesIfNeeded(
@@ -638,6 +640,8 @@ enum SharedContentHydrator {
                 || detailCache.previewTrade(id: id) != nil
                 || detailCache.tradeSummary(id: id) != nil
                 || detailCache.authoritativeDetail(id: id) != nil
+        case .traderProfile(let id):
+            return detailCache.profile(id: id) != nil
         }
     }
 
@@ -667,6 +671,8 @@ enum SharedContentHydrator {
                 )
             case .trade(let id):
                 return sharedTrades[id] == nil
+            case .traderProfile:
+                return false
             }
         }
     }
@@ -720,6 +726,8 @@ enum SharedContentHydrator {
                 }
             case .trade(let id):
                 if sharedTrades[id] != nil { return true }
+            case .traderProfile(let id):
+                if detailCache.profile(id: id) != nil { return true }
             }
         }
         return false
@@ -815,6 +823,8 @@ enum SharedContentHydrator {
                 return true
             }
             return false
+        case .traderProfile(let id):
+            return detailCache.profile(id: id) != nil
         case .trade(let id):
             guard let summary = SocialEntityPersistedCacheCoordinator.loadTradeSummary(
                 id: id,
@@ -873,6 +883,8 @@ enum SharedContentHydrator {
             else { return false }
             sharedTrades[id] = preview
             return true
+        case .traderProfile(let id):
+            return detailCache.profile(id: id) != nil
         }
     }
 
@@ -1187,6 +1199,7 @@ enum SharedContentHydrator {
         case .achievementPost(let id): return ("achievement", id.rawValue)
         case .reel(let id): return ("reel", id.rawValue)
         case .trade(let id): return ("trade", id.rawValue)
+        case .traderProfile(let id): return ("profile", id.rawValue)
         }
     }
 

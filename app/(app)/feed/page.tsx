@@ -46,6 +46,7 @@ import {
 } from "@/lib/profilePostEngagement"
 import FeedLoadMoreFooter from "../../components/feed/FeedLoadMoreFooter"
 import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
+import FeedContentFilterSwipeSurface from "@/app/components/feed/FeedContentFilterSwipeSurface"
 import FeedContentToggle from "../../components/feed/FeedContentToggle"
 import PlatformFeedHeader, {
   PlatformFeedModeToggle,
@@ -53,6 +54,7 @@ import PlatformFeedHeader, {
 import FeedPostList from "../../components/feed/FeedPostList"
 import FeedStoriesBar from "../../components/feed/FeedStoriesBar"
 import MobileWebClipsPager from "../../components/mobile/feed/MobileWebClipsPager"
+import { MOBILE_WEB_SOCIAL_PAGE_SHELL } from "@/lib/mobileWebPageSurface"
 import {
   EMPTY_COMMENTS,
   EMPTY_LIKE_META,
@@ -3146,8 +3148,14 @@ function FeedPageContent() {
   )
 
   return (
-    <NativeIosPullToRefresh onRefresh={handleNativePullToRefresh}>
-    <div data-tt-native-surface="feed" className="tt-phase1-dark w-full text-white">
+    <NativeIosPullToRefresh
+      onRefresh={handleNativePullToRefresh}
+      disabled={phoneClipsImmersive}
+    >
+    <div
+      data-tt-native-surface="feed"
+      className={`tt-phase1-dark w-full text-white ${MOBILE_WEB_SOCIAL_PAGE_SHELL}`}
+    >
       <PlatformFeedHeader mode={mode} onModeChange={handleFeedModeChange} />
       {feedbackModalProps.isOpen ? (
         <FeedbackModal {...feedbackModalProps} />
@@ -3218,6 +3226,15 @@ function FeedPageContent() {
           ) : null}
           </div>
 
+          <FeedContentFilterSwipeSurface
+            filter={contentType}
+            onSelect={setContentType}
+            disabled={
+              phoneClipsImmersive ||
+              phoneSocialDetail ||
+              Boolean(selectedPostId || stackedAttachedReel || sharePostId)
+            }
+          >
           {!authResolved ||
           (feedDeepLinkTarget &&
             !user?.id &&
@@ -3424,6 +3441,7 @@ function FeedPageContent() {
               />
             )
           ) : null}
+          </FeedContentFilterSwipeSurface>
 
           <div className={phoneClipsImmersive ? "max-md:hidden" : undefined}>
             <FeedLoadMoreFooter

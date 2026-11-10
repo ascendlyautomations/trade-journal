@@ -245,13 +245,26 @@ nonisolated enum ProfileTabWireMapping {
               !video.isEmpty else { return nil }
         let thumb = row.thumbnail_url?.trimmingCharacters(in: .whitespacesAndNewlines)
         let visibility: ContentVisibility = (row.visibility?.lowercased() == "private") ? .private : .public
-        let caption = row.caption?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let mappedCaption: String? = {
+            let raw = row.caption?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if raw?.isEmpty == false { return raw }
+            if ReelCaptionLegacySupport.shouldFillCaptionFromLinkedTrade(
+                tradeID: row.trade_id,
+                createdAt: row.created_at,
+                dbCaption: row.caption
+            ) {
+                return ReelCaptionLegacySupport.tradePublicCaption(
+                    from: row.trades?.trades.first?.public_description
+                )
+            }
+            return nil
+        }()
         return Reel(
             id: ReelID(reelID),
             authorProfileID: ownerID,
             video: MediaReference(id: video, kind: .video, altText: nil),
             thumbnail: thumb.flatMap { $0.isEmpty ? nil : MediaReference(id: $0, kind: .image, altText: nil) },
-            caption: (caption?.isEmpty == false) ? caption : nil,
+            caption: mappedCaption,
             visibility: visibility,
             linkedTradeID: row.trade_id.map { TradeID($0) },
             durationSeconds: row.duration_seconds,

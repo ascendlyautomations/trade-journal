@@ -69,6 +69,9 @@ struct TradeDetailCompactHeader: View {
 struct SocialTradeDetailHeader: View {
     let trade: Trade
     var accountLine: String?
+    var linkedReel: Reel?
+    var imagePipeline: (any ImagePipeline)?
+    var onOpenLinkedClip: (() -> Void)?
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
@@ -77,9 +80,13 @@ struct SocialTradeDetailHeader: View {
         NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
     }
 
+    private var showsLinkedClip: Bool {
+        linkedReel != nil && imagePipeline != nil && onOpenLinkedClip != nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .top, spacing: ExperienceSpacing.xs) {
+            HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(TradeDisplay.tickerText(trade.symbol))
                         .font(.system(.title3, design: .default).weight(.bold))
@@ -93,7 +100,7 @@ struct SocialTradeDetailHeader: View {
 
                 Spacer(minLength: ExperienceSpacing.xs)
 
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .trailing, spacing: ExperienceSpacing.xxs) {
                     Text(TradeDisplay.pnlText(trade.realizedPnL))
                         .font(.system(.title3, design: .rounded).weight(.bold).monospacedDigit())
                         .foregroundStyle(theme.metricColor(for: pnlAmount))
@@ -108,19 +115,37 @@ struct SocialTradeDetailHeader: View {
                 }
             }
 
-            Text(TradeDisplay.socialSharedExecutionTimeRangeText(for: trade))
-                .font(.system(.subheadline, design: .rounded).weight(.medium).monospacedDigit())
-                .foregroundStyle(colors.primaryText)
-                .lineLimit(2)
-                .minimumScaleFactor(0.85)
+            HStack(alignment: .center, spacing: ExperienceSpacing.xs) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(TradeDisplay.socialSharedExecutionTimeRangeText(for: trade))
+                        .font(.system(.subheadline, design: .rounded).weight(.medium).monospacedDigit())
+                        .foregroundStyle(colors.primaryText)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.85)
 
-            Text(TradeDisplay.socialSharedTradeDateText(for: trade))
-                .experienceStyle(.caption, color: colors.secondaryText)
+                    Text(TradeDisplay.socialSharedTradeDateText(for: trade))
+                        .experienceStyle(.caption, color: colors.secondaryText)
 
-            if let accountLine, !accountLine.isEmpty {
-                Text(accountLine)
-                    .experienceStyle(.caption2, color: colors.tertiaryText)
-                    .lineLimit(1)
+                    if let accountLine, !accountLine.isEmpty {
+                        Text(accountLine)
+                            .experienceStyle(.caption2, color: colors.tertiaryText)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if showsLinkedClip,
+                   let linkedReel,
+                   let imagePipeline,
+                   let onOpenLinkedClip
+                {
+                    FeedLinkedClipTradeDetailHeaderRow(
+                        reel: linkedReel,
+                        imagePipeline: imagePipeline,
+                        onOpen: onOpenLinkedClip
+                    )
+                    .fixedSize(horizontal: true, vertical: false)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -133,7 +158,11 @@ struct SocialTradePublicMetricsSection: View {
 
     var body: some View {
         TradeDetailGroupedSurface {
-            TradeExecutionMetricsTwoRowGrid(trade: trade)
+            TradeExecutionMetricsTwoRowGrid(
+                trade: trade,
+                contentAlignment: .centered,
+                showsPoints: false
+            )
         }
         .accessibilityIdentifier("detail.trade.socialMetrics")
     }

@@ -22,11 +22,11 @@ enum ProfileCardMediaPresence {
         return trimmed.isEmpty ? nil : thumbnail
     }
 
-    /// Vault is hidden on the viewer's own profile cards; shown when browsing another profile.
+    /// Vault on profile browse cards — same save-to-vault affordance as Feed and Detail.
     static func engagementVaultRef(
         for target: InteractionTarget,
-        profileIsOwner: Bool
+        profileIsOwner _: Bool = false
     ) -> VaultContentRef? {
-        profileIsOwner ? nil : VaultContentRef.from(target)
+        VaultContentRef.from(target)
     }
 }

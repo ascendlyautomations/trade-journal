@@ -583,6 +583,12 @@ nonisolated enum MessageMapper: DTOMapper {
             ) {
                 return .storyShare
             }
+            if ProfileShareMessageSupport.isProfileShare(
+                type: dto.type,
+                content: dto.body ?? dto.content
+            ) {
+                return .profileShare
+            }
             if let sharedContent,
                sharedContent.messageKind != .tradeShare
             {

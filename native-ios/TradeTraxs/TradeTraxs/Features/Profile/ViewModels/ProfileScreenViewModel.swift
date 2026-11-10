@@ -569,6 +569,10 @@ final class ProfileScreenViewModel {
             if let id = item.achievementID {
                 navigationCoordinator.pushAchievementDetail(id)
             }
+        case .reel:
+            if let id = item.reelID {
+                navigationCoordinator.pushReelDetail(id)
+            }
         }
     }
 
@@ -994,6 +998,11 @@ final class ProfileScreenViewModel {
         shellViewModel?.clips?.noteDeleteSucceeded(id: id)
         var next = state
         next.clips.removeAll { $0.id == id }
+        next.pinnedContent = ProfilePinnedMutation.remove(
+            contentType: .reel,
+            contentID: id.rawValue,
+            from: next.pinnedContent
+        )
         applyLocalState(next, skipClipsBootstrap: true)
         if let visible = shellViewModel?.clips?.items {
             syncClipsFromSection(visible)

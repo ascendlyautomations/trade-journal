@@ -13,6 +13,8 @@ extension DetailContentLink {
             return .achievement(id, ownerID: ownerID)
         case .story(let id):
             return .story(id, ownerID: ownerID)
+        case .traderProfile:
+            return .user(ownerID)
         }
     }
 
@@ -23,6 +25,7 @@ extension DetailContentLink {
         case .reel: return "this clip"
         case .achievement: return "this achievement"
         case .story: return "this story"
+        case .traderProfile: return "this profile"
         }
     }
 }

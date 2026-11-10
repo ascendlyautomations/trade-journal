@@ -29,6 +29,7 @@ struct TradeRoomObsBroadcastManagementSheet: View {
             }
         }
         .task(id: roomID.rawValue) {
+            controller.startPrivateObsSessionEnsureIfNeeded(roomID: roomID)
             await controller.ensurePrivateObsSession(roomID: roomID)
         }
         .task(id: liveHostWatchTaskID) {

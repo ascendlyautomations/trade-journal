@@ -91,7 +91,7 @@ final class ProfileExperienceTests: XCTestCase {
 
         XCTAssertEqual(
             ClipDisplayTitle.text(for: reel, cache: cache),
-            "Break and retest"
+            "Open drive clip — NQ continuation"
         )
         XCTAssertEqual(
             ClipDisplayTitle.text(for: reel, linkedTrade: nil),

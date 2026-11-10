@@ -3,6 +3,7 @@ import SwiftUI
 /// Compact account + filters row for Trade History.
 struct TradeHistoryFilterBar: View {
     @Bindable var viewModel: TradeHistoryViewModel
+    @Binding var browseLayout: ProfileBrowseLayout
     @Environment(\.themeColors) private var colors
 
     var body: some View {
@@ -10,6 +11,8 @@ struct TradeHistoryFilterBar: View {
             accountMenu
             Spacer(minLength: 0)
             filtersButton
+            ProfileBrowseLayoutToggle(layout: $browseLayout, compact: true)
+                .fixedSize()
         }
         .accessibilityIdentifier("trades.filterBar")
     }

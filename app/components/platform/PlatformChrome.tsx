@@ -17,6 +17,8 @@ import NativeIosAppChrome from "./native/NativeIosAppChrome"
 import WebAppChrome from "./web/WebAppChrome"
 import TradeRoomBroadcastGlobalChromeHost from "../tradeRooms/live/TradeRoomBroadcastGlobalChromeHost.tsx"
 import TradeRoomLiveVoiceChromeHost from "../tradeRooms/live/TradeRoomLiveVoiceChromeHost.tsx"
+import TradeRoomMobileTabShellSessionChromeHost from "../mobile/tradeRooms/TradeRoomMobileTabShellSessionChromeHost"
+import TradeRoomBroadcastGlobalLifecycleOverlayHost from "../mobile/tradeRooms/TradeRoomBroadcastGlobalLifecycleOverlayHost.tsx"
 
 /**
  * Root app chrome presentation adapter.
@@ -65,6 +67,8 @@ export default function PlatformChrome({ children }: { children: ReactNode }) {
       <WebAppChrome>{children}</WebAppChrome>
       <TradeRoomBroadcastGlobalChromeHost />
       <TradeRoomLiveVoiceChromeHost />
+      <TradeRoomMobileTabShellSessionChromeHost />
+      <TradeRoomBroadcastGlobalLifecycleOverlayHost />
     </>
   )
 }

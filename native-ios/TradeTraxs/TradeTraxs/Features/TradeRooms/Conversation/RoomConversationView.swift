@@ -26,6 +26,7 @@ struct RoomConversationView: View {
     @Environment(\.tabIsActive) private var tabIsActive
     @Bindable private var liveVoiceCoordinator = RoomLiveVoiceCoordinator.shared
     @Bindable private var broadcastCoordinator = RoomBroadcastCoordinator.shared
+    @Bindable private var roomMemberTagStore = SessionRoomMemberTagsStore.shared
     @State private var broadcastChatUserId: String?
     @State private var broadcastChatDisplayName = "You"
     @State private var liveDeepLinkEndedNotice: String?
@@ -376,6 +377,9 @@ struct RoomConversationView: View {
         } message: {
             Text("You can rejoin later if the room is still available.")
         }
+        .onChange(of: roomMemberTagStore.revision) { _, _ in
+            viewModel.noteMemberTagsDidChange()
+        }
         .experienceDetailEntry(revealed: contentRevealed, reduceMotion: reduceMotion)
         .onAppear {
             guard !contentRevealed else { return }
@@ -412,6 +416,7 @@ struct RoomConversationView: View {
         }
         .onDisappear {
             viewModel.stopRealtime()
+            // Ends conversation discovery polling only; watch-session interactive polling continues.
             broadcastCoordinator.stopPolling()
             liveVoiceCoordinator.stopGeneralVoicePresencePolling(for: viewModel.roomID)
         }
@@ -647,6 +652,14 @@ struct RoomConversationView: View {
                                         coordinator: navigationCoordinator
                                     )
                                 },
+                                onSharedProfileTap: { payload in
+                                    guard let data else { return }
+                                    ProfileShareNavigation.open(
+                                        payload: payload,
+                                        cache: data.detailCache,
+                                        coordinator: navigationCoordinator
+                                    )
+                                },
                                 onReport: incomingRoomMessageReportAction(for: bubble),
                                 replyParentPresentation: viewModel.replyParentPresentation(for: bubble.message),
                                 onReplyParentTap: {
@@ -694,6 +707,7 @@ struct RoomConversationView: View {
                             scrollToLatest(proxy: proxy, animated: false, reason: "bottom-anchor-onAppear")
                         }
                 }
+                .id(roomMemberTagStore.revision)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, ExperienceSpacing.sm)
                 .conversationThreadBottomAlignedContent(viewportHeight: threadScrollViewportHeight)

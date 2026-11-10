@@ -83,6 +83,16 @@ final class TradeHistoryViewModel {
         CopyTradeJournalGrouping.group(items, accounts: accounts)
     }
 
+    /// Grid layout — screenshot trades only (independent of the list filter toggle except both require media).
+    var gridItems: [TradeOwnerJournalSummary] {
+        items.filter { ProfileCardMediaPresence.tradeMedia(in: $0.summary) != nil }
+    }
+
+    var gridResultCountLabel: String {
+        let count = gridItems.count
+        return count == 1 ? "1 trade" : "\(count) trades"
+    }
+
     private var usesJournalSummaryV2: Bool {
         BackendV2FeatureFlags.isEnabled(.tradeJournalSummaryV2)
             && BackendV2FeatureFlags.isEnabled(.tradesList)
@@ -206,6 +216,18 @@ final class TradeHistoryViewModel {
         context.accountTitles = accountNames
         context.accountModes = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
         return context
+    }
+
+    /// Journal rows that match the active query (filters + search), including Picture Only via ``TradeHistoryLocalMatch``.
+    /// RPC list bootstrap does not yet pass `pictureOnly` server-side; this keeps every load path consistent.
+    private func journalSummariesMatchingQuery(
+        _ summaries: [TradeOwnerJournalSummary],
+        query: TradeHistoryQuery
+    ) -> [TradeOwnerJournalSummary] {
+        summaries.filter { summary in
+            TradeHistoryLocalMatch.matches(summary, query: query, context: matchContext)
+                && matchesLocalBrowseConstraints(summary)
+        }
     }
 
     private var hasLocalBrowseConstraints: Bool {
@@ -421,7 +443,7 @@ final class TradeHistoryViewModel {
             TradeHistoryLoadProbe.markRequest()
             #endif
 
-            if (!usesJournalSummaryV2 || hasLocalBrowseConstraints),
+            if (!usesJournalSummaryV2 || hasLocalBrowseConstraints || filters.pictureOnly),
                OwnerTradeCacheCompleteness.canPaginateFromOwnerCache(
                    metadata: SessionOwnerTradesStore.shared.snapshotMetadata(for: profileID)
                ),
@@ -457,7 +479,7 @@ final class TradeHistoryViewModel {
                    cursor: cursor
                )
             {
-                appendUnique(applied.summaries.filter(matchesLocalBrowseConstraints))
+                appendUnique(journalSummariesMatchingQuery(applied.summaries, query: currentQuery))
                 nextCursor = applied.nextCursor
                 paginationErrorMessage = nil
                 #if DEBUG
@@ -471,7 +493,12 @@ final class TradeHistoryViewModel {
                 query: currentQuery,
                 page: PageRequest(cursor: cursor, limit: 40)
             )
-            appendUnique(page.items.map(TradeSummaryMapper.ownerJournal(fromListTrade:)).filter(matchesLocalBrowseConstraints))
+            appendUnique(
+                journalSummariesMatchingQuery(
+                    page.items.map(TradeSummaryMapper.ownerJournal(fromListTrade:)),
+                    query: currentQuery
+                )
+            )
             nextCursor = page.nextCursor
             paginationErrorMessage = nil
             #if DEBUG
@@ -743,7 +770,7 @@ final class TradeHistoryViewModel {
                 metadata: metadata,
                 seededItemCount: seeded.items.count
             ) || (hasLocalBrowse && complete)
-            if (!usesJournalSummaryV2 || hasLocalBrowse),
+            if (!usesJournalSummaryV2 || hasLocalBrowse || query.filters.pictureOnly),
                canSeedFirstPage
             {
                 #if DEBUG
@@ -762,7 +789,10 @@ final class TradeHistoryViewModel {
                 )
                 #endif
                 async let accountsTask = hydrateAccountsFromSession(for: profileID)
-                items = seeded.items.map(TradeSummaryMapper.ownerJournal(fromListTrade:)).filter(matchesLocalBrowseConstraints)
+                items = journalSummariesMatchingQuery(
+                    seeded.items.map(TradeSummaryMapper.ownerJournal(fromListTrade:)),
+                    query: query
+                )
                 nextCursor = seeded.nextCursor
                 detailCache.seed(journalSummaries: items)
                 hasLoaded = true
@@ -853,7 +883,7 @@ final class TradeHistoryViewModel {
                )
             {
                 applyAccountList(applied.accounts)
-                items = applied.summaries.filter(matchesLocalBrowseConstraints)
+                items = journalSummariesMatchingQuery(applied.summaries, query: query)
                 nextCursor = applied.nextCursor
                 hasLoaded = true
                 lastQueryKey = queryKey
@@ -904,7 +934,10 @@ final class TradeHistoryViewModel {
                 await loadAccounts(for: profileID)
             }
 
-            items = page.items.map(TradeSummaryMapper.ownerJournal(fromListTrade:)).filter(matchesLocalBrowseConstraints)
+            items = journalSummariesMatchingQuery(
+                page.items.map(TradeSummaryMapper.ownerJournal(fromListTrade:)),
+                query: query
+            )
             nextCursor = page.nextCursor
             detailCache.seed(journalSummaries: items)
             hasLoaded = true
@@ -1057,9 +1090,10 @@ final class TradeHistoryViewModel {
             TradeHistoryLocalMatch.matches($0, query: query, context: matchContext)
         }
         filtered = TradeHistorySortSupport.sorted(filtered, sort: filters.sort)
-        items = filtered
-            .map(TradeSummaryMapper.ownerJournal(fromListTrade:))
-            .filter(matchesLocalBrowseConstraints)
+        items = journalSummariesMatchingQuery(
+            filtered.map(TradeSummaryMapper.ownerJournal(fromListTrade:)),
+            query: query
+        )
         nextCursor = nil
         detailCache.seed(journalSummaries: items)
         persistSnapshot()

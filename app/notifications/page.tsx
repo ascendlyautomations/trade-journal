@@ -70,6 +70,7 @@ import {
   writeNotificationsSession,
 } from "@/lib/notificationsSessionCache"
 import MobileWebActivityRow from "@/app/components/mobile/activity/MobileWebActivityRow"
+import { MOBILE_WEB_SOCIAL_PAGE_SHELL } from "@/lib/mobileWebPageSurface"
 
 const NOTIFICATIONS_TABLE = "notifications"
 
@@ -89,8 +90,7 @@ function sortNotificationsDesc(rows: NotificationRecord[]): NotificationRecord[]
   )
 }
 
-const PAGE_SHELL_CLASS =
-  "tt-phase1-dark w-full text-white px-2 pb-3 pt-0 md:pb-10 max-md:px-0"
+const PAGE_SHELL_CLASS = `tt-phase1-dark w-full text-white px-2 pb-3 pt-0 md:pb-10 max-md:px-0 ${MOBILE_WEB_SOCIAL_PAGE_SHELL}`
 
 const PAGE_CONTAINER_CLASS =
   "relative z-0 mx-auto mt-2.5 w-full min-w-0 max-w-[1600px] px-1 md:px-6 xl:px-8 2xl:px-12 max-md:mt-0 max-md:px-0"

@@ -205,9 +205,10 @@ struct FeedItemRow: View {
             )
 
         case .post(_, let post):
-            if let first = post.media.first(where: {
+            let mediaItems = post.media.filter {
                 !$0.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            }) {
+            }
+            if mediaItems.count == 1, let first = mediaItems.first {
                 InteractiveImageView(
                     mediaID: entry.id,
                     reference: first,
@@ -222,6 +223,29 @@ struct FeedItemRow: View {
                         Task { await engagementStore.ensureLiked(on: entry.interactionTarget) }
                     }
                 )
+            } else if mediaItems.count > 1 {
+                TabView {
+                    ForEach(Array(mediaItems.enumerated()), id: \.offset) { index, media in
+                        InteractiveImageView(
+                            mediaID: "\(entry.id)-\(index)",
+                            reference: media,
+                            purpose: .postImage,
+                            imagePipeline: imagePipeline,
+                            emptyIcon: .photo,
+                            accessibilityIdentifier: "feed.post.media.\(index)",
+                            deliveryQuality: .feedDisplay,
+                            auditSurface: "feed",
+                            onSingleTap: onOpen,
+                            onDoubleTapLike: {
+                                Task { await engagementStore.ensureLiked(on: entry.interactionTarget) }
+                            }
+                        )
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .automatic))
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 200)
+                .accessibilityIdentifier("feed.post.media")
             }
 
         case .clip(_, let reel):
@@ -471,7 +495,7 @@ private struct FeedItemRowPreview: View {
         case .post(_, let post):
             return post.body
         case .clip(_, let reel):
-            return reel.caption ?? "Clip"
+            return ReelCaptionDisplay.displayText(for: reel)
         case .achievement(_, let achievement):
             return achievement.title
         }

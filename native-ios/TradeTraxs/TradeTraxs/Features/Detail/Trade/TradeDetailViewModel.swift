@@ -223,6 +223,23 @@ final class TradeDetailViewModel {
         navigationCoordinator.pushOtherProfile(profileID)
     }
 
+    var visibleLinkedReel: Reel? {
+        guard experience == .social else { return nil }
+        let viewerID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+        return FeedLinkedContentResolver.visibleLinkedReel(
+            for: tradeID,
+            cache: cache,
+            viewerID: viewerID
+        )
+    }
+
+    func openLinkedClip(_ reelID: ReelID) {
+        ExperienceHaptics.play(.selection)
+        guard let reel = cache.reel(id: reelID) else { return }
+        cache.seed(reel)
+        navigationCoordinator.pushReelDetail(reel.id)
+    }
+
     func deleteTrade() async -> Bool {
         guard isOwner, !isDeleting else { return false }
         isDeleting = true

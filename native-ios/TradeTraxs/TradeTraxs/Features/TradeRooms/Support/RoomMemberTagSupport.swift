@@ -117,3 +117,35 @@ struct RoomMemberTagAssignPickerRow: View {
         }
     }
 }
+
+/// Manage Tags sheet — local multi-select until Save (web-style draft, then persist).
+struct RoomMemberTagAssignmentEditor: View {
+    let tags: [RoomMemberTag]
+    @Binding var selectedTagIDs: Set<RoomMemberTagID>
+    var isSaving: Bool = false
+
+    var body: some View {
+        List {
+            ForEach(tags) { tag in
+                Button {
+                    guard !isSaving else { return }
+                    ExperienceHaptics.play(.selection)
+                    if selectedTagIDs.contains(tag.id) {
+                        selectedTagIDs.remove(tag.id)
+                    } else {
+                        selectedTagIDs.insert(tag.id)
+                    }
+                } label: {
+                    RoomMemberTagAssignPickerRow(
+                        tag: tag,
+                        assigned: selectedTagIDs.contains(tag.id)
+                    )
+                }
+                .buttonStyle(.experiencePlain)
+                .disabled(isSaving)
+            }
+        }
+        .experienceInsetGroupedListStyle(pageBackground: true)
+        .scrollContentBackground(.hidden)
+    }
+}

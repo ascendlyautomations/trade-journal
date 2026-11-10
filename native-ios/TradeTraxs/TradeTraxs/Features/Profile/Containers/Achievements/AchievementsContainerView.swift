@@ -11,6 +11,7 @@ struct AchievementsContainerView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.appEnvironment) private var appEnvironment
     @State private var browseLayout = ProfileBrowseLayoutStore.layout(for: .achievements)
+    @State private var shareTarget: SharedContentShareTarget?
 
     private var gridColumns: [GridItem] {
         [
@@ -43,6 +44,7 @@ struct AchievementsContainerView: View {
                             ProfileAchievementGridTile(
                                 achievement: achievement,
                                 imagePipeline: imagePipeline,
+                                engagementStore: engagementStore,
                                 isPinned: isProfilePinned(achievement),
                                 onOpen: { viewModel.openAchievement(achievement) }
                             )
@@ -92,6 +94,13 @@ struct AchievementsContainerView: View {
         } message: {
             Text(viewModel.deleteErrorMessage ?? "")
         }
+        .sheet(item: $shareTarget) { target in
+            SharedContentShareSheet(
+                target: target,
+                data: appEnvironment.data,
+                onClose: { shareTarget = nil }
+            )
+        }
     }
 
     private var achievementList: some View {
@@ -103,6 +112,7 @@ struct AchievementsContainerView: View {
                     engagementStore: engagementStore,
                     vaultStore: vaultStore,
                     onOpen: { viewModel.openAchievement(achievement) },
+                    onShare: { shareTarget = viewModel.shareAchievement(achievement) },
                     isOwner: viewModel.isOwner,
                     onReport: reportAction(for: achievement),
                     onDelete: viewModel.isOwner

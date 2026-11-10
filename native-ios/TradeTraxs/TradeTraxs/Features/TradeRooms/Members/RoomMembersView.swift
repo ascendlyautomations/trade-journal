@@ -4,9 +4,11 @@ struct RoomMembersView: View {
     @State private var viewModel: RoomMembersViewModel
     @State private var selectedMember: RoomMemberItem?
     @State private var memberForTags: RoomMemberItem?
+    @State private var memberTagDraftSelection: Set<RoomMemberTagID> = []
     private let imagePipeline: any ImagePipeline
 
     @Environment(\.themeColors) private var colors
+    @Bindable private var roomMemberTagStore = SessionRoomMemberTagsStore.shared
 
     init(
         roomID: RoomID,
@@ -112,12 +114,36 @@ struct RoomMembersView: View {
                     .experienceNavigationTitle("Manage Tags")
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button("Done") { memberForTags = nil }
+                            Button("Cancel") {
+                                memberForTags = nil
+                            }
+                            .disabled(viewModel.isMutatingTag)
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Save") {
+                                Task {
+                                    let saved = await viewModel.saveMemberTagAssignments(
+                                        for: member,
+                                        selectedTagIDs: memberTagDraftSelection
+                                    )
+                                    if saved {
+                                        memberForTags = nil
+                                    }
+                                }
+                            }
+                            .fontWeight(.semibold)
+                            .disabled(viewModel.isMutatingTag)
                         }
                     }
             }
             .experienceScreenBackground()
             .presentationBackground(colors.sheetBackground)
+            .onAppear {
+                memberTagDraftSelection = viewModel.savedTagIDs(for: member.id)
+            }
+            .onChange(of: member.id) { _, _ in
+                memberTagDraftSelection = viewModel.savedTagIDs(for: member.id)
+            }
         }
         .roomMemberModerationConfirmations(
             showsRemoveConfirmation: $viewModel.showsMemberActionConfirmation,
@@ -135,6 +161,9 @@ struct RoomMembersView: View {
         )
         .task(id: viewModel.roomID) {
             viewModel.loadIfNeeded()
+        }
+        .onChange(of: roomMemberTagStore.revision) { _, _ in
+            viewModel.syncMemberTagsFromStore()
         }
         .accessibilityIdentifier("tradeRooms.members")
     }
@@ -159,7 +188,7 @@ struct RoomMembersView: View {
                 viewModel.requestMemberAction(.ban(member.id))
             },
             onDismiss: { selectedMember = nil },
-            onManageTags: viewModel.canModerateRoom
+            onManageTags: viewModel.canManageTagsForMember(member)
                 ? {
                     let item = member
                     selectedMember = nil
@@ -170,20 +199,11 @@ struct RoomMembersView: View {
     }
 
     private func memberTagsEditor(_ member: RoomMemberItem) -> some View {
-        List {
-            ForEach(viewModel.roomTags.filter { viewModel.canAssignTag($0) }) { tag in
-                let assigned = (viewModel.members.first(where: { $0.id == member.id })?.tags ?? member.tags)
-                    .contains(where: { $0.id == tag.id })
-                Button {
-                    Task { await viewModel.toggleTag(tag, for: member) }
-                } label: {
-                    RoomMemberTagAssignPickerRow(tag: tag, assigned: assigned)
-                }
-                .disabled(viewModel.isMutatingTag)
-            }
-        }
-        .experienceInsetGroupedListStyle(pageBackground: true)
-        .scrollContentBackground(.hidden)
+        RoomMemberTagAssignmentEditor(
+            tags: viewModel.roomTags.filter { viewModel.canAssignTag($0) },
+            selectedTagIDs: $memberTagDraftSelection,
+            isSaving: viewModel.isMutatingTag
+        )
         .task { await viewModel.refreshTags() }
     }
 

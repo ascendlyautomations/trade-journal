@@ -27,6 +27,7 @@ import {
   formatMobileWebChartAxisUsd,
   MOBILE_WEB_CHART,
 } from "@/lib/mobileWebAnalytics"
+import { SlidersHorizontal } from "lucide-react"
 
 export type EquityChartPoint = {
   date: string
@@ -51,6 +52,9 @@ export type DashboardEquityCurveProps = {
   equityCurveUsesAccountBalance?: boolean
   /** Render personal drawdown floor from `drawdownFloor` on each point. */
   showPersonalDrawdownFloor?: boolean
+  /** Phone web: show drawdown floor settings control on the chart. */
+  showDrawdownSettingsButton?: boolean
+  onOpenDrawdownSettings?: () => void
 }
 
 const DRAWDOWN_LIMIT_LINE_LABEL = "Max Drawdown Limit"
@@ -140,6 +144,8 @@ export default function DashboardEquityCurve({
   drawdownLimitLineY = null,
   equityCurveUsesAccountBalance = false,
   showPersonalDrawdownFloor = false,
+  showDrawdownSettingsButton = false,
+  onOpenDrawdownSettings,
 }: DashboardEquityCurveProps) {
   const showEmpty =
     data.length === 0 ||
@@ -157,7 +163,17 @@ export default function DashboardEquityCurve({
 
   if (variant === "mobile") {
     return (
-      <div className="w-full overflow-visible md:hidden">
+      <div className="relative w-full overflow-visible md:hidden">
+        {showDrawdownSettingsButton && onOpenDrawdownSettings ? (
+          <button
+            type="button"
+            onClick={onOpenDrawdownSettings}
+            aria-label="Equity curve settings"
+            className="absolute right-0 top-0 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white md:hidden"
+          >
+            <SlidersHorizontal className="h-4 w-4" strokeWidth={2} aria-hidden />
+          </button>
+        ) : null}
         <div
           data-tt-tour-target="dashboardPerformance"
           data-tt-tour-spotlight="large"

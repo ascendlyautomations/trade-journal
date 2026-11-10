@@ -182,6 +182,10 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             return try await sendStoryShare(message, content: content)
         }
 
+        if message.kind == .profileShare, let content = message.body {
+            return try await sendProfileShare(message, content: content)
+        }
+
         if message.kind == .storyReply, let content = message.body {
             return try await sendStoryReply(message, content: content)
         }
@@ -1082,6 +1086,37 @@ nonisolated struct DefaultMessageRepository: MessageRepository {
             createdAt: ISO8601.date(from: inserted.created_at) ?? message.createdAt,
             isReadByViewer: true,
             sharedContent: reference
+        )
+    }
+
+    private func sendProfileShare(_ message: Message, content: String) async throws -> Message {
+        let body = MessageInsertBodies.StoryShare(
+            conversation_id: message.conversationID.rawValue,
+            sender_id: message.senderProfileID.rawValue,
+            type: ProfileShareMessageSupport.messageType,
+            content: content,
+            parent_message_id: message.replyToMessageID?.rawValue
+        )
+        let inserted: DMInsertRow = try await supabase.database.insert(
+            body,
+            into: "messages",
+            query: [SupabaseQuery.select("id,created_at")],
+            returning: DMInsertRow.self
+        )
+        guard let id = inserted.id, !id.isEmpty else {
+            throw AppError.unknown(message: "Profile share insert returned no id")
+        }
+        scheduleDirectMessagePush(messageID: id)
+        return Message(
+            id: MessageID(id),
+            conversationID: message.conversationID,
+            senderProfileID: message.senderProfileID,
+            kind: .profileShare,
+            body: content,
+            attachments: [],
+            replyToMessageID: message.replyToMessageID,
+            createdAt: ISO8601.date(from: inserted.created_at) ?? message.createdAt,
+            isReadByViewer: true
         )
     }
 

@@ -82,6 +82,7 @@ final class DetailExperienceTests: XCTestCase {
         let clips = ClipsContainerViewModel(
             profileID: profileID,
             feed: environment.data.feed,
+            session: environment.data.session,
             navigationCoordinator: environment.navigation.coordinator,
             detailCache: environment.data.detailCache
         )

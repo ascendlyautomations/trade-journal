@@ -44,6 +44,29 @@ enum TradeRoomModerationPermission {
         return !hasElevatedTag(memberTags: targetMemberTags)
     }
 
+    /// Manage Tags sheet — owners/moderators may assign tags to themselves; other targets follow moderation rules.
+    static func canManageTagsForMember(
+        canManageRoom: Bool,
+        canModerateRoom: Bool,
+        viewerID: ProfileID?,
+        roomOwnerProfileID: ProfileID,
+        targetProfileID: ProfileID,
+        targetMemberTags: [RoomMemberTag]
+    ) -> Bool {
+        guard canModerateRoom, let viewerID else { return false }
+        if targetProfileID == viewerID {
+            return true
+        }
+        return canModerateMemberTarget(
+            canManageRoom: canManageRoom,
+            canModerateRoom: canModerateRoom,
+            viewerID: viewerID,
+            roomOwnerProfileID: roomOwnerProfileID,
+            targetProfileID: targetProfileID,
+            targetMemberTags: targetMemberTags
+        )
+    }
+
     static func viewerModeratorTags(
         viewerID: ProfileID,
         roomID: RoomID,

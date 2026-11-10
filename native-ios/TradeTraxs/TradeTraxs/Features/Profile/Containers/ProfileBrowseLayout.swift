@@ -141,53 +141,60 @@ struct ProfileBrowseGridImage: View {
 struct ProfileTradeGridTile: View {
     let summary: TradeSummary
     let imagePipeline: any ImagePipeline
+    let engagementStore: EngagementStore
     var isPinned: Bool = false
     let onOpen: () -> Void
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
 
+    private var target: InteractionTarget { .trade(summary.id) }
+
     var body: some View {
-        Button(action: onOpen) {
-            ZStack(alignment: .bottomLeading) {
-                if let media = ProfileCardMediaPresence.tradeMedia(in: summary) {
-                    ProfileBrowseGridImage(
-                        reference: media,
-                        purpose: .tradeScreenshot,
-                        imagePipeline: imagePipeline
-                    )
-                } else {
-                    tradeFallback
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(summary.symbol.ticker)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    Text(TradeDisplay.pnlText(summary.realizedPnL))
-                        .font(.caption.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(pnlColor)
-                        .lineLimit(1)
-                }
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    LinearGradient(
-                        colors: [.black.opacity(0.72), .black.opacity(0)],
-                        startPoint: .bottom,
-                        endPoint: .top
-                    )
+        ZStack(alignment: .bottomLeading) {
+            if let media = ProfileCardMediaPresence.tradeMedia(in: summary) {
+                ProfileBrowseGridImage(
+                    reference: media,
+                    purpose: .tradeScreenshot,
+                    imagePipeline: imagePipeline
                 )
+            } else {
+                tradeFallback
             }
-            .overlay(alignment: .topTrailing) {
-                if isPinned {
-                    ProfileGridPinBadge()
-                        .padding(6)
-                }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(summary.symbol.ticker)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text(TradeDisplay.pnlText(summary.realizedPnL))
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(pnlColor)
+                    .lineLimit(1)
             }
-            .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                LinearGradient(
+                    colors: [.black.opacity(0.72), .black.opacity(0)],
+                    startPoint: .bottom,
+                    endPoint: .top
+                )
+            )
         }
-        .buttonStyle(.experiencePlain)
+        .overlay(alignment: .topTrailing) {
+            if isPinned {
+                ProfileGridPinBadge()
+                    .padding(6)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
+        .contentShape(Rectangle())
+        .experienceDoubleTapLike(
+            target: target,
+            store: engagementStore,
+            anchorsHeartToTapLocation: true,
+            onSingleTap: onOpen
+        )
         .accessibilityLabel(tradeGridAccessibilityLabel)
         .accessibilityIdentifier("profile.trades.grid.\(summary.id.rawValue)")
     }
@@ -212,43 +219,125 @@ struct ProfileTradeGridTile: View {
     }
 }
 
+/// Grid thumbnail overflow — matches list cards; light icon on photo tiles.
+private struct ProfileBrowseGridOwnerOverflow: View {
+    let isOwner: Bool
+    var deleteTitle: String = "Delete"
+    var onDelete: (() -> Void)? = nil
+    var onPin: (() -> Void)? = nil
+    var onUnpin: (() -> Void)? = nil
+    var isPinnedToProfile = false
+    var accessibilityIdentifier: String
+
+    var body: some View {
+        ContentOverflowMenu(
+            isOwner: isOwner,
+            deleteTitle: deleteTitle,
+            onDelete: onDelete,
+            onPin: onPin,
+            onUnpin: onUnpin,
+            isPinnedToProfile: isPinnedToProfile,
+            foregroundColor: .white,
+            accessibilityIdentifier: accessibilityIdentifier
+        )
+        .padding(ExperienceSpacing.xxs)
+        .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
+    }
+}
+
 struct ProfileClipGridTile: View {
     let reel: Reel
     let imagePipeline: any ImagePipeline
+    let engagementStore: EngagementStore
     let title: String
+    var isOwner: Bool = false
+    var isPinned: Bool = false
+    var profilePin: ProfilePinCallbacks? = nil
+    var isDeleteInProgress: Bool = false
+    var onDelete: (() -> Void)? = nil
     let onOpen: () -> Void
 
     @Environment(\.themeColors) private var colors
 
+    private var target: InteractionTarget { .reel(reel.id) }
+
+    private var isPinnedToProfile: Bool {
+        isPinned || (profilePin?.isPinned(.reel, reel.id.rawValue) ?? false)
+    }
+
     var body: some View {
-        Button(action: onOpen) {
-            ZStack {
-                if let thumbnail = reel.thumbnail {
-                    ProfileBrowseGridImage(
-                        reference: thumbnail,
-                        purpose: .reelThumbnail,
-                        imagePipeline: imagePipeline
-                    )
-                } else {
-                    colors.fillPrimary
-                        .aspectRatio(1, contentMode: .fit)
-                }
-                Image(systemName: "play.circle.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(.white.opacity(0.92))
-                    .shadow(color: .black.opacity(0.35), radius: 4, y: 1)
+        ZStack {
+            if let thumbnail = reel.thumbnail {
+                ProfileBrowseGridImage(
+                    reference: thumbnail,
+                    purpose: .reelThumbnail,
+                    imagePipeline: imagePipeline
+                )
+            } else {
+                colors.fillPrimary
+                    .aspectRatio(1, contentMode: .fit)
             }
-            .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
+            Image(systemName: "play.circle.fill")
+                .font(.system(size: 28))
+                .foregroundStyle(.white.opacity(0.92))
+                .shadow(color: .black.opacity(0.35), radius: 4, y: 1)
         }
-        .buttonStyle(.experiencePlain)
-        .accessibilityLabel(title)
+        .overlay(alignment: .topLeading) {
+            if isOwner {
+                ProfileBrowseGridOwnerOverflow(
+                    isOwner: true,
+                    deleteTitle: "Delete Clip",
+                    onDelete: isDeleteInProgress ? nil : onDelete,
+                    onPin: profilePin.map { pin in
+                        {
+                            pin.requestPin(
+                                .reel,
+                                reel.id.rawValue,
+                                ProfilePinnedPreviewBuilder.from(reel: reel)
+                            )
+                        }
+                    },
+                    onUnpin: profilePin.map { pin in
+                        {
+                            pin.requestPin(
+                                .reel,
+                                reel.id.rawValue,
+                                ProfilePinnedPreviewBuilder.from(reel: reel)
+                            )
+                        }
+                    },
+                    isPinnedToProfile: isPinnedToProfile,
+                    accessibilityIdentifier: "profile.clip.overflow.\(reel.id.rawValue)"
+                )
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if isPinnedToProfile {
+                ProfileGridPinBadge()
+                    .padding(6)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
+        .contentShape(Rectangle())
+        .experienceDoubleTapLike(
+            target: target,
+            store: engagementStore,
+            anchorsHeartToTapLocation: true,
+            onSingleTap: onOpen
+        )
+        .accessibilityLabel(gridAccessibilityLabel)
         .accessibilityIdentifier("profile.clips.grid.\(reel.id.rawValue)")
+    }
+
+    private var gridAccessibilityLabel: String {
+        isPinnedToProfile ? "\(title), pinned to profile" : title
     }
 }
 
 struct ProfilePostGridTile: View {
     let post: Post
     let imagePipeline: any ImagePipeline
+    let engagementStore: EngagementStore
     var isPinned: Bool = false
     let onOpen: () -> Void
 
@@ -258,44 +347,50 @@ struct ProfilePostGridTile: View {
         ProfileCardMediaPresence.postMedia(in: post)
     }
 
+    private var target: InteractionTarget { .profilePost(post.id) }
+
     var body: some View {
-        Button(action: onOpen) {
-            Group {
-                if let media {
-                    ProfileBrowseGridImage(
-                        reference: media,
-                        purpose: .postImage,
-                        imagePipeline: imagePipeline
-                    )
-                } else if let share = post.roomShare {
-                    ProfileRoomShareGridFace(
-                        share: share,
-                        imagePipeline: imagePipeline,
-                        reservesPinSpace: isPinned
-                    )
-                } else {
-                    colors.fillPrimary
-                        .aspectRatio(1, contentMode: .fit)
-                        .overlay(alignment: .topLeading) {
-                            Text(profilePostGridLabel(post))
-                                .font(.caption)
-                                .foregroundStyle(colors.primaryText)
-                                .lineLimit(6)
-                                .multilineTextAlignment(.leading)
-                                .padding(10)
-                                .padding(.trailing, isPinned ? 28 : 0)
-                        }
-                }
+        Group {
+            if let media {
+                ProfileBrowseGridImage(
+                    reference: media,
+                    purpose: .postImage,
+                    imagePipeline: imagePipeline
+                )
+            } else if let share = post.roomShare {
+                ProfileRoomShareGridFace(
+                    share: share,
+                    imagePipeline: imagePipeline,
+                    reservesPinSpace: isPinned
+                )
+            } else {
+                colors.fillPrimary
+                    .aspectRatio(1, contentMode: .fit)
+                    .overlay(alignment: .topLeading) {
+                        Text(profilePostGridLabel(post))
+                            .font(.caption)
+                            .foregroundStyle(colors.primaryText)
+                            .lineLimit(6)
+                            .multilineTextAlignment(.leading)
+                            .padding(10)
+                            .padding(.trailing, isPinned ? 28 : 0)
+                    }
             }
-            .overlay(alignment: .topTrailing) {
-                if isPinned {
-                    ProfileGridPinBadge()
-                        .padding(6)
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
         }
-        .buttonStyle(.experiencePlain)
+        .overlay(alignment: .topTrailing) {
+            if isPinned {
+                ProfileGridPinBadge()
+                    .padding(6)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
+        .contentShape(Rectangle())
+        .experienceDoubleTapLike(
+            target: target,
+            store: engagementStore,
+            anchorsHeartToTapLocation: true,
+            onSingleTap: onOpen
+        )
         .accessibilityLabel(postGridAccessibilityLabel)
         .accessibilityIdentifier("profile.posts.grid.\(post.id.rawValue)")
     }
@@ -377,6 +472,7 @@ private struct ProfileRoomShareGridFace: View {
 struct ProfileAchievementGridTile: View {
     let achievement: Achievement
     let imagePipeline: any ImagePipeline
+    let engagementStore: EngagementStore
     var isPinned: Bool = false
     let onOpen: () -> Void
 
@@ -389,54 +485,60 @@ struct ProfileAchievementGridTile: View {
         return trimmed.isEmpty ? nil : image
     }
 
+    private var target: InteractionTarget { .achievement(achievement.id) }
+
     var body: some View {
-        Button(action: onOpen) {
-            ZStack(alignment: .bottomLeading) {
-                if let media {
-                    ProfileBrowseGridImage(
-                        reference: media,
-                        purpose: .postImage,
-                        imagePipeline: imagePipeline
-                    )
-                } else {
-                    colors.fillPrimary
-                        .aspectRatio(1, contentMode: .fit)
-                        .overlay {
-                            ExperienceIcon(icon: .trophy, size: .lg, color: colors.tertiaryText)
-                        }
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(achievement.title)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                    if let valueText = overlayValueText {
-                        Text(valueText)
-                            .font(.caption.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(valueColor)
-                            .lineLimit(1)
-                    }
-                }
-                .padding(8)
-                .padding(.trailing, isPinned ? 22 : 0)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    LinearGradient(
-                        colors: [.black.opacity(0.72), .black.opacity(0)],
-                        startPoint: .bottom,
-                        endPoint: .top
-                    )
+        ZStack(alignment: .bottomLeading) {
+            if let media {
+                ProfileBrowseGridImage(
+                    reference: media,
+                    purpose: .postImage,
+                    imagePipeline: imagePipeline
                 )
+            } else {
+                colors.fillPrimary
+                    .aspectRatio(1, contentMode: .fit)
+                    .overlay {
+                        ExperienceIcon(icon: .trophy, size: .lg, color: colors.tertiaryText)
+                    }
             }
-            .overlay(alignment: .topTrailing) {
-                if isPinned {
-                    ProfileGridPinBadge()
-                        .padding(6)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(achievement.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                if let valueText = overlayValueText {
+                    Text(valueText)
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(valueColor)
+                        .lineLimit(1)
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
+            .padding(8)
+            .padding(.trailing, isPinned ? 22 : 0)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                LinearGradient(
+                    colors: [.black.opacity(0.72), .black.opacity(0)],
+                    startPoint: .bottom,
+                    endPoint: .top
+                )
+            )
         }
-        .buttonStyle(.experiencePlain)
+        .overlay(alignment: .topTrailing) {
+            if isPinned {
+                ProfileGridPinBadge()
+                    .padding(6)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
+        .contentShape(Rectangle())
+        .experienceDoubleTapLike(
+            target: target,
+            store: engagementStore,
+            anchorsHeartToTapLocation: true,
+            onSingleTap: onOpen
+        )
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier("profile.achievements.grid.\(achievement.id.rawValue)")
     }

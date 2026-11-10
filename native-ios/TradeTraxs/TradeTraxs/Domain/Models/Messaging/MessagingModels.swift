@@ -11,6 +11,7 @@ nonisolated enum MessageKind: String, Hashable, Codable, Sendable {
     case voice
     case storyReply = "story_reply"
     case storyShare = "story_share"
+    case profileShare = "profile_share"
     case system
 }
 

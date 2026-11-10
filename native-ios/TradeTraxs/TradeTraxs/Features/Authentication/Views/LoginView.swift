@@ -232,9 +232,13 @@ struct LoginView: View {
                 kind: viewModel.mode == .signUp ? .newPassword : .password,
                 isSecureVisible: $viewModel.isSecurePasswordVisible,
                 textContentType: viewModel.mode == .signUp ? .newPassword : .password,
-                submitLabel: .go,
+                submitLabel: viewModel.mode == .signIn ? .done : .go,
                 onSubmit: {
-                    Task { await viewModel.submit() }
+                    if viewModel.mode == .signIn {
+                        releaseLoginKeyboardFocus()
+                    } else {
+                        Task { await viewModel.submit() }
+                    }
                 },
                 loginField: .password,
                 loginFocusedField: $focusedField

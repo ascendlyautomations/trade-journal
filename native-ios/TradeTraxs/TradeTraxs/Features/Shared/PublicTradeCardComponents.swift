@@ -207,6 +207,11 @@ nonisolated enum TradeExecutionMetricsPriceDisplay: Sendable {
     case profileCardRounded
 }
 
+nonisolated enum TradeExecutionMetricsContentAlignment: Sendable {
+    case leading
+    case centered
+}
+
 /// Two-row execution block — R:R / Contracts / Duration, then Entry / Exit / Points (times under prices).
 struct TradeExecutionMetricsTwoRowGrid: View {
     private let riskReward: Decimal?
@@ -218,8 +223,14 @@ struct TradeExecutionMetricsTwoRowGrid: View {
     private let entryAt: Date
     private let exitAt: Date?
     private let priceDisplay: TradeExecutionMetricsPriceDisplay
+    private let contentAlignment: TradeExecutionMetricsContentAlignment
+    private let showsPoints: Bool
 
-    init(trade: Trade) {
+    init(
+        trade: Trade,
+        contentAlignment: TradeExecutionMetricsContentAlignment = .leading,
+        showsPoints: Bool = true
+    ) {
         riskReward = trade.riskReward
         quantity = trade.quantity
         durationText = TradeDisplay.holdDuration(for: trade)
@@ -229,6 +240,8 @@ struct TradeExecutionMetricsTwoRowGrid: View {
         entryAt = trade.entryAt
         exitAt = trade.exitAt
         priceDisplay = .fullPrecision
+        self.contentAlignment = contentAlignment
+        self.showsPoints = showsPoints
     }
 
     init(
@@ -244,54 +257,71 @@ struct TradeExecutionMetricsTwoRowGrid: View {
         entryAt = summary.entryAt
         exitAt = summary.exitAt
         self.priceDisplay = priceDisplay
+        contentAlignment = .leading
+        showsPoints = true
     }
 
     @Environment(\.themeColors) private var colors
 
+    private var columnAlignment: Alignment {
+        contentAlignment == .centered ? .center : .leading
+    }
+
+    private var stackAlignment: HorizontalAlignment {
+        contentAlignment == .centered ? .center : .leading
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: TradeExecutionMetricsLayout.rowSpacing) {
-            metricsRow(
+        VStack(alignment: stackAlignment, spacing: TradeExecutionMetricsLayout.rowSpacing) {
+            HStack(alignment: .top, spacing: ExperienceSpacing.xxs) {
                 TradeExecutionMetricsCell(
                     label: "R:R",
-                    value: TradeDisplay.compactRRText(riskReward) ?? "—"
-                ),
+                    value: TradeDisplay.compactRRText(riskReward) ?? "—",
+                    textAlignment: contentAlignment
+                )
+                .frame(maxWidth: .infinity, alignment: columnAlignment)
                 TradeExecutionMetricsCell(
                     label: "Contracts",
-                    value: TradeDisplay.contractsText(for: quantity)
-                ),
+                    value: TradeDisplay.contractsText(for: quantity),
+                    textAlignment: contentAlignment
+                )
+                .frame(maxWidth: .infinity, alignment: columnAlignment)
                 TradeExecutionMetricsCell(
                     label: "Duration",
-                    value: durationText ?? "—"
+                    value: durationText ?? "—",
+                    textAlignment: contentAlignment
                 )
-            )
+                .frame(maxWidth: .infinity, alignment: columnAlignment)
+            }
             HStack(alignment: .top, spacing: ExperienceSpacing.xxs) {
                 TradeExecutionEntryExitColumn(
                     label: "Entry",
                     price: TradeDisplay.executionPriceText(entryPrice, display: priceDisplay),
-                    time: TradeDisplay.entryExecutionTimeText(entryAt: entryAt, exitAt: exitAt)
+                    time: TradeDisplay.entryExecutionTimeText(entryAt: entryAt, exitAt: exitAt),
+                    textAlignment: contentAlignment
                 )
                 TradeExecutionEntryExitColumn(
                     label: "Exit",
                     price: TradeDisplay.executionPriceText(exitPrice, display: priceDisplay),
-                    time: TradeDisplay.exitExecutionTimeText(entryAt: entryAt, exitAt: exitAt)
+                    time: TradeDisplay.exitExecutionTimeText(entryAt: entryAt, exitAt: exitAt),
+                    textAlignment: contentAlignment
                 )
-                TradeExecutionMetricsCell(
-                    label: "Points",
-                    value: TradeDisplay.pointsText(points) ?? "—"
-                )
+                if showsPoints {
+                    TradeExecutionMetricsCell(
+                        label: "Points",
+                        value: TradeDisplay.pointsText(points) ?? "—",
+                        textAlignment: contentAlignment
+                    )
+                } else {
+                    Color.clear
+                        .frame(maxWidth: .infinity)
+                        .accessibilityHidden(true)
+                }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: columnAlignment)
     }
 
-    private func metricsRow(_ cells: TradeExecutionMetricsCell...) -> some View {
-        HStack(alignment: .top, spacing: ExperienceSpacing.xxs) {
-            ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
-                cell
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-    }
 }
 
 private enum TradeExecutionMetricsLayout {
@@ -302,11 +332,16 @@ private struct TradeExecutionMetricsCell: View {
     let label: String
     let value: String
     var subtitle: String?
+    var textAlignment: TradeExecutionMetricsContentAlignment = .leading
 
     @Environment(\.themeColors) private var colors
 
+    private var stackAlignment: HorizontalAlignment {
+        textAlignment == .centered ? .center : .leading
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: stackAlignment, spacing: 2) {
             Text(label)
                 .experienceStyle(.caption2, color: colors.tertiaryText)
                 .lineLimit(1)
@@ -331,18 +366,38 @@ private struct TradeExecutionEntryExitColumn: View {
     let label: String
     let price: String
     let time: String
+    var textAlignment: TradeExecutionMetricsContentAlignment = .leading
 
     @Environment(\.themeColors) private var colors
 
+    private var stackAlignment: HorizontalAlignment {
+        textAlignment == .centered ? .center : .leading
+    }
+
+    private var frameAlignment: Alignment {
+        textAlignment == .centered ? .center : .leading
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: TradeExecutionEntryExitTypography.stackSpacing) {
+        VStack(alignment: stackAlignment, spacing: TradeExecutionEntryExitTypography.stackSpacing) {
             Text(label)
                 .experienceStyle(.caption2, color: colors.tertiaryText)
                 .lineLimit(1)
-            TradeExecutionEntryExitTypography.priceText(price, colors: colors)
-            TradeExecutionEntryExitTypography.timeText(time, colors: colors)
+                .multilineTextAlignment(textAlignment == .centered ? .center : .leading)
+            TradeExecutionEntryExitTypography.priceText(
+                price,
+                colors: colors,
+                minimumScale: TradeExecutionEntryExitTypography.priceMinimumScale,
+                multilineTextAlignment: textAlignment == .centered ? .center : .leading
+            )
+            TradeExecutionEntryExitTypography.timeText(
+                time,
+                colors: colors,
+                minimumScale: TradeExecutionEntryExitTypography.timeMinimumScale,
+                multilineTextAlignment: textAlignment == .centered ? .center : .leading
+            )
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: frameAlignment)
         .layoutPriority(1)
         .accessibilityElement(children: .combine)
     }
@@ -354,24 +409,36 @@ private enum TradeExecutionEntryExitTypography {
     static let timeMinimumScale: CGFloat = 0.75
 
     @ViewBuilder
-    static func priceText(_ text: String, colors: SemanticColorPalette) -> some View {
+    static func priceText(
+        _ text: String,
+        colors: SemanticColorPalette,
+        minimumScale: CGFloat = priceMinimumScale,
+        multilineTextAlignment: TextAlignment = .leading
+    ) -> some View {
         Text(text)
             .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
             .foregroundStyle(colors.primaryText)
             .lineLimit(1)
-            .minimumScaleFactor(priceMinimumScale)
+            .minimumScaleFactor(minimumScale)
             .allowsTightening(true)
+            .multilineTextAlignment(multilineTextAlignment)
             .layoutPriority(1)
     }
 
     @ViewBuilder
-    static func timeText(_ text: String, colors: SemanticColorPalette) -> some View {
+    static func timeText(
+        _ text: String,
+        colors: SemanticColorPalette,
+        minimumScale: CGFloat = timeMinimumScale,
+        multilineTextAlignment: TextAlignment = .leading
+    ) -> some View {
         Text(text)
             .font(.system(.caption2, design: .rounded).weight(.regular).monospacedDigit())
             .foregroundStyle(colors.secondaryText)
             .lineLimit(1)
-            .minimumScaleFactor(timeMinimumScale)
+            .minimumScaleFactor(minimumScale)
             .allowsTightening(true)
+            .multilineTextAlignment(multilineTextAlignment)
             .layoutPriority(1)
     }
 }

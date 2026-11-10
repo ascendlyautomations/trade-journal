@@ -7,7 +7,8 @@ import ProfileCreateMenu from "@/app/components/profile/ProfileCreateMenu"
 import ProfileVisitorModerationMenu from "@/app/components/profile/ProfileVisitorModerationMenu"
 import type { ProfileHeaderData } from "@/app/components/profile/profileTypes"
 import { normalizeTraderType } from "@/lib/traderType"
-import { ChevronRight, Share, TrendingUp } from "lucide-react"
+import Link from "next/link"
+import { ChevronRight, Settings, Share, TrendingUp } from "lucide-react"
 import MobileWebProfileStatsRow from "./MobileWebProfileStatsRow"
 
 type MobileWebProfileHeaderProps = {
@@ -156,7 +157,15 @@ export default function MobileWebProfileHeader({
       {...(isOwnProfile ? { "data-tt-tour-target": "profileIdentity" } : {})}
     >
       {isOwnProfile ? (
-        <div className="absolute right-0 top-0 z-10">
+        <div className="absolute right-0 top-0 z-10 flex items-center gap-0.5">
+          <Link
+            href="/settings"
+            prefetch={false}
+            className="tt-mobile-web-hit flex h-11 w-11 items-center justify-center rounded-full text-[color:var(--tt-text,#1f2328)] active:bg-black/5"
+            aria-label="Settings"
+          >
+            <Settings className="h-5 w-5" strokeWidth={2} aria-hidden />
+          </Link>
           <ProfileCreateMenu
             onCreateStory={onCreateStory}
             onCreatePost={onCreatePost}

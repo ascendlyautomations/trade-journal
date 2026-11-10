@@ -1,6 +1,9 @@
 "use client"
 
-import { supabase } from "./supabaseClient"
+import {
+  getSupabaseApiAccessToken,
+  isAuthenticatedMemberUser,
+} from "./supabaseBearerFetch"
 import {
   parseBillingEntitlementResponse,
   type BillingEntitlementSnapshot,
@@ -59,10 +62,7 @@ export function clearBillingEntitlementState() {
 }
 
 async function requestSnapshot(): Promise<BillingEntitlementSnapshot> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-  const token = session?.access_token
+  const token = await getSupabaseApiAccessToken()
   if (!token) {
     throw new Error("Missing session")
   }
@@ -83,6 +83,10 @@ export async function loadBillingEntitlement(
   userId: string,
   options?: { force?: boolean }
 ): Promise<BillingEntitlementClientState> {
+  if (!isAuthenticatedMemberUser({ id: userId })) {
+    clearBillingEntitlementState()
+    return getBillingEntitlementState()
+  }
   if (
     !options?.force &&
     state.userId === userId &&

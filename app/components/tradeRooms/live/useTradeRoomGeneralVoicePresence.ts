@@ -1,26 +1,27 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { getSupabaseApiAccessToken } from "@/lib/supabaseBearerFetch"
 import {
   generalVoicePresenceCache as presenceCache,
   generalVoicePresenceFetchByRoom as presenceFetchByRoom,
   PRESENCE_CACHE_MS,
+  type GeneralVoicePresenceFetchResult as PresenceFetchResult,
   type GeneralVoicePresenceSnapshot as PresenceSnapshot,
 } from "@/lib/livekit/client/generalVoicePresenceCache.ts"
 import { useTradeRoomLiveVoiceStableConnection } from "./useTradeRoomLiveVoice.ts"
 
 async function fetchGeneralVoicePresence(
   roomId: string,
-  accessToken: string,
   options?: { force?: boolean }
-): Promise<PresenceSnapshot | null> {
+): Promise<PresenceFetchResult> {
   const cached = presenceCache.get(roomId)
   if (
     !options?.force &&
     cached &&
     Date.now() - cached.fetchedAt < PRESENCE_CACHE_MS
   ) {
-    return cached
+    return { snapshot: cached }
   }
 
   const existing = presenceFetchByRoom.get(roomId)
@@ -28,7 +29,12 @@ async function fetchGeneralVoicePresence(
     return existing
   }
 
-  const pending = (async (): Promise<PresenceSnapshot | null> => {
+  const pending = (async (): Promise<PresenceFetchResult> => {
+    const accessToken = await getSupabaseApiAccessToken()
+    if (!accessToken) {
+      return { snapshot: presenceCache.get(roomId) ?? null, unauthorized: true }
+    }
+
     const res = await fetch(
       `/api/livekit/voice/presence?roomId=${encodeURIComponent(roomId)}`,
       {
@@ -36,7 +42,10 @@ async function fetchGeneralVoicePresence(
       }
     )
     const stale = presenceCache.get(roomId) ?? null
-    if (!res.ok) return stale
+    if (res.status === 401 || res.status === 403) {
+      return { snapshot: stale, unauthorized: true }
+    }
+    if (!res.ok) return { snapshot: stale }
     const payload = (await res.json().catch(() => ({}))) as {
       connectedCount?: number
     }
@@ -45,7 +54,7 @@ async function fetchGeneralVoicePresence(
       fetchedAt: Date.now(),
     }
     presenceCache.set(roomId, snapshot)
-    return snapshot
+    return { snapshot }
   })().finally(() => {
     presenceFetchByRoom.delete(roomId)
   })
@@ -65,11 +74,16 @@ export function useTradeRoomGeneralVoicePresence(options: {
   const { roomId, accessToken, enabled = true } = options
   const voice = useTradeRoomLiveVoiceStableConnection()
   const [remote, setRemote] = useState<PresenceSnapshot | null>(null)
+  const authPausedRef = useRef(false)
 
   const inThisRoomVoice =
     Boolean(roomId) &&
     voice.session?.roomId === roomId &&
     voice.isConnected
+
+  useEffect(() => {
+    authPausedRef.current = false
+  }, [roomId, accessToken])
 
   useEffect(() => {
     if (!enabled || !roomId || !accessToken || inThisRoomVoice) {
@@ -83,15 +97,21 @@ export function useTradeRoomGeneralVoicePresence(options: {
     }
 
     const load = (force: boolean) => {
-      void fetchGeneralVoicePresence(roomId, accessToken, force ? { force: true } : undefined).then(
-        (snap) => applySnapshot(snap)
-      )
+      if (authPausedRef.current) return
+      void fetchGeneralVoicePresence(
+        roomId,
+        force ? { force: true } : undefined
+      ).then((result) => {
+        if (result.unauthorized) authPausedRef.current = true
+        applySnapshot(result.snapshot)
+      })
     }
 
     load(false)
 
     const onVisibility = () => {
       if (document.visibilityState !== "visible") return
+      if (authPausedRef.current) return
       const cached = presenceCache.get(roomId)
       const stale =
         !cached || Date.now() - cached.fetchedAt >= PRESENCE_CACHE_MS

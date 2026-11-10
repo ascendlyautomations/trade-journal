@@ -57,6 +57,7 @@ nonisolated struct TradeOwnerJournalSummary: Sendable, Equatable, Identifiable {
     var entryPrice: Decimal?
     var exitPrice: Decimal?
     var sessionLabel: String?
+    var maxRrReached: Decimal? = nil
     var copyTrade: CopyTradeJournalMetadata? = nil
 
     var id: TradeID { summary.id }

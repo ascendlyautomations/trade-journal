@@ -5,12 +5,14 @@ nonisolated enum ProfilePinnedContentType: String, Hashable, Codable, Sendable {
     case trade
     case profilePost = "profile_post"
     case achievement
+    case reel
 
     static func parse(_ raw: String?) -> ProfilePinnedContentType? {
         switch raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "trade": return .trade
         case "profile_post", "post": return .profilePost
         case "achievement": return .achievement
+        case "reel", "clip": return .reel
         default: return nil
         }
     }
@@ -20,6 +22,7 @@ nonisolated enum ProfilePinnedContentType: String, Hashable, Codable, Sendable {
         case .trade: return "Trade"
         case .profilePost: return "Post"
         case .achievement: return "Achievement"
+        case .reel: return "Clip"
         }
     }
 }
@@ -58,6 +61,10 @@ nonisolated struct ProfilePinnedItem: Hashable, Codable, Sendable, Identifiable 
 
     var achievementID: AchievementID? {
         contentType == .achievement ? AchievementID(contentID) : nil
+    }
+
+    var reelID: ReelID? {
+        contentType == .reel ? ReelID(contentID) : nil
     }
 }
 
@@ -105,12 +112,24 @@ enum ProfilePinnedPreviewBuilder {
             valueText: achievement.value.map { TradeDisplay.pnlText($0) } ?? achievement.valueText
         )
     }
+
+    static func from(reel: Reel) -> ProfilePinnedPreview {
+        return ProfilePinnedPreview(
+            kindLabel: "Clip",
+            title: ReelCaptionDisplay.displayText(for: reel),
+            subtitle: nil,
+            imageURL: reel.thumbnail?.id,
+            body: ReelCaptionDisplay.bodyText(for: reel),
+            valueText: nil
+        )
+    }
 }
 
 extension ProfilePinnedContentType {
     static func from(trade: Trade) -> ProfilePinnedContentType { .trade }
     static func from(post: Post) -> ProfilePinnedContentType { .profilePost }
     static func from(achievement: Achievement) -> ProfilePinnedContentType { .achievement }
+    static func from(reel: Reel) -> ProfilePinnedContentType { .reel }
 }
 
 extension AchievementKind {

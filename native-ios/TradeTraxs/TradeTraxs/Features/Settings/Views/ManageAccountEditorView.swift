@@ -128,10 +128,7 @@ struct ManageAccountEditorView: View {
 
                 if draft.category == .propFirm,
                    draft.mode == .evaluation || draft.mode == .funded {
-                    accountField(
-                        "Account Purchase Cost",
-                        caption: "Optional. Leave blank to keep a cost you already saved."
-                    ) {
+                    accountField("Account Purchase Cost") {
                         TextField("Optional", text: $draft.purchaseCostDigits.numericInput(.unsignedCurrency))
                             .keyboardType(.decimalPad)
                             .accessibilityIdentifier("manageAccounts.purchaseCost")

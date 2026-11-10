@@ -249,11 +249,17 @@ final class ActivityHomeViewModel {
     // MARK: - Private
 
     private func load(force: Bool) async {
-        if !inboxStore.hasLoaded, !force {
+        if force {
+            if !inboxStore.hasLoaded {
+                phase = .loading
+            }
+        } else if !inboxStore.hasAuthoritativeFeedForSession {
             phase = .loading
         } else if inboxStore.hasLoaded {
             phase = .loaded
             seedActorsFromDetailCache(for: inboxStore.items)
+        } else {
+            phase = .loading
         }
 
         await inboxStore.startIfNeeded(

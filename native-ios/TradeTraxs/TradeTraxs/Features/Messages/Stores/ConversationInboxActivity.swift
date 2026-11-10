@@ -72,12 +72,18 @@ nonisolated enum ConversationInboxActivity {
         if message.kind == .storyShare {
             return StoryShareMessageSupport.previewText(from: message.body)
         }
+        if message.kind == .profileShare {
+            return ProfileShareMessageSupport.previewText(from: message.body)
+        }
         if let body = message.body?.trimmingCharacters(in: .whitespacesAndNewlines), !body.isEmpty {
             if StoryReplyMessageSupport.decode(from: body) != nil {
                 return StoryReplyMessageSupport.previewText(from: body)
             }
             if StoryShareMessageSupport.decode(from: body) != nil {
                 return StoryShareMessageSupport.previewText(from: body)
+            }
+            if ProfileShareMessageSupport.decode(from: body) != nil {
+                return ProfileShareMessageSupport.previewText(from: body)
             }
             return body
         }
@@ -97,6 +103,9 @@ nonisolated enum ConversationInboxActivity {
         }
         if type?.lowercased() == StoryShareMessageSupport.messageType {
             return StoryShareMessageSupport.previewText(from: content)
+        }
+        if type?.lowercased() == ProfileShareMessageSupport.messageType {
+            return ProfileShareMessageSupport.previewText(from: content)
         }
         if type?.lowercased() == StoryReplyMessageSupport.messageType {
             return StoryReplyMessageSupport.previewText(from: content)

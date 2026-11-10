@@ -429,6 +429,12 @@ final class TradesContainerViewModel {
         )
     }
 
+    func openLinkedClip(_ reelID: ReelID) {
+        guard let reel = detailCache.reel(id: reelID) else { return }
+        detailCache.seed(reel)
+        navigationCoordinator.pushReelDetail(reel.id)
+    }
+
     func requestDelete(_ summary: TradeSummary) {
         guard isOwner, deletingTradeID == nil else { return }
         ExperienceHaptics.play(.warning)
@@ -1411,6 +1417,26 @@ nonisolated enum TradeDisplay {
         let exit = executionTimeOnlyFormatter.string(from: exitAt)
         return "\(entry) – \(exit)"
     }
+
+    /// Owner Trades list — `Nov 17 10:15 AM - 11:15 AM` or `Nov 17 10:30 AM - Nov 18 1:00 PM`.
+    static func journalExecutionTimeRangeText(entryAt: Date, exitAt: Date?) -> String {
+        let entry = journalExecutionStampFormatter.string(from: entryAt)
+        guard let exitAt else { return entry }
+        let exit: String
+        if Calendar.current.isDate(entryAt, inSameDayAs: exitAt) {
+            exit = executionTimeOnlyFormatter.string(from: exitAt)
+        } else {
+            exit = journalExecutionStampFormatter.string(from: exitAt)
+        }
+        return "\(entry) - \(exit)"
+    }
+
+    private static let journalExecutionStampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MMM d h:mm a"
+        return formatter
+    }()
 
     /// Feed copy-trade metadata — execution clocks, then the canonical trade date.
     static func feedCopyExecutionMetadata(entryAt: Date, exitAt: Date?) -> String {

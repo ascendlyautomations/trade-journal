@@ -196,6 +196,8 @@ enum SharedContentNavigation {
                 cache.presentationSeed(id: tradeID)?.previewTrade
                 ?? cache.previewTrade(id: tradeID)
             coordinator.pushSocialTrade(tradeID, cache: cache, preview: preview)
+        case .traderProfile(let profileID):
+            coordinator.pushOtherProfile(profileID)
         }
     }
 }

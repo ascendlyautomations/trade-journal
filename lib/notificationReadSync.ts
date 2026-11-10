@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { supabase } from "@/lib/supabaseClient"
 import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
+import { isAuthenticatedMemberUser } from "@/lib/supabaseBearerFetch"
 
 export type NotificationReadTarget =
   | { kind: "conversation"; conversationId: string }
@@ -25,6 +26,7 @@ export async function markNotificationsReadForTarget(
   client: SupabaseClient = supabase
 ): Promise<number> {
   if (!userId || isDemoSupabaseBlocked()) return 0
+  if (!isAuthenticatedMemberUser({ id: userId })) return 0
 
   let query = client
     .from("notifications")

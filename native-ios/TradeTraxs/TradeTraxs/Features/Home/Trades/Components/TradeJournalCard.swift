@@ -4,10 +4,16 @@ import SwiftUI
 ///
 /// Distinct from ``ProfileTradeCard`` — no likes/comments/share chrome.
 /// Fixed vertical template: header → context (+ optional compact thumbnail) → execution → metrics.
+enum TradeJournalCardContentLayout {
+    case legacy
+    case tradesList
+}
+
 struct TradeJournalCard: View {
     let item: TradeOwnerJournalSummary
     let accountName: String?
     var copyParticipatingAccountLines: [String]? = nil
+    var contentLayout: TradeJournalCardContentLayout = .legacy
     let imagePipeline: any ImagePipeline
     let onOpen: () -> Void
     var onShare: (() -> Void)? = nil
@@ -129,7 +135,7 @@ struct TradeJournalCard: View {
         }
     }
 
-    /// Row 2 — date/time + account or copy-trade context (once each).
+    /// Row 2 — account or copy-trade context, then timing / duration (layout-specific).
     private var contextSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             if isCopyGroup {
@@ -148,9 +154,30 @@ struct TradeJournalCard: View {
                     .lineLimit(1)
             }
 
-            Text(TradeDisplay.journalContextLine(accountName: nil, at: summary.entryAt))
+            if contentLayout == .tradesList {
+                Text(
+                    TradeDisplay.journalExecutionTimeRangeText(
+                        entryAt: summary.entryAt,
+                        exitAt: summary.exitAt
+                    )
+                )
                 .experienceStyle(.caption, color: colors.secondaryText)
                 .lineLimit(1)
+                .monospacedDigit()
+
+                HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
+                    if let duration = TradeDisplay.journalCardDuration(for: item) {
+                        journalInlineMetric(title: "Duration", value: duration, layoutPriority: 1)
+                    }
+                    if let points = TradeDisplay.pointsText(summary.points) {
+                        journalInlineMetric(title: "Points", value: points)
+                    }
+                }
+            } else {
+                Text(TradeDisplay.journalContextLine(accountName: nil, at: summary.entryAt))
+                    .experienceStyle(.caption, color: colors.secondaryText)
+                    .lineLimit(1)
+            }
         }
     }
 
@@ -182,17 +209,32 @@ struct TradeJournalCard: View {
         }
     }
 
-    /// Bottom row — duration, R:R, points (left); visibility (right).
+    /// Bottom row — session / R:R / max R:R or legacy duration row (left); visibility (right).
     private var metricsRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
-            if let duration = TradeDisplay.journalCardDuration(for: item) {
-                journalInlineMetric(title: "Duration", value: duration, layoutPriority: 1)
-            }
-            if let rr = TradeDisplay.journalRRText(summary.riskReward) {
-                journalInlineMetric(title: "R:R", value: rr)
-            }
-            if let points = TradeDisplay.pointsText(summary.points) {
-                journalInlineMetric(title: "Points", value: points)
+            if contentLayout == .tradesList {
+                journalInlineMetric(
+                    title: "Session",
+                    value: tradesListSessionText,
+                    layoutPriority: 1
+                )
+                if let rr = TradeDisplay.journalRRText(summary.riskReward) {
+                    journalInlineMetric(title: "R:R", value: rr)
+                }
+                journalInlineMetric(
+                    title: "Max R:R",
+                    value: TradeDisplay.compactRRText(item.maxRrReached) ?? "—"
+                )
+            } else {
+                if let duration = TradeDisplay.journalCardDuration(for: item) {
+                    journalInlineMetric(title: "Duration", value: duration, layoutPriority: 1)
+                }
+                if let rr = TradeDisplay.journalRRText(summary.riskReward) {
+                    journalInlineMetric(title: "R:R", value: rr)
+                }
+                if let points = TradeDisplay.pointsText(summary.points) {
+                    journalInlineMetric(title: "Points", value: points)
+                }
             }
             Spacer(minLength: ExperienceSpacing.sm)
             visibilityLabel
@@ -200,6 +242,14 @@ struct TradeJournalCard: View {
                 .lineLimit(1)
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private var tradesListSessionText: String {
+        if let canonical = TradingSessionLabel.canonicalLabel(fromStored: item.sessionLabel) {
+            return canonical
+        }
+        let raw = item.sessionLabel?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return raw.isEmpty ? "—" : raw
     }
 
     private func journalFieldColumn(title: String, value: String) -> some View {

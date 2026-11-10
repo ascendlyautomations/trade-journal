@@ -7,10 +7,14 @@ final class ClipsContainerViewModel {
     private(set) var state: ProfileSectionLoadState = .idle
     private(set) var items: [Reel] = []
     private(set) var nextCursor: String?
+    var pendingDelete: Reel?
+    private(set) var deletingReelID: ReelID?
+    var deleteErrorMessage: String?
 
     let profileOwnerID: ProfileID
     private(set) var isOwner: Bool
     private let feed: any FeedRepository
+    private let session: any SessionProviding
     private let rpc: (any RPCClient)?
     private let navigationCoordinator: NavigationCoordinator
     private let detailCache: DetailPresentationCache
@@ -33,6 +37,7 @@ final class ClipsContainerViewModel {
     init(
         profileID: ProfileID,
         feed: any FeedRepository,
+        session: any SessionProviding,
         rpc: (any RPCClient)? = nil,
         navigationCoordinator: NavigationCoordinator,
         detailCache: DetailPresentationCache,
@@ -42,6 +47,7 @@ final class ClipsContainerViewModel {
         self.profileOwnerID = profileID
         self.isOwner = isOwner
         self.feed = feed
+        self.session = session
         self.rpc = rpc
         self.navigationCoordinator = navigationCoordinator
         self.detailCache = detailCache
@@ -235,8 +241,62 @@ final class ClipsContainerViewModel {
         navigationCoordinator.pushReelDetail(reel.id)
     }
 
+    func shareClip(_ reel: Reel) -> SharedContentShareTarget {
+        ExperienceHaptics.play(.selection)
+        detailCache.seed(reel)
+        let author = detailCache.profile(id: reel.authorProfileID)
+            ?? detailCache.profile(id: profileOwnerID)
+        return SharedContentShareTarget.profile(reel: reel, author: author)
+    }
+
     func addClip() {
         navigationCoordinator.openCompose(.reel)
+    }
+
+    func requestDelete(_ reel: Reel) {
+        guard isOwner, deletingReelID == nil else { return }
+        ExperienceHaptics.play(.warning)
+        TradeDeleteConfirmationPresenter.scheduleConfirmation { [weak self] in
+            self?.pendingDelete = reel
+        }
+    }
+
+    func isDeletingReel(_ id: ReelID) -> Bool {
+        deletingReelID == id
+    }
+
+    func confirmDelete(reel explicitReel: Reel? = nil) async {
+        guard isOwner, deletingReelID == nil else { return }
+        let reel = explicitReel ?? pendingDelete
+        guard let reel else { return }
+        pendingDelete = nil
+        deletingReelID = reel.id
+        deleteErrorMessage = nil
+        defer { deletingReelID = nil }
+        let removedIndex = items.firstIndex { $0.id == reel.id }
+        items.removeAll { $0.id == reel.id }
+        state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+        do {
+            try await OwnerReelDeletionService.deleteOwnedReel(
+                reelID: reel.id,
+                owner: profileOwnerID,
+                feed: feed,
+                session: session,
+                detailCache: detailCache
+            )
+            noteDeleteSucceeded(id: reel.id)
+            ExperienceHaptics.play(.success)
+        } catch {
+            if let removedIndex {
+                items.insert(reel, at: min(removedIndex, items.count))
+            } else {
+                items.append(reel)
+            }
+            items.sort { $0.createdAt > $1.createdAt }
+            state = items.isEmpty ? .empty : .loaded(itemCount: items.count)
+            deleteErrorMessage = ProfileSectionSupport.message(for: error)
+            ExperienceHaptics.play(.warning)
+        }
     }
 
     private func performLoad(generation: UInt64) async {

@@ -1,6 +1,7 @@
 "use client"
 
 import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
+import dynamic from "next/dynamic"
 import {
   Suspense,
   useCallback,
@@ -12,7 +13,10 @@ import {
   type ChangeEvent,
 } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import TradeRoomsDiscoverView from "../components/TradeRoomsDiscoverView"
+const TradeRoomsDiscoverView = dynamic(
+  () => import("../components/TradeRoomsDiscoverView"),
+  { ssr: false, loading: () => null }
+)
 import CreateFirstTradeRoomCard from "../components/CreateFirstTradeRoomCard"
 import ExploreMoreTradeRoomsCard from "../components/ExploreMoreTradeRoomsCard"
 import EmptyState from "../components/ui/EmptyState"
@@ -82,10 +86,20 @@ import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import { createRoomJoinNotification } from "@/lib/createRoomJoinNotification"
 import { createRoomMessageNotifications } from "@/lib/createRoomMessageNotifications"
-import TradeRoomCreateWizard from "@/app/components/tradeRooms/TradeRoomCreateWizard"
-import ManageTradeRoomModal from "@/app/components/tradeRooms/ManageTradeRoomModal"
+const TradeRoomCreateWizard = dynamic(
+  () => import("@/app/components/tradeRooms/TradeRoomCreateWizard"),
+  { ssr: false, loading: () => null }
+)
+const ManageTradeRoomModal = dynamic(
+  () => import("@/app/components/tradeRooms/ManageTradeRoomModal"),
+  { ssr: false, loading: () => null }
+)
 import TradeRoomGeneralVoiceSidebarRow from "@/app/components/tradeRooms/live/TradeRoomGeneralVoiceSidebarRow"
-import TradeRoomBroadcastPanel from "@/app/components/tradeRooms/live/TradeRoomBroadcastPanel"
+const TradeRoomBroadcastPanel = dynamic(
+  () => import("@/app/components/tradeRooms/live/TradeRoomBroadcastPanel"),
+  { ssr: false, loading: () => null }
+)
+import { presentTradeRoomBroadcastStreamEndedNotice } from "@/lib/livekit/client/tradeRoomBroadcastStore.ts"
 import TradeRoomBroadcastViewerRemovalOverlay from "@/app/components/tradeRooms/live/TradeRoomBroadcastViewerRemovalOverlay.tsx"
 import { useTradeRoomLiveVoiceStableConnection } from "@/app/components/tradeRooms/live/useTradeRoomLiveVoice"
 import { useTradeRoomBroadcast } from "@/app/components/tradeRooms/live/useTradeRoomBroadcast.ts"
@@ -155,7 +169,15 @@ import {
   type RoomMessageReactionEmoji,
   type RoomMessageReactionRow,
 } from "@/lib/roomMessageReactions"
-import { canEditRoomMessage } from "@/lib/roomModeration"
+import {
+  canDeleteRoomMessage,
+  canEditRoomMessage,
+} from "@/lib/roomModeration"
+import {
+  MobileWebRoomMessageActionSheet,
+  TradeRoomMessageGestureSurface,
+} from "@/app/components/mobile/tradeRooms/roomMessageMobileActions"
+import { usePhoneWebTouchTarget } from "@/lib/usePhoneWebTouchTarget"
 import RoomMessageActionsMenu from "../components/RoomMessageActionsMenu"
 import RoomMessageFooter from "../components/RoomMessageFooter"
 import { MICRO } from "@/lib/microInteractions"
@@ -193,6 +215,14 @@ import {
 import { pickInitialTradeRoomId } from "@/lib/tradeRoomsEntry"
 import { trackMobileWebAppStoreClick } from "@/lib/mobileWebAppInstallAnalytics"
 import { isPhoneWebTouchTarget } from "@/lib/mobileWebTouch"
+import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
+import { useSupabaseApiAccessToken } from "@/lib/useSupabaseApiAccessToken"
+import { isAuthenticatedMemberUser } from "@/lib/supabaseBearerFetch"
+import { setTradeRoomMobileSessionChromeEmbedded } from "@/lib/tradeRoomMobileSessionChrome"
+import MobileWebTradeRoomsHome from "@/app/components/mobile/tradeRooms/MobileWebTradeRoomsHome"
+import MobileWebRoomConversationHeader from "@/app/components/mobile/tradeRooms/MobileWebRoomConversationHeader"
+import MobileWebRoomChannelStrip from "@/app/components/mobile/tradeRooms/MobileWebRoomChannelStrip"
+import TradeRoomConversationSessionChrome from "@/app/components/mobile/tradeRooms/TradeRoomConversationSessionChrome"
 import { nativeIosAppStoreURL } from "@/lib/nativeIosAppStore"
 import { tradeRoomSharePath, tradeRoomShareUrl } from "@/lib/tradeRoomShareUrl"
 import { tradeRoomMemberCanShareMedia } from "@/lib/tradeRoomMediaPermissions"
@@ -371,6 +401,9 @@ function CommunityContent() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const router = useRouter()
   const nativeIos = useIsNativeIos()
+  const maxMdViewport = useMaxMdViewport()
+  const mobileWebTradeRooms = maxMdViewport && !nativeIos
+  const phoneWeb = usePhoneWebTouchTarget()
   const viewSharedTrade = useCallback(
     (trade: { id?: string | null }) => {
       router.push(getSharedTradeViewHref(String(trade?.id ?? "")))
@@ -431,9 +464,6 @@ function CommunityContent() {
   const [mobileRoomsOpen, setMobileRoomsOpen] = useState(false)
   const [mobileRoomQuery, setMobileRoomQuery] = useState("")
   const [mobileSectionsOpen, setMobileSectionsOpen] = useState(false)
-  const [liveWatchEndedNotice, setLiveWatchEndedNotice] = useState<string | null>(
-    null
-  )
   const consumedLiveDeepLinkRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -445,9 +475,7 @@ function CommunityContent() {
     setSelectedRoomId(null)
     router.replace("/community")
   }, [tradeRoomBroadcast.viewerStreamRemovalNotice, router])
-  const [liveKitAccessToken, setLiveKitAccessToken] = useState<string | null>(
-    null
-  )
+  const liveKitAccessToken = useSupabaseApiAccessToken()
   const [sections, setSections] = useState<any[]>([])
   const [roomLiveVoiceKind, setRoomLiveVoiceKind] = useState<string>("voice_open")
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
@@ -878,6 +906,7 @@ function CommunityContent() {
   useEffect(() => {
     if (shouldSkipLegacyRoomDataEffects()) return
     if (!user?.id || !selectedRoomId || needsJoin) return
+    if (!isAuthenticatedMemberUser(user)) return
     void import("@/lib/notificationReadSync").then(
       ({ markNotificationsReadForTarget }) => {
         void markNotificationsReadForTarget(user.id, {
@@ -917,6 +946,71 @@ function CommunityContent() {
     if (loadingRooms || !user?.id) return false
     return !userOwnsRoom
   }, [loadingRooms, user?.id, userOwnsRoom])
+
+  const mobileWebRoomsHome =
+    mobileWebTradeRooms && !roomParam?.trim() && !showCreateDiscoverView
+  const mobileWebInRoomConversation =
+    mobileWebTradeRooms &&
+    (Boolean(roomParam?.trim()) || showCreateDiscoverView)
+
+  useEffect(() => {
+    if (!mobileWebTradeRooms) {
+      setTradeRoomMobileSessionChromeEmbedded(null)
+      return
+    }
+    const embedRoomId =
+      mobileWebInRoomConversation &&
+      selectedRoomId &&
+      !needsJoin &&
+      !showCreateDiscoverView
+        ? selectedRoomId
+        : null
+    setTradeRoomMobileSessionChromeEmbedded(embedRoomId)
+    return () => setTradeRoomMobileSessionChromeEmbedded(null)
+  }, [
+    mobileWebTradeRooms,
+    mobileWebInRoomConversation,
+    selectedRoomId,
+    needsJoin,
+    showCreateDiscoverView,
+  ])
+
+  const openMobileWebTradeRoom = useCallback(
+    (room: Room) => {
+      void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
+        hapticLight("open-trade-room")
+      })
+      setSelectedRoomId(room.id)
+      setMobileRoomsOpen(false)
+      const target = String(room.slug ?? room.id)
+      router.push(`/community?room=${encodeURIComponent(target)}`)
+    },
+    [router]
+  )
+
+  const backToMobileWebTradeRoomsHome = useCallback(() => {
+    setMobileRoomsOpen(false)
+    setMobileSectionsOpen(false)
+    setSelectedRoomId(null)
+    router.push("/community")
+  }, [router])
+
+  useEffect(() => {
+    if (!mobileWebRoomsHome) return
+    setSelectedRoomId(null)
+  }, [mobileWebRoomsHome])
+
+  const tradeRoomConversationActive =
+    Boolean(selectedRoomId && !needsJoin) && !mobileWebRoomsHome
+
+  const mobileRoomActionMessage = useMemo(() => {
+    if (!phoneWeb || !activeMessageMenuId) return null
+    return (
+      pinnedMessages.find((m) => m.id === activeMessageMenuId) ??
+      messages.find((m) => m.id === activeMessageMenuId) ??
+      null
+    )
+  }, [phoneWeb, activeMessageMenuId, pinnedMessages, messages])
 
   const filteredManageMembers = useMemo(() => {
     const q = memberSearchQuery.trim().toLowerCase()
@@ -1143,24 +1237,14 @@ function CommunityContent() {
     [selectedRoomId, needsJoin, isOwner, canModerateRoom]
   )
 
-  useEffect(() => {
-    void supabase.auth.getSession().then(({ data }) => {
-      setLiveKitAccessToken(data.session?.access_token ?? null)
-    })
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setLiveKitAccessToken(session?.access_token ?? null)
-      }
-    )
-    return () => authListener.subscription.unsubscribe()
-  }, [])
-
   const fetchLiveKitVoiceToken = useCallback(async () => {
     if (!selectedRoomId) {
       throw new Error("Select a Trade Room first.")
     }
-    const { data: sessionData } = await supabase.auth.getSession()
-    const accessToken = sessionData.session?.access_token
+    const { getSupabaseApiAccessToken } = await import(
+      "@/lib/supabaseBearerFetch"
+    )
+    const accessToken = await getSupabaseApiAccessToken()
     if (!accessToken) {
       throw new Error("Sign in required for live voice.")
     }
@@ -1772,6 +1856,7 @@ function CommunityContent() {
     userId: string,
     roomSlug: string | null | undefined
   ) {
+    if (!isAuthenticatedMemberUser({ id: userId })) return
     const key = `${roomId}:${userId}`
     if (roomAppNotificationMarkedRef.current === key) return
     roomAppNotificationMarkedRef.current = key
@@ -3150,7 +3235,7 @@ function CommunityContent() {
           }
           if (cachedRooms.length > 0) {
             setLoadingRooms(false)
-            if (!rp && !createMode) {
+            if (!rp && !createMode && !mobileWebTradeRooms) {
               const defaultRoomId = pickInitialTradeRoomId(cachedRooms, uid)
               if (defaultRoomId) setSelectedRoomId(defaultRoomId)
             }
@@ -3182,6 +3267,7 @@ function CommunityContent() {
           nextRooms.length > 0 &&
           !rp &&
           !createMode &&
+          !mobileWebTradeRooms &&
           !selectedRoomIdRef.current
         ) {
           const defaultRoomId = pickInitialTradeRoomId(nextRooms, uid)
@@ -3196,8 +3282,8 @@ function CommunityContent() {
       cancelled = true
     }
     // Member list loads once per signed-in user — not on ?room= / ?create= changes (avoids cancelled fetches).
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- roomParam/createMode read at completion only
-  }, [user?.id, applyMemberRoomsFetch])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- roomParam/createMode/mobileWebTradeRooms read at completion only
+  }, [user?.id, applyMemberRoomsFetch, mobileWebTradeRooms])
 
   useEffect(() => {
     if (!roomParam || loadingRooms) return
@@ -3255,10 +3341,6 @@ function CommunityContent() {
   }, [roomParam, rooms, loadingRooms, user?.id, router])
 
   useEffect(() => {
-    setLiveWatchEndedNotice(null)
-  }, [selectedRoomId])
-
-  useEffect(() => {
     if (liveParam !== "1" || !selectedRoomId || needsJoin || !liveKitAccessToken) {
       return
     }
@@ -3282,14 +3364,15 @@ function CommunityContent() {
       if (cancelled) return
       const discoverable = discoverableFromBroadcastStatusPayload(payload)
       if (discoverable) {
-        setLiveWatchEndedNotice(null)
         void openTradeRoomBroadcastViewerStudio({
           roomId: selectedRoomId,
           accessToken: liveKitAccessToken,
           viewerUserId: user?.id ?? null,
         })
       } else {
-        setLiveWatchEndedNotice("This livestream has ended.")
+        const roomName =
+          rooms.find((r) => r.id === selectedRoomId)?.name?.trim() ?? "Trade Room"
+        presentTradeRoomBroadcastStreamEndedNotice("deep-link", roomName)
       }
       const params = new URLSearchParams(window.location.search)
       params.delete("live")
@@ -3307,6 +3390,7 @@ function CommunityContent() {
     liveKitAccessToken,
     user?.id,
     router,
+    rooms,
   ])
 
   useEffect(() => {
@@ -4307,23 +4391,51 @@ function CommunityContent() {
       <div
         data-tt-native-surface="community"
         data-tt-trade-rooms
-        className={`tt-community flex h-[var(--app-viewport-height)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] py-2 text-white ${MOBILE_WEB_NEUTRAL_PAGE_BG} max-md:px-0 max-md:py-0`}
+          className={`tt-community flex h-[var(--app-viewport-height)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] py-2 text-white ${MOBILE_WEB_NEUTRAL_PAGE_BG} max-md:px-0 max-md:py-0 max-md:text-[color:var(--tt-text,#f0f3f6)]`}
       >
         <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1600px] flex-col px-4 md:px-6 xl:px-8 2xl:px-12 max-md:max-w-none max-md:px-0">
         <div
           data-tt-trade-rooms-shell
-          className="flex h-full min-h-0 w-full flex-col overflow-visible rounded-2xl border border-white/10 bg-white/5 shadow-xl backdrop-blur-md md:flex-row md:overflow-hidden max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:shadow-none max-md:backdrop-blur-none"
+          className="flex h-full min-h-0 w-full flex-col overflow-visible rounded-2xl border border-white/10 bg-white/5 shadow-xl backdrop-blur-md md:flex-row md:overflow-hidden max-md:rounded-none max-md:border-0 max-md:bg-[var(--tt-surface)] max-md:shadow-none max-md:backdrop-blur-none"
         >
           <aside
             data-tt-trade-rooms-aside
             className={`shrink-0 border-b border-white/10 bg-white/[0.04] backdrop-blur-md md:flex md:min-h-0 md:w-72 md:flex-col md:border-b-0 md:border-r${
-              !nativeIos && (roomParam?.trim() || showCreateDiscoverView)
+              mobileWebInRoomConversation
                 ? " max-md:hidden"
-                : !nativeIos
-                  ? " max-md:flex max-md:min-h-0 max-md:flex-1 max-md:flex-col max-md:border-b-0"
-                  : ""
+                : mobileWebRoomsHome
+                  ? " max-md:flex max-md:min-h-0 max-md:w-full max-md:flex-1 max-md:flex-col max-md:border-b-0 max-md:bg-transparent max-md:backdrop-blur-none"
+                  : !nativeIos && (roomParam?.trim() || showCreateDiscoverView)
+                    ? " max-md:hidden"
+                    : !nativeIos
+                      ? " max-md:flex max-md:min-h-0 max-md:flex-1 max-md:flex-col max-md:border-b-0"
+                      : ""
             }`}
           >
+            {mobileWebRoomsHome ? (
+              <MobileWebTradeRoomsHome
+                rooms={phoneWebRoomList}
+                loading={loadingRooms}
+                loadError={memberRoomsLoadError}
+                searchQuery={mobileRoomQuery}
+                onSearchChange={setMobileRoomQuery}
+                userId={user?.id ?? null}
+                showCreateFirstRoomCard={showCreateFirstRoomCard}
+                needsJoin={needsJoin}
+                onSelectRoom={openMobileWebTradeRoom}
+                onRetryLoad={() => {
+                  if (!user?.id) return
+                  void refreshSidebarMemberRooms(user.id)
+                }}
+                onExploreCreate={navigateToCreateDiscover}
+                onRefresh={async () => {
+                  if (!user?.id) return
+                  await refreshSidebarMemberRooms(user.id)
+                }}
+              />
+            ) : null}
+            {!mobileWebRoomsHome ? (
+            <>
             <div
               data-tt-trade-rooms-controls
               data-tt-tour-target="feedTradeRooms"
@@ -4600,13 +4712,17 @@ function CommunityContent() {
                 </div>
               </div>
             </div>
+            </>
+            ) : null}
           </aside>
 
           <section
             className={`flex min-h-0 w-full min-w-0 flex-1 flex-col${
-              !nativeIos && !roomParam?.trim() && !showCreateDiscoverView
+              mobileWebRoomsHome
                 ? " max-md:hidden"
-                : ""
+                : !nativeIos && !roomParam?.trim() && !showCreateDiscoverView
+                  ? " max-md:hidden"
+                  : ""
             }`}
           >
             {showCreateDiscoverView ? (
@@ -4631,6 +4747,50 @@ function CommunityContent() {
             ) : (
             <>
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {mobileWebInRoomConversation ? (
+              <div className="md:hidden">
+                <MobileWebRoomConversationHeader
+                  roomName={
+                    selectedRoom?.name ??
+                    inviteTargetRoom?.name ??
+                    "Trade Room"
+                  }
+                  roomImageSrc={
+                    resolveStoredRoomImageUrl(
+                      roomImage ??
+                        selectedRoom?.image_url ??
+                        inviteTargetRoom?.image_url
+                    ) || "/default-avatar.png"
+                  }
+                  memberSummary={
+                    selectedRoomId && !needsJoin
+                      ? `${activeMembers} members${
+                          leftMembers ? ` · ${leftMembers} left` : ""
+                        }`
+                      : null
+                  }
+                  onBack={backToMobileWebTradeRoomsHome}
+                  roomBellEnabled={roomBellEnabled}
+                  onOpenNotifications={() => void openRoomNotificationSettings()}
+                  isOwner={isOwner}
+                  canShowActions={Boolean(selectedRoomId && !needsJoin)}
+                  onOpenSettings={() => void openManageRoomPanel()}
+                  onLeave={
+                    !isOwner && selectedRoomId && !needsJoin
+                      ? () => void handleLeaveRoom()
+                      : undefined
+                  }
+                  selectedRoom={selectedRoom}
+                  inviteLink={inviteLink}
+                  user={
+                    user?.id
+                      ? { id: user.id, username: profile?.username }
+                      : null
+                  }
+                  onCopyLink={() => showPopup(feedbackPresets.roomLinkCopied())}
+                />
+              </div>
+            ) : (
             <div className={`flex items-center gap-2 border-b border-white/10 px-3 py-2 md:hidden${
               nativeIos || !roomParam?.trim() ? " hidden" : ""
             }`}>
@@ -4711,6 +4871,7 @@ function CommunityContent() {
                 </button>
               ) : null}
             </div>
+            )}
             <div className="hidden border-b border-white/10 px-4 py-3 md:block">
               <div className="flex items-center gap-3">
                 <StorageImage
@@ -4949,12 +5110,7 @@ function CommunityContent() {
               ) : null}
 
               <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                {liveWatchEndedNotice ? (
-                  <div className="mx-3 mt-2 shrink-0 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
-                    {liveWatchEndedNotice}
-                  </div>
-                ) : null}
-                {selectedRoomId && !needsJoin ? (
+                {tradeRoomConversationActive ? (
                   <TradeRoomBroadcastPanel
                     roomId={selectedRoomId}
                     canGoLive={canGoLiveInRoom}
@@ -4966,7 +5122,37 @@ function CommunityContent() {
                     canActOnTarget={canActOnMember}
                   />
                 ) : null}
-                {sections.length > 1 ? (
+                {mobileWebInRoomConversation && selectedRoomId && !needsJoin ? (
+                  <div className="md:hidden">
+                    <MobileWebRoomChannelStrip
+                      sections={sections}
+                      selectedSectionId={selectedSectionId}
+                      onSelect={(sectionId) => {
+                        if (selectedRoomId) {
+                          void loadRoomSectionViaBootstrap(
+                            selectedRoomId,
+                            sectionId
+                          )
+                        }
+                      }}
+                      isOwner={isOwner}
+                      canAddChannel={sections.length < 5}
+                      onAddChannel={() => setShowCreateSectionModal(true)}
+                      generalVoiceSlot={
+                        showsGeneralVoice ? (
+                          <TradeRoomGeneralVoiceSidebarRow
+                            roomId={selectedRoomId}
+                            roomName={selectedRoom?.name ?? null}
+                            accessToken={liveKitAccessToken}
+                            disabled={needsJoin}
+                            fetchToken={fetchLiveKitVoiceToken}
+                          />
+                        ) : undefined
+                      }
+                    />
+                  </div>
+                ) : null}
+                {!mobileWebInRoomConversation && sections.length > 1 ? (
                   <div className="shrink-0 border-b border-white/10 md:hidden">
                     <button
                       type="button"
@@ -5121,10 +5307,17 @@ function CommunityContent() {
                           parentMessage?.id ?? msg.parent_message_id
                         )
                         return (
-                          <div
+                          <TradeRoomMessageGestureSurface
                             key={msg.id}
-                            id={roomMessageElementId(msg.id)}
-                            data-room-message-id={msg.id}
+                            messageId={msg.id}
+                            domId={roomMessageElementId(msg.id)}
+                            setActiveMenuId={setActiveMessageMenuId}
+                            disabled={
+                              needsJoin ||
+                              !user?.id ||
+                              msg.send_status === "sending" ||
+                              msg.send_status === "failed"
+                            }
                             className={`group relative rounded-xl border border-white/10 bg-white/5 p-3 max-md:rounded-[18px] max-md:border-0 max-md:px-3 max-md:py-2 ${
                               user?.id && msg.user_id === user.id
                                 ? "max-md:ml-10 max-md:bg-blue-500/25"
@@ -5253,7 +5446,7 @@ function CommunityContent() {
                                 }
                               />
                             ) : null}
-                          </div>
+                          </TradeRoomMessageGestureSurface>
                         )
                       })}
                     </div>
@@ -5266,10 +5459,17 @@ function CommunityContent() {
                       parentMessage?.id ?? msg.parent_message_id
                     )
                     return (
-                    <div
+                    <TradeRoomMessageGestureSurface
                       key={msg.id}
-                      id={roomMessageElementId(msg.id)}
-                      data-room-message-id={msg.id}
+                      messageId={msg.id}
+                      domId={roomMessageElementId(msg.id)}
+                      setActiveMenuId={setActiveMessageMenuId}
+                      disabled={
+                        needsJoin ||
+                        !user?.id ||
+                        msg.send_status === "sending" ||
+                        msg.send_status === "failed"
+                      }
                       className={`group relative rounded-xl border border-white/10 bg-white/5 p-3 max-md:rounded-[18px] max-md:border-0 max-md:px-3 max-md:py-2 ${
                         user?.id && msg.user_id === user.id
                           ? "max-md:ml-10 max-md:bg-blue-500/25"
@@ -5390,7 +5590,7 @@ function CommunityContent() {
                           }
                         />
                       ) : null}
-                    </div>
+                    </TradeRoomMessageGestureSurface>
                   )})}
                 </div>
                   ) : null}
@@ -5409,6 +5609,12 @@ function CommunityContent() {
                   </div>
                 ) : (
                   <>
+                  {mobileWebInRoomConversation && selectedRoomId && !needsJoin ? (
+                    <TradeRoomConversationSessionChrome
+                      activeRoomId={selectedRoomId}
+                      accessToken={liveKitAccessToken}
+                    />
+                  ) : null}
                   {composerPreviewUrl ? (
                     <div
                       data-tt-trade-rooms-composer-preview
@@ -6257,6 +6463,32 @@ function CommunityContent() {
         imageUrl={lightboxImageUrl}
         onClose={() => setLightboxImageUrl(null)}
       />
+      {phoneWeb && mobileRoomActionMessage ? (
+        <MobileWebRoomMessageActionSheet
+          open={activeMessageMenuId === mobileRoomActionMessage.id}
+          onClose={() => setActiveMessageMenuId(null)}
+          canReact={
+            Boolean(user?.id) &&
+            !needsJoin &&
+            mobileRoomActionMessage.send_status !== "sending" &&
+            mobileRoomActionMessage.send_status !== "failed"
+          }
+          canReply={!needsJoin && Boolean(user?.id)}
+          showEdit={canEditRoomMessage(user?.id, mobileRoomActionMessage)}
+          showDelete={canDeleteRoomMessage(user?.id, mobileRoomActionMessage, {
+            isRoomOwner: isOwner,
+            isRoomModerator,
+            roomOwnerUserId: selectedRoom?.owner_user_id,
+          })}
+          onReply={() => startReplyToMessage(mobileRoomActionMessage)}
+          onEdit={() => startEditMessage(mobileRoomActionMessage)}
+          onDelete={() => void handleDeleteMessage(mobileRoomActionMessage.id)}
+          deleting={deletingMessageId === mobileRoomActionMessage.id}
+          onSelectReaction={(emoji) =>
+            void toggleRoomMessageReaction(mobileRoomActionMessage.id, emoji)
+          }
+        />
+      ) : null}
       <TradeRoomBroadcastViewerRemovalOverlay />
     </>
   )

@@ -4,7 +4,9 @@ import UIKit
 /// Dashboard → Trades — owner journal / trade history browser.
 struct TradeHistoryView: View {
     @State private var viewModel: TradeHistoryViewModel
+    @State private var browseLayout = TradeHistoryBrowseLayoutStore.layout()
     private let imagePipeline: any ImagePipeline
+    private let engagementStore: EngagementStore
 
     @Environment(\.themeColors) private var colors
 
@@ -23,14 +25,21 @@ struct TradeHistoryView: View {
             )
         )
         self.imagePipeline = data.imagePipeline
+        self.engagementStore = data.engagementStore
     }
 
     init(
         viewModel: TradeHistoryViewModel,
-        imagePipeline: any ImagePipeline
+        imagePipeline: any ImagePipeline,
+        engagementStore: EngagementStore
     ) {
         _viewModel = State(initialValue: viewModel)
         self.imagePipeline = imagePipeline
+        self.engagementStore = engagementStore
+    }
+
+    private var usesPictureGrid: Bool {
+        browseLayout == .grid
     }
 
     var body: some View {
@@ -73,6 +82,9 @@ struct TradeHistoryView: View {
                     listContent
                 }
             }
+        }
+        .onChange(of: browseLayout) { _, layout in
+            TradeHistoryBrowseLayoutStore.save(layout)
         }
         .experienceScreenBackground()
         .experienceNavigationTitle("Trades")
@@ -151,18 +163,107 @@ struct TradeHistoryView: View {
 
     private var listContent: some View {
         ScrollViewReader { scrollProxy in
-            listBody
-                .onChange(of: FirstTradeDetailCoachmarkStore.shared.pendingTradeID) { _, pendingID in
-                    guard let pendingID else { return }
-                    scrollProxy.scrollTo(pendingID, anchor: .center)
+            Group {
+                if usesPictureGrid {
+                    pictureGridBody
+                } else {
+                    listBody
                 }
+            }
+            .onChange(of: FirstTradeDetailCoachmarkStore.shared.pendingTradeID) { _, pendingID in
+                guard let pendingID else { return }
+                scrollProxy.scrollTo(pendingID, anchor: .center)
+            }
         }
+    }
+
+    private var tradeGridColumns: [GridItem] {
+        [
+            GridItem(.flexible(), spacing: 2),
+            GridItem(.flexible(), spacing: 2),
+        ]
+    }
+
+    private var pictureGridBody: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                TradeHistoryFilterBar(viewModel: viewModel, browseLayout: $browseLayout)
+                    .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.top, ExperienceSpacing.sm)
+
+                if !viewModel.activeChips.isEmpty {
+                    chipStrip
+                        .padding(.horizontal, ExperienceSpacing.md)
+                }
+
+                if viewModel.gridItems.isEmpty {
+                    Text("No trades with screenshots in this view.")
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, ExperienceSpacing.md)
+                        .accessibilityIdentifier("trades.grid.empty")
+                } else {
+                    pictureGridCaptionRow
+                        .padding(.horizontal, ExperienceSpacing.md)
+
+                    LazyVGrid(columns: tradeGridColumns, spacing: 2) {
+                        ForEach(viewModel.gridItems) { item in
+                            ProfileTradeGridTile(
+                                summary: item.summary,
+                                imagePipeline: imagePipeline,
+                                engagementStore: engagementStore,
+                                onOpen: { viewModel.openTrade(item) }
+                            )
+                            .id(item.id)
+                            .firstTradeDetailCoachmarkAnchor(for: item.id)
+                            .task {
+                                await viewModel.loadMoreIfNeeded(currentTradeID: item.id)
+                            }
+                            .accessibilityIdentifier("trades.grid.\(item.id.rawValue)")
+                        }
+                    }
+                }
+
+                if viewModel.isLoadingMore {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                        Spacer()
+                    }
+                    .padding(.vertical, ExperienceSpacing.sm)
+                }
+
+                if let message = viewModel.paginationErrorMessage {
+                    Text(message)
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                        .padding(.horizontal, ExperienceSpacing.md)
+                }
+            }
+            .padding(.bottom, ExperienceSpacing.xxxl)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .vertical)
+        .accessibilityIdentifier("trades.pictureGrid")
+    }
+
+    private var pictureGridCaptionRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
+            Text(viewModel.gridResultCountLabel)
+                .experienceStyle(.footnote, color: colors.secondaryText)
+            Text("•")
+                .experienceStyle(.footnote, color: colors.tertiaryText)
+            Text("Tap a screenshot to open trade details")
+                .experienceStyle(.caption, color: colors.tertiaryText)
+        }
+        .lineLimit(1)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("trades.gridCaption")
     }
 
     private var listBody: some View {
         List {
             Section {
-                TradeHistoryFilterBar(viewModel: viewModel)
+                TradeHistoryFilterBar(viewModel: viewModel, browseLayout: $browseLayout)
                     .listRowInsets(EdgeInsets(
                         top: ExperienceSpacing.sm,
                         leading: ExperienceSpacing.md,
@@ -194,6 +295,7 @@ struct TradeHistoryView: View {
                         item: item,
                         accountName: viewModel.displayAccountTitle(for: item.accountID),
                         copyParticipatingAccountLines: displayItem.copyParticipatingAccountLines,
+                        contentLayout: .tradesList,
                         imagePipeline: imagePipeline,
                         onOpen: { viewModel.openTrade(item) },
                         onShare: { viewModel.shareTrade(item) },

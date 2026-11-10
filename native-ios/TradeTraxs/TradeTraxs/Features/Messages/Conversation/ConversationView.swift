@@ -350,6 +350,13 @@ struct ConversationView: View {
                                         coordinator: navigationCoordinator
                                     )
                                 },
+                                onSharedProfileTap: { payload in
+                                    ProfileShareNavigation.open(
+                                        payload: payload,
+                                        cache: detailCache,
+                                        coordinator: navigationCoordinator
+                                    )
+                                },
                                 isSelectionMode: viewModel.isSelectionMode,
                                 isSelected: viewModel.isMessageSelected(bubble.id),
                                 onToggleSelection: {

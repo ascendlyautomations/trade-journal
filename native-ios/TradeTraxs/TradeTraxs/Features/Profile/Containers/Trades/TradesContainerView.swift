@@ -124,6 +124,7 @@ struct TradesContainerView: View {
                 ProfileTradeGridTile(
                     summary: summary,
                     imagePipeline: imagePipeline,
+                    engagementStore: engagementStore,
                     isPinned: isProfilePinned(summary),
                     onOpen: { viewModel.openTrade(summary) }
                 )
@@ -163,7 +164,10 @@ struct TradesContainerView: View {
                     onReport: reportAction(for: summary),
                     profilePin: profilePin,
                     isProfilePinned: isProfilePinned(summary),
-                    copyTradeModeSummaryLine: summary.copyTradePublicModeSummary
+                    copyTradeModeSummaryLine: summary.copyTradePublicModeSummary,
+                    detailCache: appEnvironment.data.detailCache,
+                    profileViewerID: profileEngagementViewerID,
+                    onOpenLinkedClip: { viewModel.openLinkedClip($0) }
                 )
                 .id("\(summary.id.rawValue)-\(summary.copyTradePublicModeSummary ?? "")")
                 .task {
@@ -199,6 +203,13 @@ struct TradesContainerView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, ExperienceSpacing.xs)
         .accessibilityIdentifier("profile.trades.loadMoreError")
+    }
+
+    private var profileEngagementViewerID: ProfileID? {
+        if viewModel.showsOwnerActions {
+            return viewModel.profileOwnerID
+        }
+        return SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
     }
 
     private func reportAction(for summary: TradeSummary) -> (() -> Void)? {

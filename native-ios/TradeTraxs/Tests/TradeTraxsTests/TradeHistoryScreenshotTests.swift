@@ -42,7 +42,8 @@ final class TradeHistoryScreenshotTests: XCTestCase {
         try snapshot(
             TradeHistoryView(
                 viewModel: tradesVM,
-                imagePipeline: pipeline
+                imagePipeline: pipeline,
+                engagementStore: EngagementStore(repository: TradeHistoryScreenshotInteractionRepository())
             )
             .applyThemeEnvironment(env),
             name: "02-trades-default",
@@ -61,7 +62,8 @@ final class TradeHistoryScreenshotTests: XCTestCase {
         try snapshot(
             TradeHistoryView(
                 viewModel: filteredVM,
-                imagePipeline: pipeline
+                imagePipeline: pipeline,
+                engagementStore: EngagementStore(repository: TradeHistoryScreenshotInteractionRepository())
             )
             .applyThemeEnvironment(env),
             name: "03-trades-active-filters",
@@ -103,7 +105,8 @@ final class TradeHistoryScreenshotTests: XCTestCase {
         try snapshot(
             TradeHistoryView(
                 viewModel: emptyVM,
-                imagePipeline: pipeline
+                imagePipeline: pipeline,
+                engagementStore: EngagementStore(repository: TradeHistoryScreenshotInteractionRepository())
             )
             .applyThemeEnvironment(env),
             name: "06-no-results",
@@ -267,6 +270,56 @@ private final class TradeHistoryScreenshotTradeRepository: TradeRepository, @unc
     func accounts(for profileID: ProfileID) async throws -> [TradingAccount] {
         PropFirmFixtures.accounts(owner: profileID)
     }
+}
+
+private struct TradeHistoryScreenshotInteractionRepository: InteractionRepository {
+    func engagement(for targets: [InteractionTarget]) async throws -> [InteractionTarget: EngagementSnapshot] {
+        Dictionary(uniqueKeysWithValues: targets.map { ($0, .empty) })
+    }
+
+    func setLiked(_ liked: Bool, on target: InteractionTarget) async throws {}
+    func comments(
+        for target: InteractionTarget,
+        order: CommentSortOrder
+    ) async throws -> [InteractionComment] { [] }
+
+    func addComment(
+        body: String,
+        parentID: CommentID?,
+        on target: InteractionTarget
+    ) async throws -> InteractionComment {
+        InteractionComment(
+            id: CommentID(UUID().uuidString),
+            target: target,
+            authorProfileID: ProfileID("dev.trades.shots"),
+            authorUsername: nil,
+            body: body,
+            parentCommentID: parentID,
+            createdAt: .now,
+            isPinned: false
+        )
+    }
+
+    func deleteComment(id: CommentID, on target: InteractionTarget) async throws {}
+
+    func commentLikeMeta(
+        for commentIDs: [CommentID],
+        source: CommentLikeSource
+    ) async throws -> [CommentID: CommentLikeSnapshot] {
+        Dictionary(uniqueKeysWithValues: commentIDs.map { ($0, .empty) })
+    }
+
+    func setCommentLiked(
+        _ liked: Bool,
+        commentID: CommentID,
+        source: CommentLikeSource
+    ) async throws {}
+
+    func setCommentPinned(
+        _ pinned: Bool,
+        commentID: CommentID,
+        on target: InteractionTarget
+    ) async throws {}
 }
 
 private struct TradeHistoryStubImagePipeline: ImagePipeline {

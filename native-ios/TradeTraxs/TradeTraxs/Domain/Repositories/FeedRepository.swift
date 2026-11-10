@@ -73,6 +73,8 @@ nonisolated protocol FeedRepository: Sendable {
     ) async throws
     /// True when any reel already references this trade.
     func tradeHasAttachedReel(_ tradeID: TradeID) async throws -> Bool
+    /// `trades.is_public` when the trade is owned by `ownerID`; nil when not found / not owned.
+    func tradePublicFlagForReelLink(tradeID: TradeID, ownerID: ProfileID) async throws -> Bool?
 }
 
 extension FeedRepository {
@@ -128,5 +130,9 @@ extension FeedRepository {
 
     func tradeHasAttachedReel(_ tradeID: TradeID) async throws -> Bool {
         false
+    }
+
+    func tradePublicFlagForReelLink(tradeID: TradeID, ownerID: ProfileID) async throws -> Bool? {
+        nil
     }
 }

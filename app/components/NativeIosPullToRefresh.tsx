@@ -10,10 +10,12 @@ import {
   type RefObject,
 } from "react"
 import { useIsNativeIos } from "@/lib/useIsNativeIos"
+import { usePhoneWebTouchTarget } from "@/lib/usePhoneWebTouchTarget"
 import { hapticLight } from "@/lib/nativeHaptics"
 
 const PULL_THRESHOLD_PX = 64
 const MAX_PULL_PX = 96
+const HORIZONTAL_CANCEL_PX = 12
 
 type NativeIosPullToRefreshProps = {
   onRefresh: () => void | Promise<void>
@@ -35,10 +37,9 @@ function getScrollTop(scrollEl: HTMLElement | null): number {
 }
 
 /**
- * Custom pull-to-refresh for Capacitor iOS only.
- * Works even when html.tt-native sets overscroll-behavior: none,
- * by tracking touch drag from the top of the scroll container.
- * Web / Android: renders children unchanged (no listeners, no spinner).
+ * Pull-to-refresh for Capacitor iOS and phone web (max-md).
+ * Tracks touch drag from the top of the scroll container when at scrollTop 0.
+ * Desktop / tablet: children only (no listeners).
  */
 export default function NativeIosPullToRefresh({
   onRefresh,
@@ -48,7 +49,9 @@ export default function NativeIosPullToRefresh({
   className,
   disabled = false,
 }: NativeIosPullToRefreshProps) {
-  const enabled = useIsNativeIos()
+  const nativeIos = useIsNativeIos()
+  const phoneWeb = usePhoneWebTouchTarget()
+  const enabled = nativeIos || phoneWeb
   const [pullPx, setPullPx] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [rootNode, setRootNode] = useState<HTMLDivElement | null>(null)
@@ -56,6 +59,7 @@ export default function NativeIosPullToRefresh({
   const refreshingRef = useRef(false)
   const trackingRef = useRef(false)
   const startYRef = useRef(0)
+  const startXRef = useRef(0)
   const onRefreshRef = useRef(onRefresh)
   onRefreshRef.current = onRefresh
 
@@ -89,6 +93,7 @@ export default function NativeIosPullToRefresh({
       if (touchEvent.touches.length !== 1) return
       trackingRef.current = true
       startYRef.current = touchEvent.touches[0]?.clientY ?? 0
+      startXRef.current = touchEvent.touches[0]?.clientX ?? 0
       setPull(0)
     }
 
@@ -101,6 +106,15 @@ export default function NativeIosPullToRefresh({
         return
       }
       const y = touchEvent.touches[0]?.clientY ?? 0
+      const x = touchEvent.touches[0]?.clientX ?? 0
+      if (
+        Math.abs(x - startXRef.current) > HORIZONTAL_CANCEL_PX &&
+        Math.abs(x - startXRef.current) > Math.abs(y - startYRef.current)
+      ) {
+        trackingRef.current = false
+        setPull(0)
+        return
+      }
       const delta = y - startYRef.current
       if (delta <= 0) {
         setPull(0)
@@ -126,7 +140,7 @@ export default function NativeIosPullToRefresh({
       refreshingRef.current = true
       setRefreshing(true)
       setPull(PULL_THRESHOLD_PX * 0.7)
-      hapticLight("pull-refresh")
+      if (nativeIos) hapticLight("pull-refresh")
       const scrollBefore = getScrollTop(scrollEl)
       try {
         await onRefreshRef.current()
@@ -158,7 +172,7 @@ export default function NativeIosPullToRefresh({
       target.removeEventListener("touchend", onTouchEnd)
       target.removeEventListener("touchcancel", onTouchEnd)
     }
-  }, [enabled, disabled, rootNode, useRootAsScroller, setPull])
+  }, [enabled, disabled, rootNode, useRootAsScroller, setPull, nativeIos])
 
   if (!enabled) {
     return (

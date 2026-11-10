@@ -36,6 +36,26 @@ nonisolated enum RoomMessageDTOMapper {
                 }
             )
         }
+        if dto.type?.lowercased() == ProfileShareMessageSupport.messageType
+            || ProfileShareMessageSupport.isProfileShare(type: dto.type, content: rawContent)
+        {
+            return RoomMessage(
+                id: RoomMessageID(id),
+                roomID: roomID,
+                senderProfileID: ProfileID(sender),
+                body: rawContent,
+                attachedTradeID: nil,
+                media: [],
+                parentMessageID: dto.parent_message_id.map { RoomMessageID($0) },
+                channelID: dto.section_id.map { RoomChannelID($0) },
+                isPinned: dto.is_pinned ?? false,
+                createdAt: ISO8601.date(from: dto.created_at) ?? Date(),
+                shareType: ProfileShareMessageSupport.messageType,
+                reactions: (dto.room_message_reactions ?? []).compactMap {
+                    mapReaction($0, fallbackMessageID: RoomMessageID(id))
+                }
+            )
+        }
         if SharedContentRoomMessageSupport.isStructuredShare(type: dto.type, content: rawContent) {
             let structuredTradeID = SharedContentRoomMessageSupport.decode(from: rawContent).flatMap { reference -> TradeID? in
                 if case .trade(let id) = reference { return id }

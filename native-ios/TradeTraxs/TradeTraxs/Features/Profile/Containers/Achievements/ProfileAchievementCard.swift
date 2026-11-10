@@ -6,6 +6,7 @@ struct ProfileAchievementCard: View {
     let engagementStore: EngagementStore
     let vaultStore: VaultStore
     let onOpen: () -> Void
+    let onShare: () -> Void
     var isOwner: Bool = true
     var onReport: (() -> Void)? = nil
     var onDelete: (() -> Void)? = nil
@@ -60,6 +61,7 @@ struct ProfileAchievementCard: View {
                     store: engagementStore,
                     vaultStore: vaultStore,
                     onCommentTap: onOpen,
+                    onShareTap: onShare,
                     vaultRef: ProfileCardMediaPresence.engagementVaultRef(
                         for: target,
                         profileIsOwner: isOwner

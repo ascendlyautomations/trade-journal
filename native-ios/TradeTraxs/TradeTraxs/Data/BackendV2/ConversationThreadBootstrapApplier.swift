@@ -209,6 +209,9 @@ nonisolated enum ConversationThreadBootstrapApplier {
             if StoryShareMessageSupport.isStoryShare(type: row.type, content: row.content) {
                 return .storyShare
             }
+            if ProfileShareMessageSupport.isProfileShare(type: row.type, content: row.content) {
+                return .profileShare
+            }
             if let sharedContent,
                sharedContent.messageKind != .tradeShare
             {

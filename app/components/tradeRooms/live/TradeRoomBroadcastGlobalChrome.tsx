@@ -36,6 +36,8 @@ import {
 } from "@/lib/livekit/client/tradeRoomLiveModerationUiContext.ts"
 import { tradeRoomBroadcastMiniPanelPosition } from "@/lib/livekit/client/tradeRoomBroadcastMiniPlayerLayout.ts"
 import { presentTradeRoomBroadcastStudio } from "@/lib/livekit/client/tradeRoomBroadcastStudioNavigation.ts"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
+import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
 
 type Props = {
   accessToken: string | null
@@ -63,6 +65,9 @@ export default function TradeRoomBroadcastGlobalChrome({
   voiceSessionActive = false,
 }: Props) {
   const { user, profile, loading: profileLoading } = useUserProfile()
+  const maxMd = useMaxMdViewport()
+  const nativeIos = useIsNativeIos()
+  const mobilePersistentBar = maxMd && !nativeIos
   const broadcast = useTradeRoomBroadcast()
   const moderationCtx = useSyncExternalStore(
     subscribeTradeRoomLiveModerationUiContext,
@@ -102,13 +107,21 @@ export default function TradeRoomBroadcastGlobalChrome({
   }, [chromeActive, broadcast.connectionState, broadcast.publisherCaptureDegraded])
 
   useEffect(() => {
+    const sessionPollCovered =
+      broadcast.isWatching || broadcast.isPublishing
     setBroadcastInteractivePollDemand(
       "global-studio",
-      Boolean(accessToken && chromeActive),
+      Boolean(accessToken && chromeActive && !sessionPollCovered),
       accessToken
     )
     return () => setBroadcastInteractivePollDemand("global-studio", false)
-  }, [accessToken, chromeActive, broadcast.roomId])
+  }, [
+    accessToken,
+    chromeActive,
+    broadcast.roomId,
+    broadcast.isWatching,
+    broadcast.isPublishing,
+  ])
 
   const [elapsed, setElapsed] = useState("00:00")
   useEffect(() => {
@@ -269,6 +282,7 @@ export default function TradeRoomBroadcastGlobalChrome({
   )
 
   if (broadcast.studioPresentation === "mini") {
+    if (mobilePersistentBar) return null
     return (
       <div
         className={`${miniPanelPosition} w-[min(320px,calc(100vw-24px))] overflow-hidden rounded-xl border border-red-500/25 bg-zinc-950 shadow-2xl`}

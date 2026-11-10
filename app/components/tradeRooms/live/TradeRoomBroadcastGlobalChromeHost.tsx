@@ -1,29 +1,38 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useSyncExternalStore } from "react"
 import { usePathname } from "next/navigation"
-import { supabase } from "@/lib/supabaseClient.ts"
+import { useSupabaseApiAccessToken } from "@/lib/useSupabaseApiAccessToken"
 import { minimizeTradeRoomBroadcastStudioForBrowsing } from "@/lib/livekit/client/tradeRoomBroadcastStudioNavigation.ts"
+import {
+  getTradeRoomMobileSessionChromeEmbeddedRoomId,
+  subscribeTradeRoomMobileSessionChrome,
+} from "@/lib/tradeRoomMobileSessionChrome.ts"
+import { tradeRoomBroadcastGlobalChromeVisible } from "@/lib/livekit/client/tradeRoomBroadcastGlobalChromeVisibility.ts"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
+import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
 import { useTradeRoomBroadcast } from "./useTradeRoomBroadcast.ts"
 import { useTradeRoomLiveVoice } from "./useTradeRoomLiveVoice.ts"
 import TradeRoomBroadcastGlobalChrome from "./TradeRoomBroadcastGlobalChrome.tsx"
 
 export default function TradeRoomBroadcastGlobalChromeHost() {
-  const [accessToken, setAccessToken] = useState<string | null>(null)
+  const accessToken = useSupabaseApiAccessToken()
   const pathname = usePathname()
   const pathnameRef = useRef(pathname)
   const broadcast = useTradeRoomBroadcast()
   const voice = useTradeRoomLiveVoice()
-
-  useEffect(() => {
-    void supabase.auth.getSession().then(({ data }) => {
-      setAccessToken(data.session?.access_token ?? null)
-    })
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAccessToken(session?.access_token ?? null)
-    })
-    return () => sub.subscription.unsubscribe()
-  }, [])
+  const maxMd = useMaxMdViewport()
+  const nativeIos = useIsNativeIos()
+  const embeddedRoomId = useSyncExternalStore(
+    subscribeTradeRoomMobileSessionChrome,
+    getTradeRoomMobileSessionChromeEmbeddedRoomId,
+    () => null
+  )
+  const chromeActive = tradeRoomBroadcastGlobalChromeVisible(broadcast)
+  const suppressForEmbeddedBar =
+    Boolean(embeddedRoomId) && broadcast.studioPresentation !== "studio"
+  const mobileUsesPersistentBar =
+    maxMd && !nativeIos && chromeActive && broadcast.studioPresentation !== "studio"
 
   /** Full studio → mini on route change so LiveKit/audio persist like General Voice. */
   useEffect(() => {
@@ -48,6 +57,10 @@ export default function TradeRoomBroadcastGlobalChromeHost() {
     broadcast.role,
     broadcast.studioPresentation,
   ])
+
+  if (suppressForEmbeddedBar || mobileUsesPersistentBar) {
+    return null
+  }
 
   return (
     <TradeRoomBroadcastGlobalChrome

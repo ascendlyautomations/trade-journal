@@ -3,6 +3,7 @@
 import { createPortal } from "react-dom"
 import { useEffect, useMemo, useState } from "react"
 import type { UploadJob } from "@/lib/uploadProgress/types"
+import { usePhoneWebTouchTarget } from "@/lib/usePhoneWebTouchTarget"
 
 type UploadManagerProps = {
   jobs: UploadJob[]
@@ -97,6 +98,7 @@ export default function UploadManager({
   onToggleExpanded,
 }: UploadManagerProps) {
   const [mounted, setMounted] = useState(false)
+  const phoneWeb = usePhoneWebTouchTarget()
 
   useEffect(() => {
     setMounted(true)
@@ -104,7 +106,7 @@ export default function UploadManager({
 
   const activeCount = useMemo(() => activeUploadCount(jobs), [jobs])
 
-  if (!mounted || jobs.length === 0) return null
+  if (!mounted || jobs.length === 0 || phoneWeb) return null
 
   const headerLabel =
     activeCount > 0 ? `Uploading (${activeCount})` : `Uploads (${jobs.length})`

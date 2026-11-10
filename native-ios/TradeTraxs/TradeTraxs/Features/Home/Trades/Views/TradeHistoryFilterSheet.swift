@@ -102,10 +102,10 @@ struct TradeHistoryFilterSheet: View {
                     }
 
                     Toggle(isOn: $viewModel.draftFilters.pictureOnly) {
-                        Text("Picture Only")
+                        Text("Trades With Pictures")
                             .experienceStyle(.callout, color: colors.primaryText)
                     }
-                    .accessibilityIdentifier("trades.filters.pictureOnly")
+                    .accessibilityIdentifier("trades.filters.tradesWithPictures")
                 }
                 .padding(.horizontal, ExperienceSpacing.md)
                 .padding(.vertical, ExperienceSpacing.sm)

@@ -44,7 +44,7 @@ struct YearlyReportDetailView: View {
     }
 
     private var detailScroll: some View {
-        ScrollView {
+        ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
                 YearlyReportFilterBar(viewModel: viewModel)
                     .padding(.horizontal, ExperienceSpacing.md)
@@ -70,8 +70,10 @@ struct YearlyReportDetailView: View {
                         .padding(.horizontal, ExperienceSpacing.md)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, ExperienceSpacing.xxxl)
         }
+        .scrollBounceBehavior(.basedOnSize, axes: .vertical)
     }
 
     private func yearlyHeader(report: TradingYearlyReport) -> some View {
@@ -126,6 +128,7 @@ struct YearlyReportFilterBar: View {
     @Environment(\.themeColors) private var colors
 
     var body: some View {
+        ProposedWidthClamp {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             HStack(spacing: ExperienceSpacing.sm) {
                 OwnerAccountFilterDropdown(
@@ -156,6 +159,8 @@ struct YearlyReportFilterBar: View {
                 modeMenu
                 Spacer(minLength: 0)
             }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
         }
         .accessibilityIdentifier("reports.yearly.filters")
     }
@@ -297,6 +302,7 @@ struct YearlyReportChartsSection: View {
                     DashboardChartEmptyCopy(message: "Log trades this year to unlock your equity curve.")
                 } else {
                     ProfileEquityCurveView(points: report.chartSummary.equityData)
+                        .frame(maxWidth: .infinity)
                         .frame(height: 220)
                 }
             }
@@ -342,7 +348,10 @@ struct YearlyReportChartsSection: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             Text(title)
                 .experienceStyle(.headline, color: colors.primaryText)
-            content()
+            ProposedWidthClamp {
+                content()
+            }
+            .clipped()
         }
         .padding(ExperienceSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -389,23 +398,27 @@ struct YearlyMonthlyPnLBarsView: View {
         if points.isEmpty {
             DashboardChartEmptyCopy(message: "Monthly P&L appears once you have closed trades this year.")
         } else {
-            HStack(alignment: .bottom, spacing: ExperienceSpacing.xs) {
-                ForEach(points) { point in
-                    VStack(spacing: 4) {
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(point.value >= 0 ? colors.profit : colors.loss)
-                            .frame(
-                                height: max(6, CGFloat(abs(point.value) / maxAbs) * 88)
-                            )
-                        Text(point.label)
-                            .experienceStyle(.caption2, color: colors.tertiaryText)
-                            .lineLimit(1)
+            ProposedWidthClamp {
+                HStack(alignment: .bottom, spacing: ExperienceSpacing.xs) {
+                    ForEach(points) { point in
+                        VStack(spacing: 4) {
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(point.value >= 0 ? colors.profit : colors.loss)
+                                .frame(
+                                    height: max(6, CGFloat(abs(point.value) / maxAbs) * 88)
+                                )
+                            Text(point.label)
+                                .experienceStyle(.caption2, color: colors.tertiaryText)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .accessibilityLabel("\(point.label), \(NumberDisplay.reportPnL(point.value))")
                     }
-                    .frame(maxWidth: .infinity)
-                    .accessibilityLabel("\(point.label), \(NumberDisplay.reportPnL(point.value))")
                 }
+                .frame(maxWidth: .infinity)
+                .frame(height: 120, alignment: .bottom)
             }
-            .frame(height: 120, alignment: .bottom)
         }
     }
 }

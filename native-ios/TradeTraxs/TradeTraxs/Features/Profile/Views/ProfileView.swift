@@ -93,6 +93,10 @@ struct ProfileView: View {
                     ) { section in
                         shellViewModel.select(section)
                     }
+                    .animation(
+                        ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
+                        value: shellViewModel.selectedSection
+                    )
                 } else if screen.state.phase == .loading && screen.state.profile == nil {
                     VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                         ProfileSectionPicker(selection: .constant(.trades))
@@ -112,16 +116,25 @@ struct ProfileView: View {
         .scrollDismissesKeyboard(.interactively)
         .navigationInteractivePopFromLeadingEdgeOnly()
         .experienceScreenBackground()
-        .experienceNavigationTitle(navigationTitle)
+        .experienceNavigationTitle(profileNavigationTitle)
         .toolbar {
-            if screen.showsSettingsToolbar {
+            ToolbarItem(placement: .principal) {
+                Text(profileNavigationTitle)
+                    .font(.headline)
+                    .lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
+                    .transaction { transaction in
+                        transaction.animation = nil
+                    }
+            }
+            if showsOwnerChrome {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Settings", systemImage: AppIcon.settings.systemName) {
                         screen.openSettings()
                     }
                     .accessibilityIdentifier("profile.toolbar.settings")
                 }
-            } else if !contentStore.isOwner {
+            } else {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button("Share Profile", systemImage: "square.and.arrow.up") {
@@ -148,10 +161,11 @@ struct ProfileView: View {
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.body.weight(.semibold))
-                        .experienceControlHitTarget()
+                            .experienceControlHitTarget()
                     }
                     .accessibilityLabel("Profile actions")
                     .accessibilityIdentifier("profile.actions.menu")
+                    .disabled(contentStore.profile == nil)
                 }
             }
         }
@@ -219,10 +233,6 @@ struct ProfileView: View {
         .onChange(of: contentStore.isOwner) { _, _ in
             screen.reconcileOwnershipIfNeeded()
         }
-        .animation(
-            ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-            value: screen.shellViewModel?.selectedSection
-        )
         .sheet(isPresented: $screen.showsPinReplaceSheet) {
             ProfilePinReplaceSheet(
                 message: "Your Profile can have up to 3 pinned items.",
@@ -240,8 +250,9 @@ struct ProfileView: View {
         }
     }
 
-    private var navigationTitle: String {
-        if screen.contentStore.isOwner { return "Profile" }
+    /// Tab Profile is always labeled “Profile”; pushed profiles use @username once resolved.
+    private var profileNavigationTitle: String {
+        if showsOwnerChrome { return "Profile" }
         if let username = screen.contentStore.profile?.username, !username.isEmpty {
             return "@\(username)"
         }
@@ -286,7 +297,9 @@ struct ProfileView: View {
                     detailCache: appEnvironment.data.detailCache,
                     imagePipeline: appEnvironment.data.imagePipeline,
                     engagementStore: appEnvironment.data.engagementStore,
-                    vaultStore: appEnvironment.data.vaultStore
+                    vaultStore: appEnvironment.data.vaultStore,
+                    profilePin: profilePin,
+                    profilePinnedItems: screen.pinnedContent
                 )
             } else {
                 sectionLoadingPlaceholder(shell: shell, section: .clips)

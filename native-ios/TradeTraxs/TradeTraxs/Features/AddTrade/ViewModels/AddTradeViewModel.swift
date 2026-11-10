@@ -52,9 +52,11 @@ final class AddTradeViewModel {
     var rrText = ""
     var maxRrReachedText = ""
 
-    var requiresMaxRrReached: Bool {
-        (Self.parseDecimal(pnlText, style: .signedPnL) ?? 0) <= 0
+    var showsMaxRrReachedField: Bool {
+        (Self.parseDecimal(pnlText, style: .signedPnL) ?? 0) < 0
     }
+
+    var requiresMaxRrReached: Bool { showsMaxRrReachedField }
     var entryAt: Date = .now
     var exitAt: Date = .now
     var includeExitTime = false
@@ -1143,7 +1145,9 @@ final class AddTradeViewModel {
             exitAt: includeExitTime ? exitAt : nil,
             realizedPnL: Money(amount: pnl),
             riskReward: Self.parseOptionalRiskReward(rrText),
-            maxRrReached: Self.parseOptionalRiskReward(maxRrReachedText),
+            maxRrReached: showsMaxRrReachedField
+                ? Self.parseOptionalRiskReward(maxRrReachedText)
+                : nil,
             points: Self.parseDecimal(pointsText, style: .tradeQuantity) ?? 0,
             sessionLabel: sessionLabel,
             strategy: Self.nilIfEmpty(strategyText),
@@ -1181,18 +1185,19 @@ final class AddTradeViewModel {
         }()
 
         let jobID = UUID().uuidString
+        let clipCaptionOverride = tradeAttachedClipCaptionForSave()
         let reelSnapshot: ReelDraftSnapshot? = {
             guard let reelDraft = reelDraft else { return nil }
             if reelDraft.videoAssetState == .preparedDelivery,
                let captured = try? ReelEncodingPipeline.captureUploadSnapshot(
                    from: reelDraft,
                    publishID: jobID,
-                   captionOverride: nil
+                   captionOverride: clipCaptionOverride
                )
             {
                 return captured
             }
-            return ReelDraftSnapshot(draft: reelDraft, captionOverride: nil)
+            return ReelDraftSnapshot(draft: reelDraft, captionOverride: clipCaptionOverride)
         }()
 
         return TradeSaveUploadSpec(
@@ -1293,6 +1298,20 @@ final class AddTradeViewModel {
         }
     }
 
+    /// Journal notes / Share caption persisted on the trade-attached reel row (`reels.caption`).
+    private func tradeAttachedClipCaptionForSave() -> String? {
+        if let draft = reelDraft {
+            let draftCaption = draft.caption.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !draftCaption.isEmpty { return draftCaption }
+        }
+        if shareToProfile {
+            let share = publicCaptionText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !share.isEmpty { return share }
+        }
+        let notes = notesText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return notes.isEmpty ? nil : notes
+    }
+
     private func attachClipIfNeeded(to tradeID: TradeID, tradeIsPublic: Bool) async throws {
         if let draft = reelDraft {
             try await publishReelDraft(draft, tradeID: tradeID, tradeIsPublic: tradeIsPublic)
@@ -1324,9 +1343,13 @@ final class AddTradeViewModel {
         }
 
         let publishID = UUID().uuidString
+        var publishDraft = draft
+        if let caption = tradeAttachedClipCaptionForSave() {
+            publishDraft.caption = caption
+        }
         let reel = try await ReelPublishPipeline.publish(
             publishID: publishID,
-            draft: draft,
+            draft: publishDraft,
             authorID: viewerID,
             tradeID: tradeID,
             tradeIsPublic: tradeIsPublic,

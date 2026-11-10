@@ -16,7 +16,7 @@ export default function TradeRoomBroadcastViewerRemovalOverlay() {
       : "The host removed you from this livestream."
 
   return (
-    <div className="fixed inset-0 z-[9500] flex items-center justify-center bg-black/70 p-4">
+    <div className="fixed inset-0 z-[9500] hidden items-center justify-center bg-black/70 p-4 md:flex">
       <div
         className="w-full max-w-sm rounded-xl border border-white/10 bg-zinc-900 p-5 text-white shadow-2xl"
         role="alertdialog"

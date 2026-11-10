@@ -62,7 +62,9 @@ struct ManageRoomTagsView: View {
                 }
             }
         }
-        .experienceInsetGroupedListStyle(pageBackground: false)
+        .experienceInsetGroupedListStyle(pageBackground: true)
+        .listSectionSpacing(ExperienceSpacing.xxs)
+        .contentMargins(.top, ExperienceSpacing.xxs, for: .scrollContent)
         .experienceNavigationTitle("Tags")
         .refreshable { await viewModel.refreshTags() }
         .confirmationDialog(

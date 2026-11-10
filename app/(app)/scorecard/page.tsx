@@ -11,10 +11,12 @@ import { MOBILE_WEB_NEUTRAL_PAGE_BG } from "@/lib/mobileWebPageSurface"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { useProGate } from "@/lib/useProGate"
+import { usePhoneWebTouchTarget } from "@/lib/usePhoneWebTouchTarget"
 
 export default function TradingScorecardPage() {
   useScrollPageTopOnMount()
   const router = useRouter()
+  const phoneWeb = usePhoneWebTouchTarget()
   const { user, profile } = useUserProfile()
   const { proFeatureUnlocked } = useProGate(profile)
   const hydration = useScorecardPageHydration(user?.id)
@@ -22,13 +24,15 @@ export default function TradingScorecardPage() {
   const shell = (children: ReactNode) => (
     <div className={`${MOBILE_WEB_NEUTRAL_PAGE_BG} min-h-screen pb-12 pt-6 text-white`}>
       <div className={AUTH_PAGE_CONTAINER_CLASS}>
-        <button
-          type="button"
-          onClick={() => router.push("/dashboard")}
-          className="mb-4 text-sm text-blue-400 hover:underline"
-        >
-          ← Dashboard
-        </button>
+        {!phoneWeb ? (
+          <button
+            type="button"
+            onClick={() => router.push("/dashboard")}
+            className="mb-4 text-sm text-blue-400 hover:underline"
+          >
+            ← Dashboard
+          </button>
+        ) : null}
         {children}
       </div>
     </div>

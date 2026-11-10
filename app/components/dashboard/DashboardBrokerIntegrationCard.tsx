@@ -10,7 +10,10 @@ import { queueBrokerEnrichment } from "@/lib/brokerEnrichment/queueBrokerEnrichm
 import { isDemoUserId } from "@/lib/demo/constants"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
-import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
+import {
+  isAuthenticatedMemberUser,
+  supabaseBearerHeaders,
+} from "@/lib/supabaseBearerFetch"
 
 type LinkedAccount = {
   provider: "tradovate" | "rithmic"
@@ -82,6 +85,10 @@ export default function DashboardBrokerIntegrationCard({
   }, [])
 
   useEffect(() => {
+    if (!userId || !isAuthenticatedMemberUser({ id: userId })) {
+      setEligibility(null)
+      return
+    }
     let cancelled = false
     void loadEligibility()
       .then((next) => {

@@ -86,6 +86,7 @@ final class ProfileShellViewModel {
             let vm = ClipsContainerViewModel(
                 profileID: profileID,
                 feed: data.feed,
+                session: data.session,
                 navigationCoordinator: navigationCoordinator,
                 detailCache: data.detailCache,
                 engagementStore: data.engagementStore,
@@ -272,6 +273,7 @@ final class ProfileShellViewModel {
                 let vm = ClipsContainerViewModel(
                     profileID: profileID,
                     feed: data.feed,
+                    session: data.session,
                     rpc: data.rpc,
                     navigationCoordinator: navigationCoordinator,
                     detailCache: data.detailCache,

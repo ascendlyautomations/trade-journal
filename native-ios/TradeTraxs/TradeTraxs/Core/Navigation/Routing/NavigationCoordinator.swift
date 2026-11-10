@@ -662,6 +662,8 @@ final class NavigationCoordinator {
                 preview: socialTradePreview(from: cache, tradeID: tradeID)
             )
             pushMessages(.sharedTrade(tradeID))
+        case .traderProfile(let profileID):
+            pushOtherProfile(profileID)
         }
     }
 
@@ -691,6 +693,8 @@ final class NavigationCoordinator {
                 preview: socialTradePreview(from: cache, tradeID: tradeID)
             )
             pushFeed(.trade(tradeID))
+        case .traderProfile(let profileID):
+            pushOtherProfile(profileID)
         }
     }
 
@@ -720,6 +724,8 @@ final class NavigationCoordinator {
                 preview: socialTradePreview(from: cache, tradeID: tradeID)
             )
             pushProfile(.trade(tradeID))
+        case .traderProfile(let profileID):
+            pushOtherProfile(profileID)
         }
     }
 
@@ -749,6 +755,8 @@ final class NavigationCoordinator {
                 preview: socialTradePreview(from: cache, tradeID: tradeID)
             )
             pushHome(.socialTrade(tradeID))
+        case .traderProfile(let profileID):
+            pushOtherProfile(profileID)
         }
     }
 

@@ -283,6 +283,9 @@ export default function Navbar() {
     !isNativeIos()
       ? resolveMobileWebNavChrome(pathname, searchParams.toString())
       : null
+  const showPhoneWebHamburger =
+    !isNativeIos() &&
+    (!phoneWebNavChrome || phoneWebNavChrome.leading === "back")
   const hidePhoneWebNavbar =
     !isNativeIos() &&
     (isMobileWebMessageThreadPath(pathname) || phoneClipsImmersive)
@@ -1360,30 +1363,32 @@ export default function Navbar() {
                     `absolute right-1.5 top-1.5 min-w-[1rem] px-1 py-px text-center text-[10px] leading-tight ${NAV_UNREAD_BADGE}`
                   )
                 : null}
-              <button
-                type="button"
-                className="inline-flex h-11 w-11 shrink-0 items-center justify-center text-2xl leading-none text-chrome-foreground"
-                aria-expanded={isOpen}
-                aria-label={isOpen ? "Close menu" : "Open menu"}
-                onClick={() => {
-                  setActiveMenu(null)
-                  if (isOpen) {
-                    setOpenSection(null)
-                    setIsOpen(false)
-                  } else {
-                    void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
-                      hapticLight("menu")
-                    })
-                    setIsOpen(true)
-                  }
-                }}
-              >
-                {isNativeIos() ? (
-                  "☰"
-                ) : (
-                  <Menu className="h-6 w-6" strokeWidth={2} aria-hidden />
-                )}
-              </button>
+              {showPhoneWebHamburger ? (
+                <button
+                  type="button"
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center text-2xl leading-none text-chrome-foreground"
+                  aria-expanded={isOpen}
+                  aria-label={isOpen ? "Close menu" : "Open menu"}
+                  onClick={() => {
+                    setActiveMenu(null)
+                    if (isOpen) {
+                      setOpenSection(null)
+                      setIsOpen(false)
+                    } else {
+                      void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
+                        hapticLight("menu")
+                      })
+                      setIsOpen(true)
+                    }
+                  }}
+                >
+                  {isNativeIos() ? (
+                    "☰"
+                  ) : (
+                    <Menu className="h-6 w-6" strokeWidth={2} aria-hidden />
+                  )}
+                </button>
+              ) : null}
             </div>
 
             {!isHomePage && user ? (

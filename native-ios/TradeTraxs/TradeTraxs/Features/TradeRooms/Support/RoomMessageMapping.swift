@@ -44,6 +44,21 @@ nonisolated enum RoomMessageMapping {
             )
         }
 
+        if ProfileShareMessageSupport.isProfileShare(type: roomMessage.shareType, content: body) {
+            return Message(
+                id: MessageID(roomMessage.id.rawValue),
+                conversationID: conversationID,
+                senderProfileID: roomMessage.senderProfileID,
+                kind: .profileShare,
+                body: body,
+                attachments: [],
+                replyToMessageID: roomMessage.parentMessageID.map { MessageID($0.rawValue) },
+                createdAt: roomMessage.createdAt,
+                isReadByViewer: true,
+                roomReactions: roomMessage.reactions
+            )
+        }
+
         if let reference = SharedContentRoomMessageSupport.decode(from: body),
            SharedContentRoomMessageSupport.isStructuredShare(type: roomMessage.shareType, content: body)
         {

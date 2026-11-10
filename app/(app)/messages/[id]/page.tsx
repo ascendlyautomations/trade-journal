@@ -202,6 +202,11 @@ import {
 import { readConversationThreadHeaderSeed } from "@/lib/backendV2/conversationThreadInboxSeed"
 import { mapThreadBootstrapMessagesToWire } from "@/lib/backendV2/conversationThreadContracts"
 import DmMessageReactions from "@/app/components/messages/DmMessageReactions"
+import {
+  DmMessageGestureSurface,
+  MobileWebDmMessageActionSheet,
+} from "@/app/components/mobile/messages/dmMessageMobileActions"
+import { usePhoneWebTouchTarget } from "@/lib/usePhoneWebTouchTarget"
 import { toggleMessageReaction } from "@/lib/messageReactionToggle"
 import { handleMessageReactionDoubleClick } from "@/lib/messageReactionDoubleTap"
 import {
@@ -344,6 +349,7 @@ function DmMessageActionMenu({
   canReact?: boolean
   onSelectReaction?: (emoji: MessageReactionEmoji) => void
 }) {
+  const phoneWeb = usePhoneWebTouchTarget()
   return (
     <>
       <button
@@ -353,14 +359,18 @@ function DmMessageActionMenu({
           setActiveMenuId(menuOpen ? null : message.id)
         }}
         className={`absolute top-1 right-1 z-10 rounded px-1.5 py-0.5 text-xs text-gray-400 transition-opacity duration-200 hover:text-gray-200 ${
-          menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          menuOpen
+            ? "opacity-100"
+            : phoneWeb
+              ? "max-md:opacity-100"
+              : "opacity-0 group-hover:opacity-100"
         }`}
         aria-label="Message actions"
       >
         ⋯
       </button>
 
-      {menuOpen ? (
+      {menuOpen && !phoneWeb ? (
         <div
           className={`absolute top-7 z-50 rounded-lg border border-white/10 bg-card/95 shadow-lg backdrop-blur-md ${
             canReact ? "w-auto min-w-[9rem]" : "w-40"
@@ -500,7 +510,9 @@ function TradeMessageBubble({
       data-dm-message-id={message.id}
       className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
     >
-      <div
+      <DmMessageGestureSurface
+        messageId={String(message.id)}
+        setActiveMenuId={setActiveMenuId}
         className={`flex ${isMe ? "justify-end" : "justify-start"}`}
         onDoubleClick={(e) =>
           handleMessageReactionDoubleClick(e, canReact, () =>
@@ -540,7 +552,7 @@ function TradeMessageBubble({
             }
           />
         </div>
-      </div>
+      </DmMessageGestureSurface>
       <DmMessageReactionRow
         message={message}
         isMe={isMe}
@@ -790,7 +802,9 @@ function PostMessageBubble({
       data-dm-message-id={message.id}
       className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
     >
-      <div
+      <DmMessageGestureSurface
+        messageId={String(message.id)}
+        setActiveMenuId={setActiveMenuId}
         className={`flex ${isMe ? "justify-end" : "justify-start"}`}
         onDoubleClick={(e) =>
           handleMessageReactionDoubleClick(e, canReact, () =>
@@ -902,7 +916,7 @@ function PostMessageBubble({
             onClose={() => setLightboxImageUrl(null)}
           />
         </div>
-      </div>
+      </DmMessageGestureSurface>
       <DmMessageReactionRow
         message={message}
         isMe={isMe}
@@ -964,7 +978,9 @@ function StoryShareMessageBubble({
       data-dm-message-id={message.id}
       className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
     >
-      <div
+      <DmMessageGestureSurface
+        messageId={String(message.id)}
+        setActiveMenuId={setActiveMenuId}
         className={`flex ${isMe ? "justify-end" : "justify-start"}`}
         onDoubleClick={(e) =>
           handleMessageReactionDoubleClick(e, canReact, () =>
@@ -1002,7 +1018,7 @@ function StoryShareMessageBubble({
             />
           </div>
         </div>
-      </div>
+      </DmMessageGestureSurface>
       <DmMessageReactionRow
         message={message}
         isMe={isMe}
@@ -1057,7 +1073,9 @@ function StoryReplyMessageBubble({
       data-dm-message-id={message.id}
       className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
     >
-      <div
+      <DmMessageGestureSurface
+        messageId={String(message.id)}
+        setActiveMenuId={setActiveMenuId}
         className={`flex ${isMe ? "justify-end" : "justify-start"}`}
         onDoubleClick={(e) =>
           handleMessageReactionDoubleClick(e, canReact, () =>
@@ -1120,7 +1138,7 @@ function StoryReplyMessageBubble({
             ) : null}
           </div>
         </div>
-      </div>
+      </DmMessageGestureSurface>
       <DmMessageReactionRow
         message={message}
         isMe={isMe}
@@ -3683,6 +3701,20 @@ export default function DMPage() {
   )
 
   const messagesById = useMemo(() => indexCommentsById(messages), [messages])
+  const phoneWebTouch = usePhoneWebTouchTarget()
+  const actionMenuMessage = useMemo(
+    () =>
+      activeMenuId
+        ? messages.find((m) => String(m.id) === activeMenuId) ?? null
+        : null,
+    [activeMenuId, messages]
+  )
+  const actionMenuCanReact = actionMenuMessage
+    ? canReactToDmMessage(actionMenuMessage, {
+        userId: user?.id,
+        dmMessagingBlocked,
+      })
+    : false
   const groupAvatarPreviewUrl = useMemo(() => {
     if (!groupImage) return null
     return URL.createObjectURL(groupImage)
@@ -4210,9 +4242,10 @@ export default function DMPage() {
                         isMe ? "items-end" : "items-start"
                       }`}
                     >
-                      <div
-                        id={dmMessageElementId(message.id)}
-                        data-dm-message-id={message.id}
+                      <DmMessageGestureSurface
+                        messageId={String(message.id)}
+                        setActiveMenuId={setActiveMenuId}
+                        domId={dmMessageElementId(message.id)}
                         className={`flex overflow-visible ${
                           isMe ? "justify-end" : "justify-start"
                         }`}
@@ -4313,7 +4346,7 @@ export default function DMPage() {
                             </>
                           </div>
                         </div>
-                      </div>
+                      </DmMessageGestureSurface>
                       <DmMessageReactionRow
                         message={message}
                         isMe={isMe}
@@ -4726,6 +4759,24 @@ export default function DMPage() {
         imageUrl={lightboxImageUrl}
         onClose={() => setLightboxImageUrl(null)}
       />
+      {actionMenuMessage ? (
+        <MobileWebDmMessageActionSheet
+          open={Boolean(activeMenuId) && phoneWebTouch}
+          onClose={() => setActiveMenuId(null)}
+          canReact={actionMenuCanReact}
+          isMe={actionMenuMessage.sender_id === user?.id}
+          onReply={() => startReplyToMessage(actionMenuMessage)}
+          onDeleteForMe={() => void deleteForMe(actionMenuMessage)}
+          onDeleteForEveryone={
+            actionMenuMessage.sender_id === user?.id
+              ? () => void deleteForEveryone(actionMenuMessage)
+              : undefined
+          }
+          onSelectReaction={(emoji) =>
+            void toggleDmMessageReaction(String(actionMenuMessage.id), emoji)
+          }
+        />
+      ) : null}
       </>
       )}
     </>

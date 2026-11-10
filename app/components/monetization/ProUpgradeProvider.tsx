@@ -56,6 +56,7 @@ import { logMonetizationFunnel } from "@/lib/monetizationTelemetry"
 import { startTraxProCheckout } from "@/lib/startTraxProCheckout"
 import { profileHasUsedCheckoutTrial } from "@/lib/checkoutTrial"
 import { useTraxProPurchaseCopy } from "@/lib/traxProPriceCatalogClient"
+import { isAuthenticatedMemberUser } from "@/lib/supabaseBearerFetch"
 
 type PresentInput = {
   reason: ProGateReason
@@ -92,7 +93,7 @@ export function ProUpgradeProvider({ children }: { children: ReactNode }) {
   const [checkoutError, setCheckoutError] = useState<string | null>(null)
 
   const refreshFlags = useCallback(async () => {
-    if (!user?.id) {
+    if (!user?.id || !isAuthenticatedMemberUser(user)) {
       setFlags({ ...MONETIZATION_FLAGS_FAIL_CLOSED })
       return
     }
@@ -101,7 +102,7 @@ export function ProUpgradeProvider({ children }: { children: ReactNode }) {
   }, [user?.id])
 
   useEffect(() => {
-    if (!user?.id) {
+    if (!user?.id || !isAuthenticatedMemberUser(user)) {
       setFlags({ ...MONETIZATION_FLAGS_FAIL_CLOSED })
       return
     }

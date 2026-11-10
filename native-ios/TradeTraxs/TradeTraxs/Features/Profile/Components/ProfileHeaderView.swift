@@ -8,6 +8,7 @@ struct ProfileHeaderView: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.appEnvironment) private var appEnvironment
 
     var body: some View {
         Group {
@@ -108,12 +109,12 @@ struct ProfileHeaderView: View {
                 ProfileTradeRoomDestinationRow(action: viewModel.openTradeRoom)
             }
         }
-        .sheet(isPresented: $viewModel.isSharePresented) {
-            if let url = viewModel.shareURL {
-                ShareSheet(items: [viewModel.shareText, url])
-            } else {
-                ShareSheet(items: [viewModel.shareText])
-            }
+        .sheet(item: $viewModel.shareTarget) { target in
+            SharedContentShareSheet(
+                target: target,
+                data: appEnvironment.data,
+                onClose: { viewModel.shareTarget = nil }
+            )
         }
     }
 
@@ -265,12 +266,3 @@ struct ProfileHeaderView: View {
     }
 }
 
-private struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}

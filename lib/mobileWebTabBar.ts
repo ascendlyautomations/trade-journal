@@ -283,6 +283,7 @@ export const MOBILE_WEB_PAGE_HEADERS: Record<
   "/help": { title: "Help Center", backHref: "/dashboard" },
   "/suggestions": { title: "Suggestions", backHref: "/dashboard" },
   "/import": { title: "Import CSV", backHref: "/trades" },
+  "/scorecard": { title: "Trading Scorecard", backHref: "/dashboard" },
   "/feature-requests": { title: "Feature Requests", backHref: "/dashboard" },
 }
 

@@ -1764,12 +1764,15 @@ final class GlobalUploadCoordinator {
         let videoURL = checkpoint.reelVideoPublicURL!
         let thumbURL = checkpoint.reelThumbnailPublicURL ?? videoURL
         let visibility: ContentVisibility = spec.tradeIsPublic ? .public : .private
+        let persistedCaption = snapshot.flatMap {
+            ReelPublishPipeline.normalizedCaption($0.caption)
+        }
         let provisional = Reel(
             id: ReelID(UUID().uuidString),
             authorProfileID: spec.authorID,
             video: MediaReference(id: videoURL, kind: .video, altText: nil),
             thumbnail: MediaReference(id: thumbURL, kind: .image, altText: nil),
-            caption: nil,
+            caption: persistedCaption,
             visibility: visibility,
             linkedTradeID: trade.id,
             durationSeconds: snapshot?.durationSeconds ?? 0,

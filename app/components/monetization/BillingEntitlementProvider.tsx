@@ -25,6 +25,7 @@ import {
   type ClientProAccess,
 } from "@/lib/billingEntitlement"
 import { isProActive } from "@/lib/subscription"
+import { isAuthenticatedMemberUser } from "@/lib/supabaseBearerFetch"
 
 type BillingEntitlementContextValue = BillingEntitlementClientState & {
   access: ClientProAccess
@@ -47,7 +48,7 @@ export function BillingEntitlementProvider({ children }: { children: ReactNode }
   }), [])
 
   useEffect(() => {
-    if (!user?.id) {
+    if (!user?.id || !isAuthenticatedMemberUser(user)) {
       clearBillingEntitlementState()
       return
     }

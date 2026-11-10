@@ -87,6 +87,8 @@ enum SharedContentShareSeeder {
             }
         case .trade(let id):
             seedTradeID(id, detailCache: detailCache, feedSessionStore: feedSessionStore, viewerID: viewerID)
+        case .traderProfile:
+            break
         }
     }
 

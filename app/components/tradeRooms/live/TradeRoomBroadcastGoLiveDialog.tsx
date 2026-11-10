@@ -1,6 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { createPortal } from "react-dom"
+import { useEffect, useState } from "react"
+import { usePhoneWebTouchTarget } from "@/lib/usePhoneWebTouchTarget"
+import { useMobileWebSheetDismiss } from "@/lib/useMobileWebSheetDismiss"
+import { useModalScrollLock } from "@/app/components/ui/modalLayout"
+import { UI_MODAL_BACKDROP } from "@/lib/uiPrimitiveStyles"
 import type {
   TradeRoomBroadcastVideoSource,
   TradeRoomBroadcastVoiceMode,
@@ -30,17 +35,31 @@ export default function TradeRoomBroadcastGoLiveDialog({
   const [voiceMode, setVoiceMode] =
     useState<TradeRoomBroadcastVoiceMode>("broadcast_only")
   const [enableMic, setEnableMic] = useState(true)
+  const phoneWeb = usePhoneWebTouchTarget()
+  const [mounted, setMounted] = useState(false)
+  const dismiss = useMobileWebSheetDismiss(onClose)
 
-  if (!open) return null
+  useEffect(() => setMounted(true), [])
+  useModalScrollLock(open)
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="go-live-title"
-    >
-      <div className="w-full max-w-md rounded-xl border border-white/10 bg-zinc-900 p-4 shadow-xl">
+  if (!open || !mounted) return null
+
+  const sheetBody = (
+    <>
+      {phoneWeb ? (
+        <div {...dismiss}>
+          <div className="flex justify-center pt-2 pb-1 md:hidden">
+            <div className="h-1 w-10 rounded-full bg-white/20" aria-hidden />
+          </div>
+        </div>
+      ) : null}
+      <div
+        className={
+          phoneWeb
+            ? "w-full max-w-md border-0 bg-zinc-900 p-4 shadow-xl md:rounded-xl md:border md:border-white/10"
+            : "w-full max-w-md rounded-xl border border-white/10 bg-zinc-900 p-4 shadow-xl"
+        }
+      >
         <h2 id="go-live-title" className="text-lg font-semibold text-white">
           Go live
         </h2>
@@ -211,6 +230,39 @@ export default function TradeRoomBroadcastGoLiveDialog({
           </button>
         </div>
       </div>
+    </>
+  )
+
+  if (phoneWeb) {
+    return createPortal(
+      <div
+        className="fixed inset-0 z-[10050] flex items-end justify-center md:items-center md:bg-black/60 md:p-4"
+        role="presentation"
+        onClick={onClose}
+      >
+        <div className={`${UI_MODAL_BACKDROP} md:hidden`} aria-hidden />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="go-live-title"
+          className="w-full max-w-md overflow-hidden rounded-t-2xl border border-white/10 bg-zinc-900 shadow-2xl md:rounded-xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {sheetBody}
+        </div>
+      </div>,
+      document.body
+    )
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="go-live-title"
+    >
+      {sheetBody}
     </div>
   )
 }
