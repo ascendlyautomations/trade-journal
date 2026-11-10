@@ -79,7 +79,7 @@ export async function getServerNotificationPreferencesForUsers(
     const id = String((row as { user_id?: string }).user_id ?? "").trim()
     if (!id) continue
     const preferences = mapNotificationPreferencesRow(
-      row as Record<string, unknown>,
+      row as unknown as Record<string, unknown>,
       id
     )
     cachePreferences(id, preferences)

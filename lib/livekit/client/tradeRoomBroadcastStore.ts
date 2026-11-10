@@ -324,7 +324,7 @@ const interactivePollOwners = new Set<BroadcastInteractivePollOwner>()
 let interactivePollAccessToken: string | null = null
 let interactivePollIntervalMsActive = BROADCAST_INTERACTIVE_POLL_MS_PASSIVE
 let lastInteractiveDrivenStatusRefresh = 0
-let roomStatusPollTimer: ReturnType<typeof setInterval> | null = null
+let roomStatusPollTimer: number | null = null
 let roomStatusPollActive = false
 let roomStatusPollRoomId: string | null = null
 let roomStatusPollCanReconcile = false
@@ -1081,10 +1081,11 @@ async function runRoomBroadcastStatusPollTick(
   reconcile: boolean,
   lite: boolean
 ): Promise<void> {
+  const pollRoomId = roomStatusPollRoomId
   if (
     roomStatusPollPausedAuth ||
     !roomStatusPollActive ||
-    !roomStatusPollRoomId?.trim()
+    !pollRoomId?.trim()
   ) {
     return
   }
@@ -1092,7 +1093,7 @@ async function runRoomBroadcastStatusPollTick(
   roomStatusPollInFlight = true
   try {
     await refreshTradeRoomBroadcastStatus(() =>
-      fetchTradeRoomBroadcastRoomStatus(roomStatusPollRoomId, {
+      fetchTradeRoomBroadcastRoomStatus(pollRoomId, {
         reconcile,
         lite,
         canReconcile: roomStatusPollCanReconcile,

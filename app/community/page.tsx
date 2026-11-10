@@ -5110,7 +5110,7 @@ function CommunityContent() {
               ) : null}
 
               <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                {tradeRoomConversationActive ? (
+                {tradeRoomConversationActive && selectedRoomId ? (
                   <TradeRoomBroadcastPanel
                     roomId={selectedRoomId}
                     canGoLive={canGoLiveInRoom}
