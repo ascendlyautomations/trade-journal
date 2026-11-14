@@ -2,7 +2,10 @@ import { after } from "next/server"
 import {
   dispatchPushNotification,
   type PushDispatchInput,
+  type PushDispatchResult,
 } from "@/lib/server/push/pushDispatcher"
+
+export type { PushDispatchResult }
 import type { PushNotificationTarget } from "@/lib/server/push/pushCopy"
 
 export type DeliverPushInput = PushNotificationTarget & {
@@ -17,12 +20,12 @@ export type DeliverPushInput = PushNotificationTarget & {
  */
 export async function deliverIosPushNotification(
   input: DeliverPushInput
-): Promise<void> {
+): Promise<PushDispatchResult> {
   const dispatchInput: PushDispatchInput = {
     ...input,
     recipientUserId: input.recipientUserId,
   }
-  await dispatchPushNotification(dispatchInput)
+  return dispatchPushNotification(dispatchInput)
 }
 
 /** Schedule Activity push after the HTTP response (Vercel waitUntil via next/server after). */

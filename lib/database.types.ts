@@ -6370,6 +6370,10 @@ export type Database = {
       free_plan_limits_enforced: { Args: never; Returns: boolean }
       free_plan_utc_day_start: { Args: never; Returns: string }
       get_active_block_peer_ids: { Args: never; Returns: string[] }
+      weekly_trading_report_eligible_user_ids: {
+        Args: { p_end: string; p_start: string }
+        Returns: string[]
+      }
       get_app_icon_badge: { Args: { p_user_id?: string }; Returns: number }
       get_conversation_shared_media: {
         Args: {

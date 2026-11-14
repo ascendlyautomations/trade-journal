@@ -236,13 +236,20 @@ function parseApnsMeta(content: string | null | undefined): {
   }
 }
 
+export type PushDispatchResult = {
+  status: "sent" | "no_tokens" | "failed" | "skipped"
+  pushed: number
+}
+
 /**
  * Single APNs delivery pipeline for Activity and Messaging pushes.
  * Never throws to callers — safe inside after() / waitUntil.
+ * `sent` means at least one device accepted the alert. A notification row
+ * existing is not a successful push.
  */
 export async function dispatchPushNotification(
   input: PushDispatchInput
-): Promise<void> {
+): Promise<PushDispatchResult> {
   try {
     if (!isApnsConfigured()) {
       if (process.env.NODE_ENV === "development") {
@@ -250,11 +257,11 @@ export async function dispatchPushNotification(
           "[push] APNs env not configured — skipping iOS delivery. Set APNS_KEY_ID, APNS_TEAM_ID, APNS_PRIVATE_KEY."
         )
       }
-      return
+      return { status: "failed", pushed: 0 }
     }
 
     const recipientUserId = input.recipientUserId?.trim()
-    if (!recipientUserId) return
+    if (!recipientUserId) return { status: "failed", pushed: 0 }
 
     const isFollow =
       input.type === "follow" || input.type === "follow_batch"
@@ -267,7 +274,7 @@ export async function dispatchPushNotification(
           type: input.type,
         })
       }
-      return
+      return { status: "skipped", pushed: 0 }
     }
 
     const { data: tokenRows, error: tokenErr } = await supabaseServiceRole
@@ -278,7 +285,7 @@ export async function dispatchPushNotification(
 
     if (tokenErr) {
       console.error("[push] token lookup failed", tokenErr)
-      return
+      return { status: "failed", pushed: 0 }
     }
 
     const tokens = (tokenRows ?? []).filter((row) => {
@@ -302,7 +309,7 @@ export async function dispatchPushNotification(
           type: input.type,
         })
       }
-      return
+      return { status: "no_tokens", pushed: 0 }
     }
 
     if (isFollow) {
@@ -389,6 +396,7 @@ export async function dispatchPushNotification(
       })
     }
 
+    const tally = { pushed: 0, failed: 0 }
     await Promise.all(
       tokens.map(async (row) => {
         const tokenId = String(row.id ?? "").trim()
@@ -438,18 +446,27 @@ export async function dispatchPushNotification(
             })
           }
         }
-        if (!result.ok && result.invalidToken) {
+        if (result.ok) {
+          tally.pushed += 1
+        } else if (result.invalidToken) {
           console.info("[push] Removing stale APNs token:", result.reason)
           await removeInvalidDevicePushToken(tokenId, deviceToken, result.reason)
-        } else if (!result.ok && result.reason !== "apns_not_configured") {
+        } else if (result.reason !== "apns_not_configured") {
+          tally.failed += 1
           console.error("[push] APNs send failed", {
             status: result.status,
             reason: result.reason,
           })
+        } else {
+          tally.failed += 1
         }
       })
     )
+    if (tally.failed > 0) return { status: "failed", pushed: tally.pushed }
+    if (tally.pushed > 0) return { status: "sent", pushed: tally.pushed }
+    return { status: "no_tokens", pushed: 0 }
   } catch (err) {
     console.error("[push] dispatchPushNotification crashed", err)
+    return { status: "failed", pushed: 0 }
   }
 }

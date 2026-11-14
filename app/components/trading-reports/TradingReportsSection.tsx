@@ -24,6 +24,8 @@ import type { PsychologyReportPeriodRef } from "@/lib/psychology/reports/types"
 import { usePsychologyReports } from "@/lib/usePsychologyReports"
 import { useTradingReports } from "@/lib/useTradingReports"
 import { tradesSelectedTradeHref } from "@/lib/tradesSelectedTrade"
+import { generateTradingReportForWeek } from "@/lib/tradingReports/generateTradingReport"
+import { parseTradingReportWeekPeriodId } from "@/lib/tradingReports/tradingReportPeriods"
 import {
   parseYearlyReportParam,
   yearlyReportParam,
@@ -47,6 +49,7 @@ function parsePeriodKey(value: string | null): TradingReportPeriodKey | null {
 function parseReportSearch(value: string | null): {
   tab: ReportsModalTab
   periodKey?: TradingReportPeriodKey
+  absoluteWeekMonday?: string
   psychologyRef?: PsychologyReportPeriodRef
   yearlyYear?: number
   yearlyCatalog?: boolean
@@ -58,6 +61,8 @@ function parseReportSearch(value: string | null): {
   if (yearlyYear != null) return { tab: "performance", yearlyYear }
   const periodKey = parsePeriodKey(value)
   if (periodKey) return { tab: "performance", periodKey }
+  const absoluteWeekMonday = parseTradingReportWeekPeriodId(value)
+  if (absoluteWeekMonday) return { tab: "performance", absoluteWeekMonday }
   const parsed = parsePsychologyReportID(value)
   if (parsed) return { tab: "psychology", psychologyRef: parsed }
   return null
@@ -89,6 +94,7 @@ const TradingReportsSection = forwardRef<
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<ReportsModalTab>("performance")
   const [periodKey, setPeriodKey] = useState<TradingReportPeriodKey>("weekly_this")
+  const [absoluteWeekMonday, setAbsoluteWeekMonday] = useState<string | null>(null)
   const [psychologyRef, setPsychologyRef] = useState<PsychologyReportPeriodRef | null>(
     null
   )
@@ -97,10 +103,15 @@ const TradingReportsSection = forwardRef<
 
   const psychology = usePsychologyReports(userId, trades, open && tab === "psychology")
 
-  const report = useMemo(
+  const catalogReport = useMemo(
     () => getReport(periodKey) ?? snapshot?.reports[periodKey] ?? null,
     [getReport, periodKey, snapshot]
   )
+  const absoluteReport = useMemo(() => {
+    if (!absoluteWeekMonday) return null
+    return generateTradingReportForWeek(trades, absoluteWeekMonday)
+  }, [absoluteWeekMonday, trades])
+  const report = absoluteReport ?? catalogReport
 
   const bestTrade = useMemo(() => {
     if (!report?.bestTradeId) return null
@@ -121,6 +132,7 @@ const TradingReportsSection = forwardRef<
   const openModal = useCallback(
     (key?: TradingReportPeriodKey) => {
       const nextKey = key ?? periodKey
+      setAbsoluteWeekMonday(null)
       setPeriodKey(nextKey)
       setTab("performance")
       setPsychologyRef(null)
@@ -190,7 +202,14 @@ const TradingReportsSection = forwardRef<
     }
     setOpen(true)
     setTab(parsed.tab)
-    if (parsed.periodKey) setPeriodKey(parsed.periodKey)
+    if (parsed.periodKey) {
+      setAbsoluteWeekMonday(null)
+      setPeriodKey(parsed.periodKey)
+    }
+    if (parsed.absoluteWeekMonday) {
+      setAbsoluteWeekMonday(parsed.absoluteWeekMonday)
+      setPeriodKey("weekly_this")
+    }
     if (parsed.psychologyRef) setPsychologyRef(parsed.psychologyRef)
     if (parsed.tab === "psychology" && !parsed.psychologyRef) {
       setPsychologyRef(null)
@@ -247,6 +266,7 @@ const TradingReportsSection = forwardRef<
         onClose={() => {
           setOpen(false)
           setPsychologyRef(null)
+          setAbsoluteWeekMonday(null)
           writeReportParam(null)
         }}
         onOpenYearlyReports={() => {
@@ -257,7 +277,9 @@ const TradingReportsSection = forwardRef<
         }}
         report={report}
         periodKey={periodKey}
+        hidePeriodSelector={absoluteWeekMonday != null}
         onPeriodChange={(key) => {
+          setAbsoluteWeekMonday(null)
           setPeriodKey(key)
           writeReportParam(key)
         }}
@@ -272,7 +294,9 @@ const TradingReportsSection = forwardRef<
               psychologyRef ? reportIDForRef(psychologyRef) : "psychology"
             )
           } else {
-            writeReportParam(periodKey)
+            writeReportParam(
+              absoluteWeekMonday ? `week:${absoluteWeekMonday}` : periodKey
+            )
           }
         }}
         psychologyContent={

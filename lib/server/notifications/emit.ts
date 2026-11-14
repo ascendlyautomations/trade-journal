@@ -1,6 +1,6 @@
 import { after } from "next/server"
 import { supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
-import { scheduleIosPushDelivery } from "@/lib/server/push/deliverPushNotification"
+import { scheduleIosPushDelivery, type PushDispatchResult } from "@/lib/server/push/deliverPushNotification"
 import { scheduleMessagingPush } from "@/lib/server/push/messagingPush"
 import { scheduleDmConversationPush } from "@/lib/server/push/dmConversationPush"
 import type { DeliverPushInput } from "@/lib/server/push/deliverPushNotification"
@@ -25,7 +25,13 @@ export type ActivityInsertRow = {
 }
 
 export type EmitActivityResult =
-  | { ok: true; deduplicated?: boolean; inserted: boolean }
+  | {
+      ok: true
+      deduplicated?: boolean
+      inserted: boolean
+      id?: string
+      push?: PushDispatchResult
+    }
   | { ok: false; error: string }
 
 /**
@@ -41,7 +47,11 @@ export async function emitActivityNotification(params: {
   awaitPush?: boolean
 }): Promise<EmitActivityResult> {
   const { row, push, logLabel, awaitPush } = params
-  const { error } = await supabaseServiceRole.from("notifications").insert(row)
+  const { data, error } = await supabaseServiceRole
+    .from("notifications")
+    .insert(row)
+    .select("id")
+    .maybeSingle()
 
   if (error) {
     if (error.code === "23505") {
@@ -65,12 +75,13 @@ export async function emitActivityNotification(params: {
     const { deliverIosPushNotification } = await import(
       "@/lib/server/push/deliverPushNotification"
     )
-    await deliverIosPushNotification(pushInput)
-  } else {
-    scheduleIosPushDelivery(pushInput)
+    const pushResult = await deliverIosPushNotification(pushInput)
+    return { ok: true, inserted: true, id: data?.id, push: pushResult }
   }
 
-  return { ok: true, inserted: true }
+  scheduleIosPushDelivery(pushInput)
+
+  return { ok: true, inserted: true, id: data?.id }
 }
 
 /** Messaging-only push (no Activity row). */

@@ -10,6 +10,7 @@ import {
   NOTIFICATION_TIME_SECTION_LABELS,
   type NotificationTimeSection,
 } from "./formatRelativeTime"
+import { parseTradingReportWeekPeriodId } from "./tradingReports/tradingReportPeriods"
 
 export type TimeSection = NotificationTimeSection
 export {
@@ -971,13 +972,14 @@ export function affiliateNotificationHref(notification: NotificationRecord): str
 
 export function parseTradingReportNotificationContent(
   content: string | null | undefined
-): { title?: string; body?: string; href?: string } {
+): { title?: string; body?: string; href?: string; periodId?: string } {
   if (!content?.trim()) return {}
   try {
     const parsed = JSON.parse(content) as {
       title?: string
       body?: string
       href?: string
+      periodId?: string
     }
     return parsed && typeof parsed === "object" ? parsed : {}
   } catch {
@@ -1005,7 +1007,14 @@ export function tradingReportNotificationHref(
   notification: NotificationRecord
 ): string {
   const meta = parseTradingReportNotificationContent(notification.content)
+  const periodId = meta.periodId?.trim()
+  if (periodId && parseTradingReportWeekPeriodId(periodId)) {
+    return `/dashboard?report=${encodeURIComponent(periodId)}`
+  }
   const href = meta.href?.trim()
+  if (href && parseTradingReportWeekPeriodId(new URLSearchParams(href.split("?")[1] ?? "").get("report"))) {
+    return href
+  }
   return href || "/dashboard?report=weekly_last"
 }
 

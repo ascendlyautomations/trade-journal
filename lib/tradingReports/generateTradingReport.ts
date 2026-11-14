@@ -11,8 +11,10 @@ import { formatRR } from "@/lib/formatDisplay"
 import { averageRrFromTrades } from "@/lib/tradeRr"
 import { computePerformanceStats } from "@/lib/performanceShare"
 import {
+  absoluteTradingWeekBounds,
   formatTradingReportDateRange,
   getTradingReportPeriodBounds,
+  parseTradingReportWeekPeriodId,
   tradingReportPeriodTitle,
   type TradingReportPeriodBounds,
 } from "./tradingReportPeriods"
@@ -537,12 +539,22 @@ export function generateTradingReportForTrades(
   }
 }
 
-export function generateTradingReport(
+export function generateTradingReportForWeek(
   trades: any[],
-  periodKey: TradingReportPeriodKey,
+  mondayKey: string,
   now = new Date()
+): TradingReport | null {
+  const monday = parseTradingReportWeekPeriodId(`week:${mondayKey}`)
+  if (!monday) return null
+  return generateTradingReportFromBounds(trades, absoluteTradingWeekBounds(monday, now), now)
+}
+
+function generateTradingReportFromBounds(
+  trades: any[],
+  bounds: TradingReportPeriodBounds,
+  now: Date
 ): TradingReport {
-  const bounds = getTradingReportPeriodBounds(periodKey, now)
+  const periodKey = bounds.key
   const periodTrades = filterTradesForBounds(trades, bounds)
   const metrics = buildMetrics(periodTrades)
 
@@ -577,6 +589,18 @@ export function generateTradingReport(
     keyTakeaway: buildKeyTakeaway(metrics, strengths, opportunities),
     summarySource: "deterministic",
   }
+}
+
+export function generateTradingReport(
+  trades: any[],
+  periodKey: TradingReportPeriodKey,
+  now = new Date()
+): TradingReport {
+  return generateTradingReportFromBounds(
+    trades,
+    getTradingReportPeriodBounds(periodKey, now),
+    now
+  )
 }
 
 export function generateAllTradingReports(

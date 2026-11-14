@@ -2,6 +2,13 @@ import { supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { emitActivityNotification } from "@/lib/server/notifications/emit"
 import { getServerNotificationPreferences } from "@/lib/serverNotificationPreferences"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
+import type { PushDispatchResult } from "@/lib/server/push/deliverPushNotification"
+import {
+  readTradingReportPushStatus,
+  tradingReportPushNeedsRetry,
+  writeTradingReportPushStatus,
+  type TradingReportPushStatus,
+} from "@/lib/tradingReports/tradingReportPushDelivery"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 export type NotifyResult = {
@@ -327,7 +334,7 @@ async function notifyTradingReport(input: {
     (kind === "weekly" ? "Weekly trading report" : "Monthly trading report")
   const href =
     input.href?.trim() ||
-    `/dashboard?report=${encodeURIComponent(periodKey || "weekly_last")}`
+    `/dashboard?report=${encodeURIComponent(periodId || periodKey || "weekly_last")}`
 
   if (!periodKey || !periodId) {
     return { ok: false, error: "Missing periodKey or periodId", status: 400 }
@@ -343,11 +350,12 @@ async function notifyTradingReport(input: {
     periodKey,
     periodId,
     kind,
+    pushDelivery: { status: "pending" },
   })
 
   const { data: existing, error: existingErr } = await supabaseServiceRole
     .from("notifications")
-    .select("id")
+    .select("id, content")
     .eq("user_id", input.actorUserId)
     .eq("type", "trading_report")
     .ilike("content", `%${periodId}%`)
@@ -356,8 +364,23 @@ async function notifyTradingReport(input: {
   if (existingErr) {
     return { ok: false, error: existingErr.message, status: 500 }
   }
-  if (existing && existing.length > 0) {
-    return { ok: true, skipped: true, reason: "dedupe" }
+
+  const existingRow = existing?.[0]
+  if (existingRow?.id) {
+    const status = readTradingReportPushStatus(existingRow.content)
+    if (!tradingReportPushNeedsRetry(status)) {
+      return { ok: true, skipped: true, reason: "dedupe" }
+    }
+    const retryContent = existingRow.content?.trim() || content
+    const push = await deliverTradingReportPush(input.actorUserId, retryContent)
+    await recordTradingReportPushStatus(existingRow.id, retryContent, push.status)
+    if (push.status === "sent") {
+      return { ok: true, reason: "push_retried", pushed: push.pushed }
+    }
+    if (push.status === "skipped") {
+      return { ok: true, skipped: true, reason: "preferences" }
+    }
+    return { ok: true, reason: "push_pending", pushed: push.pushed }
   }
 
   const prefs = await getServerNotificationPreferences(input.actorUserId, {
@@ -383,10 +406,55 @@ async function notifyTradingReport(input: {
       prefsAlreadyChecked: true,
     },
     logLabel: "trading-reports/notify",
+    awaitPush: true,
   })
 
   if (!result.ok) return { ok: false, error: result.error, status: 500 }
-  return { ok: true }
+
+  const pushStatus = result.push?.status ?? "failed"
+  if (result.id) {
+    await recordTradingReportPushStatus(result.id, content, pushStatus)
+  }
+  if (pushStatus === "sent" || pushStatus === "skipped") {
+    return { ok: true, pushed: result.push?.pushed }
+  }
+  return { ok: true, reason: "push_pending", pushed: result.push?.pushed }
+}
+
+async function deliverTradingReportPush(
+  userId: string,
+  content: string
+): Promise<PushDispatchResult> {
+  const { deliverIosPushNotification } = await import(
+    "@/lib/server/push/deliverPushNotification"
+  )
+  return deliverIosPushNotification({
+    recipientUserId: userId,
+    type: "trading_report",
+    sender_id: null,
+    content,
+    prefsAlreadyChecked: true,
+  })
+}
+
+async function recordTradingReportPushStatus(
+  notificationId: string,
+  content: string,
+  status: TradingReportPushStatus
+) {
+  let next = content
+  try {
+    next = writeTradingReportPushStatus(content, status)
+  } catch {
+    return
+  }
+  const { error } = await supabaseServiceRole
+    .from("notifications")
+    .update({ content: next })
+    .eq("id", notificationId)
+  if (error) {
+    console.error("[trading-reports/notify] push status update failed", error)
+  }
 }
 
 async function notifyAffiliateReferral(input: {
