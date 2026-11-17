@@ -22,6 +22,7 @@ import {
 import { SafeProfileAvatar } from "@/app/components/SafeProfileAvatar.tsx"
 import { supabase } from "@/lib/supabaseClient.ts"
 import type { LiveVoiceParticipantView } from "@/lib/livekit/client/tradeRoomLiveVoiceStore.ts"
+import { shouldShowLiveVoicePlaybackUnlock } from "@/lib/livekit/mobileWebLivePolicy.ts"
 import { useTradeRoomLiveVoice } from "./useTradeRoomLiveVoice.ts"
 
 function initialsFromDisplayName(name: string): string {
@@ -180,7 +181,13 @@ export default function TradeRoomLiveVoiceBar({
   const connecting =
     voice.connectionState === ConnectionState.Connecting ||
     voice.connectionState === ConnectionState.Reconnecting
-  const muted = voice.session.canPublish && !voice.isMicrophoneEnabled
+  const muted =
+    voice.micPublishRestricted ||
+    (voice.session.canPublish && !voice.isMicrophoneEnabled)
+  const showPlaybackUnlock = shouldShowLiveVoicePlaybackUnlock({
+    hasSession: true,
+    canPlaybackAudio: voice.canPlaybackAudio,
+  })
   const status = connectionStatusLabel(
     voice.connectionState,
     voice.session.canPublish,
@@ -394,8 +401,14 @@ export default function TradeRoomLiveVoiceBar({
           {voice.session.canPublish ? (
             <button
               type="button"
-              aria-label={muted ? "Unmute microphone" : "Mute microphone"}
-              disabled={voice.isBusy || connecting}
+              aria-label={
+                voice.micPublishRestricted
+                  ? "Microphone muted by a moderator"
+                  : muted
+                    ? "Unmute microphone"
+                    : "Mute microphone"
+              }
+              disabled={voice.isBusy || connecting || voice.micPublishRestricted}
               onClick={() => void voice.setMuted(!muted)}
               className="rounded-lg bg-white/10 p-2.5 text-zinc-100 hover:bg-white/15 disabled:opacity-50"
             >
@@ -425,14 +438,14 @@ export default function TradeRoomLiveVoiceBar({
             {voice.error}
           </p>
         ) : null}
-        {voice.diagnostics && !voice.diagnostics.canPlaybackAudio ? (
+        {showPlaybackUnlock ? (
           <div className="border-t border-white/10 px-3.5 py-2">
             <button
               type="button"
               className="w-full rounded-lg bg-amber-600/90 px-2 py-2 text-xs font-medium text-white hover:bg-amber-500"
               onClick={() => void voice.resumePlayback()}
             >
-              Enable audio playback
+              Enable audio
             </button>
           </div>
         ) : null}

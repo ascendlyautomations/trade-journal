@@ -16,88 +16,108 @@ final class SettingsNotificationsViewModel {
     private let session: any SessionProviding
     private let navigationCoordinator: NavigationCoordinator
     private let pushNotifications: PushNotificationCenter?
-
-    private(set) var phase: Phase = .idle
-    private(set) var preferences: NotificationPreferences?
-    private(set) var saveError: String?
-    /// iOS system permission — never confuse with in-app preference toggles.
-    private(set) var systemAuthorization: SystemNotificationAuthorizationStatus = .notDetermined
-    private var hasLoaded = false
-    private var inflightKeys: Set<NotificationPreferenceKey> = []
+    private let preferencesStore: NotificationPreferencesSessionStore
 
     init(
         repository: any NotificationPreferencesRepository,
         session: any SessionProviding,
         navigationCoordinator: NavigationCoordinator,
-        pushNotifications: PushNotificationCenter? = nil
+        pushNotifications: PushNotificationCenter? = nil,
+        preferencesStore: NotificationPreferencesSessionStore? = nil
     ) {
         self.repository = repository
         self.session = session
         self.navigationCoordinator = navigationCoordinator
         self.pushNotifications = pushNotifications
+        self.preferencesStore = preferencesStore ?? NotificationPreferencesSessionStore.shared
     }
 
+    var phase: Phase {
+        preferencesStore.phase
+    }
+
+    var preferences: NotificationPreferences? {
+        preferencesStore.preferences
+    }
+
+    var saveError: String? {
+        preferencesStore.saveError
+    }
+
+    /// iOS system permission — never confuse with in-app preference toggles.
+    private(set) var systemAuthorization: SystemNotificationAuthorizationStatus = .notDetermined
+    private(set) var hasResolvedSystemAuthorization = false
+
+    /// Mirrors device-local reminder prefs — drives toggle UI (`@Observable` does not observe UserDefaults).
+    private(set) var dailyCheckInReminderOn = DailyCheckInReminderPreferences.isEnabled
+    private(set) var tradeImportReminderOn = TradeImportReminderPreferences.isEnabled
+
     var masterEnabled: Bool {
-        preferences?.values[.notificationsEnabled] ?? true
+        preferencesStore.masterEnabled
     }
 
     var systemPushStatusLabel: String {
         systemAuthorization.settingsLabel
     }
 
+    /// True once `UNUserNotificationCenter` status is known — avoids grayed-out ON toggles before refresh.
     var showsOpenSystemSettings: Bool {
-        !systemAuthorization.isEnabled
+        hasResolvedSystemAuthorization && systemAuthorization == .denied
     }
 
-    var dailyCheckInReminderEnabled: Bool {
-        DailyCheckInReminderPreferences.isEnabled
+    var showsRequestSystemNotificationAuthorization: Bool {
+        hasResolvedSystemAuthorization && systemAuthorization == .notDetermined
     }
 
     func setDailyCheckInReminderEnabled(_ enabled: Bool) {
-        guard DailyCheckInReminderPreferences.isEnabled != enabled else { return }
-        DailyCheckInReminderPreferences.isEnabled = enabled
-        ExperienceHaptics.play(.selection)
-        Task { await DailyCheckInReminderCoordinator.shared.sync() }
-    }
-
-    var tradeImportReminderEnabled: Bool {
-        TradeImportReminderPreferences.isEnabled
+        if applyLocalReminderToggleImmediatelyIfPossible(
+            enabled: enabled,
+            persist: { DailyCheckInReminderPreferences.isEnabled = $0 },
+            assign: { dailyCheckInReminderOn = $0 },
+            current: { dailyCheckInReminderOn },
+            sync: { await DailyCheckInReminderCoordinator.shared.sync() }
+        ) {
+            return
+        }
+        Task {
+            await applyLocalReminderToggle(
+                enabled: enabled,
+                persist: { DailyCheckInReminderPreferences.isEnabled = $0 },
+                assign: { dailyCheckInReminderOn = $0 },
+                current: { dailyCheckInReminderOn },
+                sync: { await DailyCheckInReminderCoordinator.shared.sync() }
+            )
+        }
     }
 
     func setTradeImportReminderEnabled(_ enabled: Bool) {
-        guard TradeImportReminderPreferences.isEnabled != enabled else { return }
-        TradeImportReminderPreferences.isEnabled = enabled
-        ExperienceHaptics.play(.selection)
-        Task { await TradeImportReminderCoordinator.shared.sync() }
+        if applyLocalReminderToggleImmediatelyIfPossible(
+            enabled: enabled,
+            persist: { TradeImportReminderPreferences.isEnabled = $0 },
+            assign: { tradeImportReminderOn = $0 },
+            current: { tradeImportReminderOn },
+            sync: { await TradeImportReminderCoordinator.shared.sync() }
+        ) {
+            return
+        }
+        Task {
+            await applyLocalReminderToggle(
+                enabled: enabled,
+                persist: { TradeImportReminderPreferences.isEnabled = $0 },
+                assign: { tradeImportReminderOn = $0 },
+                current: { tradeImportReminderOn },
+                sync: { await TradeImportReminderCoordinator.shared.sync() }
+            )
+        }
     }
 
     func loadIfNeeded() {
-        guard !hasLoaded else { return }
-        hasLoaded = true
-        Task { await refresh() }
+        preferencesStore.loadIfNeeded(repository: repository, session: session)
     }
 
     func refresh() async {
-        if preferences == nil {
-            phase = .loading
-        }
-        systemAuthorization = await SystemNotificationAuthorization.currentStatus()
-        TradeImportReminderPreferences.applyDefaultIfNeeded(authorizationGranted: systemAuthorization.isEnabled)
-        do {
-            guard let userID = await session.currentUserID else {
-                phase = .failed("Sign in to continue.")
-                return
-            }
-            preferences = try await repository.preferences(for: ProfileID(userID.rawValue))
-            phase = .loaded
-            saveError = nil
-        } catch {
-            if preferences == nil {
-                phase = .failed(UserFacingError.message(for: error))
-            } else {
-                saveError = UserFacingError.message(for: error)
-            }
-        }
+        await refreshSystemAuthorization()
+        await preferencesStore.refresh(repository: repository, session: session, force: true)
     }
 
     func openSystemSettings() {
@@ -110,45 +130,105 @@ final class SettingsNotificationsViewModel {
     }
 
     func refreshSystemAuthorization() async {
+        await refreshSystemAuthorizationStatusOnly()
+        reloadLocalReminderToggleStateFromPersistence()
+        TradeImportReminderPreferences.applyDefaultIfNeeded(
+            authorizationGranted: systemAuthorization.isEnabled
+        )
+        reloadLocalReminderToggleStateFromPersistence()
+        await syncLocalReminderCoordinatorsIfAuthorized()
+    }
+
+    func requestSystemNotificationAuthorization() async {
+        _ = await SystemNotificationAuthorization.requestAuthorization()
+        await refreshSystemAuthorizationStatusOnly()
+        TradeImportReminderPreferences.applyDefaultIfNeeded(
+            authorizationGranted: systemAuthorization.isEnabled
+        )
+        reloadLocalReminderToggleStateFromPersistence()
+        await syncLocalReminderCoordinatorsIfAuthorized()
+    }
+
+    var isLocalReminderToggleInteractive: Bool {
+        hasResolvedSystemAuthorization && systemAuthorization != .denied
+    }
+
+    private func refreshSystemAuthorizationStatusOnly() async {
         systemAuthorization = await SystemNotificationAuthorization.currentStatus()
+        hasResolvedSystemAuthorization = true
         await pushNotifications?.refreshAuthorizationStatus()
+    }
+
+    private func reloadLocalReminderToggleStateFromPersistence() {
+        dailyCheckInReminderOn = DailyCheckInReminderPreferences.isEnabled
+        tradeImportReminderOn = TradeImportReminderPreferences.isEnabled
+    }
+
+    private func syncLocalReminderCoordinatorsIfAuthorized() async {
+        guard systemAuthorization.isEnabled else { return }
         await DailyCheckInReminderCoordinator.shared.sync()
-        TradeImportReminderPreferences.applyDefaultIfNeeded(authorizationGranted: systemAuthorization.isEnabled)
         await TradeImportReminderCoordinator.shared.sync()
     }
 
-    func binding(for key: NotificationPreferenceKey) -> Bool {
-        preferences?.values[key] ?? true
+    @discardableResult
+    private func applyLocalReminderToggleImmediatelyIfPossible(
+        enabled: Bool,
+        persist: (Bool) -> Void,
+        assign: (Bool) -> Void,
+        current: () -> Bool,
+        sync: @escaping () async -> Void
+    ) -> Bool {
+        guard hasResolvedSystemAuthorization else { return false }
+        guard systemAuthorization != .denied else { return false }
+        if enabled, !systemAuthorization.isEnabled { return false }
+        guard current() != enabled else { return true }
+        assign(enabled)
+        persist(enabled)
+        ExperienceHaptics.play(.selection)
+        Task { await sync() }
+        return true
     }
 
-    func set(_ key: NotificationPreferenceKey, enabled: Bool) {
-        guard var current = preferences else { return }
-        guard current.values[key] != enabled else { return }
-        let previous = current
-        current.set(key, enabled: enabled)
-        preferences = current
-        ExperienceHaptics.play(.selection)
-        if AppLaunchController.shared.isDemoExperienceActive {
+    private func applyLocalReminderToggle(
+        enabled: Bool,
+        persist: (Bool) -> Void,
+        assign: (Bool) -> Void,
+        current: () -> Bool,
+        sync: @escaping () async -> Void
+    ) async {
+        if !hasResolvedSystemAuthorization {
+            await refreshSystemAuthorizationStatusOnly()
+        }
+
+        if systemAuthorization == .denied {
             return
         }
 
-        guard !inflightKeys.contains(key) else { return }
-        inflightKeys.insert(key)
-        Task {
-            defer { inflightKeys.remove(key) }
-            do {
-                guard let userID = await session.currentUserID else { return }
-                preferences = try await repository.update(
-                    [key: enabled],
-                    for: ProfileID(userID.rawValue)
-                )
-                saveError = nil
-                ExperienceHaptics.play(.success)
-            } catch {
-                preferences = previous
-                saveError = "Couldn't save. Changes were reverted."
-                ExperienceHaptics.play(.error)
+        if enabled, !systemAuthorization.isEnabled {
+            if systemAuthorization == .notDetermined {
+                await requestSystemNotificationAuthorization()
             }
+            guard systemAuthorization.isEnabled else { return }
         }
+
+        guard current() != enabled else { return }
+
+        assign(enabled)
+        persist(enabled)
+        ExperienceHaptics.play(.selection)
+        await sync()
+    }
+
+    func binding(for key: NotificationPreferenceKey) -> Bool {
+        preferencesStore.binding(for: key)
+    }
+
+    func set(_ key: NotificationPreferenceKey, enabled: Bool) {
+        preferencesStore.set(
+            key,
+            enabled: enabled,
+            repository: repository,
+            session: session
+        )
     }
 }

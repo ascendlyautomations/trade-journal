@@ -134,6 +134,7 @@ struct CreateRoomView: View {
                 }
             }
             .experienceTradeTraxsFormStyle(pageBackground: false)
+            .listSectionSpacing(CreateRoomFormLayout.sectionSpacing)
             .disabled(viewModel.isSubmitting)
             .scrollDismissesKeyboard(.interactively)
         }
@@ -155,7 +156,7 @@ struct CreateRoomView: View {
             .accessibilityIdentifier("createRoom.description")
 
             if let preview = viewModel.imagePreview {
-                HStack(spacing: ExperienceSpacing.sm) {
+                HStack(spacing: ExperienceSpacing.xs) {
                     Image(uiImage: preview)
                         .resizable()
                         .scaledToFill()
@@ -174,8 +175,6 @@ struct CreateRoomView: View {
             .accessibilityIdentifier("createRoom.imagePicker")
         } header: {
             Text("Basic Info")
-        } footer: {
-            Text("Room name is required.")
         }
     }
 
@@ -219,48 +218,28 @@ struct CreateRoomView: View {
             .accessibilityIdentifier("createRoom.tags")
         } header: {
             Text("Discovery")
-        } footer: {
-            Text("Tags help traders find your room in Explore. Choose up to \(TradeRoomConfigurationValidation.maxDiscoveryTags).")
         }
     }
 
     private var accessSection: some View {
         Section {
-            Picker("Room Visibility", selection: Binding(
-                get: { viewModel.configuration.visibility },
-                set: { viewModel.setVisibility($0) }
-            )) {
-                ForEach([TradeRoomVisibility.public, .private], id: \.self) { visibility in
-                    Text(visibility.displayName).tag(visibility)
-                }
-            }
-            .accessibilityIdentifier("createRoom.visibility")
-
-            if viewModel.showsJoinPolicy {
-                Picker("Join Policy", selection: $viewModel.configuration.joinPolicy) {
-                    ForEach([TradeRoomJoinPolicy.open, .approval], id: \.self) { policy in
-                        Text(policy.displayName).tag(policy)
-                    }
-                }
-                .accessibilityIdentifier("createRoom.joinPolicy")
-            }
+            TradeRoomAccessModeSection(
+                accessMode: $viewModel.configuration.accessMode,
+                preservesLegacyPrivate: false,
+                accessibilityRootID: "createRoom"
+            )
 
             Toggle("Show on my profile", isOn: $viewModel.configuration.showsOnProfile)
                 .accessibilityIdentifier("createRoom.showOnProfile")
         } header: {
             Text("Access")
-        } footer: {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(viewModel.configuration.visibility.summary)
-                Text("Profile visibility is separate — hiding from your profile does not make the room private.")
-            }
         }
     }
 
     private var subRoomsSection: some View {
         Section {
             ForEach($viewModel.configuration.channels) { $channel in
-                HStack(spacing: ExperienceSpacing.sm) {
+                HStack(spacing: ExperienceSpacing.xs) {
                     Image(systemName: "line.3.horizontal")
                         .foregroundStyle(colors.tertiaryText)
                     TextField("Sub-room name", text: $channel.name)
@@ -304,7 +283,7 @@ struct CreateRoomView: View {
         } header: {
             Text("Sub-Rooms")
         } footer: {
-            Text("Each sub-room has its own post permissions. Room-wide trade and media sharing use defaults until you edit the room later.")
+            Text("Choose who can post in each sub-room.")
         }
     }
 
@@ -319,7 +298,7 @@ struct CreateRoomView: View {
                                 EdgeInsets(
                                     top: CreateRoomChannelPermissionsLayout.rowTopInset,
                                     leading: ExperienceSpacing.md,
-                                    bottom: ExperienceSpacing.sm,
+                                    bottom: ExperienceSpacing.xxs,
                                     trailing: ExperienceSpacing.md
                                 )
                             )
@@ -343,7 +322,7 @@ struct CreateRoomView: View {
                     }
                 }
             }
-            .presentationDetents([.medium])
+            .experienceSheetChrome(detents: [.medium])
         }
     }
 
@@ -391,8 +370,9 @@ struct CreateRoomView: View {
                     Button("Done") { showsCategoryPicker = false }
                 }
             }
+            .experiencePlainListStyle()
         }
-        .presentationDetents([.medium, .large])
+        .experienceSheetChrome()
     }
 
     private var tagsPickerSheet: some View {
@@ -425,8 +405,9 @@ struct CreateRoomView: View {
                     Button("Done") { showsTagsPicker = false }
                 }
             }
+            .experiencePlainListStyle()
         }
-        .presentationDetents([.medium, .large])
+        .experienceSheetChrome()
     }
 
     private var tagsSummary: String {
@@ -441,12 +422,6 @@ struct CreateRoomView: View {
             Button("Cancel") { requestDismiss() }
                 .font(.body.weight(.regular))
                 .disabled(viewModel.isSubmitting)
-        }
-        if viewModel.existingOwnedRoom == nil {
-            ToolbarItem(placement: .topBarTrailing) {
-                EditButton()
-                    .disabled(viewModel.isSubmitting)
-            }
         }
     }
 
@@ -475,6 +450,10 @@ struct CreateRoomView: View {
         guard let image = await ImageCropSelectionSupport.loadUIImage(from: item) else { return }
         cropSourceImage = image
     }
+}
+
+private enum CreateRoomFormLayout {
+    static let sectionSpacing = ExperienceSpacing.xxs
 }
 
 /// Tighter sheet chrome — less space between the nav header and “WHO CAN POST”.

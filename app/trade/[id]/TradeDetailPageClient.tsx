@@ -17,9 +17,11 @@ import {
 import { supabase } from "../../../lib/supabaseClient"
 import { asJsonObject } from "@/lib/supabaseProjectedQuery"
 import {
+  formatMoneyUnknown,
   formatRR,
   formatSignedPnlDisplay,
 } from "@/lib/formatDisplay"
+import { storedPlannedDollarRisk } from "@/lib/plannedTradeRisk"
 import { hasStoredRr } from "@/lib/tradeRr"
 import {
   sanitizeTradeForViewer,
@@ -291,6 +293,7 @@ export default function TradeDetailPageClient({
     trade && hasStoredTradePoints(trade.points) ? Number(trade.points) : null
   const actualPoints = trade ? computeActualPoints(trade) : null
   const realizedRr = trade ? resolveRealizedRr(trade) : null
+  const plannedRisk = trade ? storedPlannedDollarRisk(trade.dollar_risk) : null
 
   const tradeCompactMeta = trade ? (
     <>
@@ -363,6 +366,14 @@ export default function TradeDetailPageClient({
           Max R:R Reached:{" "}
           <span className="tabular-nums text-gray-200">
             {formatRR((trade as { max_rr_reached?: unknown }).max_rr_reached)}
+          </span>
+        </p>
+      ) : null}
+      {plannedRisk != null ? (
+        <p className="text-sm text-gray-400">
+          Planned Risk ($):{" "}
+          <span className="tabular-nums text-gray-200">
+            {formatMoneyUnknown(plannedRisk, { empty: "—" })}
           </span>
         </p>
       ) : null}

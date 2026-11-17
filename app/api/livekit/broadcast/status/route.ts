@@ -76,6 +76,7 @@ export async function GET(req: Request) {
       broadcastSource: active.broadcastSource,
       primaryMediaPublisherIdentity: active.primaryMediaPublisherIdentity,
       isBroadcaster,
+      streamTitle: active.streamTitle,
     })
   }
 
@@ -118,5 +119,6 @@ export async function GET(req: Request) {
     primaryMediaPublisherConnected,
     alreadyLiveElsewhere:
       isBroadcaster && broadcasterConnected === true ? true : undefined,
+    streamTitle: active.streamTitle,
   })
 }

@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /// Compact discoverable Trade Room row — tap body to preview, Join/Request on the right.
 struct TradeRoomDiscoveryRow: View {
@@ -18,12 +17,10 @@ struct TradeRoomDiscoveryRow: View {
     let imagePipeline: any ImagePipeline
     let onOpen: () -> Void
     let onJoin: () -> Void
-    var isMuted: Bool = false
-    var onToggleMute: (() -> Void)? = nil
-    var onLeave: (() -> Void)? = nil
+    var isFavorited: Bool = false
+    var onToggleFavorite: (() -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
-    @State private var logoImage: Image?
 
     private var avatarSize: CGFloat {
         presentation == .plainList ? 40 : 52
@@ -39,65 +36,12 @@ struct TradeRoomDiscoveryRow: View {
                 HStack(alignment: presentation == .plainList ? .center : .top, spacing: rowSpacing) {
                     avatar
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 4) {
-                            Group {
-                                if presentation == .plainList {
-                                    Text(room.name)
-                                        .experienceStyle(.subheadline, color: colors.primaryText)
-                                        .fontWeight(.semibold)
-                                } else {
-                                    Text(room.name)
-                                        .experienceStyle(.headline, color: colors.primaryText)
-                                }
-                            }
-                            .lineLimit(1)
-
-                            if room.isOfficial {
-                                TradeRoomOfficialBadge(style: .label)
-                            }
-                        }
-
-                        if let description = room.description?
-                            .trimmingCharacters(in: .whitespacesAndNewlines),
-                           !description.isEmpty
-                        {
-                            Text(description)
-                                .experienceStyle(.footnote, color: colors.secondaryText)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-                        } else if let tagsLine = room.tagsLine {
-                            Text(tagsLine)
-                                .experienceStyle(.footnote, color: colors.secondaryText)
-                                .lineLimit(1)
-                        }
-
-                        HStack(spacing: ExperienceSpacing.xxs) {
-                            if let memberCount = room.memberCount {
-                                Text("\(ProfileDisplay.compactCount(memberCount)) members")
-                                    .experienceStyle(.caption, color: colors.secondaryText)
-                            }
-                            if let owner = room.ownerDisplayLabel, !room.isOfficial {
-                                if room.memberCount != nil {
-                                    Text("·")
-                                        .experienceStyle(.caption2, color: colors.tertiaryText)
-                                }
-                                Text(owner)
-                                    .experienceStyle(.caption, color: colors.tertiaryText)
-                                    .lineLimit(1)
-                            }
-                        }
-
-                        if let followed = room.followedMemberCount, followed > 0 {
-                            Text(followed == 1 ? "1 trader you follow" : "\(followed) traders you follow")
-                                .experienceStyle(
-                                    .caption2,
-                                    color: presentation == .plainList ? colors.tertiaryText : colors.accent
-                                )
-                                .lineLimit(1)
-                        }
+                    if presentation == .plainList {
+                        plainListDetails
+                        Spacer(minLength: ExperienceSpacing.sm)
+                    } else {
+                        elevatedListDetails
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .contentShape(Rectangle())
             }
@@ -107,34 +51,133 @@ struct TradeRoomDiscoveryRow: View {
         }
         .modifier(ElevatedCardChrome(presentation: presentation, colors: colors))
         .contextMenu {
-            membershipContextMenu
-        }
-        .task(id: room.imageReference?.id) {
-            await loadLogo()
+            favoriteContextMenu
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("tradeRooms.discovery.row.\(room.id.rawValue)")
     }
 
+    private var plainListDetails: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Text(room.name)
+                    .experienceStyle(.subheadline, color: colors.primaryText)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                if room.isOfficial {
+                    TradeRoomOfficialBadge(style: .label)
+                }
+            }
+
+            if let secondary = plainListSecondaryLine {
+                Text(secondary)
+                    .experienceStyle(.caption, color: colors.secondaryText)
+                    .lineLimit(1)
+            }
+
+            if let tertiary = plainListTertiaryLine {
+                Text(tertiary)
+                    .experienceStyle(.caption2, color: colors.tertiaryText)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var elevatedListDetails: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Text(room.name)
+                    .experienceStyle(.headline, color: colors.primaryText)
+                    .lineLimit(1)
+
+                if room.isOfficial {
+                    TradeRoomOfficialBadge(style: .label)
+                }
+                if isFavorited {
+                    Image(systemName: "star.fill")
+                        .font(.caption)
+                        .foregroundStyle(colors.accent)
+                        .accessibilityLabel("Favorited")
+                }
+            }
+
+            if let description = room.description?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !description.isEmpty
+            {
+                Text(description)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            } else if let tagsLine = room.tagsLine {
+                Text(tagsLine)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .lineLimit(1)
+            }
+
+            HStack(spacing: ExperienceSpacing.xxs) {
+                if let memberCount = room.memberCount {
+                    Text("\(ProfileDisplay.compactCount(memberCount)) members")
+                        .experienceStyle(.caption, color: colors.secondaryText)
+                }
+                if let owner = room.ownerDisplayLabel, !room.isOfficial {
+                    if room.memberCount != nil {
+                        Text("·")
+                            .experienceStyle(.caption2, color: colors.tertiaryText)
+                    }
+                    Text(owner)
+                        .experienceStyle(.caption, color: colors.tertiaryText)
+                        .lineLimit(1)
+                }
+            }
+
+            if let followed = room.followedMemberCount, followed > 0 {
+                Text(followed == 1 ? "1 trader you follow" : "\(followed) traders you follow")
+                    .experienceStyle(.caption2, color: colors.accent)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var plainListSecondaryLine: String? {
+        if let description = room.description?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !description.isEmpty
+        {
+            return description
+        }
+        if let tagsLine = room.tagsLine {
+            return tagsLine
+        }
+        if let memberCount = room.memberCount {
+            return "\(ProfileDisplay.compactCount(memberCount)) members"
+        }
+        return nil
+    }
+
+    private var plainListTertiaryLine: String? {
+        let hasDescription = room.description?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty == false
+        if hasDescription, let memberCount = room.memberCount {
+            return "\(ProfileDisplay.compactCount(memberCount)) members"
+        }
+        if let owner = room.ownerDisplayLabel, !room.isOfficial {
+            return owner
+        }
+        return nil
+    }
+
     @ViewBuilder
-    private var membershipContextMenu: some View {
-        if onLeave != nil || onToggleMute != nil {
-            Button(action: onOpen) {
-                Label("Open", systemImage: "person.3")
-            }
-            if let onToggleMute {
-                Button(action: onToggleMute) {
-                    Label(
-                        isMuted ? "Unmute" : "Mute",
-                        systemImage: isMuted ? "bell.fill" : "bell.slash"
-                    )
-                }
-            }
-            if let onLeave {
-                Divider()
-                Button(role: .destructive, action: onLeave) {
-                    Label("Leave Room", systemImage: "rectangle.portrait.and.arrow.right")
-                }
+    private var favoriteContextMenu: some View {
+        if let onToggleFavorite {
+            Button(action: onToggleFavorite) {
+                Label(
+                    isFavorited ? "Unfavorite Room" : "Favorite Room",
+                    systemImage: isFavorited ? "star.fill" : "star"
+                )
             }
         }
     }
@@ -155,10 +198,19 @@ struct TradeRoomDiscoveryRow: View {
                 .controlSize(.small)
                 .frame(width: 72)
         case .joined, .requested:
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(colors.secondaryText)
-                .frame(minWidth: 72)
+            if presentation == .plainList {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(colors.primaryText)
+                    .padding(.horizontal, 12)
+                    .frame(height: 30)
+                    .background(Capsule().fill(colors.fillSecondary))
+            } else {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(colors.secondaryText)
+                    .frame(minWidth: 72)
+            }
         case .idle:
             Button(action: onJoin) {
                 Text(title)
@@ -176,45 +228,12 @@ struct TradeRoomDiscoveryRow: View {
     }
 
     private var avatar: some View {
-        Group {
-            if let logoImage {
-                logoImage
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                ZStack {
-                    colors.fillSecondary
-                    ExperienceIcon(
-                        icon: .rooms,
-                        size: presentation == .plainList ? .sm : .md,
-                        color: presentation == .plainList ? colors.secondaryText : colors.accent
-                    )
-                }
-            }
-        }
-        .frame(width: avatarSize, height: avatarSize)
-        .clipShape(Circle())
-    }
-
-    private func loadLogo() async {
-        guard let reference = room.imageReference else {
-            logoImage = nil
-            return
-        }
-        do {
-            let data = try await imagePipeline.data(
-                for: ImageRequest(
-                    reference: reference,
-                    purpose: .profileAvatar,
-                    maxPixelSize: 160
-                )
-            )
-            if let ui = UIImage(data: data) {
-                logoImage = Image(uiImage: ui)
-            }
-        } catch {
-            logoImage = nil
-        }
+        TradeRoomCircularAvatar(
+            imageReference: room.imageReference,
+            imagePipeline: imagePipeline,
+            diameter: avatarSize,
+            placeholderIconColor: presentation == .plainList ? colors.secondaryText : colors.accent
+        )
     }
 }
 

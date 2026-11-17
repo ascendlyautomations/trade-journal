@@ -108,6 +108,7 @@ export const TRADES_APP_SELECT = [
   "broker_enrichment_status",
   "broker_lifecycle_id",
   "last_broker_sync_at",
+  "dollar_risk",
 ].join(", ")
 
 /**
@@ -142,6 +143,7 @@ export const TRADES_ANALYTICS_FIELDS = [
   "duration_seconds",
   "points",
   "contracts",
+  "dollar_risk",
   "entry_price",
   "exit_price",
 ] as const

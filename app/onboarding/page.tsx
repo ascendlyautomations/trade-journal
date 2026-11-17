@@ -47,7 +47,7 @@ export default function OnboardingPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-4 text-sm text-gray-400">
+      <div className="flex min-h-dvh items-center justify-center px-4 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-[max(1rem,env(safe-area-inset-bottom,0px))] text-sm text-gray-400">
         Loading…
       </div>
     )
@@ -55,7 +55,7 @@ export default function OnboardingPage() {
 
   if (!user) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-sm text-gray-400">
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-4 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-[max(1rem,env(safe-area-inset-bottom,0px))] text-sm text-gray-400">
         {oauthCallbackError ? (
           <p className="max-w-md text-center text-sm text-red-300" role="alert">
             {oauthCallbackError}

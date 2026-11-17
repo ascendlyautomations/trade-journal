@@ -27,12 +27,16 @@ struct RoomConversationView: View {
     @Bindable private var liveVoiceCoordinator = RoomLiveVoiceCoordinator.shared
     @Bindable private var broadcastCoordinator = RoomBroadcastCoordinator.shared
     @Bindable private var roomMemberTagStore = SessionRoomMemberTagsStore.shared
+    @Bindable private var favoritesStore = TradeRoomFavoritesStore.shared
+    @Bindable private var membershipStore = TradeRoomMembershipStore.shared
     @State private var broadcastChatUserId: String?
     @State private var broadcastChatDisplayName = "You"
     @State private var liveDeepLinkEndedNotice: String?
     @State private var handledLiveDeepLink = false
     @State private var navigationIntentEpoch: UInt64 = 0
     @State private var showsInviteShareSheet = false
+    @State private var showsRoomSwitcher = false
+    @State private var isRoomHeaderExpanded = true
     @State private var obsOwnerSheetStep: ObsOwnerSheetStep?
     @Bindable private var obsBroadcastController = TradeRoomObsBroadcastController.shared
 
@@ -80,58 +84,69 @@ struct RoomConversationView: View {
     }
 
     var body: some View {
+        let _ = membershipStore.revision
         VStack(spacing: 0) {
             if let room = viewModel.room, viewModel.showsRoomChrome {
-                header(for: room)
-                if viewModel.showsActivePresence {
-                    RoomActivePresenceBar(
-                        members: viewModel.activePresenceMembers,
-                        imagePipeline: imagePipeline,
-                        onTap: { viewModel.openActivePresence() }
-                    )
-                }
-                RoomTradeRoomLiveControls(
-                    roomID: room.id,
-                    roomTitle: room.name,
-                    isStreamLive: broadcastCoordinator.isStreamLive(for: room.id),
-                    isRoomOwner: viewModel.isOwner,
-                    currentUserId: obsBroadcastController.viewerUserId,
-                    onJoinStream: {
-                        Task {
-                            await broadcastCoordinator.watch(roomID: room.id, roomTitle: room.name)
-                            broadcastCoordinator.presentViewer()
+                Group {
+                    if isRoomHeaderExpanded {
+                        header(for: room)
+                        if viewModel.showsActivePresence {
+                            RoomActivePresenceBar(
+                                members: viewModel.activePresenceMembers,
+                                imagePipeline: imagePipeline,
+                                onTap: { viewModel.openActivePresence() }
+                            )
                         }
-                    },
-                    onManageStream: {
-                        broadcastCoordinator.openObsManageStream(
+                        RoomTradeRoomLiveControls(
                             roomID: room.id,
-                            roomTitle: room.name
+                            roomTitle: room.name,
+                            isStreamLive: broadcastCoordinator.isStreamLive(for: room.id),
+                            isRoomOwner: viewModel.isOwner,
+                            currentUserId: obsBroadcastController.viewerUserId,
+                            onJoinStream: {
+                                Task {
+                                    await broadcastCoordinator.watch(roomID: room.id, roomTitle: room.name)
+                                    broadcastCoordinator.presentViewer()
+                                }
+                            },
+                            onManageStream: {
+                                broadcastCoordinator.openObsManageStream(
+                                    roomID: room.id,
+                                    roomTitle: room.name
+                                )
+                            },
+                            onOpenStream: {
+                                broadcastCoordinator.presentViewer()
+                            },
+                            onStartStream: {
+                                obsOwnerSheetStep = .methodSelection
+                            },
+                            liveVoiceCoordinator: liveVoiceCoordinator,
+                            broadcastCoordinator: broadcastCoordinator
                         )
-                    },
-                    onOpenStream: {
-                        broadcastCoordinator.presentViewer()
-                    },
-                    onStartStream: {
-                        obsOwnerSheetStep = .methodSelection
-                    },
-                    liveVoiceCoordinator: liveVoiceCoordinator,
-                    broadcastCoordinator: broadcastCoordinator
+                        if let liveDeepLinkEndedNotice {
+                            Text(liveDeepLinkEndedNotice)
+                                .font(.system(.caption, design: .rounded))
+                                .foregroundStyle(colors.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, ExperienceSpacing.md)
+                                .padding(.bottom, ExperienceSpacing.xxs)
+                        }
+                    }
+                    if !viewModel.channels.isEmpty {
+                        RoomChannelSwitcherView(
+                            channels: viewModel.channels,
+                            selectedChannelID: viewModel.selectedChannelID,
+                            onSelect: { viewModel.selectChannel($0) },
+                            showsExpandHeaderControl: !isRoomHeaderExpanded,
+                            onExpandHeader: { setRoomHeaderExpanded(true) }
+                        )
+                    }
+                }
+                .animation(
+                    ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
+                    value: isRoomHeaderExpanded
                 )
-                if let liveDeepLinkEndedNotice {
-                    Text(liveDeepLinkEndedNotice)
-                        .font(.system(.caption, design: .rounded))
-                        .foregroundStyle(colors.textSecondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, ExperienceSpacing.md)
-                        .padding(.bottom, ExperienceSpacing.xxs)
-                }
-                if !viewModel.channels.isEmpty {
-                    RoomChannelSwitcherView(
-                        channels: viewModel.channels,
-                        selectedChannelID: viewModel.selectedChannelID,
-                        onSelect: { viewModel.selectChannel($0) }
-                    )
-                }
             }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -187,17 +202,39 @@ struct RoomConversationView: View {
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                VStack(spacing: 0) {
-                    Text(viewModel.title)
-                        .experienceStyle(.headline, color: colors.primaryText)
-                        .lineLimit(1)
-                    if let channel = viewModel.selectedChannel {
-                        Text(channel.displayTitle)
-                            .experienceStyle(.caption2, color: colors.tertiaryText)
-                            .lineLimit(1)
+                Button {
+                    showsRoomSwitcher = true
+                } label: {
+                    HStack(spacing: 4) {
+                        VStack(spacing: 0) {
+                            Text(viewModel.title)
+                                .experienceStyle(.headline, color: colors.primaryText)
+                                .lineLimit(1)
+                            if let channel = viewModel.selectedChannel {
+                                Text(channel.displayTitle)
+                                    .experienceStyle(.caption2, color: colors.tertiaryText)
+                                    .lineLimit(1)
+                            }
+                        }
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(colors.tertiaryText)
                     }
                 }
+                .buttonStyle(.plain)
                 .accessibilityIdentifier("tradeRooms.conversation.title")
+                .accessibilityLabel("\(viewModel.title), switch trade room")
+                .popover(isPresented: $showsRoomSwitcher, arrowEdge: .top) {
+                    let _ = favoritesStore.revision
+                    TradeRoomMembershipPickerPopover(
+                        rooms: viewModel.yourRoomsForSwitcher,
+                        currentRoomID: viewModel.activeRoomID
+                    ) { roomID in
+                        showsRoomSwitcher = false
+                        viewModel.switchToRoom(roomID)
+                    }
+                    .presentationCompactAdaptation(.popover)
+                }
             }
             ToolbarItem(placement: .topBarTrailing) {
                 if viewModel.canManageRoom {
@@ -222,7 +259,7 @@ struct RoomConversationView: View {
                     }
                     .accessibilityLabel("Moderate members")
                     .accessibilityIdentifier("tradeRooms.conversation.moderate")
-                } else if viewModel.isMember {
+                } else if viewModel.isMember || viewModel.isOwner {
                     Menu {
                         if let room = viewModel.room,
                            RoomInfoViewModel.inviteURL(slug: room.slug, roomID: room.id) != nil {
@@ -238,19 +275,31 @@ struct RoomConversationView: View {
                                 createFeedPost(for: room)
                             }
                         }
-                        Divider()
-                        Button(
-                            "Leave Room",
-                            systemImage: "rectangle.portrait.and.arrow.right",
-                            role: .destructive
-                        ) {
-                            viewModel.requestLeaveRoom()
-                        }
-                        Button(
-                            viewModel.isMuted ? "Unmute notifications" : "Mute notifications",
-                            systemImage: viewModel.isMuted ? "bell.fill" : "bell.slash"
-                        ) {
-                            viewModel.toggleMute()
+                        if viewModel.isMember || viewModel.isOwner {
+                            Divider()
+                            Button {
+                                Task { await viewModel.toggleFavoriteRoom() }
+                            } label: {
+                                Label(
+                                    viewModel.isRoomFavorited ? "Unfavorite Room" : "Favorite Room",
+                                    systemImage: viewModel.isRoomFavorited ? "star.fill" : "star"
+                                )
+                            }
+                            Button {
+                                viewModel.toggleMute()
+                            } label: {
+                                Label(
+                                    viewModel.isMuted ? "Unmute Notifications" : "Mute Notifications",
+                                    systemImage: viewModel.isMuted ? "bell.fill" : "bell.slash"
+                                )
+                            }
+                            if !viewModel.isOwner {
+                                Button(role: .destructive) {
+                                    viewModel.requestLeaveRoom()
+                                } label: {
+                                    Label("Leave Room", systemImage: "rectangle.portrait.and.arrow.right")
+                                }
+                            }
                         }
                     } label: {
                         ExperienceIcon(icon: .more, size: .md, color: colors.primaryText)
@@ -390,6 +439,9 @@ struct RoomConversationView: View {
                 contentRevealed = true
             }
         }
+        .onChange(of: viewModel.activeRoomID) { _, _ in
+            isRoomHeaderExpanded = true
+        }
         .task(id: navigationPipelineID) {
             RoomNotificationNavigationTrace.event(
                 .init(
@@ -405,6 +457,9 @@ struct RoomConversationView: View {
             viewModel.loadIfNeeded()
             viewModel.resumeRealtimeIfNeeded()
             viewModel.applyNavigationIntentIfNeeded()
+            if let explore = data?.explore {
+                await viewModel.prefetchYourRoomsForSwitcher(explore: explore)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .roomNavigationFocusDidSeed)) { note in
             guard let seededRoom = note.object as? RoomID else { return }
@@ -413,6 +468,10 @@ struct RoomConversationView: View {
                 for: viewModel.roomID,
                 resolvedRoomID: viewModel.room?.id
             )
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .tradeRoomMembershipDidChange)) { note in
+            let changed = note.object as? RoomID
+            viewModel.noteMembershipStoreDidChange(for: changed)
         }
         .onDisappear {
             viewModel.stopRealtime()
@@ -457,7 +516,7 @@ struct RoomConversationView: View {
 
     private var composerPlaceholder: String {
         if !viewModel.canPostInSelectedChannel {
-            return "Owner announcements only"
+            return "Moderators only"
         }
         if let channel = viewModel.selectedChannel {
             return "Message \(channel.displayTitle)"
@@ -540,8 +599,20 @@ struct RoomConversationView: View {
             },
             onMembersTap: { viewModel.openMembers() },
             onInfoTap: { viewModel.openRoomInfo() },
+            onCollapseTap: { setRoomHeaderExpanded(false) },
             imagePipeline: imagePipeline
         )
+    }
+
+    private func setRoomHeaderExpanded(_ expanded: Bool) {
+        guard isRoomHeaderExpanded != expanded else { return }
+        ExperienceHaptics.play(.selection)
+        ExperienceMotion.withAnimation(
+            ExperienceMotion.selection,
+            reduceMotion: reduceMotion
+        ) {
+            isRoomHeaderExpanded = expanded
+        }
     }
 
     private func copyInviteLink(for room: TradeRoom) {
@@ -711,6 +782,7 @@ struct RoomConversationView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, ExperienceSpacing.sm)
                 .conversationThreadBottomAlignedContent(viewportHeight: threadScrollViewportHeight)
+                .conversationThreadDisablesSystemScrollToTop()
             }
             .conversationThreadScrollViewportReader($threadScrollViewportHeight)
             .defaultScrollAnchor(.bottom)

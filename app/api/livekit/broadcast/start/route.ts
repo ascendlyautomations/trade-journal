@@ -52,6 +52,9 @@ export async function POST(req: Request) {
   if (!parsed) {
     return Response.json({ error: "roomId is required." }, { status: 400 })
   }
+  if ("error" in parsed) {
+    return Response.json({ error: parsed.error }, { status: 400 })
+  }
 
   const access = await resolveTradeRoomBroadcastControlAccess(supabaseServiceRole, {
     userId: user.id,
@@ -67,6 +70,7 @@ export async function POST(req: Request) {
     broadcasterUserId: user.id,
     voiceMode: parsed.voiceMode,
     videoSource: parsed.videoSource,
+    streamTitle: parsed.streamTitle,
   })
 
   if (!claim.ok) {
@@ -115,5 +119,6 @@ export async function POST(req: Request) {
     primaryMediaPublisherIdentity: claim.session.primaryMediaPublisherIdentity,
     visibility: claim.session.visibility,
     publicLive: claim.session.visibility === "public",
+    streamTitle: claim.session.streamTitle,
   })
 }

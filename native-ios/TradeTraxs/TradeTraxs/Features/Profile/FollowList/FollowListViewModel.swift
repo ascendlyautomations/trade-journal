@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftUI
 
 @Observable
 @MainActor
@@ -21,6 +22,7 @@ final class FollowListViewModel {
     var searchText = ""
     var pendingRemove: Profile?
     var pendingUnfollow: Profile?
+    var removeFollowerErrorMessage: String?
 
     private let profiles: any ProfileRepository
     private let session: any SessionProviding
@@ -35,6 +37,11 @@ final class FollowListViewModel {
     private(set) var isLoadingMore = false
     private var viewerID: ProfileID?
     private var inFlightFollow: Set<ProfileID> = []
+    private var inFlightRemove: Set<ProfileID> = []
+    /// Filters stale paginated rows until the server reflects the removal.
+    private var suppressedFollowerIDs: Set<ProfileID> = []
+    /// Set when the list loads and the authenticated viewer owns this followers list.
+    private var canRemoveIncomingFollowers = false
 
     init(
         kind: FollowListKind,
@@ -79,6 +86,9 @@ final class FollowListViewModel {
     /// Bumped by ``FollowMutationCoordinator`` — read from views so follow buttons stay in sync across screens.
     var followRevision: Int { FollowMutationCoordinator.shared.revision }
 
+    /// Authenticated viewer — used to label the viewer's own row in the list.
+    var authenticatedProfileID: ProfileID? { viewerID }
+
     func loadIfNeeded() {
         guard !hasLoaded, loadTask == nil else { return }
         loadTask = Task { await performLoad(forceNetwork: false) }
@@ -95,6 +105,7 @@ final class FollowListViewModel {
     }
 
     func loadMoreIfNeeded(currentProfileID: ProfileID) {
+        guard inFlightRemove.isEmpty else { return }
         guard hasMorePages, !isLoadingMore, loadMoreTask == nil else { return }
         guard let last = items.last?.id, last == currentProfileID else { return }
         loadMoreTask = Task { await performLoadMore() }
@@ -128,9 +139,7 @@ final class FollowListViewModel {
         Task { await follow(profile) }
     }
 
-    func confirmUnfollow() async {
-        guard let profile = pendingUnfollow else { return }
-        pendingUnfollow = nil
+    func confirmUnfollow(_ profile: Profile) async {
         await unfollow(profile)
     }
 
@@ -139,9 +148,7 @@ final class FollowListViewModel {
         pendingRemove = profile
     }
 
-    func confirmRemove() async {
-        guard let profile = pendingRemove else { return }
-        pendingRemove = nil
+    func confirmRemove(_ profile: Profile) async {
         await removeFollower(profile)
     }
 
@@ -152,7 +159,9 @@ final class FollowListViewModel {
         viewerID = userID.map { ProfileID($0.rawValue) }
 
         if !forceNetwork, let cached = cachedList(), !cached.isEmpty {
-            items = cached
+            items = filterSuppressedFollowers(cached)
+            FollowListRemoveDiagnostics.performLoadAppliedList(count: items.count, source: "cache")
+            canRemoveIncomingFollowers = kind == .followers && viewerID == listOwnerID
             hasLoaded = true
             phase = .loaded
             await loadViewerFollowing(forceNetwork: false)
@@ -194,7 +203,9 @@ final class FollowListViewModel {
                 )
             }
             guard !Task.isCancelled else { return }
-            items = page.items
+            items = filterSuppressedFollowers(page.items)
+            FollowListRemoveDiagnostics.performLoadAppliedList(count: items.count, source: "network")
+            canRemoveIncomingFollowers = kind == .followers && viewerID == listOwnerID
             nextCursor = page.nextCursor
             hasMorePages = page.nextCursor != nil
             seedListCache(page.items)
@@ -236,7 +247,7 @@ final class FollowListViewModel {
             }
             guard !Task.isCancelled else { return }
             var seen = Set(items.map(\.id))
-            for profile in page.items where !seen.contains(profile.id) {
+            for profile in filterSuppressedFollowers(page.items) where !seen.contains(profile.id) {
                 items.append(profile)
                 seen.insert(profile.id)
             }
@@ -346,8 +357,10 @@ final class FollowListViewModel {
 
         // Keep Following list in sync when unfollowing from that screen.
         if kind == .following, listOwnerID == viewerID {
-            items.removeAll { $0.id == profile.id }
-            seedListCache(items)
+            applyListItemsMutation {
+                items.removeAll { $0.id == profile.id }
+                seedListCache(items)
+            }
         }
         ExperienceHaptics.play(.selection)
 
@@ -366,40 +379,99 @@ final class FollowListViewModel {
                 isFollowing: true
             )
             if kind == .following, listOwnerID == viewerID, !items.contains(where: { $0.id == profile.id }) {
-                items.insert(profile, at: 0)
-                seedListCache(items)
+                applyListItemsMutation {
+                    items.insert(profile, at: 0)
+                    seedListCache(items)
+                }
             }
             syncViewerFollowingFromCache()
             ExperienceHaptics.play(.warning)
         }
     }
 
-    /// Remove follower = delete edge where they follow me (existing unfollow API inverted).
+    /// Owner removes an incoming follower (delete `followers` row follower→owner).
     private func removeFollower(_ profile: Profile) async {
-        guard let viewerID, kind == .followers, isOwnList else { return }
-
-        let previous = items
-        items.removeAll { $0.id == profile.id }
-        seedListCache(items)
-        FollowMutationCoordinator.shared.applyFollowerRemoved(owner: viewerID, follower: profile.id)
-        ExperienceHaptics.play(.warning)
-
-        if profile.id.rawValue.hasPrefix("dev.") {
+        guard kind == .followers else {
+            FollowListRemoveDiagnostics.guardFailed("kindNotFollowers")
+            return
+        }
+        guard canRemoveIncomingFollowers || isOwnList else {
+            FollowListRemoveDiagnostics.guardFailed("notOwnFollowersList")
+            removeFollowerErrorMessage = "You can only remove followers from your own list."
+            return
+        }
+        guard !inFlightRemove.contains(profile.id) else {
+            FollowListRemoveDiagnostics.guardFailed("removeAlreadyInFlight")
             return
         }
 
+        loadTask?.cancel()
+        loadMoreTask?.cancel()
+        inFlightRemove.insert(profile.id)
+        defer { inFlightRemove.remove(profile.id) }
+
+        removeFollowerErrorMessage = nil
+        let previous = items
+        let removedID = profile.id
+        let countBefore = items.count
+        suppressedFollowerIDs.insert(removedID)
+
+        applyListItemsMutation {
+            items.removeAll { $0.id == removedID }
+            seedListCache(items)
+        }
+        FollowListRemoveDiagnostics.optimistic(
+            beforeCount: countBefore,
+            afterCount: items.count,
+            followerID: removedID.rawValue
+        )
+        await deferListCollectionSnapshot()
+        FollowMutationCoordinator.shared.applyFollowerRemoved(owner: listOwnerID, follower: removedID)
+        ExperienceHaptics.play(.warning)
+
+        if removedID.rawValue.hasPrefix("dev.") {
+            FollowListRemoveDiagnostics.apiSucceeded(followerID: removedID.rawValue)
+            return
+        }
+
+        FollowListRemoveDiagnostics.apiStarted(followerID: removedID.rawValue, ownerID: listOwnerID.rawValue)
         do {
-            try await profiles.unfollow(from: profile.id, to: viewerID)
+            try await profiles.removeFollower(removedID, from: listOwnerID)
+            FollowListRemoveDiagnostics.apiSucceeded(followerID: removedID.rawValue)
         } catch {
-            items = previous
-            seedListCache(previous)
-            // Undo the optimistic follower-count decrement.
+            let message = ProfileSectionSupport.message(for: error)
+            FollowListRemoveDiagnostics.apiFailed(followerID: removedID.rawValue, message: message)
+            suppressedFollowerIDs.remove(removedID)
+            applyListItemsMutation {
+                items = previous
+                seedListCache(previous)
+            }
+            FollowListRemoveDiagnostics.rollback(followerID: removedID.rawValue, restoredCount: items.count)
+            await deferListCollectionSnapshot()
             FollowMutationCoordinator.shared.applyIncomingFollowAccepted(
-                owner: viewerID,
-                requester: profile.id
+                owner: listOwnerID,
+                requester: removedID
             )
+            removeFollowerErrorMessage = message
             ExperienceHaptics.play(.warning)
         }
+    }
+
+    /// Applies a single list snapshot — no implicit row animations that fight UITableView diffs.
+    private func applyListItemsMutation(_ mutation: () -> Void) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction, mutation)
+    }
+
+    /// Lets `UICollectionView` finish applying the prior item count before relationship revision bumps re-render rows.
+    private func deferListCollectionSnapshot() async {
+        await Task.yield()
+    }
+
+    private func filterSuppressedFollowers(_ profiles: [Profile]) -> [Profile] {
+        guard !suppressedFollowerIDs.isEmpty else { return profiles }
+        return profiles.filter { !suppressedFollowerIDs.contains($0.id) }
     }
 
     private func applyFixtures() {
@@ -408,6 +480,7 @@ final class FollowListViewModel {
         if viewerID == nil {
             viewerID = listOwnerID
         }
+        canRemoveIncomingFollowers = kind == .followers && viewerID == listOwnerID
         if listOwnerID == DemoExperienceSupport.profileID {
             switch kind {
             case .followers:

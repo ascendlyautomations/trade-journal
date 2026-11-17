@@ -9,6 +9,8 @@ export type TradingReportKind = "weekly" | "monthly"
 export type TradingReportMetrics = {
   netPnl: number
   winRate: number
+  /** Trades with a recorded P&L. Missing results are excluded from money and win rate. */
+  knownResultCount: number
   averageRr: number | null
   profitFactor: number | null
   tradesTaken: number

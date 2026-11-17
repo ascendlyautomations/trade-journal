@@ -5,6 +5,7 @@ import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
 import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
 import DashboardHeader from "../../components/dashboard/DashboardHeader"
 import GettingStartedChecklist from "../../components/dashboard/GettingStartedChecklist"
+import TradingPreferenceDiscovery from "../../components/analytics/TradingPreferenceDiscovery"
 import DashboardJournalEmptyState from "../../components/dashboard/DashboardJournalEmptyState"
 import TraxsProForLifeCard from "../../components/dashboard/TraxsProForLifeCard"
 import DashboardAnalytics from "../../components/dashboard/DashboardAnalytics"
@@ -76,6 +77,7 @@ import {
   shouldFetchCopyTradingGroupsForFilter,
   resolveCopyGroupAccountIdsForFilter,
 } from "@/lib/tradeAccountSelection"
+import { knownPnl } from "@/lib/analytics/knownPnl"
 import {
   getDashboardTradingDayKey,
 } from "@/lib/dashboardTradeDate"
@@ -858,6 +860,7 @@ export default function Dashboard() {
     customRangeEnd,
     accountById,
     copyGroupAccountIds,
+    userId: user?.id,
   })
 
   const psychologyScopeLabel = useMemo(
@@ -1109,13 +1112,15 @@ export default function Dashboard() {
 
   const bestWinStreak = streakData?.maxWinStreak ?? 0
 
-  const grossProfit = filteredTrades
-    .filter((t) => (Number(t.pnl) || 0) > 0)
-    .reduce((sum, t) => sum + (Number(t.pnl) || 0), 0)
+  const grossProfit = filteredTrades.reduce((sum, trade) => {
+    const pnl = knownPnl(trade.pnl)
+    return pnl != null && pnl > 0 ? sum + pnl : sum
+  }, 0)
 
-  const grossLoss = filteredTrades
-    .filter((t) => (Number(t.pnl) || 0) < 0)
-    .reduce((sum, t) => sum + Math.abs(Number(t.pnl) || 0), 0)
+  const grossLoss = filteredTrades.reduce((sum, trade) => {
+    const pnl = knownPnl(trade.pnl)
+    return pnl != null && pnl < 0 ? sum + Math.abs(pnl) : sum
+  }, 0)
 
   const profitFactor = grossLoss === 0 ? 0 : grossProfit / grossLoss
   const displayedProfitFactor = grossLoss === 0 ? null : profitFactor
@@ -1126,11 +1131,14 @@ export default function Dashboard() {
     const date = getDashboardTradingDayKey(t)
     if (!date) return
 
+    const pnl = knownPnl(t.pnl)
+    if (pnl == null) return
+
     if (!dailyMap[date]) {
       dailyMap[date] = 0
     }
 
-    dailyMap[date] += Number(t.pnl) || 0
+    dailyMap[date] += pnl
   })
 
   const dailyValues = Object.values(dailyMap)
@@ -1600,6 +1608,16 @@ export default function Dashboard() {
         onAwarded={refreshProfile}
       />
     </div>
+  ) : null}
+
+  {user?.id ? (
+    <TradingPreferenceDiscovery
+      userId={user.id}
+      hasTrade={tradesExcludingBacktest.length > 0}
+      tradesReady={!tradesLoading}
+      surface="dashboard"
+      blocked={showQuickTrade || editingTrade != null || showImportModal}
+    />
   ) : null}
 
   {gettingStartedSectionMobile}

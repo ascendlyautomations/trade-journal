@@ -169,7 +169,10 @@ export default function TradeRoomBroadcastGlobalChrome({
   }
 
   const miniPanelPosition = tradeRoomBroadcastMiniPanelPosition(voiceSessionActive)
-  const streamTitle = broadcast.roomTitle?.trim() || "Trade Room"
+  const streamTitle =
+    broadcast.status.streamTitle?.trim() ||
+    broadcast.roomTitle?.trim() ||
+    "Trade Room"
 
   const sessionId =
     broadcast.status.broadcastSessionId ??
@@ -290,6 +293,7 @@ export default function TradeRoomBroadcastGlobalChrome({
         <div className="relative aspect-video bg-black">
           <video
             ref={bindPreview}
+            data-tt-broadcast-media="true"
             className="h-full w-full object-contain"
             autoPlay
             muted
@@ -402,6 +406,7 @@ export default function TradeRoomBroadcastGlobalChrome({
       video={
         <video
           ref={bindPreview}
+          data-tt-broadcast-media="true"
           className="h-full w-full object-contain"
           autoPlay
           muted

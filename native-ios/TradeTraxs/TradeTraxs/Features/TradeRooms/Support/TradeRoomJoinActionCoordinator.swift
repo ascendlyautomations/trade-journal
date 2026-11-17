@@ -25,7 +25,8 @@ final class TradeRoomJoinActionCoordinator {
     }
 
     func isJoined(roomID: RoomID, inboxStore: MessagesInboxStore) -> Bool {
-        inboxStore.rooms.contains(where: { $0.id == roomID })
+        TradeRoomMembershipStore.shared.isJoined(roomID)
+            || inboxStore.rooms.contains(where: { $0.id == roomID })
     }
 
     @discardableResult
@@ -60,10 +61,14 @@ final class TradeRoomJoinActionCoordinator {
         }
 
         do {
-            _ = try await rooms.join(roomID: room.id, profileID: viewerID)
+            let confirmed = try await rooms.join(roomID: room.id, profileID: viewerID)
             mutationStates[room.id] = .joined
-            SessionMemberRoomsStore.shared.invalidate(viewerID: viewerID)
-            GettingStartedRefreshCenter.noteJoinedOtherTradeRoom(from: room, viewer: viewerID)
+            TradeRoomMembershipSync.applyJoined(
+                suggestion: room,
+                viewerID: viewerID,
+                inboxStore: store,
+                confirmedMembership: confirmed
+            )
             await onDirectJoinSucceeded?()
             ExperienceHaptics.play(.success)
             return .joined

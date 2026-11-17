@@ -10,13 +10,38 @@ import {
 /** Stories remain visible for 24 hours (matches feed + profile). */
 export const STORY_WINDOW_MS = 24 * 60 * 60 * 1000
 
-export const ACTIVE_STORIES_SELECT = "id, user_id, image_url, created_at"
+export const ACTIVE_STORIES_SELECT =
+  "id, user_id, image_url, created_at, text_overlays"
+
+export type StoryTextOverlay = {
+  id?: string
+  text?: string
+  x?: number
+  y?: number
+  scale?: number
+  rotation?: number
+  red?: number
+  green?: number
+  blue?: number
+  alpha?: number
+  alignment?: string
+  background?: boolean
+}
 
 export type ActiveStoryRow = {
   id: string
   user_id: string
   image_url: string
   created_at: string
+  text_overlays?: StoryTextOverlay[] | null
+}
+
+const STORY_VIDEO_EXTENSION = /\.(mp4|mov|m4v|webm)$/i
+
+/** iOS stores video stories in image_url. An <img> of that URL renders blank. */
+export function storyMediaIsVideo(url: string | null | undefined): boolean {
+  const path = String(url ?? "").split("?")[0]?.split("#")[0] ?? ""
+  return STORY_VIDEO_EXTENSION.test(path)
 }
 
 export type StoriesByUserMap = Record<string, ActiveStoryRow[]>

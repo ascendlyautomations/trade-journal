@@ -131,6 +131,21 @@ final class PushNotificationCenter: NSObject {
         }
     }
 
+    /// Re-register the cached APNs token after the app becomes active.
+    /// Does not prompt. A denied or logged-out session is left alone.
+    func refreshRemoteTokenIfAuthorized() {
+        guard tokenClient.registersTokensWithServer else { return }
+        Task { [self] in
+            await refreshAuthorizationStatus()
+            guard authorizationStatus.isEnabled else { return }
+            guard navigation.store.sessionPhase == .authenticated else { return }
+            UIApplication.shared.registerForRemoteNotifications()
+            if let token = deviceTokenHex {
+                await uploadToken(token)
+            }
+        }
+    }
+
     /// Call on logout — removes this install's token from the shared backend.
     /// Must be awaited **before** clearing the auth session when possible.
     func unregisterForLogout() async {
@@ -201,6 +216,7 @@ final class PushNotificationCenter: NSObject {
     // MARK: - Private
 
     private func uploadToken(_ token: String, previousDeviceToken: String? = nil) async {
+        guard tokenClient.registersTokensWithServer else { return }
         guard navigation.store.sessionPhase == .authenticated else { return }
         await SessionNetworkGate.shared.awaitReady()
         isRegistering = true

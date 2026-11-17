@@ -39,6 +39,8 @@ nonisolated struct ExploreRoomSuggestion: Hashable, Codable, Sendable, Identifia
     var joinPolicy: TradeRoomJoinPolicy
     /// Viewer row in `room_join_requests` when present.
     var viewerJoinRequestState: TradeRoomJoinRequestState?
+    /// Viewer favorite — `room_members.is_favorited`.
+    var isFavorited: Bool?
 
     init(
         id: RoomID,
@@ -58,7 +60,8 @@ nonisolated struct ExploreRoomSuggestion: Hashable, Codable, Sendable, Identifia
         isOwner: Bool? = nil,
         isMember: Bool? = nil,
         joinPolicy: TradeRoomJoinPolicy = .open,
-        viewerJoinRequestState: TradeRoomJoinRequestState? = nil
+        viewerJoinRequestState: TradeRoomJoinRequestState? = nil,
+        isFavorited: Bool? = nil
     ) {
         self.id = id
         self.name = name
@@ -78,6 +81,7 @@ nonisolated struct ExploreRoomSuggestion: Hashable, Codable, Sendable, Identifia
         self.isMember = isMember
         self.joinPolicy = joinPolicy
         self.viewerJoinRequestState = viewerJoinRequestState
+        self.isFavorited = isFavorited
     }
 
     /// Prefer authoritative RPC flags; fall back to legacy joined marker only when RPC omitted fields.
@@ -87,6 +91,10 @@ nonisolated struct ExploreRoomSuggestion: Hashable, Codable, Sendable, Identifia
 
     var viewerIsMember: Bool {
         isMember == true || isJoined == true
+    }
+
+    var viewerIsFavorited: Bool {
+        isFavorited == true
     }
 
     var requiresJoinRequest: Bool {
@@ -184,7 +192,7 @@ nonisolated struct TradeRoomsHomeBootstrap: Hashable, Sendable {
     var popularNextCursor: String?
 }
 
-/// All / Your Rooms / Official (+ Community for RPC) filter for Trade Rooms discovery.
+/// Trade Rooms home chips (All / Favorites / Joined / Popular) and RPC scopes (`official` / `community` for bootstrap only).
 nonisolated enum TradeRoomDiscoveryScope: String, CaseIterable, Hashable, Sendable, Identifiable {
     case all
     case official
@@ -192,26 +200,45 @@ nonisolated enum TradeRoomDiscoveryScope: String, CaseIterable, Hashable, Sendab
     case yourRooms = "your_rooms"
     /// Home tab — Popular discovery only (uses `all` RPC scope).
     case popular
+    /// Joined rooms the viewer has favorited (`room_members.is_favorited`).
+    case favorites
 
     var id: String { rawValue }
 
     /// Trade Rooms home scope chips — fixed order; selection is always by enum case, not index.
-    static let homeToggleOrder: [TradeRoomDiscoveryScope] = [.all, .yourRooms, .official, .popular]
+    static let homeToggleOrder: [TradeRoomDiscoveryScope] = [
+        .all, .favorites, .yourRooms, .popular,
+    ]
+
+    /// Maps legacy or internal scopes to a visible home chip (Official tab removed from home).
+    static func normalizedHomeScope(_ scope: TradeRoomDiscoveryScope) -> TradeRoomDiscoveryScope {
+        switch scope {
+        case .official, .community:
+            return .all
+        default:
+            return scope
+        }
+    }
 
     var title: String {
         switch self {
         case .all: return "All"
         case .official: return "Official"
         case .community: return "Community"
-        case .yourRooms: return "Your Rooms"
+        case .yourRooms: return "Joined"
         case .popular: return "Popular"
+        case .favorites: return "★"
         }
+    }
+
+    var usesCompactTabLabel: Bool {
+        self == .favorites
     }
 
     /// Value sent to `rpc_v1_trade_rooms_home_bootstrap` (`all` | `official` | `community`).
     var rpcValue: String {
         switch self {
-        case .yourRooms, .popular: return "all"
+        case .yourRooms, .popular, .favorites: return "all"
         default: return rawValue
         }
     }
@@ -220,22 +247,37 @@ nonisolated enum TradeRoomDiscoveryScope: String, CaseIterable, Hashable, Sendab
     /// Popular and Your Rooms both request the `all` payload, so they share that cache.
     var bootstrapCacheScope: TradeRoomDiscoveryScope {
         switch self {
-        case .popular, .yourRooms: return .all
+        case .popular, .yourRooms, .favorites: return .all
         default: return self
         }
     }
 
     var showsSuggestedDiscovery: Bool {
-        switch self {
-        case .all, .official: return true
-        case .yourRooms, .community, .popular: return false
-        }
+        false
     }
 
     var showsPopularDiscovery: Bool {
+        false
+    }
+
+    /// All tab — one member-count-ordered list (`popular` rows from home bootstrap RPC).
+    var showsAllScopeUnifiedDiscoveryList: Bool {
+        self == .all
+    }
+
+    /// Popular tab — single member-ordered list (Popular uses RPC `popular` rows).
+    var showsUnifiedDiscoveryList: Bool {
+        self == .official || self == .popular
+    }
+
+    var unifiedDiscoveryEmptyMessage: String {
         switch self {
-        case .all, .official, .popular: return true
-        case .yourRooms, .community: return false
+        case .popular:
+            return TradeRoomDiscoveryMode.popular.emptyMessage
+        case .official:
+            return "No official Trade Rooms available yet."
+        default:
+            return ""
         }
     }
 
@@ -243,9 +285,20 @@ nonisolated enum TradeRoomDiscoveryScope: String, CaseIterable, Hashable, Sendab
         self == .yourRooms
     }
 
+    var showsFavoritesDiscovery: Bool {
+        self == .favorites
+    }
+
     /// When true, show Suggested and/or Popular discovery lists (not membership rows).
     var showsDiscoverableLists: Bool {
-        showsSuggestedDiscovery || showsPopularDiscovery
+        showsSuggestedDiscovery
+            || showsPopularDiscovery
+            || showsAllScopeUnifiedDiscoveryList
+            || showsUnifiedDiscoveryList
+    }
+
+    var allScopeDiscoveryEmptyMessage: String {
+        TradeRoomDiscoveryMode.popular.emptyMessage
     }
 }
 
@@ -293,6 +346,7 @@ nonisolated struct ExploreLiveTraderNow: Hashable, Sendable, Identifiable {
     var viewerCount: Int?
     var startedAt: String
     var videoSource: String
+    var streamTitle: String?
 }
 
 /// BFF envelope for `GET /api/explore/live-traders` — decoded with `SupabaseTransport` default keys.
@@ -312,6 +366,7 @@ nonisolated struct ExploreLiveTraderNowAPIRow: Decodable, Sendable {
     var viewerCount: Int?
     var startedAt: String
     var videoSource: String?
+    var streamTitle: String?
 
     enum CodingKeys: String, CodingKey {
         case broadcastSessionId
@@ -325,6 +380,7 @@ nonisolated struct ExploreLiveTraderNowAPIRow: Decodable, Sendable {
         case viewerCount
         case startedAt
         case videoSource
+        case streamTitle
     }
 
     init(from decoder: Decoder) throws {
@@ -339,6 +395,7 @@ nonisolated struct ExploreLiveTraderNowAPIRow: Decodable, Sendable {
         broadcasterAvatarUrl = try container.decodeIfPresent(String.self, forKey: .broadcasterAvatarUrl)
         startedAt = try container.decode(String.self, forKey: .startedAt)
         videoSource = try container.decodeIfPresent(String.self, forKey: .videoSource)
+        streamTitle = try container.decodeIfPresent(String.self, forKey: .streamTitle)
         if let count = try? container.decodeIfPresent(Int.self, forKey: .viewerCount) {
             viewerCount = count
         } else if let count = try? container.decodeIfPresent(Double.self, forKey: .viewerCount) {
@@ -363,6 +420,10 @@ nonisolated struct ExploreLiveTraderNowAPIRow: Decodable, Sendable {
             videoSource: {
                 let trimmed = videoSource?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 return trimmed.isEmpty ? "camera" : trimmed
+            }(),
+            streamTitle: {
+                let trimmed = streamTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return trimmed.isEmpty ? nil : trimmed
             }()
         )
     }

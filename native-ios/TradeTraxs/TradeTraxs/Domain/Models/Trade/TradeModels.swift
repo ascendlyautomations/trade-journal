@@ -157,8 +157,16 @@ nonisolated struct Trade: Hashable, Codable, Sendable, Identifiable {
     var exitAt: Date?
     var realizedPnL: Money?
     var riskReward: Decimal?
+    /// Optional planned dollar risk at entry (`trades.dollar_risk`).
+    var dollarRisk: Decimal? = nil
     var maxRrReached: Decimal? = nil
     var realizedRr: Decimal? = nil
+    /// Manual journal — winner closed at full take-profit (`trades.full_tp`).
+    var fullTakeProfit: Bool = false
+    /// Manual journal — winner closed before full TP (`trades.early_exit`).
+    var earlyExit: Bool = false
+    /// Manual early-exit exit R:R when prices cannot derive realized (`trades.exit_rr`).
+    var exitRr: Decimal? = nil
     var points: Decimal?
     var sessionLabel: String?
     var visibility: ContentVisibility
@@ -276,9 +284,14 @@ nonisolated struct TradeDraft: Hashable, Codable, Sendable {
     var exitAt: Date?
     var realizedPnL: Money?
     var riskReward: Decimal? = nil
+    /// Optional planned dollar risk at entry (`trades.dollar_risk`).
+    var dollarRisk: Decimal? = nil
     /// Highest R:R reached before close (`trades.max_rr_reached`), optional journal field.
     var maxRrReached: Decimal? = nil
     var realizedRr: Decimal? = nil
+    var fullTakeProfit: Bool = false
+    var earlyExit: Bool = false
+    var exitRr: Decimal? = nil
     var points: Decimal? = nil
     var sessionLabel: String? = nil
     var strategy: String? = nil

@@ -6,7 +6,8 @@ nonisolated enum PsychologyReportGenerator {
     static func generateAll(
         trades: [Trade],
         checkIns: [TraderDailyCheckIn],
-        now: Date = Date()
+        now: Date = Date(),
+        preferences: PreferenceRuleContext? = nil
     ) -> PsychologyReportsSnapshot {
         let catalog = PsychologyReportPeriods.availableCatalog(trades: trades, now: now)
         var reports: [ReportID: PsychologyReport] = [:]
@@ -15,7 +16,8 @@ nonisolated enum PsychologyReportGenerator {
                 periodRef: ref,
                 trades: trades,
                 checkIns: checkIns,
-                now: now
+                now: now,
+                preferences: preferences
             )
             reports[report.id] = report
         }
@@ -30,7 +32,8 @@ nonisolated enum PsychologyReportGenerator {
         periodRef: PsychologyReportPeriodRef,
         trades: [Trade],
         checkIns: [TraderDailyCheckIn],
-        now: Date = Date()
+        now: Date = Date(),
+        preferences: PreferenceRuleContext? = nil
     ) -> PsychologyReport {
         let bounds = PsychologyReportPeriods.bounds(for: periodRef, now: now)
         let periodTrades = filterTrades(trades, start: bounds.start, end: bounds.end)
@@ -39,19 +42,26 @@ nonisolated enum PsychologyReportGenerator {
         let analytics = TraderPsychologyAnalyticsEngine.buildReport(
             trades: periodTrades,
             checkIns: periodCheckIns,
-            now: now
+            now: now,
+            preferences: preferences
         )
         let facts = PsychologyCoachFactsBuilder.build(
             report: analytics,
             trades: periodTrades,
             checkIns: periodCheckIns,
-            now: now
+            now: now,
+            preferences: preferences
         )
         let summary = PsychologyCoachDeterministicCoach.buildSummary(from: facts)
 
         let checkInSummary = buildCheckInSummary(periodCheckIns)
         let tradingPsych = buildTradingPsychology(periodTrades)
-        let behavior = buildBehavior(periodTrades: periodTrades, checkIns: periodCheckIns, analytics: analytics)
+        let behavior = buildBehavior(
+            periodTrades: periodTrades,
+            checkIns: periodCheckIns,
+            analytics: analytics,
+            preferences: preferences
+        )
         let comparisons = buildComparisons(
             periodRef: periodRef,
             trades: trades,
@@ -153,7 +163,8 @@ nonisolated enum PsychologyReportGenerator {
     private static func buildBehavior(
         periodTrades: [Trade],
         checkIns: [TraderDailyCheckIn],
-        analytics: PsychologyAnalyticsReport
+        analytics: PsychologyAnalyticsReport,
+        preferences: PreferenceRuleContext? = nil
     ) -> PsychologyReportBehaviorSummary {
         let enriched = TraderPsychologyAnalyticsEngine.enrich(trades: periodTrades, checkIns: checkIns)
         let dayCounts = Dictionary(grouping: enriched) {
@@ -161,23 +172,57 @@ nonisolated enum PsychologyReportGenerator {
         }.mapValues(\.count)
         let avgTradesPerDay: Double? = dayCounts.isEmpty ? nil : Double(dayCounts.values.reduce(0, +)) / Double(dayCounts.count)
 
-        let afterTwo = enriched.filter { $0.consecutiveLossesBefore >= 2 }
-        let afterTwoMetrics = TraderPsychologyAnalyticsEngine.metrics(for: afterTwo.map(\.trade))
-
+        let rulesAt: (Trade) -> PsychologyRuleSnapshot = { trade in
+            PreferenceComplianceEngine.psychologyRules(in: preferences, at: trade.entryAt)
+        }
+        let pauses = enriched.compactMap { rulesAt($0.trade).consecutiveLossPause }
+        let personalPause = !pauses.isEmpty
+        let uniquePause = Set(pauses).count == 1 ? pauses.first : nil
+        let afterRows = personalPause
+            ? enriched.filter {
+                guard let pause = rulesAt($0.trade).consecutiveLossPause else { return false }
+                return $0.consecutiveLossesBefore >= pause
+            }
+            : enriched.filter { $0.consecutiveLossesBefore >= 2 }
+        let afterMetrics = TraderPsychologyAnalyticsEngine.metrics(for: afterRows.map(\.trade))
+        let caps = enriched.compactMap { rulesAt($0.trade).maxTradesPerDay }
+        let personalCap = !caps.isEmpty
+        let uniqueCap = Set(caps).count == 1 ? caps.first : nil
         let grouped = Dictionary(grouping: enriched) {
             TraderPsychologyAnalyticsEngine.TradeSequenceBucket.resolve($0.tradeNumberInDay)
         }
-        let early = (grouped[.first] ?? []) + (grouped[.second] ?? []) + (grouped[.third] ?? [])
-        let late = grouped[.fifthPlus] ?? []
+        let early = personalCap
+            ? enriched.filter {
+                guard let cap = rulesAt($0.trade).maxTradesPerDay else { return false }
+                return $0.tradeNumberInDay <= cap
+            }
+            : (grouped[.first] ?? []) + (grouped[.second] ?? []) + (grouped[.third] ?? [])
+        let late = personalCap
+            ? enriched.filter {
+                guard let cap = rulesAt($0.trade).maxTradesPerDay else { return false }
+                return $0.tradeNumberInDay > cap
+            }
+            : (grouped[.fifthPlus] ?? [])
         let earlyM = TraderPsychologyAnalyticsEngine.metrics(for: early.map(\.trade))
         let lateM = TraderPsychologyAnalyticsEngine.metrics(for: late.map(\.trade))
 
+        let sequenceReady = early.count >= 8 && late.count >= 8
+        let afterReady = afterRows.count >= 8 && enriched.count >= 8
         return PsychologyReportBehaviorSummary(
             averageTradesPerDay: avgTradesPerDay,
-            afterTwoLossesWinRate: afterTwoMetrics.winRate.map { NSDecimalNumber(decimal: $0).doubleValue },
-            afterTwoLossesBaselineWinRate: analytics.baseline.winRate.map { NSDecimalNumber(decimal: $0).doubleValue },
-            earlyTradeAvgPnL: earlyM.averagePnL.map { NSDecimalNumber(decimal: $0).doubleValue },
-            lateTradeAvgPnL: lateM.averagePnL.map { NSDecimalNumber(decimal: $0).doubleValue }
+            afterTwoLossesWinRate: afterReady ? afterMetrics.winRate.map { NSDecimalNumber(decimal: $0).doubleValue } : nil,
+            afterTwoLossesBaselineWinRate: afterReady ? analytics.baseline.winRate.map { NSDecimalNumber(decimal: $0).doubleValue } : nil,
+            earlyTradeAvgPnL: sequenceReady ? earlyM.averagePnL.map { NSDecimalNumber(decimal: $0).doubleValue } : nil,
+            lateTradeAvgPnL: sequenceReady ? lateM.averagePnL.map { NSDecimalNumber(decimal: $0).doubleValue } : nil,
+            afterLossLabel: personalPause
+                ? (uniquePause.map { "Win rate after \($0)+ losses" } ?? "Win rate after your pause")
+                : "Win rate after 2+ losses",
+            earlyLabel: personalCap
+                ? (uniqueCap.map { "Within \($0) trades avg" } ?? "Within your cap avg")
+                : "Trades 1–3 Avg",
+            lateLabel: personalCap
+                ? (uniqueCap.map { "Beyond \($0) trades avg" } ?? "Beyond your cap avg")
+                : "Trade #5+ Avg"
         )
     }
 
@@ -190,17 +235,25 @@ nonisolated enum PsychologyReportGenerator {
         guard periodRef.template == .monthly else { return [] }
 
         let bounds = PsychologyReportPeriods.bounds(for: periodRef, now: now)
-        let calendar = Calendar.current
-        guard let prevStart = calendar.date(byAdding: .month, value: -1, to: bounds.start),
-              let prevEnd = calendar.date(byAdding: .day, value: -1, to: bounds.start)
+        let calendar = TradingReportPeriods.eastern
+        let currentEndDay = calendar.component(.day, from: bounds.end)
+        guard let prevStart = calendar.date(byAdding: .month, value: -1, to: calendar.startOfDay(for: bounds.start))
         else { return [] }
+        let priorMonthLength = calendar.range(of: .day, in: .month, for: prevStart)?.count ?? currentEndDay
+        let priorDay = min(currentEndDay, priorMonthLength)
+        guard let priorEnd = calendar.date(byAdding: .day, value: priorDay - 1, to: calendar.startOfDay(for: prevStart))
+        else { return [] }
+        let priorIsPartial = priorDay < priorMonthLength
+        let currentPartial = bounds.dateRangeLabel.contains("(partial)")
+        let currentLabel = currentPartial ? "This month so far" : "This month"
+        let priorLabel = priorIsPartial || currentPartial ? "same days last month" : "prior month"
 
         let currentTrades = filterTrades(trades, start: bounds.start, end: bounds.end)
-        let priorTrades = filterTrades(trades, start: prevStart, end: endOfDay(prevEnd, calendar: calendar))
+        let priorTrades = filterTrades(trades, start: prevStart, end: endOfDay(priorEnd, calendar: calendar))
         guard currentTrades.count >= 10, priorTrades.count >= 10 else { return [] }
 
         let currentCheckIns = filterCheckIns(checkIns, start: bounds.start, end: bounds.end)
-        let priorCheckIns = filterCheckIns(checkIns, start: prevStart, end: endOfDay(prevEnd, calendar: calendar))
+        let priorCheckIns = filterCheckIns(checkIns, start: prevStart, end: endOfDay(priorEnd, calendar: calendar))
 
         var comparisons: [PsychologyReportComparison] = []
 
@@ -210,7 +263,7 @@ nonisolated enum PsychologyReportGenerator {
             comparisons.append(
                 PsychologyReportComparison(
                     headline: curPlan > prevPlan ? "Plan adherence improved" : "Plan adherence slipped",
-                    detail: "This month: \(NumberDisplay.percent(curPlan * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)) vs prior month: \(NumberDisplay.percent(prevPlan * 100, minimumFractionDigits: 0, maximumFractionDigits: 0))",
+                    detail: "\(currentLabel): \(NumberDisplay.percent(curPlan * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)) vs \(priorLabel): \(NumberDisplay.percent(prevPlan * 100, minimumFractionDigits: 0, maximumFractionDigits: 0))",
                     reliability: PsychologySampleReliability.developing.rawValue
                 )
             )
@@ -222,7 +275,7 @@ nonisolated enum PsychologyReportGenerator {
             comparisons.append(
                 PsychologyReportComparison(
                     headline: curSleep > prevSleep ? "Average sleep increased" : "Average sleep decreased",
-                    detail: "This month: \(NumberDisplay.hours(curSleep)) vs prior: \(NumberDisplay.hours(prevSleep))",
+                    detail: "\(currentLabel): \(NumberDisplay.hours(curSleep)) vs \(priorLabel): \(NumberDisplay.hours(prevSleep))",
                     reliability: PsychologySampleReliability.developing.rawValue
                 )
             )
@@ -230,11 +283,12 @@ nonisolated enum PsychologyReportGenerator {
 
         let curFocus = avgRating(currentCheckIns.compactMap(\.focusLevel))
         let prevFocus = avgRating(priorCheckIns.compactMap(\.focusLevel))
-        if let curFocus, let prevFocus, abs(curFocus - prevFocus) >= 0.4, currentCheckIns.count >= 5 {
+        if let curFocus, let prevFocus, abs(curFocus - prevFocus) >= 0.4,
+           currentCheckIns.count >= 5, priorCheckIns.count >= 5 {
             comparisons.append(
                 PsychologyReportComparison(
                     headline: curFocus > prevFocus ? "Focus ratings improved" : "Focus ratings declined",
-                    detail: "This month avg: \(NumberDisplay.ratingOutOfFive(curFocus)) vs prior: \(NumberDisplay.ratingOutOfFive(prevFocus))",
+                    detail: "\(currentLabel) avg: \(NumberDisplay.ratingOutOfFive(curFocus)) vs \(priorLabel): \(NumberDisplay.ratingOutOfFive(prevFocus))",
                     reliability: PsychologySampleReliability.developing.rawValue
                 )
             )
@@ -362,21 +416,37 @@ nonisolated enum PsychologyReportGenerator {
     }
 
     private static func performanceSection(_ baseline: PsychologyGroupMetrics) -> PsychologyReportSection {
-        PsychologyReportSection(
+        var metrics: [PsychologyReportMetricRow] = []
+        if baseline.averagePnL != nil,
+           let pnl = TraderPsychologyAnalyticsEngine.optionalMoney(baseline.totalPnL) {
+            metrics.append(PsychologyReportMetricRow(label: "P&L", value: pnl))
+        }
+        metrics.append(
+            PsychologyReportMetricRow(
+                label: "Win Rate",
+                value: TraderPsychologyAnalyticsEngine.formatWinRate(baseline.winRate)
+            )
+        )
+        if let expectancy = baseline.expectancy,
+           let text = TraderPsychologyAnalyticsEngine.optionalMoney(expectancy) {
+            metrics.append(PsychologyReportMetricRow(label: "Expectancy", value: text))
+        }
+        if let average = baseline.averagePnL,
+           let text = TraderPsychologyAnalyticsEngine.optionalMoney(average) {
+            metrics.append(PsychologyReportMetricRow(label: "Avg Trade", value: text))
+        }
+        metrics.append(
+            PsychologyReportMetricRow(
+                label: "Profit Factor",
+                value: baseline.profitFactor.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "—"
+            )
+        )
+        return PsychologyReportSection(
             id: "performance",
             title: "Performance Overview",
             subtitle: "\(NumberDisplay.integer(baseline.tradeCount)) trades in period",
             bullets: [],
-            metrics: [
-                PsychologyReportMetricRow(label: "P&L", value: TraderPsychologyAnalyticsEngine.money(baseline.totalPnL)),
-                PsychologyReportMetricRow(label: "Win Rate", value: TraderPsychologyAnalyticsEngine.formatWinRate(baseline.winRate)),
-                PsychologyReportMetricRow(label: "Expectancy", value: TraderPsychologyAnalyticsEngine.money(baseline.expectancy ?? 0)),
-                PsychologyReportMetricRow(label: "Avg Trade", value: TraderPsychologyAnalyticsEngine.money(baseline.averagePnL ?? 0)),
-                PsychologyReportMetricRow(
-                    label: "Profit Factor",
-                    value: baseline.profitFactor.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "—"
-                ),
-            ]
+            metrics: metrics
         )
     }
 
@@ -449,7 +519,7 @@ nonisolated enum PsychologyReportGenerator {
     private static func afterLossesSection(_ behavior: PsychologyReportBehaviorSummary) -> PsychologyReportSection {
         var bullets: [String] = []
         if let after = behavior.afterTwoLossesWinRate, let base = behavior.afterTwoLossesBaselineWinRate {
-            bullets.append("Win rate after 2+ losses: \(NumberDisplay.percent(after * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)) vs \(NumberDisplay.percent(base * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)) baseline")
+            bullets.append("\(behavior.afterLossLabel): \(NumberDisplay.percent(after * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)) vs \(NumberDisplay.percent(base * 100, minimumFractionDigits: 0, maximumFractionDigits: 0)) baseline")
         }
         return PsychologyReportSection(id: "afterLosses", title: "After Losses", subtitle: nil, bullets: bullets, metrics: [])
     }
@@ -460,8 +530,8 @@ nonisolated enum PsychologyReportGenerator {
             metrics.append(PsychologyReportMetricRow(label: "Trades/Day", value: NumberDisplay.decimal(avg, minimumFractionDigits: 1, maximumFractionDigits: 1)))
         }
         if let early = behavior.earlyTradeAvgPnL, let late = behavior.lateTradeAvgPnL {
-            metrics.append(PsychologyReportMetricRow(label: "Trades 1–3 Avg", value: NumberDisplay.currency(early, minimumFractionDigits: 0, maximumFractionDigits: 0)))
-            metrics.append(PsychologyReportMetricRow(label: "Trade #5+ Avg", value: NumberDisplay.currency(late, minimumFractionDigits: 0, maximumFractionDigits: 0)))
+            metrics.append(PsychologyReportMetricRow(label: behavior.earlyLabel, value: NumberDisplay.currency(early, minimumFractionDigits: 0, maximumFractionDigits: 0)))
+            metrics.append(PsychologyReportMetricRow(label: behavior.lateLabel, value: NumberDisplay.currency(late, minimumFractionDigits: 0, maximumFractionDigits: 0)))
         }
         return PsychologyReportSection(id: "tradeFrequency", title: "Trade Frequency", subtitle: nil, bullets: [], metrics: metrics)
     }

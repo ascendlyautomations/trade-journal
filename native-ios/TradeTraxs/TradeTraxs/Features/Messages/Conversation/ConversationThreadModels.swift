@@ -185,6 +185,7 @@ struct ConversationBubbleItem: Identifiable, Hashable {
     /// Room-scoped member tags for Trade Room senders.
     var authorTags: [RoomMemberTag] = []
     var showsOwnerBadge: Bool = false
+    var showsModeratorBadge: Bool = false
     /// True when sender differs from the previous chronological message (Trade Rooms spacing).
     var startsSenderGroup: Bool = false
     var addsSenderGroupTopInset: Bool = false

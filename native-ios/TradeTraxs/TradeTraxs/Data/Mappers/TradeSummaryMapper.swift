@@ -146,6 +146,7 @@ nonisolated enum TradeSummaryMapper {
             entryPrice: flexDecimal(wire.entry_price),
             exitPrice: flexDecimal(wire.exit_price),
             sessionLabel: trimmedOptional(wire.session),
+            maxRrReached: flexDecimal(wire.max_rr_reached),
             copyTrade: mapCopyTradeJournalMetadata(from: wire)
         )
     }

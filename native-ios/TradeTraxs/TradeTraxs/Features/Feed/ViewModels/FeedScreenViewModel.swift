@@ -111,6 +111,32 @@ final class FeedScreenViewModel {
         set { state.contentFilter = newValue }
     }
 
+    /// Incremented when scope/filter intentionally resets the list scroll surface.
+    private(set) var listScrollPresentationEpoch: UInt64 = 0
+    private(set) var retainedListScrollOffset: CGFloat?
+    private(set) var retainedClipsActiveEntryID: String?
+
+    func rememberListScrollOffset(_ y: CGFloat) {
+        guard retainedListScrollOffset != y else { return }
+        retainedListScrollOffset = y
+    }
+
+    func rememberClipsActiveEntryID(_ entryID: String?) {
+        guard retainedClipsActiveEntryID != entryID else { return }
+        retainedClipsActiveEntryID = entryID
+    }
+
+    func resetScrollPresentation() {
+        retainedListScrollOffset = nil
+        retainedClipsActiveEntryID = nil
+        listScrollPresentationEpoch &+= 1
+    }
+
+    /// Home-style tab reselect at feed root — programmatic scroll-to-top (UIKit scrollsToTop is off).
+    func scrollToTopForTabReselect() {
+        resetScrollPresentation()
+    }
+
     // MARK: - Lifecycle
 
     /// Exactly one bootstrap on first presentation.
@@ -356,6 +382,7 @@ final class FeedScreenViewModel {
         reconcileSharedFeedScopeWithState()
         guard state.scope != next else { return }
         ExperienceHaptics.play(.selection)
+        resetScrollPresentation()
         state.scope = next
         if let viewerID = state.viewerID {
             FeedScopeSessionStore.shared.setScope(next, for: viewerID)
@@ -386,6 +413,7 @@ final class FeedScreenViewModel {
         guard state.contentFilter != next else { return }
         ExperienceHaptics.play(.selection)
         reconcileSharedFeedScopeWithState()
+        resetScrollPresentation()
         state.contentFilter = next
         cancelInFlightLoads()
         bootstrapGeneration &+= 1
@@ -404,8 +432,20 @@ final class FeedScreenViewModel {
         userSelectedContentFilter(next)
     }
 
-    func open(_ entry: FeedTimelineEntry) {
+    func open(_ entry: FeedTimelineEntry, scrollToComments: Bool = false) {
         ExperienceHaptics.play(.selection)
+        if scrollToComments {
+            switch entry {
+            case .trade(_, let summary):
+                detailCache.requestScrollToComments(.trade(summary.id))
+            case .post(_, let post):
+                detailCache.requestScrollToComments(.post(post.id))
+            case .achievement(_, let achievement):
+                detailCache.requestScrollToComments(.achievement(achievement.id))
+            case .clip:
+                break
+            }
+        }
         switch entry {
         case .trade(_, let summary):
             detailCache.seedPresentationSeed(DetailPresentationSeed(summary: summary))
@@ -432,6 +472,10 @@ final class FeedScreenViewModel {
             detailCache.seedFeedEngagementTarget(entry.interactionTarget, forAchievement: achievement.id)
             navigationCoordinator.pushFeed(.achievement(achievement.id))
         }
+    }
+
+    func openComments(_ entry: FeedTimelineEntry) {
+        open(entry, scrollToComments: true)
     }
 
     func openAuthor(_ profileID: ProfileID) {

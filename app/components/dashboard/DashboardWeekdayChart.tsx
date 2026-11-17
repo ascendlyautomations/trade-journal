@@ -108,6 +108,9 @@ export default function DashboardWeekdayChart({
       {embedded ? null : (
         <h2 className="mb-2 text-xs font-semibold text-blue-300 max-md:mb-1 md:mb-3 md:text-base">
           P&amp;L by Weekday
+          <span className="mt-0.5 block text-[10px] font-medium text-gray-400 md:text-xs">
+            Futures day, 6 PM ET
+          </span>
         </h2>
       )}
       {showEmpty ? (

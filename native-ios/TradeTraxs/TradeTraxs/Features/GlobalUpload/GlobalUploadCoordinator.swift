@@ -1593,20 +1593,23 @@ final class GlobalUploadCoordinator {
                 return
             }
 
-            reconcileTradeAfterSave(trade, mode: spec.mode, previous: editPreviousTrade)
-            for sibling in copySiblings {
-                TradeJournalMutationStore.shared.noteCreated(sibling)
+            let pendingClipWork = needsTradeClipWork(spec: spec, checkpoint: checkpoint)
+            if !pendingClipWork {
+                reconcileTradeAfterSave(trade, mode: spec.mode, previous: editPreviousTrade)
+                for sibling in copySiblings {
+                    TradeJournalMutationStore.shared.noteCreated(sibling)
+                }
+                if let accountID = spec.lastAccountID {
+                    AddTradeViewModel.rememberLastAccountID(accountID)
+                }
+                TradeUploadDiagnostics.log(
+                    jobID: jobID,
+                    stage: "reconciled",
+                    tradeID: trade.id.rawValue,
+                    socialPostRequested: socialPostRequested,
+                    progress: 0.96
+                )
             }
-            if let accountID = spec.lastAccountID {
-                AddTradeViewModel.rememberLastAccountID(accountID)
-            }
-            TradeUploadDiagnostics.log(
-                jobID: jobID,
-                stage: "reconciled",
-                tradeID: trade.id.rawValue,
-                socialPostRequested: socialPostRequested,
-                progress: 0.96
-            )
             updateJobProgress(jobID: jobID, phase: .publishing, progress: 0.96)
 
             if needsTradeClipWork(spec: spec, checkpoint: checkpoint) {
@@ -1620,6 +1623,23 @@ final class GlobalUploadCoordinator {
             } else if !checkpoint.clipAttached, spec.reelSnapshot == nil, spec.linkedReelID == nil {
                 checkpoint.clipAttached = true
                 persistTradeRetry(jobID: jobID, spec: spec, services: services, checkpoint: checkpoint)
+            }
+
+            if pendingClipWork {
+                reconcileTradeAfterSave(trade, mode: spec.mode, previous: editPreviousTrade)
+                for sibling in copySiblings {
+                    TradeJournalMutationStore.shared.noteCreated(sibling)
+                }
+                if let accountID = spec.lastAccountID {
+                    AddTradeViewModel.rememberLastAccountID(accountID)
+                }
+                TradeUploadDiagnostics.log(
+                    jobID: jobID,
+                    stage: "reconciled",
+                    tradeID: trade.id.rawValue,
+                    socialPostRequested: socialPostRequested,
+                    progress: 0.96
+                )
             }
 
             guard jobRunMayFinalize(jobID: jobID, generation: runGeneration, stage: "runTrade.preComplete") else {
@@ -1723,7 +1743,14 @@ final class GlobalUploadCoordinator {
             } else if let linked = spec.linkedReelID {
                 checkpoint.reelLinked = true
                 checkpoint.linkedExistingReelID = linked
-                ContentMutationStore.shared.noteReelLinked(linked)
+                if let cached = services.detailCache.reel(id: linked) {
+                    services.detailCache.applyReelTradeLink(reel: cached, tradeID: trade.id)
+                } else if let fixture = AddTradeFixtures.unattachedReels(owner: spec.authorID)
+                    .first(where: { $0.id == linked })
+                {
+                    services.detailCache.applyReelTradeLink(reel: fixture, tradeID: trade.id)
+                }
+                notifyReelLinkedInProfile(reelID: linked, services: services)
             }
             checkpoint.clipAttached = true
             persistTradeRetry(jobID: jobID, spec: spec, services: services, checkpoint: checkpoint)
@@ -1836,10 +1863,15 @@ final class GlobalUploadCoordinator {
                 tradeIsPublic: spec.tradeIsPublic,
                 linkJobID: jobID
             )
+            await seedLinkedReelAfterAttach(
+                reelID: reelID,
+                tradeID: trade.id,
+                services: services
+            )
             checkpoint.reelLinked = true
             checkpoint.linkedExistingReelID = reelID
             checkpoint.clipAttached = true
-            ContentMutationStore.shared.noteReelLinked(reelID)
+            notifyReelLinkedInProfile(reelID: reelID, services: services)
             persistTradeRetry(jobID: jobID, spec: spec, services: services, checkpoint: checkpoint)
             TradeReelLinkDiagnostics.log(
                 jobID: jobID,
@@ -1896,7 +1928,7 @@ final class GlobalUploadCoordinator {
             generation: runGeneration
         )
         ExperienceHaptics.play(.tradeSaved)
-        if case .create = spec.mode {
+        if case .create = spec.mode, PostTradeReflectionGate.shouldOfferQuickReflection(for: trade) {
             PostTradeReflectionGate.shared.present(trade)
         }
         if let draft = reelDraftForCleanup {
@@ -2192,6 +2224,24 @@ final class GlobalUploadCoordinator {
             if let phase { job.phase = phase }
             job.progress = clampedProgress(progress)
         }
+    }
+
+    private func notifyReelLinkedInProfile(reelID: ReelID, services: GlobalUploadServices) {
+        guard let reel = services.detailCache.reel(id: reelID) else { return }
+        ContentMutationStore.shared.noteReelLinked(reel)
+    }
+
+    private func seedLinkedReelAfterAttach(
+        reelID: ReelID,
+        tradeID: TradeID,
+        services: GlobalUploadServices
+    ) async {
+        if let cached = services.detailCache.reel(id: reelID) {
+            services.detailCache.applyReelTradeLink(reel: cached, tradeID: tradeID)
+            return
+        }
+        guard let loaded = try? await services.feed.reel(id: reelID) else { return }
+        services.detailCache.applyReelTradeLink(reel: loaded.reel, tradeID: tradeID)
     }
 
     private func reconcileTradeAfterSave(

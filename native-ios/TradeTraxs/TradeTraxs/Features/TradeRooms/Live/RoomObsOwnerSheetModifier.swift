@@ -15,7 +15,8 @@ struct RoomObsOwnerSheetModifier: ViewModifier {
         content.sheet(item: $step) { step in
             switch step {
             case .methodSelection:
-                TradeRoomStartStreamSheet {
+                TradeRoomStartStreamSheet { streamTitle in
+                    controller.setPendingStreamTitle(streamTitle)
                     self.step = nil
                     broadcastCoordinator.openObsManageStream(roomID: roomID, roomTitle: roomTitle)
                 }

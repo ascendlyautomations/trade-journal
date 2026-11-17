@@ -109,7 +109,8 @@ export function buildCheckInHistorySummaries(
       lossCount: 0,
     }
     stats.tradeCount += 1
-    const pnl = Number.isFinite(trade.pnl) ? trade.pnl : 0
+    const rawPnl = trade.pnl
+    const pnl = rawPnl != null && Number.isFinite(rawPnl) ? rawPnl : 0
     stats.totalPnL += pnl
     if (pnl > 0) stats.winCount += 1
     else if (pnl < 0) stats.lossCount += 1

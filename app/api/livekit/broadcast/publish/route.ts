@@ -83,6 +83,13 @@ export async function POST(req: Request) {
     )
   }
 
+  if (!active.streamTitle?.trim()) {
+    return Response.json(
+      { error: "Stream title is required before going live to the room." },
+      { status: 400 }
+    )
+  }
+
   if (active.visibility === "public") {
     return Response.json({
       ok: true,

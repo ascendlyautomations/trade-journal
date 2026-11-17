@@ -35,10 +35,16 @@ nonisolated enum DashboardTimePeriodPicker: String, CaseIterable, Identifiable, 
     case sevenDays
     case thirtyDays
     case ninetyDays
+    case ytd
     case oneYear
     case custom
 
     var id: String { rawValue }
+
+    /// Quick period chips on Trading Rules Analytics (excludes custom).
+    static let analyticsQuickPeriods: [DashboardTimePeriodPicker] = [
+        .sevenDays, .thirtyDays, .ninetyDays, .ytd, .oneYear, .all,
+    ]
 
     var title: String {
         switch self {
@@ -46,6 +52,7 @@ nonisolated enum DashboardTimePeriodPicker: String, CaseIterable, Identifiable, 
         case .sevenDays: return "7D"
         case .thirtyDays: return "30D"
         case .ninetyDays: return "90D"
+        case .ytd: return "YTD"
         case .oneYear: return "1Y"
         case .custom: return "Custom Range"
         }
@@ -57,6 +64,7 @@ nonisolated enum DashboardTimePeriodPicker: String, CaseIterable, Identifiable, 
         case .sevenDays: return .sevenDays
         case .thirtyDays: return .thirtyDays
         case .ninetyDays: return .ninetyDays
+        case .ytd: return .ytd
         case .oneYear: return .oneYear
         case .custom: return nil
         }
@@ -72,7 +80,8 @@ nonisolated enum DashboardTimePeriodPicker: String, CaseIterable, Identifiable, 
         case .sevenDays: self = .sevenDays
         case .thirtyDays: self = .thirtyDays
         case .ninetyDays: self = .ninetyDays
-        case .oneYear, .ytd: self = .oneYear
+        case .ytd: self = .ytd
+        case .oneYear: self = .oneYear
         }
     }
 }
@@ -325,6 +334,20 @@ nonisolated enum DashboardScopeFilterPersistence {
         var accountModeRaw: String?
         var showPublicOnly: Bool?
         var hasUserSelectedDateRange: Bool?
+        /// `all` or a trading account id raw value.
+        var accountFilterKey: String?
+    }
+
+    static func accountFilter(from key: String?) -> DashboardAccountFilter {
+        guard let key, key != "all", !key.isEmpty else { return .all }
+        return .account(TradingAccountID(key))
+    }
+
+    static func accountFilterKey(for filter: DashboardAccountFilter) -> String {
+        switch filter {
+        case .all: return "all"
+        case .account(let id): return id.rawValue
+        }
     }
 
     static func load(profileID: ProfileID) -> Stored? {

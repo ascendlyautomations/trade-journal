@@ -37,11 +37,16 @@ struct ExploreProfileAvatarView: View {
             Circle()
                 .stroke(colors.border.opacity(0.35), lineWidth: 0.5)
         )
-        .task(id: profile.avatar?.id) {
+        .task(id: AvatarLoadIdentity(profileID: profile.id, avatarID: profile.avatar?.id)) {
             await loadAvatar()
         }
         .accessibilityLabel(Text(initials.isEmpty ? "Avatar" : initials))
         .accessibilityIdentifier("explore.profile.avatar.\(profile.id.rawValue)")
+    }
+
+    private struct AvatarLoadIdentity: Equatable {
+        let profileID: ProfileID
+        let avatarID: String?
     }
 
     private func loadAvatar() async {

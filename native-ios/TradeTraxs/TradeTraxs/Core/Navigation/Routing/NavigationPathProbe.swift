@@ -62,6 +62,9 @@ nonisolated enum NavigationPathProbeFormatter {
         case .withdrawalDetail: return "withdrawalDetail"
         case .report: return "report"
         case .psychologyAnalytics: return "psychologyAnalytics"
+        case .tradingRulesAnalytics: return "tradingRulesAnalytics"
+        case .tradingRulesRuleDetail: return "tradingRulesRuleDetail"
+        case .tradingRulesDayDetail: return "tradingRulesDayDetail"
         case .tradingScorecard: return "tradingScorecard"
         case .psychologyCoach: return "psychologyCoach"
         case .checkInHistory: return "checkInHistory"
@@ -102,6 +105,9 @@ nonisolated enum NavigationPathProbeFormatter {
         case .manageRoom: return "manageRoom"
         case .roomSettings: return "roomSettings"
         case .settings(let settings): return "settings(\(settings.rawValue))"
+        case .tradingRulesAnalytics: return "tradingRulesAnalytics"
+        case .tradingRulesRuleDetail: return "tradingRulesRuleDetail"
+        case .tradingRulesDayDetail: return "tradingRulesDayDetail"
         }
     }
 
@@ -122,6 +128,9 @@ nonisolated enum NavigationPathProbeFormatter {
         case .manageRoom: return "manageRoom"
         case .roomSettings: return "roomSettings"
         case .settings(let settings): return "settings(\(settings.rawValue))"
+        case .tradingRulesAnalytics: return "tradingRulesAnalytics"
+        case .tradingRulesRuleDetail: return "tradingRulesRuleDetail"
+        case .tradingRulesDayDetail: return "tradingRulesDayDetail"
         }
     }
 
@@ -148,6 +157,9 @@ nonisolated enum NavigationPathProbeFormatter {
         case .followRequests: return "followRequests"
         case .tradeRoomJoinRequest: return "tradeRoomJoinRequest"
         case .admin(let adminRoute): return "admin(\(String(describing: adminRoute)))"
+        case .tradingRulesAnalytics: return "tradingRulesAnalytics"
+        case .tradingRulesRuleDetail: return "tradingRulesRuleDetail"
+        case .tradingRulesDayDetail: return "tradingRulesDayDetail"
         }
     }
 }

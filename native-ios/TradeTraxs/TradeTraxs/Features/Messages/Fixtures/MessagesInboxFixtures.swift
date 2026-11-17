@@ -114,6 +114,7 @@ nonisolated enum MessagesInboxFixtures {
 
     @MainActor
     static func seedStore(_ store: MessagesInboxStore, viewerID: ProfileID = viewerID) {
+        store.setPersistedViewerID(viewerID)
         let conversations = conversations(viewerID: viewerID)
         store.replaceConversations(conversations)
         store.replaceRooms(

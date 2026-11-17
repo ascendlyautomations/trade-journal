@@ -52,10 +52,10 @@ final class TraderPsychologyAnalyticsEngineTests: XCTestCase {
         let checkInCalm = makeCheckIn(date: "2026-09-02", stress: 1, sleepHours: 8)
         let checkInVeryStressed = makeCheckIn(date: "2026-09-03", stress: 5, sleepHours: 8)
 
-        let calmDayTrades = (0..<6).map {
+        let calmDayTrades = (0..<8).map {
             makeTrade(id: "l\($0)", pnl: 50, offsetHours: $0, dayOffset: 0)
         }
-        let stressedDayTrades = (0..<6).map {
+        let stressedDayTrades = (0..<8).map {
             makeTrade(id: "h\($0)", pnl: -20, offsetHours: $0, dayOffset: 1)
         }
 
@@ -64,7 +64,9 @@ final class TraderPsychologyAnalyticsEngineTests: XCTestCase {
             checkIns: [checkInCalm, checkInVeryStressed]
         )
 
-        XCTAssertFalse(report.dashboardCards.isEmpty)
+        let stress = report.dashboardCards.first { $0.id == "stress" }
+        XCTAssertEqual(stress?.headline.contains("lower-stress"), true)
+        XCTAssertEqual(stress?.headline.contains("performed better"), true)
     }
 
     func testStressScaleLabelsAndElevatedThreshold() {
@@ -78,8 +80,8 @@ final class TraderPsychologyAnalyticsEngineTests: XCTestCase {
     }
 
     func testConvictionGroupingInsight() {
-        let high = (0..<6).map { makeTrade(id: "h\($0)", pnl: 80, offsetHours: $0, confidence: 5) }
-        let low = (0..<6).map { makeTrade(id: "l\($0)", pnl: -40, offsetHours: $0 + 10, confidence: 1) }
+        let high = (0..<8).map { makeTrade(id: "h\($0)", pnl: 80, offsetHours: $0, confidence: 5) }
+        let low = (0..<8).map { makeTrade(id: "l\($0)", pnl: -40, offsetHours: $0 + 10, confidence: 1) }
         let report = TraderPsychologyAnalyticsEngine.buildReport(
             trades: high + low,
             checkIns: []
@@ -90,12 +92,12 @@ final class TraderPsychologyAnalyticsEngineTests: XCTestCase {
     }
 
     func testFollowedPlanComparison() {
-        let followed = (0..<6).map {
+        let followed = (0..<8).map {
             var trade = makeTrade(id: "f\($0)", pnl: 40, offsetHours: $0)
             trade.followedPlan = true
             return trade
         }
-        let broken = (0..<6).map {
+        let broken = (0..<8).map {
             var trade = makeTrade(id: "b\($0)", pnl: -30, offsetHours: $0 + 10)
             trade.followedPlan = false
             return trade
@@ -180,7 +182,8 @@ final class TraderPsychologyAnalyticsEngineTests: XCTestCase {
     func testInsufficientDataProducesEmptyDashboardCardsWithSections() {
         let report = TraderPsychologyAnalyticsEngine.buildReport(trades: [], checkIns: [])
         XCTAssertTrue(report.dashboardCards.isEmpty)
-        XCTAssertFalse(report.sections.isEmpty)
+        XCTAssertTrue(report.sections.isEmpty)
+        XCTAssertEqual(report.matchedDayCount, 0)
     }
 
     func testPsychologyInsightsUnlockProgressUsesTradingDaysAndEligibleTrades() {

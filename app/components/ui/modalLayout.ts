@@ -46,14 +46,15 @@ export const MODAL_FOOTER_CLASS = UI_MODAL_FOOTER
 
 /**
  * Modal stacking (lowest → highest among common overlays):
- * - DetailModalShell root: 9000
+ * - DetailModalShell root: 10000 (above phone tab bar 9998 and navbar 9999)
  * - ImageLightbox: 10001
  * - Modal / ScrollableModalShell / stacked DetailModalShell: 10050
  * - CommunitySharePreviewModal (preview over Quick/Add Trade): 10055
  * - FeedbackModal / ReelViewer: 10060
  * - Dropdown menus / CustomSelect portals: 10070 (DropdownMenu + ACCOUNT_DROPDOWN_PORTAL_MENU_CLASS)
  */
-export const DETAIL_MODAL_Z_INDEX_CLASS = "z-[9000]"
+/** Above the phone tab bar (9998) and navbar (9999), below the image lightbox (10001). */
+export const DETAIL_MODAL_Z_INDEX_CLASS = "z-[10000]"
 
 /** Child DetailModalShell above another detail overlay (e.g. clip over trade). */
 export const DETAIL_MODAL_STACKED_Z_INDEX_CLASS = "z-[10050]"

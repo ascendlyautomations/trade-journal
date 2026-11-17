@@ -16,6 +16,7 @@ export type ExploreLiveTraderNow = {
   viewerCount: number | null
   startedAt: string
   videoSource: string
+  streamTitle: string | null
 }
 
 type BroadcastRow = {
@@ -24,6 +25,7 @@ type BroadcastRow = {
   broadcaster_user_id: string
   started_at: string
   video_source: string
+  stream_title: string | null
   visibility: string | null
   primary_media_publisher_identity: string | null
   rooms: {
@@ -57,6 +59,7 @@ export async function listExploreLiveTradersNow(
       broadcaster_user_id,
       started_at,
       video_source,
+      stream_title,
       visibility,
       primary_media_publisher_identity,
       rooms!inner(id, name, slug, is_private)
@@ -124,6 +127,7 @@ export async function listExploreLiveTradersNow(
       viewerCount,
       startedAt: row.started_at,
       videoSource: row.video_source?.trim() || "camera",
+      streamTitle: row.stream_title?.trim() || null,
     })
   }
 

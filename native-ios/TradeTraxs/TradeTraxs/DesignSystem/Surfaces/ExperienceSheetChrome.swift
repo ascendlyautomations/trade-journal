@@ -1,5 +1,23 @@
 import SwiftUI
 
+/// Opaque modal presentation fill — replaces system sheet material (warm brown in dark mode).
+struct ExperienceThemedPresentationBackground: ViewModifier {
+    enum Surface {
+        case sheet
+        case fullScreen
+    }
+
+    var surface: Surface = .sheet
+    @Environment(\.themeColors) private var colors
+
+    func body(content: Content) -> some View {
+        let fill = surface == .sheet ? colors.sheetBackground : colors.backgroundPrimary
+        content
+            .presentationBackground(fill)
+            .background(fill)
+    }
+}
+
 /// Shared sheet chrome — Apple-style detents, drag indicator, and corner radius.
 ///
 /// Presentation-only. Does not change navigation destinations or business logic.
@@ -10,6 +28,7 @@ struct ExperienceSheetChrome: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .modifier(ExperienceThemedPresentationBackground(surface: .sheet))
             .presentationDetents(detents)
             .presentationDragIndicator(dragIndicator)
             .presentationCornerRadius(ExperienceRadius.sheet)
@@ -20,6 +39,13 @@ struct ExperienceSheetChrome: ViewModifier {
 }
 
 extension View {
+    /// Semantic fill behind sheets and full-screen covers (call on modal roots when not using ``experienceSheetChrome()``).
+    func experienceThemedPresentationBackground(fullScreen: Bool = false) -> some View {
+        modifier(
+            ExperienceThemedPresentationBackground(surface: fullScreen ? .fullScreen : .sheet)
+        )
+    }
+
     /// Standard modal sheet chrome used across Create, Filters, New Chat, pickers.
     func experienceSheetChrome(
         detents: Set<PresentationDetent> = [.medium, .large],

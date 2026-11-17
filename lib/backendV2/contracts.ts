@@ -385,6 +385,7 @@ export type ExploreBootstrapV1 = {
   meta: BootstrapMetaV1
   data: {
     traders: Record<string, unknown>[]
+    suggested_traders?: Record<string, unknown>[]
     rooms: Record<string, unknown>[]
     social_counts: Record<string, { followers: number; following: number }>
     following_ids: string[]

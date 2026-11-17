@@ -11,13 +11,62 @@ struct RoomMemberManagementSheet: View {
     let onBan: () -> Void
     let onDismiss: () -> Void
     var onManageTags: (() -> Void)? = nil
+    var moderatorActionTitle: String? = nil
+    var onModeratorAction: (() -> Void)? = nil
+
+    /// When set, moderator confirm/deny is presented on this sheet (above Manage Member).
+    @Binding var showsModeratorConfirmation: Bool
+    var moderatorDialogTitle: String = ""
+    var moderatorConfirmButtonTitle: String = "Confirm"
+    var onConfirmModerator: (() -> Void)? = nil
+    var onCancelModerator: (() -> Void)? = nil
 
     @Environment(\.themeColors) private var colors
 
+    init(
+        member: RoomMemberItem,
+        imagePipeline: any ImagePipeline,
+        canRemove: Bool,
+        canBan: Bool,
+        onViewProfile: @escaping () -> Void,
+        onRemove: @escaping () -> Void,
+        onBan: @escaping () -> Void,
+        onDismiss: @escaping () -> Void,
+        onManageTags: (() -> Void)? = nil,
+        moderatorActionTitle: String? = nil,
+        onModeratorAction: (() -> Void)? = nil,
+        showsModeratorConfirmation: Binding<Bool>? = nil,
+        moderatorDialogTitle: String = "",
+        moderatorConfirmButtonTitle: String = "Confirm",
+        onConfirmModerator: (() -> Void)? = nil,
+        onCancelModerator: (() -> Void)? = nil
+    ) {
+        self.member = member
+        self.imagePipeline = imagePipeline
+        self.canRemove = canRemove
+        self.canBan = canBan
+        self.onViewProfile = onViewProfile
+        self.onRemove = onRemove
+        self.onBan = onBan
+        self.onDismiss = onDismiss
+        self.onManageTags = onManageTags
+        self.moderatorActionTitle = moderatorActionTitle
+        self.onModeratorAction = onModeratorAction
+        _showsModeratorConfirmation = showsModeratorConfirmation ?? .constant(false)
+        self.moderatorDialogTitle = moderatorDialogTitle
+        self.moderatorConfirmButtonTitle = moderatorConfirmButtonTitle
+        self.onConfirmModerator = onConfirmModerator
+        self.onCancelModerator = onCancelModerator
+    }
+
+    private var presentsModeratorConfirmation: Bool {
+        onConfirmModerator != nil
+    }
+
     var body: some View {
         NavigationStack {
-            List {
-                Section {
+            ScrollView {
+                VStack(spacing: 0) {
                     RoomMemberRowView(
                         item: member,
                         imagePipeline: imagePipeline,
@@ -25,34 +74,42 @@ struct RoomMemberManagementSheet: View {
                         onOpen: {}
                     )
                     .allowsHitTesting(false)
-                    .listRowBackground(colors.surfaceSecondary)
-                }
+                    .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.vertical, ExperienceSpacing.sm)
 
-                Section {
-                    Button("View Profile") {
-                        onViewProfile()
-                    }
-                    .foregroundStyle(colors.primaryText)
-                    if let onManageTags {
-                        Button("Manage Tags") {
-                            onManageTags()
+                    ExperienceDivider()
+                        .padding(.leading, ExperienceSpacing.md)
+
+                    VStack(spacing: 0) {
+                        actionRow("View Profile", action: onViewProfile)
+                        if let moderatorActionTitle, let onModeratorAction {
+                            ExperienceDivider()
+                                .padding(.leading, ExperienceSpacing.md)
+                            actionRow(moderatorActionTitle, action: onModeratorAction)
                         }
-                        .foregroundStyle(colors.primaryText)
-                    }
-                    if canRemove {
-                        Button("Remove Member", role: .destructive) {
-                            onRemove()
+                        if let onManageTags {
+                            ExperienceDivider()
+                                .padding(.leading, ExperienceSpacing.md)
+                            actionRow("Manage Tags", action: onManageTags)
                         }
-                    }
-                    if canBan {
-                        Button("Ban Member", role: .destructive) {
-                            onBan()
+                        if canRemove {
+                            ExperienceDivider()
+                                .padding(.leading, ExperienceSpacing.md)
+                            actionRow("Remove Member", role: .destructive, action: onRemove)
+                        }
+                        if canBan {
+                            ExperienceDivider()
+                                .padding(.leading, ExperienceSpacing.md)
+                            actionRow("Ban Member", role: .destructive, action: onBan)
                         }
                     }
                 }
+                .manageMemberSheetGroupedCard()
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.top, ExperienceSpacing.sm)
+                .padding(.bottom, ExperienceSpacing.md)
             }
-            .experienceInsetGroupedListStyle(pageBackground: true)
-            .scrollContentBackground(.hidden)
+            .background(colors.groupedBackground.ignoresSafeArea())
             .experienceNavigationTitle("Manage Member")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -60,9 +117,62 @@ struct RoomMemberManagementSheet: View {
                 }
             }
         }
-        .experienceScreenBackground()
-        .presentationDetents([.medium, .large])
-        .presentationBackground(colors.sheetBackground)
+        .experienceSheetChrome()
+        .alert(moderatorDialogTitle, isPresented: moderatorConfirmationBinding) {
+            Button(moderatorConfirmButtonTitle, action: { onConfirmModerator?() })
+            Button("Cancel", role: .cancel, action: { onCancelModerator?() })
+        }
+    }
+
+    private var moderatorConfirmationBinding: Binding<Bool> {
+        Binding(
+            get: {
+                presentsModeratorConfirmation && showsModeratorConfirmation
+            },
+            set: { showsModeratorConfirmation = $0 }
+        )
+    }
+
+    private func actionRow(
+        _ title: String,
+        role: ButtonRole? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(role: role, action: action) {
+            HStack {
+                Text(title)
+                    .experienceStyle(.body, color: role == .destructive ? colors.loss : colors.primaryText)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.vertical, ExperienceSpacing.sm)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.experiencePlain)
+    }
+}
+
+// MARK: - Grouped card (profile + actions)
+
+private struct ManageMemberSheetGroupedCardModifier: ViewModifier {
+    @Environment(\.themeColors) private var colors
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                colors.surfacePrimary,
+                in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                    .stroke(colors.border.opacity(0.35), lineWidth: ExperienceBorder.hairline)
+            }
+    }
+}
+
+private extension View {
+    func manageMemberSheetGroupedCard() -> some View {
+        modifier(ManageMemberSheetGroupedCardModifier())
     }
 }
 

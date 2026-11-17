@@ -349,7 +349,7 @@ function PropfirmEquityPlot({
 
 function PropfirmEquityCurve({ data }: { data: PropfirmEquityCurvePoint[] }) {
   return (
-    <div className={SECTION_PANEL}>
+    <div className={`${SECTION_PANEL} max-md:!overflow-visible`}>
       <div className="mb-3 flex flex-col gap-1 max-md:mb-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className={PROPFIRM_SECTION_TITLE_CLASS}>
@@ -365,7 +365,7 @@ function PropfirmEquityCurve({ data }: { data: PropfirmEquityCurvePoint[] }) {
         <>
           <PropfirmEquityPlot
             data={data}
-            className="h-[200px] w-full overflow-hidden md:hidden"
+            className="h-[200px] w-full overflow-visible md:hidden"
             yAxisWidth={MOBILE_WEB_CHART.yAxisWidth}
             tickSize={MOBILE_WEB_CHART.tickSize}
             compactAxis
@@ -877,6 +877,8 @@ export default function PropFirmPage() {
           : []
     )
 
+    let cancelled = false
+
     if (accountIds.length === 0) {
       setTrades([])
       return
@@ -888,7 +890,7 @@ export default function PropFirmPage() {
       setLoadingTrades(true)
       try {
         if (isDemoUserId(user?.id)) {
-          setTrades(getDemoPropfirmTrades(accountIds))
+          if (!cancelled) setTrades(getDemoPropfirmTrades(accountIds))
           return
         }
 
@@ -899,6 +901,7 @@ export default function PropFirmPage() {
           .order("trade_date", { ascending: true })
           .order("entry_time", { ascending: true })
 
+        if (cancelled) return
         if (error) {
           console.error(error)
           return
@@ -906,11 +909,14 @@ export default function PropFirmPage() {
 
         setTrades(data || [])
       } finally {
-        setLoadingTrades(false)
+        if (!cancelled) setLoadingTrades(false)
       }
     }
 
-    loadTrades()
+    void loadTrades()
+    return () => {
+      cancelled = true
+    }
   }, [
     isAllAccountsView,
     selectedAccount,

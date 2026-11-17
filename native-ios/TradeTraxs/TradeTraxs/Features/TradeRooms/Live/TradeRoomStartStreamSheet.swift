@@ -7,8 +7,9 @@ struct TradeRoomStartStreamSheet: View {
 
     /// Single option — kept as a picker per product spec.
     @State private var method: String = "obs"
+    @State private var streamTitle: String = ""
 
-    var onConfirmOBS: () -> Void
+    var onConfirmOBS: (String) -> Void
 
     var body: some View {
         NavigationStack {
@@ -22,13 +23,24 @@ struct TradeRoomStartStreamSheet: View {
                         .foregroundStyle(colors.textSecondary)
                 }
 
+                Section("Stream title") {
+                    TextField("e.g. Trading NY Session — NQ Futures", text: $streamTitle)
+                        .textInputAutocapitalization(.sentences)
+                    Text("\(streamTitle.trimmingCharacters(in: .whitespacesAndNewlines).count)/\(TradeRoomBroadcastStreamTitle.maxLength)")
+                        .font(.caption2)
+                        .foregroundStyle(colors.textSecondary)
+                }
+
                 Section {
                     Button("Start with OBS") {
-                        onConfirmOBS()
+                        guard let title = TradeRoomBroadcastStreamTitle.normalize(streamTitle) else { return }
+                        onConfirmOBS(title)
                     }
                     .fontWeight(.semibold)
+                    .disabled(TradeRoomBroadcastStreamTitle.normalize(streamTitle) == nil)
                 }
             }
+            .experienceTradeTraxsFormStyle(pageBackground: true)
             .navigationTitle("Start a stream")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -37,5 +49,6 @@ struct TradeRoomStartStreamSheet: View {
                 }
             }
         }
+        .experienceSheetChrome(detents: [.large])
     }
 }

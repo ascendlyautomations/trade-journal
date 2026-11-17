@@ -40,35 +40,6 @@ struct TradesContainerView: View {
         .sheet(item: $viewModel.sharePayload) { payload in
             TradeShareSheet(items: [payload.text])
         }
-        .confirmationDialog(
-            "Delete Trade?",
-            isPresented: Binding(
-                get: { viewModel.pendingDelete != nil },
-                set: { if !$0 { viewModel.pendingDelete = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Delete Trade", role: .destructive) {
-                let summary = viewModel.pendingDelete
-                Task { await viewModel.confirmDelete(summary: summary) }
-            }
-            Button("Cancel", role: .cancel) {
-                viewModel.pendingDelete = nil
-            }
-        } message: {
-            Text("This action cannot be undone.")
-        }
-        .alert(
-            "Couldn't delete trade",
-            isPresented: Binding(
-                get: { viewModel.deleteErrorMessage != nil },
-                set: { if !$0 { viewModel.deleteErrorMessage = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) { viewModel.deleteErrorMessage = nil }
-        } message: {
-            Text(viewModel.deleteErrorMessage ?? "")
-        }
     }
 
     private var displayItems: [TradeSummary] {
@@ -143,7 +114,8 @@ struct TradesContainerView: View {
     }
 
     private var tradeList: some View {
-        LazyVStack(spacing: ExperienceSpacing.sm) {
+        let detailCache = appEnvironment.data.detailCache
+        return LazyVStack(spacing: ExperienceSpacing.sm) {
             ForEach(displayItems) { summary in
                 ProfileTradeCard(
                     summary: summary,
@@ -154,22 +126,20 @@ struct TradesContainerView: View {
                     onOpen: { viewModel.openTrade(summary) },
                     onShare: { viewModel.shareTrade(summary) },
                     onEdit: { viewModel.editTrade(summary) },
-                    onDelete: viewModel.showsOwnerActions
-                        ? {
-                            guard !viewModel.isDeletingTrade(summary.id) else { return }
-                            viewModel.requestDelete(summary)
-                        }
-                        : nil,
-                    isDeleteInProgress: viewModel.isDeletingTrade(summary.id),
+                    onDelete: nil,
+                    isDeleteInProgress: false,
                     onReport: reportAction(for: summary),
                     profilePin: profilePin,
                     isProfilePinned: isProfilePinned(summary),
                     copyTradeModeSummaryLine: summary.copyTradePublicModeSummary,
-                    detailCache: appEnvironment.data.detailCache,
+                    postedAccountCaption: viewModel.publicPostedAccountCaption(for: summary),
+                    detailCache: detailCache,
                     profileViewerID: profileEngagementViewerID,
                     onOpenLinkedClip: { viewModel.openLinkedClip($0) }
                 )
-                .id("\(summary.id.rawValue)-\(summary.copyTradePublicModeSummary ?? "")")
+                .id(
+                    "\(summary.id.rawValue)-\(summary.copyTradePublicModeSummary ?? "")-linked-\(viewModel.linkedReelPresentationToken(for: summary.id))"
+                )
                 .task {
                     await viewModel.loadMoreIfNeeded(currentTradeID: summary.id)
                 }

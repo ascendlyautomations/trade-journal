@@ -71,7 +71,7 @@ final class TradingScorecardEngineTests: XCTestCase {
         let cat = ScorecardConsistency.score(trades: trades, tradingDayCount: 8, postTripleLossWinRate: 0.2)
         XCTAssertNotNil(cat.score)
         XCTAssertEqual(cat.score, 100)
-        XCTAssertTrue(cat.subMetrics.contains { $0.id == "streak.after_three_losses_win_rate" })
+        XCTAssertNil(cat.subMetrics.first { $0.id == "streak.after_three_losses_win_rate" })
     }
 
     func testConsistencyUnscoredBelowThreePostLossTags() {
@@ -120,7 +120,9 @@ final class TradingScorecardEngineTests: XCTestCase {
         let cat = ScorecardPsychology.score(trades: trades, checkIns: checkIns, domainTrades: domainTrades)
         XCTAssertNil(cat.score)
         XCTAssertFalse(cat.eligible)
-        XCTAssertTrue(cat.subMetrics.contains { $0.id == "psych.phase1_mode" })
+        let coverage = cat.subMetrics.first { $0.id == "psych.checkin_coverage" }
+        XCTAssertEqual(coverage?.value, "5 of 8 trading days")
+        XCTAssertEqual(coverage?.sampleSize, 8)
     }
 
     func testDisciplineRequiresThreeTags() {
@@ -308,6 +310,8 @@ final class TradingScorecardEngineTests: XCTestCase {
             }
         }
         XCTAssertEqual(ScorecardTradeMapper.postTripleLossWinRate(trades: full), 1.0)
+        XCTAssertEqual(ScorecardTradeMapper.postTripleLossWindow(trades: full)?.sampleSize, 5)
+        XCTAssertNotEqual(ScorecardTradeMapper.postTripleLossWindow(trades: full)?.sampleSize, full.count)
     }
 
     func testConsistencyBarGateUsesPostLossTagsNotDayCoverage() {
@@ -319,7 +323,7 @@ final class TradingScorecardEngineTests: XCTestCase {
         }
         let cat = ScorecardConsistency.score(trades: trades, tradingDayCount: 7, postTripleLossWinRate: nil)
         XCTAssertNil(cat.score)
-        XCTAssertGreaterThan(cat.coveragePercent, 80)
+        XCTAssertEqual(cat.coveragePercent, 0)
         XCTAssertEqual(ScorecardVisualSupport.categoryBarFillFraction(cat), 1.0 / 3.0, accuracy: 0.01)
     }
 
@@ -331,8 +335,7 @@ final class TradingScorecardEngineTests: XCTestCase {
             }
         }
         let cat = ScorecardDiscipline.score(trades: losses)
-        let metric = cat.subMetrics.first { $0.id == "discipline.mistake_logging_coverage" }
-        XCTAssertNotNil(metric)
-        XCTAssertEqual(metric?.value, "50%")
+        XCTAssertNil(cat.subMetrics.first { $0.id == "discipline.mistake_logging_coverage" })
+        XCTAssertEqual(cat.subMetrics.first { $0.id == "discipline.plan_coverage" }?.sampleSize, 0)
     }
 }

@@ -20,6 +20,7 @@ nonisolated struct LiveKitBroadcastStatusResponse: Decodable, Sendable {
     var hostConnected: Bool?
     var primaryMediaPublisherConnected: Bool?
     var viewerCount: Int?
+    var streamTitle: String?
 
     enum CodingKeys: String, CodingKey {
         case live
@@ -38,6 +39,7 @@ nonisolated struct LiveKitBroadcastStatusResponse: Decodable, Sendable {
         case hostConnected
         case primaryMediaPublisherConnected
         case viewerCount
+        case streamTitle
     }
 
     init(from decoder: Decoder) throws {
@@ -70,6 +72,7 @@ nonisolated struct LiveKitBroadcastStatusResponse: Decodable, Sendable {
             forKey: .primaryMediaPublisherConnected
         )
         viewerCount = try container.decodeIfPresent(Int.self, forKey: .viewerCount)
+        streamTitle = try container.decodeIfPresent(String.self, forKey: .streamTitle)
     }
 }
 
@@ -89,6 +92,7 @@ nonisolated struct LiveKitBroadcastStartResponse: Decodable, Sendable {
     var primaryMediaPublisherIdentity: String?
     var visibility: String?
     var publicLive: Bool?
+    var streamTitle: String?
 }
 
 nonisolated struct LiveKitObsCredentialsResponse: Decodable, Sendable {
@@ -189,15 +193,22 @@ nonisolated struct LiveKitBroadcastClient: Sendable {
     func startBroadcast(
         roomID: RoomID,
         voiceMode: String = "broadcast_only",
-        videoSource: String = "obs"
+        videoSource: String = "obs",
+        streamTitle: String
     ) async throws -> LiveKitBroadcastStartResponse {
         struct Body: Encodable {
             var roomId: String
             var voiceMode: String
             var videoSource: String
+            var streamTitle: String
         }
         let body = try JSONEncoder().encode(
-            Body(roomId: roomID.rawValue, voiceMode: voiceMode, videoSource: videoSource)
+            Body(
+                roomId: roomID.rawValue,
+                voiceMode: voiceMode,
+                videoSource: videoSource,
+                streamTitle: streamTitle
+            )
         )
         let response = try await transport.send(
             host: .bff,
@@ -268,6 +279,40 @@ nonisolated struct LiveKitBroadcastClient: Sendable {
             method: .get,
             requiresAuthentication: true
         )
+    }
+
+    func patchStreamTitle(
+        roomID: RoomID,
+        sessionId: String,
+        streamTitle: String
+    ) async throws -> String {
+        struct Body: Encodable {
+            var roomId: String
+            var sessionId: String
+            var streamTitle: String
+        }
+        struct Response: Decodable {
+            var streamTitle: String?
+        }
+        let body = try JSONEncoder().encode(
+            Body(roomId: roomID.rawValue, sessionId: sessionId, streamTitle: streamTitle)
+        )
+        let response = try await transport.send(
+            host: .bff,
+            path: "/api/livekit/broadcast/stream-title",
+            method: .patch,
+            headers: ["Content-Type": "application/json"],
+            body: body,
+            requiresAuthentication: true
+        )
+        let decoded = try decodeSuccessBody(
+            Response.self,
+            response: response,
+            path: "/api/livekit/broadcast/stream-title",
+            method: .patch,
+            requiresAuthentication: true
+        )
+        return decoded.streamTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? streamTitle
     }
 
     func publishBroadcast(roomID: RoomID) async throws -> LiveKitBroadcastPublishResponse {

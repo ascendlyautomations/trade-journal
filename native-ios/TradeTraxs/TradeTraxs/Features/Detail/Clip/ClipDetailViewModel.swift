@@ -19,6 +19,8 @@ final class ClipDetailViewModel {
     private(set) var isOwner = false
     private(set) var isDeleting = false
     private(set) var deleteErrorMessage: String?
+    /// Resolved from network embed / authoritative owner cache — never stale list seed alone.
+    private(set) var resolvedLinkedTrade: Trade?
     private(set) var player: AVPlayer?
     private(set) var videoPresentation: VideoPresentationInfo?
     private(set) var didReachEnd = false
@@ -151,9 +153,30 @@ final class ClipDetailViewModel {
         }
     }
 
+    func handleJournalMutation() {
+        guard let reel else { return }
+        switch TradeJournalMutationStore.shared.latest {
+        case .deleted(let id, _) where reel.linkedTradeID == id:
+            resolvedLinkedTrade = nil
+            self.reel = LinkedReelTradeVisibility.reconcileOrphanedReelLink(
+                reel: reel,
+                cache: cache,
+                serverTradeLinkRemoved: true
+            )
+        case .updated(let trade) where reel.linkedTradeID == trade.id:
+            Task { await refresh() }
+        default:
+            break
+        }
+    }
+
     private func performLoad(forceNetwork: Bool = false) async {
         if !forceNetwork, let seed = cache.reel(id: reelID) {
-            await apply(seed)
+            await apply(seed, embeddedTrade: nil)
+            if seed.linkedTradeID != nil, resolvedLinkedTrade == nil {
+                await performLoad(forceNetwork: true)
+                return
+            }
             loadTask = nil
             return
         }
@@ -169,7 +192,7 @@ final class ClipDetailViewModel {
             if let embeddedTrade = result.embeddedTrade {
                 cache.seed(embeddedTrade)
             }
-            await apply(result.reel)
+            await apply(result.reel, embeddedTrade: result.embeddedTrade)
         } catch {
             guard !Task.isCancelled else { return }
             if reel == nil {
@@ -181,10 +204,26 @@ final class ClipDetailViewModel {
         loadTask = nil
     }
 
-    private func apply(_ loaded: Reel) async {
-        reel = loaded
-        phase = .loaded
+    private func apply(_ loaded: Reel, embeddedTrade: Trade?) async {
         let userID = await session.currentUserID
+        let viewerProfile = userID.map { ProfileID($0.rawValue) }
+        let resolved = LinkedReelTradeVisibility.resolvedTrade(
+            reel: loaded,
+            embeddedTrade: embeddedTrade,
+            cache: cache,
+            viewerID: viewerProfile
+        )
+        resolvedLinkedTrade = resolved
+        let reconciled = LinkedReelTradeVisibility.reconcileOrphanedReelLink(
+            reel: loaded,
+            cache: cache,
+            serverTradeLinkRemoved: loaded.linkedTradeID == nil
+        )
+        if reconciled.id == loaded.id {
+            cache.seed(reconciled)
+        }
+        reel = reconciled
+        phase = .loaded
         isOwner = userID?.rawValue == loaded.authorProfileID.rawValue
         if let cached = cache.profile(id: loaded.authorProfileID) {
             author = cached

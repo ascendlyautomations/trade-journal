@@ -51,6 +51,7 @@ final class AddTradeExperienceTests: XCTestCase {
             exitAt: Date(timeIntervalSince1970: 1_700_000_600),
             realizedPnL: Money(amount: 660),
             riskReward: 2,
+            fullTakeProfit: true,
             points: 16.5,
             sessionLabel: "NY",
             strategy: "ORB",
@@ -64,6 +65,7 @@ final class AddTradeExperienceTests: XCTestCase {
         XCTAssertEqual(body.direction, "Long")
         XCTAssertEqual(body.contracts, 2)
         XCTAssertEqual(body.pnl, 660)
+        XCTAssertEqual(body.full_tp, true)
         XCTAssertEqual(body.points, 16.5)
         XCTAssertEqual(body.session, "NY")
         XCTAssertEqual(body.strategy, "ORB")
@@ -692,6 +694,65 @@ final class AddTradeExperienceTests: XCTestCase {
         XCTAssertEqual(viewModel.fieldErrors[.rr], "Enter a valid R:R")
     }
 
+    func testMaxRrHiddenWhenPnLEmptyAndNoEarlyExit() {
+        let viewModel = makeAddTradeViewModelForVisibility()
+        viewModel.pnlText = ""
+        viewModel.earlyExit = false
+        XCTAssertFalse(viewModel.showsMaxRrReachedField)
+    }
+
+    func testMaxRrHiddenWhenPnLPositiveAndNoEarlyExit() {
+        let viewModel = makeAddTradeViewModelForVisibility()
+        viewModel.pnlText = "250"
+        viewModel.earlyExit = false
+        XCTAssertFalse(viewModel.showsMaxRrReachedField)
+    }
+
+    func testMaxRrHiddenWhenPnLZeroAndNoEarlyExit() {
+        let viewModel = makeAddTradeViewModelForVisibility()
+        viewModel.pnlText = "0"
+        viewModel.earlyExit = false
+        XCTAssertFalse(viewModel.showsMaxRrReachedField)
+    }
+
+    func testMaxRrShownWhenPnLNegativeAndNoEarlyExit() {
+        let viewModel = makeAddTradeViewModelForVisibility()
+        viewModel.pnlText = "-120"
+        viewModel.earlyExit = false
+        XCTAssertTrue(viewModel.showsMaxRrReachedField)
+    }
+
+    func testMaxRrShownWhenEarlyExitRegardlessOfPnL() {
+        let viewModel = makeAddTradeViewModelForVisibility()
+        viewModel.earlyExit = true
+        for pnl in ["", "500", "0", "-50"] {
+            viewModel.pnlText = pnl
+            XCTAssertTrue(viewModel.showsMaxRrReachedField, "expected visible for pnl=\(pnl)")
+        }
+    }
+
+    func testMaxRrTextPreservedWhenFieldHidden() {
+        let viewModel = makeAddTradeViewModelForVisibility()
+        viewModel.pnlText = "-100"
+        viewModel.maxRrReachedText = "1.25"
+        XCTAssertTrue(viewModel.showsMaxRrReachedField)
+        viewModel.pnlText = "200"
+        XCTAssertFalse(viewModel.showsMaxRrReachedField)
+        XCTAssertEqual(viewModel.maxRrReachedText, "1.25")
+    }
+
+    private func makeAddTradeViewModelForVisibility() -> AddTradeViewModel {
+        AddTradeViewModel(
+            trades: AddTradeStubRepository(),
+            feed: AddTradeStubFeedRepository(),
+            session: AddTradeStubSession(userID: AddTradeFixtures.viewerID.rawValue),
+            detailCache: DetailPresentationCache(),
+            uploadService: AddTradeStubUpload(),
+            objectStorage: AddTradeStubStorage(),
+            onDismiss: {}
+        )
+    }
+
     private func waitFor(timeout: TimeInterval = 2, _ condition: @escaping () -> Bool) async {
         let start = Date()
         while !condition() {
@@ -758,9 +819,15 @@ private final class AddTradeStubFeedRepository: FeedRepository, @unchecked Senda
         lastCreatedReel = reel
         return reel
     }
-    func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel] {
+    func unattachedReels(
+        for profileID: ProfileID,
+        limit: Int,
+        includingReelID: ReelID?
+    ) async throws -> [Reel] {
         Array(AddTradeFixtures.unattachedReels(owner: profileID).prefix(limit))
     }
+
+    func tradeIDsWithAttachedReels(owner: ProfileID) async throws -> Set<TradeID> { [] }
     func attachReel(id: ReelID, to tradeID: TradeID) async throws {
         attachCalls += 1
         if shouldFailAttach {

@@ -18,6 +18,7 @@ export function getTradeRoomBroadcastViewerBootstrapVideo(): HTMLVideoElement | 
     v.muted = true
     v.playsInline = true
     v.autoplay = true
+    v.setAttribute("data-tt-broadcast-media", "true")
     document.body.appendChild(v)
     viewerBootstrapVideo = v
   }

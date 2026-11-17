@@ -12,7 +12,7 @@ struct RoomChannelPostingPermissionPicker: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
             Text("WHO CAN POST")
                 .experienceStyle(.caption, color: colors.secondaryText)
 

@@ -47,6 +47,40 @@ final class PublicTradeAccountBadgeTests: XCTestCase {
         XCTAssertEqual(trade.publicAccountBadge, "Funded")
     }
 
+    func testPostedAccountCaptionJoinsProviderAndBadge() {
+        XCTAssertEqual(
+            TradeDisplay.publicPostedAccountCaption(
+                providerName: "Alpha Futures",
+                accountMode: .funded,
+                publicAccountBadge: "Funded"
+            ),
+            "Alpha Futures · Funded"
+        )
+        XCTAssertEqual(
+            TradeDisplay.publicPostedAccountCaption(
+                providerName: "Tradovate Personal",
+                accountMode: .live,
+                publicAccountBadge: "Live"
+            ),
+            "Tradovate Personal · Live"
+        )
+        XCTAssertEqual(
+            TradeDisplay.publicPostedAccountCaption(
+                providerName: "Evaluation Account",
+                accountMode: .evaluation,
+                publicAccountBadge: "Eval"
+            ),
+            "Eval"
+        )
+        XCTAssertEqual(
+            TradeDisplay.publicPostedAccountCaption(
+                providerName: nil,
+                publicAccountBadge: "Funded"
+            ),
+            "Funded"
+        )
+    }
+
     func testPublicTradeWireContainsModeWithoutAccountNumber() {
         let publicTradeJSON = """
         {"id":"t1","user_id":"u1","ticker":"NQ","direction":"long","mode":"eval","account_type":"Prop Firm","pnl":1200,"rr":2.1,"contracts":1,"created_at":"2026-01-15T12:00:00Z","is_public":true}

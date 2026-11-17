@@ -170,6 +170,13 @@ export function buildPushAlertCopy(target: PushNotificationTarget): {
 
   if (type === "room_live") {
     const json = parseJsonContent(target.content)
+    const streamTitle = stringField(json, "stream_title")
+    if (streamTitle) {
+      return {
+        title: who,
+        body: `is live: ${streamTitle}`,
+      }
+    }
     const room =
       stringField(json, "room_name") ||
       stringField(json, "room_slug") ||

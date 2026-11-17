@@ -318,7 +318,7 @@ export default function ProfileOnboarding({
   return (
     <>
       <FeedbackModal {...feedbackModalProps} />
-      <div className="flex w-full justify-center px-4 py-5 sm:px-5 md:min-h-dvh md:items-center md:py-6">
+      <div className="flex min-h-dvh w-full justify-center px-4 pt-[max(1.25rem,env(safe-area-inset-top,0px))] pb-[max(1.25rem,env(safe-area-inset-bottom,0px))] sm:px-5 md:items-center">
         <form
           onSubmit={handleSubmit}
           aria-labelledby="onboarding-title"

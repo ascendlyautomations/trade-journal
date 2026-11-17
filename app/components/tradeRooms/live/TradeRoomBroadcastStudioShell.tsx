@@ -31,8 +31,9 @@ export default function TradeRoomBroadcastStudioShell({
 }: Props) {
   return (
     <div
-      className="fixed inset-0 z-[9000] flex flex-col bg-zinc-950 text-white"
+      className="fixed inset-0 z-[10040] flex flex-col bg-zinc-950 pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] text-white"
       data-broadcast-studio-mode={mode}
+      data-tt-broadcast-media="true"
     >
       <header className="flex shrink-0 items-center gap-3 border-b border-white/10 px-4 py-3">
         <div className="min-w-0 flex-1">
@@ -44,17 +45,17 @@ export default function TradeRoomBroadcastStudioShell({
         {headerActions}
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col p-3">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
         {toolbar ? <div className="mb-2 shrink-0">{toolbar}</div> : null}
-        <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row lg:items-stretch">
-          <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
+        <div className="flex flex-col gap-3 lg:min-h-0 lg:flex-1 lg:flex-row lg:items-stretch lg:overflow-hidden">
+          <div className="flex w-full min-w-0 flex-col lg:min-h-0 lg:flex-1">
             {videoColumnPrefix}
-            <div className="relative min-h-0 w-full flex-1 overflow-hidden rounded-xl bg-black aspect-video max-lg:max-h-[min(50vh,56vw)] lg:aspect-auto lg:min-h-[280px]">
+            <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-black lg:aspect-auto lg:min-h-[280px] lg:flex-1">
               {video}
             </div>
           </div>
           {sidebar ? (
-            <div className="flex w-full min-h-0 flex-col max-lg:min-h-[220px] lg:w-[min(380px,38vw)] lg:shrink-0">
+            <div className="flex min-h-[220px] w-full flex-col lg:min-h-0 lg:w-[min(380px,38vw)] lg:shrink-0">
               {sidebar}
             </div>
           ) : null}

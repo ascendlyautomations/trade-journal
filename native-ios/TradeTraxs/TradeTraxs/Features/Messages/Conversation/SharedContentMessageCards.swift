@@ -256,9 +256,19 @@ struct SharedAchievementMessageCard: View {
                     )
                 }
 
-                Text(achievement.title)
-                    .experienceStyle(.headline, color: isOutgoing ? colors.onAccent : colors.primaryText)
-                    .lineLimit(2)
+                HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xs) {
+                    Text(achievement.title)
+                        .experienceStyle(.headline, color: isOutgoing ? colors.onAccent : colors.primaryText)
+                        .lineLimit(2)
+                        .layoutPriority(1)
+                    Spacer(minLength: ExperienceSpacing.xxs)
+                    if let accessory = AchievementDetailPresentation.titleTrailingAccessory(for: achievement) {
+                        Text(accessory)
+                            .experienceStyle(.caption, color: secondaryTextColor)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                    }
+                }
 
                 if let author {
                     HStack(spacing: 4) {
@@ -273,6 +283,12 @@ struct SharedAchievementMessageCard: View {
                 {
                     Text(details)
                         .experienceStyle(.caption, color: secondaryTextColor)
+                        .lineLimit(2)
+                }
+
+                if let context = AchievementDetailPresentation.contextCaption(for: achievement) {
+                    Text(context)
+                        .experienceStyle(.caption2, color: tertiaryTextColor)
                         .lineLimit(2)
                 }
             } else {

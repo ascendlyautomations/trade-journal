@@ -6,10 +6,13 @@ import {
   psychologyReportTitle,
 } from "./catalog.ts"
 import { buildPsychologyCoachSummary, buildPsychologyRecommendations } from "./coach.ts"
-import { enrichPsychologyTrades, resolveSequenceBucket } from "./enrich.ts"
+import { enrichPsychologyTrades } from "./enrich.ts"
 import { buildPsychologyAnalyticsReport } from "./engine.ts"
 import { buildPsychologyCoachFacts } from "./facts.ts"
+import { PSYCHOLOGY_INSIGHT_MIN_TRADES } from "./comparisons.ts"
+import { psychologyRulesAt, type PreferenceRuleContext } from "@/lib/analytics/preferenceCompliance"
 import {
+  formatOptionalPsychologyMoney,
   formatPsychologyHours,
   formatPsychologyInteger,
   formatPsychologyMoney,
@@ -23,6 +26,7 @@ import { psychologyTradeMetrics } from "./metrics.ts"
 import {
   filterTradesForPeriod,
   psychologyPeriodBounds,
+  endOfEasternDay,
 } from "./periods.ts"
 import type {
   PsychologyReport,
@@ -96,30 +100,49 @@ function buildTradingPsychology(
 function buildBehavior(
   periodTrades: readonly PsychologyReportTrade[],
   checkIns: readonly TraderDailyCheckIn[],
-  baselineWinRate: number | null
+  baselineWinRate: number | null,
+  preferences: PreferenceRuleContext | null = null
 ): PsychologyReportBehaviorSummary {
-  const enriched = enrichPsychologyTrades(periodTrades, checkIns)
+  const enriched = enrichPsychologyTrades(periodTrades, checkIns, preferences)
   const dayCounts = new Map<string, number>()
   for (const item of enriched) {
     const key = psychologyTradeDateKey(item.trade)
     if (!key) continue
     dayCounts.set(key, (dayCounts.get(key) ?? 0) + 1)
   }
-  const afterTwo = enriched.filter((row) => row.consecutiveLossesBefore >= 2)
-  const afterTwoMetrics = psychologyTradeMetrics(afterTwo.map((row) => row.trade))
-  const grouped = new Map<string, typeof enriched>()
-  for (const item of enriched) {
-    const bucket = resolveSequenceBucket(item.tradeNumberInDay)
-    const list = grouped.get(bucket) ?? []
-    list.push(item)
-    grouped.set(bucket, list)
-  }
-  const early = [
-    ...(grouped.get("Trade #1") ?? []),
-    ...(grouped.get("Trade #2") ?? []),
-    ...(grouped.get("Trade #3") ?? []),
-  ]
-  const late = grouped.get("Trade #5+") ?? []
+  const personalPause = enriched.some(
+    (row) => psychologyRulesAt(preferences, row.trade.entryAtMs).consecutiveLossPause != null
+  )
+  const pauses = enriched
+    .map((row) => psychologyRulesAt(preferences, row.trade.entryAtMs).consecutiveLossPause)
+    .filter((value): value is number => value != null)
+  const uniquePause = new Set(pauses).size === 1 ? pauses[0] : null
+  const afterRows = personalPause
+    ? enriched.filter((row) => {
+        const pause = psychologyRulesAt(preferences, row.trade.entryAtMs).consecutiveLossPause
+        return pause != null && row.consecutiveLossesBefore >= pause
+      })
+    : enriched.filter((row) => row.consecutiveLossesBefore >= 2)
+  const afterMetrics = psychologyTradeMetrics(afterRows.map((row) => row.trade))
+  const personalCap = enriched.some(
+    (row) => psychologyRulesAt(preferences, row.trade.entryAtMs).maxTradesPerDay != null
+  )
+  const caps = enriched
+    .map((row) => psychologyRulesAt(preferences, row.trade.entryAtMs).maxTradesPerDay)
+    .filter((value): value is number => value != null)
+  const uniqueCap = new Set(caps).size === 1 ? caps[0] : null
+  const early = personalCap
+    ? enriched.filter((row) => {
+        const cap = psychologyRulesAt(preferences, row.trade.entryAtMs).maxTradesPerDay
+        return cap != null && row.tradeNumberInDay <= cap
+      })
+    : enriched.filter((row) => row.tradeNumberInDay >= 1 && row.tradeNumberInDay <= 3)
+  const late = personalCap
+    ? enriched.filter((row) => {
+        const cap = psychologyRulesAt(preferences, row.trade.entryAtMs).maxTradesPerDay
+        return cap != null && row.tradeNumberInDay > cap
+      })
+    : enriched.filter((row) => row.tradeNumberInDay >= 5)
   const earlyM = psychologyTradeMetrics(early.map((row) => row.trade))
   const lateM = psychologyTradeMetrics(late.map((row) => row.trade))
 
@@ -127,10 +150,41 @@ function buildBehavior(
     averageTradesPerDay: dayCounts.size
       ? [...dayCounts.values()].reduce((sum, value) => sum + value, 0) / dayCounts.size
       : null,
-    afterTwoLossesWinRate: afterTwo.length ? afterTwoMetrics.winRate : null,
-    afterTwoLossesBaselineWinRate: afterTwo.length ? baselineWinRate : null,
-    earlyTradeAvgPnL: early.length ? earlyM.averagePnL : null,
-    lateTradeAvgPnL: late.length ? lateM.averagePnL : null,
+    afterTwoLossesWinRate:
+      afterRows.length >= PSYCHOLOGY_INSIGHT_MIN_TRADES
+        ? afterMetrics.winRate
+        : null,
+    afterTwoLossesBaselineWinRate:
+      afterRows.length >= PSYCHOLOGY_INSIGHT_MIN_TRADES &&
+      periodTrades.length >= PSYCHOLOGY_INSIGHT_MIN_TRADES
+        ? baselineWinRate
+        : null,
+    earlyTradeAvgPnL:
+      early.length >= PSYCHOLOGY_INSIGHT_MIN_TRADES &&
+      late.length >= PSYCHOLOGY_INSIGHT_MIN_TRADES
+        ? earlyM.averagePnL
+        : null,
+    lateTradeAvgPnL:
+      early.length >= PSYCHOLOGY_INSIGHT_MIN_TRADES &&
+      late.length >= PSYCHOLOGY_INSIGHT_MIN_TRADES
+        ? lateM.averagePnL
+        : null,
+    afterLossLabel:
+      personalPause && uniquePause != null
+        ? `Win rate after ${uniquePause}+ losses`
+        : personalPause
+          ? "Win rate after your pause"
+          : "Win rate after 2+ losses",
+    earlyLabel: personalCap
+      ? uniqueCap != null
+        ? `Within ${uniqueCap} trades avg`
+        : "Within your cap avg"
+      : "Trades 1–3 Avg",
+    lateLabel: personalCap
+      ? uniqueCap != null
+        ? `Beyond ${uniqueCap} trades avg`
+        : "Beyond your cap avg"
+      : "Trade #5+ Avg",
   }
 }
 
@@ -172,16 +226,24 @@ function buildComparisons(
     },
     prevBoundsEnd
   )
+  const currentEndDay = Number(bounds.endDateKey.slice(8))
+  const priorLast = priorBounds.endDateKey
+  const priorDay = Math.min(currentEndDay, Number(priorLast.slice(8)))
+  const priorEndKey = `${priorBounds.startDateKey.slice(0, 8)}${String(priorDay).padStart(2, "0")}`
+  const priorIsPartial = priorEndKey < priorLast
   const currentTrades = filterTradesForPeriod(trades, bounds)
-  const priorTrades = filterTradesForPeriod(trades, priorBounds)
+  const priorTrades = filterTradesForPeriod(trades, {
+    ...priorBounds,
+    endDateKey: priorEndKey,
+    endMs: endOfEasternDay(priorEndKey).getTime(),
+  })
+  const currentPartial = bounds.dateRangeLabel.includes("(partial)")
   if (currentTrades.length < 10 || priorTrades.length < 10) return []
 
   const currentCheckIns = filterCheckIns(checkIns, bounds.startDateKey, bounds.endDateKey)
-  const priorCheckIns = filterCheckIns(
-    checkIns,
-    priorBounds.startDateKey,
-    priorBounds.endDateKey
-  )
+  const priorCheckIns = filterCheckIns(checkIns, priorBounds.startDateKey, priorEndKey)
+  const currentLabel = currentPartial ? "This month so far" : "This month"
+  const priorLabel = priorIsPartial || currentPartial ? "same days last month" : "prior month"
 
   const comparisons: PsychologyReportComparison[] = []
   const curPlan = planRate(currentTrades)
@@ -189,7 +251,7 @@ function buildComparisons(
   if (curPlan != null && prevPlan != null && Math.abs(curPlan - prevPlan) >= 0.08) {
     comparisons.push({
       headline: curPlan > prevPlan ? "Plan adherence improved" : "Plan adherence slipped",
-      detail: `This month: ${formatPsychologyPercent(curPlan * 100)} vs prior month: ${formatPsychologyPercent(prevPlan * 100)}`,
+      detail: `${currentLabel}: ${formatPsychologyPercent(curPlan * 100)} vs ${priorLabel}: ${formatPsychologyPercent(prevPlan * 100)}`,
       reliability: "developing",
     })
   }
@@ -205,7 +267,7 @@ function buildComparisons(
   ) {
     comparisons.push({
       headline: curSleep > prevSleep ? "Average sleep increased" : "Average sleep decreased",
-      detail: `This month: ${formatPsychologyHours(curSleep)} vs prior: ${formatPsychologyHours(prevSleep)}`,
+      detail: `${currentLabel}: ${formatPsychologyHours(curSleep)} vs ${priorLabel}: ${formatPsychologyHours(prevSleep)}`,
       reliability: "developing",
     })
   }
@@ -224,11 +286,12 @@ function buildComparisons(
     curFocus != null &&
     prevFocus != null &&
     Math.abs(curFocus - prevFocus) >= 0.4 &&
-    currentCheckIns.length >= 5
+    currentCheckIns.length >= 5 &&
+    priorCheckIns.length >= 5
   ) {
     comparisons.push({
       headline: curFocus > prevFocus ? "Focus ratings improved" : "Focus ratings declined",
-      detail: `This month avg: ${formatPsychologyRating(curFocus)} vs prior: ${formatPsychologyRating(prevFocus)}`,
+      detail: `${currentLabel} avg: ${formatPsychologyRating(curFocus)} vs ${priorLabel}: ${formatPsychologyRating(prevFocus)}`,
       reliability: "developing",
     })
   }
@@ -237,18 +300,21 @@ function buildComparisons(
 }
 
 function performanceSection(baseline: ReturnType<typeof psychologyTradeMetrics>): PsychologyReportSection {
+  const pnl = formatOptionalPsychologyMoney(baseline.averagePnL == null ? null : baseline.totalPnL)
+  const expectancy = formatOptionalPsychologyMoney(baseline.expectancy)
+  const average = formatOptionalPsychologyMoney(baseline.averagePnL)
+  const metrics: PsychologyReportMetricRow[] = []
+  if (pnl) metrics.push({ label: "P&L", value: pnl })
+  metrics.push({ label: "Win Rate", value: formatPsychologyWinRate(baseline.winRate) })
+  if (expectancy) metrics.push({ label: "Expectancy", value: expectancy })
+  if (average) metrics.push({ label: "Avg Trade", value: average })
+  metrics.push({ label: "Profit Factor", value: formatPsychologyRatio(baseline.profitFactor) })
   return {
     id: "performance",
     title: "Performance Overview",
     subtitle: `${formatPsychologyInteger(baseline.tradeCount)} trades in period`,
     bullets: [],
-    metrics: [
-      { label: "P&L", value: formatPsychologyMoney(baseline.totalPnL) },
-      { label: "Win Rate", value: formatPsychologyWinRate(baseline.winRate) },
-      { label: "Expectancy", value: formatPsychologyMoney(baseline.expectancy ?? 0) },
-      { label: "Avg Trade", value: formatPsychologyMoney(baseline.averagePnL ?? 0) },
-      { label: "Profit Factor", value: formatPsychologyRatio(baseline.profitFactor) },
-    ],
+    metrics,
   }
 }
 
@@ -318,7 +384,8 @@ export function generatePsychologyReport(
   periodRef: PsychologyReportPeriodRef,
   trades: readonly PsychologyReportTrade[],
   checkIns: readonly TraderDailyCheckIn[],
-  now: Date = new Date()
+  now: Date = new Date(),
+  preferences: PreferenceRuleContext | null = null
 ): PsychologyReport {
   const bounds = psychologyPeriodBounds(periodRef, now)
   const periodTrades = filterTradesForPeriod(trades, bounds)
@@ -327,12 +394,12 @@ export function generatePsychologyReport(
     bounds.startDateKey,
     bounds.endDateKey
   )
-  const analytics = buildPsychologyAnalyticsReport(periodTrades, periodCheckIns, now)
-  const facts = buildPsychologyCoachFacts(analytics, periodTrades, periodCheckIns, now)
+  const analytics = buildPsychologyAnalyticsReport(periodTrades, periodCheckIns, now, preferences)
+  const facts = buildPsychologyCoachFacts(analytics, periodTrades, periodCheckIns, now, preferences)
   const summary = buildPsychologyCoachSummary(facts)
   const checkInSummary = buildCheckInSummary(periodCheckIns)
   const tradingPsych = buildTradingPsychology(periodTrades)
-  const behavior = buildBehavior(periodTrades, periodCheckIns, analytics.baseline.winRate)
+  const behavior = buildBehavior(periodTrades, periodCheckIns, analytics.baseline.winRate, preferences)
   const comparisons = [
     ...buildComparisons(periodRef, trades, checkIns, now),
     ...facts.trends.slice(0, 2).map((trend) => ({
@@ -440,7 +507,7 @@ export function generatePsychologyReport(
       behavior.afterTwoLossesBaselineWinRate != null
     ) {
       bullets.push(
-        `Win rate after 2+ losses: ${formatPsychologyPercent(behavior.afterTwoLossesWinRate * 100)} vs ${formatPsychologyPercent(behavior.afterTwoLossesBaselineWinRate * 100)} baseline`
+        `${behavior.afterLossLabel ?? "Win rate after 2+ losses"}: ${formatPsychologyPercent(behavior.afterTwoLossesWinRate * 100)} vs ${formatPsychologyPercent(behavior.afterTwoLossesBaselineWinRate * 100)} baseline`
       )
     }
     sections.push({
@@ -465,11 +532,11 @@ export function generatePsychologyReport(
     }
     if (behavior.earlyTradeAvgPnL != null && behavior.lateTradeAvgPnL != null) {
       metrics.push({
-        label: "Trades 1–3 Avg",
+        label: behavior.earlyLabel ?? "Trades 1–3 Avg",
         value: formatPsychologyMoney(behavior.earlyTradeAvgPnL),
       })
       metrics.push({
-        label: "Trade #5+ Avg",
+        label: behavior.lateLabel ?? "Trade #5+ Avg",
         value: formatPsychologyMoney(behavior.lateTradeAvgPnL),
       })
     }

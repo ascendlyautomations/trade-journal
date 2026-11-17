@@ -52,6 +52,7 @@ struct TradingDayDetailView: View {
                 tradesSection
             }
             .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.top, ExperienceSpacing.md)
             .padding(.bottom, ExperienceSpacing.xl)
         }
         .background(colors.groupedBackground.ignoresSafeArea())

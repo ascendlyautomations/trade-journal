@@ -238,7 +238,11 @@ final class DemoModeArchitectureTests: XCTestCase {
 }
 
 private struct UnavailableNotificationRepository: NotificationRepository {
-    func notifications(page: PageRequest) async throws -> CursorPage<ActivityNotification> {
+    func notifications(
+        page: PageRequest,
+        filter: ActivityNotificationListFilter
+    ) async throws -> CursorPage<ActivityNotification> {
+        _ = filter
         _ = page
         throw AppError.cancelled
     }

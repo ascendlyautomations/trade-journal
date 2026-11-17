@@ -74,14 +74,17 @@ struct RoomMemberRowView: View {
             Text("@\(item.profile.username)")
                 .experienceStyle(.footnote, color: colors.secondaryText)
                 .lineLimit(1)
-            if item.role == .owner || !item.tags.isEmpty {
+            let cosmeticTags = TradeRoomModerationPermission.cosmeticMemberTags(item.tags)
+            let showsModerator = TradeRoomModerationPermission.hasModeratorTag(memberTags: item.tags)
+            if item.role == .owner || showsModerator || !cosmeticTags.isEmpty {
                 RoomMemberTagChipsView(
-                    tags: item.tags,
+                    tags: cosmeticTags,
                     showsOwnerBadge: item.role == .owner,
+                    showsModeratorBadge: showsModerator,
                     wraps: true
                 )
             }
-            if item.role == .member && item.tags.isEmpty {
+            if item.role == .member && !showsModerator && cosmeticTags.isEmpty {
                 Text("Member")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(colors.secondaryText)

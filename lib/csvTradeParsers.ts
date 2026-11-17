@@ -39,6 +39,8 @@ export type CsvTradeInsert = {
   duration_text: string | null
   /** CSV imports are always private; user can publish from the trade editor. */
   is_public: false
+  /** Set only when the CSV has an explicit planned-risk column — never inferred. */
+  dollar_risk?: number | null
 }
 
 export type LogicalField =
@@ -65,6 +67,7 @@ export type LogicalField =
   | "entryTime"
   | "exitTime"
   | "duration"
+  | "dollar_risk"
 
 /** Normalized header → logical field (first alias wins at build time). */
 const HEADER_ALIAS_TO_FIELD = buildHeaderAliasMap()
@@ -236,6 +239,16 @@ function buildHeaderAliasMap(): Map<string, LogicalField> {
       "out time",
     ],
     duration: ["duration", "trade duration", "hold time", "time in trade", "hold"],
+    dollar_risk: [
+      "planned risk",
+      "planned risk ($)",
+      "planned dollar risk",
+      "dollar risk",
+      "dollar_risk",
+      "risk amount",
+      "initial risk",
+      "planned risk amount",
+    ],
   }
 
   const map = new Map<string, LogicalField>()
@@ -1545,6 +1558,14 @@ function buildFlexibleTradeInsert(
       ? account_type
       : "live"
 
+  let dollar_risk: number | null = null
+  if (f.dollar_risk != null && f.dollar_risk !== "") {
+    const risk = parseCsvNumeric(f.dollar_risk)
+    if (risk !== null && Number.isFinite(risk) && risk > 0) {
+      dollar_risk = risk
+    }
+  }
+
   const strategy = f.strategy?.trim() || null
   const commission =
     f.commission != null && f.commission !== "" ? parseCsvNumeric(f.commission) : null
@@ -1591,6 +1612,7 @@ function buildFlexibleTradeInsert(
     duration_seconds,
     duration_text,
     is_public: false,
+    ...(dollar_risk != null ? { dollar_risk } : {}),
   }
 
   return { ok: true, rowNumber, trade }

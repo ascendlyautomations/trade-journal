@@ -520,7 +520,7 @@ final class ProfileExperienceTests: XCTestCase {
         let before = viewModel.isFollowing(target)
         if before {
             viewModel.pendingUnfollow = target
-            await viewModel.confirmUnfollow()
+            await viewModel.confirmUnfollow(target)
             XCTAssertFalse(viewModel.isFollowing(target))
         } else {
             viewModel.toggleFollow(for: target)
@@ -530,6 +530,35 @@ final class ProfileExperienceTests: XCTestCase {
             }
             XCTAssertTrue(viewModel.isFollowing(target))
         }
+    }
+
+    func testFollowListRemoveFollowerOptimisticAfterConfirm() async {
+        let environment = CompositionRoot.bootstrapAppEnvironment()
+        let owner = ProfileID("dev.follow-list")
+        let viewModel = FollowListViewModel(
+            kind: .followers,
+            listOwnerID: owner,
+            profiles: environment.data.profiles,
+            session: environment.data.session,
+            detailCache: environment.data.detailCache,
+            navigationCoordinator: environment.navigation.coordinator
+        )
+        viewModel.loadIfNeeded()
+        let deadline = Date().addingTimeInterval(2)
+        while viewModel.phase != .loaded, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        guard case .loaded = viewModel.phase else {
+            return XCTFail("Expected loaded follow list")
+        }
+        guard let victim = viewModel.items.first else {
+            return XCTFail("Expected at least one follower")
+        }
+        let beforeCount = viewModel.items.count
+        await viewModel.confirmRemove(victim)
+        XCTAssertEqual(viewModel.items.count, beforeCount - 1)
+        XCTAssertFalse(viewModel.items.contains { $0.id == victim.id })
+        XCTAssertNil(viewModel.removeFollowerErrorMessage)
     }
 
     func testProfileMetadataLineMatchesWebShapeAndOmitsEmpties() {

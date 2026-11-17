@@ -7,11 +7,13 @@ enum FeedContentFilterSwipeSupport {
 
     /// Swipe left advances the strip (All → Trades → …); swipe right goes back.
     static func dragGesture(
+        isEnabled: Bool = true,
         onSwipeLeft: @escaping () -> Void,
         onSwipeRight: @escaping () -> Void
     ) -> some Gesture {
         DragGesture(minimumDistance: minimumDistance, coordinateSpace: .global)
             .onEnded { value in
+                guard isEnabled else { return }
                 if NavigationInteractivePopEdgeSupport.beginsInLeadingBackZone(
                     globalX: value.startLocation.x
                 ) {
@@ -41,26 +43,21 @@ struct FeedContentFilterSwipeModifier: ViewModifier {
     let onSelect: (FeedContentFilter) -> Void
 
     func body(content: Content) -> some View {
-        Group {
-            if isEnabled {
-                content.simultaneousGesture(
-                    FeedContentFilterSwipeSupport.dragGesture(
-                        onSwipeLeft: {
-                            guard let next = filter.adjacentFilter(offset: 1) else { return }
-                            ExperienceHaptics.play(.selection)
-                            onSelect(next)
-                        },
-                        onSwipeRight: {
-                            guard let previous = filter.adjacentFilter(offset: -1) else { return }
-                            ExperienceHaptics.play(.selection)
-                            onSelect(previous)
-                        }
-                    )
-                )
-            } else {
-                content
-            }
-        }
+        content.simultaneousGesture(
+            FeedContentFilterSwipeSupport.dragGesture(
+                isEnabled: isEnabled,
+                onSwipeLeft: {
+                    guard let next = filter.adjacentFilter(offset: 1) else { return }
+                    ExperienceHaptics.play(.selection)
+                    onSelect(next)
+                },
+                onSwipeRight: {
+                    guard let previous = filter.adjacentFilter(offset: -1) else { return }
+                    ExperienceHaptics.play(.selection)
+                    onSelect(previous)
+                }
+            )
+        )
     }
 }
 

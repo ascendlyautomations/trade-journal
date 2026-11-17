@@ -28,8 +28,7 @@ struct RoomLiveVoiceControlsSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        .experienceSheetChrome()
     }
 
     private var header: some View {

@@ -42,11 +42,12 @@ struct ClipsContainerView: View {
                 if browseLayout == .grid {
                     LazyVGrid(columns: gridColumns, spacing: 2) {
                         ForEach(displayItems) { reel in
+                            let presentationReel = detailCache.reel(id: reel.id) ?? reel
                             ProfileClipGridTile(
-                                reel: reel,
+                                reel: presentationReel,
                                 imagePipeline: imagePipeline,
                                 engagementStore: engagementStore,
-                                title: ClipDisplayTitle.text(for: reel, cache: detailCache),
+                                title: ClipDisplayTitle.text(for: presentationReel, cache: detailCache),
                                 isOwner: viewModel.isOwner,
                                 isPinned: isProfilePinned(reel),
                                 profilePin: profilePin,
@@ -57,8 +58,9 @@ struct ClipsContainerView: View {
                                         viewModel.requestDelete(reel)
                                     }
                                     : nil,
-                                onOpen: { viewModel.openClip(reel) }
+                                onOpen: { viewModel.openClip(presentationReel) }
                             )
+                            .id("\(reel.id.rawValue)-\(presentationReel.linkedTradeID?.rawValue ?? "")")
                             .task {
                                 await viewModel.loadMoreIfNeeded(currentReelID: reel.id)
                             }
@@ -132,14 +134,15 @@ struct ClipsContainerView: View {
     private var clipList: some View {
         LazyVStack(spacing: ExperienceSpacing.sm) {
             ForEach(displayItems) { reel in
+                let presentationReel = detailCache.reel(id: reel.id) ?? reel
                 ProfileClipCard(
-                    reel: reel,
+                    reel: presentationReel,
                     detailCache: detailCache,
                     imagePipeline: imagePipeline,
                     engagementStore: engagementStore,
                     vaultStore: vaultStore,
-                    onOpen: { viewModel.openClip(reel) },
-                    onShare: { shareTarget = viewModel.shareClip(reel) },
+                    onOpen: { viewModel.openClip(presentationReel) },
+                    onShare: { shareTarget = viewModel.shareClip(presentationReel) },
                     isOwner: viewModel.isOwner,
                     onDelete: viewModel.isOwner
                         ? {
@@ -152,6 +155,7 @@ struct ClipsContainerView: View {
                     profilePin: profilePin,
                     isProfilePinned: isProfilePinned(reel)
                 )
+                .id("\(reel.id.rawValue)-\(presentationReel.linkedTradeID?.rawValue ?? "")")
                 .task {
                     await viewModel.loadMoreIfNeeded(currentReelID: reel.id)
                 }

@@ -35,10 +35,14 @@ final class TradesContainerViewModel {
     private let navigationCoordinator: NavigationCoordinator
     private let detailCache: DetailPresentationCache
     private let tradeDetailRepository: any TradeDetailRepository
+    private let feed: (any FeedRepository)?
     private let engagementStore: EngagementStore?
     private let isOwner: Bool
 
     private var loadTask: Task<Void, Never>?
+    private var linkedReelsHydrationTask: Task<Void, Never>?
+    private var linkedReelsHydrationGeneration: UInt64 = 0
+    private(set) var linkedReelPresentationByTradeID: [TradeID: UInt64] = [:]
     private var loadMoreTask: Task<Void, Never>?
     private var hasLoaded = false
     private var isLoadingMore = false
@@ -83,6 +87,7 @@ final class TradesContainerViewModel {
         navigationCoordinator: NavigationCoordinator,
         detailCache: DetailPresentationCache,
         tradeDetailRepository: any TradeDetailRepository,
+        feed: (any FeedRepository)? = nil,
         engagementStore: EngagementStore? = nil,
         isOwner: Bool = true
     ) {
@@ -93,6 +98,7 @@ final class TradesContainerViewModel {
         self.navigationCoordinator = navigationCoordinator
         self.detailCache = detailCache
         self.tradeDetailRepository = tradeDetailRepository
+        self.feed = feed
         self.engagementStore = engagementStore
         self.isOwner = isOwner
     }
@@ -433,6 +439,34 @@ final class TradesContainerViewModel {
         guard let reel = detailCache.reel(id: reelID) else { return }
         detailCache.seed(reel)
         navigationCoordinator.pushReelDetail(reel.id)
+    }
+
+    func linkedReelPresentationToken(for tradeID: TradeID) -> UInt64 {
+        linkedReelPresentationByTradeID[tradeID, default: 0]
+    }
+
+    /// Owner link/unlink — merge reel into cache and refresh only affected trade cards.
+    func applyReelLinkMutation(_ reel: Reel) {
+        guard reel.authorProfileID == profileID else { return }
+        let priorTradeID = detailCache.reel(id: reel.id)?.linkedTradeID
+        invalidateInFlightLinkedReelsHydration()
+        detailCache.seed(reel)
+        var affected = Set<TradeID>()
+        if let priorTradeID { affected.insert(priorTradeID) }
+        if let linked = reel.linkedTradeID { affected.insert(linked) }
+        for tradeID in affected {
+            noteLinkedReelPresentationChanged(for: tradeID)
+        }
+    }
+
+    /// Owner clip delete — clear trade→clip index and refresh the linked trade row.
+    func applyLinkedReelDeleted(_ reelID: ReelID) {
+        let priorTradeID = detailCache.reel(id: reelID)?.linkedTradeID
+        invalidateInFlightLinkedReelsHydration()
+        detailCache.removeReel(id: reelID)
+        if let priorTradeID {
+            noteLinkedReelPresentationChanged(for: priorTradeID)
+        }
     }
 
     func requestDelete(_ summary: TradeSummary) {
@@ -860,12 +894,49 @@ final class TradesContainerViewModel {
 
     private func seedCachesFromItems() {
         detailCache.seed(publicTradeSummaries: items, for: profileID)
-        detailCache.seedPublicAccountMetadata(
-            names: sanitizedPublicAccountNames(from: accountNames),
-            modes: accountModes,
-            sizes: accountSizes,
-            for: profileID
-        )
+        if isOwner, let ownerAccounts = SessionAccountsStore.shared.cached(for: profileID), !ownerAccounts.isEmpty {
+            detailCache.seedOwnerAccounts(ownerAccounts, for: profileID)
+        } else {
+            detailCache.seedPublicAccountMetadata(
+                names: sanitizedPublicAccountNames(from: accountNames),
+                modes: accountModes,
+                sizes: accountSizes,
+                for: profileID
+            )
+        }
+        scheduleLinkedReelsHydrationIfNeeded()
+    }
+
+    /// Trade-card clip thumbnails — independent of Profile → Clips tab bootstrap.
+    func scheduleLinkedReelsHydrationIfNeeded() {
+        guard let feed, canViewContent else { return }
+        let tradeIDs = visibleItems.map(\.id)
+        guard !tradeIDs.isEmpty else { return }
+        linkedReelsHydrationTask?.cancel()
+        let generation = linkedReelsHydrationGeneration
+        linkedReelsHydrationTask = Task { [weak self] in
+            guard let self, !Task.isCancelled else { return }
+            await ProfileTradeLinkedReelsHydrator.hydrateMissing(
+                tradeIDs: tradeIDs,
+                profileID: profileID,
+                feed: feed,
+                detailCache: detailCache,
+                isHydrationCurrent: { [weak self] in
+                    self?.linkedReelsHydrationGeneration == generation
+                }
+            )
+        }
+    }
+
+    private func invalidateInFlightLinkedReelsHydration() {
+        linkedReelsHydrationGeneration &+= 1
+        linkedReelsHydrationTask?.cancel()
+        linkedReelsHydrationTask = nil
+        OwnerProfileOptimisticStore.invalidateLinkedReelsByTradeFlight(for: profileID)
+    }
+
+    private func noteLinkedReelPresentationChanged(for tradeID: TradeID) {
+        linkedReelPresentationByTradeID[tradeID, default: 0] &+= 1
     }
 
     private func ownerPublicTradePreserveIDs() -> Set<TradeID> {
@@ -874,6 +945,34 @@ final class TradesContainerViewModel {
                 .filter { $0.visibility == .public }
                 .map(\.id)
         )
+    }
+
+    /// Public profile card / chip caption — provider from journal + account metadata, type from trade row.
+    func publicPostedAccountCaption(for summary: TradeSummary) -> String? {
+        guard summary.mode != .copyTraded else { return nil }
+        return TradeDisplay.publicPostedAccountCaption(
+            providerName: publicAccountProviderName(for: summary),
+            accountMode: summary.accountMode
+                ?? journalItems.first(where: { $0.id == summary.id }).flatMap { journal in
+                    journal.accountID.flatMap { accountModes[$0] }
+                },
+            publicAccountBadge: summary.publicAccountBadge
+        )
+    }
+
+    func publicAccountProviderName(for summary: TradeSummary) -> String? {
+        guard let journal = journalItems.first(where: { $0.id == summary.id }),
+              let accountID = journal.accountID
+        else { return nil }
+        let raw = accountNames[accountID] ?? detailCache.accountName(for: accountID)
+        return raw.map {
+            PublicAccountPrivacy.publicSafeAccountName(
+                rawName: $0,
+                accountNumber: nil,
+                category: nil,
+                mode: accountModes[accountID]
+            )
+        }
     }
 
     private func sanitizedPublicAccountNames(
@@ -1418,7 +1517,13 @@ nonisolated enum TradeDisplay {
         return "\(entry) – \(exit)"
     }
 
-    /// Owner Trades list — `Nov 17 10:15 AM - 11:15 AM` or `Nov 17 10:30 AM - Nov 18 1:00 PM`.
+    /// Journal trade detail header — only when `exitAt` is set.
+    static func journalTradeDetailExecutionRangeText(for trade: Trade) -> String? {
+        guard trade.exitAt != nil else { return nil }
+        return journalExecutionTimeRangeText(entryAt: trade.entryAt, exitAt: trade.exitAt)
+    }
+
+    /// Owner Trades list — `Nov 17 10:15 AM – 11:15 AM` or `Nov 17 10:30 AM – Nov 18 1:00 PM`.
     static func journalExecutionTimeRangeText(entryAt: Date, exitAt: Date?) -> String {
         let entry = journalExecutionStampFormatter.string(from: entryAt)
         guard let exitAt else { return entry }
@@ -1428,7 +1533,7 @@ nonisolated enum TradeDisplay {
         } else {
             exit = journalExecutionStampFormatter.string(from: exitAt)
         }
-        return "\(entry) - \(exit)"
+        return "\(entry) – \(exit)"
     }
 
     private static let journalExecutionStampFormatter: DateFormatter = {
@@ -1447,6 +1552,30 @@ nonisolated enum TradeDisplay {
     /// Shared social trade detail — calendar day for the execution (entry day).
     static func socialSharedTradeDateText(for trade: Trade) -> String {
         dateText(trade.entryAt)
+    }
+
+    /// Social trade detail metrics — calendar date under entry/exit clock time.
+    static func socialDetailExecutionDateText(for date: Date) -> String {
+        dateText(date)
+    }
+
+    static func socialDetailExecutionClockText(for date: Date) -> String {
+        executionTimeOnlyFormatter.string(from: date)
+    }
+
+    /// Public social header — `Live`, `Funded`, `Eval`, etc.
+    static func socialHeaderAccountBadge(for trade: Trade) -> String? {
+        if trade.mode == .copyTraded { return nil }
+        if let badge = trade.publicAccountBadge?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !badge.isEmpty
+        {
+            return badge
+        }
+        if let accountMode = trade.accountMode {
+            return accountStatusTitle(accountMode)
+        }
+        return nil
     }
 
     private static let executionTimeOnlyFormatter: DateFormatter = {
@@ -1519,22 +1648,97 @@ nonisolated enum TradeDisplay {
         return intValue.stringValue
     }
 
-    /// Account identity line — journal+owner: `Name • Number`; public/social: sanitized name only.
+    private static let genericPublicAccountProviderLabels: Set<String> = [
+        "Funded Account",
+        "Evaluation Account",
+        "Live Account",
+        "Sim Account",
+        "Backtest Account",
+        "Trading Account",
+    ]
+
+    /// Posted trade caption — `Alpha Futures · Funded` (provider + compact type, no account ids).
+    static func publicPostedAccountCaption(
+        providerName: String?,
+        accountMode: TradingAccountMode? = nil,
+        publicAccountBadge: String? = nil
+    ) -> String? {
+        let provider = resolvedPostedAccountProviderName(providerName)
+        let type = resolvedPostedAccountTypeLabel(
+            publicAccountBadge: publicAccountBadge,
+            accountMode: accountMode
+        )
+        switch (provider, type) {
+        case let (provider?, type?):
+            return "\(provider)\(TradingAccountDisplay.ownerDropdownSeparator)\(type)"
+        case let (provider?, nil):
+            return provider
+        case let (nil, type?):
+            return type
+        case (nil, nil):
+            return nil
+        }
+    }
+
+    private static func resolvedPostedAccountProviderName(_ raw: String?) -> String? {
+        let trimmed = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !genericPublicAccountProviderLabels.contains(trimmed) else {
+            return nil
+        }
+        let inferred = TradingAccountDisplay.inferPropFirmName(trimmed)
+        let candidate = inferred.isEmpty ? trimmed : inferred
+        return candidate.isEmpty ? nil : candidate
+    }
+
+    private static func resolvedPostedAccountTypeLabel(
+        publicAccountBadge: String?,
+        accountMode: TradingAccountMode?
+    ) -> String? {
+        if let badge = publicAccountBadge?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !badge.isEmpty
+        {
+            return badge
+        }
+        if let accountMode {
+            return accountModeCompactTitle(accountMode)
+        }
+        return nil
+    }
+
+    /// Account identity line — journal+owner: `Name • Number`; public/social: provider · type.
     static func accountIdentityLine(
         name: String?,
         size: Decimal? = nil,
         mode: TradingAccountMode? = nil,
         accountNumber: String? = nil,
         audience: TradingAccountDisplay.Audience = .public,
-        category: TradingAccountCategory? = nil
+        category: TradingAccountCategory? = nil,
+        publicAccountBadge: String? = nil
     ) -> String? {
         _ = size
-        return TradingAccountDisplay.optionalTitle(
-            name: name,
-            accountNumber: accountNumber,
-            audience: audience,
-            category: category,
-            mode: mode
-        )
+        switch audience {
+        case .owner:
+            return TradingAccountDisplay.optionalTitle(
+                name: name,
+                accountNumber: accountNumber,
+                audience: audience,
+                category: category,
+                mode: mode
+            )
+        case .public:
+            let safeName = TradingAccountDisplay.optionalTitle(
+                name: name,
+                accountNumber: accountNumber,
+                audience: audience,
+                category: category,
+                mode: mode
+            )
+            return publicPostedAccountCaption(
+                providerName: safeName,
+                accountMode: mode,
+                publicAccountBadge: publicAccountBadge
+            )
+        }
     }
 }

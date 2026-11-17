@@ -24,6 +24,7 @@ export type QuickTradeCsvFormPatch = {
   pnl: string
   points: string
   contracts: string
+  plannedDollarRisk: string
   rr: string
   direction: "Long" | "Short" | null
   entryDate: string
@@ -189,6 +190,10 @@ export function quickTradeFormPatchFromCsvTrade(
     contracts:
       trade.contracts != null && Number.isFinite(trade.contracts)
         ? String(trade.contracts)
+        : "",
+    plannedDollarRisk:
+      trade.dollar_risk != null && Number.isFinite(trade.dollar_risk)
+        ? String(trade.dollar_risk)
         : "",
     rr:
       trade.rr != null && Number.isFinite(trade.rr) ? String(trade.rr) : "",

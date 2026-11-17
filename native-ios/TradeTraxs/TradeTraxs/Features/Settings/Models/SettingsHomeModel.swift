@@ -25,35 +25,17 @@ enum SettingsHomeModel {
             SettingsHomeSection(
                 id: "account",
                 title: "Account",
-                items: [
-                    SettingsHomeItem(route: .account, systemImage: "person.crop.circle"),
-                    SettingsHomeItem(route: .profile, systemImage: "person.text.rectangle"),
-                    SettingsHomeItem(route: .privacy, systemImage: "hand.raised"),
-                    SettingsHomeItem(route: .notifications, systemImage: "bell"),
-                ]
-            ),
-            SettingsHomeSection(
-                id: "tradetraxs",
-                title: "TradeTraxs",
-                items: tradetraxsItems
+                items: accountItems
             ),
             SettingsHomeSection(
                 id: "personal",
                 title: "Personal",
-                items: [
-                    SettingsHomeItem(route: .vault, systemImage: "hexagon.fill"),
-                    SettingsHomeItem(route: .appearance, systemImage: "circle.lefthalf.filled"),
-                ]
+                items: personalItems
             ),
             SettingsHomeSection(
-                id: "support",
-                title: "Support",
-                items: [
-                    SettingsHomeItem(route: .support, systemImage: "questionmark.circle"),
-                    SettingsHomeItem(route: .productFeedback, systemImage: "text.bubble"),
-                    SettingsHomeItem(route: .whatsNew, systemImage: "sparkles"),
-                    SettingsHomeItem(route: .about, systemImage: "info.circle"),
-                ]
+                id: "tradetraxs",
+                title: "TRADETRAXS",
+                items: tradetraxsItems
             ),
             SettingsHomeSection(
                 id: "legal",
@@ -67,9 +49,11 @@ enum SettingsHomeModel {
         ]
     }
 
-    /// Restore Subscription / Referrals by turning the matching release flags back on.
-    private static var tradetraxsItems: [SettingsHomeItem] {
-        var items: [SettingsHomeItem] = []
+    private static var accountItems: [SettingsHomeItem] {
+        var items: [SettingsHomeItem] = [
+            SettingsHomeItem(route: .account, systemImage: "person.crop.circle"),
+            SettingsHomeItem(route: .profile, systemImage: "person.text.rectangle"),
+        ]
         if IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled {
             items.append(
                 SettingsHomeItem(
@@ -79,24 +63,46 @@ enum SettingsHomeModel {
                 )
             )
         }
-        items.append(
+        items.append(SettingsHomeItem(route: .privacy, systemImage: "hand.raised"))
+        items.append(SettingsHomeItem(route: .notifications, systemImage: "bell"))
+        return items
+    }
+
+    /// Trading, vault, and appearance tools — formerly the TradeTraxs section plus vault/appearance.
+    private static var personalItems: [SettingsHomeItem] {
+        var items: [SettingsHomeItem] = [
+            SettingsHomeItem(
+                route: .tradingAnalytics,
+                systemImage: "slider.horizontal.3",
+                displayTitle: "Trading Rules"
+            ),
             SettingsHomeItem(
                 route: .tradingAccounts,
                 systemImage: "chart.bar.doc.horizontal",
                 displayTitle: "Trading Accounts"
-            )
-        )
-        items.append(SettingsHomeItem(route: .payouts, systemImage: "building.columns"))
-        items.append(
+            ),
+            SettingsHomeItem(route: .payouts, systemImage: "building.columns"),
             SettingsHomeItem(
                 route: .propFirmExpenses,
                 systemImage: "creditcard",
                 displayTitle: "Expense Tracker"
-            )
-        )
+            ),
+            SettingsHomeItem(route: .vault, systemImage: "hexagon.fill"),
+            SettingsHomeItem(route: .appearance, systemImage: "circle.lefthalf.filled"),
+        ]
         if IosSubscriptionReleaseConfiguration.iosReferralProgramEnabled {
             items.append(SettingsHomeItem(route: .affiliate, systemImage: "gift"))
         }
         return items
+    }
+
+    /// Product help and walkthrough — formerly Support; App Walkthrough and Leave a Rating are injected in the view.
+    private static var tradetraxsItems: [SettingsHomeItem] {
+        [
+            SettingsHomeItem(route: .whatsNew, systemImage: "sparkles"),
+            SettingsHomeItem(route: .support, systemImage: "questionmark.circle"),
+            SettingsHomeItem(route: .productFeedback, systemImage: "text.bubble"),
+            SettingsHomeItem(route: .about, systemImage: "info.circle"),
+        ]
     }
 }

@@ -3,28 +3,35 @@ import SwiftUI
 struct PsychologySummarySection: View {
     let summary: PsychologyCoachSummary
     var onOpenCoach: (() -> Void)?
+    var recommendationsOnly = false
 
     @Environment(\.themeColors) private var colors
 
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-            Text(summary.title)
-                .experienceStyle(.title3, color: colors.primaryText)
-                .fontWeight(.bold)
+            if !recommendationsOnly {
+                Text(summary.title)
+                    .experienceStyle(.title3, color: colors.primaryText)
+                    .fontWeight(.bold)
 
-            Text(summary.overview)
-                .experienceStyle(.body, color: colors.secondaryText)
+                Text(summary.overview)
+                    .experienceStyle(.body, color: colors.secondaryText)
 
-            if !summary.doingWell.isEmpty {
-                labeledBullets(title: "What You're Doing Well", items: summary.doingWell, tint: colors.success)
-            }
+                if !summary.doingWell.isEmpty {
+                    labeledBullets(title: "What You're Doing Well", items: summary.doingWell, tint: colors.success)
+                }
 
-            if !summary.watchItems.isEmpty {
-                labeledBullets(title: "What to Watch", items: summary.watchItems, tint: colors.warning)
+                if !summary.watchItems.isEmpty {
+                    labeledBullets(title: "What to Watch", items: summary.watchItems, tint: colors.warning)
+                }
             }
 
             if !summary.recommendations.isEmpty {
-                labeledBullets(title: "Possible Guardrails", items: summary.recommendations, tint: colors.accent)
+                labeledBullets(
+                    title: recommendationsOnly ? "Recommendations" : "Possible Guardrails",
+                    items: summary.recommendations,
+                    tint: colors.accent
+                )
             }
 
             if let onOpenCoach {

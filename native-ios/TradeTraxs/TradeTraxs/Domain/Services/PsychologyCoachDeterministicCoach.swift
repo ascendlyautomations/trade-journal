@@ -50,10 +50,17 @@ nonisolated enum PsychologyCoachDeterministicCoach {
     private static func positiveObservations(from facts: PsychologyCoachFacts) -> [String] {
         var items: [String] = []
         for insight in facts.topInsights {
-            if insight.headline.localizedCaseInsensitiveContains("outperform")
-                || insight.headline.localizedCaseInsensitiveContains("strongest")
-                || insight.headline.localizedCaseInsensitiveContains("stable")
-                || insight.headline.localizedCaseInsensitiveContains("best") {
+            let headline = insight.headline.lowercased()
+            let favorable = headline.contains("outperform")
+                || headline.contains("strongest")
+                || headline.contains("stable")
+                || headline.contains("best")
+                || headline.contains("performed better")
+                || headline.contains("won more often")
+            let unfavorable = headline.contains("in this sample")
+                || headline.contains("worse")
+                || headline.contains("less often")
+            if favorable && !unfavorable {
                 items.append(insight.headline)
             }
         }
@@ -73,6 +80,9 @@ nonisolated enum PsychologyCoachDeterministicCoach {
                 $0.headline.localizedCaseInsensitiveContains("drop")
                     || $0.headline.localizedCaseInsensitiveContains("weaker")
                     || $0.headline.localizedCaseInsensitiveContains("underperform")
+                    || $0.headline.localizedCaseInsensitiveContains("worse")
+                    || $0.headline.localizedCaseInsensitiveContains("less often")
+                    || $0.headline.localizedCaseInsensitiveContains("in this sample")
             }
             .map(\.headline)
         for trend in facts.trends where trend.headline.localizedCaseInsensitiveContains("weakened")
@@ -88,27 +98,30 @@ nonisolated enum PsychologyCoachDeterministicCoach {
 
         if let checkpoint = facts.guardrailFacts.consecutiveLossCheckpoint {
             recs.append(
-                "Consider using \(checkpoint) consecutive losses as a checkpoint before taking another trade, historically your results weaken after this point."
+                facts.guardrailFacts.personalLossPause
+                    ? "Results have been weaker after your pause of \(checkpoint) consecutive losses."
+                    : "Results have been weaker after \(checkpoint) consecutive losses. That is a result difference, not a reason those trades were taken."
             )
         }
 
         if let limit = facts.guardrailFacts.maxTradesDaySoftLimit {
             recs.append(
-                "Your first \(limit) trades currently outperform later trades. Consider reviewing whether additional setups are becoming lower quality."
+                facts.guardrailFacts.personalTradeCap
+                    ? "Trades beyond your daily cap of \(limit) have been weaker than trades within it."
+                    : "Later trades in the day have been weaker than your first three. Reviewing whether those extra setups are lower quality may help."
             )
         }
 
         if facts.guardrailFacts.lowSleepHoursThreshold != nil {
             recs.append(
-                "Your historical results are weaker below 6 hours of sleep. Consider treating low-sleep sessions as higher-risk days."
+                "Be cautious after fewer than 6 hours of sleep. Those sessions have been weaker than better-rested ones."
             )
         }
 
-        for insight in facts.topInsights where insight.category == "mentalState" && insight.headline.localizedCaseInsensitiveContains("stress") {
+        if facts.guardrailFacts.highStressWeaker {
             recs.append(
-                "High-stress days correlate with weaker results in your journal. A brief reset before the next trade may help."
+                "Reset when stress is high. Lower-stress days have been the stronger ones."
             )
-            break
         }
 
         return recs

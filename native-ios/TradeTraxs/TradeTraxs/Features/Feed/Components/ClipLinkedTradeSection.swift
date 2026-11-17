@@ -9,6 +9,8 @@ struct ClipLinkedTradeSection: View {
 
     let trade: Trade
     var style: Style = .clipsOverlay
+    /// Clip caption shown above this section — suppress duplicate trade description when identical.
+    var displayedClipCaption: String? = nil
     let onOpen: () -> Void
 
     @Environment(\.themeColors) private var colors
@@ -39,7 +41,7 @@ struct ClipLinkedTradeSection: View {
                         .shadow(color: overlayShadowColor, radius: 2, y: 1)
                 }
 
-                if let description = Self.descriptionText(for: trade) {
+                if let description = Self.descriptionText(for: trade, clipCaption: displayedClipCaption) {
                     Text(description)
                         .font(descriptionFont)
                         .foregroundStyle(descriptionColor)
@@ -57,10 +59,20 @@ struct ClipLinkedTradeSection: View {
         .accessibilityIdentifier("clips.linked.trade.\(trade.id.rawValue)")
     }
 
-    /// Authoritative public trade description — same field as Trade Detail.
-    static func descriptionText(for trade: Trade) -> String? {
-        let trimmed = trade.publicCaption?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? nil : trimmed
+    /// Public caption first, then journal notes / preview when public text is absent.
+    static func descriptionText(for trade: Trade, clipCaption: String? = nil) -> String? {
+        let candidate =
+            LinkedContentCaptionDedup.normalizedForComparison(trade.publicCaption)
+            ?? LinkedContentCaptionDedup.normalizedForComparison(trade.notes)
+            ?? LinkedContentCaptionDedup.normalizedForComparison(trade.notePreview)
+        guard let candidate else { return nil }
+        if LinkedContentCaptionDedup.shouldHideTradeDescription(
+            displayedClipCaption: clipCaption,
+            tradeDescription: candidate
+        ) {
+            return nil
+        }
+        return candidate
     }
 
     private var summaryLine: String {

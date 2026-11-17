@@ -719,7 +719,12 @@ private final class EditTradeStubFeedRepository: FeedRepository, @unchecked Send
         ProfileReelsResult(reels: [], embeddedTrades: [])
     }
     func createReel(_ reel: Reel) async throws -> Reel { reel }
-    func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel] { [] }
+    func unattachedReels(
+        for profileID: ProfileID,
+        limit: Int,
+        includingReelID: ReelID?
+    ) async throws -> [Reel] { [] }
+    func tradeIDsWithAttachedReels(owner: ProfileID) async throws -> Set<TradeID> { [] }
     func attachReel(id: ReelID, to tradeID: TradeID) async throws {}
     func tradeHasAttachedReel(_ tradeID: TradeID) async throws -> Bool { false }
 }

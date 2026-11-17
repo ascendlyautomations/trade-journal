@@ -1,12 +1,10 @@
 "use client"
 
 import {
-  formatPsychologyMoney,
+  formatOptionalPsychologyMoney,
   formatPsychologyWinRate,
 } from "@/lib/psychology/reports/format"
-import { reliabilityLabel } from "@/lib/psychology/reports/metrics"
 import type { PsychologyGroupMetrics } from "@/lib/psychology/reports/types"
-import { countNoun } from "@/lib/countNoun"
 
 type PsychologyAnalyticsMetricsRowProps = {
   label: string
@@ -19,61 +17,22 @@ export default function PsychologyAnalyticsMetricsRow({
   metrics,
   highlight = false,
 }: PsychologyAnalyticsMetricsRowProps) {
-  const isPreview = metrics.reliability === "insufficient" && metrics.tradeCount > 0
+  if (metrics.tradeCount < 5) return null
+  const average = formatOptionalPsychologyMoney(metrics.averagePnL)
+  const winRate = metrics.winRate == null ? null : formatPsychologyWinRate(metrics.winRate)
 
   return (
     <article
-      className={`rounded-xl border border-white/10 p-4 max-md:p-3 ${
+      className={`flex flex-wrap items-baseline justify-between gap-2 rounded-xl border border-white/10 px-4 py-3 max-md:px-3 ${
         highlight ? "bg-blue-500/10" : "bg-white/5"
       }`}
     >
       <p className="text-sm font-semibold text-white">{label}</p>
-      {metrics.tradeCount === 0 ? (
-        <p className="mt-1 text-xs text-gray-400">No trades in this group yet</p>
-      ) : isPreview ? (
-        <>
-          <p className="mt-1 text-xs font-medium text-amber-200/90">
-            Preview · {countNoun(metrics.tradeCount, "trade")}
-          </p>
-          <div className="mt-2 flex flex-wrap gap-4 text-xs max-md:grid max-md:grid-cols-2 max-md:gap-2">
-            <MetricPill label="Win rate" value={formatPsychologyWinRate(metrics.winRate)} />
-            <MetricPill
-              label="Avg P&L / trade"
-              value={formatPsychologyMoney(metrics.averagePnL ?? 0)}
-            />
-          </div>
-          <p className="mt-2 text-[11px] text-gray-500">
-            {reliabilityLabel(metrics.reliability)}, need 5+ trades for a reliable read
-          </p>
-        </>
-      ) : (
-        <>
-          <div className="mt-2 flex flex-wrap gap-4 text-xs max-md:grid max-md:grid-cols-2 max-md:gap-2">
-            <MetricPill label="Trades" value={String(metrics.tradeCount)} />
-            <MetricPill label="Win rate" value={formatPsychologyWinRate(metrics.winRate)} />
-            <MetricPill
-              label="Avg P&L / trade"
-              value={formatPsychologyMoney(metrics.averagePnL ?? 0)}
-            />
-            <MetricPill
-              label="Expected $ / trade"
-              value={formatPsychologyMoney(metrics.expectancy ?? 0)}
-            />
-          </div>
-          <p className="mt-2 text-[11px] text-gray-500">
-            {reliabilityLabel(metrics.reliability)}
-          </p>
-        </>
-      )}
+      <p className="text-sm tabular-nums text-gray-200">
+        {winRate ? <span>{winRate} win rate</span> : null}
+        {winRate && average ? <span className="text-gray-500"> · </span> : null}
+        {average ? <span>{average} avg</span> : null}
+      </p>
     </article>
-  )
-}
-
-function MetricPill({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-[10px] uppercase text-gray-500">{label}</p>
-      <p className="font-semibold tabular-nums text-white">{value}</p>
-    </div>
   )
 }

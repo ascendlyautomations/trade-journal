@@ -28,10 +28,49 @@ describe("Feed Reel media — zero video before intentional activation", () => {
   })
 
   it("FeedPostDetailModal attached reel preview does not mount video", () => {
-    const src = read("app/components/feed/FeedPostDetailModal.tsx")
-    assert.match(src, /ReelThumbnailPreview/)
-    assert.doesNotMatch(src, /<video/)
-    assert.doesNotMatch(src, /DetailModalVideo/)
+    const modalSrc = read("app/components/feed/FeedPostDetailModal.tsx")
+    assert.match(modalSrc, /TradeDetailMediaWithClipOverlay/)
+    assert.doesNotMatch(modalSrc, /<video/)
+    assert.doesNotMatch(modalSrc, /DetailModalVideo/)
+    const mediaSrc = read("app/components/trade/TradeDetailMediaWithClipOverlay.tsx")
+    assert.match(mediaSrc, /ReelThumbnailPreview/)
+    assert.doesNotMatch(mediaSrc, /<video/)
+  })
+
+  it("public trade detail places author header before mobile media", () => {
+    const modalSrc = read("app/components/feed/FeedPostDetailModal.tsx")
+    assert.doesNotMatch(modalSrc, /mobileMediaBeforeHeader/)
+    assert.match(modalSrc, /engagementUnderMedia/)
+    assert.match(modalSrc, /DETAIL_MODAL_MEDIA_ACTIONS_WRAP_CLASS/)
+    assert.match(modalSrc, /PostInteractionsEngagement/)
+
+    const mediaSrc = read("app/components/trade/TradeDetailMediaWithClipOverlay.tsx")
+    assert.match(mediaSrc, /LinkedClipImageOverlay/)
+    assert.match(mediaSrc, /stopPropagation/)
+    assert.doesNotMatch(mediaSrc, /ViewReelBadge/)
+    const overlaySrc = read("app/components/trade/LinkedClipImageOverlay.tsx")
+    assert.match(overlaySrc, /Linked Clip/)
+  })
+
+  it("social trade detail places engagement directly under media on iOS", () => {
+    const src = read(
+      "native-ios/TradeTraxs/TradeTraxs/Features/Detail/Trade/TradeDetailView.swift"
+    )
+    const socialBlock = src.slice(
+      src.indexOf("private func socialTradeContent"),
+      src.indexOf("private func socialEngagementTarget")
+    )
+    const mediaIdx = socialBlock.indexOf("SocialTradeDetailMediaSection")
+    const engagementIdx = socialBlock.indexOf(
+      "socialEngagementBar(for: trade, scrollProxy: scrollProxy)"
+    )
+    const headlineIdx = socialBlock.indexOf("detail.trade.headline")
+    assert.ok(mediaIdx >= 0 && engagementIdx > mediaIdx)
+    assert.ok(engagementIdx < headlineIdx)
+    assert.doesNotMatch(
+      socialBlock,
+      /SocialTradePublicMetricsSection[\s\S]{0,400}socialEngagementBar/
+    )
   })
 
   it("FeedPostList routes reel posts through FeedReelCard only", () => {
@@ -79,6 +118,14 @@ describe("Feed Reel media — zero video before intentional activation", () => {
     assert.match(src, /post\.video_url/)
     assert.match(src, /removeAttribute\("src"\)/)
     assert.match(src, /video\.load\(\)/)
+  })
+
+  it("Clips pager preloads metadata and still plays only the active clip", () => {
+    const src = read("app/components/mobile/feed/MobileWebClipsPager.tsx")
+    assert.match(src, /preload="metadata"/)
+    assert.doesNotMatch(src, /preload="auto"/)
+    assert.match(src, /active && videoUrl/)
+    assert.match(src, /loading=\{nearActive \? "eager" : "lazy"\}/)
   })
 
   it("ReelClipPlayback does not seek or autoplay before intentional play", () => {

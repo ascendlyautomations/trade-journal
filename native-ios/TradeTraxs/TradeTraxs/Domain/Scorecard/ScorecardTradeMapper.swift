@@ -31,6 +31,13 @@ nonisolated enum ScorecardTradeMapper {
             return n.isFinite ? n : nil
         }()
 
+        let dollarRisk: Double? = {
+            guard let amount = trade.dollarRisk else { return nil }
+            let n = NSDecimalNumber(decimal: amount).doubleValue
+            guard n.isFinite, n > 0 else { return nil }
+            return n
+        }()
+
         return ScorecardTrade(
             id: trade.id.rawValue,
             pnl: pnl,
@@ -42,22 +49,34 @@ nonisolated enum ScorecardTradeMapper {
             confidence: trade.confidence.map(Double.init),
             executionRating: trade.executionRating.map(Double.init),
             entryTimeMs: entryMs,
+            dollarRisk: dollarRisk,
             tradingDayKey: DashboardTradingDayKey.key(for: trade),
-            psychologyDayKey: TraderPsychologyAnalyticsFoundation.tradeDateKey(for: trade)
+            psychologyDayKey: TraderPsychologyAnalyticsFoundation.tradeDateKey(for: trade),
+            emotion: trade.emotion
         )
     }
 
-    static func postTripleLossWinRate(trades: [ScorecardTrade]) -> Double? {
+    struct PostTripleLossWindow {
+        var winRate: Double
+        /// Trades inside the recovery window, not every trade in scope.
+        var sampleSize: Int
+    }
+
+    static func postTripleLossWindow(trades: [ScorecardTrade]) -> PostTripleLossWindow? {
         guard trades.count >= 4 else { return nil }
         for i in 0...(trades.count - 4) {
             if trades[i].pnl < 0, trades[i + 1].pnl < 0, trades[i + 2].pnl < 0 {
                 let next = Array(trades[(i + 3)..<min(i + 8, trades.count)])
                 guard next.count >= 5 else { continue }
                 let wins = next.filter { $0.pnl > 0 }.count
-                return Double(wins) / Double(next.count)
+                return PostTripleLossWindow(winRate: Double(wins) / Double(next.count), sampleSize: next.count)
             }
         }
         return nil
+    }
+
+    static func postTripleLossWinRate(trades: [ScorecardTrade]) -> Double? {
+        postTripleLossWindow(trades: trades)?.winRate
     }
 
     static func periodTradingDayCount(from trades: [ScorecardTrade]) -> Int {

@@ -11,6 +11,7 @@ import {
 import type { TraderDailyCheckIn } from "@/lib/dailyCheckIn/types"
 import type { PsychologyReportTrade } from "@/lib/psychology/reports/types"
 import {
+  formatOptionalPsychologyMoney,
   formatPsychologyMoney,
   formatPsychologyWinRate,
 } from "@/lib/psychology/reports/format"
@@ -160,10 +161,14 @@ export default function CheckInDayDetail({
               </div>
               <p
                 className={`text-sm font-semibold tabular-nums ${
-                  trade.pnl >= 0 ? "text-emerald-400" : "text-red-400"
+                  trade.pnl == null
+                    ? "text-gray-400"
+                    : trade.pnl >= 0
+                      ? "text-emerald-400"
+                      : "text-red-400"
                 }`}
               >
-                {formatPsychologyMoney(trade.pnl)}
+                {formatOptionalPsychologyMoney(trade.pnl) ?? "—"}
               </p>
             </Link>
           ))

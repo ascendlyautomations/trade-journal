@@ -102,9 +102,8 @@ final class PsychologyCoachPhase5Tests: XCTestCase {
             tradingDay: "2026-09-02"
         )
 
-        if facts.guardrailFacts.lowSleepHoursThreshold != nil {
-            XCTAssertTrue(notices.contains { $0.kind == .lowSleep })
-        }
+        XCTAssertNil(facts.guardrailFacts.lowSleepHoursThreshold)
+        XCTAssertFalse(notices.contains { $0.kind == .lowSleep })
     }
 
     func testGuardrailDismissalDedupes() {

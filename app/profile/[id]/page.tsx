@@ -20,7 +20,6 @@ import {
   stableIdKey,
 } from "@/lib/realtimeFilters"
 import { devLog, devWarn } from "@/lib/devLog"
-import { deleteUserTrade } from "@/lib/deleteTrade"
 import { invalidateUserStreaksCache } from "@/lib/userStreaksCache"
 import { CONTENT_IMAGE_V2_PRESET } from "@/lib/contentImageV2"
 import { IMMUTABLE_MEDIA_CACHE_CONTROL } from "@/lib/storageCacheControl"
@@ -115,7 +114,7 @@ import { invalidateFollowListCache } from "@/lib/followListPage"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { ensureDmConversation } from "@/lib/dmConversation"
 import { dmThreadPath } from "@/lib/messageRoutes"
-import { ConfirmModal, FeedbackModal, useDeleteTradeConfirmation, useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
+import { ConfirmModal, FeedbackModal, useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 import { PlatformProfileHeader } from "../../components/platform"
 import {
@@ -164,6 +163,16 @@ import {
   patchFeedReelInSessionsForUser,
   removeFeedReelFromSessionsForUser,
 } from "@/lib/feedSessionCache"
+import {
+  TRADE_DELETED_EVENT,
+  TRADE_VISIBILITY_EVENT,
+  type TradeDeletedDetail,
+  type TradeVisibilityDetail,
+  patchFeedItemUnlinkedFromTrade,
+  patchReelRowUnlinkedFromTrade,
+  patchFeedItemTradeVisibility,
+  patchReelRowTradeVisibility,
+} from "@/lib/tradeDeleteSync"
 import {
   REEL_COMMENT_INSERT_SELECT,
   insertReelCommentNotifications,
@@ -2417,6 +2426,68 @@ function ProfilePageContent() {
     [currentUserId, profile]
   )
 
+  useEffect(() => {
+    function onTradeDeleted(event: Event) {
+      const detail = (event as CustomEvent<TradeDeletedDetail>).detail
+      const tradeId = String(detail?.tradeId ?? "").trim()
+      if (!tradeId) return
+      if (
+        detail.userId &&
+        currentUserId &&
+        detail.userId !== currentUserId
+      ) {
+        return
+      }
+
+      setProfileReels((prev) =>
+        prev.map((row) => patchReelRowUnlinkedFromTrade(row, tradeId))
+      )
+      setSelectedReelDetail((prev: any | null) => {
+        if (!prev) return prev
+        const patched = patchFeedItemUnlinkedFromTrade(prev, tradeId)
+        if (patched === prev) return prev
+        return reelDetailFeedItem(patched, profile)
+      })
+      setTradeReelsByTradeId((prev) => {
+        if (!(tradeId in prev)) return prev
+        const next = { ...prev }
+        delete next[tradeId]
+        return next
+      })
+    }
+
+    function onTradeVisibility(event: Event) {
+      const detail = (event as CustomEvent<TradeVisibilityDetail>).detail
+      const tradeId = String(detail?.tradeId ?? "").trim()
+      if (!tradeId) return
+      if (
+        detail.userId &&
+        currentUserId &&
+        detail.userId !== currentUserId
+      ) {
+        return
+      }
+      const isPublic = detail.isPublic === true
+
+      setProfileReels((prev) =>
+        prev.map((row) => patchReelRowTradeVisibility(row, tradeId, isPublic))
+      )
+      setSelectedReelDetail((prev: any | null) => {
+        if (!prev) return prev
+        const patched = patchFeedItemTradeVisibility(prev, tradeId, isPublic)
+        if (patched === prev) return prev
+        return reelDetailFeedItem(patched, profile)
+      })
+    }
+
+    window.addEventListener(TRADE_DELETED_EVENT, onTradeDeleted)
+    window.addEventListener(TRADE_VISIBILITY_EVENT, onTradeVisibility)
+    return () => {
+      window.removeEventListener(TRADE_DELETED_EVENT, onTradeDeleted)
+      window.removeEventListener(TRADE_VISIBILITY_EVENT, onTradeVisibility)
+    }
+  }, [currentUserId, profile])
+
   const handleReelSaved = useCallback(
     (reel: ReelRow) => {
       applyReelPatch(String(reel.id), {
@@ -3272,37 +3343,6 @@ function ProfilePageContent() {
     }
   }
 
-  const performDeleteTrade = useCallback(async (tradeId: string) => {
-    if (isExploreWriteBlocked(currentUserId)) {
-      requestDemoSignup("delete", currentUserId)
-      return
-    }
-    const snapshotAll = allTrades
-    const snapshotAnalytics = analyticsTradeRows
-    const snapshotSummary = summaryTrades
-    setAllTrades((prev) => prev.filter((t) => String(t.id) !== String(tradeId)))
-    setAnalyticsTradeRows((prev) =>
-      prev.filter((t) => String(t.id) !== String(tradeId))
-    )
-    setSummaryTrades((prev) =>
-      prev.filter((t) => String(t.id) !== String(tradeId))
-    )
-    setSelectedTradeDetail((prev: any | null) =>
-      prev && String(prev.id) === String(tradeId) ? null : prev
-    )
-    try {
-      await deleteUserTrade(supabase, tradeId)
-    } catch (err) {
-      console.error(err)
-      setAllTrades(snapshotAll)
-      setAnalyticsTradeRows(snapshotAnalytics)
-      setSummaryTrades(snapshotSummary)
-    }
-  }, [allTrades, analyticsTradeRows, summaryTrades])
-
-  const { requestDelete: handleDeleteTrade, confirmModalProps: deleteTradeConfirmProps } =
-    useDeleteTradeConfirmation(performDeleteTrade)
-
   const emptyFollowSet = useMemo(() => new Set<string>(), [])
 
   const profileFollowingIds = useMemo(() => {
@@ -4091,7 +4131,6 @@ function ProfilePageContent() {
   return (
     <>
       <FeedbackModal {...feedbackModalProps} />
-      <ConfirmModal {...deleteTradeConfirmProps} />
       <ConfirmModal {...deleteReelConfirmProps} />
       {currentUserId === profile?.id ? (
         <StoryComposeModal
@@ -4392,9 +4431,6 @@ function ProfilePageContent() {
                     }}
                     onStartEditTrade={() => openEditTradeModal(trade)}
                     onTogglePinTrade={() => void handlePinTrade(trade)}
-                    onDeleteTrade={() =>
-                      void handleDeleteTrade(String(trade.id))
-                    }
                     showInteractions
                     onOpenDetail={() => openTradeDetail(trade, false)}
                     onOpenComments={() => openTradeDetail(trade, true)}
@@ -4614,9 +4650,6 @@ function ProfilePageContent() {
                 setSelectedTradeDetail(null)
               }}
               onTogglePinTrade={() => void handlePinTrade(selectedTradeDetail)}
-              onDeleteTrade={() =>
-                void handleDeleteTrade(String(selectedTradeDetail.id))
-              }
               showInteractions={true}
               commentsExpanded
               scrollToCommentsOnMount={tradeDetailFocusComments}

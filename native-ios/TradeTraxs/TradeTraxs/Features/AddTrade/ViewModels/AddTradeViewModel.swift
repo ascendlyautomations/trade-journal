@@ -31,6 +31,9 @@ final class AddTradeViewModel {
         case points
         case rr
         case maxRrReached
+        case exitRr
+        case realizedRr
+        case plannedRisk
     }
 
     private(set) var phase: Phase = .idle
@@ -49,14 +52,37 @@ final class AddTradeViewModel {
     var contractsText = ""
     var pnlText = ""
     var pointsText = ""
+    var plannedRiskText = ""
     var rrText = ""
     var maxRrReachedText = ""
+    var exitRrText = ""
+    var fullTakeProfit = false
+    var earlyExit = false
 
     var showsMaxRrReachedField: Bool {
-        (Self.parseDecimal(pnlText, style: .signedPnL) ?? 0) < 0
+        if earlyExit { return true }
+        guard let parsedPnL = Self.parseDecimal(pnlText, style: .signedPnL) else { return false }
+        return parsedPnL < 0
+    }
+
+    var showsExitRrField: Bool {
+        guard earlyExit, (Self.parseDecimal(pnlText, style: .signedPnL) ?? 0) > 0 else {
+            return false
+        }
+        return !TradePointsAndRealizedRr.canComputeExitRrFromPrices(draft: riskPreviewDraft())
     }
 
     var requiresMaxRrReached: Bool { showsMaxRrReachedField }
+
+    func toggleFullTakeProfit() {
+        fullTakeProfit.toggle()
+        if fullTakeProfit { earlyExit = false }
+    }
+
+    func toggleEarlyExit() {
+        earlyExit.toggle()
+        if earlyExit { fullTakeProfit = false }
+    }
     var entryAt: Date = .now
     var exitAt: Date = .now
     var includeExitTime = false
@@ -66,9 +92,14 @@ final class AddTradeViewModel {
     var customTimeframeText = ""
     var newsEvent = false
     var confidenceLevel = 0
-    var emotionSelection = ""
+    var emotionPickerSelection = ""
+    var emotionCustomText = ""
+    var exitEmotionPickerSelection = ""
+    var exitEmotionCustomText = ""
+    var executionRatingLevel = 0
     var followedPlan: Bool?
-    var marketConditionSelection = ""
+    var marketConditionPickerSelection = ""
+    var marketConditionCustomText = ""
     var psychologyNotesText = ""
     var screenshotDisplayMode: TradeScreenshotDisplayMode = .fit
     var publicCaptionText = ""
@@ -119,7 +150,6 @@ final class AddTradeViewModel {
     private var saveTask: Task<Void, Never>?
     private var isEnqueueingTradeSave = false
     private var hasLoadedAccounts = false
-    private var hasLoadedReels = false
     private var editingTrade: Trade?
     private var editingOriginalAccountID: TradingAccountID?
     private var existingImageURL: String?
@@ -311,9 +341,14 @@ final class AddTradeViewModel {
             || !timeframeSelection.isEmpty
             || newsEvent
             || confidenceLevel > 0
-            || !emotionSelection.isEmpty
+            || !resolvedEmotionSelection.isEmpty
             || followedPlan != nil
-            || !marketConditionSelection.isEmpty
+            || !resolvedMarketConditionSelection.isEmpty
+            || exitEmotionPickerSelection == TradeReviewCatalog.customPsychologyToken
+            || executionRatingLevel > 0
+            || emotionPickerSelection == TradeReviewCatalog.customPsychologyToken
+            || exitEmotionPickerSelection == TradeReviewCatalog.customPsychologyToken
+            || marketConditionPickerSelection == TradeReviewCatalog.customPsychologyToken
             || !rrText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || screenshotData != nil
             || reelDraft != nil
@@ -342,9 +377,9 @@ final class AddTradeViewModel {
     var hasPsychologyDetails: Bool {
         TradeReviewCatalog.hasPsychologyDetails(
             confidence: confidenceLevel,
-            emotion: emotionSelection,
-            followedPlan: followedPlan,
-            marketCondition: marketConditionSelection,
+            emotionBefore: resolvedEmotionSelection,
+            emotionAfter: resolvedExitEmotionSelection,
+            executionRating: executionRatingLevel,
             psychologyNotes: psychologyNotesText
         )
     }
@@ -352,11 +387,32 @@ final class AddTradeViewModel {
     var psychologySummary: String {
         TradeReviewCatalog.psychologySummary(
             confidence: confidenceLevel,
-            emotion: emotionSelection,
-            followedPlan: followedPlan,
-            marketCondition: marketConditionSelection,
+            emotionBefore: resolvedEmotionSelection,
+            emotionAfter: resolvedExitEmotionSelection,
+            executionRating: executionRatingLevel,
             psychologyNotes: psychologyNotesText
         )
+    }
+
+    private var resolvedEmotionSelection: String {
+        TradeReviewCatalog.resolvedPsychologyValue(
+            selection: emotionPickerSelection,
+            custom: emotionCustomText
+        ) ?? ""
+    }
+
+    private var resolvedExitEmotionSelection: String {
+        TradeReviewCatalog.resolvedPsychologyValue(
+            selection: exitEmotionPickerSelection,
+            custom: exitEmotionCustomText
+        ) ?? ""
+    }
+
+    private var resolvedMarketConditionSelection: String {
+        TradeReviewCatalog.resolvedPsychologyValue(
+            selection: marketConditionPickerSelection,
+            custom: marketConditionCustomText
+        ) ?? ""
     }
 
     func copyNotesToCaption() {
@@ -608,23 +664,29 @@ final class AddTradeViewModel {
     func selectLinkedReel(_ reel: Reel) {
         ExperienceHaptics.play(.selection)
         reelDraft = nil
+        detailCache.seed(reel)
         linkedReel = reel
         formError = nil
     }
 
     func clearLinkedReel() {
         linkedReel = nil
+        reloadUnattachedReelsForPicker()
     }
 
     func clearClip() {
         reelDraft = nil
         linkedReel = nil
+        reloadUnattachedReelsForPicker()
+    }
+
+    /// Refreshes linkable clips from the database (call when the picker opens and after link changes).
+    func reloadUnattachedReelsForPicker() {
+        Task { await loadUnattachedReels() }
     }
 
     func loadUnattachedReelsIfNeeded() {
-        guard !hasLoadedReels else { return }
-        hasLoadedReels = true
-        Task { await loadUnattachedReels() }
+        reloadUnattachedReelsForPicker()
     }
 
     /// Reload accounts after Manage Accounts mutations (no polling).
@@ -919,8 +981,12 @@ final class AddTradeViewModel {
         contractsText = Self.decimalFieldText(trade.quantity, style: .tradeQuantity)
         pnlText = Self.decimalFieldText(trade.realizedPnL?.amount, style: .signedPnL)
         pointsText = Self.decimalFieldText(trade.points, style: .tradeQuantity)
+        plannedRiskText = Self.decimalFieldText(trade.dollarRisk, style: .propFirmAmount)
         rrText = Self.decimalFieldText(trade.riskReward, style: .riskReward)
         maxRrReachedText = Self.decimalFieldText(trade.maxRrReached, style: .riskReward)
+        exitRrText = Self.decimalFieldText(trade.exitRr, style: .riskReward)
+        fullTakeProfit = trade.fullTakeProfit
+        earlyExit = trade.earlyExit
         entryAt = trade.entryAt
         if let exit = trade.exitAt {
             exitAt = exit
@@ -936,9 +1002,26 @@ final class AddTradeViewModel {
         customTimeframeText = timeframeParts.custom
         newsEvent = trade.newsEvent ?? false
         confidenceLevel = trade.confidence ?? 0
-        emotionSelection = trade.emotion ?? ""
+        let emotionParts = TradeReviewCatalog.psychologyPickerState(
+            for: trade.emotion,
+            presets: TradeReviewCatalog.emotions
+        )
+        emotionPickerSelection = emotionParts.selection
+        emotionCustomText = emotionParts.custom
+        let exitEmotionParts = TradeReviewCatalog.psychologyPickerState(
+            for: trade.exitEmotion,
+            presets: TradeReviewCatalog.emotions
+        )
+        exitEmotionPickerSelection = exitEmotionParts.selection
+        exitEmotionCustomText = exitEmotionParts.custom
+        executionRatingLevel = trade.executionRating ?? 0
         followedPlan = trade.followedPlan
-        marketConditionSelection = trade.marketCondition ?? ""
+        let marketParts = TradeReviewCatalog.psychologyPickerState(
+            for: trade.marketCondition,
+            presets: TradeReviewCatalog.marketConditions
+        )
+        marketConditionPickerSelection = marketParts.selection
+        marketConditionCustomText = marketParts.custom
         psychologyNotesText = trade.psychologyNotes ?? ""
         screenshotDisplayMode = trade.imageDisplayMode
         publicCaptionText = trade.publicCaption ?? ""
@@ -946,6 +1029,9 @@ final class AddTradeViewModel {
         existingImageURL = trade.thumbnail?.id
         removeExistingScreenshot = false
         screenshotData = nil
+        if let attached = detailCache.reel(linkedTo: trade.id) {
+            linkedReel = attached
+        }
         hydratedFingerprint = formFingerprint
     }
 
@@ -984,7 +1070,11 @@ final class AddTradeViewModel {
             contractsText,
             pnlText,
             pointsText,
+            plannedRiskText,
             rrText,
+            fullTakeProfit ? "1" : "0",
+            earlyExit ? "1" : "0",
+            exitRrText,
             String(entryAt.timeIntervalSince1970),
             includeExitTime ? String(exitAt.timeIntervalSince1970) : "nil",
             strategyText,
@@ -993,9 +1083,14 @@ final class AddTradeViewModel {
             customTimeframeText,
             newsEvent ? "1" : "0",
             String(confidenceLevel),
-            emotionSelection,
+            emotionPickerSelection,
+            emotionCustomText,
+            exitEmotionPickerSelection,
+            exitEmotionCustomText,
+            String(executionRatingLevel),
             followedPlan.map { $0 ? "1" : "0" } ?? "nil",
-            marketConditionSelection,
+            marketConditionPickerSelection,
+            marketConditionCustomText,
             psychologyNotesText,
             screenshotDisplayMode.rawValue,
             publicCaptionText,
@@ -1145,22 +1240,28 @@ final class AddTradeViewModel {
             exitAt: includeExitTime ? exitAt : nil,
             realizedPnL: Money(amount: pnl),
             riskReward: Self.parseOptionalRiskReward(rrText),
+            dollarRisk: Self.parseOptionalPlannedDollarRisk(plannedRiskText),
             maxRrReached: showsMaxRrReachedField
                 ? Self.parseOptionalRiskReward(maxRrReachedText)
                 : nil,
+            fullTakeProfit: fullTakeProfit,
+            earlyExit: earlyExit,
+            exitRr: Self.parseOptionalRiskReward(exitRrText),
             points: Self.parseDecimal(pointsText, style: .tradeQuantity) ?? 0,
             sessionLabel: sessionLabel,
             strategy: Self.nilIfEmpty(strategyText),
-            visibility: shareToProfile ? .public : .private,
+            visibility: shareToProfile ? ContentVisibility.public : ContentVisibility.private,
             publicCaption: Self.nilIfEmpty(publicCaptionText),
             noteBody: Self.nilIfEmpty(notesText),
             timeframe: resolvedTimeframe,
             newsEvent: newsEvent,
             confidence: confidenceLevel > 0 ? confidenceLevel : nil,
-            emotion: Self.nilIfEmpty(emotionSelection),
+            emotion: Self.nilIfEmpty(resolvedEmotionSelection),
             followedPlan: followedPlan,
-            marketCondition: Self.nilIfEmpty(marketConditionSelection),
+            marketCondition: Self.nilIfEmpty(resolvedMarketConditionSelection),
             psychologyNotes: Self.nilIfEmpty(psychologyNotesText),
+            exitEmotion: Self.nilIfEmpty(resolvedExitEmotionSelection),
+            executionRating: executionRatingLevel > 0 ? executionRatingLevel : nil,
             imageDisplayMode: screenshotDisplayMode,
             durationSeconds: holdDuration?.seconds,
             durationText: holdDuration?.text,
@@ -1220,19 +1321,18 @@ final class AddTradeViewModel {
         onDismiss()
     }
 
-    func savePostTradeReflection(exitEmotion: String?, executionRating: Int?) async {
+    func savePostTradeReflection(patch: PostTradePsychologySavePatch) async {
         guard let trade = pendingPostTradeReflection else {
             onDismiss()
             return
         }
-        guard exitEmotion != nil || executionRating != nil else {
+        guard patch.hasAnyValue else {
             skipPostTradeReflection()
             return
         }
 
         var draft = tradeDraft(from: trade)
-        draft.exitEmotion = exitEmotion
-        draft.executionRating = executionRating
+        TradeReviewCatalog.applyPsychologyPatch(patch, to: &draft)
 
         do {
             let updated = try await trades.update(id: trade.id, draft: draft, previous: trade)
@@ -1259,8 +1359,12 @@ final class AddTradeViewModel {
             exitAt: trade.exitAt,
             realizedPnL: trade.realizedPnL,
             riskReward: trade.riskReward,
+            dollarRisk: trade.dollarRisk,
             maxRrReached: trade.maxRrReached,
             realizedRr: trade.realizedRr,
+            fullTakeProfit: trade.fullTakeProfit,
+            earlyExit: trade.earlyExit,
+            exitRr: trade.exitRr,
             points: trade.points,
             sessionLabel: trade.sessionLabel,
             strategy: trade.strategy,
@@ -1283,16 +1387,37 @@ final class AddTradeViewModel {
         )
     }
 
+    private func includingReelIDForClipPicker() -> ReelID? {
+        if let linkedReel { return linkedReel.id }
+        if case .edit(let tradeID) = mode {
+            return detailCache.reel(linkedTo: tradeID)?.id
+        }
+        return nil
+    }
+
     private func loadUnattachedReels() async {
         isLoadingReels = true
         defer { isLoadingReels = false }
         guard let viewerID else { return }
+        let includingReelID = includingReelIDForClipPicker()
         if viewerID.rawValue.hasPrefix("dev.") {
             unattachedReels = AddTradeFixtures.unattachedReels(owner: viewerID)
+            if let includingReelID,
+               !unattachedReels.contains(where: { $0.id == includingReelID }),
+               let preserved = detailCache.reel(id: includingReelID)
+            {
+                unattachedReels.insert(preserved, at: 0)
+            }
             return
         }
         do {
-            unattachedReels = try await feed.unattachedReels(for: viewerID, limit: 30)
+            let loaded = try await feed.unattachedReels(
+                for: viewerID,
+                limit: 30,
+                includingReelID: includingReelID
+            )
+            unattachedReels = loaded
+            detailCache.seed(reels: loaded)
         } catch {
             unattachedReels = []
         }
@@ -1364,14 +1489,44 @@ final class AddTradeViewModel {
     private func linkReelIfNeeded(to tradeID: TradeID) async throws {
         guard let reel = linkedReel else { return }
         if let viewerID, viewerID.rawValue.hasPrefix("dev.") {
-            ContentMutationStore.shared.noteReelLinked(reel.id)
+            detailCache.applyReelTradeLink(reel: reel, tradeID: tradeID)
+            if let linked = detailCache.reel(id: reel.id) {
+                ContentMutationStore.shared.noteReelLinked(linked)
+            }
             return
         }
         if try await feed.tradeHasAttachedReel(tradeID) {
             throw AppError.domain(.conflict(message: "This trade already has a clip attached."))
         }
         try await feed.attachReel(id: reel.id, to: tradeID)
-        ContentMutationStore.shared.noteReelLinked(reel.id)
+        detailCache.applyReelTradeLink(reel: reel, tradeID: tradeID)
+        if let linked = detailCache.reel(id: reel.id) {
+            ContentMutationStore.shared.noteReelLinked(linked)
+        }
+        await loadUnattachedReels()
+    }
+
+    private func riskPreviewDraft() -> TradeDraft {
+        TradeDraft(
+            symbol: Symbol(ticker: symbolText.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()),
+            side: side,
+            mode: .live,
+            quantity: Self.parseDecimal(contractsText, style: .tradeQuantity) ?? 0,
+            entryPrice: Self.parseDecimal(entryPriceText, style: .tradePrice),
+            exitPrice: Self.parseDecimal(exitPriceText, style: .tradePrice),
+            entryAt: entryAt,
+            realizedPnL: Money(amount: Self.parseDecimal(pnlText, style: .signedPnL) ?? 0),
+            riskReward: Self.parseOptionalRiskReward(rrText),
+            dollarRisk: Self.parseOptionalPlannedDollarRisk(plannedRiskText),
+            maxRrReached: showsMaxRrReachedField
+                ? Self.parseOptionalRiskReward(maxRrReachedText)
+                : nil,
+            fullTakeProfit: fullTakeProfit,
+            earlyExit: earlyExit,
+            exitRr: Self.parseOptionalRiskReward(exitRrText),
+            points: Self.parseDecimal(pointsText, style: .tradeQuantity),
+            visibility: ContentVisibility.private
+        )
     }
 
     private func validate() -> Bool {
@@ -1403,22 +1558,36 @@ final class AddTradeViewModel {
             errors[.pnl] = "Enter a valid P&L"
         }
         let pnlForRisk = Self.parseDecimal(pnlText, style: .signedPnL) ?? 0
+        let preview = riskPreviewDraft()
         let riskValidation = TradePointsAndRealizedRr.validateManualRiskFields(
             pnl: pnlForRisk,
             pointsText: pointsText,
             rrText: rrText,
             maxRrText: maxRrReachedText,
+            fullTakeProfit: fullTakeProfit,
+            earlyExit: earlyExit,
+            exitRrText: exitRrText,
             parsePoints: { Self.parseDecimal($0, style: .tradeQuantity) },
-            parseRr: Self.parseOptionalRiskReward
+            parseRr: Self.parseOptionalRiskReward,
+            canComputeExitRr: TradePointsAndRealizedRr.canComputeExitRrFromPrices(draft: preview),
+            previewDraft: preview
         )
+        if let message = riskValidation.outcomeMode {
+            formError = formError ?? message
+        }
         if let message = riskValidation.points { errors[.points] = message }
         if let message = riskValidation.rr { errors[.rr] = message }
         if let message = riskValidation.maxRr { errors[.maxRrReached] = message }
+        if let message = riskValidation.exitRr { errors[.exitRr] = message }
+        if let message = riskValidation.realizedRr { errors[.realizedRr] = message }
         if !entryPriceText.isEmpty, Self.parseDecimal(entryPriceText, style: .tradePrice) == nil {
             errors[.entry] = "Invalid entry price"
         }
         if !exitPriceText.isEmpty, Self.parseDecimal(exitPriceText, style: .tradePrice) == nil {
             errors[.exit] = "Invalid exit price"
+        }
+        if let plannedRiskError = Self.plannedDollarRiskValidationMessage(plannedRiskText) {
+            errors[.plannedRisk] = plannedRiskError
         }
         if includeExitTime, exitAt < entryAt {
             formError = formError ?? "Exit time must be after entry time."
@@ -1516,6 +1685,23 @@ final class AddTradeViewModel {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    /// Blank → `nil`; positive values only — never derived from P&L or R:R.
+    private static func parseOptionalPlannedDollarRisk(_ raw: String) -> Decimal? {
+        let plain = NumericInputFieldSupport.plainNumericString(from: raw)
+        guard !plain.isEmpty else { return nil }
+        guard let value = parseDecimal(raw, style: .propFirmAmount), value > 0 else { return nil }
+        return value
+    }
+
+    private static func plannedDollarRiskValidationMessage(_ raw: String) -> String? {
+        let plain = NumericInputFieldSupport.plainNumericString(from: raw)
+        guard !plain.isEmpty else { return nil }
+        guard let value = parseDecimal(raw, style: .propFirmAmount), value > 0 else {
+            return "Enter a dollar amount above 0, or leave blank"
+        }
+        return nil
+    }
+
     private static func parseDecimal(_ raw: String, style: NumericInputStyle = .signedPnL) -> Decimal? {
         NumericInputFieldSupport.parse(raw, style: style)
     }
@@ -1539,6 +1725,12 @@ final class AddTradeViewModel {
             exitAt: draft.exitAt,
             realizedPnL: draft.realizedPnL,
             riskReward: draft.riskReward,
+            dollarRisk: draft.dollarRisk,
+            maxRrReached: draft.maxRrReached,
+            realizedRr: draft.realizedRr,
+            fullTakeProfit: draft.fullTakeProfit,
+            earlyExit: draft.earlyExit,
+            exitRr: draft.exitRr,
             points: draft.points,
             sessionLabel: draft.sessionLabel,
             visibility: draft.visibility,
@@ -1555,6 +1747,8 @@ final class AddTradeViewModel {
             followedPlan: draft.followedPlan,
             marketCondition: draft.marketCondition,
             psychologyNotes: draft.psychologyNotes,
+            exitEmotion: draft.exitEmotion,
+            executionRating: draft.executionRating,
             durationText: draft.durationText,
             durationSeconds: draft.durationSeconds,
             createdAt: .now,
@@ -1575,6 +1769,12 @@ final class AddTradeViewModel {
         trade.exitAt = draft.exitAt
         trade.realizedPnL = draft.realizedPnL
         trade.riskReward = draft.riskReward
+        trade.dollarRisk = draft.dollarRisk
+        trade.maxRrReached = draft.maxRrReached
+        trade.realizedRr = draft.realizedRr
+        trade.fullTakeProfit = draft.fullTakeProfit
+        trade.earlyExit = draft.earlyExit
+        trade.exitRr = draft.exitRr
         trade.points = draft.points
         trade.sessionLabel = draft.sessionLabel
         trade.visibility = draft.visibility
@@ -1590,6 +1790,8 @@ final class AddTradeViewModel {
         trade.followedPlan = draft.followedPlan
         trade.marketCondition = draft.marketCondition
         trade.psychologyNotes = draft.psychologyNotes
+        trade.exitEmotion = draft.exitEmotion
+        trade.executionRating = draft.executionRating
         trade.durationText = draft.durationText
         trade.durationSeconds = draft.durationSeconds
         trade.imageDisplayMode = draft.imageDisplayMode
@@ -1695,6 +1897,7 @@ final class AddTradeViewModel {
         contractsText = state.contracts
         pnlText = state.pnl
         pointsText = state.points
+        plannedRiskText = state.plannedRisk
         rrText = state.rr
         if let entryAt = state.entryAt.flatMap(ContentDraftDateCodec.date(from:)) {
             self.entryAt = entryAt
@@ -1709,9 +1912,29 @@ final class AddTradeViewModel {
         customTimeframeText = state.customTimeframe
         newsEvent = state.newsEvent
         confidenceLevel = state.confidence
-        emotionSelection = state.emotion
+        let emotionDraft = TradeReviewCatalog.psychologyPickerStateFromDraft(
+            pickerSelection: state.emotion,
+            customText: state.customEmotion,
+            presets: TradeReviewCatalog.emotions
+        )
+        emotionPickerSelection = emotionDraft.selection
+        emotionCustomText = emotionDraft.custom
+        let exitEmotionDraft = TradeReviewCatalog.psychologyPickerStateFromDraft(
+            pickerSelection: state.exitEmotion,
+            customText: state.customExitEmotion,
+            presets: TradeReviewCatalog.emotions
+        )
+        exitEmotionPickerSelection = exitEmotionDraft.selection
+        exitEmotionCustomText = exitEmotionDraft.custom
+        executionRatingLevel = state.executionRating
         followedPlan = state.followedPlan
-        marketConditionSelection = state.marketCondition
+        let marketDraft = TradeReviewCatalog.psychologyPickerStateFromDraft(
+            pickerSelection: state.marketCondition,
+            customText: state.customMarketCondition,
+            presets: TradeReviewCatalog.marketConditions
+        )
+        marketConditionPickerSelection = marketDraft.selection
+        marketConditionCustomText = marketDraft.custom
         psychologyNotesText = state.psychologyNotes
         screenshotDisplayMode = TradeScreenshotDisplayMode(rawValue: state.screenshotDisplayMode) ?? .fit
         publicCaptionText = state.publicCaption
@@ -1729,6 +1952,7 @@ final class AddTradeViewModel {
         state.contracts = contractsText
         state.pnl = pnlText
         state.points = pointsText
+        state.plannedRisk = plannedRiskText
         state.rr = rrText
         state.entryAt = ContentDraftDateCodec.string(from: entryAt)
         state.exitAt = includeExitTime ? ContentDraftDateCodec.string(from: exitAt) : nil
@@ -1739,9 +1963,14 @@ final class AddTradeViewModel {
         state.customTimeframe = customTimeframeText
         state.newsEvent = newsEvent
         state.confidence = confidenceLevel
-        state.emotion = emotionSelection
+        state.emotion = emotionPickerSelection
+        state.customEmotion = emotionCustomText
+        state.exitEmotion = exitEmotionPickerSelection
+        state.customExitEmotion = exitEmotionCustomText
+        state.executionRating = executionRatingLevel
         state.followedPlan = followedPlan
-        state.marketCondition = marketConditionSelection
+        state.marketCondition = marketConditionPickerSelection
+        state.customMarketCondition = marketConditionCustomText
         state.psychologyNotes = psychologyNotesText
         state.screenshotDisplayMode = screenshotDisplayMode.rawValue
         state.publicCaption = publicCaptionText

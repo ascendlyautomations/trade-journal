@@ -24,10 +24,23 @@ nonisolated enum DashboardLoadProbe {
         }
     }
 
+    enum Section: String, Sendable, CaseIterable {
+        case equityChart
+        case tradingRules
+        case tradingRulesUI
+        case tradingRulesAuthoritative
+        case psychology
+        case psychologyInsights
+        case psychologyUnlock
+        case checkIns
+        case interactive
+    }
+
     struct SessionSnapshot: Sendable {
         var operations: [Operation]
         var firstUsefulRenderMs: Int?
         var fullHydrationMs: Int?
+        var sectionReadyMs: [Section: Int]
         var networkOperationCount: Int
         var blockingNetworkCount: Int
         var notificationRowsLoaded: Int
@@ -38,6 +51,7 @@ nonisolated enum DashboardLoadProbe {
     nonisolated(unsafe) private static var operations: [Operation] = []
     nonisolated(unsafe) private static var firstUsefulRenderMs: Int?
     nonisolated(unsafe) private static var fullHydrationMs: Int?
+    nonisolated(unsafe) private static var sectionReadyMs: [Section: Int] = [:]
     nonisolated(unsafe) private static var notificationRowsLoaded = 0
     nonisolated(unsafe) private static var coldAttemptCount = 0
     private static let logger = Logger(
@@ -52,6 +66,7 @@ nonisolated enum DashboardLoadProbe {
         operations = []
         firstUsefulRenderMs = nil
         fullHydrationMs = nil
+        sectionReadyMs = [:]
         notificationRowsLoaded = 0
         coldAttemptCount = 0
         lock.unlock()
@@ -79,6 +94,29 @@ nonisolated enum DashboardLoadProbe {
         fullHydrationMs = Int(Date().timeIntervalSince(start) * 1_000)
         logger.debug("FULL_HYDRATION \(self.fullHydrationMs ?? -1)ms")
         #endif
+    }
+
+    static func markSectionReady(_ section: Section) {
+        #if DEBUG
+        lock.lock()
+        defer { lock.unlock() }
+        guard sectionReadyMs[section] == nil, let start = sessionStart else { return }
+        let ms = Int(Date().timeIntervalSince(start) * 1_000)
+        sectionReadyMs[section] = ms
+        logger.debug("SECTION_READY \(section.rawValue, privacy: .public) \(ms)ms")
+        #endif
+    }
+
+    /// Fires once when summary, equity overlay, rules UI, psychology insights, and check-ins window are ready.
+    static func markDashboardInteractiveIfReady(
+        summaryReady: Bool,
+        equityReady: Bool,
+        rulesUIReady: Bool,
+        psychologyInsightsReady: Bool,
+        checkInsReady: Bool
+    ) {
+        guard summaryReady, equityReady, rulesUIReady, psychologyInsightsReady, checkInsReady else { return }
+        markSectionReady(.interactive)
     }
 
     static func recordColdAttempt() {
@@ -156,6 +194,7 @@ nonisolated enum DashboardLoadProbe {
             operations: operations,
             firstUsefulRenderMs: firstUsefulRenderMs,
             fullHydrationMs: fullHydrationMs,
+            sectionReadyMs: sectionReadyMs,
             networkOperationCount: network.count,
             blockingNetworkCount: network.filter(\.blocksFirstUsefulRender).count,
             notificationRowsLoaded: notificationRowsLoaded
@@ -168,6 +207,7 @@ nonisolated enum DashboardLoadProbe {
         operations = []
         firstUsefulRenderMs = nil
         fullHydrationMs = nil
+        sectionReadyMs = [:]
         notificationRowsLoaded = 0
         coldAttemptCount = 0
         lock.unlock()

@@ -6,6 +6,8 @@ struct ReportsScreenView: View {
     @State private var isPerformanceExpanded = false
     @State private var isPsychologyExpanded = false
     @State private var entitlementGateRevision = 0
+    private let tradingPreferences: (any TradingPreferencesRepository)?
+    private let navigationCoordinator: NavigationCoordinator?
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -21,10 +23,14 @@ struct ReportsScreenView: View {
                 navigationCoordinator: navigationCoordinator
             )
         )
+        tradingPreferences = data.tradingPreferences
+        self.navigationCoordinator = navigationCoordinator
     }
 
     init(viewModel: ReportsScreenViewModel) {
         _viewModel = State(initialValue: viewModel)
+        tradingPreferences = nil
+        navigationCoordinator = nil
     }
 
     var body: some View {
@@ -126,12 +132,22 @@ struct ReportsScreenView: View {
     }
 
     private var intro: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            Text("Your Reports")
-                .experienceStyle(.title3, color: colors.primaryText)
-            Text("Performance reviews and psychology insights from your journal.")
-                .experienceStyle(.footnote, color: colors.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                Text("Your Reports")
+                    .experienceStyle(.title3, color: colors.primaryText)
+                Text("Performance reviews and psychology insights from your journal.")
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let navigationCoordinator {
+                ReportsConfigureTradingRulesPrompt(
+                    userID: reportsViewerProfileID,
+                    repository: tradingPreferences,
+                    navigationCoordinator: navigationCoordinator
+                )
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -275,6 +291,7 @@ struct ReportsScreenView: View {
             isPsychologyExpanded.toggle()
         }
     }
+
 }
 
 struct PsychologyReportPeriodPickerView: View {
@@ -302,6 +319,7 @@ struct PsychologyReportPeriodPickerView: View {
                     }
                 }
             }
+            .experiencePlainListStyle()
             .navigationTitle("Choose Period")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -329,6 +347,7 @@ struct TradingReportYearPickerView: View {
                         .experienceStyle(.headline, color: colors.primaryText)
                 }
             }
+            .experiencePlainListStyle()
             .navigationTitle("Choose Year")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

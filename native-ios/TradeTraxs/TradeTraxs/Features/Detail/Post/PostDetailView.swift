@@ -161,6 +161,15 @@ struct PostDetailView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
+            .detailCommentsScrollOnOpen(
+                intent: .post(viewModel.postID),
+                anchorID: Self.commentsAnchorID,
+                isContentReady: viewModel.post != nil,
+                contentRevealed: contentRevealed,
+                detailCache: data.detailCache,
+                scrollProxy: proxy,
+                reduceMotion: reduceMotion
+            )
         }
         .overlay {
             if viewModel.isDeleting {

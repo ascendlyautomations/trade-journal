@@ -18,7 +18,8 @@ enum ExploreProfileHydration {
         detailCache: DetailPresentationCache,
         repository: any ProfileRepository,
         confirmedAbsent: inout Set<ProfileID>,
-        forceNetwork: Bool = false
+        forceNetwork: Bool = false,
+        avatarBatchProfileIDs: Set<ProfileID>? = nil
     ) async -> ([ExploreTraderSuggestion], Metrics) {
         guard !suggestions.isEmpty else { return ([], Metrics()) }
 
@@ -68,6 +69,22 @@ enum ExploreProfileHydration {
                 continue
             }
 
+            if let allowlist = avatarBatchProfileIDs, !allowlist.contains(profileID) {
+                merged.append(suggestion)
+                #if DEBUG
+                traces.append(
+                    ExploreHydrationDiagnostics.TraderAvatarTrace(
+                        profileID: profileID,
+                        bootstrapHasAvatar: bootstrapHasAvatar,
+                        batchRequired: false,
+                        batchHasAvatar: nil,
+                        cachePreservedAvatar: cachePreservedAvatar,
+                        finalHasAvatar: suggestion.profile.avatar != nil
+                    )
+                )
+                #endif
+                continue
+            }
             needsBatch.append(profileID)
             merged.append(suggestion)
             #if DEBUG
@@ -147,5 +164,25 @@ enum ExploreProfileHydration {
         #endif
 
         return (hydrated, metrics)
+    }
+
+    /// Warms the image pipeline cache for visible suggested-trader avatars (no duplicate on-screen loads).
+    static func prefetchAvatars(
+        for profiles: [Profile],
+        imagePipeline: any ImagePipeline,
+        maxPixelSize: Int = 156
+    ) async {
+        let requests = profiles.compactMap { profile -> ImageRequest? in
+            guard ExploreTraderRanking.hasValidProfilePicture(profile),
+                  let avatar = profile.avatar
+            else { return nil }
+            return ImageRequest(
+                reference: avatar,
+                purpose: .profileAvatar,
+                maxPixelSize: maxPixelSize
+            )
+        }
+        guard !requests.isEmpty else { return }
+        await imagePipeline.prefetch(requests)
     }
 }

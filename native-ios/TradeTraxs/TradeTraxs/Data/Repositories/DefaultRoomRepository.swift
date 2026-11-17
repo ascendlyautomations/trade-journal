@@ -57,7 +57,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 SupabaseQuery.eq("room_id", room.id.rawValue),
                 URLQueryItem(name: "left_at", value: "is.null"),
             ]
-        ) {
+        ), active > 0 {
             room.memberCount = active
         }
         return room
@@ -106,7 +106,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
             p_description: configuration.trimmedDescription,
             p_image_url: configuration.imageURL,
             p_show_on_profile: configuration.showsOnProfile,
-            p_is_private: configuration.visibility == .private,
+            p_is_private: configuration.persistedIsPrivate,
             p_category: configuration.category?.rawValue,
             p_discovery_tags: configuration.discoveryTags,
             p_join_policy: configuration.effectiveJoinPolicy.rawValue,
@@ -614,7 +614,8 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
             channelID: message.channelID?.rawValue,
             senderID: message.senderProfileID.rawValue,
             messageType: messageType,
-            hasReply: message.parentMessageID != nil
+            hasReply: message.parentMessageID != nil,
+            serverMembershipConfirmed: true
         )
     }
 
@@ -1497,5 +1498,33 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
     private static func isUniqueViolation(_ error: Error) -> Bool {
         let text = String(describing: error).lowercased()
         return text.contains("23505") || text.contains("duplicate") || text.contains("unique")
+    }
+
+    func setRoomFavorited(roomID: RoomID, profileID: ProfileID, favorited: Bool) async throws {
+        struct Body: Encodable { var is_favorited: Bool }
+        _ = try await supabase.database.update(
+            Body(is_favorited: favorited),
+            table: "room_members",
+            query: [
+                SupabaseQuery.eq("room_id", roomID.rawValue),
+                SupabaseQuery.eq("user_id", profileID.rawValue),
+                URLQueryItem(name: "left_at", value: "is.null"),
+            ]
+        )
+    }
+
+    func favoritedRoomIDs(for profileID: ProfileID) async throws -> Set<RoomID> {
+        struct Row: Decodable { var room_id: String? }
+        let rows: [Row] = try await supabase.database.select(
+            Row.self,
+            from: "room_members",
+            query: [
+                SupabaseQuery.select("room_id"),
+                SupabaseQuery.eq("user_id", profileID.rawValue),
+                SupabaseQuery.eq("is_favorited", "true"),
+                URLQueryItem(name: "left_at", value: "is.null"),
+            ]
+        )
+        return Set(rows.compactMap(\.room_id).map { RoomID($0) })
     }
 }

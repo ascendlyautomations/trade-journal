@@ -207,6 +207,10 @@ struct ProfileView: View {
                 if contentStore.isOwner {
                     contentStore.applyStoryDeleted(storyID)
                 }
+            case .reelLinked(let reel):
+                if contentStore.isOwner {
+                    screen.applyReelLinkMutation(reel)
+                }
             default:
                 break
             }

@@ -41,7 +41,9 @@ nonisolated enum TradingScorecardBuilder {
             scopeLabel: input.scopeLabel,
             generatedAtMs: Int64(Date().timeIntervalSince1970 * 1000),
             overall: overall,
-            categories: categories
+            categories: categories,
+            adherence: ScorecardReadout.adherence(trades: trades, checkIns: input.checkIns),
+            insights: ScorecardReadout.insights(trades: trades, preferences: input.preferenceContext)
         )
     }
 
@@ -95,9 +97,7 @@ nonisolated enum TradingScorecardBuilder {
         }
 
         if scored.isEmpty {
-            return baseBuilding(
-                "Building your score, tag plan adherence after losses and on more trades to unlock category scores. Category breakdowns below show coverage and insights."
-            )
+            return baseBuilding("Tag plan adherence on trades to unlock the score.")
         }
 
         var nominalIncluded = 0.0
@@ -137,12 +137,7 @@ nonisolated enum TradingScorecardBuilder {
             reliability = ScorecardReliabilitySupport.minReliability(reliability, category.reliability)
         }
 
-        var statusMessage = "Overall trading score for the current dashboard scope."
-        if nominalIncluded < 0.999 {
-            let pct = Int((nominalIncluded * 100).rounded())
-            statusMessage +=
-                " Based on \(scored.count) of 4 categories (\(pct)% of nominal weight), Psychology and Risk are insights/coverage only in Phase 1."
-        }
+        let statusMessage = "How consistently you followed your plan in this scope."
 
         return ScorecardOverallResult(
             score: score,

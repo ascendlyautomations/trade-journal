@@ -13,35 +13,16 @@ struct TradeHistoryFilterSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: sectionSpacing) {
-                    filterSection("Sort By") {
-                        menuPickerRow(title: "Sort By") {
-                            Picker("Sort By", selection: $viewModel.draftFilters.sort) {
-                                ForEach(TradeHistorySort.allCases) { value in
-                                    Text(value.title).tag(value)
-                                }
-                            }
-                            .labelsHidden()
-                        }
+                    inlineFilterField(title: "Sort By") {
+                        sortDropdownMenu
                     }
 
                     HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-                        inlineFilterMenu(title: "Date") {
-                            Picker("Range", selection: $viewModel.draftFilters.dateRange) {
-                                ForEach(TradeHistoryDateRange.allCases) { range in
-                                    Text(range.title).tag(range)
-                                }
-                            }
-                            .labelsHidden()
-                            .frame(maxWidth: .infinity, alignment: .trailing)
+                        inlineFilterField(title: "Date") {
+                            dateDropdownMenu
                         }
-                        inlineFilterMenu(title: "Session") {
-                            Picker("Trading Session", selection: $viewModel.draftFilters.tradingSession) {
-                                ForEach(TradeHistorySessionFilter.allCases) { value in
-                                    Text(value.title).tag(value)
-                                }
-                            }
-                            .labelsHidden()
-                            .frame(maxWidth: .infinity, alignment: .trailing)
+                        inlineFilterField(title: "Session") {
+                            sessionDropdownMenu
                         }
                     }
 
@@ -101,11 +82,7 @@ struct TradeHistoryFilterSheet: View {
                         .accessibilityHint("Public trades are visible on your profile and feed")
                     }
 
-                    Toggle(isOn: $viewModel.draftFilters.pictureOnly) {
-                        Text("Trades With Pictures")
-                            .experienceStyle(.callout, color: colors.primaryText)
-                    }
-                    .accessibilityIdentifier("trades.filters.tradesWithPictures")
+                    picturesOnlyToggle
                 }
                 .padding(.horizontal, ExperienceSpacing.md)
                 .padding(.vertical, ExperienceSpacing.sm)
@@ -153,42 +130,88 @@ struct TradeHistoryFilterSheet: View {
     }
 
     @ViewBuilder
-    private func inlineFilterMenu<PickerContent: View>(
+    private func inlineFilterField<Content: View>(
         title: String,
-        @ViewBuilder picker: () -> PickerContent
+        @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: labelControlSpacing) {
             Text(title.uppercased())
                 .font(ExperienceTypography.caption.weight(.semibold))
                 .foregroundStyle(colors.secondaryText)
-            HStack(spacing: ExperienceSpacing.sm) {
-                picker()
-                    .pickerStyle(.menu)
-                    .tint(colors.accent)
-            }
-            .frame(maxWidth: .infinity, minHeight: ExperienceSpacing.minTouchTarget, alignment: .center)
-            .padding(.horizontal, ExperienceSpacing.sm)
-            .background(colors.fillSecondary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    @ViewBuilder
-    private func menuPickerRow<PickerContent: View>(
-        title: String,
-        @ViewBuilder picker: () -> PickerContent
-    ) -> some View {
-        HStack(spacing: ExperienceSpacing.sm) {
-            Text(title)
-                .experienceStyle(.body, color: colors.primaryText)
-            Spacer(minLength: ExperienceSpacing.xs)
-            picker()
-                .pickerStyle(.menu)
-                .tint(colors.accent)
+    private var sortDropdownMenu: some View {
+        TradeHistoryFilterDropdownMenu(
+            selectionTitle: viewModel.draftFilters.sort.title,
+            accessibilityLabel: "Sort by"
+        ) {
+            ForEach(TradeHistorySort.allCases) { value in
+                Button {
+                    viewModel.draftFilters.sort = value
+                } label: {
+                    if viewModel.draftFilters.sort == value {
+                        Label(value.title, systemImage: "checkmark")
+                    } else {
+                        Text(value.title)
+                    }
+                }
+            }
         }
-        .frame(minHeight: ExperienceSpacing.minTouchTarget, alignment: .center)
-        .padding(.horizontal, ExperienceSpacing.sm)
-        .background(colors.fillSecondary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .accessibilityIdentifier("trades.filters.sort")
+    }
+
+    private var dateDropdownMenu: some View {
+        TradeHistoryFilterDropdownMenu(
+            selectionTitle: viewModel.draftFilters.dateRange.title,
+            accessibilityLabel: "Date"
+        ) {
+            ForEach(TradeHistoryDateRange.allCases) { range in
+                Button {
+                    viewModel.draftFilters.dateRange = range
+                } label: {
+                    if viewModel.draftFilters.dateRange == range {
+                        Label(range.title, systemImage: "checkmark")
+                    } else {
+                        Text(range.title)
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("trades.filters.date")
+    }
+
+    private var sessionDropdownMenu: some View {
+        TradeHistoryFilterDropdownMenu(
+            selectionTitle: viewModel.draftFilters.tradingSession.title,
+            accessibilityLabel: "Session"
+        ) {
+            ForEach(TradeHistorySessionFilter.allCases) { value in
+                Button {
+                    viewModel.draftFilters.tradingSession = value
+                } label: {
+                    if viewModel.draftFilters.tradingSession == value {
+                        Label(value.title, systemImage: "checkmark")
+                    } else {
+                        Text(value.title)
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("trades.filters.session")
+    }
+
+    private var picturesOnlyToggle: some View {
+        Toggle(isOn: $viewModel.draftFilters.pictureOnly) {
+            Text("Trades With Pictures")
+                .experienceStyle(.callout, color: colors.primaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .toggleStyle(SwitchToggleStyle(tint: colors.accent))
+        .tradeHistoryFilterControlChrome(surface: .toggleRow)
+        .accessibilityIdentifier("trades.filters.tradesWithPictures")
     }
 
     private var customStartBinding: Binding<Date> {

@@ -1,19 +1,21 @@
 "use client"
 
-import { Hand, Mic, MicOff, Radio, Volume2, VolumeX, X } from "lucide-react"
+import { Hand, Mic, MicOff, Radio, Volume2, X } from "lucide-react"
+import BroadcastListenControls from "@/app/components/tradeRooms/live/BroadcastListenControls.tsx"
 import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
 import { useTradeRoomBroadcast } from "@/app/components/tradeRooms/live/useTradeRoomBroadcast"
 import {
   leaveTradeRoomBroadcastViewer,
+  resumeTradeRoomBroadcastPlayback,
   setTradeRoomBroadcastStudioPresentation,
   toggleTradeRoomBroadcastMicMuted,
   toggleTradeRoomBroadcastRaisedHand,
-  toggleTradeRoomBroadcastStreamListenMuted,
-  toggleTradeRoomBroadcastViewerMicMuted,
 } from "@/lib/livekit/client/tradeRoomBroadcastStore.ts"
 import { tradeRoomBroadcastGlobalChromeVisible } from "@/lib/livekit/client/tradeRoomBroadcastGlobalChromeVisibility.ts"
 import { presentTradeRoomBroadcastStudio } from "@/lib/livekit/client/tradeRoomBroadcastStudioNavigation.ts"
+import { shouldShowBroadcastEnableSound } from "@/lib/livekit/mobileWebLivePolicy.ts"
+import TradeRoomBroadcastSpeakInviteBanner from "@/app/components/tradeRooms/live/TradeRoomBroadcastSpeakInviteBanner.tsx"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 
 type Props = {
@@ -61,6 +63,12 @@ export default function TradeRoomBroadcastPersistentBar({
     await leaveTradeRoomBroadcastViewer()
   }
 
+  const showEnableSound = shouldShowBroadcastEnableSound({
+    isWatching: broadcast.isWatching,
+    isPublishing: broadcast.isPublishing,
+    canPlaybackAudio: broadcast.canPlaybackAudio,
+  })
+
   const subtitle = isHost
     ? "You're live — tap to open stream"
     : isViewer
@@ -76,6 +84,17 @@ export default function TradeRoomBroadcastPersistentBar({
       role="region"
       aria-label="Live stream session"
     >
+      {broadcast.speakInviteNotice && accessToken && broadcast.roomId ? (
+        <div className="px-3 pt-2">
+          <TradeRoomBroadcastSpeakInviteBanner
+            roomId={broadcast.roomId}
+            accessToken={accessToken}
+            invitationId={broadcast.speakInviteNotice.invitationId}
+            busy={broadcast.isBusy || broadcast.speakerUpgradeInFlight}
+            onNeedOpenStream={openStream}
+          />
+        </div>
+      ) : null}
       <div className="flex items-center gap-2 px-3 py-2">
         <button
           type="button"
@@ -116,38 +135,17 @@ export default function TradeRoomBroadcastPersistentBar({
                 aria-hidden
               />
             </button>
-            <button
-              type="button"
-              aria-label={
-                broadcast.isInConversation
-                  ? broadcast.viewerMicMuted
-                    ? "Unmute mic"
-                    : "Mute mic"
-                  : broadcast.streamListenMuted
-                    ? "Unmute stream"
-                    : "Mute stream"
-              }
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[color:var(--chrome-foreground,#f3f4f6)] active:bg-white/10"
-              onClick={() => {
-                if (broadcast.isInConversation) {
-                  void toggleTradeRoomBroadcastViewerMicMuted()
-                } else {
-                  toggleTradeRoomBroadcastStreamListenMuted()
-                }
-              }}
-            >
-              {broadcast.isInConversation ? (
-                broadcast.viewerMicMuted ? (
-                  <MicOff className="h-4 w-4" aria-hidden />
-                ) : (
-                  <Mic className="h-4 w-4" aria-hidden />
-                )
-              ) : broadcast.streamListenMuted ? (
-                <VolumeX className="h-4 w-4" aria-hidden />
-              ) : (
+            {showEnableSound ? (
+              <button
+                type="button"
+                aria-label="Enable sound"
+                className="inline-flex h-9 shrink-0 items-center justify-center rounded-full bg-amber-600 px-2.5 text-[11px] font-semibold text-white"
+                onClick={() => void resumeTradeRoomBroadcastPlayback()}
+              >
                 <Volume2 className="h-4 w-4" aria-hidden />
-              )}
-            </button>
+              </button>
+            ) : null}
+            <BroadcastListenControls broadcast={broadcast} tone="bar" />
             <button
               type="button"
               aria-label="Leave stream"

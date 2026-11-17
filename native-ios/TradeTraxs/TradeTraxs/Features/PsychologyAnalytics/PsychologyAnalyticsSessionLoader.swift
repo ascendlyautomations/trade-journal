@@ -5,6 +5,7 @@ struct PsychologyAnalyticsLoadDependencies {
     let dailyCheckIns: any TraderDailyCheckInRepository
     let tradesRepository: any TradeRepository
     let rpc: (any RPCClient)?
+    var tradingPreferences: (any TradingPreferencesRepository)? = nil
 }
 
 enum PsychologyAnalyticsLoadOutcome: Equatable {
@@ -106,6 +107,7 @@ enum PsychologyAnalyticsSessionLoader {
             detailCache: dependencies.detailCache
         )
 
+        let preferences = await loadPreferences(for: profileID, dependencies: dependencies)
         if let cachedTrades = SessionOwnerTradesStore.shared.cached(for: profileID) {
             let checkIns = PsychologyAnalyticsCheckInGate.mergedCheckIns(profileID: profileID)
             let scoped = PsychologyAnalyticsTradeScope.scopedTrades(
@@ -117,7 +119,8 @@ enum PsychologyAnalyticsSessionLoader {
                 scopedTrades: scoped,
                 checkIns: checkIns,
                 profileID: profileID,
-                scope: scope
+                scope: scope,
+                preferences: preferences
             )
         }
 
@@ -155,9 +158,29 @@ enum PsychologyAnalyticsSessionLoader {
             scopedTrades: scoped,
             checkIns: checkIns,
             profileID: profileID,
-            scope: scope
+            scope: scope,
+            preferences: preferences
         )
         return .ready
+    }
+
+    private static func loadPreferences(
+        for profileID: ProfileID,
+        dependencies: PsychologyAnalyticsLoadDependencies
+    ) async -> PreferenceRuleContext? {
+        guard let tradingPreferences = dependencies.tradingPreferences else { return nil }
+        do {
+            async let global = tradingPreferences.globalPreferences(for: profileID)
+            async let overrides = tradingPreferences.accountOverrides(for: profileID)
+            async let revisions = tradingPreferences.revisions(for: profileID)
+            return PreferenceRuleContext(
+                revisions: try await revisions,
+                global: try await global,
+                overrides: try await overrides
+            )
+        } catch {
+            return nil
+        }
     }
 
     private static func loadAccounts(

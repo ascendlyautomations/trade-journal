@@ -78,6 +78,26 @@ struct DashboardAnalyticsGRDBCutoverTests {
         #expect(read.presets.isEmpty)
     }
 
+    @Test("Aggregate chart read reuses presentation session cache")
+    func aggregateChartsReusePresentationCache() async throws {
+        let (url, store) = try makeStore()
+        defer {
+            AnalyticsDashboardGRDBSessionCache.resetAll()
+            try? FileManager.default.removeItem(at: url)
+        }
+        let viewer = ProfileID("dash-grdb-cache")
+        let bootstrap = try fullBootstrap(revision: 50)
+        _ = try await store.ingestDashboardBootstrap(viewerID: viewer, bootstrap: bootstrap)
+        try await ingestAggregateCharts(from: bootstrap, viewer: viewer, store: store, revision: 50)
+        _ = try await store.readDashboardSnapshotForPresentation(viewerID: viewer)
+        let charts = try await store.readDashboardAggregateCharts(viewerID: viewer, requiredRevision: 50)
+        #expect(charts.state == .available)
+        #expect(!charts.presets.isEmpty)
+        let cached = AnalyticsDashboardGRDBSessionCache.aggregateCharts(viewerID: viewer, revision: 50)
+        #expect(cached != nil)
+        #expect(cached?.count == charts.presets.count)
+    }
+
     @Test("dashboardAnalyticsGRDB flag OFF when disabled")
     func grdbFlagRollback() {
         BackendV2FeatureFlags.resetFlagsForTests()

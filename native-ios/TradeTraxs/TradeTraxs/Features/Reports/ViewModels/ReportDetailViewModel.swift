@@ -11,6 +11,7 @@ final class ReportDetailViewModel: ScreenLifecycle {
 
     private let periodKey: TradingReportPeriodKey
     private let monthRef: TradingReportMonthRef?
+    private let weekRef: TradingReportWeekRef?
     private let tradingReports: any TradingReportRepository
     private let trades: any TradeRepository
     private let session: any SessionProviding
@@ -26,11 +27,17 @@ final class ReportDetailViewModel: ScreenLifecycle {
         detailCache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator
     ) {
-        if let monthRef = TradingReportMonthRef.parse(reportID: reportID) {
+        if let weekRef = TradingReportWeekRef.parse(reportID: reportID) {
+            self.weekRef = weekRef
+            self.monthRef = nil
+            self.periodKey = .weeklyThis
+        } else if let monthRef = TradingReportMonthRef.parse(reportID: reportID) {
             self.monthRef = monthRef
+            self.weekRef = nil
             self.periodKey = .monthlyThis
         } else {
             self.monthRef = nil
+            self.weekRef = nil
             self.periodKey = TradingReportPeriodKey(rawValue: reportID.rawValue) ?? .weeklyThis
         }
         self.tradingReports = tradingReports
@@ -50,6 +57,7 @@ final class ReportDetailViewModel: ScreenLifecycle {
         navigationCoordinator: NavigationCoordinator
     ) {
         self.monthRef = nil
+        self.weekRef = nil
         self.periodKey = periodKey
         self.tradingReports = tradingReports
         self.trades = trades
@@ -117,7 +125,15 @@ final class ReportDetailViewModel: ScreenLifecycle {
 
         do {
             let result: ReportDetailBootstrap.Result
-            if let monthRef {
+            if let weekRef {
+                result = try await ReportDetailBootstrap.loadWeek(
+                    ReportDetailBootstrap.WeekContext(
+                        mondayKey: weekRef.mondayKey,
+                        tradingReports: tradingReports,
+                        forceNetwork: forceNetwork
+                    )
+                )
+            } else if let monthRef {
                 result = try await ReportDetailBootstrap.loadMonth(
                     ReportDetailBootstrap.MonthContext(
                         monthRef: monthRef,

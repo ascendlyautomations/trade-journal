@@ -160,6 +160,15 @@ private final class StubAchievementPostDatabase: SupabaseDatabaseExecuting, @unc
 
     func delete(from table: String, query: [URLQueryItem]) async throws {}
 
+    func deleteReturning<T>(
+        _ type: T.Type,
+        from table: String,
+        query: [URLQueryItem]
+    ) async throws -> [T] where T: Decodable {
+        _ = (type, table, query)
+        return []
+    }
+
     func rpcData(functionName: String, parametersJSON: Data?) async throws -> Data {
         throw AppError.unknown(message: "not implemented")
     }

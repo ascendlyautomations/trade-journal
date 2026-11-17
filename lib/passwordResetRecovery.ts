@@ -1,9 +1,24 @@
 import type { AuthChangeEvent, Session, SupabaseClient } from "@supabase/supabase-js"
+import {
+  passwordResetStatusFromStoredSession,
+  readStoredSupabaseSession,
+  supabaseBrowserAuthStorageKey,
+} from "@/lib/auth/mobileWebSessionRestore"
 
 export type PasswordResetRecoveryStatus = "ready" | "invalid"
 
 const RECOVERY_VERIFY_TIMEOUT_MS = 8000
+const RECOVERY_ABSOLUTE_TIMEOUT_MS = 45000
 const HASH_PROCESS_DELAY_MS = 400
+
+function storedRecoveryUserId(): string | null {
+  if (typeof window === "undefined") return null
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!url) return null
+  const key = supabaseBrowserAuthStorageKey(url)
+  if (!key) return null
+  return readStoredSupabaseSession(window.localStorage, key)?.user?.id ?? null
+}
 
 function parseHashParams(): URLSearchParams {
   if (typeof window === "undefined") return new URLSearchParams()
@@ -52,13 +67,19 @@ export function establishPasswordResetRecovery(
   return new Promise((resolve) => {
     let settled = false
     let timeoutId: ReturnType<typeof setTimeout> | undefined
+    let absoluteTimeoutId: ReturnType<typeof setTimeout> | undefined
 
     const finish = (status: PasswordResetRecoveryStatus) => {
       if (settled) return
       settled = true
       if (timeoutId) clearTimeout(timeoutId)
+      if (absoluteTimeoutId) clearTimeout(absoluteTimeoutId)
       subscription.unsubscribe()
       resolve(status)
+    }
+
+    const finishFromStoredSession = () => {
+      finish(passwordResetStatusFromStoredSession(storedRecoveryUserId()))
     }
 
     const {
@@ -79,7 +100,16 @@ export function establishPasswordResetRecovery(
 
       if (!hasRecoveryUrlIndicators()) {
         await delay(HASH_PROCESS_DELAY_MS)
-        finish("invalid")
+        if (settled) return
+        const storedStatus = passwordResetStatusFromStoredSession(storedRecoveryUserId())
+        if (storedStatus === "ready") {
+          finish("ready")
+          return
+        }
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+        finish(session?.user ? "ready" : "invalid")
         return
       }
 
@@ -124,7 +154,18 @@ export function establishPasswordResetRecovery(
       finish("invalid")
     }
 
-    timeoutId = setTimeout(() => finish("invalid"), RECOVERY_VERIFY_TIMEOUT_MS)
+    timeoutId = setTimeout(() => {
+      if (settled) return
+      if (storedRecoveryUserId()) {
+        finish("ready")
+        return
+      }
+      if (hasRecoveryUrlIndicators()) return
+      finish("invalid")
+    }, RECOVERY_VERIFY_TIMEOUT_MS)
+    absoluteTimeoutId = setTimeout(() => {
+      finishFromStoredSession()
+    }, RECOVERY_ABSOLUTE_TIMEOUT_MS)
     void run()
   })
 }

@@ -104,18 +104,6 @@ struct ManageRoomView: View {
         } message: {
             Text(channelDeleteMessage)
         }
-        .roomMemberModerationConfirmations(
-            showsRemoveConfirmation: $viewModel.showsMemberActionConfirmation,
-            showsBanConfirmation: $viewModel.showsBanMemberConfirmation,
-            removeDialogTitle: manageRoomMemberActionDialogTitle,
-            onConfirmRemove: { Task { await viewModel.confirmMemberAction() } },
-            onConfirmBan: { Task { await viewModel.confirmMemberAction() } },
-            onCancelRemove: { viewModel.pendingMemberAction = nil },
-            onCancelBan: { viewModel.cancelBanMember() }
-        )
-        .sheet(item: $selectedMember) { member in
-            manageRoomMemberSheet(member)
-        }
         .sheet(item: $memberForTags) { member in
             NavigationStack {
                 memberTagsEditor(member)
@@ -193,7 +181,7 @@ struct ManageRoomView: View {
                 hubRow("Banned Members", systemImage: "hand.raised") {
                     navigationSection = .banned
                 }
-                hubRow("Trade Room Settings", systemImage: "gearshape") {
+                hubRow("Delete Trade Room", systemImage: "gearshape") {
                     viewModel.openRoomSettings()
                 }
             }
@@ -261,19 +249,11 @@ struct ManageRoomView: View {
             }
 
             Section("Access") {
-                Picker("Room Visibility", selection: Binding(
-                    get: { viewModel.editConfiguration.visibility },
-                    set: { viewModel.editConfiguration.visibility = $0 }
-                )) {
-                    Text("Public").tag(TradeRoomVisibility.public)
-                    Text("Private").tag(TradeRoomVisibility.private)
-                }
-                if viewModel.editConfiguration.visibility == .public {
-                    Picker("Join Policy", selection: $viewModel.editConfiguration.joinPolicy) {
-                        Text("Anyone can join").tag(TradeRoomJoinPolicy.open)
-                        Text("Request to join").tag(TradeRoomJoinPolicy.approval)
-                    }
-                }
+                TradeRoomAccessModeSection(
+                    accessMode: $viewModel.editConfiguration.accessMode,
+                    preservesLegacyPrivate: viewModel.editConfiguration.preservesLegacyPrivate,
+                    accessibilityRootID: "tradeRooms.manage.details"
+                )
                 Toggle("Show on my profile", isOn: $viewModel.editConfiguration.showsOnProfile)
             }
 
@@ -397,6 +377,18 @@ struct ManageRoomView: View {
         .experienceInsetGroupedListStyle(pageBackground: true)
         .experienceNavigationTitle("Members")
         .refreshable { await viewModel.refreshMembersAndBans() }
+        .sheet(item: $selectedMember) { member in
+            manageRoomMemberSheet(member)
+        }
+        .roomMemberModerationConfirmations(
+            showsRemoveConfirmation: $viewModel.showsMemberActionConfirmation,
+            showsBanConfirmation: $viewModel.showsBanMemberConfirmation,
+            removeDialogTitle: manageRoomMemberActionDialogTitle,
+            onConfirmRemove: { Task { await viewModel.confirmMemberAction() } },
+            onConfirmBan: { Task { await viewModel.confirmMemberAction() } },
+            onCancelRemove: { viewModel.pendingMemberAction = nil },
+            onCancelBan: { viewModel.cancelBanMember() }
+        )
     }
 
     private var joinRequestsScreen: some View {
@@ -473,7 +465,7 @@ struct ManageRoomView: View {
                         Button("Unban") {
                             Task { await viewModel.unban(ban) }
                         }
-                        .disabled(viewModel.isMutatingMember)
+                        .disabled(!viewModel.canUnban(ban) || viewModel.isMutatingMember)
                     }
                 }
             }
@@ -509,7 +501,23 @@ struct ManageRoomView: View {
                     selectedMember = nil
                     memberForTags = managed
                 }
-                : nil
+                : nil,
+            moderatorActionTitle: viewModel.moderatorActionTitle(for: member),
+            onModeratorAction: viewModel.canManageModeratorStatus(for: member)
+                ? {
+                    viewModel.requestModeratorStatusChange(for: member)
+                }
+                : nil,
+            showsModeratorConfirmation: $viewModel.showsModeratorConfirmation,
+            moderatorDialogTitle: viewModel.moderatorConfirmationTitle,
+            moderatorConfirmButtonTitle: viewModel.moderatorConfirmationButtonTitle,
+            onConfirmModerator: {
+                Task {
+                    await viewModel.confirmModeratorStatusChange()
+                    selectedMember = nil
+                }
+            },
+            onCancelModerator: { viewModel.cancelModeratorStatusChange() }
         )
     }
 
@@ -520,7 +528,7 @@ struct ManageRoomView: View {
 
     private func memberTagsEditor(_ member: RoomManagedMember) -> some View {
         RoomMemberTagAssignmentEditor(
-            tags: viewModel.tags,
+            tags: viewModel.tags.filter { viewModel.canAssignTag($0) },
             selectedTagIDs: $memberTagDraftSelection,
             isSaving: viewModel.isMutatingTag
         )
@@ -544,6 +552,7 @@ struct ManageRoomView: View {
                     }
                 }
             }
+            .experienceTradeTraxsFormStyle(pageBackground: true)
             .experienceNavigationTitle("Edit Tag")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -561,7 +570,7 @@ struct ManageRoomView: View {
             }
             .onAppear { editingTag = tag }
         }
-        .presentationDetents([.medium])
+        .experienceSheetChrome(detents: [.medium], interactiveDismiss: false)
         .experienceProtectedFormDismiss()
     }
 

@@ -37,6 +37,7 @@ final class TradeRoomsHomeViewModel {
     private(set) var searchDiscoveryPhase: Phase = .idle
 
     private static let discoveryInitialLimit = 20
+    private static let allScopeDiscoveryPageSize = 8
     private static let searchDiscoveryLimit = 20
     private static let searchDebounceNanoseconds: UInt64 = 280_000_000
 
@@ -46,6 +47,7 @@ final class TradeRoomsHomeViewModel {
     }
     private var suggestedNextCursor: String?
     private var popularNextCursor: String?
+    private var allScopeVisibleCount = allScopeDiscoveryPageSize
 
     private let messages: any MessageRepository
     private let rooms: any RoomRepository
@@ -118,6 +120,7 @@ final class TradeRoomsHomeViewModel {
         }
         restoreCachedHomeBootstrap()
         hydrateYourRoomsFromMembershipCache()
+        syncOwnedTradeRoomPresentationFromLocalStores()
         latchInitialDiscoveryScopeIfNeeded()
         self.domain.configure(
             messages: messages,
@@ -146,9 +149,19 @@ final class TradeRoomsHomeViewModel {
     }
 
     func noteViewAppeared() {
+        normalizeDiscoveryScopeIfNeeded()
+        syncOwnedTradeRoomPresentationFromLocalStores()
+        Task { await refreshOwnedTradeRoomHeaderIfNeeded() }
 #if DEBUG
         TradeRoomsHomeLifecycleProbe.viewAppear(id: lifecycleProbeID)
 #endif
+    }
+
+    private func normalizeDiscoveryScopeIfNeeded() {
+        let normalized = TradeRoomDiscoveryScope.normalizedHomeScope(discoveryScope)
+        if normalized != discoveryScope {
+            discoveryScope = normalized
+        }
     }
 
     func noteViewDisappeared() {
@@ -203,25 +216,55 @@ final class TradeRoomsHomeViewModel {
     }
 
     var joinedRoomIDs: Set<RoomID> {
-        Set(items.map(\.id))
+        var ids = Set(items.map(\.id))
+        ids.formUnion(TradeRoomMembershipStore.shared.allJoinedRoomIDs)
+        return ids
     }
 
     var suggestedDiscoverableRooms: [ExploreRoomSuggestion] {
-        sortedForAllScopeIfNeeded(
-            filteredDiscoverable(from: suggestedItems, section: "suggested")
-        )
+        filteredDiscoverable(from: suggestedItems, section: "suggested")
     }
 
     var popularDiscoverableRooms: [ExploreRoomSuggestion] {
-        sortedForAllScopeIfNeeded(
-            filteredDiscoverable(from: popularItems, section: "popular")
-        )
+        filteredDiscoverable(from: popularItems, section: "popular")
+    }
+
+    /// All tab — server `popular` keyset (member count desc), excluding joined rooms.
+    var allScopeDiscoverableRooms: [ExploreRoomSuggestion] {
+        popularDiscoverableRooms
+    }
+
+    var allScopeDisplayedDiscoverableRooms: [ExploreRoomSuggestion] {
+        Array(allScopeDiscoverableRooms.prefix(allScopeVisibleCount))
+    }
+
+    var showsAllScopeShowMore: Bool {
+        guard activeDiscoveryScope == .all else { return false }
+        guard !allScopeDiscoverableRooms.isEmpty else { return false }
+        if allScopeVisibleCount < allScopeDiscoverableRooms.count { return true }
+        return popularNextCursor != nil
+    }
+
+    /// Official or Popular tab — one list (Popular preserves RPC member-count order).
+    var unifiedDiscoverableRooms: [ExploreRoomSuggestion] {
+        switch activeDiscoveryScope {
+        case .popular:
+            return filteredDiscoverable(from: popularItems, section: "popular")
+        case .official:
+            return filteredDiscoverable(from: popularItems, section: "popular")
+        default:
+            return []
+        }
     }
 
     var canLoadMoreAllScopeDiscovery: Bool {
-        activeDiscoveryScope == .all
+        showsAllScopeShowMore
+    }
+
+    var canLoadMoreUnifiedDiscovery: Bool {
+        activeDiscoveryScope.showsUnifiedDiscoveryList
             && !isLoadingMoreDiscovery
-            && (suggestedNextCursor != nil || popularNextCursor != nil)
+            && popularNextCursor != nil
     }
 
     var discoverableRooms: [ExploreRoomSuggestion] {
@@ -243,6 +286,12 @@ final class TradeRoomsHomeViewModel {
         yourRoomsItems
     }
 
+    var favoriteRooms: [ExploreRoomSuggestion] {
+        yourRoomsItems.filter {
+            TradeRoomFavoritesStore.shared.isFavorited($0.id) || $0.viewerIsFavorited
+        }
+    }
+
     var displayedDiscoveryRooms: [ExploreRoomSuggestion] {
         switch discoveryMode {
         case .yourRooms:
@@ -261,20 +310,48 @@ final class TradeRoomsHomeViewModel {
             || !yourRoomsItems.isEmpty
             || !suggestedDiscoverableRooms.isEmpty
             || !popularDiscoverableRooms.isEmpty
+            || !allScopeDiscoverableRooms.isEmpty
     }
 
     var showsYourRoomsEmptyState: Bool {
         discoveryMode == .yourRooms && yourRooms.isEmpty && discoveryPhase == .loaded
     }
 
-    /// True once home bootstrap + member rooms load finished — avoids flashing Create before ownership is known.
+    /// True once we can show Create vs owned-room avatar (cache or loaded bootstrap).
     var isHeaderOwnershipResolved: Bool {
-        discoveryPhase == .loaded && phase != .idle && phase != .loading
+        if viewerOwnedRoom != nil { return true }
+        if let viewerID, detailCache.ownedTradeRoom(for: viewerID) != nil { return true }
+        if let viewerID, detailCache.hasResolvedOwnedTradeRoom(for: viewerID),
+           inboxStore.hasLoadedRooms
+        {
+            return true
+        }
+        return discoveryPhase == .loaded && phase != .idle && phase != .loading
     }
 
-    /// Viewer-owned Trade Room from bootstrap RPC (`is_owner`) — at most one.
+    /// Viewer-owned Trade Room — inbox owner row first, then bootstrap/cache/intent.
     var viewerOwnedRoom: ExploreRoomSuggestion? {
-        yourRoomsItems.first(where: \.viewerIsOwner)
+        guard let viewerID else { return nil }
+        if let item = items.first(where: { $0.room.ownerProfileID == viewerID }) {
+            return ownedRoomSuggestion(from: item.room)
+        }
+        if let room = detailCache.ownedTradeRoom(for: viewerID) {
+            return ownedRoomSuggestion(from: room)
+        }
+        if let owned = yourRoomsItems.first(where: \.viewerIsOwner) {
+            return owned
+        }
+        if let cached = SessionMemberRoomsStore.shared.cached(for: viewerID)?.0,
+           let room = cached.first(where: { $0.ownerProfileID == viewerID })
+        {
+            return ownedRoomSuggestion(from: room)
+        }
+        if let created = TradeRoomCreationIntent.shared.createdRoomForProfile,
+           created.ownerProfileID == viewerID
+        {
+            return ownedRoomSuggestion(from: created)
+        }
+        return nil
     }
 
     func armPresentCreateOnAppear() {
@@ -303,6 +380,7 @@ final class TradeRoomsHomeViewModel {
     }
 
     func selectDiscoveryScope(_ scope: TradeRoomDiscoveryScope) {
+        let scope = TradeRoomDiscoveryScope.normalizedHomeScope(scope)
         didUserSelectDiscoveryScope = true
         didLatchInitialDiscoveryScope = true
         guard discoveryScope != scope else { return }
@@ -310,25 +388,44 @@ final class TradeRoomsHomeViewModel {
         discoveryScope = scope
         suggestedNextCursor = nil
         popularNextCursor = nil
+        if scope == .all {
+            allScopeVisibleCount = Self.allScopeDiscoveryPageSize
+        }
         Task { await loadHomeBootstrap(forceNetwork: true) }
     }
 
-    func loadMoreAllScopeDiscoveryIfNeeded(currentRoomID: RoomID) async {
+    func showMoreAllScopeDiscovery() {
         guard activeDiscoveryScope == .all else { return }
-        guard !isLoadingMoreDiscovery else { return }
-        if let last = suggestedDiscoverableRooms.last?.id,
-           last == currentRoomID,
-           suggestedNextCursor != nil
-        {
-            await loadMoreDiscoveryPage(section: .suggested)
-            return
-        }
-        if let last = popularDiscoverableRooms.last?.id,
-           last == currentRoomID,
-           popularNextCursor != nil
-        {
+        ExperienceHaptics.play(.selection)
+        allScopeVisibleCount += Self.allScopeDiscoveryPageSize
+        Task { await ensureAllScopeDiscoveryLoadedThroughVisibleWindow() }
+    }
+
+    func loadMoreAllScopeDiscoveryIfNeeded(currentRoomID: RoomID) async {
+        await loadMoreDiscoveryIfNeeded(currentRoomID: currentRoomID)
+    }
+
+    private func ensureAllScopeDiscoveryLoadedThroughVisibleWindow() async {
+        guard activeDiscoveryScope == .all else { return }
+        while allScopeDiscoverableRooms.count < allScopeVisibleCount, popularNextCursor != nil {
+            guard !isLoadingMoreDiscovery else { return }
             await loadMoreDiscoveryPage(section: .popular)
         }
+    }
+
+    func loadMoreDiscoveryIfNeeded(currentRoomID: RoomID) async {
+        guard !isLoadingMoreDiscovery else { return }
+
+        if activeDiscoveryScope == .all {
+            return
+        }
+
+        guard activeDiscoveryScope.showsUnifiedDiscoveryList else { return }
+        guard let last = unifiedDiscoverableRooms.last?.id,
+              last == currentRoomID,
+              popularNextCursor != nil
+        else { return }
+        await loadMoreDiscoveryPage(section: .popular)
     }
 
     private func loadMoreDiscoveryPage(section: TradeRoomDiscoveryMode) async {
@@ -338,8 +435,8 @@ final class TradeRoomsHomeViewModel {
         defer { isLoadingMoreDiscovery = false }
         do {
             let bootstrap = try await explore.tradeRoomsHomeBootstrap(
-                scope: .all,
-                limit: Self.discoveryInitialLimit,
+                scope: discoveryScope.bootstrapCacheScope,
+                limit: discoveryPageFetchLimit,
                 suggestedCursor: section == .suggested ? suggestedNextCursor : nil,
                 popularCursor: section == .popular ? popularNextCursor : nil
             )
@@ -391,6 +488,7 @@ final class TradeRoomsHomeViewModel {
 
     func openDiscoveryRoom(_ room: ExploreRoomSuggestion) {
         ExperienceHaptics.play(.selection)
+        TradeRoomDiscoveryMemberCountCache.record(room)
         navigationCoordinator.open(navigationHost.room(room.id))
     }
 
@@ -410,16 +508,14 @@ final class TradeRoomsHomeViewModel {
             rooms: rooms,
             inboxStore: inboxStore,
             onDirectJoinSucceeded: { [weak self] in
-                guard let self else { return }
-                SessionMemberRoomsStore.shared.invalidate(viewerID: viewerID)
-                await self.domain.refreshRooms()
+                await self?.domain.refreshRooms()
             }
         )
 
         if result == .joined {
             patchDiscoveryRoomJoined(room.id)
-            SessionTradeRoomsDiscoveryStore.shared.invalidate(viewerID: viewerID)
-            await loadHomeBootstrap(forceNetwork: true)
+            insertJoinedYourRoomIfNeeded(room)
+            Task { await domain.refreshRooms() }
         } else if result == .requested {
             patchDiscoveryRoomRequested(room.id)
         }
@@ -434,14 +530,15 @@ final class TradeRoomsHomeViewModel {
     }
 
     func joinState(for roomID: RoomID) -> TradeRoomDiscoveryJoinState {
-        if joinedRoomIDs.contains(roomID) { return .joined }
+        let isJoined = joinedRoomIDs.contains(roomID)
+        if isJoined { return .joined }
         let pool = yourRoomsItems + suggestedItems + popularItems + searchDiscoveryRooms
         guard let room = pool.first(where: { $0.id == roomID }) else {
             return joinCoordinator.mutationStates[roomID] ?? .idle
         }
         return joinCoordinator.effectiveState(
             for: room,
-            isJoined: false
+            isJoined: isJoined
         )
     }
 
@@ -477,8 +574,73 @@ final class TradeRoomsHomeViewModel {
             updated.isJoined = true
             updated.isMember = true
             updated.viewerJoinRequestState = nil
+            return TradeRoomMembershipSync.patchExploreRoomSuggestion(updated)
+        }
+    }
+
+    private func patchDiscoveryRoomLeft(_ roomID: RoomID) {
+        patchDiscoverableCollections(roomID: roomID) { room in
+            var updated = room
+            updated.isJoined = false
+            updated.isMember = false
             return updated
         }
+        yourRoomsItems.removeAll { $0.id == roomID }
+    }
+
+    private func ownedRoomSuggestion(from room: TradeRoom) -> ExploreRoomSuggestion {
+        let ownerItem = items.first(where: { $0.id == room.id })
+        return ExploreRoomSuggestion.fromMembership(
+            room: room,
+            ownerName: ownerItem?.ownerName,
+            ownerUsername: nil,
+            viewerID: viewerID,
+            isOwner: true,
+            isMember: true
+        )
+    }
+
+    private func upsertOwnedRoomInYourRooms(_ room: TradeRoom) {
+        let row = ownedRoomSuggestion(from: room)
+        var copy = row
+        copy.isOwner = true
+        copy.isMember = true
+        copy.isJoined = true
+        if let index = yourRoomsItems.firstIndex(where: { $0.id == room.id }) {
+            yourRoomsItems[index] = copy
+        } else {
+            yourRoomsItems.insert(copy, at: 0)
+        }
+    }
+
+    private func insertJoinedYourRoomIfNeeded(_ room: ExploreRoomSuggestion) {
+        var row = TradeRoomMembershipSync.patchExploreRoomSuggestion(room)
+        row.isMember = true
+        row.isJoined = true
+        guard !yourRoomsItems.contains(where: { $0.id == row.id }) else {
+            if let index = yourRoomsItems.firstIndex(where: { $0.id == row.id }) {
+                yourRoomsItems[index] = row
+            }
+            return
+        }
+        yourRoomsItems.append(row)
+        yourRoomsItems.sort { lhs, rhs in
+            if lhs.viewerIsOwner != rhs.viewerIsOwner { return lhs.viewerIsOwner }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+    }
+
+    func syncMembershipPresentationFromStore() {
+        suggestedItems = TradeRoomMembershipSync.applyMembershipFlags(to: suggestedItems)
+        popularItems = TradeRoomMembershipSync.applyMembershipFlags(to: popularItems)
+        searchDiscoveryRooms = TradeRoomMembershipSync.applyMembershipFlags(to: searchDiscoveryRooms)
+        yourRoomsItems = TradeRoomMembershipSync.applyMembershipFlags(to: yourRoomsItems)
+        for id in TradeRoomMembershipStore.shared.allJoinedRoomIDs {
+            if let room = (suggestedItems + popularItems + searchDiscoveryRooms).first(where: { $0.id == id }) {
+                insertJoinedYourRoomIfNeeded(room)
+            }
+        }
+        _ = reconcileYourRoomsWithMembership()
     }
 
     private func patchDiscoveryRoomRequested(_ roomID: RoomID) {
@@ -609,6 +771,12 @@ final class TradeRoomsHomeViewModel {
 
     func handleRoomCreated(_ room: TradeRoom) {
         showsCreateRoom = false
+        if let viewerID {
+            detailCache.seedOwnedTradeRoom(room, for: viewerID)
+            TradeRoomCreationIntent.shared.noteCreatedRoom(room)
+            upsertOwnedRoomInYourRooms(room)
+            syncOwnedTradeRoomPresentationFromLocalStores()
+        }
         Task {
             if let viewerID {
                 SessionTradeRoomsDiscoveryStore.shared.invalidate(viewerID: viewerID)
@@ -647,6 +815,24 @@ final class TradeRoomsHomeViewModel {
         inboxStore.isRoomMuted(roomID)
     }
 
+    func isRoomFavorited(_ roomID: RoomID) -> Bool {
+        TradeRoomFavoritesStore.shared.isFavorited(roomID)
+    }
+
+    func toggleFavorite(roomID: RoomID) async {
+        guard let viewerID else { return }
+        _ = await TradeRoomFavoriteAction.toggle(
+            roomID: roomID,
+            viewerID: viewerID,
+            rooms: rooms
+        )
+        syncFavoritePresentation()
+    }
+
+    func syncFavoritePresentation() {
+        yourRoomsItems = TradeRoomFavoriteSync.applyFavoritedFlag(to: yourRoomsItems)
+    }
+
     func requestLeaveRoom(id: RoomID) {
         ExperienceHaptics.play(.warning)
         pendingLeaveRoomID = id
@@ -677,10 +863,16 @@ final class TradeRoomsHomeViewModel {
         }
         do {
             try await rooms.leave(roomID: id, profileID: viewerID)
-            inboxStore.removeRoom(id: id)
+            TradeRoomMembershipSync.applyLeft(
+                roomID: id,
+                viewerID: viewerID,
+                inboxStore: inboxStore
+            )
             SessionTradeRoomsDiscoveryStore.shared.invalidate(viewerID: viewerID)
             yourRoomsItems.removeAll { $0.id == id }
-            await loadHomeBootstrap(forceNetwork: true)
+            patchDiscoveryRoomLeft(id)
+            TradeRoomFavoritesStore.shared.setFavorited(id, favorited: false)
+            Task { await domain.refreshRooms() }
             ExperienceHaptics.play(.success)
         } catch {
             ExperienceHaptics.play(.warning)
@@ -712,7 +904,10 @@ final class TradeRoomsHomeViewModel {
         if viewerID == nil {
             viewerID = domain.state.viewerID
         }
+        TradeRoomMembershipStore.shared.mergeServerMembership(Set(inboxStore.rooms.map(\.id)))
         _ = reconcileYourRoomsWithMembership()
+        syncMembershipPresentationFromStore()
+        syncOwnedTradeRoomPresentationFromLocalStores()
         latchInitialDiscoveryScopeIfNeeded()
         phase = domain.state.phase
         applyInitialDiscoveryModeIfNeeded()
@@ -747,22 +942,15 @@ final class TradeRoomsHomeViewModel {
         #endif
     }
 
-    /// Last row in the All-scope discovery scroll (Suggested, then Popular).
-    private var allScopeDiscoveryPaginationAnchorRoomID: RoomID? {
-        if !popularDiscoverableRooms.isEmpty {
-            return popularDiscoverableRooms.last?.id
-        }
-        return suggestedDiscoverableRooms.last?.id
-    }
-
-    private func sortedForAllScopeIfNeeded(_ rooms: [ExploreRoomSuggestion]) -> [ExploreRoomSuggestion] {
-        guard activeDiscoveryScope == .all else { return rooms }
-        return TradeRoomDiscoveryMemberCountSort.sorted(rooms)
-    }
-
     private func bootstrapFetchLimit(for scope: TradeRoomDiscoveryScope) -> Int {
         _ = scope
         return Self.discoveryInitialLimit
+    }
+
+    private var discoveryPageFetchLimit: Int {
+        activeDiscoveryScope == .all
+            ? Self.allScopeDiscoveryPageSize
+            : Self.discoveryInitialLimit
     }
 
     private func filteredDiscoverable(
@@ -874,6 +1062,8 @@ final class TradeRoomsHomeViewModel {
                 return
             }
             applyHomeBootstrap(bootstrap, viewerID: sessionViewer, source: bootstrapSource)
+            await TradeRoomFavoriteAction.hydrateIfNeeded(viewerID: sessionViewer, rooms: rooms)
+            syncFavoritePresentation()
             discoveryPhase = .loaded
             #if DEBUG
             TradeRoomsHomeBootstrapProbe.bootstrapReturned(bootstrap)
@@ -909,15 +1099,68 @@ final class TradeRoomsHomeViewModel {
         let bootstrapChanged = fingerprint != lastAppliedBootstrapFingerprint
         if bootstrapChanged {
             lastAppliedBootstrapFingerprint = fingerprint
-            yourRoomsItems = bootstrap.yourRooms
+            yourRoomsItems = TradeRoomFavoriteSync.applyFavoritedFlag(to: bootstrap.yourRooms)
             suggestedItems = bootstrap.suggested
             popularItems = bootstrap.popular
+            let serverJoined = Set(
+                bootstrap.yourRooms
+                    .filter { $0.viewerIsMember || $0.viewerIsOwner }
+                    .map(\.id)
+            )
+            TradeRoomMembershipStore.shared.mergeServerMembership(serverJoined)
+            suggestedItems = TradeRoomMembershipSync.applyMembershipFlags(to: suggestedItems)
+            popularItems = TradeRoomMembershipSync.applyMembershipFlags(to: popularItems)
+            yourRoomsItems = TradeRoomMembershipSync.applyMembershipFlags(to: yourRoomsItems)
             applyDiscoveryPagination(from: bootstrap)
+            if discoveryScope == .all {
+                allScopeVisibleCount = Self.allScopeDiscoveryPageSize
+            }
         }
 
         _ = reconcileYourRoomsWithMembership()
+        syncFavoritePresentation()
+        syncOwnedTradeRoomPresentationFromLocalStores()
         if bootstrapChanged {
             logDisplayedIfChanged(source: source)
+        }
+    }
+
+    /// Keeps ``DetailPresentationCache`` aligned with inbox / bootstrap — no network.
+    func syncOwnedTradeRoomPresentationFromLocalStores() {
+        guard let viewerID else { return }
+        if let item = items.first(where: { $0.room.ownerProfileID == viewerID }) {
+            if detailCache.ownedTradeRoom(for: viewerID)?.id != item.room.id {
+                detailCache.seedOwnedTradeRoom(item.room, for: viewerID)
+            }
+            return
+        }
+        if let owned = yourRoomsItems.first(where: \.viewerIsOwner),
+           let inboxRoom = inboxStore.rooms.first(where: { $0.id == owned.id })
+        {
+            detailCache.seedOwnedTradeRoom(inboxRoom, for: viewerID)
+        }
+    }
+
+    /// One authoritative owner lookup when local stores miss (e.g. stale profile `nil` cache).
+    func refreshOwnedTradeRoomHeaderIfNeeded() async {
+        guard let viewerID else { return }
+        if viewerOwnedRoom != nil { return }
+
+        if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) {
+            let room = TradeRoomsFixtures.rooms(ownerID: viewerID).first
+            detailCache.seedOwnedTradeRoom(room, for: viewerID)
+            if let room { upsertOwnedRoomInYourRooms(room) }
+            return
+        }
+
+        if let room = try? await rooms.ownedRoom(for: viewerID) {
+            detailCache.seedOwnedTradeRoom(room, for: viewerID)
+            upsertOwnedRoomInYourRooms(room)
+            return
+        }
+
+        if !detailCache.hasResolvedOwnedTradeRoom(for: viewerID), inboxStore.hasLoadedRooms {
+            detailCache.seedOwnedTradeRoom(nil, for: viewerID)
         }
     }
 

@@ -24,6 +24,7 @@ enum GettingStartedTaskNavigation {
             coordinator.pushFeed(.suggestedTraders)
 
         case .room:
+            TradeRoomsHomeScreenStore.requestDiscoveryScope(.all, host: .feed)
             coordinator.selectTab(.feed)
             coordinator.pushFeed(.rooms)
 

@@ -56,6 +56,9 @@ final class ManageRoomViewModel {
     var pendingMemberAction: MemberAction?
     var showsMemberActionConfirmation = false
     var showsBanMemberConfirmation = false
+    var showsModeratorConfirmation = false
+    var pendingModeratorMake: Bool?
+    var pendingModeratorProfileID: ProfileID?
     var pendingChannelDelete: ChannelDeleteConfirmation?
     var isSavingDetails = false
     var isMutatingMember = false
@@ -153,6 +156,24 @@ final class ManageRoomViewModel {
     var canManageRoom: Bool {
         guard let room else { return false }
         return TradeRoomManagementPermission.canManage(room: room, viewerID: viewerID)
+    }
+
+    var viewerHasModeratorTag: Bool {
+        guard let viewerID else { return false }
+        return TradeRoomModerationPermission.viewerHasModeratorTag(
+            viewerID: viewerID,
+            roomID: roomID,
+            tagStore: tagStore
+        )
+    }
+
+    var canModerateRoom: Bool {
+        guard let room else { return false }
+        return TradeRoomModerationPermission.canModerate(
+            room: room,
+            viewerID: viewerID,
+            viewerHasModeratorTag: viewerHasModeratorTag
+        )
     }
 
     var showsJoinRequestsSection: Bool {
@@ -384,7 +405,7 @@ final class ManageRoomViewModel {
             targetProfileID: member.id,
             roomOwnerProfileID: room.ownerProfileID,
             canManageRoom: canManageRoom,
-            canModerateRoom: canManageRoom,
+            canModerateRoom: canModerateRoom,
             targetMemberTags: member.tags
         )
     }
@@ -393,11 +414,24 @@ final class ManageRoomViewModel {
         canBanMember(member)
     }
 
+    func canUnban(_ ban: RoomBanRecord) -> Bool {
+        guard let room else { return false }
+        let bannedTags = tagStore.tags(for: ban.profile.id, roomID: roomID)
+        return RoomMessageModerationPolicy.canBanMember(
+            viewerID: viewerID,
+            targetProfileID: ban.profile.id,
+            roomOwnerProfileID: room.ownerProfileID,
+            canManageRoom: canManageRoom,
+            canModerateRoom: canModerateRoom,
+            targetMemberTags: bannedTags
+        )
+    }
+
     func canManageTagsForMember(_ member: RoomManagedMember) -> Bool {
         guard let room else { return false }
         return TradeRoomModerationPermission.canManageTagsForMember(
             canManageRoom: canManageRoom,
-            canModerateRoom: canManageRoom,
+            canModerateRoom: canModerateRoom,
             viewerID: viewerID,
             roomOwnerProfileID: room.ownerProfileID,
             targetProfileID: member.profile.id,
@@ -406,13 +440,84 @@ final class ManageRoomViewModel {
     }
 
     func canShowManageMember(_ member: RoomManagedMember) -> Bool {
+        if canManageModeratorStatus(for: member) { return true }
         if canManageTagsForMember(member) { return true }
-        return canManageRoom && (canBanMember(member) || canRemoveMember(member))
+        return canBanMember(member) || canRemoveMember(member)
+    }
+
+    func canManageModeratorStatus(for member: RoomManagedMember) -> Bool {
+        guard canManageRoom, let room, let viewerID else { return false }
+        return member.id != viewerID && member.id != room.ownerProfileID
+    }
+
+    func isMemberModerator(_ member: RoomManagedMember) -> Bool {
+        TradeRoomModerationPermission.hasModeratorTag(memberTags: member.tags)
+    }
+
+    func moderatorActionTitle(for member: RoomManagedMember) -> String? {
+        guard canManageModeratorStatus(for: member) else { return nil }
+        return isMemberModerator(member) ? "Remove Moderator" : "Make Moderator"
+    }
+
+    func requestModeratorStatusChange(for member: RoomManagedMember) {
+        guard canManageModeratorStatus(for: member) else { return }
+        pendingModeratorProfileID = member.id
+        pendingModeratorMake = !isMemberModerator(member)
+        showsModeratorConfirmation = true
+    }
+
+    func cancelModeratorStatusChange() {
+        pendingModeratorProfileID = nil
+        pendingModeratorMake = nil
+        showsModeratorConfirmation = false
+    }
+
+    var moderatorConfirmationTitle: String {
+        pendingModeratorMake == true
+            ? "Make this member a moderator?"
+            : "Remove moderator status from this member?"
+    }
+
+    var moderatorConfirmationButtonTitle: String {
+        pendingModeratorMake == true ? "Make Moderator" : "Remove Moderator"
+    }
+
+    func confirmModeratorStatusChange() async {
+        guard canManageRoom,
+              let profileID = pendingModeratorProfileID,
+              let makeModerator = pendingModeratorMake
+        else { return }
+        pendingModeratorProfileID = nil
+        pendingModeratorMake = nil
+        showsModeratorConfirmation = false
+        isMutatingMember = true
+        defer { isMutatingMember = false }
+        do {
+            _ = await tagStore.ensureDefaultTagsIfCanManage(
+                roomID: roomID,
+                canManage: canManageRoom,
+                repository: rooms
+            )
+            try await TradeRoomModeratorPromotion.setModerator(
+                promoted: makeModerator,
+                roomID: roomID,
+                profileID: profileID,
+                roomTags: tagStore.tags(for: roomID),
+                tagStore: tagStore,
+                management: rooms
+            )
+            await refreshMembersAndBans()
+            statusMessage = makeModerator ? "Moderator added." : "Moderator removed."
+            ExperienceHaptics.play(.success)
+        } catch {
+            statusMessage = ConversationThreadSupport.message(for: error)
+            ExperienceHaptics.play(.error)
+        }
     }
 
     func confirmMemberAction() async {
         guard let action = pendingMemberAction else { return }
-        guard canManageRoom, let viewerID, let room else { return }
+        guard canModerateRoom, let viewerID, let room else { return }
         let targetID: ProfileID
         switch action {
         case .remove(let profileID), .ban(let profileID):
@@ -460,14 +565,7 @@ final class ManageRoomViewModel {
     }
 
     func unban(_ ban: RoomBanRecord) async {
-        guard canManageRoom,
-              let viewerID,
-              let room,
-              RoomMessageModerationPolicy.isRoomOwner(
-                roomOwnerProfileID: room.ownerProfileID,
-                viewerID: viewerID
-              )
-        else { return }
+        guard canUnban(ban), viewerID != nil else { return }
         isMutatingMember = true
         defer { isMutatingMember = false }
         do {
@@ -536,12 +634,27 @@ final class ManageRoomViewModel {
         Set(tagStore.tags(for: profileID, roomID: roomID).map(\.id))
     }
 
+    func canAssignTag(_ tag: RoomMemberTag) -> Bool {
+        TradeRoomModerationPermission.canAssignTag(
+            tag: tag,
+            canManageRoom: canManageRoom,
+            canModerateRoom: canModerateRoom
+        )
+    }
+
     func saveMemberTagAssignments(
         for member: RoomManagedMember,
         selectedTagIDs: Set<RoomMemberTagID>
     ) async -> Bool {
         guard canManageRoom else { return false }
-        let targetIDs = selectedTagIDs
+        let assignableIDs = Set(tags.filter { canAssignTag($0) }.map(\.id))
+        let elevatedIDs = Set(
+            savedTagIDs(for: member.profile.id).filter { id in
+                guard let tag = tags.first(where: { $0.id == id }) else { return false }
+                return !canAssignTag(tag)
+            }
+        )
+        let targetIDs = selectedTagIDs.intersection(assignableIDs).union(elevatedIDs)
         let currentIDs = savedTagIDs(for: member.profile.id)
 
         guard targetIDs != currentIDs else { return true }

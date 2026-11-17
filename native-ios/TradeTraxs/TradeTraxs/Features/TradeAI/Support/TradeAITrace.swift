@@ -20,6 +20,10 @@ nonisolated enum TradeAITrace {
         log("analysis.decoded")
     }
 
+    static func analysisFailed(status: Int, byteCount: Int, category: String) {
+        log("analysis.failed status=\(status) bytes=\(byteCount) category=\(category)")
+    }
+
     static func persistenceStarted(rowCount: Int, payloadType: String) {
         log("persistence.started rows=\(rowCount) payloadType=\(payloadType)")
     }
@@ -35,9 +39,6 @@ nonisolated enum TradeAITrace {
 
     private static func log(_ message: String) {
         let line = "[TradeAITrace] \(message)"
-        logger.debug("\(line, privacy: .public)")
-        #if DEBUG
-        print(line)
-        #endif
+        logger.info("\(line, privacy: .public)")
     }
 }

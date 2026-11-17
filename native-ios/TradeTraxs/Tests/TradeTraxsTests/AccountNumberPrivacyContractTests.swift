@@ -91,6 +91,37 @@ final class AccountNumberPrivacyContractTests: XCTestCase {
         XCTAssertNil(body.account_size)
     }
 
+    @MainActor
+    func testOwnerAccountNumbersSurvivePublicMetadataPurge() {
+        let cache = DetailPresentationCache()
+        let accountID = TradingAccountID("acc-owner-1")
+        let profileID = ProfileID("user-owner")
+        let account = TradingAccount(
+            id: accountID,
+            ownerProfileID: profileID,
+            name: "Alpha Futures",
+            category: .propFirm,
+            mode: .evaluation,
+            size: Money(amount: 50_000),
+            isActive: true,
+            canAddTrades: true,
+            showInAccountDropdowns: true,
+            accountNumber: "500123"
+        )
+        cache.seedOwnerAccounts([account], for: profileID)
+        XCTAssertEqual(cache.accountNumber(for: accountID, audience: .owner), "500123")
+        XCTAssertNil(cache.accountNumber(for: accountID, audience: .public))
+
+        cache.seedPublicAccountMetadata(
+            names: [accountID: "Evaluation Account"],
+            modes: [accountID: .evaluation],
+            sizes: [accountID: 50_000],
+            for: profileID
+        )
+        XCTAssertEqual(cache.accountNumber(for: accountID, audience: .owner), "500123")
+        XCTAssertNil(cache.accountNumber(for: accountID, audience: .public))
+    }
+
     func testProfileTradeDisplayNeverUsesOwnerAudience() {
         XCTAssertEqual(
             TradingAccountDisplay.title(

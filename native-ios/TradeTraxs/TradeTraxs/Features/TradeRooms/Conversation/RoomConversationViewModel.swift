@@ -288,7 +288,13 @@ final class RoomConversationViewModel {
 
     var isMember: Bool {
         if membership != nil { return true }
+        if TradeRoomMembershipStore.shared.isJoined(resolvedRoomID) { return true }
         return inboxStore.rooms.contains { $0.id == resolvedRoomID }
+    }
+
+    /// Active `room_members` row — required for RLS inserts (`is_active_room_member`).
+    var hasServerConfirmedMembership: Bool {
+        isOwner || membership != nil
     }
 
     /// Public open-join rooms are readable without membership; private/approval stay gated.
@@ -368,7 +374,7 @@ final class RoomConversationViewModel {
     /// Member/owner shell — composer may still be read-only on announcement channels.
     var canShowComposer: Bool {
         guard selectedChannel != nil else { return false }
-        return isOwner || isMember
+        return hasServerConfirmedMembership
     }
 
     /// Composer stays visible for empty threads and while channel metadata is resolving — independent of header chrome.
@@ -379,10 +385,11 @@ final class RoomConversationViewModel {
         return room != nil && selectedChannel != nil
     }
 
-    /// Web `canPostInRoom` — owner bypasses channel chat lock.
+    /// Web `canPostInRoom` — owner and Moderator tag bypass channel chat lock.
     var canPostInSelectedChannel: Bool {
         guard selectedChannel != nil else { return false }
         if isOwner { return true }
+        if viewerHasModeratorTag { return true }
         return selectedChannel?.allowMembersChat ?? true
     }
 
@@ -493,14 +500,28 @@ final class RoomConversationViewModel {
     }
 
     var showsJoinButton: Bool {
-        TradeRoomJoinPresentation.showsButton(
+        TradeRoomJoinPresentation.showsConversationHeaderJoinButton(
             isOwner: isOwner,
+            isMember: isMember,
             state: joinPresentationState
         )
     }
 
     var isMuted: Bool {
         inboxStore.isRoomMuted(roomID)
+    }
+
+    var isRoomFavorited: Bool {
+        TradeRoomFavoritesStore.shared.isFavorited(roomID)
+    }
+
+    func toggleFavoriteRoom() async {
+        guard let viewerID else { return }
+        _ = await TradeRoomFavoriteAction.toggle(
+            roomID: roomID,
+            viewerID: viewerID,
+            rooms: rooms
+        )
     }
 
     func loadIfNeeded() {
@@ -622,12 +643,50 @@ final class RoomConversationViewModel {
         loadTask = Task { await performInitialLoad() }
     }
 
+    func noteMembershipStoreDidChange(for changedRoomID: RoomID?) {
+        guard let changedRoomID, changedRoomID == resolvedRoomID else { return }
+        if TradeRoomMembershipStore.shared.isJoined(resolvedRoomID) {
+            if let cached = TradeRoomConfirmedMembershipCache.take(for: resolvedRoomID) {
+                membership = cached
+            } else {
+                Task { await refreshAuthoritativeMembershipFromServer() }
+            }
+            upsertJoinedRoomInInbox()
+            if canViewMessages, messages.isEmpty, phase == .loaded {
+                Task { try? await reloadMessagesAfterMembershipGranted() }
+            }
+        } else {
+            membership = nil
+            joinRequestState = nil
+        }
+    }
+
+    @discardableResult
+    func refreshAuthoritativeMembershipFromServer() async -> Bool {
+        guard let viewerID, !isOwner else { return isOwner }
+        if let cached = TradeRoomConfirmedMembershipCache.take(for: resolvedRoomID) {
+            membership = cached
+            return true
+        }
+        if let loaded = try? await rooms.membership(roomID: resolvedRoomID, profileID: viewerID) {
+            membership = loaded
+            TradeRoomMembershipStore.shared.setJoined(resolvedRoomID, joined: true)
+            return true
+        }
+        membership = nil
+        if TradeRoomMembershipStore.shared.isJoined(resolvedRoomID) {
+            TradeRoomMembershipStore.shared.setJoined(resolvedRoomID, joined: false)
+        }
+        return false
+    }
+
     /// Applies room metadata edits from Manage Room / Room Information without reloading messages.
     func reloadRoomMetadataIfNeeded() async {
         guard phase == .loaded else { return }
         do {
             let loaded = try await rooms.room(id: resolvedRoomID)
             room = loaded
+            applyKnownDiscoveryMemberCountIfNeeded()
             await reconcileMemberCount(source: .mutation)
         } catch {
             // Soft-fail — stale header is acceptable until next full load.
@@ -805,6 +864,7 @@ final class RoomConversationViewModel {
     func sendText() async {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isSending, canPostInSelectedChannel else { return }
+        guard await ensureAuthoritativeMembershipBeforeSend() else { return }
         let replyTo = replyTarget?.messageID
         draft = ""
         if replyTo != nil { clearReply() }
@@ -872,6 +932,7 @@ final class RoomConversationViewModel {
 
     func sendTradeSummary(_ summary: TradeSummary) async {
         guard let viewerID, !isSending, canPostInSelectedChannel, let channelID = selectedChannelID else { return }
+        guard await ensureAuthoritativeMembershipBeforeSend() else { return }
         let replyTo = replyTarget?.messageID
         if replyTo != nil { clearReply() }
         showsTradePicker = false
@@ -1011,7 +1072,8 @@ final class RoomConversationViewModel {
             senderProfileID: item.message.senderProfileID,
             isRoomOwner: isOwner,
             isRoomModerator: viewerHasModeratorTag && !isOwner,
-            roomOwnerProfileID: room?.ownerProfileID
+            roomOwnerProfileID: room?.ownerProfileID,
+            senderMemberTags: memberTags(for: item.message.senderProfileID)
         )
     }
 
@@ -1187,12 +1249,29 @@ final class RoomConversationViewModel {
         }
     }
 
-    private func refreshRoomMemberCount(viewerID: ProfileID) async {
-        let activeCount = (try? await rooms.activeMemberCounts(for: [resolvedRoomID]))?[resolvedRoomID]
-        if let activeCount, var updated = room {
-            updated.memberCount = activeCount
+    private var viewerCanQueryMemberList: Bool {
+        isOwner || isMember
+    }
+
+    private func applyKnownDiscoveryMemberCountIfNeeded() {
+        guard room?.memberCount == nil || room?.memberCount == 0 else { return }
+        guard let known = TradeRoomDiscoveryMemberCountCache.knownCount(for: resolvedRoomID) else { return }
+        if var updated = room {
+            updated.memberCount = known
             room = updated
         }
+    }
+
+    private func refreshRoomMemberCount(viewerID: ProfileID) async {
+        let listed = (try? await rooms.activeMemberCounts(for: [resolvedRoomID]))?[resolvedRoomID]
+        guard let count = RoomMemberCountReconcile.choose(
+            listedActiveCount: listed,
+            currentCount: room?.memberCount,
+            viewerCanQueryMemberList: viewerCanQueryMemberList
+        ), var updated = room
+        else { return }
+        updated.memberCount = count
+        room = updated
     }
 
     func cancelDeleteMessage() {
@@ -1381,9 +1460,12 @@ final class RoomConversationViewModel {
             try await rooms.leave(roomID: targetID, profileID: viewerID)
             membership = nil
             joinRequestState = nil
-            inboxStore.removeRoom(id: targetID)
-            SessionMemberRoomsStore.shared.invalidate(viewerID: viewerID)
-            TradeRoomJoinActionCoordinator.shared.clearMutation(for: targetID)
+            TradeRoomMembershipSync.applyLeft(
+                roomID: targetID,
+                viewerID: viewerID,
+                inboxStore: inboxStore
+            )
+            applyMembershipMemberCountDelta(-1)
             await reconcileMemberCount(source: .mutation)
             ExperienceHaptics.play(.success)
             navigationCoordinator?.pop()
@@ -1427,12 +1509,16 @@ final class RoomConversationViewModel {
                         joinRequestState = status == .approved ? nil : .pending
                         if status == .approved {
                             membership = try? await rooms.membership(roomID: roomID, profileID: viewerID)
-                            TradeRoomJoinActionCoordinator.shared.patchJoined(resolvedRoomID)
-                            GettingStartedRefreshCenter.noteJoinedOtherTradeRoom(
-                                viewer: viewerID,
-                                roomOwnerProfileID: room?.ownerProfileID,
-                                isViewerRoomOwner: isOwner
-                            )
+                            if let room {
+                                TradeRoomMembershipSync.applyJoined(
+                                    tradeRoom: room,
+                                    viewerID: viewerID,
+                                    inboxStore: inboxStore
+                                )
+                            } else {
+                                TradeRoomMembershipStore.shared.setJoined(resolvedRoomID, joined: true)
+                            }
+                            applyMembershipMemberCountDelta(+1)
                             await reconcileMemberCount(source: .mutation)
                             try? await reloadMessagesAfterMembershipGranted()
                         }
@@ -1451,20 +1537,33 @@ final class RoomConversationViewModel {
                         return
                     }
                 }
-                membership = try await rooms.join(roomID: roomID, profileID: viewerID)
-                GettingStartedRefreshCenter.noteJoinedOtherTradeRoom(
-                    viewer: viewerID,
-                    roomOwnerProfileID: room?.ownerProfileID,
-                    isViewerRoomOwner: isOwner
-                )
-                TradeRoomJoinActionCoordinator.shared.patchJoined(resolvedRoomID)
-                SessionMemberRoomsStore.shared.invalidate(viewerID: viewerID)
-                upsertJoinedRoomInInbox()
+                let joined = try await rooms.join(roomID: roomID, profileID: viewerID)
+                membership = joined
+                TradeRoomConfirmedMembershipCache.store(joined, for: resolvedRoomID)
+                if let room {
+                    TradeRoomMembershipSync.applyJoined(
+                        tradeRoom: room,
+                        viewerID: viewerID,
+                        inboxStore: inboxStore,
+                        confirmedMembership: joined
+                    )
+                } else {
+                    TradeRoomMembershipStore.shared.setJoined(resolvedRoomID, joined: true)
+                    upsertJoinedRoomInInbox()
+                }
+                applyMembershipMemberCountDelta(+1)
                 await reconcileMemberCount(source: .mutation)
+                try? await reloadMessagesAfterMembershipGranted()
             } else {
                 try await rooms.leave(roomID: roomID, profileID: viewerID)
                 membership = nil
                 joinRequestState = nil
+                TradeRoomMembershipSync.applyLeft(
+                    roomID: resolvedRoomID,
+                    viewerID: viewerID,
+                    inboxStore: inboxStore
+                )
+                applyMembershipMemberCountDelta(-1)
                 await reconcileMemberCount(source: .mutation)
             }
             ExperienceHaptics.play(.success)
@@ -1500,6 +1599,22 @@ final class RoomConversationViewModel {
     func openRoomSettings() {
         ExperienceHaptics.play(.selection)
         navigationCoordinator?.open(navigationHost.roomSettings(roomID))
+    }
+
+    var yourRoomsForSwitcher: [ExploreRoomSuggestion] {
+        TradeRoomYourRoomsCatalog.rooms(viewerID: viewerID)
+    }
+
+    func prefetchYourRoomsForSwitcher(explore: any ExploreRepository) async {
+        guard let viewerID else { return }
+        await TradeRoomYourRoomsCatalog.prefetchIfNeeded(viewerID: viewerID, explore: explore)
+        await TradeRoomFavoriteAction.hydrateIfNeeded(viewerID: viewerID, rooms: rooms)
+    }
+
+    func switchToRoom(_ targetRoomID: RoomID) {
+        guard let navigationCoordinator else { return }
+        guard !RoomNavigationFocusStore.shared.sameRoom(targetRoomID, roomID) else { return }
+        navigationCoordinator.switchTradeRoom(to: targetRoomID, host: navigationHost)
     }
 
     func openProfile(_ profileID: ProfileID) {
@@ -1571,6 +1686,7 @@ final class RoomConversationViewModel {
         let current = await session.currentUserID
         let viewer = current.map { ProfileID($0.rawValue) }
         viewerID = viewer
+        applyKnownDiscoveryMemberCountIfNeeded()
 
         if let messagesRepo, viewer != nil, shouldApplyBlockedAuthorFilter {
             await FeedBlockedAuthorsFilter.shared.syncFromServer(messages: messagesRepo, force: false)
@@ -1932,6 +2048,7 @@ final class RoomConversationViewModel {
         if !channelMetadataCached || room == nil {
             let loaded = try await rooms.room(id: roomID)
             room = loaded
+            applyKnownDiscoveryMemberCountIfNeeded()
             let activeRoomID = loaded.id
             if let viewerID {
                 membership = try? await rooms.membership(roomID: activeRoomID, profileID: viewerID)
@@ -1983,16 +2100,34 @@ final class RoomConversationViewModel {
         )
     }
 
+    private func applyMembershipMemberCountDelta(_ delta: Int) {
+        let id = resolvedRoomID
+        guard let next = RoomMemberCountReconcile.adjustedAfterMembershipChange(
+            currentCount: room?.memberCount,
+            delta: delta
+        ) else { return }
+        if var updated = room {
+            updated.memberCount = next
+            room = updated
+        }
+        RoomMemberCountSync.applyDelta(
+            roomID: id,
+            delta: delta,
+            inboxStore: inboxStore,
+            viewerID: viewerID
+        )
+    }
+
     private func reconcileMemberCount(source: RoomMemberCountProbe.Source) async {
         let id = resolvedRoomID
-        let count: Int
-        if let authoritative = try? await rooms.activeMemberCounts(for: [id])[id] {
-            count = authoritative
-        } else if let fallback = room?.memberCount {
-            count = fallback
-        } else {
-            return
-        }
+        applyKnownDiscoveryMemberCountIfNeeded()
+        let listed = try? await rooms.activeMemberCounts(for: [id])[id]
+        guard let count = RoomMemberCountReconcile.choose(
+            listedActiveCount: listed,
+            currentCount: room?.memberCount,
+            viewerCanQueryMemberList: viewerCanQueryMemberList
+        )
+        else { return }
         if var updated = room {
             updated.memberCount = count
             room = updated
@@ -2961,6 +3096,7 @@ final class RoomConversationViewModel {
 
     private func sendVoice(data: Data, duration: TimeInterval) async {
         guard let viewerID, canRecordVoiceMessages, let channelID = selectedChannelID else { return }
+        guard await ensureAuthoritativeMembershipBeforeSend() else { return }
         let replyTo = replyTarget?.messageID
         if replyTo != nil { clearReply() }
         isSending = true
@@ -3073,6 +3209,7 @@ final class RoomConversationViewModel {
         replyToMessageID: MessageID? = nil
     ) async {
         guard let viewerID, canPostInSelectedChannel, let channelID = selectedChannelID else { return }
+        guard await ensureAuthoritativeMembershipBeforeSend() else { return }
         let blocksComposer = localImageData == nil
         if blocksComposer {
             isSending = true
@@ -3216,15 +3353,6 @@ final class RoomConversationViewModel {
                 isPinned: false,
                 createdAt: .now
             )
-            #if DEBUG
-            print(
-                """
-                [RoomMessageSend] compose roomID=\(roomID.rawValue) \
-                channelID=\(channelID.rawValue) membershipJoined=\(membership != nil) \
-                isOwner=\(isOwner)
-                """
-            )
-            #endif
             let savedRoom = try await rooms.send(payload)
             let saved = RoomMessageMapping.displayMessage(from: savedRoom)
             commitMessages([saved])
@@ -3236,6 +3364,12 @@ final class RoomConversationViewModel {
             patchInboxPreview(with: saved)
             ExperienceHaptics.play(.messageSent)
         } catch {
+            #if DEBUG
+            RoomMessageSendProbe.logFailed(
+                messageSendProbeContext(channelID: channelID, messageType: "room_message"),
+                error: error
+            )
+            #endif
             await handleSendFailure(
                 tempID: tempID,
                 optimistic: optimistic,
@@ -3334,8 +3468,43 @@ final class RoomConversationViewModel {
             ExperienceHaptics.play(.messageSent)
             return
         }
+        let probe = messageSendProbeContext(channelID: channelID, messageType: "outbound")
+        #if DEBUG
+        RoomMessageSendProbe.logFailed(probe, error: error)
+        #endif
+        if RoomMessageSendDiagnostics.classify(
+            error: error,
+            hasServerMembership: hasServerConfirmedMembership,
+            canPostInChannel: canPostInSelectedChannel,
+            isOwner: isOwner,
+            viewerHasModeratorTag: viewerHasModeratorTag
+        ) == .membershipNotConfirmed {
+            await refreshAuthoritativeMembershipFromServer()
+        }
         sendStates[tempID] = .failed
         ExperienceHaptics.play(.error)
+    }
+
+    private func messageSendProbeContext(
+        channelID: RoomChannelID,
+        messageType: String
+    ) -> RoomMessageSendProbe.Context {
+        RoomMessageSendProbe.Context(
+            roomID: resolvedRoomID.rawValue,
+            channelID: channelID.rawValue,
+            senderID: viewerID?.rawValue,
+            messageType: messageType,
+            hasReply: false,
+            serverMembershipConfirmed: hasServerConfirmedMembership,
+            channelAllowsMemberPost: canPostInSelectedChannel,
+            isOwner: isOwner,
+            viewerHasModeratorTag: viewerHasModeratorTag
+        )
+    }
+
+    private func ensureAuthoritativeMembershipBeforeSend() async -> Bool {
+        if hasServerConfirmedMembership { return true }
+        return await refreshAuthoritativeMembershipFromServer()
     }
 
     private func hydrateSenders(for messages: [Message]) async {
@@ -3567,11 +3736,13 @@ final class RoomConversationViewModel {
                         sendState: sendStates[message.id] ?? .sent,
                         authorProfile: senderProfile(for: message.senderProfileID),
                         showsAuthorName: showsAuthorName,
-                        authorTags: tagStore.tags(
-                            for: message.senderProfileID,
-                            roomID: roomID
+                        authorTags: TradeRoomModerationPermission.cosmeticMemberTags(
+                            tagStore.tags(for: message.senderProfileID, roomID: roomID)
                         ),
                         showsOwnerBadge: room?.ownerProfileID == message.senderProfileID,
+                        showsModeratorBadge: TradeRoomModerationPermission.hasModeratorTag(
+                            memberTags: tagStore.tags(for: message.senderProfileID, roomID: roomID)
+                        ),
                         startsSenderGroup: startsSenderGroup,
                         addsSenderGroupTopInset: previous != nil && startsSenderGroup,
                         shareUserCaption: shareCaptions.captionByShareID[message.id]

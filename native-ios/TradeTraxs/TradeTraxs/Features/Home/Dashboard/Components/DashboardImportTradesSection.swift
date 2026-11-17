@@ -7,6 +7,9 @@ struct DashboardImportTradesSection: View {
     let navigationCoordinator: NavigationCoordinator
 
     @State private var showsAccounts = false
+    @State private var showsConnectBrokerSheet = false
+    @State private var linkTarget: BrokerIntegrationLinkTarget?
+    @State private var createLinkTarget: BrokerIntegrationCreateLinkTarget?
     @State private var importFlow = BrokerImportFlowModel()
     @State private var brokerViewModel: BrokerIntegrationsViewModel?
     @State private var manageAccountsViewModel: ManageAccountsViewModel?
@@ -65,31 +68,69 @@ struct DashboardImportTradesSection: View {
 
     private var accountsSheet: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                    if !liveTargets.isEmpty {
-                        liveBrokerRows
-                    } else if !store.linkedAccounts.isEmpty {
-                        linkedBrokerRows
-                    } else if accountsStillLoading {
-                        loadingRow
-                    } else if hasConnectedBroker {
-                        needsLinkingCard
-                    } else {
-                        emptyStateRows
+            ZStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                        if !liveTargets.isEmpty {
+                            liveBrokerRows
+                        } else if !store.linkedAccounts.isEmpty {
+                            linkedBrokerRows
+                        } else if accountsStillLoading {
+                            loadingRow
+                        } else if hasConnectedBroker {
+                            needsLinkingCard
+                        } else {
+                            emptyStateRows
+                        }
                     }
+                    .padding(ExperienceSpacing.md)
                 }
-                .padding(ExperienceSpacing.md)
+                .experienceScreenBackground()
+
+                brokerConnectionCoordinator
             }
-            .experienceScreenBackground()
-            .experienceNavigationTitle("Broker Integration")
+            .experienceNavigationTitle("Broker Integrations")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { showsAccounts = false }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Done") {
+                        showsAccounts = false
+                    }
+                    .accessibilityIdentifier("dashboard.brokerIntegrations.done")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        ExperienceHaptics.play(.selection)
+                        ensureBrokerViewModel()
+                        showsConnectBrokerSheet = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.body.weight(.semibold))
+                    }
+                    .disabled(brokerViewModel?.isBrokerConnectionMutationActive == true)
+                    .accessibilityLabel("Add broker")
+                    .accessibilityIdentifier("dashboard.brokerIntegrations.add")
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .experienceSheetChrome()
+        .sheet(isPresented: $showsConnectBrokerSheet) {
+            if let brokerViewModel {
+                BrokerIntegrationConnectBrokerSheet(viewModel: brokerViewModel)
+            }
+        }
+        .onChange(of: BrokerIntegrationMutationStore.shared.revision) { _, _ in
+            guard showsAccounts else { return }
+            Task {
+                await brokerViewModel?.refreshAll(announceChange: false)
+                store.refresh(fromUserAction: false)
+            }
+        }
+        .onChange(of: brokerViewModel?.unlinkedBrokerAccountsCount) { _, _ in
+            promptLinkingIfNeeded()
+        }
+        .onChange(of: brokerViewModel?.hasActiveConnectedBroker) { _, _ in
+            promptLinkingIfNeeded()
+        }
         .fullScreenCover(isPresented: $importFlow.isPresented) {
             BrokerImportProgressView(
                 model: importFlow,
@@ -316,7 +357,8 @@ struct DashboardImportTradesSection: View {
                 }
             } onTap: {
                 ExperienceHaptics.play(.selection)
-                openBrokerIntegrations()
+                ensureBrokerViewModel()
+                showsConnectBrokerSheet = true
             }
 
             DashboardQuickActionRow(
@@ -351,6 +393,31 @@ struct DashboardImportTradesSection: View {
     private var rowBorder: some View {
         RoundedRectangle(cornerRadius: DashboardQuickActionStyle.cornerRadius, style: .continuous)
             .stroke(colors.border, lineWidth: 1)
+    }
+
+    @ViewBuilder
+    private var brokerConnectionCoordinator: some View {
+        if let brokerViewModel, let manageAccountsViewModel {
+            BrokerIntegrationConnectionCoordinator(
+                viewModel: brokerViewModel,
+                manageAccountsViewModel: manageAccountsViewModel,
+                data: data,
+                linkTarget: $linkTarget,
+                createLinkTarget: $createLinkTarget,
+                showsImportedTradesReview: false
+            )
+        }
+    }
+
+    private func promptLinkingIfNeeded() {
+        guard let brokerViewModel else { return }
+        guard linkTarget == nil, createLinkTarget == nil else { return }
+        guard let next = brokerViewModel.firstUnlinkedBrokerAccount() else { return }
+        linkTarget = BrokerIntegrationLinkTarget(
+            provider: next.provider,
+            connectionId: next.connectionId,
+            account: next.account
+        )
     }
 
     private func ensureBrokerViewModel() {

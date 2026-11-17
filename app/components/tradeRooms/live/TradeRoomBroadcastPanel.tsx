@@ -10,6 +10,8 @@ import { useTradeRoomBroadcast } from "./useTradeRoomBroadcast.ts"
 import TradeRoomBroadcastGoLiveDialog, {
   type GoLiveDialogResult,
 } from "./TradeRoomBroadcastGoLiveDialog.tsx"
+import TradeRoomBroadcastHostStreamTitleEditor from "./TradeRoomBroadcastHostStreamTitleEditor.tsx"
+import { formatLiveBroadcastHeadline } from "@/lib/livekit/tradeRoomBroadcastStreamTitle.ts"
 import {
   setBroadcastInteractivePollDemand,
   setBroadcastPassiveInteractiveContext,
@@ -89,6 +91,7 @@ type StatusPayload = {
   primaryMediaPublisherConnected?: boolean | null
   broadcasterConnected?: boolean | null
   alreadyLiveElsewhere?: boolean
+  streamTitle?: string | null
   error?: string
 }
 
@@ -312,6 +315,8 @@ export default function TradeRoomBroadcastPanel({
       primaryMediaPublisherIdentity: payload.primaryMediaPublisherIdentity,
       publicLive: payload.publicLive,
       visibility: payload.visibility,
+      streamTitle:
+        typeof payload.streamTitle === "string" ? payload.streamTitle : null,
     }
   }
 
@@ -337,6 +342,7 @@ export default function TradeRoomBroadcastPanel({
               roomId,
               voiceMode: setup.voiceMode,
               videoSource: setup.videoSource,
+              streamTitle: setup.streamTitle,
             }),
           })
           const payload = (await res.json().catch(() => ({}))) as TokenPayload
@@ -465,8 +471,15 @@ export default function TradeRoomBroadcastPanel({
       ? broadcast.localViewerCount
       : (broadcast.status.viewerCount ?? 0)
 
-  const broadcasterLabel =
-    broadcast.status.broadcasterDisplayName?.trim() || "Broadcaster"
+  const liveHeadline = formatLiveBroadcastHeadline({
+    broadcasterDisplayName: broadcast.status.broadcasterDisplayName,
+    streamTitle: broadcast.status.streamTitle,
+    roomTitleFallback: roomTitle,
+  })
+  const hostSessionId =
+    broadcast.status.broadcastSessionId?.trim() ||
+    broadcast.publisherSessionId?.trim() ||
+    ""
 
   useEffect(() => {
     logBroadcast("broadcast panel render state", {
@@ -537,7 +550,7 @@ export default function TradeRoomBroadcastPanel({
             </span>
           ) : publicLive ? (
             <span className="truncate text-sm text-gray-200">
-              {broadcasterLabel}
+              {liveHeadline}
               {viewerCount != null ? (
                 <span className="text-gray-500"> · {viewerCount} watching</span>
               ) : null}
@@ -768,6 +781,7 @@ export default function TradeRoomBroadcastPanel({
             {!obsSetupSheetOpen ? (
               <video
                 ref={bindStreamVideoRef}
+                data-tt-broadcast-media="true"
                 className="pointer-events-none fixed h-px w-px opacity-0"
                 playsInline
                 muted
@@ -788,6 +802,9 @@ export default function TradeRoomBroadcastPanel({
                 obsPreparingHost={obsPreparingHost}
                 encoderConnected={encoderConnected}
                 waitingForObsEncoder={waitingForObsEncoder}
+                roomId={roomId}
+                accessToken={accessToken}
+                hostSessionId={hostSessionId}
               />
             </MobileWebObsBroadcastSetupSheet>
           </div>
@@ -803,6 +820,9 @@ export default function TradeRoomBroadcastPanel({
               obsPreparingHost={obsPreparingHost}
               encoderConnected={encoderConnected}
               waitingForObsEncoder={waitingForObsEncoder}
+              roomId={roomId}
+              accessToken={accessToken}
+              hostSessionId={hostSessionId}
             />
           </div>
         ) : null}

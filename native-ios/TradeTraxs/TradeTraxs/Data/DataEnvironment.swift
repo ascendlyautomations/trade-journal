@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import Synchronization
 
 /// Data subgraph injected through ``DependencyContainer``.
 ///
@@ -39,6 +40,7 @@ final class DataEnvironment {
     let achievements: any AchievementRepository
     let referrals: any ReferralRepository
     let notificationPreferences: any NotificationPreferencesRepository
+    let tradingPreferences: any TradingPreferencesRepository
     let authentication: any AuthenticationRepository
     let home: any HomeRepository
     /// Platform likes/comments — content-agnostic (Trade / Post / Clip / Feed).
@@ -97,6 +99,7 @@ final class DataEnvironment {
         achievements: any AchievementRepository,
         referrals: any ReferralRepository,
         notificationPreferences: any NotificationPreferencesRepository,
+        tradingPreferences: any TradingPreferencesRepository,
         authentication: any AuthenticationRepository,
         home: any HomeRepository,
         interactions: any InteractionRepository,
@@ -149,6 +152,7 @@ final class DataEnvironment {
         self.achievements = achievements
         self.referrals = referrals
         self.notificationPreferences = notificationPreferences
+        self.tradingPreferences = tradingPreferences
         self.authentication = authentication
         self.home = home
         self.interactions = interactions
@@ -351,6 +355,7 @@ final class DataEnvironment {
                 supabase: supabase,
                 cache: cache
             ),
+            tradingPreferences: DefaultTradingPreferencesRepository(supabase: supabase),
             authentication: DefaultAuthenticationRepository(manager: authenticationManager),
             home: DefaultHomeRepository(supabase: supabase, cache: cache, session: session),
             interactions: interactions,
@@ -359,13 +364,15 @@ final class DataEnvironment {
             tradingReports: DefaultTradingReportRepository(
                 trades: tradesRepository,
                 session: session,
-                detailCache: detailCache
+                detailCache: detailCache,
+                tradingPreferences: DefaultTradingPreferencesRepository(supabase: supabase)
             ),
             psychologyReports: DefaultPsychologyReportRepository(
                 trades: tradesRepository,
                 dailyCheckIns: dailyCheckInRepository,
                 session: session,
-                detailCache: detailCache
+                detailCache: detailCache,
+                tradingPreferences: DefaultTradingPreferencesRepository(supabase: supabase)
             ),
             dailyCheckIns: dailyCheckInRepository,
             contentReports: DefaultContentReportRepository(supabase: supabase),
@@ -483,6 +490,7 @@ final class DataEnvironment {
                     supabase: supabase,
                     cache: cache
                 ),
+                tradingPreferences: DefaultTradingPreferencesRepository(supabase: supabase),
                 home: DefaultHomeRepository(supabase: supabase, cache: cache, session: session),
                 ai: DefaultAIRepository(supabase: supabase, session: session),
                 dailyCheckIns: DefaultTraderDailyCheckInRepository(supabase: supabase, cache: cache),
@@ -490,12 +498,14 @@ final class DataEnvironment {
                     trades: tradesRepository,
                     dailyCheckIns: DefaultTraderDailyCheckInRepository(supabase: supabase, cache: cache),
                     session: session,
-                    detailCache: detailCache
+                    detailCache: detailCache,
+                    tradingPreferences: DefaultTradingPreferencesRepository(supabase: supabase)
                 ),
                 tradingReports: DefaultTradingReportRepository(
                     trades: tradesRepository,
                     session: session,
-                    detailCache: detailCache
+                    detailCache: detailCache,
+                    tradingPreferences: DefaultTradingPreferencesRepository(supabase: supabase)
                 )
             )
         }
@@ -534,6 +544,7 @@ final class DataEnvironment {
             achievements: repositories.achievements,
             referrals: repositories.referrals,
             notificationPreferences: repositories.notificationPreferences,
+            tradingPreferences: repositories.tradingPreferences,
             authentication: DefaultAuthenticationRepository(manager: authenticationManager),
             home: repositories.home,
             interactions: interactions,
@@ -612,12 +623,14 @@ final class DataEnvironment {
             trades: DemoTradeRepository(),
             dailyCheckIns: DemoCheckInRepository(),
             session: session,
-            detailCache: detailCache
+            detailCache: detailCache,
+            tradingPreferences: DefaultTradingPreferencesRepository(supabase: supabase)
         )
         let tradingReports: any TradingReportRepository = DefaultTradingReportRepository(
             trades: DemoTradeRepository(),
             session: session,
-            detailCache: detailCache
+            detailCache: detailCache,
+            tradingPreferences: DefaultTradingPreferencesRepository(supabase: supabase)
         )
 
         AppLog.application.info(
@@ -657,6 +670,7 @@ final class DataEnvironment {
             achievements: achievements,
             referrals: DemoReferralRepository(),
             notificationPreferences: DemoNotificationPreferencesRepository(),
+            tradingPreferences: DemoTradingPreferencesRepository(),
             authentication: DefaultAuthenticationRepository(manager: authenticationManager),
             home: DemoHomeRepository(),
             interactions: interactions,
@@ -928,8 +942,13 @@ private struct DemoSearchRepository: SearchRepository {
 }
 
 private struct DemoNotificationPreferencesRepository: NotificationPreferencesRepository {
-    func preferences(for userID: ProfileID) async throws -> NotificationPreferences {
-        SettingsFixtures.preferences(userID: userID)
+    func invalidateCachedPreferences(for userID: ProfileID) {
+        _ = userID
+    }
+
+    func preferences(for userID: ProfileID, forceRefresh: Bool) async throws -> NotificationPreferences {
+        _ = forceRefresh
+        return SettingsFixtures.preferences(userID: userID)
     }
 
     func update(
@@ -938,6 +957,70 @@ private struct DemoNotificationPreferencesRepository: NotificationPreferencesRep
     ) async throws -> NotificationPreferences {
         _ = patch
         throw DemoAuthRequired.error
+    }
+}
+
+private nonisolated struct DemoTradingPreferencesState {
+    var globals: [String: TradingPreferenceGlobal] = [:]
+    var overrides: [String: [TradingPreferenceAccountOverride]] = [:]
+    var discovery: [String: PreferenceDiscoveryResponse] = [:]
+}
+
+private nonisolated final class DemoTradingPreferencesRepository: TradingPreferencesRepository, @unchecked Sendable {
+    private let state = Mutex(DemoTradingPreferencesState())
+
+    func globalPreferences(for userID: ProfileID) async throws -> TradingPreferenceGlobal {
+        state.withLock { $0.globals[userID.rawValue] ?? .empty(userID: userID) }
+    }
+
+    func saveGlobal(_ preferences: TradingPreferenceGlobal) async throws -> TradingPreferenceGlobal {
+        state.withLock { store in
+            store.globals[preferences.userID.rawValue] = preferences
+        }
+        return preferences
+    }
+
+    func accountOverrides(for userID: ProfileID) async throws -> [TradingPreferenceAccountOverride] {
+        state.withLock { $0.overrides[userID.rawValue] ?? [] }
+    }
+
+    func saveOverride(
+        _ override: TradingPreferenceAccountOverride
+    ) async throws -> TradingPreferenceAccountOverride {
+        state.withLock { store in
+            var rows = store.overrides[override.userID.rawValue] ?? []
+            rows.removeAll { $0.accountID == override.accountID }
+            rows.append(override)
+            store.overrides[override.userID.rawValue] = rows
+        }
+        return override
+    }
+
+    func revisions(for userID: ProfileID) async throws -> [TradingPreferenceRevision] {
+        _ = userID
+        return []
+    }
+
+    func discovery(for userID: ProfileID) async throws -> PreferenceDiscoveryResponse? {
+        state.withLock { $0.discovery[userID.rawValue] }
+    }
+
+    func recordDiscovery(
+        _ response: PreferenceDiscoveryResponse,
+        for userID: ProfileID
+    ) async throws -> PreferenceDiscoveryResponse {
+        state.withLock { store in
+            if let current = store.discovery[userID.rawValue], current.rank >= response.rank {
+                return current
+            }
+            store.discovery[userID.rawValue] = response
+            return response
+        }
+    }
+
+    func hasJournalTrade(for userID: ProfileID) async throws -> Bool {
+        _ = userID
+        return !DemoCanonicalDataset.trades().filter { $0.mode != .backtest }.isEmpty
     }
 }
 
@@ -974,9 +1057,13 @@ private struct DemoFollowRequestRepository: FollowRequestRepository {
 }
 
 private struct DemoNotificationRepository: NotificationRepository {
-    func notifications(page: PageRequest) async throws -> CursorPage<ActivityNotification> {
+    func notifications(
+        page: PageRequest,
+        filter: ActivityNotificationListFilter
+    ) async throws -> CursorPage<ActivityNotification> {
         _ = page
-        return CursorPage(items: DemoGraph.notifications(), nextCursor: nil)
+        let items = DemoGraph.notifications().filter { filter.matches($0) }
+        return CursorPage(items: items, nextCursor: nil)
     }
 
     func notification(id: NotificationID) async throws -> ActivityNotification? {

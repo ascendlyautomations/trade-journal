@@ -1,3 +1,4 @@
+import { knownPnl } from "./analytics/knownPnl"
 import {
   compareDashboardTradesChronological,
   type DashboardTradeDateFields,
@@ -17,7 +18,9 @@ export function computeMaxDrawdown(
   let maxDrawdown = 0
 
   for (const trade of chronological) {
-    runningEquity += Number(trade.pnl) || 0
+    const pnl = knownPnl(trade.pnl)
+    if (pnl == null) continue
+    runningEquity += pnl
     if (runningEquity > runningPeak) runningPeak = runningEquity
     const drawdown = runningPeak - runningEquity
     if (drawdown > maxDrawdown) maxDrawdown = drawdown

@@ -37,6 +37,8 @@ nonisolated struct SupabaseTransport: Sendable {
         return try await client.prepare(request)
     }
 
+    /// - Parameter acceptsNonSuccessStatusCodes: Trade AI analysis only. When true, 4xx/5xx
+    ///   bodies are returned instead of thrown. All other callers keep the default `false`.
     func send(
         host: APIHost,
         path: String,
@@ -44,7 +46,8 @@ nonisolated struct SupabaseTransport: Sendable {
         queryItems: [URLQueryItem] = [],
         headers: [String: String] = [:],
         body: Data? = nil,
-        requiresAuthentication: Bool = true
+        requiresAuthentication: Bool = true,
+        acceptsNonSuccessStatusCodes: Bool = false
     ) async throws -> HTTPResponse {
         try requireConfigured()
         let endpoint = Endpoint(
@@ -55,13 +58,14 @@ nonisolated struct SupabaseTransport: Sendable {
             headers: headers,
             requiresAuthentication: requiresAuthentication
         )
-        let request: HTTPRequest
+        var request: HTTPRequest
         do {
             request = try requestBuilder.makeRequest(endpoint: endpoint, body: body)
         } catch {
             // Surface missing BFF/base URL as AppError.transport (user-facing), not raw NetworkError.
             throw mapFailure(error, path: path)
         }
+        request.acceptsNonSuccessStatusCodes = acceptsNonSuccessStatusCodes
         do {
             let response = try await client.send(request)
             #if DEBUG

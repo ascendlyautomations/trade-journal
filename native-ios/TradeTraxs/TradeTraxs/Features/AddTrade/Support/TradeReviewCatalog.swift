@@ -32,6 +32,53 @@ nonisolated enum TradeReviewCatalog {
         "Volatile",
     ]
 
+    static let customPsychologyToken = "Custom..."
+
+    static var emotionOptions: [String] { emotions + [customPsychologyToken] }
+
+    static var marketConditionOptions: [String] { marketConditions + [customPsychologyToken] }
+
+    static func resolvedPsychologyValue(selection: String, custom: String) -> String? {
+        let trimmedSelection = selection.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSelection.isEmpty else { return nil }
+        if trimmedSelection == customPsychologyToken {
+            let trimmedCustom = custom.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmedCustom.isEmpty ? nil : trimmedCustom
+        }
+        return trimmedSelection
+    }
+
+    static func psychologyPickerState(for stored: String?, presets: [String]) -> (selection: String, custom: String) {
+        let trimmed = stored?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return ("", "") }
+        if presets.contains(trimmed) {
+            return (trimmed, "")
+        }
+        return (customPsychologyToken, trimmed)
+    }
+
+    static func psychologyPickerStateFromDraft(
+        pickerSelection: String,
+        customText: String,
+        presets: [String]
+    ) -> (selection: String, custom: String) {
+        let selection = pickerSelection.trimmingCharacters(in: .whitespacesAndNewlines)
+        let custom = customText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if selection == customPsychologyToken {
+            return (selection, custom)
+        }
+        if !selection.isEmpty {
+            if presets.contains(selection) {
+                return (selection, "")
+            }
+            return (customPsychologyToken, selection)
+        }
+        if !custom.isEmpty {
+            return (customPsychologyToken, custom)
+        }
+        return ("", "")
+    }
+
     static func resolvedTimeframe(selection: String, custom: String) -> String? {
         let trimmedSelection = selection.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedSelection.isEmpty else { return nil }
@@ -53,30 +100,30 @@ nonisolated enum TradeReviewCatalog {
 
     static func hasPsychologyDetails(
         confidence: Int,
-        emotion: String,
-        followedPlan: Bool?,
-        marketCondition: String,
+        emotionBefore: String,
+        emotionAfter: String,
+        executionRating: Int,
         psychologyNotes: String
     ) -> Bool {
         confidence > 0
-            || !emotion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || followedPlan != nil
-            || !marketCondition.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !emotionBefore.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !emotionAfter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || executionRating > 0
             || !psychologyNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     static func psychologySummary(
         confidence: Int,
-        emotion: String,
-        followedPlan: Bool?,
-        marketCondition: String,
+        emotionBefore: String,
+        emotionAfter: String,
+        executionRating: Int,
         psychologyNotes: String
     ) -> String {
         guard hasPsychologyDetails(
             confidence: confidence,
-            emotion: emotion,
-            followedPlan: followedPlan,
-            marketCondition: marketCondition,
+            emotionBefore: emotionBefore,
+            emotionAfter: emotionAfter,
+            executionRating: executionRating,
             psychologyNotes: psychologyNotes
         ) else {
             return "Add psychology details"
@@ -86,18 +133,16 @@ nonisolated enum TradeReviewCatalog {
         if confidence > 0 {
             parts.append("Conviction \(confidence)/5")
         }
-        let trimmedEmotion = emotion.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedEmotion.isEmpty {
-            parts.append(trimmedEmotion)
+        let before = emotionBefore.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !before.isEmpty {
+            parts.append("Before: \(before)")
         }
-        let trimmedMarket = marketCondition.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedMarket.isEmpty {
-            parts.append(trimmedMarket)
+        let after = emotionAfter.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !after.isEmpty {
+            parts.append("After: \(after)")
         }
-        if followedPlan == true {
-            parts.append("Followed plan")
-        } else if followedPlan == false {
-            parts.append("Did not follow plan")
+        if executionRating > 0 {
+            parts.append("Exec \(executionRating)/5")
         }
 
         if parts.isEmpty {
@@ -109,9 +154,70 @@ nonisolated enum TradeReviewCatalog {
         }
 
         let joined = parts.joined(separator: " • ")
-        if joined.count > 64 {
-            return String(joined.prefix(61)) + "…"
+        if joined.count > 72 {
+            return String(joined.prefix(69)) + "…"
         }
         return joined
+    }
+
+  /// Appends a post-trade reflection line to psychology notes without touching journal notes.
+    static func mergePsychologyReflectionNote(existing: String?, newNote: String) -> String? {
+        let trimmed = newNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return existing?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? existing : nil }
+        let prior = existing?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if prior.isEmpty { return trimmed }
+        if prior.contains(trimmed) { return prior }
+        return prior + "\n\n" + trimmed
+    }
+
+    struct QuickReflectionPsychologyGaps: Sendable {
+        var needsConviction: Bool
+        var needsEmotionBefore: Bool
+        var needsEmotionAfter: Bool
+        var needsExecutionRating: Bool
+        var needsPsychologyNotes: Bool
+
+        var hasAnyGap: Bool {
+            needsConviction
+                || needsEmotionBefore
+                || needsEmotionAfter
+                || needsExecutionRating
+                || needsPsychologyNotes
+        }
+    }
+
+    static func quickReflectionGaps(for trade: Trade) -> QuickReflectionPsychologyGaps {
+        QuickReflectionPsychologyGaps(
+            needsConviction: (trade.confidence ?? 0) < 1,
+            needsEmotionBefore: trade.emotion?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+            needsEmotionAfter: trade.exitEmotion?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+            needsExecutionRating: (trade.executionRating ?? 0) < 1,
+            needsPsychologyNotes: trade.psychologyNotes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true
+        )
+    }
+
+    /// Quick reflection when every Add Trade psychology field is already captured.
+    static func quickReflectionIsRedundant(for trade: Trade) -> Bool {
+        !quickReflectionGaps(for: trade).hasAnyGap
+    }
+
+    static func applyPsychologyPatch(_ patch: PostTradePsychologySavePatch, to draft: inout TradeDraft) {
+        if let confidence = patch.confidence, confidence > 0 {
+            draft.confidence = confidence
+        }
+        if let emotion = patch.emotion?.trimmingCharacters(in: .whitespacesAndNewlines), !emotion.isEmpty {
+            draft.emotion = emotion
+        }
+        if let exitEmotion = patch.exitEmotion?.trimmingCharacters(in: .whitespacesAndNewlines), !exitEmotion.isEmpty {
+            draft.exitEmotion = exitEmotion
+        }
+        if let executionRating = patch.executionRating, executionRating > 0 {
+            draft.executionRating = executionRating
+        }
+        if let psychologyNotes = patch.psychologyNotes?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !psychologyNotes.isEmpty
+        {
+            draft.psychologyNotes = psychologyNotes
+        }
     }
 }

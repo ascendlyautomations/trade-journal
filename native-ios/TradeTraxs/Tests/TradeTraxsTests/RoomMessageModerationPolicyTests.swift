@@ -91,6 +91,26 @@ final class RoomMessageModerationPolicyTests: XCTestCase {
         )
     }
 
+    func testModeratorCannotDeleteModeratorMessage() {
+        let modTag = RoomMemberTag(
+            id: RoomMemberTagID("t-mod"),
+            roomID: RoomID("room"),
+            name: "Moderator",
+            colorKey: "purple",
+            isPreset: true
+        )
+        XCTAssertFalse(
+            RoomMessageModerationPolicy.canDeleteMessage(
+                viewerID: moderator,
+                senderProfileID: member,
+                isRoomOwner: false,
+                isRoomModerator: true,
+                roomOwnerProfileID: owner,
+                senderMemberTags: [modTag]
+            )
+        )
+    }
+
     func testModeratorCannotBanAnotherModerator() {
         let mod = moderatorOnly()
         let modTag = RoomMemberTag(

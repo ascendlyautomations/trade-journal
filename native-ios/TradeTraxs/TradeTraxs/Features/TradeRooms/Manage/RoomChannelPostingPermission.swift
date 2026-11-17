@@ -3,23 +3,23 @@ import Foundation
 /// Channel post permission — maps to `room_sections.allow_members_chat` (boolean).
 enum RoomChannelPostingPermission: CaseIterable, Hashable {
     case everyone
-    case ownersOnly
+    case moderatorsOnly
 
     static func from(allowMembersChat: Bool) -> RoomChannelPostingPermission {
-        allowMembersChat ? .everyone : .ownersOnly
+        allowMembersChat ? .everyone : .moderatorsOnly
     }
 
     var allowMembersChat: Bool {
         switch self {
         case .everyone: return true
-        case .ownersOnly: return false
+        case .moderatorsOnly: return false
         }
     }
 
     var summaryLabel: String {
         switch self {
         case .everyone: return "Everyone"
-        case .ownersOnly: return "Owners Only"
+        case .moderatorsOnly: return "Moderators Only"
         }
     }
 }

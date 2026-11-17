@@ -3,7 +3,6 @@
 import type { ComponentProps } from "react"
 import AchievementCard from "@/app/components/AchievementCard"
 import ProfileAchievementSocialCard from "@/app/components/ProfileAchievementSocialCard"
-import MobileWebProfileAchievementGrid from "@/app/components/mobile/profile/MobileWebProfileAchievementGrid"
 import type { FeedLikeMeta } from "@/app/components/feed/FeedPostCard"
 import type { Achievement } from "@/lib/achievements"
 
@@ -106,14 +105,13 @@ export default function ProfileAchievementsTab({
         </div>
       ) : (
         <>
-          <div className="md:hidden">
-            <MobileWebProfileAchievementGrid
-              achievements={[
-                ...achievements.filter((achievement) => achievement.is_featured),
-                ...achievements.filter((achievement) => !achievement.is_featured),
-              ]}
-              onOpenDetail={onOpenDetail}
-            />
+          <div className="space-y-3 md:hidden">
+            {achievements
+              .filter((achievement) => achievement.is_featured)
+              .map((achievement) => renderAchievement(achievement, true))}
+            {achievements
+              .filter((achievement) => !achievement.is_featured)
+              .map((achievement) => renderAchievement(achievement, false))}
           </div>
           <div className="hidden space-y-4 md:block">
             {achievements.some((achievement) => achievement.is_featured) ? (

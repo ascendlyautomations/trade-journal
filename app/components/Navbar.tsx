@@ -71,8 +71,8 @@ import {
   MOBILE_WEB_HIDE_NAVBAR_CLASS,
   openMobileWebCompose,
   resolveMobileWebNavChrome,
-  shouldUseMobileWebHistoryBack,
 } from "@/lib/mobileWebTabBar"
+import { followMobileWebBack } from "@/lib/mobileWebInAppHistory"
 import {
   getMobileWebTradeTitle,
   subscribeMobileWebTradeTitle,
@@ -1013,18 +1013,7 @@ export default function Navbar() {
                   onClick={() => {
                     const fallback = phoneWebNavChrome.backHref
                     if (!fallback) return
-                    if (
-                      typeof window !== "undefined" &&
-                      shouldUseMobileWebHistoryBack(
-                        document.referrer,
-                        window.location.origin,
-                        window.history.length
-                      )
-                    ) {
-                      router.back()
-                      return
-                    }
-                    router.push(fallback)
+                    followMobileWebBack(fallback, router)
                   }}
                 >
                   <ChevronLeft className="h-6 w-6" strokeWidth={2.25} aria-hidden />

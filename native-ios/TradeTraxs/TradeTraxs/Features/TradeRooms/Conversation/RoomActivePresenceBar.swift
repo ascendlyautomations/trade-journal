@@ -96,7 +96,7 @@ struct RoomActivePresenceSheet: View {
                         }
                         .buttonStyle(.experiencePlain)
                     }
-                    .listStyle(.plain)
+                    .experiencePlainListStyle()
                 }
             }
             .experienceScreenBackground()

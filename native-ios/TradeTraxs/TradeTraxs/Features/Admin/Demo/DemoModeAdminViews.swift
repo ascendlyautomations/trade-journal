@@ -458,6 +458,7 @@ struct DemoAdminEditorView: View {
                 }
             }
         }
+        .experienceTradeTraxsFormStyle(pageBackground: true)
     }
 
     @ViewBuilder private var fields: some View {

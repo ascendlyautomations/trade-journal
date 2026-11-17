@@ -14,33 +14,7 @@ struct DashboardScopeFilterSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: sectionSpacing) {
                     filterSection("Time Period") {
-                        menuPickerRow(title: "Period") {
-                            Picker("Time Period", selection: $viewModel.draftScopeFilters.timePeriod) {
-                                ForEach(DashboardTimePeriodPicker.allCases) { period in
-                                    Text(period.title).tag(period)
-                                }
-                            }
-                            .labelsHidden()
-                        }
-
-                        if viewModel.draftScopeFilters.timePeriod == .custom {
-                            VStack(spacing: labelControlSpacing) {
-                                DatePicker(
-                                    "Start",
-                                    selection: customStartBinding,
-                                    in: ...Date(),
-                                    displayedComponents: .date
-                                )
-                                .datePickerStyle(.compact)
-                                DatePicker(
-                                    "End",
-                                    selection: customEndBinding,
-                                    in: ...Date(),
-                                    displayedComponents: .date
-                                )
-                                .datePickerStyle(.compact)
-                            }
-                        }
+                        DashboardScopeTimePeriodFields(draft: $viewModel.draftScopeFilters)
                     }
 
                     filterSection("Account Type") {
@@ -123,17 +97,75 @@ struct DashboardScopeFilterSheet: View {
         .background(colors.fillSecondary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
+}
+
+/// Shared time period picker row — Dashboard filter sheet and Trading Rules Analytics.
+struct DashboardScopeTimePeriodFields: View {
+    @Binding var draft: DashboardScopeFilterDraft
+
+    @Environment(\.themeColors) private var colors
+
+    private let labelControlSpacing = ExperienceSpacing.xs
+
+    var body: some View {
+        menuPickerRow(title: "Period") {
+            Picker("Time Period", selection: $draft.timePeriod) {
+                ForEach(DashboardTimePeriodPicker.allCases) { period in
+                    Text(period.title).tag(period)
+                }
+            }
+            .labelsHidden()
+        }
+
+        if draft.timePeriod == .custom {
+            VStack(spacing: labelControlSpacing) {
+                DatePicker(
+                    "Start",
+                    selection: customStartBinding,
+                    in: ...Date(),
+                    displayedComponents: .date
+                )
+                .datePickerStyle(.compact)
+                DatePicker(
+                    "End",
+                    selection: customEndBinding,
+                    in: ...Date(),
+                    displayedComponents: .date
+                )
+                .datePickerStyle(.compact)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func menuPickerRow<PickerContent: View>(
+        title: String,
+        @ViewBuilder picker: () -> PickerContent
+    ) -> some View {
+        HStack(spacing: ExperienceSpacing.sm) {
+            Text(title)
+                .experienceStyle(.body, color: colors.primaryText)
+            Spacer(minLength: ExperienceSpacing.xs)
+            picker()
+                .pickerStyle(.menu)
+                .tint(colors.accent)
+        }
+        .frame(minHeight: ExperienceSpacing.minTouchTarget, alignment: .center)
+        .padding(.horizontal, ExperienceSpacing.sm)
+        .background(colors.fillSecondary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
     private var customStartBinding: Binding<Date> {
         Binding(
-            get: { viewModel.draftScopeFilters.customStart ?? Date() },
-            set: { viewModel.draftScopeFilters.customStart = $0 }
+            get: { draft.customStart ?? Date() },
+            set: { draft.customStart = $0 }
         )
     }
 
     private var customEndBinding: Binding<Date> {
         Binding(
-            get: { viewModel.draftScopeFilters.customEnd ?? Date() },
-            set: { viewModel.draftScopeFilters.customEnd = $0 }
+            get: { draft.customEnd ?? Date() },
+            set: { draft.customEnd = $0 }
         )
     }
 }

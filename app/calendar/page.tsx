@@ -23,7 +23,6 @@ import { deleteUserTrade } from "@/lib/deleteTrade"
 import {
   buildAccountFilterOptionsFromRows,
   formatTradeAccountNameSizeLine,
-  tradeMatchesAccountFilter,
 } from "@/lib/tradeAccountDisplay"
 import { isValidAccountFilterValue } from "@/lib/tradeAccountSelection"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
@@ -50,6 +49,7 @@ import MobileWebCalendarMonthSummary from "@/app/components/mobile/calendar/Mobi
 import MobileWebCalendarYearView from "@/app/components/mobile/calendar/MobileWebCalendarYearView"
 import { buildMobileWebCalendarYearOverview } from "@/lib/mobileWebCalendarYear"
 import { MOBILE_WEB_NEUTRAL_PAGE_BG } from "@/lib/mobileWebPageSurface"
+import { tradeVisibleInCalendarFilters } from "@/lib/calendarTradeVisibility"
 export default function CalendarPage() {
   useScrollPageTopOnMount()
   const router = useRouter()
@@ -129,9 +129,23 @@ export default function CalendarPage() {
     void ensureRichTradeRowsByIds(supabase, user.id, missingIds)
   }, [selectedDate, selectedTrades, user?.id])
 
+  function calendarTradeVisible(trade: {
+    account_id?: string | null
+    mode?: string | null
+    account_type?: string | null
+  }) {
+    const id = String(trade.account_id ?? "").trim()
+    return tradeVisibleInCalendarFilters(trade, {
+      accountFilter,
+      accountRow: id ? accountById[id] : null,
+      selectedMode,
+    })
+  }
+
   async function handleTradeFormSaved() {
     if (selectedDate) {
       const list = trades.filter((trade) => {
+        if (!calendarTradeVisible(trade)) return false
         const resolved = resolveTradingTimeSourceForKey(trade)
         if (!resolved) return false
         return getTradingDayKey(resolved) === selectedDate
@@ -185,43 +199,11 @@ export default function CalendarPage() {
     }
   }, [accountFilter, accountFilterOptions])
 
-  const filteredTrades = trades.filter((trade) => {
-    if (accountFilter !== "all") {
-      const id = String(trade.account_id ?? "").trim()
-      const accountRow = id ? accountById[id] : null
-      if (!tradeMatchesAccountFilter(trade, accountFilter, accountRow)) {
-        return false
-      }
-    }
-    if (selectedMode === "all") return true
-    const m = selectedMode.toLowerCase()
-    return (
-      trade.mode?.toLowerCase() === m ||
-      trade.account_type?.toLowerCase() === m
-    )
-  })
+  const filteredTrades = trades.filter((trade) => calendarTradeVisible(trade))
 
   useEffect(() => {
     if (!selectedDate) return
-    const visible = trades.filter((trade) => {
-      if (accountFilter !== "all") {
-        const id = String(trade.account_id ?? "").trim()
-        const accountRow = id ? accountById[id] : null
-        if (!tradeMatchesAccountFilter(trade, accountFilter, accountRow)) {
-          return false
-        }
-      }
-      if (selectedMode !== "all") {
-        const mode = selectedMode.toLowerCase()
-        if (
-          trade.mode?.toLowerCase() !== mode &&
-          trade.account_type?.toLowerCase() !== mode
-        ) {
-          return false
-        }
-      }
-      return true
-    })
+    const visible = trades.filter((trade) => calendarTradeVisible(trade))
     const list = visible.filter((trade) => {
       const resolved = resolveTradingTimeSourceForKey(trade)
       if (!resolved) return false

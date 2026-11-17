@@ -28,13 +28,49 @@ final class TradeReviewCatalogTests: XCTestCase {
         XCTAssertEqual(mapped.custom, "45 Second")
     }
 
+    func testResolvedPsychologyValueUsesPreset() {
+        XCTAssertEqual(
+            TradeReviewCatalog.resolvedPsychologyValue(selection: "Calm", custom: ""),
+            "Calm"
+        )
+    }
+
+    func testResolvedPsychologyValueUsesCustomText() {
+        XCTAssertEqual(
+            TradeReviewCatalog.resolvedPsychologyValue(
+                selection: TradeReviewCatalog.customPsychologyToken,
+                custom: "Anxious but decisive"
+            ),
+            "Anxious but decisive"
+        )
+    }
+
+    func testPsychologyPickerStateMapsUnknownStoredValueToCustom() {
+        let mapped = TradeReviewCatalog.psychologyPickerState(
+            for: "Anxious but decisive",
+            presets: TradeReviewCatalog.emotions
+        )
+        XCTAssertEqual(mapped.selection, TradeReviewCatalog.customPsychologyToken)
+        XCTAssertEqual(mapped.custom, "Anxious but decisive")
+    }
+
+    func testPsychologyPickerStateFromDraftHandlesLegacyWireOnlyValue() {
+        let mapped = TradeReviewCatalog.psychologyPickerStateFromDraft(
+            pickerSelection: "Auction imbalance",
+            customText: "",
+            presets: TradeReviewCatalog.marketConditions
+        )
+        XCTAssertEqual(mapped.selection, TradeReviewCatalog.customPsychologyToken)
+        XCTAssertEqual(mapped.custom, "Auction imbalance")
+    }
+
     func testPsychologySummaryPlaceholderWhenEmpty() {
         XCTAssertEqual(
             TradeReviewCatalog.psychologySummary(
                 confidence: 0,
-                emotion: "",
-                followedPlan: false,
-                marketCondition: "",
+                emotionBefore: "",
+                emotionAfter: "",
+                executionRating: 0,
                 psychologyNotes: ""
             ),
             "Add psychology details"
@@ -45,26 +81,101 @@ final class TradeReviewCatalogTests: XCTestCase {
         XCTAssertEqual(
             TradeReviewCatalog.psychologySummary(
                 confidence: 4,
-                emotion: "Calm",
-                followedPlan: false,
-                marketCondition: "",
+                emotionBefore: "Calm",
+                emotionAfter: "",
+                executionRating: 0,
                 psychologyNotes: ""
             ),
-            "Conviction 4/5 • Calm"
+            "Conviction 4/5 • Before: Calm"
         )
     }
 
-    func testPsychologySummaryIncludesMarketAndFollowedPlan() {
+    func testPsychologySummaryIncludesExitEmotionAndExecution() {
         XCTAssertEqual(
             TradeReviewCatalog.psychologySummary(
                 confidence: 3,
-                emotion: "",
-                followedPlan: true,
-                marketCondition: "Trending",
+                emotionBefore: "",
+                emotionAfter: "Focused",
+                executionRating: 4,
                 psychologyNotes: ""
             ),
-            "Conviction 3/5 • Trending • Followed plan"
+            "Conviction 3/5 • After: Focused • Exec 4/5"
         )
+    }
+
+    func testMergePsychologyReflectionNoteAppendsWithoutOverwritingJournal() {
+        let merged = TradeReviewCatalog.mergePsychologyReflectionNote(
+            existing: "Pre-trade calm.",
+            newNote: "Took profit early."
+        )
+        XCTAssertEqual(merged, "Pre-trade calm.\n\nTook profit early.")
+    }
+
+    func testQuickReflectionSkippedWhenPsychologyCapturedInAddTrade() {
+        let trade = Trade(
+            id: TradeID("t"),
+            ownerProfileID: ProfileID("u"),
+            accountID: nil,
+            symbol: Symbol(ticker: "ES"),
+            side: .long,
+            mode: .live,
+            quantity: 1,
+            entryAt: .now,
+            visibility: .private,
+            confidence: 4,
+            emotion: "Focused",
+            psychologyNotes: "Waited for pullback.",
+            exitEmotion: "Calm",
+            executionRating: 4,
+            createdAt: .now,
+            updatedAt: .now
+        )
+        XCTAssertTrue(TradeReviewCatalog.quickReflectionIsRedundant(for: trade))
+    }
+
+    func testQuickReflectionOfferedWhenAnyPsychologyFieldMissing() {
+        let trade = Trade(
+            id: TradeID("t"),
+            ownerProfileID: ProfileID("u"),
+            accountID: nil,
+            symbol: Symbol(ticker: "ES"),
+            side: .long,
+            mode: .live,
+            quantity: 1,
+            entryAt: .now,
+            visibility: .private,
+            confidence: 3,
+            emotion: "Calm",
+            exitEmotion: "Calm",
+            executionRating: 4,
+            createdAt: .now,
+            updatedAt: .now
+        )
+        XCTAssertFalse(TradeReviewCatalog.quickReflectionIsRedundant(for: trade))
+        XCTAssertTrue(TradeReviewCatalog.quickReflectionGaps(for: trade).needsPsychologyNotes)
+    }
+
+    func testApplyPsychologyPatchOnlyUpdatesProvidedFields() {
+        var draft = TradeDraft(
+            symbol: Symbol(ticker: "ES"),
+            side: .long,
+            mode: .live,
+            quantity: 1,
+            entryAt: .now,
+            visibility: .private
+        )
+        draft.confidence = 5
+        draft.emotion = "Calm"
+        draft.psychologyNotes = "Existing"
+
+        let patch = PostTradePsychologySavePatch(exitEmotion: "Focused", executionRating: 3)
+        TradeReviewCatalog.applyPsychologyPatch(patch, to: &draft)
+
+        XCTAssertEqual(draft.confidence, 5)
+        XCTAssertEqual(draft.emotion, "Calm")
+        XCTAssertEqual(draft.psychologyNotes, "Existing")
+        XCTAssertEqual(draft.exitEmotion, "Focused")
+        XCTAssertEqual(draft.executionRating, 3)
     }
 }
 
@@ -200,11 +311,64 @@ final class AddTradePsychologyViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.timeframeSelection, "5m")
         XCTAssertTrue(viewModel.newsEvent)
         XCTAssertEqual(viewModel.confidenceLevel, 3)
-        XCTAssertEqual(viewModel.emotionSelection, "Calm")
+        XCTAssertEqual(viewModel.emotionPickerSelection, "Calm")
         XCTAssertEqual(viewModel.followedPlan, true)
-        XCTAssertEqual(viewModel.marketConditionSelection, "Trending")
+        XCTAssertEqual(viewModel.marketConditionPickerSelection, "Trending")
         XCTAssertEqual(viewModel.psychologyNotesText, "Felt good about the setup.")
-        XCTAssertEqual(viewModel.psychologySummary, "Conviction 3/5 • Calm • Trending • Followed plan")
+        XCTAssertEqual(viewModel.psychologySummary, "Conviction 3/5 • Before: Calm")
+    }
+
+    func testApplyTradeHydratesCustomEmotionAndMarket() {
+        let trade = Trade(
+            id: TradeID("t-psych-custom"),
+            ownerProfileID: ProfileID("viewer"),
+            accountID: nil,
+            symbol: Symbol(ticker: "ES"),
+            side: .long,
+            mode: .live,
+            quantity: 1,
+            entryPrice: nil,
+            exitPrice: nil,
+            entryAt: .now,
+            exitAt: nil,
+            realizedPnL: Money(amount: 100),
+            riskReward: nil,
+            points: nil,
+            sessionLabel: "NY",
+            visibility: .private,
+            publicCaption: nil,
+            thumbnail: nil,
+            notePreview: nil,
+            notes: nil,
+            strategy: nil,
+            timeframe: nil,
+            newsEvent: nil,
+            confidence: 2,
+            emotion: "Impatient",
+            followedPlan: nil,
+            marketCondition: "Opening drive",
+            psychologyNotes: nil,
+            createdAt: .now,
+            updatedAt: .now
+        )
+
+        let viewModel = AddTradeViewModel(
+            trades: AddTradePsychologyStubRepository(),
+            feed: AddTradePsychologyStubFeed(),
+            session: AddTradePsychologyStubSession(),
+            detailCache: DetailPresentationCache(),
+            uploadService: AddTradePsychologyStubUpload(),
+            objectStorage: AddTradePsychologyStubStorage(),
+            mode: .edit(trade.id),
+            onDismiss: {}
+        )
+        viewModel.applyTradeForTesting(trade)
+
+        XCTAssertEqual(viewModel.emotionPickerSelection, TradeReviewCatalog.customPsychologyToken)
+        XCTAssertEqual(viewModel.emotionCustomText, "Impatient")
+        XCTAssertEqual(viewModel.marketConditionPickerSelection, TradeReviewCatalog.customPsychologyToken)
+        XCTAssertEqual(viewModel.marketConditionCustomText, "Opening drive")
+        XCTAssertEqual(viewModel.psychologySummary, "Conviction 2/5 • Impatient • Opening drive")
     }
     #endif
 
@@ -280,7 +444,12 @@ private struct AddTradePsychologyStubFeed: FeedRepository {
         ProfileReelsResult(reels: [], embeddedTrades: [])
     }
     func createReel(_ reel: Reel) async throws -> Reel { reel }
-    func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel] { [] }
+    func unattachedReels(
+        for profileID: ProfileID,
+        limit: Int,
+        includingReelID: ReelID?
+    ) async throws -> [Reel] { [] }
+    func tradeIDsWithAttachedReels(owner: ProfileID) async throws -> Set<TradeID> { [] }
     func attachReel(id: ReelID, to tradeID: TradeID) async throws {}
     func tradeHasAttachedReel(_ tradeID: TradeID) async throws -> Bool { false }
 }

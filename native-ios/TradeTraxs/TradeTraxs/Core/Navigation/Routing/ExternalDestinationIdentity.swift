@@ -175,6 +175,12 @@ enum ExternalDestinationIdentity {
             return "withdrawal:\(id)"
         case .psychologyAnalytics:
             return "screen:psychology-analytics"
+        case .tradingRulesAnalytics:
+            return "screen:trading-rules-analytics"
+        case .tradingRulesRuleDetail(let ruleID):
+            return "trading-rules-rule:\(ruleID)"
+        case .tradingRulesDayDetail(let day):
+            return "trading-rules-day:\(day)"
         case .tradingScorecard:
             return "screen:trading-scorecard"
         case .psychologyCoach:
@@ -216,6 +222,12 @@ enum ExternalDestinationIdentity {
             return "screen:leaderboard"
         case .settings(let settings):
             return "settings:\(settings.rawValue)"
+        case .tradingRulesAnalytics:
+            return "screen:trading-rules-analytics"
+        case .tradingRulesRuleDetail(let ruleID):
+            return "trading-rules-rule:\(ruleID)"
+        case .tradingRulesDayDetail(let day):
+            return "trading-rules-day:\(day)"
         }
     }
 
@@ -243,6 +255,12 @@ enum ExternalDestinationIdentity {
             return "following:\(id.rawValue)"
         case .settings(let settings):
             return "settings:\(settings.rawValue)"
+        case .tradingRulesAnalytics:
+            return "screen:trading-rules-analytics"
+        case .tradingRulesRuleDetail(let ruleID):
+            return "trading-rules-rule:\(ruleID)"
+        case .tradingRulesDayDetail(let day):
+            return "trading-rules-day:\(day)"
         }
     }
 
@@ -282,6 +300,12 @@ enum ExternalDestinationIdentity {
             return "screen:help"
         case .admin(let route):
             return "admin:\(String(describing: route))"
+        case .tradingRulesAnalytics:
+            return "screen:trading-rules-analytics"
+        case .tradingRulesRuleDetail(let ruleID):
+            return "trading-rules-rule:\(ruleID)"
+        case .tradingRulesDayDetail(let day):
+            return "trading-rules-day:\(day)"
         }
     }
 

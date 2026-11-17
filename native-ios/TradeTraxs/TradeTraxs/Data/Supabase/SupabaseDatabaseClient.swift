@@ -66,6 +66,12 @@ nonisolated protocol SupabaseDatabaseExecuting: Sendable {
 
     func delete(from table: String, query: [URLQueryItem]) async throws
 
+    func deleteReturning<T: Decodable>(
+        _ type: T.Type,
+        from table: String,
+        query: [URLQueryItem]
+    ) async throws -> [T]
+
     func rpcData(functionName: String, parametersJSON: Data?) async throws -> Data
 
     /// Guest-readable RPC. Uses the anon key and does not require a user access token.
@@ -354,6 +360,25 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
         )
     }
 
+    func deleteReturning<T: Decodable>(
+        _ type: T.Type,
+        from table: String,
+        query: [URLQueryItem]
+    ) async throws -> [T] {
+        DatabaseRequestDebugLog.write(operation: "DELETE", target: table, reason: "delete-returning")
+        let response = try await transport.send(
+            host: .supabase,
+            path: "/rest/v1/\(table)",
+            method: .delete,
+            queryItems: query,
+            headers: [
+                "Prefer": "return=representation",
+                "Accept": "application/json",
+            ]
+        )
+        return try transport.decoder.decode([T].self, from: response)
+    }
+
     func rpcData(functionName: String, parametersJSON: Data?) async throws -> Data {
         DatabaseRequestDebugLog.write(operation: "RPC", target: functionName, reason: "rpc")
         DatabaseRequestDebugLog.rpc(functionName)
@@ -489,6 +514,15 @@ nonisolated struct UnconfiguredSupabaseDatabaseClient: SupabaseDatabaseExecuting
 
     func delete(from table: String, query: [URLQueryItem]) async throws {
         _ = (table, query)
+        throw AppError.authentication(.notConfigured)
+    }
+
+    func deleteReturning<T: Decodable>(
+        _ type: T.Type,
+        from table: String,
+        query: [URLQueryItem]
+    ) async throws -> [T] {
+        _ = (type, table, query)
         throw AppError.authentication(.notConfigured)
     }
 

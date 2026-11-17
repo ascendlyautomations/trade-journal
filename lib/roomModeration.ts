@@ -1,3 +1,5 @@
+import { memberHasElevatedTag } from "./tradeRoomModerationPermission.ts"
+
 type RoomMessageLike = {
   user_id: string
   type?: string | null
@@ -41,6 +43,8 @@ export function canDeleteRoomMessage(
     isRoomOwner: boolean
     isRoomModerator?: boolean
     roomOwnerUserId?: string | null
+    senderTagIds?: string[]
+    tags?: { id: string; name: string }[]
   }
 ): boolean {
   if (!viewerUserId) return false
@@ -51,6 +55,18 @@ export function canDeleteRoomMessage(
     options.roomOwnerUserId &&
     message.user_id === options.roomOwnerUserId &&
     !options.isRoomOwner
+  ) {
+    return false
+  }
+  if (
+    options.isRoomModerator &&
+    !options.isRoomOwner &&
+    options.senderTagIds &&
+    options.tags &&
+    memberHasElevatedTag({
+      tagIds: options.senderTagIds,
+      tags: options.tags,
+    })
   ) {
     return false
   }

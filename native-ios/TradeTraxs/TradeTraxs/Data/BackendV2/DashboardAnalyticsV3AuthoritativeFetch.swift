@@ -34,4 +34,23 @@ nonisolated enum DashboardAnalyticsV3AuthoritativeFetch {
         )
         return bootstrap
     }
+
+    /// Lightweight revision probe — avoids full dashboard bootstrap when local GRDB/VM is current.
+    static func fetchRemoteRevision(
+        viewerID: ProfileID,
+        rpc: any RPCClient
+    ) async -> Int64? {
+        let flightKey = BackendV2FlightKeys.analyticsRevision(viewerID: viewerID.rawValue)
+        do {
+            let encoded = try await BackendV2SingleFlight.shared.coalesce(key: flightKey) {
+                let repo = AnalyticsRevisionRepository(rpc: rpc)
+                let response = try await repo.loadRevision()
+                return try JSONEncoder().encode(response)
+            }
+            let server = try JSONDecoder().decode(AnalyticsRevisionV1.self, from: encoded)
+            return server.revisionInt
+        } catch {
+            return nil
+        }
+    }
 }

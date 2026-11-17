@@ -25,9 +25,11 @@ extension View {
                     imagePipeline: imagePipeline,
                     coordinator: coordinator
                 )
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-                .interactiveDismissDisabled(false)
+                .experienceSheetChrome(
+                    detents: [.large],
+                    dragIndicator: .hidden,
+                    interactiveDismiss: false
+                )
             }
         }
     }

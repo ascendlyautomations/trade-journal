@@ -56,6 +56,7 @@ struct AppRootView: View {
         .sheet(item: sheetBinding) { destination in
             sheetContent(destination)
                 .applyThemeEnvironment(themeManager.themeEnvironment)
+                .experienceThemedPresentationBackground()
         }
         .sheet(item: $contentReportPresenter.activeRequest) { request in
             ContentReportSheet(
@@ -74,6 +75,7 @@ struct AppRootView: View {
                 }
             )
             .applyThemeEnvironment(themeManager.themeEnvironment)
+            .experienceThemedPresentationBackground()
         }
         .sheet(isPresented: $gettingStartedStore.showsGettingStartedCompletion, onDismiss: {
             if gettingStartedStore.consumeReviewRequestAfterCompletion() {
@@ -84,6 +86,7 @@ struct AppRootView: View {
                 gettingStartedStore.showsGettingStartedCompletion = false
             }
             .applyThemeEnvironment(themeManager.themeEnvironment)
+            .experienceThemedPresentationBackground()
         }
         .sheet(isPresented: $thirdPartyAIConsentPresenter.isPresented, onDismiss: {
             thirdPartyAIConsentPresenter.handleSheetDismissed()
@@ -93,10 +96,12 @@ struct AppRootView: View {
                 onNotNow: { thirdPartyAIConsentPresenter.decline() }
             )
             .applyThemeEnvironment(themeManager.themeEnvironment)
+            .experienceThemedPresentationBackground()
         }
         .fullScreenCover(item: fullScreenBinding) { destination in
             fullScreenContent(destination)
                 .applyThemeEnvironment(themeManager.themeEnvironment)
+                .experienceThemedPresentationBackground(fullScreen: true)
         }
         .onAppear {
             themeManager.updateInterfaceStyle(colorScheme)
@@ -399,6 +404,10 @@ struct AppRootView: View {
     }
 
     private var mainAuthenticatedShell: some View {
+        authenticatedMainTabs
+    }
+
+    private var authenticatedMainTabs: some View {
         MainTabShellView(
             store: navigation.store,
             coordinator: navigation.coordinator,
@@ -438,6 +447,12 @@ struct AppRootView: View {
             let tour = ContextualTourCoordinator.shared
             guard tour.phase == .measuring || tour.phase == .presenting else { return }
             applyAppWalkthroughNavigation(request)
+        }
+        .onChange(of: ContextualTourCoordinator.shared.phase) { _, phase in
+            guard phase == .idle else { return }
+            guard ContextualTourCoordinator.shared.consumeOpenTradingRulesAfterCompletion() else { return }
+            navigation.coordinator.selectTab(.profile)
+            navigation.store.paths.profile = [.settings(.home), .settings(.tradingAnalytics)]
         }
         .onChange(of: navigation.store.selectedTab) { _, _ in
             OwnerAccountFilterDropdownController.shared.dismiss()
@@ -738,7 +753,7 @@ struct AppRootView: View {
         case .composeChooser:
             return [.fraction(0.60)]
         case .dailyCheckIn:
-            return [.fraction(0.65), .large]
+            return [.large]
         case .tradeImportReminder:
             return [.fraction(0.55)]
         case .quickTrade, .accountSwitcher:
@@ -767,12 +782,8 @@ struct AppRootView: View {
         case .settings:
             navigation.coordinator.selectTab(.profile)
             navigation.coordinator.pushProfileSettingsHome(source: "appWalkthrough")
-        case .payouts:
-            navigation.coordinator.selectTab(.profile)
-            navigation.store.paths.profile = [.settings(.home), .settings(.payouts)]
-        case .expenseTracker:
-            navigation.coordinator.selectTab(.profile)
-            navigation.store.paths.profile = [.settings(.home), .settings(.propFirmExpenses)]
+        case .payouts, .expenseTracker:
+            break
         }
     }
 

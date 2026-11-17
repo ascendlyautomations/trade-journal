@@ -1,6 +1,6 @@
 import type { TraderDailyCheckIn } from "../../dailyCheckIn/types.ts"
-import { enrichPsychologyTrades, resolveSequenceBucket } from "./enrich.ts"
-import { psychologyTradeMetrics, qualifiesForComparison, qualifiesForDashboardCard } from "./metrics.ts"
+import { derivePsychologyGuardrails } from "./comparisons.ts"
+import { enrichPsychologyTrades } from "./enrich.ts"
 import { analyzePsychologyTrends } from "./trends.ts"
 import type {
   PsychologyAnalyticsReport,
@@ -29,7 +29,7 @@ export function buildPsychologyDataGapMessages(
   if (report.baseline.tradeCount < 5) {
     gaps.push("Log at least 5 trades to unlock personalized coaching.")
   }
-  if (report.checkInMatchedTradeCount < 5) {
+  if (report.matchedDayCount < 5) {
     gaps.push(
       "Complete daily check-ins on trading days to unlock sleep and mental-state patterns."
     )
@@ -61,63 +61,12 @@ export function buildPsychologyCoachFacts(
   report: PsychologyAnalyticsReport,
   trades: readonly PsychologyReportTrade[],
   checkIns: readonly TraderDailyCheckIn[],
-  now: Date = new Date()
+  now: Date = new Date(),
+  preferences: import("@/lib/analytics/preferenceCompliance.ts").PreferenceRuleContext | null = null
 ): PsychologyCoachFacts {
-  const enriched = enrichPsychologyTrades(trades, checkIns)
+  const enriched = enrichPsychologyTrades(trades, checkIns, preferences)
   const trends = analyzePsychologyTrends(trades, checkIns)
-  const afterTwo = enriched.filter((row) => row.consecutiveLossesBefore >= 2)
-  const afterTwoMetrics = psychologyTradeMetrics(afterTwo.map((row) => row.trade))
-
-  let lowSleepHoursThreshold: number | null = null
-  let lowSleepExpectancy: number | null = null
-  const lowSleep = enriched.filter((row) => {
-    const hours = row.dailyCheckIn?.sleepHours
-    return hours != null && hours < 6
-  })
-  if (lowSleep.length >= 10) {
-    const metrics = psychologyTradeMetrics(lowSleep.map((row) => row.trade))
-    if (qualifiesForComparison(metrics.reliability)) {
-      lowSleepHoursThreshold = 6
-      lowSleepExpectancy = metrics.expectancy ?? metrics.averagePnL
-    }
-  }
-
-  let maxTradesDaySoftLimit: number | null = null
-  let lateTradeAveragePnL: number | null = null
-  let earlyTradeAveragePnL: number | null = null
-  const grouped = new Map<string, typeof enriched>()
-  for (const item of enriched) {
-    const bucket = resolveSequenceBucket(item.tradeNumberInDay)
-    const list = grouped.get(bucket) ?? []
-    list.push(item)
-    grouped.set(bucket, list)
-  }
-  const early = [
-    ...(grouped.get("Trade #1") ?? []),
-    ...(grouped.get("Trade #2") ?? []),
-    ...(grouped.get("Trade #3") ?? []),
-  ]
-  const late = grouped.get("Trade #5+") ?? []
-  if (early.length >= 5 && late.length >= 5) {
-    const earlyM = psychologyTradeMetrics(early.map((row) => row.trade))
-    const lateM = psychologyTradeMetrics(late.map((row) => row.trade))
-    if (
-      qualifiesForDashboardCard(earlyM.reliability) &&
-      qualifiesForDashboardCard(lateM.reliability) &&
-      (earlyM.averagePnL ?? 0) > (lateM.averagePnL ?? 0) + 5
-    ) {
-      maxTradesDaySoftLimit = 4
-      earlyTradeAveragePnL = earlyM.averagePnL
-      lateTradeAveragePnL = lateM.averagePnL
-    }
-  }
-
-  const checkpoint =
-    afterTwo.length >= 10 &&
-    qualifiesForComparison(afterTwoMetrics.reliability) &&
-    (afterTwoMetrics.winRate ?? 0) < (report.baseline.winRate ?? 0) - 0.05
-      ? 2
-      : null
+  const guardrails = derivePsychologyGuardrails(enriched, preferences)
 
   const combined = [
     ...report.dashboardCards.filter((card) => card.category === "combined"),
@@ -151,16 +100,7 @@ export function buildPsychologyCoachFacts(
     topInsights: report.dashboardCards.map(factInsight),
     combinedPatterns: combinedFacts,
     trends,
-    guardrailFacts: {
-      consecutiveLossCheckpoint: checkpoint,
-      consecutiveLossWinRateAfter: afterTwoMetrics.winRate,
-      consecutiveLossBaselineWinRate: report.baseline.winRate,
-      lowSleepHoursThreshold,
-      lowSleepExpectancy,
-      maxTradesDaySoftLimit,
-      lateTradeAveragePnL,
-      earlyTradeAveragePnL,
-    },
+    guardrailFacts: guardrails,
     dataGaps: buildPsychologyDataGapMessages(report, trades),
     hasMinimumData: report.baseline.tradeCount >= 5,
   }

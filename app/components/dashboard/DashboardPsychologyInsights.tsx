@@ -24,17 +24,12 @@ import { psychologySectionIdForCategory } from "@/lib/psychology/sectionId"
 import { hydratePsychologySession } from "@/lib/psychology/hydratePsychologySession"
 import { setPsychologyAnalyticsScope } from "@/lib/psychology/psychologySessionStore"
 import { createPsychologyAnalyticsScope } from "@/lib/psychology/psychologyScope"
-import {
-  buildEarlyPsychologyInsightCards,
-  hasMatchedPsychologyData,
-  mergePsychologyInsightCards,
-} from "@/lib/psychology/dailyPsychologyInsights"
+import { hasMatchedPsychologyData } from "@/lib/psychology/dailyPsychologyInsights"
 import {
   displayCheckInDayCountForGate,
   displayTradeCountForGate,
   PSYCHOLOGY_INSIGHTS_REQUIRED_COUNT,
 } from "@/lib/psychology/unlockProgress"
-import { reliabilityLabel } from "@/lib/psychology/reports/metrics"
 import type { PsychologyInsightCard } from "@/lib/psychology/reports/types"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { useProGate } from "@/lib/useProGate"
@@ -201,10 +196,6 @@ function PsychologyInsightCardRow({
         <span className="mt-0.5 block text-xs text-gray-400">
           {normalizeAIGeneratedText(card.detail)}
         </span>
-        <span className="mt-1 block text-[10px] text-gray-500">
-          {reliabilityLabel(card.reliability)}
-          {card.sampleSize > 0 ? ` · ${card.sampleSize} trades` : ""}
-        </span>
       </span>
       <span className="shrink-0 text-xs text-gray-500" aria-hidden>
         ›
@@ -275,10 +266,7 @@ export default function DashboardPsychologyInsights({
     userId,
   ])
 
-  const displayCards = useMemo(() => {
-    const early = buildEarlyPsychologyInsightCards(trades, checkIns)
-    return mergePsychologyInsightCards(early, cards)
-  }, [trades, checkIns, cards])
+  const displayCards = cards
 
   const hasMatched = useMemo(
     () => hasMatchedPsychologyData(trades, checkIns),

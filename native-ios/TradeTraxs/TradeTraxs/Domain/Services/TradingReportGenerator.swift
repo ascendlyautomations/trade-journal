@@ -10,11 +10,12 @@ nonisolated enum TradingReportGenerator {
 
     static func generateAll(
         trades: [Trade],
-        now: Date = Date()
+        now: Date = Date(),
+        preferences: PreferenceRuleContext? = nil
     ) -> [TradingReportPeriodKey: TradingReport] {
         var result: [TradingReportPeriodKey: TradingReport] = [:]
         for key in TradingReportPeriodKey.allCases {
-            result[key] = generate(trades: trades, periodKey: key, now: now)
+            result[key] = generate(trades: trades, periodKey: key, now: now, preferences: preferences)
         }
         return result
     }
@@ -22,31 +23,44 @@ nonisolated enum TradingReportGenerator {
     static func generate(
         trades: [Trade],
         periodKey: TradingReportPeriodKey,
-        now: Date = Date()
+        now: Date = Date(),
+        preferences: PreferenceRuleContext? = nil
     ) -> TradingReport {
         let bounds = TradingReportPeriods.bounds(for: periodKey, now: now)
+        return generate(trades: trades, bounds: bounds, now: now, preferences: preferences)
+    }
+
+    static func generate(
+        trades: [Trade],
+        week: TradingReportWeekRef,
+        now: Date = Date(),
+        preferences: PreferenceRuleContext? = nil
+    ) -> TradingReport {
+        let bounds = TradingReportPeriods.bounds(forWeekStarting: week.mondayKey, now: now)
+            ?? TradingReportPeriods.bounds(for: .weeklyThis, now: now)
+        return generate(trades: trades, bounds: bounds, now: now, preferences: preferences)
+    }
+
+    private static func generate(
+        trades: [Trade],
+        bounds: TradingReportPeriods.Bounds,
+        now: Date,
+        preferences: PreferenceRuleContext?
+    ) -> TradingReport {
+        let periodKey = bounds.key
+        _ = now
         let periodTrades = filterTrades(trades, bounds: bounds)
         let metrics = buildMetrics(periodTrades)
 
-        let comparisonKey: TradingReportPeriodKey? = {
-            switch periodKey {
-            case .weeklyThis: return .weeklyLast
-            case .monthlyThis: return .monthlyLast
-            default: return nil
-            }
-        }()
-        let comparisonTrades = comparisonKey.map {
-            filterTrades(trades, bounds: TradingReportPeriods.bounds(for: $0, now: now))
-        }
+        let comparisonTrades = comparablePriorTrades(trades, periodKey: periodKey, bounds: bounds)
+        let partial = !partialSuffix(for: periodKey, bounds: bounds).isEmpty
 
         let strengths = buildStrengths(periodTrades, metrics: metrics, comparisonTrades: comparisonTrades)
-        let opportunities = buildOpportunities(periodTrades, metrics: metrics)
-        let recommendations = buildRecommendations(
-            strengths: strengths,
-            opportunities: opportunities,
-            metrics: metrics
-        )
+        let adjustment = ruleAdjustment(periodTrades, preferences: preferences)
+            ?? buildOpportunities(periodTrades, metrics: metrics).first
+        let recommendations = adjustment.map { [$0] } ?? []
         let bestTrade = findBestTrade(periodTrades)
+        let changed = whatChanged(metrics: metrics, prior: comparisonTrades)
 
         return TradingReport(
             periodKey: periodKey,
@@ -56,20 +70,26 @@ nonisolated enum TradingReportGenerator {
                 start: bounds.start,
                 end: bounds.end,
                 kind: bounds.kind
-            ),
+            ) + partialSuffix(for: periodKey, bounds: bounds),
             periodStartIso: isoString(bounds.start),
             periodEndIso: isoString(bounds.end),
             generatedAt: now.timeIntervalSince1970 * 1000,
-            executiveSummary: buildExecutiveSummary(metrics: metrics, kind: bounds.kind),
+            executiveSummary: buildExecutiveSummary(
+                metrics: metrics,
+                kind: bounds.kind,
+                partial: partial,
+                comparisonNote: comparisonAvailabilityNote(periodTrades, comparisonTrades),
+                changedNote: changed
+            ),
             metrics: metrics,
             strengths: strengths,
-            opportunities: opportunities,
+            opportunities: [],
             recommendations: recommendations,
             bestTradeId: bestTrade.map(\.id.rawValue),
             keyTakeaway: buildKeyTakeaway(
                 metrics: metrics,
-                strengths: strengths,
-                opportunities: opportunities
+                adjustment: adjustment,
+                kind: bounds.kind
             ),
             summarySource: "deterministic"
         )
@@ -78,15 +98,12 @@ nonisolated enum TradingReportGenerator {
     // MARK: - Filtering
 
     private static func filterTrades(_ trades: [Trade], bounds: TradingReportPeriods.Bounds) -> [Trade] {
-        trades.filter { trade in
-            guard let date = resolveTradeDate(trade) else { return false }
-            return date >= bounds.start && date <= bounds.end
+        let startKey = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: bounds.start)
+        let endKey = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: bounds.end)
+        return trades.filter { trade in
+            let key = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: trade)
+            return !key.isEmpty && key >= startKey && key <= endKey
         }
-    }
-
-    /// Web `resolveDashboardTradeDate` — entry → exit → created.
-    private static func resolveTradeDate(_ trade: Trade) -> Date? {
-        trade.entryAt
     }
 
     private static func resolveTimeSource(_ trade: Trade) -> Date {
@@ -96,10 +113,10 @@ nonisolated enum TradingReportGenerator {
     // MARK: - Metrics
 
     private static func buildMetrics(_ trades: [Trade]) -> TradingReportMetrics {
-        let totalTrades = trades.count
-        let wins = trades.filter { pnl($0) > 0 }.count
-        let winRate = totalTrades > 0 ? (Double(wins) / Double(totalTrades)) * 100 : 0
-        let totalPnL = trades.reduce(0.0) { $0 + pnl($1) }
+        let priced = trades.compactMap { knownPnl($0) }
+        let wins = priced.filter { $0 > 0 }.count
+        let winRate = priced.isEmpty ? 0 : (Double(wins) / Double(priced.count)) * 100
+        let totalPnL = priced.reduce(0, +)
         let avgRR = averageRr(trades)
         let daily = computeDailyPnl(trades)
         let sessions = computeSessionPnl(trades)
@@ -107,17 +124,19 @@ nonisolated enum TradingReportGenerator {
         let worstDay = pickExtremeDay(daily, mode: .worst)
         let bestSession = pickExtremeSession(sessions, mode: .best)
         let worstSession = pickExtremeSession(sessions, mode: .worst)
+        let sameDay = bestDay.label != nil && bestDay.label == worstDay.label
 
         return TradingReportMetrics(
             netPnl: totalPnL,
             winRate: winRate,
+            knownResultCount: priced.count,
             averageRr: avgRR,
             profitFactor: computeProfitFactor(trades),
-            tradesTaken: totalTrades,
-            bestDayLabel: bestDay.label,
-            bestDayPnl: bestDay.pnl,
-            worstDayLabel: worstDay.label,
-            worstDayPnl: worstDay.pnl,
+            tradesTaken: trades.count,
+            bestDayLabel: sameDay ? nil : bestDay.label,
+            bestDayPnl: sameDay ? nil : bestDay.pnl,
+            worstDayLabel: sameDay ? nil : worstDay.label,
+            worstDayPnl: sameDay ? nil : worstDay.pnl,
             bestSessionLabel: bestSession.label,
             bestSessionPnl: bestSession.pnl,
             worstSessionLabel: worstSession.label,
@@ -127,8 +146,57 @@ nonisolated enum TradingReportGenerator {
         )
     }
 
-    private static func pnl(_ trade: Trade) -> Double {
-        NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
+    private static func knownPnl(_ trade: Trade) -> Double? {
+        guard let amount = trade.realizedPnL?.amount else { return nil }
+        return NSDecimalNumber(decimal: amount).doubleValue
+    }
+
+    private static func partialSuffix(
+        for key: TradingReportPeriodKey,
+        bounds: TradingReportPeriods.Bounds
+    ) -> String {
+        let calendar = TradingReportPeriods.eastern
+        switch key {
+        case .weeklyThis:
+            let sunday = calendar.date(byAdding: .day, value: 6, to: bounds.start) ?? bounds.end
+            return calendar.isDate(bounds.end, inSameDayAs: sunday) ? "" : " (partial)"
+        case .monthlyThis:
+            let day = calendar.component(.day, from: bounds.end)
+            let length = calendar.range(of: .day, in: .month, for: bounds.start)?.count ?? day
+            return day < length ? " (partial)" : ""
+        case .weeklyLast, .monthlyLast:
+            return ""
+        }
+    }
+
+    private static func comparablePriorTrades(
+        _ trades: [Trade],
+        periodKey: TradingReportPeriodKey,
+        bounds: TradingReportPeriods.Bounds
+    ) -> [Trade]? {
+        let calendar = TradingReportPeriods.eastern
+        let prior: (Date, Date)?
+        switch periodKey {
+        case .weeklyThis:
+            guard let start = calendar.date(byAdding: .day, value: -7, to: bounds.start),
+                  let end = calendar.date(byAdding: .day, value: -7, to: bounds.end)
+            else { return nil }
+            prior = (start, end)
+        case .monthlyThis:
+            guard let start = calendar.date(byAdding: .month, value: -1, to: bounds.start),
+                  let end = calendar.date(byAdding: .month, value: -1, to: bounds.end)
+            else { return nil }
+            prior = (start, end)
+        case .weeklyLast, .monthlyLast:
+            return nil
+        }
+        guard let prior else { return nil }
+        return trades.filter { trade in
+            let key = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: trade)
+            let startKey = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: prior.0)
+            let endKey = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: prior.1)
+            return key >= startKey && key <= endKey
+        }
     }
 
     private static func averageRr(_ trades: [Trade]) -> Double? {
@@ -141,64 +209,81 @@ nonisolated enum TradingReportGenerator {
     }
 
     private static func computeProfitFactor(_ trades: [Trade]) -> Double? {
-        let grossProfit = trades.filter { pnl($0) > 0 }.reduce(0.0) { $0 + pnl($1) }
-        let grossLoss = trades.filter { pnl($0) < 0 }.reduce(0.0) { $0 + abs(pnl($1)) }
+        let values = trades.compactMap { knownPnl($0) }
+        let grossProfit = values.filter { $0 > 0 }.reduce(0, +)
+        let grossLoss = values.filter { $0 < 0 }.reduce(0) { $0 + abs($1) }
         guard grossLoss > 0 else { return nil }
         return grossProfit / grossLoss
     }
 
-    private static func computeDailyPnl(_ trades: [Trade]) -> [String: Double] {
-        var map: [String: Double] = [:]
+    private struct PricedBucket {
+        var pnl: Double = 0
+        var count: Int = 0
+    }
+
+    private static let comparativeMinimum = 5
+
+    private static func computeDailyPnl(_ trades: [Trade]) -> [String: PricedBucket] {
+        var map: [String: PricedBucket] = [:]
         for trade in trades {
-            guard let key = TradingCalendarDay.key(for: trade) else { continue }
-            map[key, default: 0] += pnl(trade)
+            let key = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: trade)
+            guard !key.isEmpty, let value = knownPnl(trade) else { continue }
+            var row = map[key] ?? PricedBucket()
+            row.pnl += value
+            row.count += 1
+            map[key] = row
         }
         return map
     }
 
     private static func pickExtremeDay(
-        _ daily: [String: Double],
+        _ daily: [String: PricedBucket],
         mode: ExtremeMode
     ) -> (label: String?, pnl: Double?) {
-        guard !daily.isEmpty else { return (nil, nil) }
-        let picked: (key: String, pnl: Double)? = {
-            switch mode {
-            case .best: return daily.max(by: { $0.value < $1.value }).map { ($0.key, $0.value) }
-            case .worst: return daily.min(by: { $0.value < $1.value }).map { ($0.key, $0.value) }
-            }
-        }()
-        guard let picked else { return (nil, nil) }
+        guard daily.count >= 2 else { return (nil, nil) }
+        let eligible = daily.filter { mode == .best ? $0.value.pnl > 0 : $0.value.pnl < 0 }
+        guard let picked = (mode == .best
+            ? eligible.max(by: { $0.value.pnl < $1.value.pnl })
+            : eligible.min(by: { $0.value.pnl < $1.value.pnl }))
+        else { return (nil, nil) }
+        let opposite = daily.values.contains { mode == .best ? $0.pnl < picked.value.pnl : $0.pnl > picked.value.pnl }
+        guard opposite else { return (nil, nil) }
         let formatter = DateFormatter()
         formatter.locale = .current
+        formatter.timeZone = TradingReportPeriods.eastern.timeZone
         formatter.setLocalizedDateFormatFromTemplate("EEEMMMd")
         if let date = dayKeyDate(picked.key) {
-            return (formatter.string(from: date), picked.pnl)
+            return (formatter.string(from: date), picked.value.pnl)
         }
-        return (picked.key, picked.pnl)
+        return (picked.key, picked.value.pnl)
     }
 
-    private static func computeSessionPnl(_ trades: [Trade]) -> [String: Double] {
-        var map: [String: Double] = [:]
+    private static func computeSessionPnl(_ trades: [Trade]) -> [String: PricedBucket] {
+        var map: [String: PricedBucket] = [:]
         for trade in trades {
             guard let bucket = normalizeSessionBucket(trade.sessionLabel) else { continue }
-            map[bucket, default: 0] += pnl(trade)
+            guard let value = knownPnl(trade) else { continue }
+            var row = map[bucket] ?? PricedBucket()
+            row.pnl += value
+            row.count += 1
+            map[bucket] = row
         }
         return map
     }
 
     private static func pickExtremeSession(
-        _ sessions: [String: Double],
+        _ sessions: [String: PricedBucket],
         mode: ExtremeMode
     ) -> (label: String?, pnl: Double?) {
-        guard !sessions.isEmpty else { return (nil, nil) }
-        let picked: (key: String, pnl: Double)? = {
-            switch mode {
-            case .best: return sessions.max(by: { $0.value < $1.value }).map { ($0.key, $0.value) }
-            case .worst: return sessions.min(by: { $0.value < $1.value }).map { ($0.key, $0.value) }
-            }
-        }()
-        guard let picked else { return (nil, nil) }
-        return (TradingSessionCatalog.displayTitle(for: picked.key), picked.pnl)
+        let rows = sessions.filter { $0.value.count >= comparativeMinimum }
+        guard rows.count >= 2 else { return (nil, nil) }
+        guard let picked = (mode == .best
+            ? rows.max(by: { $0.value.pnl < $1.value.pnl })
+            : rows.min(by: { $0.value.pnl < $1.value.pnl }))
+        else { return (nil, nil) }
+        if mode == .best, picked.value.pnl <= 0 { return (nil, nil) }
+        if mode == .worst, picked.value.pnl >= 0 { return (nil, nil) }
+        return (TradingSessionCatalog.displayTitle(for: picked.key), picked.value.pnl)
     }
 
     private static func normalizeSessionBucket(_ raw: String?) -> String? {
@@ -230,39 +315,41 @@ nonisolated enum TradingReportGenerator {
 
     private static func buildExecutiveSummary(
         metrics: TradingReportMetrics,
-        kind: TradingReportKind
+        kind: TradingReportKind,
+        partial: Bool,
+        comparisonNote: String?,
+        changedNote: String? = nil
     ) -> String {
         let periodLabel = kind == .weekly ? "week" : "month"
+        let partialLabel = partial ? "partial " : ""
         if metrics.tradesTaken == 0 {
-            return "No trades were logged during this \(periodLabel). Log your next session to unlock personalized insights here."
+            return "No trades were logged during this \(partialLabel)\(periodLabel)."
         }
+        if metrics.knownResultCount == 0 {
+            let tradeWord = metrics.tradesTaken == 1 ? "trade" : "trades"
+            return "\(NumberDisplay.integer(metrics.tradesTaken)) \(tradeWord) were logged this \(partialLabel)\(periodLabel), but none have a P&L yet."
+        }
+        let tone = metrics.netPnl > 0 ? "positive" : metrics.netPnl < 0 ? "negative" : "flat"
+        let priced = metrics.knownResultCount == metrics.tradesTaken
+            ? "\(NumberDisplay.integer(metrics.tradesTaken)) trade\(metrics.tradesTaken == 1 ? "" : "s")"
+            : "\(NumberDisplay.integer(metrics.knownResultCount)) priced trade\(metrics.knownResultCount == 1 ? "" : "s") of \(NumberDisplay.integer(metrics.tradesTaken))"
+        let winRate = metrics.knownResultCount >= comparativeMinimum
+            ? " Win rate was \(NumberDisplay.percent(metrics.winRate, minimumFractionDigits: 1, maximumFractionDigits: 1))."
+            : ""
+        let comparison = comparisonNote.map { " \($0)" } ?? ""
+        let changed = changedNote.map { " \($0)" } ?? ""
+        return "This \(partialLabel)\(periodLabel) was \(tone): \(formatPnl(metrics.netPnl)) across \(priced).\(winRate)\(comparison)\(changed)"
+    }
 
-        let tone: String = {
-            if metrics.netPnl > 0 { return "positive" }
-            if metrics.netPnl < 0 { return "challenging" }
-            return "mixed"
-        }()
-
-        let execution: String = {
-            if metrics.winRate >= 55 { return "solid win rate" }
-            if metrics.winRate <= 40 { return "a win rate that needs attention" }
-            return "a balanced win rate"
-        }()
-
-        let risk: String = {
-            if let pf = metrics.profitFactor, pf >= 1.5 { return "healthy profit factor" }
-            if let pf = metrics.profitFactor, pf < 1 { return "profit factor below breakeven" }
-            return "moderate profit factor"
-        }()
-
-        let rr: String = {
-            if let average = metrics.averageRr, average >= 1.5 { return "strong average Risk:Reward" }
-            if let average = metrics.averageRr, average < 1 { return "below-target Risk:Reward" }
-            return "steady Risk:Reward"
-        }()
-
-        let tradeWord = metrics.tradesTaken == 1 ? "trade" : "trades"
-        return "Overall, you had a \(tone) \(periodLabel) with \(NumberDisplay.integer(metrics.tradesTaken)) \(tradeWord) and \(formatPnl(metrics.netPnl)) net P&L. You posted \(execution) with \(risk) and \(rr)."
+    private static func comparisonAvailabilityNote(
+        _ current: [Trade],
+        _ prior: [Trade]?
+    ) -> String? {
+        guard let prior else { return nil }
+        let currentPriced = current.compactMap { knownPnl($0) }.count
+        let priorPriced = prior.compactMap { knownPnl($0) }.count
+        if currentPriced >= comparativeMinimum, priorPriced >= comparativeMinimum { return nil }
+        return "A same-window comparison with the prior period is not available yet."
     }
 
     private static func buildStrengths(
@@ -275,45 +362,30 @@ nonisolated enum TradingReportGenerator {
         if let label = metrics.bestSessionLabel,
            let sessionPnl = metrics.bestSessionPnl,
            sessionPnl > 0 {
-            strengths.append(
-                "You performed best during the \(label) session (\(formatPnl(sessionPnl)))."
-            )
+            strengths.append("\(label) was ahead of your other sessions (\(formatPnl(sessionPnl))).")
         }
 
-        if metrics.winRate >= 55, metrics.tradesTaken >= 3 {
-            strengths.append(
-                "Your win rate was \(NumberDisplay.percent(metrics.winRate, minimumFractionDigits: 1, maximumFractionDigits: 1)) across \(NumberDisplay.integer(metrics.tradesTaken)) trades."
-            )
+        if let pf = metrics.profitFactor, pf >= 1.5, metrics.knownResultCount >= comparativeMinimum {
+            strengths.append("Profit factor was \(NumberDisplay.ratio(pf, fractionDigits: 2)).")
         }
 
-        if let pf = metrics.profitFactor, pf >= 1.5 {
-            strengths.append(
-                "Profit factor reached \(NumberDisplay.ratio(pf, fractionDigits: 2)), showing winners outweighed losers."
-            )
-        }
-
-        if let average = metrics.averageRr, average >= 1.2 {
-            strengths.append("Average Risk:Reward was \(formatRR(average)).")
-        }
-
-        if let comparisonTrades, comparisonTrades.count >= 3,
+        if let comparisonTrades,
+           comparisonTrades.compactMap({ knownPnl($0) }).count >= comparativeMinimum,
+           metrics.knownResultCount >= comparativeMinimum,
            let current = metrics.averageRr,
            let prior = averageRr(comparisonTrades),
+           prior != 0,
            current > prior * 1.05 {
-            let pct = Int((((current - prior) / prior) * 100).rounded())
-            strengths.append("Your average RR improved by \(NumberDisplay.integer(pct))% versus the prior period.")
+            let pct = Int((((current - prior) / abs(prior)) * 100).rounded())
+            strengths.append("Average R was \(NumberDisplay.integer(pct))% higher than the same window in the prior period.")
         }
 
-        let strategies = computeStrategyPnl(trades)
-        if let best = strategies.max(by: { $0.value < $1.value }), best.value > 0 {
-            strengths.append("Your top setup was \(best.key) (\(formatPnl(best.value))).")
+        let strategies = computeStrategyPnl(trades).filter { $0.value.count >= comparativeMinimum && $0.value.pnl > 0 }
+        if strategies.count >= 2, let best = strategies.max(by: { $0.value.pnl < $1.value.pnl }) {
+            strengths.append("\(best.key) was your strongest tagged setup (\(formatPnl(best.value.pnl))).")
         }
 
-        if metrics.netPnl > 0, metrics.tradesTaken >= 3 {
-            strengths.append("You finished the period net positive.")
-        }
-
-        return Array(strengths.prefix(5))
+        return Array(strengths.prefix(3))
     }
 
     private static func buildOpportunities(
@@ -324,177 +396,148 @@ nonisolated enum TradingReportGenerator {
 
         if let label = metrics.worstSessionLabel,
            let sessionPnl = metrics.worstSessionPnl,
-           sessionPnl < 0 {
-            opportunities.append(
-                "\(label) session trades lost \(formatPnl(abs(sessionPnl)))."
-            )
+           sessionPnl < 0,
+           label != metrics.bestSessionLabel {
+            opportunities.append("\(label) was behind your other sessions (\(formatPnl(sessionPnl))).")
         }
 
         let hourly = computeHourlyPnl(trades)
-        if hourly.count >= 2 {
-            let afternoon = hourly.filter { $0.key >= 12 }.reduce(0.0) { $0 + $1.value }
-            let morning = hourly.filter { $0.key < 12 }.reduce(0.0) { $0 + $1.value }
-            if afternoon < morning, afternoon < 0 {
-                opportunities.append("Afternoon trades underperformed relative to the morning.")
+        var morning = PricedBucket()
+        var afternoon = PricedBucket()
+        for (hour, row) in hourly {
+            if hour >= 12 {
+                afternoon.pnl += row.pnl
+                afternoon.count += row.count
+            } else {
+                morning.pnl += row.pnl
+                morning.count += row.count
             }
         }
+        if morning.count >= comparativeMinimum,
+           afternoon.count >= comparativeMinimum,
+           afternoon.pnl < morning.pnl,
+           afternoon.pnl < 0 {
+            opportunities.append("Afternoon results were weaker than the morning.")
+        }
 
-        let lossesAfterWins = detectLossesAfterWinStreak(trades)
-        if lossesAfterWins >= 2 {
+        let weekdays = computeWeekdayPnl(trades).filter { $0.value.count >= comparativeMinimum }
+        if weekdays.count >= 2, let worst = weekdays.min(by: { $0.value.pnl < $1.value.pnl }), worst.value.pnl < 0,
+           worst.key >= 0, worst.key < weekdayLabels.count {
             opportunities.append(
-                "\(NumberDisplay.integer(lossesAfterWins)) losing trades followed consecutive winners. Watch for overconfidence."
+                "\(weekdayLabels[worst.key]) was the weakest weekday with at least \(comparativeMinimum) priced trades (\(formatPnl(worst.value.pnl)))."
             )
         }
 
-        let weekdays = computeWeekdayPnl(trades)
-        if weekdays.count >= 2,
-           let worst = weekdays.min(by: { $0.value < $1.value }),
-           worst.value < 0,
-           worst.key >= 0,
-           worst.key < weekdayLabels.count {
-            opportunities.append(
-                "\(weekdayLabels[worst.key]) was your weakest weekday (\(formatPnl(worst.value)))."
-            )
+        if let average = metrics.averageRr, average < 1, metrics.knownResultCount >= comparativeMinimum {
+            opportunities.append("Average R was \(formatRR(average)).")
         }
 
-        if let average = metrics.averageRr, average < 1, metrics.tradesTaken >= 3 {
-            opportunities.append(
-                "Average Risk:Reward was \(formatRR(average)). Review exits and stop placement."
-            )
-        }
-
-        if let pf = metrics.profitFactor, pf < 1, metrics.tradesTaken >= 3 {
+        if let pf = metrics.profitFactor, pf < 1, metrics.knownResultCount >= comparativeMinimum {
             opportunities.append(
                 "Profit factor was \(NumberDisplay.ratio(pf, fractionDigits: 2)). Losses exceeded gains."
             )
         }
 
-        if hourly.count >= 3,
-           let worstHour = hourly.min(by: { $0.value < $1.value }),
-           worstHour.value < 0 {
+        let hourlyRows = hourly.filter { $0.value.count >= comparativeMinimum }
+        if hourlyRows.count >= 2, let worstHour = hourlyRows.min(by: { $0.value.pnl < $1.value.pnl }), worstHour.value.pnl < 0 {
             opportunities.append(
-                "Trades around \(formatHourLabel(worstHour.key)) were your weakest hour block."
+                "\(formatHourLabel(worstHour.key)) Eastern was the weakest hour with at least \(comparativeMinimum) priced trades."
             )
         }
 
         return Array(opportunities.prefix(5))
     }
 
-    private static func buildRecommendations(
-        strengths: [String],
-        opportunities: [String],
-        metrics: TradingReportMetrics
-    ) -> [String] {
-        var recommendations: [String] = []
-
-        if strengths.contains(where: { $0.contains("top setup") }) {
-            recommendations.append("Continue focusing on your best-performing setup.")
-        }
-        if opportunities.contains(where: { $0.lowercased().contains("afternoon") }) {
-            recommendations.append("Reduce afternoon trading exposure until performance improves.")
-        }
-        if opportunities.contains(where: { $0.contains("consecutive winners") }) {
-            recommendations.append("Review losing trades taken after extended win streaks.")
-        }
-        if let pf = metrics.profitFactor, pf >= 1.2 {
-            recommendations.append("Maintain your current risk management discipline.")
-        } else if metrics.tradesTaken >= 3 {
-            recommendations.append("Tighten risk per trade until profit factor recovers above 1.0.")
-        }
-        if let label = metrics.bestSessionLabel,
-           let sessionPnl = metrics.bestSessionPnl,
-           sessionPnl > 0 {
-            recommendations.append("Prioritize \(label) session setups that are working.")
-        }
-        recommendations.append("Keep journaling consistently to sharpen future reports.")
-
-        var unique: [String] = []
-        for item in recommendations where !unique.contains(item) {
-            unique.append(item)
-        }
-        return Array(unique.prefix(5))
-    }
-
     private static func buildKeyTakeaway(
         metrics: TradingReportMetrics,
-        strengths: [String],
-        opportunities: [String]
+        adjustment: String?,
+        kind: TradingReportKind
     ) -> String {
+        let periodLabel = kind == .weekly ? "week" : "month"
         if metrics.tradesTaken == 0 {
-            return "Consistent journaling unlocks sharper weekly and monthly intelligence. Log your next trade to start building your report history."
+            return "No trades were logged this \(periodLabel)."
         }
-        if let strength = strengths.first, let opportunity = opportunities.first {
-            let strengthBody = strength.hasSuffix(".") ? String(strength.dropLast()) : strength
-            let opportunityBody = opportunity.prefix(1).lowercased() + opportunity.dropFirst()
-            return "\(strengthBody), but \(opportunityBody)"
+        if metrics.knownResultCount == 0 {
+            return "P&L is missing on these trades, so this report does not estimate a result."
         }
-        if metrics.netPnl > 0 {
-            return "Your edge showed up in the data this period. Protect it by doubling down on what worked and trimming the sessions that dragged performance."
+        if let adjustment { return adjustment }
+        return "\(formatPnl(metrics.netPnl)) across \(NumberDisplay.integer(metrics.knownResultCount)) priced trades. No other pattern cleared the sample minimum."
+    }
+
+    private static func whatChanged(metrics: TradingReportMetrics, prior: [Trade]?) -> String? {
+        guard let prior else { return nil }
+        let priorPriced = prior.compactMap { knownPnl($0) }
+        guard metrics.knownResultCount >= comparativeMinimum, priorPriced.count >= comparativeMinimum else {
+            return nil
         }
-        if metrics.netPnl < 0 {
-            return "This period highlights where leakage occurred. Use the session and timing breakdowns above to tighten execution next week."
-        }
-        return "Stay process-focused: the metrics above show where your execution helped and where small adjustments can compound over the next reporting period."
+        let priorNet = priorPriced.reduce(0, +)
+        let delta = metrics.netPnl - priorNet
+        if delta == 0 { return "Net P&L matched the same window in the prior period." }
+        let direction = delta > 0 ? "higher" : "lower"
+        return "Compared with the same window in the prior period, net P&L was \(formatPnl(abs(delta))) \(direction)."
+    }
+
+    private static func ruleAdjustment(_ trades: [Trade], preferences: PreferenceRuleContext?) -> String? {
+        guard preferences != nil else { return nil }
+        let summary = PreferenceComplianceEngine.evaluate(
+            trades.map(PreferenceComplianceEngine.input(from:)),
+            context: preferences
+        )
+        return PreferenceComplianceEngine.primaryAdjustment(for: summary)
     }
 
     // MARK: - Helpers
 
     private enum ExtremeMode { case best, worst }
 
-    private static func computeStrategyPnl(_ trades: [Trade]) -> [String: Double] {
-        var map: [String: Double] = [:]
+    private static func computeStrategyPnl(_ trades: [Trade]) -> [String: PricedBucket] {
+        var map: [String: PricedBucket] = [:]
         for trade in trades {
             let raw = (trade.strategy ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !raw.isEmpty else { continue }
-            map[raw, default: 0] += pnl(trade)
+            guard !raw.isEmpty, let value = knownPnl(trade) else { continue }
+            var row = map[raw] ?? PricedBucket()
+            row.pnl += value
+            row.count += 1
+            map[raw] = row
         }
         return map
     }
 
-    private static func computeWeekdayPnl(_ trades: [Trade]) -> [Int: Double] {
-        var map: [Int: Double] = [:]
-        let calendar = Calendar.current
+    private static func computeWeekdayPnl(_ trades: [Trade]) -> [Int: PricedBucket] {
+        var map: [Int: PricedBucket] = [:]
+        let calendar = TradingReportPeriods.eastern
         for trade in trades {
-            guard let date = resolveTradeDate(trade) else { continue }
-            let day = calendar.component(.weekday, from: date) - 1 // 0 = Sunday
-            map[day, default: 0] += pnl(trade)
+            let key = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: trade)
+            guard !key.isEmpty, let date = dayKeyDate(key), let value = knownPnl(trade) else { continue }
+            let day = calendar.component(.weekday, from: date) - 1
+            var row = map[day] ?? PricedBucket()
+            row.pnl += value
+            row.count += 1
+            map[day] = row
         }
         return map
     }
 
-    private static func computeHourlyPnl(_ trades: [Trade]) -> [Int: Double] {
-        var map: [Int: Double] = [:]
-        let calendar = Calendar.current
+    private static func computeHourlyPnl(_ trades: [Trade]) -> [Int: PricedBucket] {
+        var map: [Int: PricedBucket] = [:]
+        let calendar = TradingReportPeriods.eastern
         for trade in trades {
+            guard let value = knownPnl(trade) else { continue }
             let hour = calendar.component(.hour, from: resolveTimeSource(trade))
-            map[hour, default: 0] += pnl(trade)
+            var row = map[hour] ?? PricedBucket()
+            row.pnl += value
+            row.count += 1
+            map[hour] = row
         }
         return map
-    }
-
-    private static func detectLossesAfterWinStreak(_ trades: [Trade]) -> Int {
-        let sorted = trades.sorted {
-            (resolveTradeDate($0)?.timeIntervalSince1970 ?? 0)
-                < (resolveTradeDate($1)?.timeIntervalSince1970 ?? 0)
-        }
-        var winStreak = 0
-        var lossAfterStreak = 0
-        for trade in sorted {
-            let value = pnl(trade)
-            if value > 0 {
-                winStreak += 1
-                continue
-            }
-            if value < 0, winStreak >= 2 {
-                lossAfterStreak += 1
-            }
-            winStreak = 0
-        }
-        return lossAfterStreak
     }
 
     private static func findBestTrade(_ trades: [Trade]) -> Trade? {
-        trades.max(by: { pnl($0) < pnl($1) })
+        let best = trades.max {
+            (knownPnl($0) ?? -.greatestFiniteMagnitude) < (knownPnl($1) ?? -.greatestFiniteMagnitude)
+        }
+        guard let best, let pnl = knownPnl(best), pnl > 0 else { return nil }
+        return best
     }
 
     private static func formatHourLabel(_ hour: Int) -> String {
@@ -518,7 +561,7 @@ nonisolated enum TradingReportGenerator {
     private static func dayKeyDate(_ key: String) -> Date? {
         let parts = key.split(separator: "-").compactMap { Int($0) }
         guard parts.count == 3 else { return nil }
-        return Calendar.current.date(from: DateComponents(
+        return TradingReportPeriods.eastern.date(from: DateComponents(
             year: parts[0],
             month: parts[1],
             day: parts[2],

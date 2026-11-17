@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// All / Your Rooms / Official / Popular filter for Trade Rooms discovery.
+/// All / Favorites / Joined / Popular filter for Trade Rooms discovery.
 struct TradeRoomDiscoveryScopeToggle: View {
     let scope: TradeRoomDiscoveryScope
     let onSelect: (TradeRoomDiscoveryScope) -> Void
@@ -22,14 +22,21 @@ struct TradeRoomDiscoveryScopeToggle: View {
             guard scope != value else { return }
             onSelect(value)
         } label: {
-            Text(value.title)
-                .font(.caption.weight(selected ? .semibold : .medium))
-                .foregroundStyle(selected ? colors.onAccent : colors.primaryText)
-                .lineLimit(1)
-                .minimumScaleFactor(1)
-                .allowsTightening(true)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 7)
+            Group {
+                if value.usesCompactTabLabel {
+                    Text(value.title)
+                        .font(.caption2.weight(selected ? .bold : .semibold))
+                } else {
+                    Text(value.title)
+                        .font(.caption2.weight(selected ? .semibold : .medium))
+                }
+            }
+            .foregroundStyle(selected ? colors.onAccent : colors.primaryText)
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .allowsTightening(true)
+            .padding(.horizontal, value.usesCompactTabLabel ? 8 : 5)
+            .padding(.vertical, 6)
                 .frame(maxWidth: .infinity)
                 .background {
                     Capsule(style: .continuous)

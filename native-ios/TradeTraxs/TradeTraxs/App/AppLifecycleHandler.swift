@@ -42,6 +42,7 @@ final class AppLifecycleHandler {
             await pushNotifications?.refreshAuthorizationStatus()
             if AuthBootstrapReadiness.allowsAuthenticatedBackgroundWork() {
                 pushNotifications?.syncBadgeFromActivity()
+                pushNotifications?.refreshRemoteTokenIfAuthorized()
             }
             await DailyCheckInReminderCoordinator.shared.sync()
             await TradeImportReminderCoordinator.shared.sync()

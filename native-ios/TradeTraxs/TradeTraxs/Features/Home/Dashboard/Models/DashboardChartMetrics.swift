@@ -145,29 +145,30 @@ nonisolated enum DashboardChartMetrics {
         )
         let trades = filtered.map(\.trade)
 
-        let pnlValues = trades.map { $0.realizedPnL?.amount ?? 0 }
+        let pnlValues = trades.compactMap(\.realizedPnL?.amount)
         let wins = pnlValues.filter { $0 > 0 }
         let losses = pnlValues.filter { $0 < 0 }
         let tradeCount = trades.count
         let winCount = wins.count
         let lossCount = losses.count
-        let netPnL = pnlValues.reduce(0, +)
+        let netPnL = pnlValues.reduce(Decimal(0), +)
+        let pricedCount = pnlValues.count
 
-        let winRate: Decimal? = tradeCount > 0 ? Decimal(winCount) / Decimal(tradeCount) : nil
+        let winRate: Decimal? = pricedCount > 0 ? Decimal(winCount) / Decimal(pricedCount) : nil
         let grossWins = wins.reduce(Decimal(0), +)
         let grossLosses = losses.reduce(Decimal(0), +)
         let profitFactor: Decimal? = grossLosses < 0 ? grossWins / abs(grossLosses) : nil
 
         let avgWin: Decimal? = winCount > 0 ? grossWins / Decimal(winCount) : nil
         let avgLossAbs: Decimal? = lossCount > 0 ? abs(grossLosses) / Decimal(lossCount) : nil
-        let lossRate: Decimal = tradeCount > 0 ? Decimal(lossCount) / Decimal(tradeCount) : 0
+        let lossRate: Decimal = pricedCount > 0 ? Decimal(lossCount) / Decimal(pricedCount) : 0
         let winRateFrac: Decimal = winRate ?? 0
         let expectancy: Decimal? = {
-            guard tradeCount > 0 else { return nil }
+            guard pricedCount > 0 else { return nil }
             return winRateFrac * (avgWin ?? 0) - lossRate * (avgLossAbs ?? 0)
         }()
 
-        let averageRR = TradePointsAndRealizedRr.averageRealizedRr(trades: trades)
+        let averageRR = TradePointsAndRealizedRr.averageTargetedRr(trades: trades)
 
         var maxRrSum = Decimal(0)
         var maxRrCount = 0
@@ -208,7 +209,7 @@ nonisolated enum DashboardChartMetrics {
             lossCount: lossCount,
             avgWin: avgWin,
             avgLoss: avgLossAbs.map { -$0 },
-            bestTrade: pnlValues.max(),
+            bestTrade: wins.max(),
             biggestLoss: losses.min(),
             maxDrawdown: maxDrawdown(trades),
             currentEquity: profileStats.currentEquity,
@@ -371,7 +372,8 @@ nonisolated enum DashboardChartMetrics {
         var peak: Decimal = 0
         var maxDD: Decimal = 0
         for trade in chronological {
-            running += trade.realizedPnL?.amount ?? 0
+            guard let amount = trade.realizedPnL?.amount else { continue }
+            running += amount
             if running > peak { peak = running }
             let drawdown = peak - running
             if drawdown > maxDD { maxDD = drawdown }
@@ -381,13 +383,27 @@ nonisolated enum DashboardChartMetrics {
 
     // MARK: - Weekdays / Hours
 
+    private static func futuresWeekday(_ trade: Trade) -> Int? {
+        guard let key = DashboardTradingDayKey.key(for: trade) else { return nil }
+        let parts = key.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        let calendar = TradingReportPeriods.eastern
+        guard let date = calendar.date(from: DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: parts[0],
+            month: parts[1],
+            day: parts[2],
+            hour: 12
+        )) else { return nil }
+        return calendar.component(.weekday, from: date)
+    }
+
     private static func weekdayBars(_ trades: [Trade]) -> [DashboardBarPoint] {
         let labels = ["Mon", "Tue", "Wed", "Thu", "Fri"]
-        var map: [Int: Decimal] = [:] // 2...6 Mon-Fri in Gregorian when firstWeekday=1
-        let calendar = Calendar.current
+        var map: [Int: Decimal] = [:]
         for trade in trades {
-            let date = trade.entryAt
-            let weekday = calendar.component(.weekday, from: date) // 1=Sun
+            guard let weekday = futuresWeekday(trade) else { continue }
             // Map to Mon=0 ... Fri=4
             let index: Int?
             switch weekday {
@@ -399,7 +415,8 @@ nonisolated enum DashboardChartMetrics {
             default: index = nil
             }
             guard let index else { continue }
-            map[index, default: 0] += trade.realizedPnL?.amount ?? 0
+            guard let amount = trade.realizedPnL?.amount else { continue }
+            map[index, default: 0] += amount
         }
         return labels.enumerated().map { offset, label in
             DashboardBarPoint(
@@ -411,10 +428,11 @@ nonisolated enum DashboardChartMetrics {
 
     private static func hourBars(_ trades: [Trade]) -> [DashboardBarPoint] {
         var map: [Int: Decimal] = [:]
-        let calendar = Calendar.current
+        let calendar = TradingReportPeriods.eastern
         for trade in trades {
             let hour = calendar.component(.hour, from: trade.entryAt)
-            map[hour, default: 0] += trade.realizedPnL?.amount ?? 0
+            guard let amount = trade.realizedPnL?.amount else { continue }
+            map[hour, default: 0] += amount
         }
         // Show hours that have activity, keep chronological.
         let active = map.keys.sorted()
@@ -439,10 +457,8 @@ nonisolated enum DashboardChartMetrics {
     }
 
     private static func longShortBars(_ trades: [Trade]) -> [DashboardBarPoint] {
-        let longPnL = trades.filter { $0.side == .long }
-            .reduce(Decimal(0)) { $0 + ($1.realizedPnL?.amount ?? 0) }
-        let shortPnL = trades.filter { $0.side == .short }
-            .reduce(Decimal(0)) { $0 + ($1.realizedPnL?.amount ?? 0) }
+        let longPnL = trades.filter { $0.side == .long }.compactMap(\.realizedPnL?.amount).reduce(Decimal(0), +)
+        let shortPnL = trades.filter { $0.side == .short }.compactMap(\.realizedPnL?.amount).reduce(Decimal(0), +)
         return [
             DashboardBarPoint(
                 label: "Long",
@@ -472,9 +488,10 @@ nonisolated enum DashboardChartMetrics {
             let seconds = exit.timeIntervalSince(trade.entryAt)
             guard seconds > 0 else { continue }
             all.append(seconds)
-            let pnl = trade.realizedPnL?.amount ?? 0
-            if pnl > 0 { win.append(seconds) }
-            else if pnl < 0 { loss.append(seconds) }
+            if let pnl = trade.realizedPnL?.amount {
+                if pnl > 0 { win.append(seconds) }
+                else if pnl < 0 { loss.append(seconds) }
+            }
         }
         return HoldDurations(all: all, win: win, loss: loss)
     }
@@ -537,9 +554,8 @@ nonisolated enum DashboardChartMetrics {
     private static func weekdayHeatmapBars(_ trades: [Trade]) -> [DashboardBarPoint] {
         let labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         var map: [Int: Decimal] = [:]
-        let calendar = Calendar.current
         for trade in trades {
-            let weekday = calendar.component(.weekday, from: trade.entryAt) // 1=Sun
+            guard let weekday = futuresWeekday(trade) else { continue }
             let index: Int
             switch weekday {
             case 2: index = 0
@@ -551,7 +567,8 @@ nonisolated enum DashboardChartMetrics {
             case 1: index = 6
             default: continue
             }
-            map[index, default: 0] += trade.realizedPnL?.amount ?? 0
+            guard let amount = trade.realizedPnL?.amount else { continue }
+            map[index, default: 0] += amount
         }
         return labels.enumerated().map { offset, label in
             DashboardBarPoint(
@@ -563,10 +580,11 @@ nonisolated enum DashboardChartMetrics {
 
     private static func hourHeatmapBars(_ trades: [Trade]) -> [DashboardBarPoint] {
         var map: [Int: Decimal] = [:]
-        let calendar = Calendar.current
+        let calendar = TradingReportPeriods.eastern
         for trade in trades {
             let hour = calendar.component(.hour, from: trade.entryAt)
-            map[hour, default: 0] += trade.realizedPnL?.amount ?? 0
+            guard let amount = trade.realizedPnL?.amount else { continue }
+            map[hour, default: 0] += amount
         }
         return (0..<24).map { hour in
             DashboardBarPoint(
@@ -596,23 +614,27 @@ nonisolated enum DashboardChartMetrics {
 
         var symbolPnL: [String: (pnl: Decimal, count: Int)] = [:]
         for trade in trades {
+            guard let amount = trade.realizedPnL?.amount else { continue }
             let key = trade.symbol.ticker
             let current = symbolPnL[key] ?? (0, 0)
-            symbolPnL[key] = (current.pnl + (trade.realizedPnL?.amount ?? 0), current.count + 1)
+            symbolPnL[key] = (current.pnl + amount, current.count + 1)
         }
-        if let best = symbolPnL
-            .filter({ $0.value.count >= 3 })
-            .max(by: { ($0.value.pnl / Decimal($0.value.count)) < ($1.value.pnl / Decimal($1.value.count)) })
-        {
+        let qualifiedSymbols = symbolPnL.filter { $0.value.count >= 5 }
+        if qualifiedSymbols.count >= 2,
+           let best = qualifiedSymbols.max(by: {
+               ($0.value.pnl / Decimal($0.value.count)) < ($1.value.pnl / Decimal($1.value.count))
+           }) {
             let avg = best.value.pnl / Decimal(best.value.count)
-            items.append(
-                DashboardInsightItem(
-                    id: "symbol",
-                    title: "Lean into your edge market",
-                    body: "\(best.key) is your strongest average outcome (\(money(avg)) over \(best.value.count) trades). Size carefully there and journal what you're doing differently.",
-                    kind: .symbol
+            if avg > 0 {
+                items.append(
+                    DashboardInsightItem(
+                        id: "symbol",
+                        title: "Strongest average symbol",
+                        body: "\(best.key) averaged \(money(avg)) across \(best.value.count) priced trades.",
+                        kind: .symbol
+                    )
                 )
-            )
+            }
         }
 
         let longCount = trades.filter { $0.side == .long }.count
@@ -646,7 +668,7 @@ nonisolated enum DashboardChartMetrics {
                 TradingSessionLabel.canonicalLabel(fromStored: $0.sessionLabel) == label
             }
             guard !scoped.isEmpty else { return nil }
-            let pnls = scoped.map { $0.realizedPnL?.amount ?? 0 }
+            let pnls = scoped.compactMap(\.realizedPnL?.amount)
             let wins = pnls.filter { $0 > 0 }.count
             let losses = pnls.filter { $0 < 0 }.count
             return DashboardSessionPerformanceRow(
@@ -655,7 +677,7 @@ nonisolated enum DashboardChartMetrics {
                 netPnL: NSDecimalNumber(decimal: pnls.reduce(0, +)).doubleValue,
                 wins: wins,
                 losses: losses,
-                winRate: scoped.isEmpty ? nil : Double(wins) / Double(scoped.count) * 100
+                winRate: pnls.isEmpty ? nil : Double(wins) / Double(pnls.count) * 100
             )
         }
     }
@@ -665,10 +687,11 @@ nonisolated enum DashboardChartMetrics {
         for trade in trades {
             let key = trade.symbol.ticker
             var row = map[key] ?? (0, 0, 0, 0, 0)
-            let pnl = trade.realizedPnL?.amount ?? 0
-            row.pnl += pnl
-            row.trades += 1
-            if pnl > 0 { row.wins += 1 }
+            if let pnl = trade.realizedPnL?.amount {
+                row.pnl += pnl
+                row.trades += 1
+                if pnl > 0 { row.wins += 1 }
+            }
             if let rr = TradePointsAndRealizedRr.resolveRealizedRr(trade: trade) {
                 row.rrSum += rr
                 row.rrCount += 1
@@ -691,14 +714,10 @@ nonisolated enum DashboardChartMetrics {
 
     private static func localDailyPerformance(_ trades: [Trade]) -> DashboardDailyPerformanceSnapshot? {
         var dayMap: [String: Decimal] = [:]
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.timeZone = TimeZone(identifier: "America/New_York")
-        formatter.dateFormat = "yyyy-MM-dd"
         for trade in trades {
-            let day = trade.exitAt ?? trade.entryAt
-            let key = formatter.string(from: day)
-            dayMap[key, default: 0] += trade.realizedPnL?.amount ?? 0
+            guard let key = DashboardTradingDayKey.key(for: trade),
+                  let amount = trade.realizedPnL?.amount else { continue }
+            dayMap[key, default: 0] += amount
         }
         guard !dayMap.isEmpty else { return nil }
         let values = dayMap.values.map { NSDecimalNumber(decimal: $0).doubleValue }
@@ -720,7 +739,7 @@ nonisolated enum DashboardChartMetrics {
         var tempType: String?
         var tempLen = 0
         for trade in ordered {
-            let pnl = trade.realizedPnL?.amount ?? 0
+            guard let pnl = trade.realizedPnL?.amount else { continue }
             let type = pnl > 0 ? "win" : pnl < 0 ? "loss" : "even"
             if type == tempType { tempLen += 1 } else { tempLen = 1; tempType = type }
             if type == "win" { maxWin = max(maxWin, tempLen) }
@@ -736,10 +755,11 @@ nonisolated enum DashboardChartMetrics {
 
     private static func localHourHighlights(_ trades: [Trade]) -> DashboardHourHighlights? {
         var map: [Int: Decimal] = [:]
-        let calendar = Calendar.current
+        let calendar = TradingReportPeriods.eastern
         for trade in trades {
             let hour = calendar.component(.hour, from: trade.entryAt)
-            map[hour, default: 0] += trade.realizedPnL?.amount ?? 0
+            guard let amount = trade.realizedPnL?.amount else { continue }
+            map[hour, default: 0] += amount
         }
         guard map.count > 1 else { return nil }
         let best = map.max(by: { $0.value < $1.value })
@@ -756,7 +776,7 @@ nonisolated enum DashboardChartMetrics {
         func side(_ isLong: Bool) -> DashboardDirectionSideSnapshot? {
             let scoped = trades.filter { ($0.side == .long) == isLong }
             guard !scoped.isEmpty else { return nil }
-            let pnls = scoped.map { $0.realizedPnL?.amount ?? 0 }
+            let pnls = scoped.compactMap(\.realizedPnL?.amount)
             let wins = pnls.filter { $0 > 0 }
             let losses = pnls.filter { $0 < 0 }
             let grossWins = wins.reduce(Decimal(0), +)
@@ -769,16 +789,17 @@ nonisolated enum DashboardChartMetrics {
                     rrCount += 1
                 }
             }
+            let net = pnls.reduce(Decimal(0), +)
             return DashboardDirectionSideSnapshot(
                 trades: scoped.count,
-                netPnL: NSDecimalNumber(decimal: pnls.reduce(0, +)).doubleValue,
+                netPnL: NSDecimalNumber(decimal: net).doubleValue,
                 wins: wins.count,
                 losses: losses.count,
-                winRate: Double(wins.count) / Double(scoped.count) * 100,
+                winRate: pnls.isEmpty ? 0 : Double(wins.count) / Double(pnls.count) * 100,
                 profitFactor: grossLoss > 0 ? NSDecimalNumber(decimal: grossWins / grossLoss).doubleValue : nil,
-                expectancy: NSDecimalNumber(decimal: pnls.reduce(0, +) / Decimal(scoped.count)).doubleValue,
+                expectancy: pnls.isEmpty ? nil : NSDecimalNumber(decimal: net / Decimal(pnls.count)).doubleValue,
                 avgRR: rrCount > 0 ? NSDecimalNumber(decimal: rrSum / Decimal(rrCount)).doubleValue : nil,
-                bestTrade: pnls.max().map { NSDecimalNumber(decimal: $0).doubleValue },
+                bestTrade: wins.max().map { NSDecimalNumber(decimal: $0).doubleValue },
                 worstTrade: losses.min().map { NSDecimalNumber(decimal: $0).doubleValue }
             )
         }
@@ -793,7 +814,8 @@ nonisolated enum DashboardChartMetrics {
             guard let exit = trade.exitAt else { continue }
             let seconds = exit.timeIntervalSince(trade.entryAt)
             guard seconds > 0 else { continue }
-            let pnl = NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
+            guard let amount = trade.realizedPnL?.amount else { continue }
+            let pnl = NSDecimalNumber(decimal: amount).doubleValue
             if pnl > 0 { winners.append(Row(seconds: seconds, pnl: pnl)) }
             if pnl < 0 { losers.append(Row(seconds: seconds, pnl: pnl)) }
         }
@@ -819,14 +841,14 @@ nonisolated enum DashboardChartMetrics {
             let key = (trade.strategy ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard !key.isEmpty else { continue }
             var row = map[key] ?? (0, 0, 0)
-            let pnl = trade.realizedPnL?.amount ?? 0
+            guard let pnl = trade.realizedPnL?.amount else { continue }
             row.pnl += pnl
             row.trades += 1
             if pnl > 0 { row.wins += 1 }
             map[key] = row
         }
-        let qualified = map.filter { $0.value.trades >= 3 }
-        guard !qualified.isEmpty else { return nil }
+        let qualified = map.filter { $0.value.trades >= 5 }
+        guard qualified.count >= 2 else { return nil }
         let best = qualified.max(by: { $0.value.pnl < $1.value.pnl })
         let worst = qualified.min(by: { $0.value.pnl < $1.value.pnl })
         func highlight(_ pair: (key: String, value: (pnl: Decimal, trades: Int, wins: Int))?) -> DashboardStrategyHighlight? {
@@ -838,6 +860,9 @@ nonisolated enum DashboardChartMetrics {
                 winRate: Double(pair.value.wins) / Double(pair.value.trades) * 100
             )
         }
-        return DashboardStrategyHighlights(best: highlight(best.map { ($0.key, $0.value) }), worst: highlight(worst.map { ($0.key, $0.value) }))
+        let bestHighlight = (best?.value.pnl ?? 0) > 0 ? highlight(best.map { ($0.key, $0.value) }) : nil
+        let worstHighlight = (worst?.value.pnl ?? 0) < 0 ? highlight(worst.map { ($0.key, $0.value) }) : nil
+        guard bestHighlight != nil || worstHighlight != nil else { return nil }
+        return DashboardStrategyHighlights(best: bestHighlight, worst: worstHighlight)
     }
 }

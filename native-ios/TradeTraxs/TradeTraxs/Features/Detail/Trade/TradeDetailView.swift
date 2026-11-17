@@ -71,7 +71,7 @@ struct TradeDetailView: View {
             }
         }
         .id(viewModel.tradeID)
-        .experienceScreenBackground()
+        .experienceScreenBackground(usesGroupedFillInLightMode: experience == .journal)
         .experienceNavigationTitle(viewModel.trade?.symbol.ticker ?? "Trade")
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
@@ -190,6 +190,15 @@ struct TradeDetailView: View {
                 .padding(.bottom, ExperienceSpacing.lg)
             }
             .scrollDismissesKeyboard(.interactively)
+            .detailCommentsScrollOnOpen(
+                intent: .trade(viewModel.tradeID),
+                anchorID: Self.commentsAnchorID,
+                isContentReady: viewModel.trade != nil && experience == .social,
+                contentRevealed: contentRevealed,
+                detailCache: data.detailCache,
+                scrollProxy: proxy,
+                reduceMotion: reduceMotion
+            )
         }
         .overlay {
             if viewModel.isDeleting {
@@ -214,8 +223,8 @@ struct TradeDetailView: View {
             avatar: viewModel.authorAvatar,
             displayName: viewModel.authorDisplayName,
             username: viewModel.authorUsername,
-            subtitle: viewModel.accountIdentityLine,
-            dateText: TradeDisplay.dateText(trade.entryAt),
+            subtitle: experience == .social ? nil : viewModel.accountIdentityLine,
+            dateText: experience == .social ? "" : TradeDisplay.dateText(trade.entryAt),
             isOwner: viewModel.isOwner,
             contentLink: .trade(trade.id),
             ownerProfileID: trade.ownerProfileID,
@@ -335,11 +344,14 @@ struct TradeDetailView: View {
 
     @ViewBuilder
     private func socialTradeContent(_ trade: Trade, scrollProxy: ScrollViewProxy) -> some View {
+        let hasSocialMedia = viewModel.mediaReference != nil || viewModel.visibleLinkedReel != nil
+
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            if let media = viewModel.mediaReference {
-                TradeDetailMediaView(
-                    mediaID: trade.id.rawValue,
-                    reference: media,
+            if hasSocialMedia {
+                SocialTradeDetailMediaSection(
+                    tradeID: trade.id,
+                    mediaReference: viewModel.mediaReference,
+                    linkedReel: viewModel.visibleLinkedReel,
                     imagePipeline: imagePipeline,
                     onDoubleTapLike: {
                         Task {
@@ -347,32 +359,38 @@ struct TradeDetailView: View {
                                 on: socialEngagementTarget(for: trade.id)
                             )
                         }
-                    }
-                )
-                socialEngagementBar(for: trade, scrollProxy: scrollProxy)
-            }
-
-            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                SocialTradeDetailHeader(
-                    trade: trade,
-                    accountLine: trade.mode == .copyTraded
-                        ? viewModel.socialCopyTradeModeSummary
-                        : viewModel.accountIdentityLine,
-                    linkedReel: viewModel.visibleLinkedReel,
-                    imagePipeline: imagePipeline,
+                    },
                     onOpenLinkedClip: {
                         guard let reel = viewModel.visibleLinkedReel else { return }
                         viewModel.openLinkedClip(reel.id)
                     }
                 )
-                .accessibilityIdentifier("detail.trade.headline")
 
-                SocialTradePublicMetricsSection(trade: trade)
-            }
-
-            if viewModel.mediaReference == nil {
                 socialEngagementBar(for: trade, scrollProxy: scrollProxy)
+                    .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.top, ExperienceSpacing.xxs)
+            } else {
+                socialEngagementBar(for: trade, scrollProxy: scrollProxy)
+                    .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.bottom, ExperienceSpacing.xxs)
             }
+
+            SocialTradeDetailHeader(
+                trade: trade,
+                accountBadge: trade.mode == .copyTraded
+                    ? nil
+                    : TradeDisplay.socialHeaderAccountBadge(for: trade),
+                copyTradeSummary: trade.mode == .copyTraded
+                    ? viewModel.socialCopyTradeModeSummary
+                    : nil
+            )
+            .accessibilityIdentifier("detail.trade.headline")
+
+            if let caption = viewModel.displayPublicCaption {
+                SocialTradePublicCaptionSection(caption: caption)
+            }
+
+            SocialTradePublicMetricsSection(trade: trade)
 
             CommentsSectionView(
                 target: socialEngagementTarget(for: trade.id),
@@ -403,8 +421,10 @@ struct TradeDetailView: View {
                 }
             },
             onShareTap: { showsShareSheet = true },
-            vaultRef: tradeVaultRef
+            vaultRef: tradeVaultRef,
+            visualStyle: .feedCard
         )
+        .accessibilityIdentifier("detail.trade.engagement")
     }
 
     private func logContentRenderedIfReady() {

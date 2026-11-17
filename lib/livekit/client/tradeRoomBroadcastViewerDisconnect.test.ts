@@ -81,6 +81,32 @@ describe("classifyViewerBroadcastDisconnect", () => {
     )
   })
 
+  it("live stream with a missing interactive snapshot → connection_lost", () => {
+    assert.deepEqual(
+      classifyViewerBroadcastDisconnect({
+        watchingSessionId: session,
+        statusLive: true,
+        statusSessionId: session,
+        snapshot: null,
+        viewerUserId: viewer,
+      }),
+      { type: "connection_lost" }
+    )
+  })
+
+  it("live stream when the interactive snapshot request fails → connection_lost", () => {
+    assert.deepEqual(
+      classifyViewerBroadcastDisconnect({
+        watchingSessionId: session,
+        statusLive: true,
+        statusSessionId: null,
+        snapshot: undefined,
+        viewerUserId: viewer,
+      }),
+      { type: "connection_lost" }
+    )
+  })
+
   it("network drop while still in room → connection_lost", () => {
     assert.deepEqual(
       classifyViewerBroadcastDisconnect({

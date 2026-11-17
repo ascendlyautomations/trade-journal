@@ -7,7 +7,8 @@ enum PsychologyAnalyticsReportComposer {
         scopedTrades: [Trade],
         checkIns: [TraderDailyCheckIn],
         profileID: ProfileID,
-        scope: PsychologyAnalyticsScopeResolver.Resolved
+        scope: PsychologyAnalyticsScopeResolver.Resolved,
+        preferences: PreferenceRuleContext? = nil
     ) {
         let unlock = PsychologyInsightsUnlockProgress(
             tradingDayCheckInCount: PsychologyCheckInHistoryGate.countPsychologyCheckInHistoryDays(
@@ -15,11 +16,7 @@ enum PsychologyAnalyticsReportComposer {
             ),
             tradeCount: scopedTrades.count
         )
-        let early = EarlyPsychologyInsightsBuilder.build(trades: scopedTrades, checkIns: checkIns)
-        let displayInsightCards = EarlyPsychologyInsightsBuilder.merge(
-            early: early,
-            reportCards: report.dashboardCards
-        )
+        let displayInsightCards = report.dashboardCards
         let gapMessages = displayInsightCards.isEmpty
             ? PsychologyProgressMessaging.postUnlockInsightGapMessages(
                 report: report,
@@ -40,7 +37,8 @@ enum PsychologyAnalyticsReportComposer {
         let facts = PsychologyCoachFactsBuilder.build(
             report: report,
             trades: scopedTrades,
-            checkIns: checkIns
+            checkIns: checkIns,
+            preferences: preferences
         )
         let summary = PsychologyCoachDeterministicCoach.buildSummary(from: facts)
         PsychologyCoachSessionStore.shared.update(facts: facts, summary: summary)
@@ -50,18 +48,21 @@ enum PsychologyAnalyticsReportComposer {
         scopedTrades: [Trade],
         checkIns: [TraderDailyCheckIn],
         profileID: ProfileID,
-        scope: PsychologyAnalyticsScopeResolver.Resolved
+        scope: PsychologyAnalyticsScopeResolver.Resolved,
+        preferences: PreferenceRuleContext? = nil
     ) {
         let report = TraderPsychologyAnalyticsEngine.buildReport(
             trades: scopedTrades,
-            checkIns: checkIns
+            checkIns: checkIns,
+            preferences: preferences
         )
         publish(
             report: report,
             scopedTrades: scopedTrades,
             checkIns: checkIns,
             profileID: profileID,
-            scope: scope
+            scope: scope,
+            preferences: preferences
         )
     }
 }
@@ -83,7 +84,7 @@ enum PsychologyAnalyticsCheckInGate {
     }
 }
 
-enum PsychologyAnalyticsTradeScope {
+nonisolated enum PsychologyAnalyticsTradeScope {
     static func chartInputs(
         trades: [Trade],
         accounts: [TradingAccount]
@@ -116,5 +117,36 @@ enum PsychologyAnalyticsTradeScope {
         filter.linkedAccountModes = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
         let inputs = chartInputs(trades: ownerTrades, accounts: accounts)
         return DashboardChartMetrics.filteredTrades(from: inputs, scope: filter)
+    }
+
+    /// Trading Rules compliance — Eastern entry-time windows aligned with rule day/week keys.
+    static func complianceScopedTrades(
+        ownerTrades: [Trade],
+        accounts: [TradingAccount],
+        scope: DashboardClientScopeFilter,
+        now: Date = Date()
+    ) -> [Trade] {
+        var filter = scope
+        filter.linkedAccountModes = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
+        let inputs = chartInputs(trades: ownerTrades, accounts: accounts)
+        let withoutDate = DashboardChartMetrics.filteredTrades(
+            from: inputs,
+            scope: DashboardClientScopeFilter(
+                accountFilter: filter.accountFilter,
+                dateRange: .all,
+                customInterval: nil,
+                accountMode: filter.accountMode,
+                showPublicOnly: filter.showPublicOnly,
+                linkedAccountModes: filter.linkedAccountModes
+            )
+        )
+        guard let window = TradingRulesDisciplineScopeInterval.currentInterval(scope: scope, now: now)
+        else {
+            return withoutDate
+        }
+        return withoutDate.filter { trade in
+            let entry = DashboardScopeFilterSupport.dashboardTradeFilterDate(for: trade)
+            return entry >= window.start && entry <= window.end
+        }
     }
 }

@@ -7,11 +7,15 @@ final class SettingsExperienceTests: XCTestCase {
         let sections = SettingsHomeModel.sections
         XCTAssertFalse(sections.isEmpty)
         XCTAssertTrue(sections.contains { $0.id == "account" })
+        XCTAssertTrue(sections.contains { $0.id == "personal" })
         XCTAssertTrue(sections.contains { $0.id == "tradetraxs" })
         XCTAssertTrue(sections.contains { $0.id == "legal" })
-        let supportItems = sections.first { $0.id == "support" }?.items.map(\.route) ?? []
-        XCTAssertTrue(supportItems.contains(.support))
-        XCTAssertTrue(supportItems.contains(.productFeedback))
+        let tradetraxsItems = sections.first { $0.id == "tradetraxs" }?.items.map(\.route) ?? []
+        XCTAssertTrue(tradetraxsItems.contains(.support))
+        XCTAssertTrue(tradetraxsItems.contains(.productFeedback))
+        let personalItems = sections.first { $0.id == "personal" }?.items.map(\.route) ?? []
+        XCTAssertTrue(personalItems.contains(.tradingAnalytics))
+        XCTAssertTrue(personalItems.contains(.vault))
         let allRoutes = sections.flatMap(\.items).map(\.route)
         XCTAssertTrue(allRoutes.contains(.account))
         XCTAssertTrue(allRoutes.contains(.privacy))
@@ -135,12 +139,17 @@ final class SettingsExperienceTests: XCTestCase {
     }
 
     func testNotificationsViewModelPersistsToggleAndRevertsOnFailure() async {
+        let store = NotificationPreferencesSessionStore.shared
+        store.resetForSessionBoundary()
+        defer { store.resetForSessionBoundary() }
+
         let repository = SettingsStubNotificationPreferencesRepository()
         let navigation = NavigationCoordinator(store: NavigationStore())
         let viewModel = SettingsNotificationsViewModel(
             repository: repository,
             session: SettingsStubSession(userID: SettingsFixtures.viewerID.rawValue),
-            navigationCoordinator: navigation
+            navigationCoordinator: navigation,
+            preferencesStore: store
         )
 
         viewModel.loadIfNeeded()
@@ -155,6 +164,60 @@ final class SettingsExperienceTests: XCTestCase {
         viewModel.set(.directMessagesEnabled, enabled: true)
         await waitFor { viewModel.saveError != nil }
         XCTAssertEqual(viewModel.binding(for: .directMessagesEnabled), false)
+    }
+
+    func testNotificationsViewModelCoalescesRapidTogglesPerKey() async {
+        let store = NotificationPreferencesSessionStore.shared
+        store.resetForSessionBoundary()
+        defer { store.resetForSessionBoundary() }
+
+        let repository = SettingsCoalescingNotificationPreferencesRepository()
+        let viewModel = SettingsNotificationsViewModel(
+            repository: repository,
+            session: SettingsStubSession(userID: SettingsFixtures.viewerID.rawValue),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
+            preferencesStore: store
+        )
+
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+
+        viewModel.set(.likesEnabled, enabled: false)
+        viewModel.set(.likesEnabled, enabled: true)
+        viewModel.set(.likesEnabled, enabled: false)
+
+        await waitFor(timeout: 3) {
+            repository.updateCallCount >= 1 && repository.lastPatch[.likesEnabled] == false
+        }
+        XCTAssertEqual(viewModel.binding(for: .likesEnabled), false)
+        XCTAssertNil(viewModel.saveError)
+    }
+
+    func testNotificationsViewModelBatchesConcurrentDifferentKeys() async {
+        let store = NotificationPreferencesSessionStore.shared
+        store.resetForSessionBoundary()
+        defer { store.resetForSessionBoundary() }
+
+        let repository = SettingsCoalescingNotificationPreferencesRepository()
+        let viewModel = SettingsNotificationsViewModel(
+            repository: repository,
+            session: SettingsStubSession(userID: SettingsFixtures.viewerID.rawValue),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
+            preferencesStore: store
+        )
+
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+
+        viewModel.set(.likesEnabled, enabled: false)
+        viewModel.set(.commentsEnabled, enabled: false)
+
+        await waitFor(timeout: 3) {
+            repository.lastPatch[.likesEnabled] == false
+                && repository.lastPatch[.commentsEnabled] == false
+        }
+        XCTAssertFalse(viewModel.binding(for: .likesEnabled))
+        XCTAssertFalse(viewModel.binding(for: .commentsEnabled))
     }
 
     func testSubscriptionViewModelLoadsBillingStatus() async {
@@ -294,7 +357,12 @@ private final class SettingsStubNotificationPreferencesRepository: NotificationP
     private(set) var lastPatch: [NotificationPreferenceKey: Bool] = [:]
     private var stored = SettingsFixtures.preferences()
 
-    func preferences(for userID: ProfileID) async throws -> NotificationPreferences {
+    func invalidateCachedPreferences(for userID: ProfileID) {
+        _ = userID
+    }
+
+    func preferences(for userID: ProfileID, forceRefresh: Bool) async throws -> NotificationPreferences {
+        _ = forceRefresh
         stored.userID = userID
         return stored
     }
@@ -312,6 +380,41 @@ private final class SettingsStubNotificationPreferencesRepository: NotificationP
         }
         stored.userID = userID
         return stored
+    }
+}
+
+private final class SettingsCoalescingNotificationPreferencesRepository: NotificationPreferencesRepository, @unchecked Sendable {
+    private let lock = NSLock()
+    private(set) var lastPatch: [NotificationPreferenceKey: Bool] = [:]
+    private(set) var updateCallCount = 0
+    private var stored = SettingsFixtures.preferences()
+
+    func invalidateCachedPreferences(for userID: ProfileID) {
+        _ = userID
+    }
+
+    func preferences(for userID: ProfileID, forceRefresh: Bool) async throws -> NotificationPreferences {
+        _ = forceRefresh
+        return TestLock.withLock(lock) {
+            stored.userID = userID
+            return stored
+        }
+    }
+
+    func update(
+        _ patch: [NotificationPreferenceKey: Bool],
+        for userID: ProfileID
+    ) async throws -> NotificationPreferences {
+        try await Task.sleep(nanoseconds: 80_000_000)
+        return TestLock.withLock(lock) {
+            updateCallCount += 1
+            lastPatch = patch
+            for (key, value) in patch {
+                stored.set(key, enabled: value)
+            }
+            stored.userID = userID
+            return stored
+        }
     }
 }
 

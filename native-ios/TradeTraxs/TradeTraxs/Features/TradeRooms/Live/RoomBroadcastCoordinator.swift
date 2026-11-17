@@ -8,6 +8,7 @@ struct RoomBroadcastStatus: Hashable, Sendable {
     var broadcastSessionId: String?
     var broadcasterUserId: String?
     var broadcasterDisplayName: String?
+    var streamTitle: String?
     var voiceMode: String?
     var videoSource: String?
     /// "browser" or "obs"
@@ -48,6 +49,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         broadcastSessionId: nil,
         broadcasterUserId: nil,
         broadcasterDisplayName: nil,
+        streamTitle: nil,
         voiceMode: nil,
         videoSource: nil,
         broadcastSource: nil,
@@ -111,10 +113,14 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private(set) var isMicrophoneEnabledInStream = false
     private(set) var watchSession: BroadcastWatchSession?
     private(set) var obsHostBarSession: ObsHostBarSession?
+    /// Stable sheet anchor — survives ``clearObsHostBarSession()`` during private OBS prep (see ``syncObsHostBarSession()``).
+    private(set) var obsManageStreamPresentation: ObsHostBarSession?
     private(set) var isObsManageStreamPresented = false
     private(set) var isViewerPresented = false
     private(set) var isVideoRenderingEnabled = true
     private(set) var isStreamPlaybackMuted = false
+    /// 0–1 playback gain. Mute does not change this. Hardware volume stays separate.
+    private(set) var streamPlaybackGain: Double = 1
     private(set) var isBroadcastHandRaised = false
     private(set) var rosterParticipants: [BroadcastRosterParticipant] = []
     private(set) var broadcastRaisedHandIdentities: Set<String> = []
@@ -180,17 +186,44 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     }
 
     func openObsManageStream(roomID: RoomID, roomTitle: String) {
+        let trimmed = roomTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let session = ObsHostBarSession(
+            roomID: roomID,
+            roomTitle: trimmed.isEmpty ? "Trade Room" : trimmed
+        )
+        obsManageStreamPresentation = session
         setObsHostBarSession(roomID: roomID, roomTitle: roomTitle)
         TradeRoomObsBroadcastController.shared.noteHostContext(roomID: roomID, roomTitle: roomTitle)
         isObsManageStreamPresented = true
+        TradeRoomObsBroadcastDiagnostics.log(
+            "sheet.present",
+            roomID: roomID,
+            detail: "manageStream=open"
+        )
     }
 
     func presentObsManageStreamFromBar() {
-        guard obsHostBarSession != nil else { return }
+        guard let obsHostBarSession else { return }
+        obsManageStreamPresentation = obsHostBarSession
         isObsManageStreamPresented = true
+        TradeRoomObsBroadcastDiagnostics.log(
+            "sheet.present",
+            roomID: obsHostBarSession.roomID,
+            detail: "manageStream=fromBar"
+        )
     }
 
     func setObsManageStreamPresented(_ presented: Bool) {
+        if !presented {
+            if let roomID = obsManageStreamPresentation?.roomID {
+                TradeRoomObsBroadcastDiagnostics.log(
+                    "sheet.dismiss",
+                    roomID: roomID,
+                    detail: "manageStream=closed"
+                )
+            }
+            obsManageStreamPresentation = nil
+        }
         isObsManageStreamPresented = presented
     }
 
@@ -674,6 +707,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                 broadcastSessionId: res.broadcastSessionId,
                 broadcasterUserId: res.broadcasterUserId,
                 broadcasterDisplayName: res.broadcasterDisplayName,
+                streamTitle: res.streamTitle,
                 voiceMode: res.voiceMode,
                 videoSource: res.videoSource,
                 broadcastSource: res.broadcastSource,
@@ -828,6 +862,11 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
 
     func toggleStreamPlaybackMute() async {
         isStreamPlaybackMuted.toggle()
+        applyStreamPlaybackMute()
+    }
+
+    func setStreamPlaybackGain(_ gain: Double) {
+        streamPlaybackGain = BroadcastPlaybackLevel.clampedGain(gain)
         applyStreamPlaybackMute()
     }
 
@@ -1433,6 +1472,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         broadcastSourceIsObs = false
         watchSession = nil
         isStreamPlaybackMuted = false
+        streamPlaybackGain = 1
         speakInviteNotice = nil
         broadcastSpeakerGrantUserIds = []
         broadcastPendingSpeakInvitationIds = [:]
@@ -1455,7 +1495,10 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
 
     private func applyStreamPlaybackMute() {
         guard let room else { return }
-        let volume: Double = isStreamPlaybackMuted ? 0 : 1
+        let volume = BroadcastPlaybackLevel.trackVolume(
+            muted: isStreamPlaybackMuted,
+            gain: streamPlaybackGain
+        )
         for participant in room.remoteParticipants.values {
             for pub in participant.audioTracks {
                 if let track = pub.track as? RemoteAudioTrack {
@@ -1628,10 +1671,20 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
 
     nonisolated func room(_ room: Room, participant: RemoteParticipant, didSubscribeTrack publication: RemoteTrackPublication) {
         Task { @MainActor in
-            guard publication.kind == .video else { return }
-            syncVideoTrack(from: room)
-            syncViewerCount(from: room)
-            applyStreamPlaybackMute()
+            let kind: BroadcastPlaybackLevel.SubscribeKind = {
+                switch publication.kind {
+                case .audio: return .audio
+                case .video: return .video
+                default: return .other
+                }
+            }()
+            if kind == .video {
+                syncVideoTrack(from: room)
+                syncViewerCount(from: room)
+            }
+            if BroadcastPlaybackLevel.shouldApplyPlayback(on: kind) {
+                applyStreamPlaybackMute()
+            }
         }
     }
 

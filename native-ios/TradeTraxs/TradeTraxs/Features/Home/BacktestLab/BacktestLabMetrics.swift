@@ -11,6 +11,11 @@ nonisolated enum BacktestLabMetrics {
         var winRatePercent: Double
         var totalPnL: Decimal
         var averageRR: Double?
+        /// Gross profit / gross loss — nil when undefined (e.g. no losing trades).
+        var profitFactor: Decimal?
+        var averageWin: Decimal?
+        /// Positive loss magnitude per losing trade.
+        var averageLoss: Decimal?
     }
 
     struct StrategyBreakdown: Identifiable, Equatable, Sendable {
@@ -24,19 +29,47 @@ nonisolated enum BacktestLabMetrics {
 
     static func snapshot(for trades: [Trade]) -> Snapshot {
         let pnls = trades.map { $0.realizedPnL?.amount ?? 0 }
-        let wins = pnls.filter { $0 > 0 }.count
-        let losses = pnls.filter { $0 < 0 }.count
+        let winPnls = pnls.filter { $0 > 0 }
+        let lossPnls = pnls.filter { $0 < 0 }
+        let wins = winPnls.count
+        let losses = lossPnls.count
         let total = pnls.reduce(0, +)
         let count = trades.count
         let winRate = count > 0 ? (Double(wins) / Double(count)) * 100 : 0
+        let grossProfit = winPnls.reduce(0, +)
+        let grossLoss = abs(lossPnls.reduce(0, +))
+        let profitFactor: Decimal? = {
+            guard grossLoss > 0 else { return nil }
+            guard grossProfit > 0 else { return 0 }
+            return grossProfit / grossLoss
+        }()
+        let averageWin: Decimal? = wins > 0 ? grossProfit / Decimal(wins) : nil
+        let averageLoss: Decimal? = losses > 0 ? grossLoss / Decimal(losses) : nil
         return Snapshot(
             tradeCount: count,
             winCount: wins,
             lossCount: losses,
             winRatePercent: winRate,
             totalPnL: total,
-            averageRR: averageRR(trades)
+            averageRR: averageRR(trades),
+            profitFactor: profitFactor,
+            averageWin: averageWin,
+            averageLoss: averageLoss
         )
+    }
+
+    static func formatProfitFactor(_ value: Decimal?) -> String {
+        NumberDisplay.factor(value)
+    }
+
+    static func formatAverageWin(_ value: Decimal?) -> String {
+        guard let value else { return "—" }
+        return TradeDisplay.pnlText(Money(amount: value))
+    }
+
+    static func formatAverageLoss(_ value: Decimal?) -> String {
+        guard let value, value > 0 else { return "—" }
+        return TradeDisplay.pnlText(Money(amount: -value))
     }
 
     static func strategyBreakdown(from trades: [Trade]) -> [StrategyBreakdown] {

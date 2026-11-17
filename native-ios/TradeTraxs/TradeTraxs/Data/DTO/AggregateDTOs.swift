@@ -11,16 +11,16 @@ nonisolated enum TradeDTO {
 
     /// Mirrors web `PUBLIC_TRADE_SELECT` / owner list fields used by Profile + Trade Detail.
     static let profileListSelect =
-        "id,user_id,account_id,created_at,date,trade_date,pnl,rr,max_rr_reached,realized_rr,points,contracts,session,ticker,direction,notes,public_description,is_public,is_pinned,image_url,entry_time,exit_time,entry_price,exit_price,account_type,mode,strategy,duration_seconds,duration_text,trade_mode"
+        "id,user_id,account_id,created_at,date,trade_date,pnl,rr,max_rr_reached,realized_rr,full_tp,early_exit,exit_rr,points,contracts,session,ticker,direction,notes,public_description,is_public,is_pinned,image_url,entry_time,exit_time,entry_price,exit_price,account_type,mode,strategy,duration_seconds,duration_text,trade_mode"
 
     /// Owner Trade Detail / Add Trade edit — includes psychology + journal review columns.
     static let ownerJournalSelect =
         profileListSelect
-        + ",confidence,emotion,followed_plan,mistake_type,market_condition,timeframe,news_event,psychology_notes,exit_emotion,execution_rating,image_display_mode,reviewed,is_initial_import,import_source,import_fingerprint,max_rr_reached"
+        + ",confidence,emotion,followed_plan,mistake_type,market_condition,timeframe,news_event,psychology_notes,exit_emotion,execution_rating,image_display_mode,reviewed,is_initial_import,import_source,import_fingerprint,max_rr_reached,dollar_risk"
 
     /// Owner Trade History — includes denormalized account_name for search.
     static let historyListSelect =
-        "id,user_id,account_id,account_name,created_at,date,trade_date,pnl,rr,max_rr_reached,points,contracts,session,ticker,direction,notes,public_description,is_public,is_pinned,image_url,entry_time,exit_time,entry_price,exit_price,account_type,mode,strategy,confidence,emotion,followed_plan,mistake_type,market_condition,timeframe,news_event,psychology_notes,exit_emotion,execution_rating,duration_seconds,duration_text,trade_mode,image_display_mode,reviewed,is_initial_import,import_source,import_fingerprint,source_account_id,copied_account_ids,copy_trading_group_id"
+        "id,user_id,account_id,account_name,created_at,date,trade_date,pnl,rr,max_rr_reached,realized_rr,full_tp,early_exit,exit_rr,points,contracts,dollar_risk,session,ticker,direction,notes,public_description,is_public,is_pinned,image_url,entry_time,exit_time,entry_price,exit_price,account_type,mode,strategy,confidence,emotion,followed_plan,mistake_type,market_condition,timeframe,news_event,psychology_notes,exit_emotion,execution_rating,duration_seconds,duration_text,trade_mode,image_display_mode,reviewed,is_initial_import,import_source,import_fingerprint,source_account_id,copied_account_ids,copy_trading_group_id"
 
     /// Mirrors web `PROFILE_SUMMARY_TRADE_SELECT`.
     static let profileSummarySelect = "id,created_at,pnl,rr,mode,account_type"
@@ -40,8 +40,12 @@ nonisolated enum TradeDTO {
         var exit_time: String?
         var pnl: FlexibleNumber?
         var rr: FlexibleNumber?
+        var dollar_risk: FlexibleNumber?
         var max_rr_reached: FlexibleNumber?
         var realized_rr: FlexibleNumber?
+        var full_tp: Bool? = nil
+        var early_exit: Bool? = nil
+        var exit_rr: FlexibleNumber?
         var points: FlexibleNumber?
         var session: String?
         var is_public: Bool?
@@ -225,6 +229,9 @@ nonisolated enum TradeDTO {
         var rr: Double?
         var max_rr_reached: Double? = nil
         var realized_rr: Double? = nil
+        var full_tp: Bool = false
+        var early_exit: Bool = false
+        var exit_rr: Double? = nil
         var points: Double?
         var session: String?
         var strategy: String?
@@ -256,6 +263,7 @@ nonisolated enum TradeDTO {
         var source_account_id: String? = nil
         var copied_account_ids: [String]? = nil
         var copy_trading_group_id: String? = nil
+        var dollar_risk: Double? = nil
     }
 
     /// Mirrors web `InputTradeForm` save/update journal + psychology columns.
@@ -278,6 +286,9 @@ nonisolated enum TradeDTO {
         var rr: Double?
         var max_rr_reached: Double? = nil
         var realized_rr: Double? = nil
+        var full_tp: Bool = false
+        var early_exit: Bool = false
+        var exit_rr: Double? = nil
         var points: Double?
         var session: String?
         var strategy: String?
@@ -301,12 +312,15 @@ nonisolated enum TradeDTO {
         var image_display_mode: String?
         var reviewed: Bool?
         var created_at: String
+        var dollar_risk: Double? = nil
 
         enum CodingKeys: String, CodingKey {
             case account_id, account_name, account_size, account_type, account_category
             case ticker, direction, mode, contracts
             case entry_price, exit_price, entry_time, exit_time, trade_date
-            case pnl, rr, max_rr_reached, realized_rr, points, session, strategy, notes, image_url, image_crop
+            case pnl, rr, max_rr_reached, realized_rr, full_tp, early_exit, exit_rr, points
+            case dollar_risk
+            case session, strategy, notes, image_url, image_crop
             case is_public, public_description, created_at
             case confidence, emotion, followed_plan, market_condition, timeframe, news_event
             case psychology_notes, exit_emotion, execution_rating, duration_seconds, duration_text, image_display_mode, reviewed
@@ -344,7 +358,15 @@ nonisolated enum TradeDTO {
                 try container.encodeNil(forKey: .max_rr_reached)
             }
             try container.encodeIfPresent(realized_rr, forKey: .realized_rr)
+            try container.encode(full_tp, forKey: .full_tp)
+            try container.encode(early_exit, forKey: .early_exit)
+            try container.encodeIfPresent(exit_rr, forKey: .exit_rr)
             try container.encodeIfPresent(points, forKey: .points)
+            if let dollar_risk {
+                try container.encode(dollar_risk, forKey: .dollar_risk)
+            } else {
+                try container.encodeNil(forKey: .dollar_risk)
+            }
             try container.encodeIfPresent(session, forKey: .session)
             try container.encodeIfPresent(strategy, forKey: .strategy)
             try container.encodeIfPresent(notes, forKey: .notes)
@@ -917,6 +939,7 @@ nonisolated enum RoomDTO {
         var user_id: String?
         var role: String?
         var joined_at: String?
+        var is_favorited: Bool?
     }
 
     /// Web Community `loadMemberRooms` row (`room_members` + rooms embed).

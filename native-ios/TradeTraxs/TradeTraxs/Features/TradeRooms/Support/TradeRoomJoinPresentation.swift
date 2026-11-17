@@ -106,6 +106,21 @@ nonisolated enum TradeRoomJoinPresentation {
         }
     }
 
+    /// In-room header — join CTA only for viewers who are not yet members (no Owner/Joined pill).
+    static func showsConversationHeaderJoinButton(
+        isOwner: Bool,
+        isMember: Bool,
+        state: TradeRoomDiscoveryJoinState
+    ) -> Bool {
+        if isOwner || isMember { return false }
+        switch state {
+        case .joined:
+            return false
+        case .idle, .joining, .requesting, .requested:
+            return true
+        }
+    }
+
     static func resolveState(
         isJoined: Bool,
         joinPolicy: TradeRoomJoinPolicy,

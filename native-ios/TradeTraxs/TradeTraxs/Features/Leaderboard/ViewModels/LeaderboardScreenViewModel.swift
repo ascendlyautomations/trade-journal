@@ -24,6 +24,7 @@ final class LeaderboardScreenViewModel: ScreenLifecycle {
     private var filterGeneration: UInt64 = 0
     /// Bumps when ``LeaderboardSessionStore/profilesByID`` changes so views re-resolve avatars.
     private(set) var profileRevision: UInt64 = 0
+    var authenticatedProfileID: ProfileID? { state.viewerID }
     private var inFlightFollow: Set<ProfileID> = []
 
     init(

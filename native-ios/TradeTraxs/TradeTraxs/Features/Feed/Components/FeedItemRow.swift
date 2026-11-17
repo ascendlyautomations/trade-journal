@@ -10,6 +10,7 @@ struct FeedItemRow: View {
     let detailCache: DetailPresentationCache
     let playbackCoordinator: FeedVideoPlaybackCoordinator
     let onOpen: () -> Void
+    let onOpenComments: () -> Void
     let onOpenAuthor: () -> Void
     let onOpenLinkedTrade: (TradeID) -> Void
     let onOpenLinkedClip: (ReelID) -> Void
@@ -35,6 +36,28 @@ struct FeedItemRow: View {
 
     private var linkedReel: Reel? {
         FeedLinkedContentResolver.linkedReel(for: entry, cache: detailCache)
+    }
+
+    /// Linked clip pill on row media — skip the footer embed when already on-image.
+    private var showsLinkedClipOnTradeImage: Bool {
+        guard linkedReel != nil, entry.hasDisplayMedia else { return false }
+        switch entry {
+        case .trade, .post:
+            return true
+        default:
+            return false
+        }
+    }
+
+    @ViewBuilder
+    private func feedLinkedClipImageOverlay(for reel: Reel) -> some View {
+        FeedLinkedClipImageOverlay(
+            reel: reel,
+            imagePipeline: imagePipeline,
+            onOpen: { onOpenLinkedClip(reel.id) },
+            accessibilityIdentifier: "feed.trade.linkedClip.overlay.\(reel.id.rawValue)"
+        )
+        .padding(ExperienceSpacing.sm)
     }
 
     var body: some View {
@@ -78,7 +101,7 @@ struct FeedItemRow: View {
                 Label("Like", systemImage: "heart")
             }
             Button {
-                onOpen()
+                feedCommentTapAction()
             } label: {
                 Label("Comment", systemImage: "bubble.right")
             }
@@ -189,33 +212,14 @@ struct FeedItemRow: View {
     private var feedImageMedia: some View {
         switch entry {
         case .trade(_, let summary):
-            InteractiveImageView(
-                mediaID: entry.id,
-                reference: summary.thumbnail,
-                purpose: .tradeScreenshot,
-                imagePipeline: imagePipeline,
-                emptyIcon: .chart,
-                accessibilityIdentifier: "feed.trade.media",
-                deliveryQuality: .feedDisplay,
-                auditSurface: "feed",
-                onSingleTap: onOpen,
-                onDoubleTapLike: {
-                    Task { await engagementStore.ensureLiked(on: entry.interactionTarget) }
-                }
-            )
-
-        case .post(_, let post):
-            let mediaItems = post.media.filter {
-                !$0.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            }
-            if mediaItems.count == 1, let first = mediaItems.first {
+            ZStack(alignment: .bottomTrailing) {
                 InteractiveImageView(
                     mediaID: entry.id,
-                    reference: first,
-                    purpose: .postImage,
+                    reference: summary.thumbnail,
+                    purpose: .tradeScreenshot,
                     imagePipeline: imagePipeline,
-                    emptyIcon: .photo,
-                    accessibilityIdentifier: "feed.post.media",
+                    emptyIcon: .chart,
+                    accessibilityIdentifier: "feed.trade.media",
                     deliveryQuality: .feedDisplay,
                     auditSurface: "feed",
                     onSingleTap: onOpen,
@@ -223,29 +227,66 @@ struct FeedItemRow: View {
                         Task { await engagementStore.ensureLiked(on: entry.interactionTarget) }
                     }
                 )
-            } else if mediaItems.count > 1 {
-                TabView {
-                    ForEach(Array(mediaItems.enumerated()), id: \.offset) { index, media in
-                        InteractiveImageView(
-                            mediaID: "\(entry.id)-\(index)",
-                            reference: media,
-                            purpose: .postImage,
-                            imagePipeline: imagePipeline,
-                            emptyIcon: .photo,
-                            accessibilityIdentifier: "feed.post.media.\(index)",
-                            deliveryQuality: .feedDisplay,
-                            auditSurface: "feed",
-                            onSingleTap: onOpen,
-                            onDoubleTapLike: {
-                                Task { await engagementStore.ensureLiked(on: entry.interactionTarget) }
-                            }
-                        )
+
+                if let linkedReel {
+                    feedLinkedClipImageOverlay(for: linkedReel)
+                }
+            }
+
+        case .post(_, let post):
+            let mediaItems = post.media.filter {
+                !$0.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            if mediaItems.count == 1, let first = mediaItems.first {
+                ZStack(alignment: .bottomTrailing) {
+                    InteractiveImageView(
+                        mediaID: entry.id,
+                        reference: first,
+                        purpose: .postImage,
+                        imagePipeline: imagePipeline,
+                        emptyIcon: .photo,
+                        accessibilityIdentifier: "feed.post.media",
+                        deliveryQuality: .feedDisplay,
+                        auditSurface: "feed",
+                        onSingleTap: onOpen,
+                        onDoubleTapLike: {
+                            Task { await engagementStore.ensureLiked(on: entry.interactionTarget) }
+                        }
+                    )
+
+                    if let linkedReel {
+                        feedLinkedClipImageOverlay(for: linkedReel)
                     }
                 }
-                .tabViewStyle(.page(indexDisplayMode: .automatic))
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: 200)
-                .accessibilityIdentifier("feed.post.media")
+            } else if mediaItems.count > 1 {
+                ZStack(alignment: .bottomTrailing) {
+                    TabView {
+                        ForEach(Array(mediaItems.enumerated()), id: \.offset) { index, media in
+                            InteractiveImageView(
+                                mediaID: "\(entry.id)-\(index)",
+                                reference: media,
+                                purpose: .postImage,
+                                imagePipeline: imagePipeline,
+                                emptyIcon: .photo,
+                                accessibilityIdentifier: "feed.post.media.\(index)",
+                                deliveryQuality: .feedDisplay,
+                                auditSurface: "feed",
+                                onSingleTap: onOpen,
+                                onDoubleTapLike: {
+                                    Task { await engagementStore.ensureLiked(on: entry.interactionTarget) }
+                                }
+                            )
+                        }
+                    }
+                    .tabViewStyle(.page(indexDisplayMode: .automatic))
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 200)
+                    .accessibilityIdentifier("feed.post.media")
+
+                    if let linkedReel {
+                        feedLinkedClipImageOverlay(for: linkedReel)
+                    }
+                }
             }
 
         case .clip(_, let reel):
@@ -292,7 +333,7 @@ struct FeedItemRow: View {
                 onOpen: { onOpenLinkedTrade(linkedTradeSummary.id) }
             )
         }
-        if let linkedReel {
+        if let linkedReel, !showsLinkedClipOnTradeImage {
             FeedLinkedClipEmbed(
                 reel: linkedReel,
                 imagePipeline: imagePipeline,
@@ -314,6 +355,15 @@ struct FeedItemRow: View {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    private var feedCommentTapAction: () -> Void {
+        switch entry {
+        case .trade, .post, .achievement:
+            return onOpenComments
+        case .clip:
+            return onOpen
+        }
+    }
+
     // MARK: - Engagement
 
     @ViewBuilder
@@ -322,7 +372,7 @@ struct FeedItemRow: View {
             target: entry.interactionTarget,
             store: engagementStore,
             vaultStore: vaultStore,
-            onCommentTap: onOpen,
+            onCommentTap: feedCommentTapAction,
             onShareTap: onShare,
             onEmptyAreaTap: onOpen,
             vaultRef: vaultRef,
@@ -367,6 +417,13 @@ struct FeedItemRow: View {
         }
     }
 
+    private func feedAccountProviderName(for summary: TradeSummary) -> String? {
+        guard let trade = detailCache.trade(id: summary.id),
+              let accountID = trade.accountID
+        else { return nil }
+        return detailCache.accountName(for: accountID)
+    }
+
     private func tradeMetrics(_ summary: TradeSummary, opensOnTap: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             PublicTradeHeadlineRow(
@@ -377,7 +434,11 @@ struct FeedItemRow: View {
             .feedOpensOnTap(opensOnTap, action: onOpen)
             .accessibilityIdentifier("feed.trade.headline")
 
-            PublicTradeMetaChipRow(summary: summary, showsSession: summary.mode != .copyTraded)
+            PublicTradeMetaChipRow(
+                summary: summary,
+                showsSession: summary.mode != .copyTraded,
+                accountProviderName: feedAccountProviderName(for: summary)
+            )
                 .accessibilityIdentifier("feed.trade.badges")
                 .feedOpensOnTap(opensOnTap, allowsSiblingScroll: true, action: onOpen)
         }

@@ -93,8 +93,7 @@ struct DashboardEquityDrawdownSettingsSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        .experienceSheetChrome()
         .accessibilityIdentifier("dashboard.equityDrawdownSettings")
     }
 }

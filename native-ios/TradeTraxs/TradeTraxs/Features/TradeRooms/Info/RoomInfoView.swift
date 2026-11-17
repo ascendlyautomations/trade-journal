@@ -82,51 +82,60 @@ struct RoomInfoView: View {
     }
 
     private var content: some View {
-        List {
-            Section {
-                roomHeader
-            }
-            .listRowInsets(EdgeInsets(
-                top: ExperienceSpacing.sm,
-                leading: ExperienceSpacing.md,
-                bottom: ExperienceSpacing.sm,
-                trailing: ExperienceSpacing.md
-            ))
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
+        ScrollView {
+            VStack(spacing: ExperienceSpacing.sm) {
+                roomInfoCard
 
-            Section {
-                membersRow
-                    .experienceDashboardListRow()
-                inviteLinkRow
-                    .experienceDashboardListRow()
-                if viewModel.viewerID != nil {
-                    createFeedPostRow
-                        .experienceDashboardListRow()
+                if let statusMessage = viewModel.statusMessage {
+                    Text(statusMessage)
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, ExperienceSpacing.md)
                 }
-                ownerRow
-                    .experienceDashboardListRow()
             }
+            .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.vertical, ExperienceSpacing.sm)
+        }
+        .scrollContentBackground(.hidden)
+        .background(colors.backgroundPrimary.ignoresSafeArea())
+    }
+
+    private var roomInfoCard: some View {
+        VStack(spacing: 0) {
+            roomInfoCardRow { roomHeader }
+
+            roomInfoCardDivider
+            roomInfoCardRow { membersRow }
+
+            roomInfoCardDivider
+            roomInfoCardRow { inviteLinkRow }
+
+            if viewModel.viewerID != nil {
+                roomInfoCardDivider
+                roomInfoCardRow { createFeedPostRow }
+            }
+
+            roomInfoCardDivider
+            roomInfoCardRow { ownerRow }
 
             if viewModel.canManageRoom {
-                Section {
-                    Button("Trade Room Settings") {
+                roomInfoCardDivider
+                roomInfoCardRow {
+                    Button {
                         viewModel.openRoomSettings()
+                    } label: {
+                        Text("Trade Room Settings")
+                            .experienceStyle(.body, color: colors.primaryText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .experienceDashboardListRow()
-                }
-            } else if viewModel.isMember {
-                Section {
-                    Button("Leave Room", role: .destructive) {
-                        viewModel.showsLeaveConfirmation = true
-                    }
-                    .experienceDashboardListRow()
+                    .buttonStyle(.experiencePlain)
                 }
             }
 
             if !viewModel.isOwner {
-                Section {
-                    Button("Report Room") {
+                roomInfoCardDivider
+                roomInfoCardRow {
+                    Button {
                         ExperienceHaptics.play(.selection)
                         ContentReportSupport.presentTradeRoom(
                             roomID: viewModel.roomID,
@@ -134,21 +143,41 @@ struct RoomInfoView: View {
                             ownerID: viewModel.room?.ownerProfileID,
                             presenter: appEnvironment.contentReportPresenter
                         )
+                    } label: {
+                        Text("Report Room")
+                            .experienceStyle(.body, color: colors.primaryText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .experienceDashboardListRow()
+                    .buttonStyle(.experiencePlain)
                 }
             }
 
-            if let statusMessage = viewModel.statusMessage {
-                Section {
-                    Text(statusMessage)
-                        .experienceStyle(.footnote, color: colors.secondaryText)
-                        .experienceDashboardListRow()
+            if viewModel.isMember, !viewModel.canManageRoom {
+                roomInfoCardDivider
+                roomInfoCardRow {
+                    Button(role: .destructive) {
+                        viewModel.showsLeaveConfirmation = true
+                    } label: {
+                        Text("Leave Room")
+                            .experienceStyle(.body, color: colors.loss)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.experiencePlain)
                 }
             }
         }
-        .experienceInsetGroupedListStyle(pageBackground: true)
-        .listSectionSpacing(ExperienceSpacing.sm)
+        .roomInfoGroupedCard()
+    }
+
+    private var roomInfoCardDivider: some View {
+        ExperienceDivider()
+            .padding(.leading, ExperienceSpacing.md)
+    }
+
+    private func roomInfoCardRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.vertical, ExperienceSpacing.sm)
     }
 
     private var roomHeader: some View {
@@ -204,6 +233,7 @@ struct RoomInfoView: View {
                     .foregroundStyle(colors.tertiaryText)
             }
         }
+        .buttonStyle(.experiencePlain)
         .accessibilityIdentifier("tradeRooms.info.members")
     }
 
@@ -299,6 +329,7 @@ struct RoomInfoView: View {
                         .foregroundStyle(colors.tertiaryText)
                 }
             }
+            .buttonStyle(.experiencePlain)
             .accessibilityIdentifier("tradeRooms.info.owner")
         } else {
             HStack {
@@ -378,5 +409,29 @@ struct RoomInfoView: View {
         } catch {
             ownerAvatarImage = nil
         }
+    }
+}
+
+// MARK: - Grouped settings card
+
+private struct RoomInfoGroupedCardModifier: ViewModifier {
+    @Environment(\.themeColors) private var colors
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                colors.surfacePrimary,
+                in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                    .stroke(colors.border.opacity(0.35), lineWidth: ExperienceBorder.hairline)
+            }
+    }
+}
+
+private extension View {
+    func roomInfoGroupedCard() -> some View {
+        modifier(RoomInfoGroupedCardModifier())
     }
 }

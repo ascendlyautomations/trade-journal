@@ -16,6 +16,12 @@ import {
 } from "react"
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js"
 import {
+  readStoredSupabaseSession,
+  shouldApplyDelayedTokenRefresh,
+  shouldHydrateFromStoredSession,
+  supabaseBrowserAuthStorageKey,
+} from "@/lib/auth/mobileWebSessionRestore"
+import {
   applyBetaReferralIfEligible,
   clearBetaReferralAfterApply,
 } from "./applyBetaReferralIfEligible"
@@ -712,18 +718,56 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    const readStoredSession = (): Session | null => {
+      if (typeof window === "undefined") return null
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+      if (!url) return null
+      const key = supabaseBrowserAuthStorageKey(url)
+      if (!key) return null
+      return readStoredSupabaseSession(window.localStorage, key)
+    }
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return
 
-      // TOKEN_REFRESHED / USER_UPDATED / PASSWORD_RECOVERY → never Session Bootstrap.
+      if (event === "TOKEN_REFRESHED") {
+        const refreshedUserId = session?.user?.id ?? null
+        if (
+          session &&
+          shouldApplyDelayedTokenRefresh({
+            currentUserId: sessionUserIdRef.current,
+            refreshedUserId,
+          })
+        ) {
+          void applyAuthSession(session, "INITIAL_SESSION")
+        }
+        return
+      }
+
+      // USER_UPDATED / PASSWORD_RECOVERY → never Session Bootstrap.
       if (event === "SIGNED_OUT") {
         clearAuthState()
         if (isDemoModeActive() && mounted) {
           void applyDemoAuthSession(++loadGeneration)
         }
         return
+      }
+
+      if (
+        event === "INITIAL_SESSION" &&
+        !session?.user &&
+        shouldHydrateFromStoredSession({
+          eventSessionUserId: null,
+          storedSession: readStoredSession(),
+        })
+      ) {
+        const stored = readStoredSession()
+        if (stored) {
+          void applyAuthSession(stored, "INITIAL_SESSION")
+          return
+        }
       }
 
       if (!AUTH_SYNC_EVENTS.includes(event)) {

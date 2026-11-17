@@ -56,7 +56,7 @@ struct ExploreHomeView: View {
             await viewModel.refresh()
         }
         .onAppear {
-            viewModel.exploreScreenDidAppear()
+            viewModel.exploreScreenDidAppear(imagePipeline: imagePipeline)
         }
         .onDisappear {
             viewModel.exploreScreenDidDisappear()
@@ -98,7 +98,8 @@ struct ExploreHomeView: View {
     private var discoveryContent: some View {
         switch viewModel.phase {
         case .idle, .loading:
-            if viewModel.suggestedTraders.isEmpty
+            if viewModel.homeSuggestedTraders.isEmpty
+                && viewModel.suggestedTraders.isEmpty
                 && viewModel.suggestedTradeRooms.isEmpty
             {
                 ExperienceListSkeleton(style: .explore)
@@ -145,7 +146,7 @@ struct ExploreHomeView: View {
 
                 if let message = viewModel.tradersFailedMessage, viewModel.suggestedTraders.isEmpty {
                     inlineSectionError(message)
-                } else if !viewModel.suggestedTraders.isEmpty {
+                } else if !viewModel.homeSuggestedTraders.isEmpty {
                     tradersSection
                 }
 
@@ -235,21 +236,18 @@ struct ExploreHomeView: View {
             .padding(.horizontal, ExperienceSpacing.md)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-                    ForEach(viewModel.suggestedTraders) { trader in
+                HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+                    ForEach(viewModel.homeSuggestedTraders) { trader in
                         ExploreTraderCard(
                             trader: trader,
                             profile: viewModel.resolvedProfile(for: trader),
+                            viewerProfileID: viewModel.authenticatedProfileID,
                             imagePipeline: imagePipeline,
                             isFollowing: viewModel.isFollowing(trader),
+                            showsFollowControl: viewModel.showsFollowControl(for: trader),
                             onOpen: { viewModel.openTrader(trader) },
                             onToggleFollow: { viewModel.toggleFollow(trader) }
                         )
-                        .onAppear {
-                            if trader.id == viewModel.suggestedTraders.last?.id {
-                                viewModel.loadMoreTradersIfNeeded()
-                            }
-                        }
                     }
                 }
                 .padding(.horizontal, ExperienceSpacing.md)
@@ -316,6 +314,7 @@ struct ExploreHomeView: View {
                             ExploreTraderListRow(
                                 trader: trader,
                                 profile: viewModel.resolvedProfile(for: trader),
+                                viewerProfileID: viewModel.authenticatedProfileID,
                                 imagePipeline: imagePipeline,
                                 isFollowing: viewModel.isFollowing(trader),
                                 showsFollowControl: viewModel.showsFollowControl(for: trader),

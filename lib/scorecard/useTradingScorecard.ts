@@ -1,10 +1,15 @@
 "use client"
 
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { usePsychologyJournalInputs } from "../psychology/usePsychologyJournalInputs.ts"
 import { buildTradingScorecard, collectTopStrengthsAndWeaknesses } from "./buildScorecard.ts"
 import { mergeScorecardTrades } from "./tradeMapping.ts"
 import type { ScorecardAnalyticsContext, ScorecardResult } from "./types.ts"
+import { supabase } from "@/lib/supabaseClient"
+import type { PreferenceRuleContext } from "../analytics/preferenceCompliance.ts"
+import {
+  loadTradingPreferenceBundle,
+} from "../analytics/tradingPreferencesStore.ts"
 
 export type UseTradingScorecardParams = {
   userId: string | null | undefined
@@ -31,6 +36,26 @@ export function useTradingScorecard({
 }: UseTradingScorecardParams): UseTradingScorecardResult {
   const { checkIns, trades: journalTrades, ready: journalReady, loadError } =
     usePsychologyJournalInputs(userId, dashboardTrades)
+  const [preferences, setPreferences] = useState<PreferenceRuleContext | null>(null)
+
+  useEffect(() => {
+    if (!userId) {
+      setPreferences(null)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const bundle = await loadTradingPreferenceBundle(supabase, userId)
+        if (!cancelled) setPreferences(bundle)
+      } catch {
+        if (!cancelled) setPreferences(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
 
   const scopedIds = useMemo(
     () => new Set(dashboardTrades.map((r) => String(r.id ?? "").trim()).filter(Boolean)),
@@ -49,12 +74,15 @@ export function useTradingScorecard({
     if (analytics.totalTrades === 0) return null
     const merged = mergeScorecardTrades(dashboardTrades, journalInScope)
     if (merged.length === 0) return null
-    return buildTradingScorecard({
-      scopeLabel,
-      trades: merged,
-      checkIns,
-      analytics,
-    })
+    return buildTradingScorecard(
+      {
+        scopeLabel,
+        trades: merged,
+        checkIns,
+        analytics,
+      },
+      preferences
+    )
   }, [
     ready,
     dashboardTrades,
@@ -62,6 +90,7 @@ export function useTradingScorecard({
     checkIns,
     scopeLabel,
     analytics,
+    preferences,
   ])
 
   const highlights = useMemo(

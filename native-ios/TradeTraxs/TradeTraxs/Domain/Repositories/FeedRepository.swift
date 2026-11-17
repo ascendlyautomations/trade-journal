@@ -60,7 +60,16 @@ nonisolated protocol FeedRepository: Sendable {
     /// Deletes a reel the viewer owns.
     func deleteReel(id: ReelID) async throws
     /// Own clips with `trade_id IS NULL` — candidates for linking to a new trade.
-    func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel]
+    /// Pass `includingReelID` to keep the trade's current clip visible while editing.
+    func unattachedReels(
+        for profileID: ProfileID,
+        limit: Int,
+        includingReelID: ReelID?
+    ) async throws -> [Reel]
+    /// Trade ids that already have an owner reel (`reels.trade_id`).
+    func tradeIDsWithAttachedReels(owner: ProfileID) async throws -> Set<TradeID>
+    /// Web `fetchReelsByTradeIds` — lightweight `REEL_ROW_SELECT` for trade-card clip thumbnails.
+    func reels(linkedToTradeIDs tradeIDs: [TradeID], ownerID: ProfileID) async throws -> [Reel]
     /// Sets `reels.trade_id` (caption unchanged). App enforces one reel per trade.
     func attachReel(id: ReelID, to tradeID: TradeID) async throws
     /// Targeted link — PATCH `reels` (`trade_id`, mirror trade visibility; caption preserved).
@@ -106,12 +115,33 @@ extension FeedRepository {
         throw AppError.notImplemented(feature: "deleteReel")
     }
 
-    func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel] {
+    func unattachedReels(
+        for profileID: ProfileID,
+        limit: Int,
+        includingReelID: ReelID?
+    ) async throws -> [Reel] {
         let page = try await reels(
             authoredBy: profileID,
             page: PageRequest(limit: max(limit, 1))
         )
-        return Array(page.items.filter { $0.linkedTradeID == nil }.prefix(limit))
+        var items = page.items.filter { reel in
+            reel.linkedTradeID == nil || reel.id == includingReelID
+        }
+        if let includingReelID,
+           !items.contains(where: { $0.id == includingReelID }),
+           let preserved = page.items.first(where: { $0.id == includingReelID })
+        {
+            items.insert(preserved, at: 0)
+        }
+        return Array(items.prefix(limit))
+    }
+
+    func tradeIDsWithAttachedReels(owner: ProfileID) async throws -> Set<TradeID> {
+        let page = try await reels(
+            authoredBy: owner,
+            page: PageRequest(limit: 200)
+        )
+        return Set(page.items.compactMap(\.linkedTradeID))
     }
 
     func attachReel(id: ReelID, to tradeID: TradeID) async throws {
@@ -134,5 +164,9 @@ extension FeedRepository {
 
     func tradePublicFlagForReelLink(tradeID: TradeID, ownerID: ProfileID) async throws -> Bool? {
         nil
+    }
+
+    func reels(linkedToTradeIDs tradeIDs: [TradeID], ownerID: ProfileID) async throws -> [Reel] {
+        []
     }
 }

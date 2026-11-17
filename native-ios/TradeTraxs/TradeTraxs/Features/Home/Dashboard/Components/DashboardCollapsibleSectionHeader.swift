@@ -3,7 +3,7 @@ import SwiftUI
 /// Tappable Dashboard section header with disclosure chevron (section collapse).
 struct DashboardCollapsibleSectionHeader: View {
     let title: String
-    var subtitle: String? = nil
+    var info: String? = nil
     let isExpanded: Bool
     var trailing: AnyView? = nil
     let onToggle: () -> Void
@@ -12,22 +12,29 @@ struct DashboardCollapsibleSectionHeader: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
-            Button {
-                ExperienceHaptics.play(.selection)
-                onToggle()
-            } label: {
-                VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .center, spacing: ExperienceSpacing.xxs) {
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    onToggle()
+                } label: {
                     Text(title)
                         .experienceStyle(.headline, color: colors.primaryText)
-                    if let subtitle {
-                        Text(subtitle)
-                            .experienceStyle(.footnote, color: colors.tertiaryText)
-                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+                .buttonStyle(.experiencePlain)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityLabel(title)
+                .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+
+                if let info {
+                    AnalyticsMetricInfoButton(
+                        title: title,
+                        bodyText: info,
+                        accessibilityID: "dashboard.sectionInfo.\(DashboardChartInfo.identifier(for: title))"
+                    )
+                }
             }
-            .buttonStyle(.experiencePlain)
+
+            Spacer(minLength: 0)
 
             if let trailing {
                 trailing
@@ -48,10 +55,6 @@ struct DashboardCollapsibleSectionHeader: View {
         }
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.vertical, ExperienceSpacing.xs)
-        .accessibilityAddTraits(.isHeader)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(subtitle.map { "\(title). \($0)" } ?? title)
-        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
     }
 }
 

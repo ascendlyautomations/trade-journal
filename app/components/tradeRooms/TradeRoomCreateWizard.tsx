@@ -12,14 +12,14 @@ import { uploadTradeRoomImage } from "@/lib/tradeRoomImageUpload"
 import {
   defaultTradeRoomDraft,
   TRADE_ROOM_CATEGORIES,
+  TRADE_ROOM_ACCESS_OPTIONS,
   TRADE_ROOM_PRESET_DISCOVERY_TAGS,
   TRADE_ROOM_VALIDATION,
-  tradeRoomVisibilitySummary,
+  applyTradeRoomAccessMode,
+  tradeRoomAccessMode,
   validateTradeRoomConfiguration,
   type TradeRoomConfiguration,
   type TradeRoomDraftChannel,
-  type TradeRoomJoinPolicy,
-  type TradeRoomVisibility,
 } from "@/lib/tradeRoomConfiguration"
 
 const FIELD =
@@ -69,7 +69,6 @@ export default function TradeRoomCreateWizard({
     setPendingImageFile(null)
   }, [open, username])
 
-  const showsJoinPolicy = config.visibility === "public"
 
   const canSubmit = useMemo(() => {
     if (ownedRoomSlug) return false
@@ -335,65 +334,33 @@ export default function TradeRoomCreateWizard({
                 <h3 className="mb-3 text-sm font-semibold text-blue-200">Access</h3>
                 <div className="space-y-3">
                   <div>
-                    <label className={LABEL}>Room visibility</label>
+                    <label className={LABEL}>Room access</label>
                     <div className="grid grid-cols-2 gap-2">
-                      {(["public", "private"] as TradeRoomVisibility[]).map((v) => (
+                      {TRADE_ROOM_ACCESS_OPTIONS.map((opt) => (
                         <button
-                          key={v}
+                          key={opt.value}
                           type="button"
                           onClick={() =>
-                            setConfig((p) => ({
-                              ...p,
-                              visibility: v,
-                              joinPolicy: v === "private" ? "open" : p.joinPolicy,
-                            }))
+                            setConfig((p) => applyTradeRoomAccessMode(p, opt.value))
                           }
-                          className={`rounded-lg border px-3 py-2 text-sm capitalize ${
-                            config.visibility === v
+                          className={`rounded-lg border px-3 py-2 text-sm ${
+                            tradeRoomAccessMode(config) === opt.value
                               ? "border-blue-400/40 bg-blue-500/15 text-blue-100"
                               : "border-white/10 bg-white/5 text-gray-300"
                           }`}
                         >
-                          {v}
+                          {opt.label}
                         </button>
                       ))}
                     </div>
                     <p className="mt-2 text-xs text-gray-500">
-                      {tradeRoomVisibilitySummary(config.visibility)}
+                      {
+                        TRADE_ROOM_ACCESS_OPTIONS.find(
+                          (opt) => opt.value === tradeRoomAccessMode(config),
+                        )?.summary
+                      }
                     </p>
                   </div>
-
-                  {showsJoinPolicy ? (
-                    <div>
-                      <label className={LABEL}>Join policy</label>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        {(
-                          [
-                            { value: "open", label: "Anyone can join" },
-                            { value: "approval", label: "Request to join" },
-                          ] as const
-                        ).map((opt) => (
-                          <button
-                            key={opt.value}
-                            type="button"
-                            onClick={() =>
-                              setConfig((p) => ({
-                                ...p,
-                                joinPolicy: opt.value as TradeRoomJoinPolicy,
-                              }))
-                            }
-                            className={`rounded-lg border px-3 py-2 text-left text-sm ${
-                              config.joinPolicy === opt.value
-                                ? "border-blue-400/40 bg-blue-500/15 text-blue-100"
-                                : "border-white/10 bg-white/5 text-gray-300"
-                            }`}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
 
                   <label className="flex items-start gap-2 text-sm text-gray-300">
                     <input

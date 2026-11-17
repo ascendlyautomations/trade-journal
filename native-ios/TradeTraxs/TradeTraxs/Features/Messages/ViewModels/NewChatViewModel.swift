@@ -21,6 +21,11 @@ final class NewChatViewModel {
     private(set) var phase: Phase = .idle
     private(set) var results: [Profile] = []
     private(set) var selectedGroupMembers: [Profile] = []
+    private(set) var followingProfiles: [Profile] = []
+    private(set) var suggestedProfiles: [Profile] = []
+    private(set) var isLoadingSuggestions = false
+    private(set) var isLoadingMoreSuggested = false
+    private(set) var canLoadMoreSuggested = false
     var searchText = ""
     var groupName = ""
 
@@ -35,10 +40,14 @@ final class NewChatViewModel {
 
     private var viewerID: ProfileID?
     private var searchTask: Task<Void, Never>?
-    private var suggestions: [Profile] = []
+    private var suggestedNextCursor: String?
     private var searchGeneration: UInt64 = 0
     private var openingProfileID: ProfileID?
     private var isCreatingGroup = false
+    private var loadMoreSuggestedTask: Task<Void, Never>?
+
+    private static let suggestedPageSize = 15
+    private static let hideSuggestedWhenFollowingCount = 10
 
     init(
         messages: any MessageRepository,
@@ -69,8 +78,19 @@ final class NewChatViewModel {
     }
 
     var visibleResults: [Profile] {
-        if normalizedQuery.isEmpty { return suggestions }
-        return results
+        results
+    }
+
+    var showsFollowingSection: Bool {
+        !isSearching && !followingProfiles.isEmpty
+    }
+
+    var showsSuggestedSection: Bool {
+        !isSearching && followingProfiles.count < Self.hideSuggestedWhenFollowingCount
+    }
+
+    var showsSuggestedSeeMore: Bool {
+        showsSuggestedSection && canLoadMoreSuggested && !isLoadingSuggestions
     }
 
     var canCreateGroup: Bool {
@@ -83,6 +103,9 @@ final class NewChatViewModel {
             return "Search unavailable"
         default:
             break
+        }
+        if isLoadingSuggestions, normalizedQuery.isEmpty {
+            return "Loading people…"
         }
         if mode == .group, selectedGroupMembers.isEmpty, normalizedQuery.isEmpty {
             return "Select group members"
@@ -126,23 +149,56 @@ final class NewChatViewModel {
     }
 
     func prepare() async {
+        isLoadingSuggestions = true
+        followingProfiles = []
+        suggestedProfiles = []
+        suggestedNextCursor = nil
+        canLoadMoreSuggested = false
+        defer { isLoadingSuggestions = false }
+
         if let raw = await session.currentUserID?.rawValue {
             viewerID = ProfileID(raw)
         }
-        if let viewerID, MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) {
-            suggestions = FollowListFixtures.following(owner: viewerID)
-            for profile in suggestions { detailCache.seed(profile) }
-            return
-        }
-        if let viewerID, let following = detailCache.following(for: viewerID), !following.isEmpty {
-            suggestions = following.filter { $0.id != viewerID }
-            return
-        }
         guard let viewerID else { return }
-        if let page = try? await explore.discoverableProfiles(page: PageRequest(limit: 48)) {
-            suggestions = page.items.filter { $0.id != viewerID && !$0.isPrivate }
-            for profile in suggestions { detailCache.seed(profile) }
+
+        if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) {
+            await reloadSectionsForDevelopment(viewerID: viewerID)
+            return
         }
+
+        await FeedBlockedAuthorsFilter.shared.syncFromServer(messages: messages, force: false)
+        await reloadFollowingAndSuggested(resetSuggestedPagination: true)
+    }
+
+    func handleFollowRelationshipChange() async {
+        guard !isSearching else { return }
+        if let viewerID, MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) {
+            await reloadSectionsForDevelopment(viewerID: viewerID)
+            return
+        }
+        await reloadFollowingAndSuggested(resetSuggestedPagination: true)
+    }
+
+    func handleBlockListChange() {
+        Task { await handleFollowRelationshipChange() }
+    }
+
+    func loadMoreSuggested() async {
+        guard showsSuggestedSection,
+              canLoadMoreSuggested,
+              !isLoadingMoreSuggested,
+              loadMoreSuggestedTask == nil
+        else { return }
+
+        isLoadingMoreSuggested = true
+        loadMoreSuggestedTask = Task {
+            defer {
+                isLoadingMoreSuggested = false
+                loadMoreSuggestedTask = nil
+            }
+            await loadSuggestedPage(reset: false)
+        }
+        await loadMoreSuggestedTask?.value
     }
 
     func searchChanged() {
@@ -235,6 +291,8 @@ final class NewChatViewModel {
     func dismiss() {
         searchTask?.cancel()
         searchTask = nil
+        loadMoreSuggestedTask?.cancel()
+        loadMoreSuggestedTask = nil
         searchGeneration &+= 1
         results = []
         searchText = ""
@@ -244,6 +302,12 @@ final class NewChatViewModel {
         phase = .idle
         openingProfileID = nil
         isCreatingGroup = false
+        isLoadingSuggestions = false
+        isLoadingMoreSuggested = false
+        canLoadMoreSuggested = false
+        suggestedNextCursor = nil
+        followingProfiles = []
+        suggestedProfiles = []
     }
 
     func isGroupMemberSelected(_ profile: Profile) -> Bool {
@@ -328,11 +392,136 @@ final class NewChatViewModel {
         } catch ConversationCreationCoordinator.CreationError.invalidRecipients {
             phase = .failed("Select at least two people for a group chat.")
             ExperienceHaptics.play(.warning)
-            return nil
         } catch {
             phase = .failed(MessagesInboxSupport.message(for: error))
             ExperienceHaptics.play(.warning)
-            return nil
+        }
+        return nil
+    }
+
+    // MARK: - Sections
+
+    private func reloadSectionsForDevelopment(viewerID: ProfileID) async {
+        let following = FollowListFixtures.following(owner: viewerID)
+        followingProfiles = filterDiscoverableCandidates(following, viewerID: viewerID)
+        for profile in followingProfiles { detailCache.seed(profile) }
+
+        if followingProfiles.count >= Self.hideSuggestedWhenFollowingCount {
+            suggestedProfiles = []
+            canLoadMoreSuggested = false
+            suggestedNextCursor = nil
+            return
+        }
+
+        await loadSuggestedPage(reset: true)
+    }
+
+    private func reloadFollowingAndSuggested(resetSuggestedPagination: Bool) async {
+        guard let viewerID else { return }
+
+        do {
+            let following = try await loadAllFollowing(for: viewerID)
+            followingProfiles = filterDiscoverableCandidates(following, viewerID: viewerID)
+            detailCache.seed(following: followingProfiles, for: viewerID)
+            for profile in followingProfiles { detailCache.seed(profile) }
+        } catch {
+            followingProfiles = []
+        }
+
+        if followingProfiles.count >= Self.hideSuggestedWhenFollowingCount {
+            suggestedProfiles = []
+            suggestedNextCursor = nil
+            canLoadMoreSuggested = false
+            return
+        }
+
+        if resetSuggestedPagination {
+            suggestedProfiles = []
+            suggestedNextCursor = nil
+            canLoadMoreSuggested = false
+            await loadSuggestedPage(reset: true)
+            return
+        }
+
+        let followingIDs = Set(followingProfiles.map(\.id))
+        suggestedProfiles.removeAll { followingIDs.contains($0.id) }
+        suggestedProfiles.removeAll { FeedBlockedAuthorsFilter.shared.contains($0.id) }
+
+        if suggestedProfiles.isEmpty {
+            await loadSuggestedPage(reset: true)
+        }
+    }
+
+    private func loadAllFollowing(for viewerID: ProfileID) async throws -> [Profile] {
+        var aggregated: [Profile] = []
+        var seen = Set<ProfileID>()
+        var cursor: String?
+        repeat {
+            let page = try await profiles.following(
+                of: viewerID,
+                page: PageRequest(cursor: cursor, limit: FollowListPagination.pageSize)
+            )
+            for profile in page.items where seen.insert(profile.id).inserted {
+                aggregated.append(profile)
+            }
+            cursor = page.nextCursor
+        } while cursor != nil
+        return aggregated
+    }
+
+    private func loadSuggestedPage(reset: Bool) async {
+        guard let viewerID, showsSuggestedSection || reset else { return }
+        if reset {
+            suggestedProfiles = []
+            suggestedNextCursor = nil
+        }
+
+        let followingIDs = Set(followingProfiles.map(\.id))
+
+        do {
+            let page = try await explore.discoverableProfiles(
+                page: PageRequest(cursor: suggestedNextCursor, limit: Self.suggestedPageSize)
+            )
+            let filtered = filterSuggestedCandidates(
+                page.items,
+                viewerID: viewerID,
+                excludingFollowingIDs: followingIDs
+            )
+            var seen = Set(suggestedProfiles.map(\.id))
+            for profile in filtered where seen.insert(profile.id).inserted {
+                suggestedProfiles.append(profile)
+                detailCache.seed(profile)
+            }
+            suggestedNextCursor = page.nextCursor
+            canLoadMoreSuggested = suggestedNextCursor != nil
+        } catch {
+            if reset {
+                suggestedProfiles = []
+            }
+            canLoadMoreSuggested = false
+        }
+    }
+
+    private func filterDiscoverableCandidates(_ profiles: [Profile], viewerID: ProfileID) -> [Profile] {
+        profiles.filter { profile in
+            profile.id != viewerID
+                && !profile.isPrivate
+                && !profile.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !FeedBlockedAuthorsFilter.shared.contains(profile.id)
+        }
+    }
+
+    private func filterSuggestedCandidates(
+        _ profiles: [Profile],
+        viewerID: ProfileID,
+        excludingFollowingIDs: Set<ProfileID>
+    ) -> [Profile] {
+        profiles.filter { profile in
+            profile.id != viewerID
+                && !excludingFollowingIDs.contains(profile.id)
+                && !profile.isPrivate
+                && !profile.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !FeedBlockedAuthorsFilter.shared.contains(profile.id)
         }
     }
 }

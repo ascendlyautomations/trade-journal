@@ -34,7 +34,7 @@ struct BacktestLabView: View {
                 labContent
             }
         }
-        .experienceScreenBackground()
+        .experienceScreenBackground(usesGroupedFillInLightMode: true)
         .experienceNavigationTitle("Backtest Lab")
         .toolbar(.hidden, for: .tabBar)
         .refreshable {
@@ -68,6 +68,12 @@ struct BacktestLabView: View {
         .sheet(item: $viewModel.sharePayload) { payload in
             BacktestLabShareSheet(items: [payload.text])
         }
+        .sheet(isPresented: Binding(
+            get: { viewModel.showsCustomTimeSheet },
+            set: { viewModel.showsCustomTimeSheet = $0 }
+        )) {
+            BacktestLabCustomTimeRangeSheet(viewModel: viewModel)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { _ in
             entitlementGateRevision += 1
         }
@@ -93,11 +99,9 @@ struct BacktestLabView: View {
     private var gatedContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-                introCopy
-                    .padding(.horizontal, ExperienceSpacing.md)
-                    .padding(.top, ExperienceSpacing.sm)
                 upgradeBlock
                     .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.top, ExperienceSpacing.xs)
             }
             .padding(.bottom, ExperienceSpacing.xxxl)
         }
@@ -129,14 +133,11 @@ struct BacktestLabView: View {
     private var labScrollContent: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-                introCopy
+                filterBar
                     .padding(.horizontal, ExperienceSpacing.md)
-                    .padding(.top, ExperienceSpacing.sm)
+                    .padding(.top, ExperienceSpacing.xs)
 
-                strategyRow
-                    .padding(.horizontal, ExperienceSpacing.md)
-
-                metricStrip
+                BacktestLabMetricsGrid(snapshot: viewModel.metrics)
                     .padding(.top, ExperienceSpacing.xxs)
 
                 winsLossesRow
@@ -153,13 +154,6 @@ struct BacktestLabView: View {
             }
             .padding(.bottom, ExperienceSpacing.xxxl)
         }
-    }
-
-    private var introCopy: some View {
-        Text("Backtest trades stay separate from dashboard, Trades history, and performance analytics.")
-            .experienceStyle(.footnote, color: colors.secondaryText)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var upgradeBlock: some View {
@@ -181,14 +175,45 @@ struct BacktestLabView: View {
         }
         .padding(ExperienceSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
-            cornerRadius: ExperienceRadius.md,
-            style: .continuous
-        ))
+        .experienceTradingRulesCard(prominence: .featured)
         .accessibilityIdentifier("backtest.lab.gate")
     }
 
-    private var strategyRow: some View {
+    private var filterBar: some View {
+        HStack(spacing: ExperienceSpacing.xs) {
+            accountFilterMenu
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+            strategyFilterMenu
+            timeFilterMenu
+        }
+        .accessibilityIdentifier("backtest.lab.filters")
+    }
+
+    private var accountFilterMenu: some View {
+        OwnerAccountFilterDropdown(
+            accounts: viewModel.backtestAccountsForMenu,
+            isAllAccountsSelected: {
+                if case .all = viewModel.accountFilter { return true }
+                return false
+            }(),
+            selectedAccountID: {
+                if case .account(let id) = viewModel.accountFilter { return id }
+                return nil
+            }(),
+            onSelectAll: { viewModel.setAccountFilter(.all) },
+            onSelectAccount: { viewModel.setAccountFilter(.account($0)) },
+            onManageAccounts: { viewModel.openManageAccounts() },
+            accessibilityIdentifier: "backtest.lab.account",
+            boundary: .trades,
+            profileID: viewModel.ownerAccountsProfileID
+        ) {
+            filterCapsuleLabel(viewModel.accountMenuTitle)
+        }
+        .accessibilityLabel("Account")
+        .accessibilityValue(viewModel.accountMenuTitle)
+    }
+
+    private var strategyFilterMenu: some View {
         Menu {
             ForEach(viewModel.strategyOptions, id: \.self) { option in
                 Button {
@@ -202,53 +227,39 @@ struct BacktestLabView: View {
                 }
             }
         } label: {
-            HStack(spacing: 4) {
-                Text(viewModel.strategyMenuTitle)
-                    .experienceStyle(.footnote, color: colors.primaryText)
-                    .lineLimit(1)
-                ExperienceIcon(icon: .chevronDown, size: .xs, color: colors.secondaryText)
-            }
-            .padding(.horizontal, ExperienceSpacing.sm)
-            .frame(minHeight: 32)
-            .background(colors.fillSecondary, in: Capsule())
-            .experienceControlHitTarget()
+            filterCapsuleLabel(viewModel.strategyMenuTitle)
         }
         .accessibilityIdentifier("backtest.lab.strategy")
     }
 
-    private var metricStrip: some View {
-        let snap = viewModel.metrics
-        let pnlTone: DashboardMetricTone = {
-            if snap.totalPnL > 0 { return .positive }
-            if snap.totalPnL < 0 { return .negative }
-            return .neutral
-        }()
-        return DashboardMetricStrip(chips: [
-            DashboardMetricChip(
-                id: "trades",
-                label: "Trades",
-                value: "\(snap.tradeCount)",
-                tone: .neutral
-            ),
-            DashboardMetricChip(
-                id: "winRate",
-                label: "Win Rate",
-                value: String(format: "%.1f%%", snap.winRatePercent),
-                tone: .neutral
-            ),
-            DashboardMetricChip(
-                id: "pnl",
-                label: "Total PnL",
-                value: TradeDisplay.pnlText(Money(amount: snap.totalPnL)),
-                tone: pnlTone
-            ),
-            DashboardMetricChip(
-                id: "avgRR",
-                label: "Avg RR",
-                value: snap.averageRR.map { TradeDisplay.compactRRText(Decimal($0)) ?? "—" } ?? "—",
-                tone: .neutral
-            ),
-        ])
+    private var timeFilterMenu: some View {
+        Menu {
+            ForEach(BacktestLabTimeFilter.allCases) { option in
+                Button {
+                    viewModel.setTimeFilter(option)
+                } label: {
+                    Text(option.menuTitle)
+                }
+            }
+        } label: {
+            filterCapsuleLabel(viewModel.timeMenuTitle)
+        }
+        .accessibilityLabel("Time")
+        .accessibilityValue(viewModel.timeMenuTitle)
+        .accessibilityIdentifier("backtest.lab.time")
+    }
+
+    private func filterCapsuleLabel(_ title: String) -> some View {
+        HStack(spacing: 4) {
+            Text(title)
+                .experienceStyle(.footnote, color: colors.primaryText)
+                .lineLimit(1)
+            ExperienceIcon(icon: .chevronDown, size: .xs, color: colors.secondaryText)
+        }
+        .padding(.horizontal, ExperienceSpacing.sm)
+        .frame(minHeight: 32)
+        .tradingRulesFilterChip()
+        .experienceControlHitTarget()
     }
 
     private var winsLossesRow: some View {
@@ -262,19 +273,16 @@ struct BacktestLabView: View {
                 .experienceStyle(.footnote, color: colors.loss)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(ExperienceSpacing.sm)
-        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
-            cornerRadius: ExperienceRadius.md,
-            style: .continuous
-        ))
+        .padding(ExperienceSpacing.md)
+        .experienceTradingRulesCard(prominence: .standard)
     }
 
     @ViewBuilder
     private var calendarSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("Backtest Calendar")
-                .experienceStyle(.headline, color: colors.primaryText)
+            backtestSectionHeader("Backtest Calendar")
 
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             HStack {
                 Button {
                     viewModel.shiftCalendarMonth(by: -1)
@@ -305,7 +313,15 @@ struct BacktestLabView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, ExperienceSpacing.sm)
             }
+            }
+            .padding(ExperienceSpacing.md)
+            .experienceTradingRulesCard(prominence: .standard)
         }
+    }
+
+    private func backtestSectionHeader(_ title: String) -> some View {
+        Text(title)
+            .experienceStyle(.headline, color: colors.primaryText)
     }
 
     private var strategyBreakdownGridColumns: [GridItem] {
@@ -318,13 +334,15 @@ struct BacktestLabView: View {
     @ViewBuilder
     private var strategySection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("Strategy Breakdown")
-                .experienceStyle(.headline, color: colors.primaryText)
+            backtestSectionHeader("Strategy Breakdown")
 
             if viewModel.strategyBreakdown.isEmpty {
                 Text("No strategy labels yet. Add a strategy when logging backtest trades.")
                     .experienceStyle(.footnote, color: colors.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(ExperienceSpacing.md)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .experienceTradingRulesCard(prominence: .standard)
             } else {
                 LazyVGrid(columns: strategyBreakdownGridColumns, spacing: ExperienceSpacing.sm) {
                     ForEach(viewModel.strategyBreakdown) { row in
@@ -337,40 +355,38 @@ struct BacktestLabView: View {
     }
 
     private func strategyBreakdownCard(_ row: BacktestLabMetrics.StrategyBreakdown) -> some View {
-        ExperienceCard {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                Text(row.name)
-                    .experienceStyle(.subheadline, color: colors.primaryText)
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            Text(row.name)
+                .experienceStyle(.subheadline, color: colors.primaryText)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                Text("Trades: \(row.tradeCount)")
-                    .experienceStyle(.caption, color: colors.secondaryText)
-                Text(String(format: "Win rate: %.1f%%", row.winRatePercent))
-                    .experienceStyle(.caption, color: colors.secondaryText)
-                Text("PnL: \(TradeDisplay.pnlText(Money(amount: row.totalPnL)))")
-                    .experienceStyle(.caption, color: theme.metricColor(
-                        for: NSDecimalNumber(decimal: row.totalPnL).doubleValue
-                    ))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                if let rr = row.averageRR {
-                    Text("Avg RR: \(TradeDisplay.compactRRText(Decimal(rr)) ?? "—")")
-                        .experienceStyle(.caption, color: colors.tertiaryText)
-                }
+            Text("Trades: \(row.tradeCount)")
+                .experienceStyle(.caption, color: colors.secondaryText)
+            Text(String(format: "Win rate: %.1f%%", row.winRatePercent))
+                .experienceStyle(.caption, color: colors.secondaryText)
+            Text("P&L: \(TradeDisplay.pnlText(Money(amount: row.totalPnL)))")
+                .experienceStyle(.caption, color: theme.metricColor(
+                    for: NSDecimalNumber(decimal: row.totalPnL).doubleValue
+                ))
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+            if let rr = row.averageRR {
+                Text("Avg R:R: \(TradeDisplay.compactRRText(Decimal(rr)) ?? "—")")
+                    .experienceStyle(.caption, color: colors.tertiaryText)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(ExperienceSpacing.md)
+        .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
+        .experienceTradingRulesCard(cornerRadius: ExperienceRadius.md)
     }
 
     @ViewBuilder
     private var tradesSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("Backtest Trades")
-                .experienceStyle(.headline, color: colors.primaryText)
+            backtestSectionHeader("Backtest Trades")
 
             if viewModel.journalItems.isEmpty {
                 ExperienceEmptyState(

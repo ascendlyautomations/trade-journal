@@ -1,6 +1,7 @@
 "use client"
 
 import { isExploreWriteBlocked } from "@/lib/exploreWriteGuard"
+import { TRADE_ROOM_VALIDATION } from "@/lib/tradeRoomConfiguration"
 import dynamic from "next/dynamic"
 import {
   Suspense,
@@ -13,6 +14,7 @@ import {
   type ChangeEvent,
 } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { followMobileWebBack } from "@/lib/mobileWebInAppHistory"
 const TradeRoomsDiscoverView = dynamic(
   () => import("../components/TradeRoomsDiscoverView"),
   { ssr: false, loading: () => null }
@@ -123,6 +125,7 @@ import {
   canModerateRoomMemberTarget,
   canModerateTradeRoom,
   memberHasModeratorTag,
+  TRADE_ROOM_MODERATOR_TAG_NAME,
 } from "@/lib/tradeRoomModerationPermission"
 import { canManageTradeRoom } from "@/lib/tradeRoomManagementPermission"
 import { attemptTradeRoomJoin, roomRequiresJoinApproval } from "@/lib/tradeRoomJoinFlow"
@@ -304,6 +307,8 @@ type MemberActionConfirm =
   | { kind: "remove"; userId: string }
   | { kind: "ban"; userId: string }
   | { kind: "unban"; banId: string }
+  | { kind: "promoteModerator"; userId: string }
+  | { kind: "demoteModerator"; userId: string }
 
 type DeleteSectionConfirm = {
   sectionId: string
@@ -508,6 +513,9 @@ function CommunityContent() {
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null)
   const [banningMemberId, setBanningMemberId] = useState<string | null>(null)
   const [unbanningBanId, setUnbanningBanId] = useState<string | null>(null)
+  const [settingModeratorUserId, setSettingModeratorUserId] = useState<
+    string | null
+  >(null)
   const [memberActionConfirm, setMemberActionConfirm] =
     useState<MemberActionConfirm | null>(null)
   const [deleteSectionConfirm, setDeleteSectionConfirm] =
@@ -992,7 +1000,7 @@ function CommunityContent() {
     setMobileRoomsOpen(false)
     setMobileSectionsOpen(false)
     setSelectedRoomId(null)
-    router.push("/community")
+    followMobileWebBack("/community", router)
   }, [router])
 
   useEffect(() => {
@@ -1035,7 +1043,18 @@ function CommunityContent() {
   const memberActionBusy =
     removingMemberId !== null ||
     banningMemberId !== null ||
-    unbanningBanId !== null
+    unbanningBanId !== null ||
+    settingModeratorUserId !== null
+
+  const roomModeratorPresetTag = useMemo(
+    () =>
+      roomMemberTags.find(
+        (tag) =>
+          tag.name.trim().toLowerCase() ===
+          TRADE_ROOM_MODERATOR_TAG_NAME.toLowerCase()
+      ) ?? null,
+    [roomMemberTags]
+  )
 
   const userIdRef = useRef<string | null>(null)
   const roomsRef = useRef<Room[]>([])
@@ -1288,7 +1307,10 @@ function CommunityContent() {
     if (isOwner) return true
     if (isBetaAnnouncementsLocked) return isAdmin
     if (sections.length === 0) return true
-    return currentSection?.allow_members_chat !== false
+    if (currentSection?.allow_members_chat === false) {
+      return isRoomModerator
+    }
+    return true
   }, [
     selectedRoomId,
     selectedSectionId,
@@ -1296,6 +1318,7 @@ function CommunityContent() {
     isOwner,
     isAdmin,
     isBetaAnnouncementsLocked,
+    isRoomModerator,
     sections.length,
     currentSection?.allow_members_chat,
   ])
@@ -2426,8 +2449,11 @@ function CommunityContent() {
   }
 
   async function handleAddSection() {
-    if (sections.length >= 5) {
-      showPopup({ type: "warning", message: "Max 5 pages allowed" })
+    if (sections.length >= TRADE_ROOM_VALIDATION.maxChannels) {
+      showPopup({
+        type: "warning",
+        message: `Max ${TRADE_ROOM_VALIDATION.maxChannels} pages allowed`,
+      })
       return
     }
     if (!selectedRoomId) return
@@ -2557,8 +2583,11 @@ function CommunityContent() {
     const trimmed = newSectionName.trim()
     if (!trimmed || !selectedRoomId) return
 
-    if (sections.length >= 5) {
-      showPopup({ type: "warning", message: "Max 5 pages allowed" })
+    if (sections.length >= TRADE_ROOM_VALIDATION.maxChannels) {
+      showPopup({
+        type: "warning",
+        message: `Max ${TRADE_ROOM_VALIDATION.maxChannels} pages allowed`,
+      })
       return
     }
 
@@ -2890,6 +2919,8 @@ function CommunityContent() {
 
   async function handleUnbanMember(banId: string) {
     if (!selectedRoomId) return
+    const ban = bannedUsers.find((row) => row.id === banId)
+    if (!ban || !canActOnMember(ban.user_id)) return
 
     setUnbanningBanId(banId)
 
@@ -2911,6 +2942,43 @@ function CommunityContent() {
     await loadManageMembers(selectedRoomId)
   }
 
+  async function handleSetMemberModerator(userId: string, promoted: boolean) {
+    if (!selectedRoomId || !roomModeratorPresetTag) return
+    if (userId === user?.id) return
+    if (userId === selectedRoom?.owner_user_id) return
+
+    setSettingModeratorUserId(userId)
+    const assigned = tagIdsForMember(userId).includes(roomModeratorPresetTag.id)
+    const result =
+      promoted && !assigned
+        ? await assignMemberTag(
+            supabase,
+            selectedRoomId,
+            userId,
+            roomModeratorPresetTag.id
+          )
+        : !promoted && assigned
+          ? await removeMemberTagAssignment(
+              supabase,
+              selectedRoomId,
+              userId,
+              roomModeratorPresetTag.id
+            )
+          : { error: null as string | null }
+    setSettingModeratorUserId(null)
+
+    if (result.error) {
+      showPopup({ type: "error", message: result.error })
+      return
+    }
+
+    showPopup({
+      type: "success",
+      message: promoted ? "Moderator added" : "Moderator removed",
+    })
+    await loadManageMembers(selectedRoomId)
+  }
+
   async function handleMemberActionConfirm() {
     if (!memberActionConfirm || memberActionBusy) return
 
@@ -2920,8 +2988,12 @@ function CommunityContent() {
       await handleRemoveMember(action.userId)
     } else if (action.kind === "ban") {
       await handleBanMember(action.userId)
-    } else {
+    } else if (action.kind === "unban") {
       await handleUnbanMember(action.banId)
+    } else if (action.kind === "promoteModerator") {
+      await handleSetMemberModerator(action.userId, true)
+    } else if (action.kind === "demoteModerator") {
+      await handleSetMemberModerator(action.userId, false)
     }
 
     setMemberActionConfirm(null)
@@ -2933,6 +3005,12 @@ function CommunityContent() {
     }
     if (confirm.kind === "ban") {
       return "Ban this member from the room? They will not be able to rejoin until unbanned."
+    }
+    if (confirm.kind === "promoteModerator") {
+      return "Make this member a moderator? They can ban, remove, and delete messages from regular members."
+    }
+    if (confirm.kind === "demoteModerator") {
+      return "Remove moderator status from this member?"
     }
     return "Allow this user to join the room again?"
   }
@@ -4391,7 +4469,7 @@ function CommunityContent() {
       <div
         data-tt-native-surface="community"
         data-tt-trade-rooms
-          className={`tt-community flex h-[var(--app-viewport-height)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] py-2 text-white ${MOBILE_WEB_NEUTRAL_PAGE_BG} max-md:px-0 max-md:py-0 max-md:text-[color:var(--tt-text,#f0f3f6)]`}
+          className={`tt-community tt-mobile-web-keyboard-shell flex h-[var(--app-viewport-height)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] py-2 text-white ${MOBILE_WEB_NEUTRAL_PAGE_BG} max-md:px-0 max-md:py-0 max-md:text-[color:var(--tt-text,#f0f3f6)]`}
       >
         <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1600px] flex-col px-4 md:px-6 xl:px-8 2xl:px-12 max-md:max-w-none max-md:px-0">
         <div
@@ -5097,7 +5175,7 @@ function CommunityContent() {
                       </div>
                     ))}
                   </div>
-                  {isOwner && sections.length < 5 ? (
+                  {isOwner && sections.length < TRADE_ROOM_VALIDATION.maxChannels ? (
                     <button
                       type="button"
                       onClick={() => setShowCreateSectionModal(true)}
@@ -5136,7 +5214,9 @@ function CommunityContent() {
                         }
                       }}
                       isOwner={isOwner}
-                      canAddChannel={sections.length < 5}
+                      canAddChannel={
+                        sections.length < TRADE_ROOM_VALIDATION.maxChannels
+                      }
                       onAddChannel={() => setShowCreateSectionModal(true)}
                       generalVoiceSlot={
                         showsGeneralVoice ? (
@@ -5220,7 +5300,7 @@ function CommunityContent() {
                               <span className="truncate">{section.name}</span>
                             </button>
                           ))}
-                          {isOwner && sections.length < 5 ? (
+                          {isOwner && sections.length < TRADE_ROOM_VALIDATION.maxChannels ? (
                             <button
                               type="button"
                               onClick={() => {
@@ -5386,6 +5466,8 @@ function CommunityContent() {
                                 isRoomOwner={isOwner}
                                 isRoomModerator={isRoomModerator}
                                 roomOwnerUserId={selectedRoom?.owner_user_id}
+                                senderTagIds={tagIdsForMember(msg.user_id)}
+                                roomMemberTags={roomMemberTags}
                                 activeMenuId={activeMessageMenuId}
                                 setActiveMenuId={setActiveMessageMenuId}
                                 onEdit={() => startEditMessage(msg)}
@@ -5528,6 +5610,8 @@ function CommunityContent() {
                           isRoomOwner={isOwner}
                           isRoomModerator={isRoomModerator}
                           roomOwnerUserId={selectedRoom?.owner_user_id}
+                          senderTagIds={tagIdsForMember(msg.user_id)}
+                          roomMemberTags={roomMemberTags}
                           activeMenuId={activeMessageMenuId}
                           setActiveMenuId={setActiveMessageMenuId}
                           onEdit={() => startEditMessage(msg)}
@@ -5921,8 +6005,18 @@ function CommunityContent() {
                         const isRemoving = removingMemberId === member.user_id
                         const isBanning = banningMemberId === member.user_id
                         const memberTagIds = tagIdsForMember(member.user_id)
+                        const targetIsModerator = memberHasModeratorTag({
+                          tagIds: memberTagIds,
+                          tags: roomMemberTags,
+                        })
                         const showsModerationActions =
                           !isSelf && canActOnMember(member.user_id)
+                        const canManageModeratorStatus =
+                          canManageRoom &&
+                          !isSelf &&
+                          member.user_id !== selectedRoom?.owner_user_id
+                        const isSettingModerator =
+                          settingModeratorUserId === member.user_id
                         const assignableTags = roomMemberTags.filter((tag) =>
                           canAssignRoomMemberTag({
                             tagName: tag.name,
@@ -5954,53 +6048,88 @@ function CommunityContent() {
                                     {displayName}
                                   </p>
                                 ) : null}
+                                {targetIsModerator ? (
+                                  <span className="mt-0.5 inline-flex rounded-full border border-blue-400/40 bg-blue-500/15 px-2 py-0.5 text-[10px] font-semibold text-blue-200">
+                                    Moderator
+                                  </span>
+                                ) : null}
                               </div>
                               {isSelf ? (
                                 <span className="shrink-0 text-xs text-gray-400">
                                   You
                                 </span>
-                              ) : showsModerationActions ? (
-                                <div className="flex shrink-0 items-center gap-1">
-                                  <button
-                                    type="button"
-                                    disabled={memberActionBusy}
-                                    onClick={() =>
-                                      setMemberActionConfirm({
-                                        kind: "ban",
-                                        userId: member.user_id,
-                                      })
-                                    }
-                                    className="inline-flex items-center gap-1 rounded bg-orange-500/10 px-2 py-1 text-xs text-orange-400 hover:bg-orange-500/20 disabled:opacity-50"
-                                  >
-                                    {isBanning ? (
-                                      <>
-                                        <ActionSpinner className="border-orange-400" />
-                                        Banning...
-                                      </>
-                                    ) : (
-                                      "Ban"
-                                    )}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={memberActionBusy}
-                                    onClick={() =>
-                                      setMemberActionConfirm({
-                                        kind: "remove",
-                                        userId: member.user_id,
-                                      })
-                                    }
-                                    className="inline-flex items-center gap-1 rounded bg-red-500/10 px-2 py-1 text-xs text-red-400 hover:bg-red-500/20 disabled:opacity-50"
-                                  >
-                                    {isRemoving ? (
-                                      <>
-                                        <ActionSpinner className="border-red-400" />
-                                        Removing...
-                                      </>
-                                    ) : (
-                                      "Remove"
-                                    )}
-                                  </button>
+                              ) : showsModerationActions || canManageModeratorStatus ? (
+                                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+                                  {canManageModeratorStatus && roomModeratorPresetTag ? (
+                                    <button
+                                      type="button"
+                                      disabled={memberActionBusy}
+                                      onClick={() =>
+                                        setMemberActionConfirm({
+                                          kind: targetIsModerator
+                                            ? "demoteModerator"
+                                            : "promoteModerator",
+                                          userId: member.user_id,
+                                        })
+                                      }
+                                      className="inline-flex items-center gap-1 rounded bg-blue-500/10 px-2 py-1 text-xs text-blue-300 hover:bg-blue-500/20 disabled:opacity-50"
+                                    >
+                                      {isSettingModerator ? (
+                                        <>
+                                          <ActionSpinner className="border-blue-300" />
+                                          Saving...
+                                        </>
+                                      ) : targetIsModerator ? (
+                                        "Remove Mod"
+                                      ) : (
+                                        "Make Mod"
+                                      )}
+                                    </button>
+                                  ) : null}
+                                  {showsModerationActions ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        disabled={memberActionBusy}
+                                        onClick={() =>
+                                          setMemberActionConfirm({
+                                            kind: "ban",
+                                            userId: member.user_id,
+                                          })
+                                        }
+                                        className="inline-flex items-center gap-1 rounded bg-orange-500/10 px-2 py-1 text-xs text-orange-400 hover:bg-orange-500/20 disabled:opacity-50"
+                                      >
+                                        {isBanning ? (
+                                          <>
+                                            <ActionSpinner className="border-orange-400" />
+                                            Banning...
+                                          </>
+                                        ) : (
+                                          "Ban"
+                                        )}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={memberActionBusy}
+                                        onClick={() =>
+                                          setMemberActionConfirm({
+                                            kind: "remove",
+                                            userId: member.user_id,
+                                          })
+                                        }
+                                        className="inline-flex items-center gap-1 rounded bg-red-500/10 px-2 py-1 text-xs text-red-400 hover:bg-red-500/20 disabled:opacity-50"
+                                      >
+                                        {isRemoving ? (
+                                          <>
+                                            <ActionSpinner className="border-red-400" />
+                                            Removing...
+                                          </>
+                                        ) : (
+                                          "Remove"
+                                        )}
+                                      </button>
+                                    </>
+                                  ) : null}
                                 </div>
                               ) : null}
                             </div>
@@ -6054,6 +6183,7 @@ function CommunityContent() {
                           const username = ban.profiles?.username?.trim()
                           const avatarSrc = ban.profiles?.avatar_url
                           const isUnbanning = unbanningBanId === ban.id
+                          const canUnban = canActOnMember(ban.user_id)
 
                           return (
                             <div
@@ -6078,26 +6208,28 @@ function CommunityContent() {
                                   </p>
                                 ) : null}
                               </div>
-                              <button
-                                type="button"
-                                disabled={memberActionBusy}
-                                onClick={() =>
-                                  setMemberActionConfirm({
-                                    kind: "unban",
-                                    banId: ban.id,
-                                  })
-                                }
-                                className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-blue-500/10 px-2 py-1 text-xs text-blue-400 hover:bg-blue-500/20 disabled:opacity-50"
-                              >
-                                {isUnbanning ? (
-                                  <>
-                                    <ActionSpinner className="border-green-400" />
-                                    Unbanning...
-                                  </>
-                                ) : (
-                                  "Unban"
-                                )}
-                              </button>
+                              {canUnban ? (
+                                <button
+                                  type="button"
+                                  disabled={memberActionBusy}
+                                  onClick={() =>
+                                    setMemberActionConfirm({
+                                      kind: "unban",
+                                      banId: ban.id,
+                                    })
+                                  }
+                                  className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-blue-500/10 px-2 py-1 text-xs text-blue-400 hover:bg-blue-500/20 disabled:opacity-50"
+                                >
+                                  {isUnbanning ? (
+                                    <>
+                                      <ActionSpinner className="border-green-400" />
+                                      Unbanning...
+                                    </>
+                                  ) : (
+                                    "Unban"
+                                  )}
+                                </button>
+                              ) : null}
                             </div>
                           )
                         })}
@@ -6142,8 +6274,11 @@ function CommunityContent() {
                       disabled={memberActionBusy}
                       onClick={() => void handleMemberActionConfirm()}
                       className={
-                        memberActionConfirm.kind === "unban"
+                        memberActionConfirm.kind === "unban" ||
+                        memberActionConfirm.kind === "promoteModerator"
                           ? "inline-flex items-center gap-1.5 rounded-lg border border-blue-400/30 bg-blue-500/20 px-3 py-1.5 text-sm text-blue-100 hover:bg-blue-500/30 disabled:opacity-50"
+                          : memberActionConfirm.kind === "demoteModerator"
+                            ? "inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm text-gray-100 hover:bg-white/15 disabled:opacity-50"
                           : memberActionConfirm.kind === "ban"
                             ? "inline-flex items-center gap-1.5 rounded bg-orange-500/20 px-3 py-1.5 text-sm text-orange-100 hover:bg-orange-500/30 disabled:opacity-50"
                             : "inline-flex items-center gap-1.5 rounded bg-red-500/20 px-3 py-1.5 text-sm text-red-100 hover:bg-red-500/30 disabled:opacity-50"
@@ -6158,6 +6293,10 @@ function CommunityContent() {
                         "Unban"
                       ) : memberActionConfirm.kind === "ban" ? (
                         "Ban"
+                      ) : memberActionConfirm.kind === "promoteModerator" ? (
+                        "Make Moderator"
+                      ) : memberActionConfirm.kind === "demoteModerator" ? (
+                        "Remove Moderator"
                       ) : (
                         "Remove"
                       )}
@@ -6479,6 +6618,8 @@ function CommunityContent() {
             isRoomOwner: isOwner,
             isRoomModerator,
             roomOwnerUserId: selectedRoom?.owner_user_id,
+            senderTagIds: tagIdsForMember(mobileRoomActionMessage.user_id),
+            tags: roomMemberTags,
           })}
           onReply={() => startReplyToMessage(mobileRoomActionMessage)}
           onEdit={() => startEditMessage(mobileRoomActionMessage)}

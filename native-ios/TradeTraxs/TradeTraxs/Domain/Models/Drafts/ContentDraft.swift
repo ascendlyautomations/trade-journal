@@ -118,6 +118,7 @@ nonisolated struct TradeComposerDraftState: Codable, Equatable, Sendable {
     var contracts: String = ""
     var pnl: String = ""
     var points: String = ""
+    var plannedRisk: String = ""
     var rr: String = ""
     var entryAt: String?
     var exitAt: String?
@@ -129,8 +130,13 @@ nonisolated struct TradeComposerDraftState: Codable, Equatable, Sendable {
     var newsEvent: Bool = false
     var confidence: Int = 0
     var emotion: String = ""
+    var customEmotion: String = ""
+    var exitEmotion: String = ""
+    var customExitEmotion: String = ""
+    var executionRating: Int = 0
     var followedPlan: Bool?
     var marketCondition: String = ""
+    var customMarketCondition: String = ""
     var psychologyNotes: String = ""
     var screenshotDisplayMode: String = TradeScreenshotDisplayMode.fit.rawValue
     var publicCaption: String = ""
@@ -139,9 +145,10 @@ nonisolated struct TradeComposerDraftState: Codable, Equatable, Sendable {
 
     var isMeaningfullyEmpty: Bool {
         let texts = [
-            symbol, entryPrice, exitPrice, contracts, pnl, points, rr,
-            strategy, notes, timeframe, customTimeframe, emotion,
-            marketCondition, psychologyNotes, publicCaption,
+            symbol, entryPrice, exitPrice, contracts, pnl, points, plannedRisk, rr,
+            strategy, notes, timeframe, customTimeframe, emotion, customEmotion,
+            exitEmotion, customExitEmotion, marketCondition, customMarketCondition,
+            psychologyNotes, publicCaption,
         ]
         let hasText = texts.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         return !hasText
@@ -152,6 +159,7 @@ nonisolated struct TradeComposerDraftState: Codable, Equatable, Sendable {
             && followedPlan == nil
             && !shareToProfile
             && confidence == 0
+            && executionRating == 0
             && side == TradeSide.long.rawValue
     }
 }

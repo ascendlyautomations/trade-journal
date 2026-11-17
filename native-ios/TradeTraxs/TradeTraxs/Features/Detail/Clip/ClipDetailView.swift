@@ -131,6 +131,9 @@ struct ClipDetailView: View {
             )
         }
         .accessibilityIdentifier("detail.clip.root")
+        .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
+            viewModel.handleJournalMutation()
+        }
     }
 
     @ViewBuilder
@@ -196,35 +199,36 @@ struct ClipDetailView: View {
 
     private func clipBody(_ reel: Reel, scrollProxy: ScrollViewProxy) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
-            EngagementBar(
-                target: .reel(reel.id),
-                store: data.engagementStore,
-                vaultStore: data.vaultStore,
-                onCommentTap: {
-                    withAnimation(
-                        ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion)
-                    ) {
-                        scrollProxy.scrollTo(Self.commentsAnchorID, anchor: .top)
-                    }
-                },
-                onShareTap: { presentShare(for: reel) },
-                vaultRef: VaultContentRef(contentType: .reel, contentID: reel.id.rawValue)
-            )
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+                EngagementBar(
+                    target: .reel(reel.id),
+                    store: data.engagementStore,
+                    vaultStore: data.vaultStore,
+                    onCommentTap: {
+                        withAnimation(
+                            ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion)
+                        ) {
+                            scrollProxy.scrollTo(Self.commentsAnchorID, anchor: .top)
+                        }
+                    },
+                    onShareTap: { presentShare(for: reel) },
+                    vaultRef: VaultContentRef(contentType: .reel, contentID: reel.id.rawValue)
+                )
 
-            if let caption = reel.caption?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !caption.isEmpty
-            {
-                Text(caption)
-                    .experienceStyle(.body, color: colors.primaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("detail.clip.caption")
+                if let caption = ReelCaptionDisplay.bodyText(for: reel, cache: data.detailCache) {
+                    Text(caption)
+                        .experienceStyle(.body, color: colors.primaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("detail.clip.caption")
+                }
             }
 
-            if let linkedTrade {
+            if let linkedTrade = viewModel.resolvedLinkedTrade {
                 ClipLinkedTradeSection(
                     trade: linkedTrade,
                     style: .detailBody,
+                    displayedClipCaption: displayedClipCaption(for: reel),
                     onOpen: { openLinkedTrade(linkedTrade.id) }
                 )
                 .accessibilityIdentifier("detail.clip.linkedTrade")
@@ -312,13 +316,6 @@ struct ClipDetailView: View {
 
     private static let commentsAnchorID = "detail.clip.comments"
 
-    private var linkedTrade: Trade? {
-        guard let reel = viewModel.reel,
-              let tradeID = reel.linkedTradeID
-        else { return nil }
-        return data.detailCache.trade(id: tradeID)
-    }
-
     private func presentShare(for reel: Reel) {
         data.detailCache.seed(reel)
         shareTarget = SharedContentShareTarget.profile(reel: reel, author: viewModel.author)
@@ -326,5 +323,9 @@ struct ClipDetailView: View {
 
     private func openLinkedTrade(_ tradeID: TradeID) {
         navigationCoordinator.pushTradeDetail(tradeID, cache: data.detailCache)
+    }
+
+    private func displayedClipCaption(for reel: Reel) -> String? {
+        ReelCaptionDisplay.bodyText(for: reel, cache: data.detailCache)
     }
 }

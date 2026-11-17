@@ -24,7 +24,8 @@ enum RoomMessageModerationPolicy {
         senderProfileID: ProfileID,
         isRoomOwner: Bool,
         isRoomModerator: Bool = false,
-        roomOwnerProfileID: ProfileID? = nil
+        roomOwnerProfileID: ProfileID? = nil,
+        senderMemberTags: [RoomMemberTag] = []
     ) -> Bool {
         guard viewerID != nil else { return false }
         if isOwnMessage(viewerID: viewerID, senderProfileID: senderProfileID) {
@@ -35,6 +36,10 @@ enum RoomMessageModerationPolicy {
         if let roomOwnerProfileID,
            senderProfileID == roomOwnerProfileID,
            !isRoomOwner {
+            return false
+        }
+        if isRoomModerator, !isRoomOwner,
+           TradeRoomModerationPermission.hasElevatedTag(memberTags: senderMemberTags) {
             return false
         }
         return true

@@ -28,23 +28,30 @@ nonisolated enum TradeRoomCategory: String, CaseIterable, Codable, Sendable, Has
     }
 }
 
+/// Stored on `rooms.is_private` — only set via ``TradeRoomConfiguration/persistedIsPrivate`` for create/update payloads.
 nonisolated enum TradeRoomVisibility: String, Codable, Sendable, Hashable {
     case `public`
     case `private`
+}
+
+/// Owner-facing room access — replaces separate Private + Join Policy controls in create/edit UI.
+nonisolated enum TradeRoomAccessMode: String, CaseIterable, Codable, Sendable, Hashable {
+    case publicOpen
+    case requestToJoin
 
     var displayName: String {
         switch self {
-        case .public: return "Public"
-        case .private: return "Private"
+        case .publicOpen: return "Public"
+        case .requestToJoin: return "Request to Join"
         }
     }
 
     var summary: String {
         switch self {
-        case .public:
-            return "Discoverable in Suggested, Popular, and Explore."
-        case .private:
-            return "Hidden from public discovery. Invite or link access only."
+        case .publicOpen:
+            return "Anyone can join instantly."
+        case .requestToJoin:
+            return "Users request membership and are approved before joining."
         }
     }
 }
@@ -56,7 +63,7 @@ nonisolated enum TradeRoomJoinPolicy: String, Codable, Sendable, Hashable {
     var displayName: String {
         switch self {
         case .open: return "Anyone can join"
-        case .approval: return "Request to join"
+        case .approval: return "Request to Join"
         }
     }
 }
@@ -149,10 +156,6 @@ nonisolated enum TradeRoomConfigurationValidation {
             return "Sub-room names must be unique."
         }
 
-        if configuration.visibility == .private, configuration.joinPolicy == .approval {
-            // Private rooms use invite/link; join policy only applies to public rooms.
-        }
-
         return nil
     }
 }
@@ -172,6 +175,8 @@ nonisolated struct TradeRoomConfiguration: Hashable, Sendable {
     var membersCanShareTrades: Bool
     var membersCanShareMedia: Bool
     var channels: [TradeRoomDraftChannel]
+    /// Loaded from `rooms.is_private` on edit — kept when owner keeps Request to Join on a legacy private room.
+    var preservesLegacyPrivate: Bool = false
 
     static func defaultDraft(username: String?) -> TradeRoomConfiguration {
         let trimmed = username?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -206,7 +211,8 @@ nonisolated struct TradeRoomConfiguration: Hashable, Sendable {
         membersCanMessage: Bool,
         membersCanShareTrades: Bool,
         membersCanShareMedia: Bool,
-        channels: [TradeRoomDraftChannel]
+        channels: [TradeRoomDraftChannel],
+        preservesLegacyPrivate: Bool = false
     ) {
         self.name = name
         self.description = description
@@ -221,6 +227,7 @@ nonisolated struct TradeRoomConfiguration: Hashable, Sendable {
         self.membersCanShareTrades = membersCanShareTrades
         self.membersCanShareMedia = membersCanShareMedia
         self.channels = channels
+        self.preservesLegacyPrivate = preservesLegacyPrivate
     }
 
     init(room: TradeRoom, channels: [RoomChannel]) {
@@ -229,9 +236,10 @@ nonisolated struct TradeRoomConfiguration: Hashable, Sendable {
         imageURL = room.image?.id
         category = room.category
         discoveryTags = room.discoveryTags
+        preservesLegacyPrivate = room.isPrivate
         visibility = room.isPrivate ? .private : .public
         showsOnProfile = room.showsOnProfile
-        joinPolicy = room.joinPolicy
+        joinPolicy = room.isPrivate ? .open : room.joinPolicy
         rules = room.rules
         membersCanMessage = room.membersCanMessage
         membersCanShareTrades = room.membersCanShareTrades
@@ -264,8 +272,33 @@ nonisolated struct TradeRoomConfiguration: Hashable, Sendable {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    var accessMode: TradeRoomAccessMode {
+        get {
+            if preservesLegacyPrivate { return .requestToJoin }
+            return joinPolicy == .approval ? .requestToJoin : .publicOpen
+        }
+        set {
+            switch newValue {
+            case .publicOpen:
+                preservesLegacyPrivate = false
+                visibility = .public
+                joinPolicy = .open
+            case .requestToJoin:
+                joinPolicy = .approval
+                if !preservesLegacyPrivate {
+                    visibility = .public
+                }
+            }
+        }
+    }
+
+    var persistedIsPrivate: Bool {
+        preservesLegacyPrivate && accessMode == .requestToJoin
+    }
+
     var effectiveJoinPolicy: TradeRoomJoinPolicy {
-        visibility == .public ? joinPolicy : .approval
+        if persistedIsPrivate { return .open }
+        return joinPolicy
     }
 
     var hasUnsavedDraftChanges: Bool {
@@ -274,9 +307,8 @@ nonisolated struct TradeRoomConfiguration: Hashable, Sendable {
             || imageURL != nil
             || category != .general
             || !discoveryTags.isEmpty
-            || visibility != .public
+            || accessMode != .publicOpen
             || showsOnProfile == false
-            || joinPolicy != .open
             || trimmedRules != nil
             || membersCanMessage == false
             || membersCanShareTrades == false

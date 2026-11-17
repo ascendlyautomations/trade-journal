@@ -7,6 +7,7 @@ import {
   copyObsFieldToClipboard,
   setObsStreamKeyRevealed,
 } from "@/lib/livekit/client/tradeRoomBroadcastStore.ts"
+import TradeRoomBroadcastHostStreamTitleEditor from "./TradeRoomBroadcastHostStreamTitleEditor.tsx"
 
 export type TradeRoomObsPrivateSetupContentProps = {
   videoRef: (el: HTMLVideoElement | null) => void
@@ -16,6 +17,9 @@ export type TradeRoomObsPrivateSetupContentProps = {
   obsPreparingHost: boolean
   encoderConnected: boolean
   waitingForObsEncoder: boolean
+  roomId?: string
+  accessToken?: string | null
+  hostSessionId?: string
 }
 
 export default function TradeRoomObsPrivateSetupContent({
@@ -26,11 +30,21 @@ export default function TradeRoomObsPrivateSetupContent({
   obsPreparingHost,
   encoderConnected,
   waitingForObsEncoder,
+  roomId,
+  accessToken,
+  hostSessionId,
 }: TradeRoomObsPrivateSetupContentProps) {
   const broadcast = useTradeRoomBroadcast()
 
   return (
     <div className="flex min-h-0 flex-col gap-3">
+      {roomId && accessToken && hostSessionId && broadcast.isPublishing ? (
+        <TradeRoomBroadcastHostStreamTitleEditor
+          roomId={roomId}
+          accessToken={accessToken}
+          sessionId={hostSessionId}
+        />
+      ) : null}
       <div className="rounded-lg border border-violet-500/30 bg-zinc-950/80 p-4 text-sm text-gray-200">
         <p className="font-semibold text-violet-200">OBS Studio — private setup</p>
         <p className="mt-2 text-xs text-gray-400">
@@ -191,6 +205,7 @@ export default function TradeRoomObsPrivateSetupContent({
         ) : null}
         <video
           ref={videoRef}
+          data-tt-broadcast-media="true"
           className="h-full w-full object-contain"
           playsInline
           muted

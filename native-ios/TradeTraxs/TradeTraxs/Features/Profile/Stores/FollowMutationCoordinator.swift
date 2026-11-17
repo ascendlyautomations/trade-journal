@@ -142,6 +142,7 @@ final class FollowMutationCoordinator {
 
     /// Owner removed someone from their Followers list (they→me edge deleted).
     func applyFollowerRemoved(owner: ProfileID, follower: ProfileID) {
+        _ = RelationshipWriteGeneration.bump(viewerID: owner)
         if var stats = detailCache?.stats(for: owner) {
             stats.followerCount = max(0, stats.followerCount - 1)
             detailCache?.seed(stats: stats)
@@ -157,8 +158,27 @@ final class FollowMutationCoordinator {
         if owner == currentUserProfile?.profile?.id {
             currentUserProfile?.applyFollowerCountDelta(-1)
         }
+        ProfilePersistedCacheCoordinator.patchProfileHeader(
+            viewerID: follower,
+            targetProfileID: owner,
+            isFollowing: false,
+            isRequested: false,
+            stats: detailCache?.stats(for: owner)
+        )
         syncActiveProfileStats(profileID: owner)
+        Task {
+            await SessionFollowingStore.shared.setFollowing(
+                viewerID: follower.rawValue,
+                targetID: owner.rawValue,
+                isFollowing: false
+            )
+        }
         latest = .followerRemoved(owner: owner, follower: follower)
+        SessionNetworkProbe.record(
+            .localMutation,
+            resource: "follow.edge.removeFollower",
+            detail: "\(follower.rawValue)->\(owner.rawValue)"
+        )
         revision += 1
     }
 

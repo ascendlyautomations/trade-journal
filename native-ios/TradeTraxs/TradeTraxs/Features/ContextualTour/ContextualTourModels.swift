@@ -23,11 +23,13 @@ enum ContextualTourStepRole: Equatable, Sendable {
     /// Continue / Exit between major sections. No spotlight.
     case sectionContinue
     case finish
+    /// End-of-tour choice before dismissal (e.g. open Trading Rules).
+    case tradingRulesPrompt
 
     /// Shown in progress and as a full explanation card.
     var countsTowardProgress: Bool {
         switch self {
-        case .spotlight, .narration, .finish:
+        case .spotlight, .narration, .finish, .tradingRulesPrompt:
             return true
         case .sectionContinue:
             return false
@@ -50,6 +52,7 @@ enum ContextualTourTargetID: String, Hashable, Sendable {
     case profileIdentity
     case profileTradeRoom
     case settingsAppearance
+    case settingsTradingRules
     case payoutsHistory
     case expenseTrackerAdd
     case expenseTrackerIncome
@@ -153,13 +156,6 @@ enum ContextualTourCatalog {
             presentsIfUnmeasured: true
         ),
         ContextualTourStep(
-            target: .dashboardNotifications,
-            title: "Notifications",
-            message: "Social updates and activity alerts.",
-            surface: .dashboard,
-            presentsIfUnmeasured: true
-        ),
-        ContextualTourStep(
             title: "Continue to Feed",
             message: "",
             surface: .dashboard,
@@ -207,45 +203,10 @@ enum ContextualTourCatalog {
             presentsIfUnmeasured: true
         ),
         ContextualTourStep(
-            title: "Continue to Payouts",
+            title: "Continue to Settings",
             message: "",
             surface: .profile,
             role: .sectionContinue
-        ),
-        ContextualTourStep(
-            target: .payoutsHistory,
-            title: "Withdrawals",
-            message: "Record prop firm payouts, review withdrawal history, and see what you've earned.",
-            surface: .payouts,
-            presentsIfUnmeasured: true
-        ),
-        ContextualTourStep(
-            target: .expenseTrackerAdd,
-            title: "Expense Tracker",
-            message: "Track evaluation purchases, activation fees, resets, trading tools, and business expenses.",
-            surface: .expenseTracker,
-            presentsIfUnmeasured: true
-        ),
-        ContextualTourStep(
-            target: .expenseTrackerIncome,
-            title: "Income",
-            message: "Add business income yourself and watch it next to your expenses.",
-            surface: .expenseTracker,
-            presentsIfUnmeasured: true
-        ),
-        ContextualTourStep(
-            target: .expenseTrackerAnalytics,
-            title: "Tax & profit",
-            message: "See net profit, spending breakdowns, an estimated tax reserve, and how each firm is doing.",
-            surface: .expenseTracker,
-            presentsIfUnmeasured: true
-        ),
-        ContextualTourStep(
-            target: .expenseTrackerExport,
-            title: "Export Tax CSV",
-            message: "Download income, payouts, and expenses when you're getting ready for taxes.",
-            surface: .expenseTracker,
-            presentsIfUnmeasured: true
         ),
         ContextualTourStep(
             target: .settingsAppearance,
@@ -255,10 +216,17 @@ enum ContextualTourCatalog {
             presentsIfUnmeasured: true
         ),
         ContextualTourStep(
-            title: "You're all set",
-            message: "Replay this walkthrough anytime in Settings.",
+            target: .settingsTradingRules,
+            title: "Trading Rules",
+            message: "Set limits and discipline targets, then measure compliance from your journal.",
             surface: .settings,
-            role: .finish
+            presentsIfUnmeasured: true
+        ),
+        ContextualTourStep(
+            title: "Trading Rules",
+            message: "Would you like to configure your trading rules now? Replay this walkthrough anytime in Settings.",
+            surface: .settings,
+            role: .tradingRulesPrompt
         ),
     ]
 }

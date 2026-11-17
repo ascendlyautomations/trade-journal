@@ -32,42 +32,11 @@ nonisolated struct DefaultAIRepository: AIRepository {
             path: "/api/analyze-trade",
             method: .post,
             body: data,
-            requiresAuthentication: true
+            requiresAuthentication: true,
+            acceptsNonSuccessStatusCodes: true
         )
         TradeAITrace.analysisResponse(status: response.statusCode, byteCount: response.data.count)
-
-        let decoded = try? JSONDecoder().decode(AnalyzeTradeBFFResponse.self, from: response.data)
-        let reply = decoded?.reply?.trimmingCharacters(in: .whitespacesAndNewlines)
-            ?? decoded?.result?.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        switch response.statusCode {
-        case 200 ... 299:
-            guard let reply, !reply.isEmpty else {
-                throw AppError.unknown(message: "No response generated")
-            }
-            TradeAITrace.analysisDecoded()
-            return TradeAIAnalyzeResponse(reply: AIGeneratedTextNormalizer.normalize(reply))
-        case 401:
-            throw AppError.domain(.permission(.notAuthenticated))
-        case 403:
-            return TradeAIAnalyzeResponse(
-                reply: AIGeneratedTextNormalizer.normalize(
-                    ProEntitlementResponseSanitizer.message(
-                        statusCode: 403,
-                        error: decoded?.error,
-                        reply: reply
-                    )
-                )
-            )
-        case 429:
-            throw AppError.unknown(message: decoded?.error ?? "Slow down — try again in a moment.")
-        default:
-            throw AppError.unknown(
-                message: decoded?.error
-                    ?? decoded?.reply
-                    ?? "We couldn't complete the analysis. Please try again."
-            )
-        }
+        return TradeAIAnalyzeHTTPMapping.map(statusCode: response.statusCode, data: response.data)
     }
 
     func loadConversation(tradeID: TradeID) async throws -> [TradeAIMessage] {
@@ -243,12 +212,6 @@ private nonisolated struct AnalyzeTradeBFFBody: Encodable {
 private nonisolated struct AnalyzeTradeBFFMessage: Encodable {
     var role: String
     var content: String
-}
-
-private nonisolated struct AnalyzeTradeBFFResponse: Decodable {
-    var reply: String?
-    var result: String?
-    var error: String?
 }
 
 private nonisolated struct PsychologyCoachBFFBody: Encodable {

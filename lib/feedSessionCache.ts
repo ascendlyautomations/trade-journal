@@ -1,5 +1,6 @@
 import type { FeedItem } from "@/app/components/feed/feedPostHelpers"
 import { persistFeedSession } from "@/lib/nativeSilentCacheBridge"
+import { patchFeedItemTradeVisibility } from "@/lib/tradeDeleteSync"
 
 type LikeMeta = { count: number; liked: boolean }
 
@@ -97,6 +98,81 @@ export function patchFeedReelInSessionsForUser(
       if (String(item.id) !== id || item.feedKind !== "reel") return item
       changed = true
       return { ...item, ...patch }
+    })
+
+    if (!changed) continue
+
+    feedSessions.set(key, {
+      ...session,
+      posts: nextPosts,
+      mergeBuffer: nextBuffer,
+    })
+  }
+}
+
+/** Clear stale trade_id on reels after the linked journal trade was deleted. */
+export function unlinkReelsFromDeletedTradeInSessions(
+  userId: string,
+  tradeId: string
+) {
+  const tid = tradeId.trim()
+  if (!tid) return
+
+  for (const [key, session] of feedSessions.entries()) {
+    if (!key.startsWith(`${userId}:`)) continue
+
+    let changed = false
+    const nextPosts = session.posts.map((p) => {
+      if ((p as { feedKind?: string }).feedKind !== "reel") return p
+      if (String((p as { trade_id?: string }).trade_id ?? "") !== tid) return p
+      changed = true
+      return { ...p, trade_id: null, kind: null, trades: null }
+    })
+    const nextBuffer = session.mergeBuffer.map((item) => {
+      if (item.feedKind !== "reel") return item
+      const row = item as { trade_id?: string | null }
+      if (String(row.trade_id ?? "") !== tid) return item
+      changed = true
+      return {
+        ...item,
+        trade_id: null,
+        kind: null,
+        trades: null,
+      } as FeedItem
+    })
+
+    if (!changed) continue
+
+    feedSessions.set(key, {
+      ...session,
+      posts: nextPosts,
+      mergeBuffer: nextBuffer,
+    })
+  }
+}
+
+/** Update embedded trade visibility on linked reels (trade unpublished / re-published). */
+export function patchLinkedTradeVisibilityInSessions(
+  userId: string,
+  tradeId: string,
+  isPublic: boolean
+) {
+  const tid = tradeId.trim()
+  if (!tid) return
+
+  for (const [key, session] of feedSessions.entries()) {
+    if (!key.startsWith(`${userId}:`)) continue
+
+    let changed = false
+    const nextPosts = session.posts.map((p) => {
+      const patched = patchFeedItemTradeVisibility(p, tid, isPublic)
+      if (patched !== p) changed = true
+      return patched
+    })
+    const nextBuffer = session.mergeBuffer.map((item) => {
+      const patched = patchFeedItemTradeVisibility(item, tid, isPublic)
+      if (patched !== item) changed = true
+      return patched as FeedItem
     })
 
     if (!changed) continue

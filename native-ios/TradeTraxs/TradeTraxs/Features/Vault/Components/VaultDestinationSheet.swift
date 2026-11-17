@@ -41,7 +41,6 @@ struct VaultDestinationSheet: View {
             .experienceInsetGroupedListStyle(pageBackground: true)
         }
         .experienceSheetChrome()
-        .presentationDetents([.medium, .large])
     }
 
     private var addSection: some View {

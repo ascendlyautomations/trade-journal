@@ -25,7 +25,10 @@ final class DetailPresentationCache {
     private var ownedTradeRooms: [ProfileID: TradeRoom] = [:]
     private var ownedTradeRoomResolved: Set<ProfileID> = []
     private var accountNames: [TradingAccountID: String] = [:]
+    /// Public projection — cleared when seeding visitor-safe metadata.
     private var accountNumbers: [TradingAccountID: String] = [:]
+    /// Owner-only numbers from full `accounts` rows — never cleared by public profile seeding.
+    private var ownerAccountNumbers: [TradingAccountID: String] = [:]
     private var accountModes: [TradingAccountID: TradingAccountMode] = [:]
     private var accountSizes: [TradingAccountID: Decimal] = [:]
     /// Full `accounts` rows keyed by profile — session reuse for Stats / Detail.
@@ -224,7 +227,8 @@ final class DetailPresentationCache {
     }
 
     func seed(_ reel: Reel) {
-        if let existing = reels[reel.id],
+        let existing = reels[reel.id]
+        if let existing,
            let existingTradeID = existing.linkedTradeID,
            existingTradeID != reel.linkedTradeID
         {
@@ -233,7 +237,23 @@ final class DetailPresentationCache {
         reels[reel.id] = reel
         if let tradeID = reel.linkedTradeID {
             reelIDByLinkedTradeID[tradeID] = reel.id
+        } else if let priorTradeID = existing?.linkedTradeID {
+            reelIDByLinkedTradeID.removeValue(forKey: priorTradeID)
         }
+    }
+
+    /// After a successful attach/link API call — keeps ``reel(linkedTo:)`` warm for profile + feed cards.
+    func applyReelTradeLink(reel: Reel, tradeID: TradeID) {
+        var linked = reel
+        linked.linkedTradeID = tradeID
+        seed(linked)
+    }
+
+    /// Clears clip→trade locally after unlink — also drops trade→clip index when this reel owned the link.
+    func clearReelTradeLink(reel: Reel) {
+        var unlinked = reel
+        unlinked.linkedTradeID = nil
+        seed(unlinked)
     }
 
     func seed(reels items: [Reel]) {
@@ -348,12 +368,20 @@ final class DetailPresentationCache {
             }
             return (account.id, number)
         }
-        seed(accountNumbers: Dictionary(uniqueKeysWithValues: numbers))
+        let numberMap = Dictionary(uniqueKeysWithValues: numbers)
+        seed(accountNumbers: numberMap)
+        seed(ownerAccountNumbers: numberMap)
     }
 
     func seed(accountNumbers numbers: [TradingAccountID: String]) {
         for (id, number) in numbers {
             accountNumbers[id] = number
+        }
+    }
+
+    func seed(ownerAccountNumbers numbers: [TradingAccountID: String]) {
+        for (id, number) in numbers {
+            ownerAccountNumbers[id] = number
         }
     }
 
@@ -532,6 +560,7 @@ final class DetailPresentationCache {
     // feed-vs-trade target routing only, not duplicate engagement counts.
 
     private var feedEngagementTargetByTradeID: [TradeID: InteractionTarget] = [:]
+    private var pendingDetailCommentsScrollIntentKeys: Set<String> = []
     private var feedEngagementTargetByAchievementID: [AchievementID: InteractionTarget] = [:]
 
     /// Web feed trade cards like/comment on `posts.id`, not `trades.id`.
@@ -552,12 +581,26 @@ final class DetailPresentationCache {
         feedEngagementTargetByAchievementID[achievementID]
     }
 
+    func requestScrollToComments(_ intent: DetailCommentsScrollIntent) {
+        pendingDetailCommentsScrollIntentKeys.insert(intent.storageKey)
+    }
+
+    func consumeScrollToComments(_ intent: DetailCommentsScrollIntent) -> Bool {
+        pendingDetailCommentsScrollIntentKeys.remove(intent.storageKey) != nil
+    }
+
     func accountName(for accountID: TradingAccountID) -> String? {
         accountNames[accountID]
     }
 
-    func accountNumber(for accountID: TradingAccountID) -> String? {
-        accountNumbers[accountID]
+    /// Owner contexts prefer the durable owner map; public paths only see the public projection.
+    func accountNumber(for accountID: TradingAccountID, audience: TradingAccountDisplay.Audience = .owner) -> String? {
+        switch audience {
+        case .owner:
+            return ownerAccountNumbers[accountID] ?? accountNumbers[accountID]
+        case .public:
+            return nil
+        }
     }
 
     func accountMode(for accountID: TradingAccountID) -> TradingAccountMode? {
@@ -589,6 +632,10 @@ final class DetailPresentationCache {
             publicTradeSummariesByProfile[key]?.removeAll { $0.id == id }
         }
         statsByProfile = [:]
+        reelIDByLinkedTradeID.removeValue(forKey: id)
+        for reel in reels.values where reel.linkedTradeID == id {
+            clearReelTradeLink(reel: reel)
+        }
     }
 
     func removePost(id: PostID) {
@@ -637,6 +684,7 @@ final class DetailPresentationCache {
         ownedTradeRoomResolved = []
         accountNames = [:]
         accountNumbers = [:]
+        ownerAccountNumbers = [:]
         accountModes = [:]
         accountSizes = [:]
         accountsByProfile = [:]
@@ -649,6 +697,7 @@ final class DetailPresentationCache {
         viewerFollowRequestByProfile = [:]
         feedEngagementTargetByTradeID = [:]
         feedEngagementTargetByAchievementID = [:]
+        pendingDetailCommentsScrollIntentKeys = []
     }
 }
 

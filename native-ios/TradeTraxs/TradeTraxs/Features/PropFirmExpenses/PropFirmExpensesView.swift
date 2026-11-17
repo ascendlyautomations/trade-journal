@@ -22,9 +22,9 @@ struct PropFirmExpensesView: View {
     @State private var showsCustomPercent = false
     @State private var customPercent = ""
     @State private var showsFilters = false
-    @State private var showsAllIncome = false
-    @State private var showsAllExpenses = false
-    @State private var showsAllFirms = false
+    @State private var showsFirmPerformanceList = false
+    @State private var showsIncomeHistoryList = false
+    @State private var showsExpenseHistoryList = false
 
     private let historyPreviewLimit = 3
 
@@ -112,6 +112,26 @@ struct PropFirmExpensesView: View {
         .sheet(item: $exportFile) { file in
             PropFirmExpenseShareSheet(items: [file.url])
         }
+        .navigationDestination(isPresented: $showsFirmPerformanceList) {
+            PropFirmFirmPerformanceListView(
+                overview: viewModel.overview,
+                mostProfitableKey: viewModel.overview.mostProfitableFirmKey
+            )
+        }
+        .navigationDestination(isPresented: $showsIncomeHistoryList) {
+            PropFirmIncomeHistoryListView(rows: yearScopedIncome) { row in
+                openIncome(row)
+            }
+        }
+        .navigationDestination(isPresented: $showsExpenseHistoryList) {
+            PropFirmExpenseHistoryListView(
+                rows: yearScopedFilteredExpenses,
+                subtitle: historySubtitle,
+                onSelect: openExpense,
+                showsFilterAction: { showsFilters = true },
+                filtersActive: filtersAreActive
+            )
+        }
     }
 
     private var filtered: [PropFirmExpense] {
@@ -151,17 +171,40 @@ struct PropFirmExpensesView: View {
     private var content: some View {
         let overview = viewModel.overview
         return ScrollView {
-            LazyVStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+            LazyVStack(alignment: .leading, spacing: ExperienceSpacing.md) {
                 moneySection
-                incomeHistory
-                history
-                firmSection(overview)
-                overviewSection(overview)
-                spendingSection
+                firmPerformanceSection(overview)
+                spendingAnalyticsSection(overview)
+                PropFirmSpendingBreakdownCard(expenses: yearScopedExpenses, year: viewModel.selectedYear)
+                    .padding(.horizontal, ExperienceSpacing.md)
+                incomeHistorySection
+                expenseHistorySection
+                taxDeductibleSection(overview)
+                estimatedTaxReserveSection(overview)
                 exportSection
             }
             .padding(.bottom, ExperienceSpacing.xxxl)
         }
+    }
+
+    private var yearBounds: (start: String, end: String) {
+        let year = viewModel.selectedYear
+        return (String(format: "%04d-01-01", year), String(format: "%04d-12-31", year))
+    }
+
+    private var yearScopedExpenses: [PropFirmExpense] {
+        let bounds = yearBounds
+        return expandedExpenses.filter { $0.datePaid >= bounds.start && $0.datePaid <= bounds.end }
+    }
+
+    private var yearScopedFilteredExpenses: [PropFirmExpense] {
+        let bounds = yearBounds
+        return filtered.filter { $0.datePaid >= bounds.start && $0.datePaid <= bounds.end }
+    }
+
+    private var yearScopedIncome: [TrackerIncome] {
+        let bounds = yearBounds
+        return visibleIncome.filter { $0.dateReceived >= bounds.start && $0.dateReceived <= bounds.end }
     }
 
     private var moneySection: some View {
@@ -175,7 +218,7 @@ struct PropFirmExpensesView: View {
         let businessTotal = incomeRows.filter { $0.incomeKind == .business }.reduce(Decimal.zero) { $0 + $1.amount }
         let incomeTotal = withdrawalTotal + businessTotal
         let net = incomeTotal - expenseTotal
-        return VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+        return VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
             HStack {
                 sectionTitle("\(String(viewModel.selectedYear))")
                 Spacer()
@@ -193,27 +236,9 @@ struct PropFirmExpensesView: View {
                 metric("Net", PropFirmExpenseMoney.format(net), tint: net > 0 ? colors.profit : net < 0 ? colors.loss : colors.primaryText)
             }
             .fixedSize(horizontal: false, vertical: true)
-            if let breakdown = incomeBreakdownCaption(
-                withdrawals: withdrawalTotal,
-                business: businessTotal
-            ) {
-                Text(breakdown)
-                    .experienceStyle(.subheadline, color: colors.secondaryText)
-            }
         }
         .padding(.horizontal, ExperienceSpacing.md)
-    }
-
-    private func incomeBreakdownCaption(withdrawals: Decimal, business: Decimal) -> String? {
-        var parts: [String] = []
-        if withdrawals > 0 {
-            parts.append("Withdrawals \(PropFirmExpenseMoney.format(withdrawals))")
-        }
-        if business > 0 {
-            parts.append("Business income \(PropFirmExpenseMoney.format(business))")
-        }
-        guard !parts.isEmpty else { return nil }
-        return parts.joined(separator: " · ")
+        .padding(.top, ExperienceSpacing.sm)
     }
 
     private var incomeRowsForDisplay: [TrackerIncome] {
@@ -260,31 +285,22 @@ struct PropFirmExpensesView: View {
         }
     }
 
-    private var incomeHistory: some View {
+    private var incomeHistorySection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            sectionTitle("Income")
+            sectionTitle("Income History")
                 .padding(.horizontal, ExperienceSpacing.md)
-            if visibleIncome.isEmpty {
+            if yearScopedIncome.isEmpty {
                 ExperienceEmptyState(
                     icon: .chart,
                     title: "No income yet",
                     message: "Add business income for client or project payments."
                 )
             } else {
-                let rows = displayed(visibleIncome, expanded: showsAllIncome)
+                let rows = Array(yearScopedIncome.prefix(historyPreviewLimit))
                 VStack(spacing: 0) {
                     ForEach(rows) { row in
                         Button {
-                            if row.opensWithdrawal {
-                                WithdrawalDetailSelection.stage(row.savedID)
-                                stackNavigation?.pushSettings(.withdrawalDetail)
-                                return
-                            }
-                            let source = viewModel.income.first { $0.id == row.savedID } ?? row
-                            editingIncome = source
-                            incomeDraft = .from(source)
-                            viewModel.formError = nil
-                            showsIncomeEditor = true
+                            openIncome(row)
                         } label: {
                             HStack(alignment: .top) {
                                 VStack(alignment: .leading, spacing: 2) {
@@ -308,10 +324,14 @@ struct PropFirmExpensesView: View {
                     }
                 }
                 .background(colors.fillSecondary.opacity(0.25), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                        .stroke(colors.border.opacity(0.22), lineWidth: ExperienceBorder.hairline)
+                )
                 .padding(.horizontal, ExperienceSpacing.md)
-                if visibleIncome.count > historyPreviewLimit {
-                    viewMoreButton(expanded: showsAllIncome) {
-                        showsAllIncome.toggle()
+                if yearScopedIncome.count > historyPreviewLimit {
+                    viewMoreButton {
+                        showsIncomeHistoryList = true
                     }
                     .accessibilityIdentifier("propFirmExpenses.income.viewMore")
                 }
@@ -319,55 +339,32 @@ struct PropFirmExpensesView: View {
         }
     }
 
-    private var spendingSection: some View {
-        let rows = filtered
-        return VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            sectionTitle("Breakdown")
-                .padding(.horizontal, ExperienceSpacing.md)
-            breakdown(title: "Type", rows: grouped(rows, label: { $0.trackerKind.title }), empty: "No spending yet.")
-            breakdown(title: "Category", rows: grouped(rows, label: { $0.categoryTitle }), empty: "No categories yet.")
-            breakdown(title: "Business or project", rows: grouped(rows, label: { $0.projectTitle }), empty: "No projects yet.")
-        }
-    }
-
-    private func grouped(_ rows: [PropFirmExpense], label: (PropFirmExpense) -> String) -> [PropFirmExpenseBreakdown] {
-        var buckets: [String: (String, Decimal)] = [:]
-        for expense in rows {
-            let name = label(expense)
-            let key = name.lowercased()
-            var row = buckets[key] ?? (name, .zero)
-            row.1 += expense.totalCost
-            buckets[key] = row
-        }
-        return buckets.values
-            .map { PropFirmExpenseBreakdown(id: $0.0, label: $0.0, total: $0.1) }
-            .sorted { $0.total == $1.total ? $0.label < $1.label : $0.total > $1.total }
-    }
-
-    private func overviewSection(_ overview: PropFirmYearOverview) -> some View {
+    private func taxDeductibleSection(_ overview: PropFirmYearOverview) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            sectionTitle("Prop firm")
-                .contextualTourTarget(.expenseTrackerAnalytics)
-            Text("Payouts \(PropFirmExpenseMoney.format(overview.payouts)) · Expenses \(PropFirmExpenseMoney.format(overview.expenses)) · Net \(PropFirmExpenseMoney.format(overview.net))")
-                .experienceStyle(.subheadline, color: colors.secondaryText)
-            VStack(spacing: ExperienceSpacing.sm) {
-                metric(
-                    "Potential Tax-Deductible Expenses",
-                    PropFirmExpenseMoney.format(overview.deductibleEstimate),
-                    tint: colors.primaryText,
-                    detail: "Unverified estimate"
-                )
-            }
-            reserveCalculator(overview)
+            sectionTitle("Potential Tax-Deductible Expenses")
+                .padding(.horizontal, ExperienceSpacing.md)
+            metric(
+                "Estimated deductible total",
+                PropFirmExpenseMoney.format(overview.deductibleEstimate),
+                tint: colors.primaryText,
+                detail: "Unverified estimate"
+            )
+            .padding(.horizontal, ExperienceSpacing.md)
         }
-        .padding(.horizontal, ExperienceSpacing.md)
-        .padding(.top, ExperienceSpacing.sm)
+    }
+
+    private func estimatedTaxReserveSection(_ overview: PropFirmYearOverview) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            sectionTitle("Estimated Tax Reserve")
+                .padding(.horizontal, ExperienceSpacing.md)
+            reserveCalculator(overview)
+                .padding(.horizontal, ExperienceSpacing.md)
+        }
+        .contextualTourTarget(.expenseTrackerAnalytics)
     }
 
     private func reserveCalculator(_ overview: PropFirmYearOverview) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("Estimated Tax Reserve")
-                .experienceStyle(.caption, color: colors.secondaryText)
             Text(PropFirmExpenseMoney.format(overview.reserve))
                 .font(.system(.headline, design: .rounded).weight(.semibold).monospacedDigit())
                 .foregroundStyle(colors.primaryText)
@@ -429,6 +426,10 @@ struct PropFirmExpensesView: View {
         .padding(ExperienceSpacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                .stroke(colors.border.opacity(0.28), lineWidth: ExperienceBorder.hairline)
+        )
         .onChange(of: viewModel.reservePercent) { _, newValue in
             guard !PropFirmYearOverviewBuilder.isPreset(newValue) else { return }
             showsCustomPercent = true
@@ -438,74 +439,60 @@ struct PropFirmExpensesView: View {
         }
     }
 
-    private func firmSection(_ overview: PropFirmYearOverview) -> some View {
+    private func firmPerformanceSection(_ overview: PropFirmYearOverview) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            sectionTitle("Firm Performance")
-                .padding(.horizontal, ExperienceSpacing.md)
-            if let best = overview.firms.first(where: { $0.key == overview.mostProfitableFirmKey }) {
-                Text("Most profitable firm: \(best.label) (\(PropFirmExpenseMoney.format(best.net)) net)")
-                    .experienceStyle(.subheadline, color: colors.profit)
-                    .padding(.horizontal, ExperienceSpacing.md)
-            } else {
-                Text("No firm is attributed for \(String(overview.year)) yet.")
-                    .experienceStyle(.subheadline, color: colors.secondaryText)
-                    .padding(.horizontal, ExperienceSpacing.md)
+            HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
+                sectionTitle("Firm Performance")
+                Spacer(minLength: ExperienceSpacing.xs)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("Total Payouts")
+                        .experienceStyle(.caption2, color: colors.secondaryText)
+                    Text(PropFirmExpenseMoney.format(overview.payouts))
+                        .font(.subheadline.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(colors.profit)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
             }
+            .padding(.horizontal, ExperienceSpacing.md)
+
             if overview.firms.isEmpty {
                 Text("No spending or payouts in \(String(overview.year)).")
                     .experienceStyle(.subheadline, color: colors.secondaryText)
                     .padding(.horizontal, ExperienceSpacing.md)
             } else {
-                let firms = displayed(overview.firms, expanded: showsAllFirms)
+                let firms = Array(overview.firms.prefix(historyPreviewLimit))
                 VStack(spacing: ExperienceSpacing.sm) {
                     ForEach(firms) { firm in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(alignment: .firstTextBaseline) {
-                                Text(firm.label)
-                                    .experienceStyle(.body, color: colors.primaryText)
-                                Spacer()
-                                Text("\(PropFirmExpenseMoney.format(firm.net)) net")
-                                    .font(.subheadline.monospacedDigit().weight(.semibold))
-                                    .foregroundStyle(firm.net > 0 ? colors.profit : firm.net < 0 ? colors.loss : colors.primaryText)
-                            }
-                            Text("Spent \(PropFirmExpenseMoney.format(firm.spent)) · Payouts \(PropFirmExpenseMoney.format(firm.payouts))")
-                                .experienceStyle(.caption, color: colors.secondaryText)
-                            Text(firm.shortfall > 0
-                                 ? "\(PropFirmExpenseMoney.format(firm.shortfall)) more in payouts to recover recorded expenses"
-                                 : "Recorded expenses are recovered")
-                                .experienceStyle(.caption, color: colors.primaryText)
-                            if firm.key == PropFirmYearOverviewBuilder.unassignedKey {
-                                Text("These payouts are not tied to one recorded prop firm.")
-                                    .experienceStyle(.caption, color: colors.secondaryText)
-                            }
-                        }
-                        .padding(ExperienceSpacing.sm)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            firm.key == overview.mostProfitableFirmKey ? colors.profit.opacity(0.12) : colors.fillSecondary.opacity(0.35),
-                            in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
-                                .stroke(firm.key == overview.mostProfitableFirmKey ? colors.profit.opacity(0.55) : Color.clear, lineWidth: 1)
+                        PropFirmPerformanceCard(
+                            firm: firm,
+                            highlighted: firm.key == overview.mostProfitableFirmKey
                         )
                     }
                 }
                 .padding(.horizontal, ExperienceSpacing.md)
                 if overview.firms.count > historyPreviewLimit {
-                    viewMoreButton(expanded: showsAllFirms) {
-                        showsAllFirms.toggle()
+                    viewMoreButton {
+                        showsFirmPerformanceList = true
                     }
                     .accessibilityIdentifier("propFirmExpenses.firms.viewMore")
                 }
             }
+        }
+    }
+
+    private func spendingAnalyticsSection(_ overview: PropFirmYearOverview) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             sectionTitle("Spending Analytics")
                 .padding(.horizontal, ExperienceSpacing.md)
-                .padding(.top, ExperienceSpacing.xs)
             monthly(overview.months)
+                .padding(ExperienceSpacing.md)
+                .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                        .stroke(colors.border.opacity(0.28), lineWidth: ExperienceBorder.hairline)
+                )
                 .padding(.horizontal, ExperienceSpacing.md)
-            breakdown(title: "Spending by Prop Firm", rows: overview.spendingByFirm, empty: "No firm spending in \(overview.year).")
-            breakdown(title: "Expenses by Category", rows: overview.byCategory, empty: "No category spending in \(overview.year).")
         }
     }
 
@@ -557,6 +544,10 @@ struct PropFirmExpensesView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(ExperienceSpacing.sm)
         .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                .stroke(colors.border.opacity(0.28), lineWidth: ExperienceBorder.hairline)
+        )
     }
 
     private func monthly(_ points: [PropFirmMonthComparison]) -> some View {
@@ -602,41 +593,7 @@ struct PropFirmExpensesView: View {
         return CGFloat(Swift.max(4, ratio * 88))
     }
 
-    private func breakdown(title: String, rows: [PropFirmExpenseBreakdown], empty: String) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text(title)
-                .experienceStyle(.headline, color: colors.primaryText)
-            if rows.isEmpty {
-                Text(empty)
-                    .experienceStyle(.subheadline, color: colors.secondaryText)
-            } else {
-                let maxTotal = rows.map(\.total).max() ?? 1
-                ForEach(rows) { row in
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(row.label)
-                                .experienceStyle(.subheadline, color: colors.primaryText)
-                                .lineLimit(1)
-                            Spacer()
-                            Text(PropFirmExpenseMoney.format(row.total))
-                                .font(.subheadline.monospacedDigit())
-                                .foregroundStyle(colors.primaryText)
-                        }
-                        GeometryReader { proxy in
-                            let ratio = NSDecimalNumber(decimal: row.total / maxTotal).doubleValue
-                            Capsule()
-                                .fill(colors.accent.opacity(0.85))
-                                .frame(width: max(4, proxy.size.width * ratio))
-                        }
-                        .frame(height: 6)
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, ExperienceSpacing.md)
-    }
-
-    private var history: some View {
+    private var expenseHistorySection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             HStack {
                 Text("Expense History")
@@ -662,22 +619,18 @@ struct PropFirmExpensesView: View {
             if viewModel.isLoading && viewModel.expenses.isEmpty {
                 ProgressView()
                     .frame(maxWidth: .infinity)
-            } else if filtered.isEmpty {
+            } else if yearScopedFilteredExpenses.isEmpty {
                 ExperienceEmptyState(
                     icon: .chart,
                     title: viewModel.expenses.isEmpty ? "No expenses yet" : "No expenses match these filters",
                     message: "Add a prop firm fee, or enter an account purchase cost when you create an eval or funded account."
                 )
             } else {
-                let rows = displayed(filtered, expanded: showsAllExpenses)
+                let rows = Array(yearScopedFilteredExpenses.prefix(historyPreviewLimit))
                 VStack(spacing: 0) {
                     ForEach(rows) { expense in
                         Button {
-                            let source = viewModel.expenses.first { $0.id == expense.savedID } ?? expense
-                            editorExpense = source
-                            draft = .from(source)
-                            viewModel.formError = nil
-                            showsEditor = true
+                            openExpense(expense)
                         } label: {
                             HStack(alignment: .top) {
                                 VStack(alignment: .leading, spacing: 2) {
@@ -701,10 +654,14 @@ struct PropFirmExpensesView: View {
                     }
                 }
                 .background(colors.fillSecondary.opacity(0.25), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+                        .stroke(colors.border.opacity(0.22), lineWidth: ExperienceBorder.hairline)
+                )
                 .padding(.horizontal, ExperienceSpacing.md)
-                if filtered.count > historyPreviewLimit {
-                    viewMoreButton(expanded: showsAllExpenses) {
-                        showsAllExpenses.toggle()
+                if yearScopedFilteredExpenses.count > historyPreviewLimit {
+                    viewMoreButton {
+                        showsExpenseHistoryList = true
                     }
                     .accessibilityIdentifier("propFirmExpenses.expenses.viewMore")
                 }
@@ -712,12 +669,8 @@ struct PropFirmExpensesView: View {
         }
     }
 
-    private func displayed<Item>(_ items: [Item], expanded: Bool) -> [Item] {
-        expanded ? items : Array(items.prefix(historyPreviewLimit))
-    }
-
-    private func viewMoreButton(expanded: Bool, action: @escaping () -> Void) -> some View {
-        Button(expanded ? "Show less" : "View more", action: action)
+    private func viewMoreButton(action: @escaping () -> Void) -> some View {
+        Button("View more", action: action)
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(colors.accent)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -773,6 +726,7 @@ struct PropFirmExpensesView: View {
                     DatePicker("To", selection: $toDate, displayedComponents: .date)
                 }
             }
+            .experienceTradeTraxsFormStyle(pageBackground: true)
             .experienceNavigationTitle("Filters")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -790,7 +744,7 @@ struct PropFirmExpensesView: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .experienceSheetChrome()
     }
 
     private var projectOptions: [String] {
@@ -854,6 +808,27 @@ struct PropFirmExpensesView: View {
         } else {
             scroll()
         }
+    }
+
+    private func openIncome(_ row: TrackerIncome) {
+        if row.opensWithdrawal {
+            WithdrawalDetailSelection.stage(row.savedID)
+            stackNavigation?.pushSettings(.withdrawalDetail)
+            return
+        }
+        let source = viewModel.income.first { $0.id == row.savedID } ?? row
+        editingIncome = source
+        incomeDraft = .from(source)
+        viewModel.formError = nil
+        showsIncomeEditor = true
+    }
+
+    private func openExpense(_ expense: PropFirmExpense) {
+        let source = viewModel.expenses.first { $0.id == expense.savedID } ?? expense
+        editorExpense = source
+        draft = .from(source)
+        viewModel.formError = nil
+        showsEditor = true
     }
 
     private func presentAddIncome() {

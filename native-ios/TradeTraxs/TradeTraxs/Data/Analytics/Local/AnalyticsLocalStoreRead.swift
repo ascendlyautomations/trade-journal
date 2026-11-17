@@ -280,32 +280,24 @@ extension AnalyticsLocalStore {
         let viewer = normalizedViewer(viewerID)
         let queue = try await database.databaseQueue()
 
-        let (metrics, charts, bootstrapCoverage) = try await queue.read { db -> (
-            [DashboardPresetMetricsRecord],
-            [DashboardChartBundleRecord],
-            [AnalyticsRangeCoverageRecord]
-        ) in
-            let metrics = try DashboardPresetMetricsRecord
-                .filter(Column("viewer_id") == viewer)
-                .fetchAll(db)
-            let charts = try DashboardChartBundleRecord
-                .filter(Column("viewer_id") == viewer)
-                .filter(Column("account_scope_key") == AnalyticsScopeKeys.allAccountsQuery)
-                .fetchAll(db)
-            let coverage = try AnalyticsRangeCoverageRecord
+        let revisions = try await queue.read { db in
+            try Self.dashboardRevisionCandidates(viewer: viewer, db: db)
+        }
+
+        let bootstrapCoverage = try await queue.read { db in
+            try AnalyticsRangeCoverageRecord
                 .filter(Column("viewer_id") == viewer)
                 .filter(Column("domain") == AnalyticsLocalSchema.domainDashboardBootstrap)
                 .fetchAll(db)
-            return (metrics, charts, coverage)
         }
 
-        let revisions = Set(
-            metrics.map(\.ingested_revision)
-                + charts.map(\.ingested_revision)
-                + bootstrapCoverage.map(\.server_revision)
-        ).filter { $0 > 0 }.sorted(by: >)
-
         for revision in revisions {
+            let (metrics, charts) = try await queue.read { db in
+                (
+                    try Self.dashboardMetricsAtRevision(viewer: viewer, revision: revision, db: db),
+                    try Self.dashboardAggregateChartsAtRevision(viewer: viewer, revision: revision, db: db)
+                )
+            }
             let state = Self.dashboardSnapshotState(
                 requiredRevision: revision,
                 metrics: metrics,
@@ -319,12 +311,21 @@ extension AnalyticsLocalStore {
                    aggregateCharts: charts
                )
             {
+                let decodedCharts = AnalyticsDashboardGRDBSessionCache.decodeAggregateChartPresets(from: charts)
+                AnalyticsDashboardGRDBSessionCache.storePresentation(
+                    viewerID: viewerID,
+                    presentation: AnalyticsDashboardGRDBSessionCache.PresentationSnapshot(
+                        revision: revision,
+                        snapshot: snapshot,
+                        aggregateCharts: decodedCharts
+                    )
+                )
                 let elapsed = Int(Date().timeIntervalSince(started) * 1000)
                 AnalyticsGRDBProbe.logReadPerf(
                     domain: "dashboard",
                     rows: nil,
-                    metricsRows: metrics.filter { $0.ingested_revision == revision }.count,
-                    chartBundles: charts.filter { $0.ingested_revision == revision }.count,
+                    metricsRows: metrics.count,
+                    chartBundles: charts.count,
                     bundles: nil,
                     elapsedMs: elapsed
                 )
@@ -370,23 +371,17 @@ extension AnalyticsLocalStore {
         let viewer = normalizedViewer(viewerID)
         let queue = try await database.databaseQueue()
 
-        let (metrics, charts, bootstrapCoverage) = try await queue.read { db -> (
-            [DashboardPresetMetricsRecord],
-            [DashboardChartBundleRecord],
-            [AnalyticsRangeCoverageRecord]
-        ) in
-            let metrics = try DashboardPresetMetricsRecord
-                .filter(Column("viewer_id") == viewer)
-                .fetchAll(db)
-            let charts = try DashboardChartBundleRecord
-                .filter(Column("viewer_id") == viewer)
-                .filter(Column("account_scope_key") == AnalyticsScopeKeys.allAccountsQuery)
-                .fetchAll(db)
-            let coverage = try AnalyticsRangeCoverageRecord
+        let bootstrapCoverage = try await queue.read { db in
+            try AnalyticsRangeCoverageRecord
                 .filter(Column("viewer_id") == viewer)
                 .filter(Column("domain") == AnalyticsLocalSchema.domainDashboardBootstrap)
                 .fetchAll(db)
-            return (metrics, charts, coverage)
+        }
+        let (metrics, charts) = try await queue.read { db in
+            (
+                try Self.dashboardMetricsAtRevision(viewer: viewer, revision: requiredRevision, db: db),
+                try Self.dashboardAggregateChartsAtRevision(viewer: viewer, revision: requiredRevision, db: db)
+            )
         }
 
         let state = Self.dashboardSnapshotState(
@@ -409,8 +404,8 @@ extension AnalyticsLocalStore {
         AnalyticsGRDBProbe.logReadPerf(
             domain: "dashboard",
             rows: nil,
-            metricsRows: metrics.filter { $0.ingested_revision == requiredRevision }.count,
-            chartBundles: charts.filter { $0.ingested_revision == requiredRevision }.count,
+            metricsRows: metrics.count,
+            chartBundles: charts.count,
             bundles: nil,
             elapsedMs: elapsed
         )
@@ -433,16 +428,41 @@ extension AnalyticsLocalStore {
         let started = Date()
         let viewer = normalizedViewer(viewerID)
         let accountKey = AnalyticsScopeKeys.accountScopeKey(forQueryAccountID: accountID.rawValue)
+
+        if let cached = AnalyticsDashboardGRDBSessionCache.accountCharts(
+            viewerID: viewerID,
+            accountScopeKey: accountKey,
+            revision: requiredRevision
+        ), DashboardAnalyticsChartsSupport.chartsReadyForPresentation(cached) {
+            let elapsed = Int(Date().timeIntervalSince(started) * 1000)
+            AnalyticsGRDBProbe.logReadPerf(
+                domain: "accountCharts",
+                rows: nil,
+                metricsRows: nil,
+                chartBundles: nil,
+                bundles: cached.count,
+                elapsedMs: elapsed
+            )
+            return AnalyticsDashboardAccountChartsReadResult(
+                state: .available,
+                requiredRevision: requiredRevision,
+                accountScopeKey: accountKey,
+                presets: cached
+            )
+        }
+
         let queue = try await database.databaseQueue()
 
         let (bundles, coverageRows) = try await queue.read { db -> (
             [DashboardChartBundleRecord],
             [AnalyticsRangeCoverageRecord]
         ) in
-            let bundles = try DashboardChartBundleRecord
-                .filter(Column("viewer_id") == viewer)
-                .filter(Column("account_scope_key") == accountKey)
-                .fetchAll(db)
+            let bundles = try Self.dashboardAccountChartsAtRevision(
+                viewer: viewer,
+                accountScopeKey: accountKey,
+                revision: requiredRevision,
+                db: db
+            )
             let coverage = try AnalyticsRangeCoverageRecord
                 .filter(Column("viewer_id") == viewer)
                 .filter(Column("domain") == AnalyticsLocalSchema.domainDashboardAccountCharts)
@@ -451,18 +471,34 @@ extension AnalyticsLocalStore {
             return (bundles, coverage)
         }
 
-        let state = Self.accountChartsState(
+        var state = Self.accountChartsState(
             requiredRevision: requiredRevision,
             bundles: bundles,
             coverageRows: coverageRows
         )
+        if state == .missing || state == .partial, bundles.isEmpty {
+            let found = try await queue.read { db in
+                try Self.maxChartRevision(
+                    viewer: viewer,
+                    accountScopeKey: accountKey,
+                    db: db
+                )
+            }
+            if let found, found < requiredRevision {
+                state = .stale(foundRevision: found)
+            }
+        }
 
         var presets: [String: AnalyticsDashboardChartsPresetV1] = [:]
         if state == .available {
-            for bundle in bundles where bundle.ingested_revision == requiredRevision {
-                if let decoded = try? bundle.decodedCharts() {
-                    presets[bundle.preset_key] = decoded
-                }
+            presets = AnalyticsDashboardGRDBSessionCache.decodeAggregateChartPresets(from: bundles)
+            if DashboardAnalyticsChartsSupport.chartsReadyForPresentation(presets) {
+                AnalyticsDashboardGRDBSessionCache.storeAccountCharts(
+                    viewerID: viewerID,
+                    accountScopeKey: accountKey,
+                    revision: requiredRevision,
+                    presets: presets
+                )
             }
         }
 
@@ -472,7 +508,7 @@ extension AnalyticsLocalStore {
             rows: nil,
             metricsRows: nil,
             chartBundles: nil,
-            bundles: bundles.filter { $0.ingested_revision == requiredRevision }.count,
+            bundles: bundles.count,
             elapsedMs: elapsed
         )
 
@@ -494,16 +530,60 @@ extension AnalyticsLocalStore {
         let started = Date()
         let viewer = normalizedViewer(viewerID)
         let scopeKey = AnalyticsScopeKeys.allAccountsQuery
+
+        if let cached = AnalyticsDashboardGRDBSessionCache.aggregateCharts(
+            viewerID: viewerID,
+            revision: requiredRevision
+        ), DashboardAnalyticsChartsSupport.chartsReadyForPresentation(cached) {
+            let elapsed = Int(Date().timeIntervalSince(started) * 1000)
+            AnalyticsGRDBProbe.logReadPerf(
+                domain: "aggregateCharts",
+                rows: nil,
+                metricsRows: nil,
+                chartBundles: nil,
+                bundles: cached.count,
+                elapsedMs: elapsed
+            )
+            return AnalyticsDashboardAccountChartsReadResult(
+                state: .available,
+                requiredRevision: requiredRevision,
+                accountScopeKey: scopeKey,
+                presets: cached
+            )
+        }
+
+        if let presentation = AnalyticsDashboardGRDBSessionCache.presentationSnapshot(
+            viewerID: viewerID,
+            revision: requiredRevision
+        ), DashboardAnalyticsChartsSupport.chartsReadyForPresentation(presentation.aggregateCharts) {
+            let elapsed = Int(Date().timeIntervalSince(started) * 1000)
+            AnalyticsGRDBProbe.logReadPerf(
+                domain: "aggregateCharts",
+                rows: nil,
+                metricsRows: nil,
+                chartBundles: nil,
+                bundles: presentation.aggregateCharts.count,
+                elapsedMs: elapsed
+            )
+            return AnalyticsDashboardAccountChartsReadResult(
+                state: .available,
+                requiredRevision: requiredRevision,
+                accountScopeKey: scopeKey,
+                presets: presentation.aggregateCharts
+            )
+        }
+
         let queue = try await database.databaseQueue()
 
         let (bundles, coverageRows) = try await queue.read { db -> (
             [DashboardChartBundleRecord],
             [AnalyticsRangeCoverageRecord]
         ) in
-            let bundles = try DashboardChartBundleRecord
-                .filter(Column("viewer_id") == viewer)
-                .filter(Column("account_scope_key") == scopeKey)
-                .fetchAll(db)
+            let bundles = try Self.dashboardAggregateChartsAtRevision(
+                viewer: viewer,
+                revision: requiredRevision,
+                db: db
+            )
             let coverage = try AnalyticsRangeCoverageRecord
                 .filter(Column("viewer_id") == viewer)
                 .filter(Column("domain") == AnalyticsLocalSchema.domainDashboardAggregateCharts)
@@ -512,19 +592,27 @@ extension AnalyticsLocalStore {
             return (bundles, coverage)
         }
 
-        let state = Self.accountChartsState(
+        var state = Self.accountChartsState(
             requiredRevision: requiredRevision,
             bundles: bundles,
             coverageRows: coverageRows
         )
+        if state == .missing || state == .partial, bundles.isEmpty {
+            let found = try await queue.read { db in
+                try Self.maxChartRevision(
+                    viewer: viewer,
+                    accountScopeKey: scopeKey,
+                    db: db
+                )
+            }
+            if let found, found < requiredRevision {
+                state = .stale(foundRevision: found)
+            }
+        }
 
         var presets: [String: AnalyticsDashboardChartsPresetV1] = [:]
         if state == .available {
-            for bundle in bundles where bundle.ingested_revision == requiredRevision {
-                if let decoded = try? bundle.decodedCharts() {
-                    presets[bundle.preset_key] = decoded
-                }
-            }
+            presets = AnalyticsDashboardGRDBSessionCache.decodeAggregateChartPresets(from: bundles)
         }
 
         let elapsed = Int(Date().timeIntervalSince(started) * 1000)
@@ -533,7 +621,7 @@ extension AnalyticsLocalStore {
             rows: nil,
             metricsRows: nil,
             chartBundles: nil,
-            bundles: bundles.filter { $0.ingested_revision == requiredRevision }.count,
+            bundles: bundles.count,
             elapsedMs: elapsed
         )
 
@@ -545,9 +633,80 @@ extension AnalyticsLocalStore {
         )
     }
 
+    // MARK: - Dashboard revision-scoped SQL
+
+    nonisolated static func dashboardRevisionCandidates(viewer: String, db: Database) throws -> [Int64] {
+        try Int64.fetchAll(
+            db,
+            sql: """
+            SELECT DISTINCT ingested_revision
+            FROM (
+                SELECT ingested_revision FROM dashboard_preset_metrics WHERE viewer_id = ?
+                UNION
+                SELECT ingested_revision FROM dashboard_chart_bundle
+                WHERE viewer_id = ? AND account_scope_key = ?
+            )
+            WHERE ingested_revision > 0
+            ORDER BY ingested_revision DESC
+            """,
+            arguments: [viewer, viewer, AnalyticsScopeKeys.allAccountsQuery]
+        )
+    }
+
+    nonisolated static func dashboardMetricsAtRevision(
+        viewer: String,
+        revision: Int64,
+        db: Database
+    ) throws -> [DashboardPresetMetricsRecord] {
+        try DashboardPresetMetricsRecord
+            .filter(Column("viewer_id") == viewer)
+            .filter(Column("ingested_revision") == revision)
+            .fetchAll(db)
+    }
+
+    nonisolated static func dashboardAggregateChartsAtRevision(
+        viewer: String,
+        revision: Int64,
+        db: Database
+    ) throws -> [DashboardChartBundleRecord] {
+        try DashboardChartBundleRecord
+            .filter(Column("viewer_id") == viewer)
+            .filter(Column("account_scope_key") == AnalyticsScopeKeys.allAccountsQuery)
+            .filter(Column("ingested_revision") == revision)
+            .fetchAll(db)
+    }
+
+    nonisolated static func dashboardAccountChartsAtRevision(
+        viewer: String,
+        accountScopeKey: String,
+        revision: Int64,
+        db: Database
+    ) throws -> [DashboardChartBundleRecord] {
+        try DashboardChartBundleRecord
+            .filter(Column("viewer_id") == viewer)
+            .filter(Column("account_scope_key") == accountScopeKey)
+            .filter(Column("ingested_revision") == revision)
+            .fetchAll(db)
+    }
+
+    nonisolated static func maxChartRevision(
+        viewer: String,
+        accountScopeKey: String,
+        db: Database
+    ) throws -> Int64? {
+        try Int64.fetchOne(
+            db,
+            sql: """
+            SELECT MAX(ingested_revision) FROM dashboard_chart_bundle
+            WHERE viewer_id = ? AND account_scope_key = ? AND ingested_revision > 0
+            """,
+            arguments: [viewer, accountScopeKey]
+        )
+    }
+
     // MARK: - Dashboard snapshot assembly
 
-    static func dashboardSnapshotState(
+    nonisolated static func dashboardSnapshotState(
         requiredRevision: Int64,
         metrics: [DashboardPresetMetricsRecord],
         aggregateCharts: [DashboardChartBundleRecord],
@@ -597,7 +756,7 @@ extension AnalyticsLocalStore {
         return .missing
     }
 
-    static func buildDashboardSnapshot(
+    nonisolated static func buildDashboardSnapshot(
         requiredRevision: Int64,
         metrics: [DashboardPresetMetricsRecord],
         aggregateCharts: [DashboardChartBundleRecord]
@@ -657,7 +816,7 @@ extension AnalyticsLocalStore {
         )
     }
 
-    static func accountChartsState(
+    nonisolated static func accountChartsState(
         requiredRevision: Int64,
         bundles: [DashboardChartBundleRecord],
         coverageRows: [AnalyticsRangeCoverageRecord]
@@ -680,11 +839,19 @@ extension AnalyticsLocalStore {
         let hasOlder = bundles.contains { $0.ingested_revision > 0 && $0.ingested_revision < requiredRevision }
             || coverageRows.contains { $0.server_revision > 0 && $0.server_revision < requiredRevision }
         if hasOlder, atR.isEmpty {
-            return .stale(foundRevision: bundles.map(\.ingested_revision).max())
+            let found = [
+                bundles.map(\.ingested_revision).max(),
+                coverageRows.map(\.server_revision).max(),
+            ].compactMap { $0 }.max()
+            return .stale(foundRevision: found)
         }
 
         if !bundles.isEmpty, atR.isEmpty {
-            return .stale(foundRevision: bundles.map(\.ingested_revision).max())
+            let found = [
+                bundles.map(\.ingested_revision).max(),
+                coverageRows.map(\.server_revision).max(),
+            ].compactMap { $0 }.max()
+            return .stale(foundRevision: found)
         }
 
         return .missing

@@ -9,6 +9,10 @@ enum RoomMessageSendProbe {
         var senderID: String?
         var messageType: String
         var hasReply: Bool
+        var serverMembershipConfirmed: Bool = false
+        var channelAllowsMemberPost: Bool = true
+        var isOwner: Bool = false
+        var viewerHasModeratorTag: Bool = false
     }
 
     nonisolated static func logInsertAttempt(_ context: Context) {
@@ -17,7 +21,9 @@ enum RoomMessageSendProbe {
             [RoomMessageSend] attempt roomID=\(context.roomID) \
             channelID=\(context.channelID ?? "nil") \
             senderID=\(context.senderID ?? "nil") \
-            type=\(context.messageType) hasReply=\(context.hasReply)
+            type=\(context.messageType) hasReply=\(context.hasReply) \
+            serverMembership=\(context.serverMembershipConfirmed) \
+            channelAllowsMemberPost=\(context.channelAllowsMemberPost)
             """
         )
     }
@@ -33,7 +39,15 @@ enum RoomMessageSendProbe {
     }
 
     nonisolated static func logFailed(_ context: Context, error: Error) {
+        let diagnosis = RoomMessageSendDiagnostics.classify(
+            error: error,
+            hasServerMembership: context.serverMembershipConfirmed,
+            canPostInChannel: context.channelAllowsMemberPost,
+            isOwner: context.isOwner,
+            viewerHasModeratorTag: context.viewerHasModeratorTag
+        )
         print("[RoomMessageSend] FAILED roomID=\(context.roomID) channelID=\(context.channelID ?? "nil")")
+        print("[RoomMessageSend] diagnosis=\(diagnosis.logLabel)")
         print("[RoomMessageSend] errorType=\(String(reflecting: type(of: error)))")
         let postgrest = postgrestDetail(from: error)
         if let status = postgrest.httpStatus {

@@ -537,7 +537,7 @@ struct WithdrawalDetailView: View {
                 }
             }
         }
-        .presentationDetents([.medium])
+        .experienceSheetChrome(detents: [.medium])
     }
 
     private func deletePropPayout(behavior: PayoutDrawdownBehavior) async {

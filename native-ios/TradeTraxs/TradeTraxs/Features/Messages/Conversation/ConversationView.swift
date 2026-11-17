@@ -410,6 +410,7 @@ struct ConversationView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, ExperienceSpacing.sm)
                 .conversationThreadBottomAlignedContent(viewportHeight: threadScrollViewportHeight)
+                .conversationThreadDisablesSystemScrollToTop()
             }
             .conversationThreadScrollViewportReader($threadScrollViewportHeight)
             .defaultScrollAnchor(.bottom)

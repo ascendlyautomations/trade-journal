@@ -167,6 +167,140 @@ nonisolated enum PayoutHistorySupport {
         return (total, count, average)
     }
 
+    /// Same rows as ``PayoutsScreenView`` `historyItems` (recorded ledger + cycles + unmatched achievement payouts).
+    static func withdrawalsScreenHistoryItems(
+        accounts: [TradingAccount],
+        entriesByAccount: [TradingAccountID: [AccountPayoutEntry]],
+        cyclesByAccount: [TradingAccountID: [AccountPayoutCycle]],
+        achievementPayouts: [PayoutHistoryItem]
+    ) -> [PayoutHistoryItem] {
+        let recorded = buildHistory(
+            accounts: accounts,
+            entriesByAccount: entriesByAccount,
+            cyclesByAccount: cyclesByAccount
+        )
+        return (recorded + achievementPayouts).sorted { $0.date > $1.date }
+    }
+
+    /// Top-of-screen total on the Withdrawals page.
+    static func withdrawalsScreenTotal(
+        accounts: [TradingAccount],
+        entriesByAccount: [TradingAccountID: [AccountPayoutEntry]],
+        cyclesByAccount: [TradingAccountID: [AccountPayoutCycle]],
+        achievementPayouts: [PayoutHistoryItem]
+    ) -> Decimal {
+        let items = withdrawalsScreenHistoryItems(
+            accounts: accounts,
+            entriesByAccount: entriesByAccount,
+            cyclesByAccount: cyclesByAccount,
+            achievementPayouts: achievementPayouts
+        )
+        return summary(for: items).total
+    }
+
+    /// Recorded-only total — used in tests and parity checks.
+    static func withdrawalsPageRecordedTotal(
+        accounts: [TradingAccount],
+        entriesByAccount: [TradingAccountID: [AccountPayoutEntry]],
+        cyclesByAccount: [TradingAccountID: [AccountPayoutCycle]]
+    ) -> Decimal {
+        withdrawalsScreenTotal(
+            accounts: accounts,
+            entriesByAccount: entriesByAccount,
+            cyclesByAccount: cyclesByAccount,
+            achievementPayouts: []
+        )
+    }
+
+    static func dashboardMatchesWithdrawalsHomeScope(
+        accountFilter: DashboardAccountFilter,
+        scope: DashboardClientScopeFilter
+    ) -> Bool {
+        guard scope.customInterval == nil else { return false }
+        guard scope.dateRange == .all, scope.accountMode == .all, !scope.showPublicOnly else { return false }
+        if case .all = accountFilter { return true }
+        return false
+    }
+
+    /// Dashboard Performance → Payouts card. All Accounts + All Time uses the Withdrawals page total exactly.
+    static func dashboardPayoutsCardTotal(
+        accounts: [TradingAccount],
+        entriesByAccount: [TradingAccountID: [AccountPayoutEntry]],
+        cyclesByAccount: [TradingAccountID: [AccountPayoutCycle]],
+        achievementPayouts: [PayoutHistoryItem],
+        accountFilter: DashboardAccountFilter,
+        scope: DashboardClientScopeFilter,
+        now: Date = Date()
+    ) -> Decimal {
+        if dashboardMatchesWithdrawalsHomeScope(accountFilter: accountFilter, scope: scope) {
+            return withdrawalsScreenTotal(
+                accounts: accounts,
+                entriesByAccount: entriesByAccount,
+                cyclesByAccount: cyclesByAccount,
+                achievementPayouts: achievementPayouts
+            )
+        }
+        let items = withdrawalsScreenHistoryItems(
+            accounts: accounts,
+            entriesByAccount: entriesByAccount,
+            cyclesByAccount: cyclesByAccount,
+            achievementPayouts: achievementPayouts
+        )
+        let scoped = items.filter {
+            matchesDashboardScope(item: $0, accountFilter: accountFilter, scope: scope, now: now)
+        }
+        return summary(for: scoped).total
+    }
+
+    /// Ledger + funded cycles only — excludes unmatched payout achievements (Withdrawals page may add those separately).
+    static func recordedWithdrawalsTotal(
+        accounts: [TradingAccount],
+        entriesByAccount: [TradingAccountID: [AccountPayoutEntry]],
+        cyclesByAccount: [TradingAccountID: [AccountPayoutCycle]],
+        accountFilter: DashboardAccountFilter,
+        scope: DashboardClientScopeFilter,
+        now: Date = Date()
+    ) -> Decimal {
+        let items = buildHistory(
+            accounts: accounts,
+            entriesByAccount: entriesByAccount,
+            cyclesByAccount: cyclesByAccount
+        )
+        let scoped = items.filter {
+            matchesDashboardScope(item: $0, accountFilter: accountFilter, scope: scope, now: now)
+        }
+        return summary(for: scoped).total
+    }
+
+    static func matchesDashboardScope(
+        item: PayoutHistoryItem,
+        accountFilter: DashboardAccountFilter,
+        scope: DashboardClientScopeFilter,
+        now: Date = Date()
+    ) -> Bool {
+        switch accountFilter {
+        case .all:
+            break
+        case .account(let id):
+            guard item.accountID == id else { return false }
+        }
+        return matchesDashboardDate(item.date, scope: scope, now: now)
+    }
+
+    static func matchesDashboardDate(
+        _ date: Date,
+        scope: DashboardClientScopeFilter,
+        now: Date = Date()
+    ) -> Bool {
+        if let interval = scope.customInterval {
+            return date >= interval.start && date <= interval.end
+        }
+        if let lower = DashboardScopeFilterSupport.analyticsLowerBound(for: scope, now: now) {
+            return date >= lower
+        }
+        return true
+    }
+
     static func liveWithdrawals(
         from items: [PayoutHistoryItem],
         accountsByID: [TradingAccountID: TradingAccount]

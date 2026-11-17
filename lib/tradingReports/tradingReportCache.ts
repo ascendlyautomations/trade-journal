@@ -1,4 +1,5 @@
 import { generateAllTradingReports } from "./generateTradingReport"
+import { preferenceFingerprint, type PreferenceRuleContext } from "@/lib/analytics/preferenceCompliance"
 import { resolveNewTradingReportBadge } from "./tradingReportSeen"
 import type {
   NewTradingReportBadge,
@@ -19,6 +20,7 @@ type CacheEntry = {
   invalidated: boolean
   loading: boolean
   tradeFingerprint: string
+  preferenceFingerprint: string
 }
 
 const reportsByUser = new Map<string, CacheEntry>()
@@ -48,7 +50,7 @@ export function subscribeTradingReportsCache(listener: () => void): () => void {
 export function invalidateTradingReportsCache(userId: string) {
   const entry = reportsByUser.get(userId)
   if (!entry) return
-  reportsByUser.set(userId, { ...entry, invalidated: true })
+  reportsByUser.set(userId, { ...entry, invalidated: true, preferenceFingerprint: entry.preferenceFingerprint })
   badgeByUser.delete(userId)
   notify()
 }
@@ -108,11 +110,12 @@ export function getNewTradingReportBadge(
 export function ensureTradingReportsLoaded(
   trades: any[],
   userId: string | null | undefined,
-  options: { force?: boolean } = {}
+  options: { force?: boolean; preferences?: PreferenceRuleContext | null } = {}
 ): TradingReportsSnapshot | null {
   if (!userId) return null
 
   const fingerprint = tradeFingerprint(trades)
+  const prefFingerprint = preferenceFingerprint(options.preferences)
   const existing = reportsByUser.get(userId)
 
   if (
@@ -121,13 +124,14 @@ export function ensureTradingReportsLoaded(
     !existing.invalidated &&
     !existing.loading &&
     existing.tradeFingerprint === fingerprint &&
+    existing.preferenceFingerprint === prefFingerprint &&
     existing.data
   ) {
     return existing.data
   }
 
   const snapshot: TradingReportsSnapshot = {
-    reports: generateAllTradingReports(trades),
+    reports: generateAllTradingReports(trades, new Date(), options.preferences ?? null),
     computedAt: Date.now(),
   }
 
@@ -137,6 +141,7 @@ export function ensureTradingReportsLoaded(
     invalidated: false,
     loading: false,
     tradeFingerprint: fingerprint,
+    preferenceFingerprint: prefFingerprint,
   })
   notify()
 
@@ -155,6 +160,7 @@ export function primeTradingReportsFromTrades(userId: string, trades: any[]) {
     invalidated: false,
     loading: false,
     tradeFingerprint: tradeFingerprint(trades),
+    preferenceFingerprint: "noprefs",
   })
   notify()
 }

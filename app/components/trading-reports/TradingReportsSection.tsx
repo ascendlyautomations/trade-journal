@@ -26,6 +26,9 @@ import { useTradingReports } from "@/lib/useTradingReports"
 import { tradesSelectedTradeHref } from "@/lib/tradesSelectedTrade"
 import { generateTradingReportForWeek } from "@/lib/tradingReports/generateTradingReport"
 import { parseTradingReportWeekPeriodId } from "@/lib/tradingReports/tradingReportPeriods"
+import TradingPreferenceDiscovery from "@/app/components/analytics/TradingPreferenceDiscovery"
+import TradingRulesCompliancePanel from "@/app/components/analytics/trading-rules/TradingRulesCompliancePanel"
+import { useTradingRulesCompliance } from "@/lib/analytics/useTradingRulesCompliance"
 import {
   parseYearlyReportParam,
   yearlyReportParam,
@@ -62,7 +65,9 @@ function parseReportSearch(value: string | null): {
   const periodKey = parsePeriodKey(value)
   if (periodKey) return { tab: "performance", periodKey }
   const absoluteWeekMonday = parseTradingReportWeekPeriodId(value)
-  if (absoluteWeekMonday) return { tab: "performance", absoluteWeekMonday }
+  if (absoluteWeekMonday) {
+    return { tab: "performance", absoluteWeekMonday }
+  }
   const parsed = parsePsychologyReportID(value)
   if (parsed) return { tab: "psychology", psychologyRef: parsed }
   return null
@@ -102,6 +107,11 @@ const TradingReportsSection = forwardRef<
   const [yearlyYear, setYearlyYear] = useState<number | null>(null)
 
   const psychology = usePsychologyReports(userId, trades, open && tab === "psychology")
+  const tradingRules = useTradingRulesCompliance(
+    userId,
+    trades,
+    open && tab === "performance"
+  )
 
   const catalogReport = useMemo(
     () => getReport(periodKey) ?? snapshot?.reports[periodKey] ?? null,
@@ -285,6 +295,21 @@ const TradingReportsSection = forwardRef<
         }}
         bestTrade={bestTrade}
         viewerUserId={userId}
+        preferenceDiscovery={
+          <TradingPreferenceDiscovery
+            userId={userId}
+            hasTrade={trades.some((trade) => trade?.mode !== "backtest")}
+            surface="analytics"
+          />
+        }
+        tradingRulesContent={
+          <TradingRulesCompliancePanel
+            analytics={tradingRules.analytics}
+            loading={tradingRules.loading}
+            error={tradingRules.error}
+            onOpenTrade={(id) => handleViewTrade({ id })}
+          />
+        }
         onViewTrade={handleViewTrade}
         tab={tab}
         onTabChange={(next) => {

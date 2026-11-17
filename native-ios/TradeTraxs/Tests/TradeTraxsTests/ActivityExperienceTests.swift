@@ -18,6 +18,67 @@ final class ActivityExperienceTests: XCTestCase {
         XCTAssertTrue(store.paths.profile.isEmpty)
     }
 
+    func testActivityTypeCategoryMapsToSupabaseTypes() {
+        let follows = ActivityNotificationFilterSupport.listFilter(
+            dateFilter: .allTime,
+            customInterval: nil,
+            typeCategory: .follows
+        )
+        XCTAssertEqual(
+            Set(follows.types ?? []),
+            Set([
+                "follow", "follow_request", "follow_request_accepted",
+            ])
+        )
+
+        let comments = ActivityNotificationFilterSupport.listFilter(
+            dateFilter: .allTime,
+            customInterval: nil,
+            typeCategory: .comments
+        )
+        XCTAssertEqual(comments.types, ["comment"])
+        XCTAssertTrue(comments.excludeAchievementPosts)
+
+        let achievements = ActivityNotificationFilterSupport.listFilter(
+            dateFilter: .allTime,
+            customInterval: nil,
+            typeCategory: .achievements
+        )
+        XCTAssertTrue(achievements.achievementPostsOnly)
+        XCTAssertEqual(Set(achievements.types ?? []), Set(["like", "comment"]))
+
+        let rooms = ActivityNotificationFilterSupport.listFilter(
+            dateFilter: .allTime,
+            customInterval: nil,
+            typeCategory: .tradeRooms
+        )
+        XCTAssertTrue(rooms.types?.contains("trade_room_join_request") == true)
+        XCTAssertFalse(rooms.types?.contains("room_mention") == true)
+    }
+
+    func testActivityListFilterDateBounds() {
+        let now = Date(timeIntervalSince1970: 1_900_000_000)
+        let cal = Calendar(identifier: .gregorian)
+        let filter = ActivityNotificationFilterSupport.listFilter(
+            dateFilter: .today,
+            customInterval: nil,
+            typeCategory: .allTypes,
+            now: now,
+            calendar: cal
+        )
+        XCTAssertNotNil(filter.createdAfter)
+        XCTAssertNotNil(filter.createdBefore)
+
+        let all = ActivityNotificationFilterSupport.listFilter(
+            dateFilter: .allTime,
+            customInterval: nil,
+            typeCategory: .allTypes,
+            now: now,
+            calendar: cal
+        )
+        XCTAssertFalse(all.isActive)
+    }
+
     func testInboxTypesMatchWebAllowlist() {
         let expected: Set<String> = [
             "like", "comment", "room_join", "room_mention",
@@ -112,7 +173,69 @@ final class ActivityExperienceTests: XCTestCase {
         )
         XCTAssertFalse(sections.isEmpty)
         XCTAssertTrue(sections.contains { $0.section == .today })
-        XCTAssertTrue(sections.contains { $0.section == .yesterday || $0.section == .earlier })
+        XCTAssertTrue(sections.contains { $0.section == .yesterday || $0.section == .thisWeek })
+        XCTAssertEqual(sections.map(\.section), ActivityTimeSection.displayOrder.filter { s in
+            sections.contains { $0.section == s }
+        })
+        for section in sections {
+            let dates = section.rows.map(\.notification.createdAt)
+            XCTAssertEqual(dates, dates.sorted(by: >))
+        }
+    }
+
+    func testTimeSectionBoundariesAreMutuallyExclusive() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 16, hour: 15))!
+        let boundaries = ActivityTimeSectionBoundaries(now: now, calendar: calendar)
+
+        let todayNoon = calendar.date(
+            bySettingHour: 12,
+            minute: 0,
+            second: 0,
+            of: boundaries.startOfToday
+        )!
+        let yesterdayNoon = calendar.date(
+            bySettingHour: 12,
+            minute: 0,
+            second: 0,
+            of: boundaries.startOfYesterday
+        )!
+        var samples: [(Date, ActivityTimeSection)] = [
+            (todayNoon, .today),
+            (yesterdayNoon, .yesterday),
+        ]
+
+        if boundaries.startOfYesterday > boundaries.startOfThisWeek {
+            let thisWeekSample = calendar.date(byAdding: .second, value: -1, to: boundaries.startOfYesterday)!
+            samples.append((thisWeekSample, .thisWeek))
+        }
+
+        if boundaries.startOfThisWeek > boundaries.startOfLastWeek {
+            let lastWeekSample = calendar.date(byAdding: .second, value: -1, to: boundaries.startOfThisWeek)!
+            samples.append((lastWeekSample, .lastWeek))
+        }
+
+        if boundaries.startOfLastWeek > boundaries.startOfThisMonth {
+            let thisMonthSample = calendar.date(byAdding: .second, value: -1, to: boundaries.startOfLastWeek)!
+            samples.append((thisMonthSample, .thisMonth))
+        }
+
+        if boundaries.startOfThisMonth > boundaries.startOfLastMonth {
+            let lastMonthSample = calendar.date(byAdding: .second, value: -1, to: boundaries.startOfThisMonth)!
+            samples.append((lastMonthSample, .lastMonth))
+        }
+
+        let ancient = calendar.date(from: DateComponents(year: 2024, month: 1, day: 1))!
+        samples.append((ancient, .older))
+
+        for (date, expected) in samples {
+            XCTAssertEqual(
+                boundaries.section(for: date),
+                expected,
+                "\(date) should be \(expected.rawValue)"
+            )
+        }
     }
 
     func testUnreadBadgeAndMarkReadUpdatesStore() {
@@ -575,10 +698,14 @@ private final class ActivityStubNotificationRepository: NotificationRepository, 
         self.shouldFailDelete = shouldFailDelete
     }
 
-    func notifications(page: PageRequest) async throws -> CursorPage<ActivityNotification> {
+    func notifications(
+        page: PageRequest,
+        filter: ActivityNotificationListFilter
+    ) async throws -> CursorPage<ActivityNotification> {
         notificationsPageCallCount += 1
         if shouldFail { throw AppError.unknown(message: "network") }
-        return CursorPage(items: items, nextCursor: nil)
+        let filtered = items.filter { filter.matches($0) }
+        return CursorPage(items: filtered, nextCursor: nil)
     }
 
     func notification(id: NotificationID) async throws -> ActivityNotification? {

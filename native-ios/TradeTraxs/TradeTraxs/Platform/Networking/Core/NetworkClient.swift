@@ -172,6 +172,19 @@ actor URLSessionNetworkClient: NetworkClient {
                         current = try await requestInterceptor.intercept(request)
                         continue
                     }
+                    if current.acceptsNonSuccessStatusCodes,
+                       let http = response as? HTTPURLResponse
+                    {
+                        let raw = HTTPResponse(data: data, httpURLResponse: http, metrics: nil)
+                        let intercepted = try await responseInterceptor.intercept(raw, for: current)
+                        metrics.byteCountReceived = Int64(intercepted.data.count)
+                        metrics.statusCode = intercepted.statusCode
+                        return HTTPResponse(
+                            data: intercepted.data,
+                            httpURLResponse: intercepted.httpURLResponse,
+                            metrics: metrics
+                        )
+                    }
                     throw mapped
                 }
 

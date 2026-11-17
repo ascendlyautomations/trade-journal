@@ -26,8 +26,11 @@ import {
 import {
   cleanupBroadcastRemoteAudio,
   getBroadcastStreamListenMuted,
+  getBroadcastStreamListenVolume,
   registerBroadcastRemoteAudioHandlers,
+  replayBroadcastRemoteAudio,
   setBroadcastStreamListenMuted,
+  setBroadcastStreamListenVolume,
 } from "./tradeRoomBroadcastAudio.ts"
 import {
   clearBroadcastChatState,
@@ -72,6 +75,7 @@ import {
 } from "./tradeRoomBroadcastScreenOverlaySession.ts"
 import {
   isBroadcastScreenShareCancelled,
+  shouldRetryBrowserScreenShareWithoutAudio,
   tradeRoomBroadcastScreenShareProgramActive,
   tradeRoomBroadcastShareScreenWhileLiveAvailable,
 } from "./tradeRoomBroadcastScreenShareWhileLive.ts"
@@ -95,8 +99,11 @@ import {
   declineBroadcastSpeakInvite,
   fetchBroadcastAcceptSpeakInvitePayload,
 } from "./tradeRoomBroadcastInviteRespond.ts"
-import { fetchBroadcastConversationJoinPayload } from "./tradeRoomBroadcastJoinConversation.ts"
 import { resolveBroadcastLiveVisibility } from "./broadcastVisibilityMerge.ts"
+import {
+  shouldKeepBroadcastConnectionForConversation,
+  speakInviteAllowsMicrophone,
+} from "../mobileWebLivePolicy.ts"
 
 export type BroadcastSource = "browser" | "obs"
 
@@ -112,6 +119,7 @@ export type BroadcastRoomStatus = {
   broadcastSessionId?: string
   broadcasterUserId?: string
   broadcasterDisplayName?: string | null
+  streamTitle?: string | null
   startedAt?: string
   viewerCount?: number | null
   voiceMode?: TradeRoomBroadcastVoiceMode
@@ -198,6 +206,10 @@ export type BroadcastStoreSnapshot = {
   liveParticipants: BroadcastLiveParticipant[]
   interactiveProfiles: Record<string, BroadcastInteractiveProfileLite>
   streamListenMuted: boolean
+  /** 0–1 playback gain. Mute does not clear this. */
+  streamListenVolume: number
+  /** False until Room.startAudio() succeeds for this browser session. */
+  canPlaybackAudio: boolean
   viewerMicMuted: boolean
   /** Conversation role: true once a microphone track is actually published to the room. */
   viewerMicPublishReady: boolean
@@ -312,6 +324,8 @@ let handFeedback: string | null = null
 let liveParticipants: BroadcastLiveParticipant[] = []
 let interactiveProfiles: Record<string, BroadcastInteractiveProfileLite> = {}
 let streamListenMuted = false
+let streamListenVolume = 1
+let canPlaybackAudio = false
 let viewerMicMuted = false
 let viewerMicPublishReady = false
 let speakInviteNotice: BroadcastSpeakInviteNotice | null = null
@@ -352,9 +366,22 @@ let screenShareWhileLiveBusy = false
 let screenShareWhileLiveError: string | null = null
 
 const BROWSER_SCREEN_SHARE_OPTS = {
-  audio: false,
+  audio: true,
   selfBrowserSurface: "include" as const,
   surfaceSwitching: "include" as const,
+}
+
+/** Video-only when the browser or token cannot provide tab audio. */
+async function enableBrowserScreenShare(room: Room): Promise<void> {
+  try {
+    await room.localParticipant.setScreenShareEnabled(true, BROWSER_SCREEN_SHARE_OPTS)
+  } catch (err) {
+    if (!shouldRetryBrowserScreenShareWithoutAudio(err)) throw err
+    await room.localParticipant.setScreenShareEnabled(true, {
+      ...BROWSER_SCREEN_SHARE_OPTS,
+      audio: false,
+    })
+  }
 }
 
 export {
@@ -370,7 +397,6 @@ let voluntaryViewerBroadcastLeave = false
 let intentionalBroadcastRoomTeardown = false
 let viewerRemovalHandling = false
 let passiveInteractiveContext: BroadcastPassiveInteractiveContext | null = null
-let speakerAutoUpgradeAttemptedSessionId: string | null = null
 /** Broadcaster: play remote guest microphones (invite / open voice). */
 let broadcasterRemoteSpeakerAudioCleanup: (() => void) | null = null
 /** Conversation viewer: listeners for LocalTrackPublished to sync viewerMicPublishReady. */
@@ -497,6 +523,8 @@ function buildSnapshot(): BroadcastStoreSnapshot {
     liveParticipants,
     interactiveProfiles,
     streamListenMuted,
+    streamListenVolume,
+    canPlaybackAudio,
     viewerMicMuted,
     viewerMicPublishReady,
     speakInviteNotice,
@@ -661,7 +689,37 @@ function attachRoomSync(activeRoom: Room, broadcasterId: string) {
   activeRoom.on(RoomEvent.Disconnected, () => {
     void handleViewerBroadcastLiveKitDisconnected()
   })
+  activeRoom.on(RoomEvent.AudioPlaybackStatusChanged, () => {
+    canPlaybackAudio = activeRoom.canPlaybackAudio
+    emit()
+  })
   sync()
+}
+
+/** Invoke Room.startAudio() synchronously so the caller can stay inside a tap. */
+function beginBroadcastAudioUnlock(activeRoom: Room): Promise<void> {
+  const pending = activeRoom.startAudio()
+  replayBroadcastRemoteAudio()
+  return pending.then(
+    () => {
+      if (broadcastRoom === activeRoom) {
+        canPlaybackAudio = activeRoom.canPlaybackAudio
+      }
+    },
+    () => {
+      if (broadcastRoom === activeRoom) {
+        canPlaybackAudio = activeRoom.canPlaybackAudio
+      }
+    }
+  )
+}
+
+export function resumeTradeRoomBroadcastPlayback(): Promise<void> {
+  if (!broadcastRoom) return Promise.resolve()
+  return beginBroadcastAudioUnlock(broadcastRoom).then(() => {
+    replayBroadcastRemoteAudio()
+    emit()
+  })
 }
 
 function presentViewerStreamEndedNotice(sessionId: string): void {
@@ -944,6 +1002,12 @@ function statusPayloadFromApiJson(payload: Record<string, unknown>): BroadcastRo
         : payload.broadcasterDisplayName === null
           ? null
           : undefined,
+    streamTitle:
+      typeof payload.streamTitle === "string"
+        ? payload.streamTitle
+        : payload.streamTitle === null
+          ? null
+          : undefined,
     startedAt: typeof payload.startedAt === "string" ? payload.startedAt : undefined,
     viewerCount:
       typeof payload.viewerCount === "number" ? payload.viewerCount : undefined,
@@ -1106,6 +1170,52 @@ async function runRoomBroadcastStatusPollTick(
   }
 }
 
+let broadcastPollVisibilityBound = false
+
+function broadcastPollDocumentHidden(): boolean {
+  return typeof document !== "undefined" && document.visibilityState === "hidden"
+}
+
+/** Stop the HTTP poll timers only. LiveKit rooms, audio, and broadcasts stay up. */
+function clearBroadcastPollTimers(): void {
+  if (interactivePollTimer) {
+    clearInterval(interactivePollTimer)
+    interactivePollTimer = null
+  }
+  if (roomStatusPollTimer) {
+    clearInterval(roomStatusPollTimer)
+    roomStatusPollTimer = null
+  }
+}
+
+function resumeBroadcastPollTimers(): void {
+  const token = interactivePollAccessToken?.trim()
+  if (interactivePollOwners.size > 0 && token) {
+    startInteractivePolling(token)
+  }
+  if (
+    roomStatusPollActive &&
+    roomStatusPollRoomId?.trim() &&
+    roomStatusPollAccessToken?.trim()
+  ) {
+    reconcileRoomBroadcastStatusPolling(true)
+  }
+}
+
+function onBroadcastPollVisibility(): void {
+  if (broadcastPollDocumentHidden()) {
+    clearBroadcastPollTimers()
+    return
+  }
+  resumeBroadcastPollTimers()
+}
+
+function ensureBroadcastPollVisibilityListener(): void {
+  if (broadcastPollVisibilityBound || typeof document === "undefined") return
+  broadcastPollVisibilityBound = true
+  document.addEventListener("visibilitychange", onBroadcastPollVisibility)
+}
+
 function reconcileRoomBroadcastStatusPolling(immediate = false): void {
   if (
     !roomStatusPollActive ||
@@ -1122,6 +1232,15 @@ function reconcileRoomBroadcastStatusPolling(immediate = false): void {
     (isWatching || isPublishing)
   ) {
     stopRoomBroadcastStatusPolling()
+    return
+  }
+
+  ensureBroadcastPollVisibilityListener()
+  if (broadcastPollDocumentHidden()) {
+    if (roomStatusPollTimer) {
+      clearInterval(roomStatusPollTimer)
+      roomStatusPollTimer = null
+    }
     return
   }
 
@@ -1324,16 +1443,6 @@ export async function refreshBroadcastInteractiveState(
       }
     }
 
-    if (
-      hasSpeakerGrant &&
-      isWatching &&
-      role === "viewer" &&
-      roomId === effectiveRoomId &&
-      boundViewerVideoElement &&
-      sessionId
-    ) {
-      void maybeAutoUpgradeViewerToSpeaker(accessToken, sessionId)
-    }
     const nextProfiles: Record<string, BroadcastInteractiveProfileLite> = {
       ...interactiveProfiles,
     }
@@ -1358,51 +1467,10 @@ export async function refreshBroadcastInteractiveState(
   }
 }
 
-async function maybeAutoUpgradeViewerToSpeaker(
-  accessToken: string,
-  sessionId: string
-): Promise<void> {
-  if (speakerAutoUpgradeAttemptedSessionId === sessionId) return
-  const activeRoomId = roomId
-  const videoElement = boundViewerVideoElement
-  const token = accessToken.trim()
-  if (speakerUpgradeInFlight || isBusy || !activeRoomId || !videoElement) {
-    return
-  }
-  if (!token) {
-    error = "Sign in to join as a speaker."
-    emit()
-    return
-  }
-  const inviteId = speakInviteNotice?.invitationId?.trim() ?? ""
-  speakerAutoUpgradeAttemptedSessionId = sessionId
-  speakerUpgradeInFlight = true
-  emit()
-  try {
-    await joinTradeRoomBroadcastConversation({
-      roomId: activeRoomId,
-      videoElement,
-      fetchJoin: () =>
-        inviteId
-          ? fetchBroadcastAcceptSpeakInvitePayload(token, inviteId)
-          : fetchBroadcastConversationJoinPayload(token, activeRoomId),
-    })
-    speakInviteNotice = null
-    viewerMicMuted = false
-    error = null
-  } catch (err) {
-    speakerAutoUpgradeAttemptedSessionId = null
-    error =
-      err instanceof Error ? err.message : "Could not join as a speaker."
-  } finally {
-    speakerUpgradeInFlight = false
-    emit()
-  }
-}
-
 function startInteractivePolling(accessToken: string) {
   const token = accessToken.trim()
   if (!token) return
+  ensureBroadcastPollVisibilityListener()
   const intervalMs = interactivePollIntervalMs()
   if (
     interactivePollTimer &&
@@ -1417,6 +1485,7 @@ function startInteractivePolling(accessToken: string) {
   if (!viewerAccessToken?.trim()) {
     viewerAccessToken = token
   }
+  if (broadcastPollDocumentHidden()) return
   void refreshBroadcastInteractiveState(token)
   interactivePollTimer = setInterval(() => {
     void refreshBroadcastInteractiveState(token)
@@ -1599,8 +1668,11 @@ async function releaseLocalTracks(activeRoom: Room) {
 
 async function teardownBroadcastRoom(options?: {
   preserveViewerCredentials?: boolean
+  /** Explicit leave. Reconnect and conversation changes keep the listen level. */
+  resetListenState?: boolean
 }) {
   const preserveViewer = options?.preserveViewerCredentials === true
+  const resetListen = options?.resetListenState === true
   const room = broadcastRoom
   let screenCaptureReleased = false
   const ensureScreenCaptureReleased = async () => {
@@ -1648,7 +1720,7 @@ async function teardownBroadcastRoom(options?: {
   broadcasterPreviewError = null
   cleanupBroadcastVideoAttachments()
   detachLocalBroadcastPreview()
-  cleanupBroadcastRemoteAudio()
+  cleanupBroadcastRemoteAudio(resetListen ? undefined : { preserveListenMute: true })
   if (room) {
     room.removeAllListeners()
     await room.disconnect()
@@ -1676,7 +1748,13 @@ async function teardownBroadcastRoom(options?: {
   handFeedback = null
   liveParticipants = []
   interactiveProfiles = {}
-  streamListenMuted = false
+  if (resetListen) {
+    streamListenMuted = false
+    streamListenVolume = 1
+  } else {
+    streamListenMuted = getBroadcastStreamListenMuted()
+    streamListenVolume = getBroadcastStreamListenVolume()
+  }
   viewerMicMuted = false
   viewerMicPublishReady = false
   speakInviteNotice = null
@@ -1689,8 +1767,11 @@ async function teardownBroadcastRoom(options?: {
   speakerGrantUserIds = []
   sessionBlockUserIds = []
   boundViewerVideoElement = null
-  speakerAutoUpgradeAttemptedSessionId = null
-  setBroadcastStreamListenMuted(false)
+  canPlaybackAudio = false
+  if (resetListen) {
+    setBroadcastStreamListenMuted(false)
+    setBroadcastStreamListenVolume(1)
+  }
   setBroadcastPublisherCredentials(null)
   intentionalBroadcastRoomTeardown = false
   } finally {
@@ -1745,6 +1826,15 @@ export function setTradeRoomBroadcastStatus(next: BroadcastRoomStatus): void {
     merged.broadcastSessionId === prev.broadcastSessionId
   ) {
     merged.broadcasterDisplayName = prev.broadcasterDisplayName
+  }
+  if (
+    merged.streamTitle === undefined &&
+    prev.streamTitle !== undefined &&
+    merged.live &&
+    prev.live &&
+    merged.broadcastSessionId === prev.broadcastSessionId
+  ) {
+    merged.streamTitle = prev.streamTitle
   }
   if (
     merged.broadcastSource === undefined &&
@@ -1967,6 +2057,12 @@ export function toggleTradeRoomBroadcastStreamListenMuted(): void {
   emit()
 }
 
+export function setTradeRoomBroadcastStreamListenVolume(volume: number): void {
+  setBroadcastStreamListenVolume(volume)
+  streamListenVolume = getBroadcastStreamListenVolume()
+  emit()
+}
+
 export async function toggleTradeRoomBroadcastViewerMicMuted(): Promise<void> {
   if (!broadcastRoom || role !== "conversation") return
   const next = !viewerMicMuted
@@ -2040,12 +2136,14 @@ export async function acceptTradeRoomBroadcastSpeakInvite(options: {
   }>
 }): Promise<void> {
   if (speakerUpgradeInFlight || isBusy) return
+  if (!speakInviteAllowsMicrophone({ accepted: true })) return
+  if (broadcastRoom) beginBroadcastAudioUnlock(broadcastRoom)
   speakerUpgradeInFlight = true
   emit()
   try {
     const token = options.accessToken.trim()
     const inviteId = options.invitationId?.trim() ?? ""
-    await joinTradeRoomBroadcastConversation({
+    const joined = await joinTradeRoomBroadcastConversation({
       roomId: options.roomId,
       videoElement: options.videoElement,
       fetchJoin: () =>
@@ -2053,10 +2151,8 @@ export async function acceptTradeRoomBroadcastSpeakInvite(options: {
           ? fetchBroadcastAcceptSpeakInvitePayload(token, inviteId)
           : options.fetchConversationToken(),
     })
-    speakerAutoUpgradeAttemptedSessionId =
-      currentSessionId ?? speakInviteNotice?.sessionId ?? null
+    if (!joined) return
     speakInviteNotice = null
-    viewerMicMuted = false
   } catch (err) {
     error =
       err instanceof Error ? err.message : "Could not join as a speaker."
@@ -2070,6 +2166,7 @@ export type BroadcastGoLiveSetup = {
   videoSource: TradeRoomBroadcastVideoSource
   voiceMode: TradeRoomBroadcastVoiceMode
   enableBroadcasterMic: boolean
+  streamTitle: string
 }
 
 const OBS_CREDENTIALS_LOST_MESSAGE =
@@ -2292,6 +2389,39 @@ export async function copyObsFieldToClipboard(value: string): Promise<void> {
 /**
  * OBS Stage 2: make the preparing session public (notifications once, viewer tokens enabled).
  */
+export async function patchTradeRoomBroadcastStreamTitle(options: {
+  roomId: string
+  sessionId: string
+  accessToken: string
+  streamTitle: string
+}): Promise<void> {
+  const res = await fetch("/api/livekit/broadcast/stream-title", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${options.accessToken.trim()}`,
+    },
+    body: JSON.stringify({
+      roomId: options.roomId,
+      sessionId: options.sessionId,
+      streamTitle: options.streamTitle,
+    }),
+  })
+  const payload = (await res.json().catch(() => ({}))) as {
+    error?: string
+    streamTitle?: string
+  }
+  if (!res.ok) {
+    throw new Error(payload.error || "Could not update stream title.")
+  }
+  const next = payload.streamTitle?.trim() || options.streamTitle.trim()
+  setTradeRoomBroadcastStatus({
+    ...status,
+    streamTitle: next,
+  })
+  emit()
+}
+
 export async function publishTradeRoomBroadcastObs(options: {
   roomId: string
   accessToken: string
@@ -2455,6 +2585,9 @@ export async function startTradeRoomBroadcast(options: {
       broadcastSessionId: start.broadcastSessionId,
       broadcasterUserId: start.broadcasterUserId,
       broadcasterDisplayName: start.broadcasterDisplayName,
+      streamTitle:
+        (start as { streamTitle?: string | null }).streamTitle?.trim() ||
+        options.setup.streamTitle.trim(),
       startedAt: start.startedAt,
       voiceMode: start.voiceMode,
       videoSource: start.videoSource,
@@ -2561,11 +2694,7 @@ export async function startTradeRoomBroadcast(options: {
             resolution: { width: 1280, height: 720, frameRate: 24 },
           })
         } else {
-          await nextRoom.localParticipant.setScreenShareEnabled(true, {
-            audio: false,
-            selfBrowserSurface: "include",
-            surfaceSwitching: "include",
-          })
+          await enableBrowserScreenShare(nextRoom)
         }
         localPub = findLocalBroadcastVideoPublication(
           nextRoom,
@@ -2734,9 +2863,11 @@ async function connectBroadcastViewer(options: {
     visibility?: "public" | "preparing"
   }
   asConversation: boolean
+  preparedRoom?: Room
+  playbackPromise?: Promise<void>
 }): Promise<void> {
   const { tokenPayload } = options
-  if (broadcastRoom) {
+  if (broadcastRoom && broadcastRoom !== options.preparedRoom) {
     await teardownBroadcastRoom()
   }
 
@@ -2773,10 +2904,14 @@ async function connectBroadcastViewer(options: {
     primaryMediaPublisherIdentity: activePrimaryMediaPublisherIdentity,
   }
 
-  const nextRoom = new Room({
-    adaptiveStream: true,
-    dynacast: true,
-  })
+  const nextRoom =
+    options.preparedRoom ??
+    new Room({
+      adaptiveStream: true,
+      dynacast: true,
+    })
+  const playbackPromise =
+    options.playbackPromise ?? beginBroadcastAudioUnlock(nextRoom)
   broadcastRoom = nextRoom
 
   logBroadcast("viewer connecting", {
@@ -2811,6 +2946,9 @@ async function connectBroadcastViewer(options: {
     options.videoElement,
     tokenPayload.voiceMode ?? "broadcast_only"
   )
+  await playbackPromise
+  replayBroadcastRemoteAudio()
+  canPlaybackAudio = nextRoom.canPlaybackAudio
 
   if (options.asConversation) {
     try {
@@ -2865,8 +3003,9 @@ export async function watchTradeRoomBroadcast(options: {
     currentSessionId != null &&
     broadcasterIdentityForRoom
   ) {
+    const playbackPromise = beginBroadcastAudioUnlock(broadcastRoom)
     boundViewerVideoElement = options.videoElement
-    reattachBroadcastVideoToElement(broadcastRoom!, {
+    reattachBroadcastVideoToElement(broadcastRoom, {
       broadcastSource: status.broadcastSource ?? "browser",
       primaryMediaPublisherIdentity: status.primaryMediaPublisherIdentity,
       broadcasterUserId: broadcasterIdentityForRoom,
@@ -2874,8 +3013,16 @@ export async function watchTradeRoomBroadcast(options: {
       preferredSource:
         preferredVideoSource === "obs" ? "screen" : preferredVideoSource,
     })
+    await playbackPromise
+    emit()
     return
   }
+
+  const preparedRoom = new Room({
+    adaptiveStream: true,
+    dynacast: true,
+  })
+  const playbackPromise = beginBroadcastAudioUnlock(preparedRoom)
 
   isBusy = true
   error = null
@@ -2892,8 +3039,13 @@ export async function watchTradeRoomBroadcast(options: {
       videoElement: options.videoElement,
       tokenPayload,
       asConversation: false,
+      preparedRoom,
+      playbackPromise,
     })
   } catch (err) {
+    if (preparedRoom !== broadcastRoom) {
+      await preparedRoom.disconnect().catch(() => {})
+    }
     if (err instanceof BroadcastNoActiveStreamError) {
       await teardownBroadcastRoom({ preserveViewerCredentials: true })
       isWatching = false
@@ -2913,6 +3065,38 @@ export async function watchTradeRoomBroadcast(options: {
   }
 }
 
+function broadcastConnectionMatches(
+  targetRoomId: string,
+  sessionId: string | null | undefined
+): boolean {
+  const connected =
+    broadcastRoom?.state === ConnectionState.Connected ||
+    broadcastRoom?.state === ConnectionState.Reconnecting
+  return shouldKeepBroadcastConnectionForConversation({
+    connected: Boolean(broadcastRoom) && connected,
+    sameRoom: roomId === targetRoomId,
+    sameSession: Boolean(sessionId) && currentSessionId === sessionId,
+  })
+}
+
+async function publishConversationMicrophone(activeRoom: Room): Promise<void> {
+  if (!speakInviteAllowsMicrophone({ accepted: true })) return
+  role = "conversation"
+  isInConversation = true
+  registerConversationMicPublishListeners(activeRoom)
+  try {
+    await activeRoom.localParticipant.setMicrophoneEnabled(true)
+    viewerMicMuted = false
+    syncViewerMicPublishReady(activeRoom)
+    error = null
+  } catch (err) {
+    viewerMicMuted = true
+    viewerMicPublishReady = false
+    error =
+      err instanceof Error ? err.message : "Could not enable microphone."
+  }
+}
+
 export async function joinTradeRoomBroadcastConversation(options: {
   roomId: string
   videoElement: HTMLVideoElement
@@ -2928,24 +3112,61 @@ export async function joinTradeRoomBroadcastConversation(options: {
     broadcastSource?: BroadcastSource
     primaryMediaPublisherIdentity?: string | null
   }>
-}): Promise<void> {
-  if (isBusy) return
+}): Promise<boolean> {
+  if (isBusy) return false
+  const playbackPromise = broadcastRoom
+    ? beginBroadcastAudioUnlock(broadcastRoom)
+    : null
+  const preparedRoom = broadcastRoom
+    ? null
+    : new Room({ adaptiveStream: true, dynacast: true })
+  const preparedPlayback = preparedRoom
+    ? beginBroadcastAudioUnlock(preparedRoom)
+    : null
   isBusy = true
   error = null
   emit()
 
   try {
     const tokenPayload = await options.fetchJoin()
+    await playbackPromise
+    if (
+      broadcastRoom &&
+      broadcastConnectionMatches(options.roomId, tokenPayload.broadcastSessionId)
+    ) {
+      if (options.videoElement && broadcasterIdentityForRoom) {
+        boundViewerVideoElement = options.videoElement
+        reattachBroadcastVideoToElement(broadcastRoom, {
+          broadcastSource: status.broadcastSource ?? "browser",
+          primaryMediaPublisherIdentity: status.primaryMediaPublisherIdentity,
+          broadcasterUserId: broadcasterIdentityForRoom,
+          videoEl: options.videoElement,
+          preferredSource:
+            preferredVideoSource === "obs" ? "screen" : preferredVideoSource,
+        })
+      }
+      await publishConversationMicrophone(broadcastRoom)
+      replayBroadcastRemoteAudio()
+      speakInviteNotice = null
+      return true
+    }
     await connectBroadcastViewer({
       roomId: options.roomId,
       videoElement: options.videoElement,
       tokenPayload,
       asConversation: true,
+      preparedRoom: preparedRoom ?? undefined,
+      playbackPromise: preparedPlayback ?? undefined,
     })
+    return true
   } catch (err) {
+    if (preparedRoom && preparedRoom !== broadcastRoom) {
+      await preparedRoom.disconnect().catch(() => {})
+    }
     error =
       err instanceof Error ? err.message : "Could not join the conversation."
     emit()
+    return false
   } finally {
     isBusy = false
     emit()
@@ -2971,11 +3192,32 @@ export async function leaveTradeRoomBroadcastConversation(options: {
   }>
 }): Promise<void> {
   if (isBusy) return
+  const keepConnection = broadcastConnectionMatches(options.roomId, currentSessionId)
+  const playbackPromise = broadcastRoom
+    ? beginBroadcastAudioUnlock(broadcastRoom)
+    : null
   isBusy = true
   emit()
 
   try {
     const leave = await options.fetchLeave()
+    await playbackPromise
+    if (keepConnection && broadcastRoom) {
+      try {
+        await broadcastRoom.localParticipant.setMicrophoneEnabled(false)
+      } catch {
+        // Permission may already have been revoked.
+      }
+      role = "viewer"
+      isInConversation = false
+      viewerMicMuted = false
+      viewerMicPublishReady = false
+      conversationMicStateCleanup?.()
+      conversationMicStateCleanup = null
+      replayBroadcastRemoteAudio()
+      error = null
+      return
+    }
     const viewer = leave.viewerToken
     if (!viewer?.token) {
       isInConversation = false
@@ -3108,10 +3350,7 @@ export async function retryTradeRoomBroadcasterCapture(): Promise<void> {
       await releaseBrowserScreenShareCapture(broadcastRoom, {
         stopDisplayCapture: true,
       }).catch(() => {})
-      await broadcastRoom.localParticipant.setScreenShareEnabled(
-        true,
-        BROWSER_SCREEN_SHARE_OPTS
-      )
+      await enableBrowserScreenShare(broadcastRoom)
     }
     const localPub = findLocalBroadcastVideoPublication(broadcastRoom, source)
     if (!localPub?.track) {
@@ -3191,7 +3430,7 @@ export async function retryTradeRoomBroadcasterCapture(): Promise<void> {
 export async function leaveTradeRoomBroadcastViewer(): Promise<void> {
   voluntaryViewerBroadcastLeave = true
   try {
-    await teardownBroadcastRoom()
+    await teardownBroadcastRoom({ resetListenState: true })
     isWatching = false
     role = "none"
     roomId = null
@@ -3303,10 +3542,7 @@ function bindBroadcasterScreenShareEnded(rawScreen: MediaStreamTrack): void {
 }
 
 async function publishBrowserScreenShareWithOverlay(room: Room): Promise<void> {
-  await room.localParticipant.setScreenShareEnabled(
-    true,
-    BROWSER_SCREEN_SHARE_OPTS
-  )
+  await enableBrowserScreenShare(room)
   const screenPub = findLocalBroadcastVideoPublication(room, "screen")
   if (!screenPub?.track) {
     throw new Error("Screen share was cancelled or no video track was published.")

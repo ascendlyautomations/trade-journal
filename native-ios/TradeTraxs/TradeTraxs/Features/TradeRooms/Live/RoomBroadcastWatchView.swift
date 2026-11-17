@@ -97,9 +97,15 @@ struct RoomBroadcastWatchView: View {
             .accessibilityLabel("Minimize")
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(roomTitle)
-                    .experienceStyle(.subheadline, color: colors.primaryText)
-                    .lineLimit(1)
+                Text(
+                    TradeRoomBroadcastStreamTitle.viewerPopupHeadline(
+                        streamTitle: coordinator.polledStatus.streamTitle,
+                        roomName: roomTitle
+                    )
+                )
+                .experienceStyle(.subheadline, color: colors.primaryText)
+                .lineLimit(1)
+                .truncationMode(.tail)
                 HStack(spacing: 6) {
                     Text("LIVE")
                         .font(.system(size: 9, weight: .heavy, design: .rounded))
@@ -127,6 +133,24 @@ struct RoomBroadcastWatchView: View {
         .padding(.horizontal, ExperienceSpacing.sm)
         .padding(.vertical, ExperienceSpacing.xs)
         .background(colors.navigationBackground.opacity(0.98))
+        .contentShape(Rectangle())
+        .simultaneousGesture(headerMinimizeDragGesture)
+    }
+
+    private var headerMinimizeDragGesture: some Gesture {
+        DragGesture(minimumDistance: 16, coordinateSpace: .local)
+            .onEnded { value in
+                let vertical = value.translation.height
+                let horizontal = abs(value.translation.width)
+                let velocityY = value.predictedEndTranslation.height - value.translation.height
+                let shouldMinimize =
+                    vertical > 0
+                    && vertical > horizontal * 1.05
+                    && (vertical >= 72 || velocityY >= 900)
+                guard shouldMinimize else { return }
+                coordinator.minimizeViewer()
+                dismiss()
+            }
     }
 
     private var streamToolbar: some View {
@@ -139,13 +163,7 @@ struct RoomBroadcastWatchView: View {
                 Task { await coordinator.toggleBroadcastHand() }
             }
 
-            toolbarIcon(
-                systemName: coordinator.isStreamPlaybackMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
-                label: coordinator.isStreamPlaybackMuted ? "Unmute stream" : "Mute stream",
-                tint: colors.primaryText
-            ) {
-                Task { await coordinator.toggleStreamPlaybackMute() }
-            }
+            RoomBroadcastAudioControl(coordinator: coordinator, style: .toolbar)
 
             if coordinator.isInConversation {
                 toolbarIcon(
@@ -214,11 +232,7 @@ struct RoomBroadcastWatchView: View {
                 }
                 Spacer()
                 HStack(spacing: ExperienceSpacing.lg) {
-                    fullscreenControl(
-                        systemName: coordinator.isStreamPlaybackMuted ? "speaker.slash.fill" : "speaker.wave.2.fill"
-                    ) {
-                        Task { await coordinator.toggleStreamPlaybackMute() }
-                    }
+                    RoomBroadcastAudioControl(coordinator: coordinator, style: .fullscreen)
                     fullscreenControl(systemName: "hand.raised.fill") {
                         Task { await coordinator.toggleBroadcastHand() }
                     }

@@ -280,6 +280,243 @@ export type Database = {
         }
         Relationships: []
       }
+      trading_preference_discovery: {
+        Row: {
+          response: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          response: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          response?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      trading_preferences: {
+        Row: {
+          allowed_trading_days: string[]
+          breakeven_tolerance: number | null
+          consecutive_loss_pause: number | null
+          daily_loss_limit: number | null
+          daily_loss_limit_scope: string
+          daily_profit_rules_scope: string
+          daily_profit_target: number | null
+          max_contracts_per_trade: number | null
+          max_drawdown_goal: number | null
+          max_risk_per_trade: number | null
+          max_trades_per_day: number | null
+          max_trades_per_day_scope: string
+          max_weekly_loss: number | null
+          max_weekly_loss_scope: string
+          min_acceptable_rr: number | null
+          planned_end_minute: number | null
+          planned_start_minute: number | null
+          preferred_sessions: string[]
+          primary_instruments: string[]
+          stop_after_daily_profit_target: boolean
+          target_rr: number | null
+          trading_style: string | null
+          updated_at: string
+          user_id: string
+          wait_after_loss_minutes: number | null
+        }
+        Insert: {
+          allowed_trading_days?: string[]
+          breakeven_tolerance?: number | null
+          consecutive_loss_pause?: number | null
+          daily_loss_limit?: number | null
+          daily_loss_limit_scope?: string
+          daily_profit_rules_scope?: string
+          daily_profit_target?: number | null
+          max_contracts_per_trade?: number | null
+          max_drawdown_goal?: number | null
+          max_risk_per_trade?: number | null
+          max_trades_per_day?: number | null
+          max_trades_per_day_scope?: string
+          max_weekly_loss?: number | null
+          max_weekly_loss_scope?: string
+          min_acceptable_rr?: number | null
+          planned_end_minute?: number | null
+          planned_start_minute?: number | null
+          preferred_sessions?: string[]
+          primary_instruments?: string[]
+          stop_after_daily_profit_target?: boolean
+          target_rr?: number | null
+          trading_style?: string | null
+          updated_at?: string
+          user_id: string
+          wait_after_loss_minutes?: number | null
+        }
+        Update: {
+          allowed_trading_days?: string[]
+          breakeven_tolerance?: number | null
+          consecutive_loss_pause?: number | null
+          daily_loss_limit?: number | null
+          daily_loss_limit_scope?: string
+          daily_profit_rules_scope?: string
+          daily_profit_target?: number | null
+          max_contracts_per_trade?: number | null
+          max_drawdown_goal?: number | null
+          max_risk_per_trade?: number | null
+          max_trades_per_day?: number | null
+          max_trades_per_day_scope?: string
+          max_weekly_loss?: number | null
+          max_weekly_loss_scope?: string
+          min_acceptable_rr?: number | null
+          planned_end_minute?: number | null
+          planned_start_minute?: number | null
+          preferred_sessions?: string[]
+          primary_instruments?: string[]
+          stop_after_daily_profit_target?: boolean
+          target_rr?: number | null
+          trading_style?: string | null
+          updated_at?: string
+          user_id?: string
+          wait_after_loss_minutes?: number | null
+        }
+        Relationships: []
+      }
+      trading_preference_account_overrides: {
+        Row: {
+          account_id: string
+          daily_loss_limit: number | null
+          daily_profit_target: number | null
+          max_drawdown_goal: number | null
+          overrides_daily_loss: boolean
+          overrides_daily_profit_target: boolean
+          overrides_max_drawdown_goal: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          daily_loss_limit?: number | null
+          daily_profit_target?: number | null
+          max_drawdown_goal?: number | null
+          overrides_daily_loss?: boolean
+          overrides_daily_profit_target?: boolean
+          overrides_max_drawdown_goal?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          daily_loss_limit?: number | null
+          daily_profit_target?: number | null
+          max_drawdown_goal?: number | null
+          overrides_daily_loss?: boolean
+          overrides_daily_profit_target?: boolean
+          overrides_max_drawdown_goal?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      trading_preference_revisions: {
+        Row: {
+          account_id: string | null
+          allowed_trading_days: string[]
+          breakeven_tolerance: number | null
+          consecutive_loss_pause: number | null
+          daily_loss_limit: number | null
+          daily_loss_limit_scope: string
+          daily_profit_rules_scope: string
+          daily_profit_target: number | null
+          effective_from: string
+          id: string
+          max_contracts_per_trade: number | null
+          max_drawdown_goal: number | null
+          max_risk_per_trade: number | null
+          max_trades_per_day: number | null
+          max_trades_per_day_scope: string
+          max_weekly_loss: number | null
+          max_weekly_loss_scope: string
+          min_acceptable_rr: number | null
+          overrides_daily_loss: boolean
+          overrides_daily_profit_target: boolean
+          overrides_max_drawdown_goal: boolean
+          planned_end_minute: number | null
+          planned_start_minute: number | null
+          preferred_sessions: string[]
+          primary_instruments: string[]
+          stop_after_daily_profit_target: boolean
+          target_rr: number | null
+          trading_style: string | null
+          user_id: string
+          wait_after_loss_minutes: number | null
+        }
+        Insert: {
+          account_id?: string | null
+          allowed_trading_days?: string[]
+          breakeven_tolerance?: number | null
+          consecutive_loss_pause?: number | null
+          daily_loss_limit?: number | null
+          daily_loss_limit_scope?: string
+          daily_profit_rules_scope?: string
+          daily_profit_target?: number | null
+          effective_from?: string
+          id?: string
+          max_contracts_per_trade?: number | null
+          max_drawdown_goal?: number | null
+          max_risk_per_trade?: number | null
+          max_trades_per_day?: number | null
+          max_trades_per_day_scope?: string
+          max_weekly_loss?: number | null
+          max_weekly_loss_scope?: string
+          min_acceptable_rr?: number | null
+          overrides_daily_loss?: boolean
+          overrides_daily_profit_target?: boolean
+          overrides_max_drawdown_goal?: boolean
+          planned_end_minute?: number | null
+          planned_start_minute?: number | null
+          preferred_sessions?: string[]
+          primary_instruments?: string[]
+          stop_after_daily_profit_target?: boolean
+          target_rr?: number | null
+          trading_style?: string | null
+          user_id: string
+          wait_after_loss_minutes?: number | null
+        }
+        Update: {
+          account_id?: string | null
+          allowed_trading_days?: string[]
+          breakeven_tolerance?: number | null
+          consecutive_loss_pause?: number | null
+          daily_loss_limit?: number | null
+          daily_loss_limit_scope?: string
+          daily_profit_rules_scope?: string
+          daily_profit_target?: number | null
+          effective_from?: string
+          id?: string
+          max_contracts_per_trade?: number | null
+          max_drawdown_goal?: number | null
+          max_risk_per_trade?: number | null
+          max_trades_per_day?: number | null
+          max_trades_per_day_scope?: string
+          max_weekly_loss?: number | null
+          max_weekly_loss_scope?: string
+          min_acceptable_rr?: number | null
+          overrides_daily_loss?: boolean
+          overrides_daily_profit_target?: boolean
+          overrides_max_drawdown_goal?: boolean
+          planned_end_minute?: number | null
+          planned_start_minute?: number | null
+          preferred_sessions?: string[]
+          primary_instruments?: string[]
+          stop_after_daily_profit_target?: boolean
+          target_rr?: number | null
+          trading_style?: string | null
+          user_id?: string
+          wait_after_loss_minutes?: number | null
+        }
+        Relationships: []
+      }
       prop_firm_payout_assignments: {
         Row: {
           payout_key: string
@@ -3855,6 +4092,7 @@ export type Database = {
           primary_media_publisher_identity: string | null
           room_id: string
           started_at: string
+          stream_title: string | null
           video_source: string
           visibility: string
           voice_mode: string
@@ -3874,6 +4112,7 @@ export type Database = {
           primary_media_publisher_identity?: string | null
           room_id: string
           started_at?: string
+          stream_title?: string | null
           video_source?: string
           visibility?: string
           voice_mode?: string
@@ -3893,6 +4132,7 @@ export type Database = {
           primary_media_publisher_identity?: string | null
           room_id?: string
           started_at?: string
+          stream_title?: string | null
           video_source?: string
           visibility?: string
           voice_mode?: string
@@ -5206,6 +5446,7 @@ export type Database = {
           created_at: string | null
           date: string | null
           direction: string | null
+          dollar_risk: number | null
           duration_seconds: number | null
           duration_text: string | null
           emotion: string | null
@@ -5240,6 +5481,9 @@ export type Database = {
           rr: number | null
           max_rr_reached: number | null
           realized_rr: number | null
+          full_tp: boolean
+          early_exit: boolean
+          exit_rr: number | null
           session: string | null
           source_account_id: string | null
           strategy: string | null
@@ -5270,6 +5514,7 @@ export type Database = {
           created_at?: string | null
           date?: string | null
           direction?: string | null
+          dollar_risk?: number | null
           duration_seconds?: number | null
           duration_text?: string | null
           emotion?: string | null
@@ -5304,6 +5549,9 @@ export type Database = {
           rr?: number | null
           max_rr_reached?: number | null
           realized_rr?: number | null
+          full_tp?: boolean
+          early_exit?: boolean
+          exit_rr?: number | null
           session?: string | null
           source_account_id?: string | null
           strategy?: string | null
@@ -5334,6 +5582,7 @@ export type Database = {
           created_at?: string | null
           date?: string | null
           direction?: string | null
+          dollar_risk?: number | null
           duration_seconds?: number | null
           duration_text?: string | null
           emotion?: string | null
@@ -5368,6 +5617,9 @@ export type Database = {
           rr?: number | null
           max_rr_reached?: number | null
           realized_rr?: number | null
+          full_tp?: boolean
+          early_exit?: boolean
+          exit_rr?: number | null
           session?: string | null
           source_account_id?: string | null
           strategy?: string | null
@@ -5644,6 +5896,7 @@ export type Database = {
           created_at: string | null
           date: string | null
           direction: string | null
+          dollar_risk: number | null
           duration_seconds: number | null
           duration_text: string | null
           entry_price: number | null
@@ -6373,7 +6626,7 @@ export type Database = {
       weekly_trading_report_eligible_user_ids: {
         Args: { p_end: string; p_start: string }
         Returns: string[]
-      }
+      },
       get_app_icon_badge: { Args: { p_user_id?: string }; Returns: number }
       get_conversation_shared_media: {
         Args: {

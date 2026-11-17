@@ -60,77 +60,35 @@ struct DashboardTradingScorecardSection: View {
                     lineWidth: 9
                 )
 
-                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                    if let consistency = result.categories.first(where: { $0.id == .consistency }) {
-                        ScorecardCategoryBarRow(
-                            title: "Consistency",
-                            valueLabel: ScorecardVisualSupport.homeCategoryValueLabel(consistency),
-                            fillFraction: ScorecardVisualSupport.categoryBarFillFraction(consistency),
-                            tint: ScorecardVisualSupport.categoryBarRepresentsScore(consistency)
-                                ? colors.accent
-                                : colors.accentMuted,
-                            representsScore: ScorecardVisualSupport.categoryBarRepresentsScore(consistency)
-                        )
-                    }
-                    if let discipline = result.categories.first(where: { $0.id == .discipline }) {
-                        ScorecardCategoryBarRow(
-                            title: "Discipline",
-                            valueLabel: ScorecardVisualSupport.homeCategoryValueLabel(discipline),
-                            fillFraction: ScorecardVisualSupport.categoryBarFillFraction(discipline),
-                            tint: ScorecardVisualSupport.categoryBarRepresentsScore(discipline)
-                                ? colors.accent
-                                : colors.accentMuted,
-                            representsScore: ScorecardVisualSupport.categoryBarRepresentsScore(discipline)
-                        )
-                    }
-                    HStack(spacing: ExperienceSpacing.md) {
-                        if let risk = result.categories.first(where: { $0.id == .risk }) {
-                            ScorecardPhase1Indicator(
-                                kind: .risk,
-                                coveragePercent: risk.coveragePercent,
-                                caption: "\(risk.coveragePercent)% cov"
-                            )
-                        }
-                        if let psych = result.categories.first(where: { $0.id == .psychology }) {
-                            ScorecardPhase1Indicator(
-                                kind: .psychology,
-                                coveragePercent: psych.coveragePercent,
-                                caption: matchedDaysCaption(psych)
-                            )
+                VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+                    Text("\(result.overall.tradeCount) trades · \(result.overall.tradingDayCount) days")
+                        .experienceStyle(.caption, color: colors.secondaryText)
+                    ForEach(result.adherence) { row in
+                        HStack {
+                            Text(row.label)
+                                .experienceStyle(.caption, color: colors.secondaryText)
+                            Spacer(minLength: 8)
+                            Text(row.value ?? row.pending ?? "")
+                                .experienceStyle(.caption, color: colors.primaryText)
+                                .fontWeight(.semibold)
                         }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            if result.overall.score == nil {
-                ScorecardHomeCategorySnapshotGrid(result: result)
-                ScorecardGateChipsRow(chips: ScorecardVisualSupport.overallBuildingGateChips(result: result))
-            }
-
-            if let footnote = ScorecardVisualSupport.overallBuildingFootnote(result: result) {
-                Text(footnote)
-                    .experienceStyle(.caption2, color: colors.tertiaryText)
+            if let insight = result.insights.first {
+                Text(insight.text)
+                    .experienceStyle(.caption, color: colors.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            Text("\(result.overall.tradeCount) trades · \(result.overall.tradingDayCount) days")
-                .experienceStyle(.caption2, color: colors.tertiaryText)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(ExperienceSpacing.md)
         .experienceDashboardCard(prominence: .featured)
     }
 
-    private func matchedDaysCaption(_ psych: ScorecardCategoryResult) -> String {
-        if let matched = psych.subMetrics.first(where: { $0.id == "psych.matched_days" }) {
-            return matched.value + "d"
-        }
-        return "\(psych.coveragePercent)% cov"
-    }
-
     private var loadingPlaceholder: some View {
-        ExperienceSkeleton(height: 140, cornerRadius: ExperienceRadius.lg)
+        ExperienceSkeleton(height: 120, cornerRadius: ExperienceRadius.lg)
             .accessibilityIdentifier("dashboard.scorecard.loading")
     }
 

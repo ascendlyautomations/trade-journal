@@ -64,9 +64,7 @@ struct SharedContentShareRoomChannelPickerView: View {
             .experienceDashboardListRow()
             .accessibilityIdentifier("sharedContentShare.roomChannel.\(channel.id.rawValue)")
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .experienceDashboardGroupedRows()
+        .experiencePlainListStyle()
         .listRowSeparatorTint(colors.separator)
     }
 }
@@ -85,7 +83,7 @@ struct ShareRecipientSubRoomRow: View {
                     .experienceStyle(.headline, color: colors.primaryText)
                     .lineLimit(1)
                 if !channel.allowMembersChat {
-                    Text("Owners only")
+                    Text("Moderators only")
                         .experienceStyle(.caption, color: colors.secondaryText)
                 }
             }

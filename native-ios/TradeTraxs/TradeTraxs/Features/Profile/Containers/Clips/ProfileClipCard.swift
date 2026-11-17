@@ -23,6 +23,10 @@ struct ProfileClipCard: View {
 
     private var target: InteractionTarget { .reel(reel.id) }
 
+    private var presentationReel: Reel {
+        detailCache.reel(id: reel.id) ?? reel
+    }
+
     var body: some View {
         ExperienceCard {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
@@ -43,7 +47,7 @@ struct ProfileClipCard: View {
                 } metadata: {
                     VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                         HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
-                            Text(ClipDisplayTitle.text(for: reel, cache: detailCache))
+                            Text(ClipDisplayTitle.text(for: presentationReel, cache: detailCache))
                                 .experienceStyle(.headline, color: colors.primaryText)
                                 .lineLimit(3)
                                 .multilineTextAlignment(.leading)
@@ -54,15 +58,18 @@ struct ProfileClipCard: View {
                         }
 
                         HStack(spacing: ExperienceSpacing.xs) {
-                            Text(TradeDisplay.dateText(reel.createdAt))
+                            Text(TradeDisplay.dateText(presentationReel.createdAt))
                                 .experienceStyle(.caption, color: colors.secondaryText)
-                            if let seconds = reel.durationSeconds, seconds > 0 {
+                            if let seconds = presentationReel.durationSeconds, seconds > 0 {
                                 Text(Self.formatDuration(seconds))
                                     .experienceStyle(.caption, color: colors.tertiaryText)
                             }
                             Spacer(minLength: 0)
                         }
-                        if reel.linkedTradeID != nil {
+                        if let tradeID = presentationReel.linkedTradeID,
+                           let summary = detailCache.tradeSummary(id: tradeID),
+                           isOwner || summary.visibility == .public
+                        {
                             ExperienceTag(title: "Linked Trade", tone: .info)
                         }
                     }

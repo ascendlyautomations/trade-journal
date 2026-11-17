@@ -5,6 +5,8 @@ struct ReportDetailView: View {
     @State private var viewModel: ReportDetailViewModel
 
     @Environment(\.themeColors) private var colors
+    private let tradingPreferences: (any TradingPreferencesRepository)?
+    private let navigationCoordinator: NavigationCoordinator?
 
     init(
         reportID: ReportID,
@@ -21,10 +23,14 @@ struct ReportDetailView: View {
                 navigationCoordinator: navigationCoordinator
             )
         )
+        tradingPreferences = data.tradingPreferences
+        self.navigationCoordinator = navigationCoordinator
     }
 
     init(viewModel: ReportDetailViewModel) {
         _viewModel = State(initialValue: viewModel)
+        tradingPreferences = nil
+        navigationCoordinator = nil
     }
 
     var body: some View {
@@ -54,6 +60,16 @@ struct ReportDetailView: View {
     private var detailScroll: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+                if let navigationCoordinator {
+                    TradingPreferenceDiscoverySlot(
+                        surface: .analytics,
+                        userID: SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) },
+                        repository: tradingPreferences,
+                        localHasTrade: false,
+                        navigationCoordinator: navigationCoordinator
+                    )
+                    .padding(.horizontal, ExperienceSpacing.md)
+                }
                 header
                     .padding(.horizontal, ExperienceSpacing.md)
                     .padding(.top, ExperienceSpacing.xs)

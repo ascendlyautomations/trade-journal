@@ -1,17 +1,8 @@
 "use client"
 
-import Link from "next/link"
-import { reliabilityLabel } from "@/lib/scorecard"
-import type { ScorecardCategoryResult, ScorecardResult } from "@/lib/scorecard"
+import type { ScorecardResult } from "@/lib/scorecard"
+import { scorecardDisplayProse } from "./scorecardDisplay"
 import {
-  categoryPhase1RowLabel,
-  PHASE1_SCORE_EXPLAINER,
-  PLAN_ADHERENCE_SCORE_LABEL,
-  scorecardDisplayProse,
-} from "./scorecardDisplay"
-import {
-  scorecardBarFillClass,
-  scorecardBarTrackClass,
   scorecardMetricClass,
   scorecardPanelClass,
   scorecardSubtitleClass,
@@ -21,38 +12,13 @@ import {
 type TradingScorecardDashboardSectionProps = {
   result: ScorecardResult | null
   ready: boolean
-  highlights: { strengths: string[]; weaknesses: string[] }
   onOpenDetail: () => void
-  proFeatureUnlocked: boolean
-}
-
-function CategoryRow({ category }: { category: ScorecardCategoryResult }) {
-  const scoreLabel = categoryPhase1RowLabel(category)
-  return (
-    <div className="space-y-1.5" data-testid={`scorecard.category.${category.id}`}>
-      <div className="flex items-center justify-between gap-2 text-xs">
-        <span className="font-medium text-gray-200">{category.title}</span>
-        <span className="text-right tabular-nums text-gray-400">
-          {scoreLabel}
-          <span className="text-gray-500"> · {category.coveragePercent}% cov</span>
-        </span>
-      </div>
-      <div className={scorecardBarTrackClass}>
-        <div
-          className={scorecardBarFillClass(category.score)}
-          style={{ width: category.score != null ? `${category.score}%` : "0%" }}
-        />
-      </div>
-    </div>
-  )
 }
 
 export default function TradingScorecardDashboardSection({
   result,
   ready,
-  highlights,
   onOpenDetail,
-  proFeatureUnlocked,
 }: TradingScorecardDashboardSectionProps) {
   if (!ready) {
     return (
@@ -104,7 +70,7 @@ export default function TradingScorecardDashboardSection({
           {overallDisplay != null ? (
             <>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                {PLAN_ADHERENCE_SCORE_LABEL}
+                Plan-Adherence Score
               </p>
               <p className={scorecardMetricClass} data-testid="dashboard.scorecard.overall">
                 {overallDisplay}
@@ -113,67 +79,33 @@ export default function TradingScorecardDashboardSection({
             </>
           ) : (
             <p className="text-lg font-semibold text-white" data-testid="dashboard.scorecard.building">
-              Building your score
+              Building
             </p>
           )}
           <p className="mt-1 text-xs text-gray-500">
-            {scorecardDisplayProse(result.overall.statusMessage)} ·{" "}
-            {reliabilityLabel(result.overall.reliability)}
-            {result.overall.contributions.length > 0 &&
-            result.overall.nominalWeightIncluded < 0.999
-              ? ` · ${result.overall.contributions.length}/4 categories`
-              : ""}
+            {scorecardDisplayProse(result.overall.statusMessage)}
           </p>
-          <p className="mt-1.5 text-[11px] leading-snug text-gray-500">{PHASE1_SCORE_EXPLAINER}</p>
         </div>
         <p className="text-xs text-gray-500">
           {result.overall.tradeCount} trades · {result.overall.tradingDayCount} trading days
         </p>
       </div>
 
-      <div className="mt-5 space-y-3">
-        {result.categories.map((cat) => (
-          <CategoryRow key={cat.id} category={cat} />
+      <div className="mt-4 space-y-2">
+        {result.adherence.map((row) => (
+          <div key={row.id} className="flex items-baseline justify-between gap-3 text-xs">
+            <span className="text-gray-300">{row.label}</span>
+            <span className="tabular-nums text-gray-100">{row.value ?? row.pending}</span>
+          </div>
         ))}
       </div>
 
-      {(highlights.strengths.length > 0 || highlights.weaknesses.length > 0) && (
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {highlights.strengths.length > 0 ? (
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-400/90">
-                Strengths
-              </p>
-              <ul className="mt-1 space-y-1 text-xs text-gray-300">
-                {highlights.strengths.map((line) => (
-                  <li key={line}>• {scorecardDisplayProse(line)}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {highlights.weaknesses.length > 0 ? (
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-400/90">
-                Focus areas
-              </p>
-              <ul className="mt-1 space-y-1 text-xs text-gray-300">
-                {highlights.weaknesses.map((line) => (
-                  <li key={line}>• {scorecardDisplayProse(line)}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </div>
-      )}
-
-      {!proFeatureUnlocked ? (
-        <p className="mt-4 text-xs text-gray-500">
-          TraxPro unlocks advanced psychology analytics on{" "}
-          <Link href="/psychology/analytics" className="text-blue-400 hover:underline">
-            Psychology Analytics
-          </Link>
-          . Phase 1 scorecard psychology insights remain available here on Free.
-        </p>
+      {result.insights.length > 0 ? (
+        <ul className="mt-4 space-y-1 text-xs text-gray-300">
+          {result.insights.map((insight) => (
+            <li key={insight.id}>{scorecardDisplayProse(insight.text)}</li>
+          ))}
+        </ul>
       ) : null}
     </section>
   )

@@ -7,6 +7,29 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
         self.supabase = supabase
     }
 
+    func discoverableProfilesWithAvatars(limit: Int) async throws -> [Profile] {
+        let capped = max(1, min(limit, 24))
+        let rows: [ProfileDTO.Profile] = try await supabase.database.select(
+            ProfileDTO.Profile.self,
+            from: "profiles",
+            query: [
+                SupabaseQuery.select(
+                    "id,username,name,bio,avatar_url,trader_type,trading_style,primary_market,started_trading,is_private,created_at"
+                ),
+                URLQueryItem(name: "username", value: "not.is.null"),
+                URLQueryItem(name: "is_private", value: "neq.true"),
+                URLQueryItem(name: "avatar_url", value: "not.is.null"),
+                URLQueryItem(name: "order", value: "created_at.desc"),
+                URLQueryItem(name: "limit", value: String(capped)),
+            ]
+        )
+        return rows.compactMap { try? ProfileMapper.mapToDomain($0) }
+            .filter {
+                !$0.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    && ExploreTraderRanking.hasValidProfilePicture($0)
+            }
+    }
+
     func discoverableProfiles(page: PageRequest) async throws -> CursorPage<Profile> {
         let offset = Int(page.cursor ?? "0") ?? 0
         let limit = max(1, min(page.limit, 48))
@@ -284,7 +307,7 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
         rooms.filter { room in
             guard room.slug.lowercased() != "tradetraxs-beta" else { return false }
             switch scope {
-            case .all, .yourRooms, .popular: return true
+            case .all, .yourRooms, .popular, .favorites: return true
             case .official: return room.isOfficial
             case .community: return !room.isOfficial
             }

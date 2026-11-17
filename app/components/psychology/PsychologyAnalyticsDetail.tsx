@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import PsychologyCoachEntryLink from "./PsychologyCoachEntryLink"
 import PsychologySummarySection from "./PsychologySummarySection"
@@ -8,14 +8,8 @@ import PsychologyAnalyticsOverview from "./PsychologyAnalyticsOverview"
 import PsychologyAnalyticsMetricsRow from "./PsychologyAnalyticsMetricsRow"
 import type { PsychologyAnalyticsReport } from "@/lib/psychology/reports/types"
 import type { PsychologyCoachSummary } from "@/lib/psychology/reports/coach"
-import { reliabilityLabel } from "@/lib/psychology/reports/metrics"
 import type { TraderDailyCheckIn } from "@/lib/dailyCheckIn/types"
 import type { PsychologyReportTrade } from "@/lib/psychology/reports/types"
-import {
-  buildEarlyPsychologyInsightCards,
-  mergePsychologyInsightCards,
-} from "@/lib/psychology/dailyPsychologyInsights"
-import { countNoun } from "@/lib/countNoun"
 
 type PsychologyAnalyticsDetailProps = {
   report: PsychologyAnalyticsReport
@@ -25,17 +19,6 @@ type PsychologyAnalyticsDetailProps = {
   checkIns?: readonly TraderDailyCheckIn[]
   scopeLabel?: string | null
 }
-
-const ADVANCED_SECTION_IDS = new Set([
-  "sleep",
-  "mentalState",
-  "conviction",
-  "discipline",
-  "emotion",
-  "afterLosses",
-  "tradeFrequency",
-  "combined",
-])
 
 export default function PsychologyAnalyticsDetail({
   report,
@@ -47,26 +30,20 @@ export default function PsychologyAnalyticsDetail({
 }: PsychologyAnalyticsDetailProps) {
   const highlightRef = useRef<string | null>(null)
   const [advancedOpen, setAdvancedOpen] = useState(false)
-  const insightCards = useMemo(() => {
-    const early = buildEarlyPsychologyInsightCards(journalTrades, checkIns)
-    return mergePsychologyInsightCards(early, report.dashboardCards)
-  }, [journalTrades, checkIns, report.dashboardCards])
-
-  const advancedSections = report.sections.filter((section) =>
-    ADVANCED_SECTION_IDS.has(section.id)
-  )
+  const insightCards = report.dashboardCards
+  const advancedSections = report.sections
 
   useEffect(() => {
     if (!highlightedSectionID || highlightRef.current === highlightedSectionID) {
       return
     }
     highlightRef.current = highlightedSectionID
-    if (ADVANCED_SECTION_IDS.has(highlightedSectionID)) {
+    if (advancedSections.some((section) => section.id === highlightedSectionID)) {
       setAdvancedOpen(true)
     }
     const node = document.getElementById(`psych-section-${highlightedSectionID}`)
     node?.scrollIntoView({ behavior: "smooth", block: "start" })
-  }, [highlightedSectionID])
+  }, [advancedSections, highlightedSectionID])
 
   return (
     <div
@@ -86,12 +63,6 @@ export default function PsychologyAnalyticsDetail({
         />
       </div>
 
-      {summary ? (
-        <div className="max-md:order-2">
-          <PsychologySummarySection summary={summary} showCoachLink={false} />
-        </div>
-      ) : null}
-
       <Link
         href="/check-in-history"
         className="flex w-full items-center justify-center rounded-lg border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-white hover:bg-white/10 max-md:order-4 max-md:min-h-11"
@@ -104,8 +75,7 @@ export default function PsychologyAnalyticsDetail({
         <section className="space-y-3">
           <h2 className="text-base font-semibold text-white">Insights</h2>
           <p className="text-xs text-gray-500">
-            Patterns from matched check-in days and trade psychology tags, association
-            only, not causation.
+            What your results have lined up with. These are associations, not causes.
           </p>
           <div className="space-y-2">
             {insightCards.map((card) => (
@@ -118,25 +88,33 @@ export default function PsychologyAnalyticsDetail({
                 </p>
                 <p className="mt-1 text-sm font-semibold text-white">{card.headline}</p>
                 <p className="mt-1 text-xs text-gray-400">{card.detail}</p>
-                <p className="mt-2 text-[11px] text-gray-500">
-                  {countNoun(card.sampleSize, "trade")} · {reliabilityLabel(card.reliability)}
-                </p>
               </article>
             ))}
           </div>
         </section>
       ) : (
         <div className="rounded-xl border border-white/10 bg-white/5 p-4 max-md:p-3">
-          <p className="text-sm font-medium text-white">No matched days yet</p>
+          <p className="text-sm font-medium text-white">No insight yet</p>
           <p className="mt-1 text-xs text-gray-400">
-            Complete a daily check-in on the same Eastern calendar day as a trade in this
-            scope to unlock sleep, mood, and performance insights.
+            A comparison appears after each side has at least 8 trades and a real
+            difference in results.
           </p>
         </div>
       )}
       </div>
 
-      <section className="space-y-3 max-md:order-6">
+      {summary ? (
+        <div className="max-md:order-6">
+          <PsychologySummarySection
+            summary={summary}
+            showCoachLink={false}
+            recommendationsOnly
+          />
+        </div>
+      ) : null}
+
+      {advancedSections.length > 0 ? (
+      <section className="space-y-3 max-md:order-7">
         <button
           type="button"
           className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left max-md:min-h-11 max-md:px-3"
@@ -147,7 +125,7 @@ export default function PsychologyAnalyticsDetail({
           <span>
             <span className="block text-sm font-semibold text-white">Advanced analytics</span>
             <span className="block text-xs text-gray-500">
-              Sleep, mental state, conviction, discipline, emotion, and more
+              Both sides of each comparison
             </span>
           </span>
           <span className="text-sm text-blue-400">{advancedOpen ? "Hide" : "Show"}</span>
@@ -189,6 +167,7 @@ export default function PsychologyAnalyticsDetail({
             ))
           : null}
       </section>
+      ) : null}
     </div>
   )
 }

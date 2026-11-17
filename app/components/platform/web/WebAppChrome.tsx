@@ -1,19 +1,24 @@
 "use client"
 
-import { Suspense, type ReactNode } from "react"
+import { Suspense, useEffect, type ReactNode } from "react"
 import { usePathname, useSearchParams } from "next/navigation"
 import MobileWebOpenInAppLink from "@/app/components/mobile/MobileWebOpenInAppLink"
 import MobileWebTabBar from "@/app/components/mobile/MobileWebTabBar"
 import MobileWebQuickTradeHost from "@/app/components/mobile/MobileWebQuickTradeHost"
 import MobileWebGlobalUploadStatusBar from "@/app/components/mobile/upload/MobileWebGlobalUploadStatusBar"
 import { mobileWebOpenInAppLink } from "@/lib/mobileWebOpenInApp"
+import { syncMobileWebInAppHistory } from "@/lib/mobileWebInAppHistory"
 
 function MobileWebOpenInAppRoute() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const search = searchParams.toString()
+  useEffect(() => {
+    syncMobileWebInAppHistory(search ? `${pathname}?${search}` : pathname || "/")
+  }, [pathname, search])
   return (
     <MobileWebOpenInAppLink
-      link={mobileWebOpenInAppLink(pathname || "/", searchParams.toString())}
+      link={mobileWebOpenInAppLink(pathname || "/", search)}
       hideWhileClipsImmersive
     />
   )

@@ -115,10 +115,13 @@ struct ReportDetailBlocksView: View {
             ],
             spacing: ExperienceSpacing.sm
         ) {
-            metricCell("Net P&L", formatPnl(metrics.netPnl))
+            metricCell(
+                "Net P&L",
+                metrics.knownResultCount > 0 ? formatPnl(metrics.netPnl) : "—"
+            )
             metricCell(
                 "Win Rate",
-                metrics.tradesTaken > 0
+                metrics.knownResultCount > 0
                     ? NumberDisplay.percent(metrics.winRate, minimumFractionDigits: 1, maximumFractionDigits: 1)
                     : "—"
             )
@@ -133,15 +136,11 @@ struct ReportDetailBlocksView: View {
             metricCell("Trades Taken", NumberDisplay.integer(metrics.tradesTaken))
             metricCell(
                 "Best Day",
-                metrics.bestDayLabel.map {
-                    "\($0) (\(formatPnl(metrics.bestDayPnl ?? 0)))"
-                } ?? "—"
+                bestWorstLabel(metrics.bestDayLabel, metrics.bestDayPnl)
             )
             metricCell(
                 "Worst Day",
-                metrics.worstDayLabel.map {
-                    "\($0) (\(formatPnl(metrics.worstDayPnl ?? 0)))"
-                } ?? "—"
+                bestWorstLabel(metrics.worstDayLabel, metrics.worstDayPnl)
             )
             metricCell("Best Session", metrics.bestSessionLabel ?? "—")
             metricCell("Worst Session", metrics.worstSessionLabel ?? "—")
@@ -151,6 +150,11 @@ struct ReportDetailBlocksView: View {
                 metrics.averageHoldTimeSeconds.map(formatHold) ?? "—"
             )
         }
+    }
+
+    private func bestWorstLabel(_ label: String?, _ pnl: Double?) -> String {
+        guard let label, let pnl else { return "—" }
+        return "\(label) (\(formatPnl(pnl)))"
     }
 
     private func metricCell(_ label: String, _ value: String) -> some View {

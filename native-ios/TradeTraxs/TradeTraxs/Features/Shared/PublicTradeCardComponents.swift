@@ -49,12 +49,15 @@ struct PublicTradeMetaChipRow: View {
     private let layout: LayoutStyle
     /// Profile grouped copy line — replaces per-row account badge (`copyTradePublicModeSummary`).
     private let copyTradeGroupedModeSummary: String?
+    /// Sanitized provider label — type comes from trade/summary badge fields.
+    private let accountProviderName: String?
 
     init(
         trade: Trade,
         showsQuantity: Bool = true,
         showsSession: Bool = true,
-        layout: LayoutStyle = .horizontalScroll
+        layout: LayoutStyle = .horizontalScroll,
+        accountProviderName: String? = nil
     ) {
         self.trade = trade
         self.summary = nil
@@ -62,6 +65,7 @@ struct PublicTradeMetaChipRow: View {
         self.showsSession = showsSession
         self.layout = layout
         self.copyTradeGroupedModeSummary = nil
+        self.accountProviderName = accountProviderName
     }
 
     init(
@@ -69,7 +73,8 @@ struct PublicTradeMetaChipRow: View {
         showsQuantity: Bool = true,
         showsSession: Bool = true,
         layout: LayoutStyle = .horizontalScroll,
-        copyTradeGroupedModeSummary: String? = nil
+        copyTradeGroupedModeSummary: String? = nil,
+        accountProviderName: String? = nil
     ) {
         self.trade = nil
         self.summary = summary
@@ -77,6 +82,7 @@ struct PublicTradeMetaChipRow: View {
         self.showsSession = showsSession
         self.layout = layout
         self.copyTradeGroupedModeSummary = copyTradeGroupedModeSummary
+        self.accountProviderName = accountProviderName
     }
 
     var body: some View {
@@ -108,8 +114,14 @@ struct PublicTradeMetaChipRow: View {
                 title: TradeDisplay.sideTitle(trade.side),
                 tone: trade.side == .long ? .success : .error
             )
-            if trade.mode != .copyTraded, let accountBadge = trade.publicAccountBadge {
-                PublicTradeMetaChip(title: accountBadge, tone: .info)
+            if trade.mode != .copyTraded,
+               let accountCaption = TradeDisplay.publicPostedAccountCaption(
+                   providerName: accountProviderName,
+                   accountMode: trade.accountMode,
+                   publicAccountBadge: trade.publicAccountBadge
+               )
+            {
+                PublicTradeMetaChip(title: accountCaption, tone: .info)
             }
             if trade.riskReward != nil {
                 PublicTradeMetaChip(title: TradeDisplay.rrText(trade.riskReward), tone: .info)
@@ -149,8 +161,14 @@ struct PublicTradeMetaChipRow: View {
                !line.isEmpty
             {
                 PublicTradeCopyGroupModeLine(text: line)
-            } else if summary.mode != .copyTraded, let accountBadge = summary.publicAccountBadge {
-                PublicTradeMetaChip(title: accountBadge, tone: .info)
+            } else if summary.mode != .copyTraded,
+                      let accountCaption = TradeDisplay.publicPostedAccountCaption(
+                          providerName: accountProviderName,
+                          accountMode: summary.accountMode,
+                          publicAccountBadge: summary.publicAccountBadge
+                      )
+            {
+                PublicTradeMetaChip(title: accountCaption, tone: .info)
             }
             if summary.riskReward != nil {
                 PublicTradeMetaChip(title: TradeDisplay.rrText(summary.riskReward), tone: .info)
@@ -225,11 +243,13 @@ struct TradeExecutionMetricsTwoRowGrid: View {
     private let priceDisplay: TradeExecutionMetricsPriceDisplay
     private let contentAlignment: TradeExecutionMetricsContentAlignment
     private let showsPoints: Bool
+    private let showsSocialExecutionDates: Bool
 
     init(
         trade: Trade,
         contentAlignment: TradeExecutionMetricsContentAlignment = .leading,
-        showsPoints: Bool = true
+        showsPoints: Bool = true,
+        showsSocialExecutionDates: Bool = false
     ) {
         riskReward = trade.riskReward
         quantity = trade.quantity
@@ -242,6 +262,7 @@ struct TradeExecutionMetricsTwoRowGrid: View {
         priceDisplay = .fullPrecision
         self.contentAlignment = contentAlignment
         self.showsPoints = showsPoints
+        self.showsSocialExecutionDates = showsSocialExecutionDates
     }
 
     init(
@@ -259,6 +280,7 @@ struct TradeExecutionMetricsTwoRowGrid: View {
         self.priceDisplay = priceDisplay
         contentAlignment = .leading
         showsPoints = true
+        showsSocialExecutionDates = false
     }
 
     @Environment(\.themeColors) private var colors
@@ -297,13 +319,26 @@ struct TradeExecutionMetricsTwoRowGrid: View {
                 TradeExecutionEntryExitColumn(
                     label: "Entry",
                     price: TradeDisplay.executionPriceText(entryPrice, display: priceDisplay),
-                    time: TradeDisplay.entryExecutionTimeText(entryAt: entryAt, exitAt: exitAt),
+                    dateLine: showsSocialExecutionDates
+                        ? TradeDisplay.socialDetailExecutionDateText(for: entryAt)
+                        : nil,
+                    time: showsSocialExecutionDates
+                        ? TradeDisplay.socialDetailExecutionClockText(for: entryAt)
+                        : TradeDisplay.entryExecutionTimeText(entryAt: entryAt, exitAt: exitAt),
                     textAlignment: contentAlignment
                 )
                 TradeExecutionEntryExitColumn(
                     label: "Exit",
                     price: TradeDisplay.executionPriceText(exitPrice, display: priceDisplay),
-                    time: TradeDisplay.exitExecutionTimeText(entryAt: entryAt, exitAt: exitAt),
+                    dateLine: showsSocialExecutionDates
+                        ? exitAt.map { TradeDisplay.socialDetailExecutionDateText(for: $0) }
+                        : nil,
+                    time: {
+                        if showsSocialExecutionDates, let exitAt {
+                            return TradeDisplay.socialDetailExecutionClockText(for: exitAt)
+                        }
+                        return TradeDisplay.exitExecutionTimeText(entryAt: entryAt, exitAt: exitAt)
+                    }(),
                     textAlignment: contentAlignment
                 )
                 if showsPoints {
@@ -365,6 +400,7 @@ private struct TradeExecutionMetricsCell: View {
 private struct TradeExecutionEntryExitColumn: View {
     let label: String
     let price: String
+    var dateLine: String?
     let time: String
     var textAlignment: TradeExecutionMetricsContentAlignment = .leading
 
@@ -390,6 +426,14 @@ private struct TradeExecutionEntryExitColumn: View {
                 minimumScale: TradeExecutionEntryExitTypography.priceMinimumScale,
                 multilineTextAlignment: textAlignment == .centered ? .center : .leading
             )
+            if let dateLine, !dateLine.isEmpty {
+                TradeExecutionEntryExitTypography.timeText(
+                    dateLine,
+                    colors: colors,
+                    minimumScale: TradeExecutionEntryExitTypography.timeMinimumScale,
+                    multilineTextAlignment: textAlignment == .centered ? .center : .leading
+                )
+            }
             TradeExecutionEntryExitTypography.timeText(
                 time,
                 colors: colors,

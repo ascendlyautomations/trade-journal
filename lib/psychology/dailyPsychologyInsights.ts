@@ -5,7 +5,7 @@ import type {
   PsychologyInsightCategory,
   PsychologySampleReliability,
 } from "./reports/types.ts"
-import { psychologyTradeMetrics } from "./reports/metrics.ts"
+import { psychologyTradeMetrics, resolvePsychologyReliability } from "./reports/metrics.ts"
 import type { MatchedTradingDay, TradeWithPnL } from "./matchedTradingDays.ts"
 import { buildMatchedTradingDays } from "./matchedTradingDays.ts"
 
@@ -302,6 +302,7 @@ function mapTradeForPsychology(trade: TradeWithPnL): PsychologyReportTrade | nul
     created_at: trade.created_at ?? null,
     pnl: readTradePnL(trade),
     rr: null,
+    accountId: typeof raw.account_id === "string" ? raw.account_id : null,
     emotion: (raw.emotion as string | null) ?? null,
     confidence: (raw.confidence as number | null) ?? null,
     followedPlan: (raw.followed_plan as boolean | null) ?? null,
@@ -329,8 +330,8 @@ function buildTradeTagCards(trades: readonly TradeWithPnL[]): PsychologyInsightC
   if (highConf.length >= 1 && lowConf.length >= 1) {
     const hi = psychologyTradeMetrics(highConf)
     const lo = psychologyTradeMetrics(lowConf)
-    hi.reliability = resolveMatchedDayReliability(0, hi.tradeCount)
-    lo.reliability = resolveMatchedDayReliability(0, lo.tradeCount)
+    hi.reliability = resolvePsychologyReliability(hi.tradeCount)
+    lo.reliability = resolvePsychologyReliability(lo.tradeCount)
     cards.push({
       id: "trade.confidence.compare",
       category: "conviction",
@@ -338,12 +339,12 @@ function buildTradeTagCards(trades: readonly TradeWithPnL[]): PsychologyInsightC
       headline: "High vs low confidence trades",
       detail: `4–5: ${formatPsychologyMoney(hi.averagePnL ?? 0)} avg (${hi.tradeCount} trades) vs 1–2: ${formatPsychologyMoney(lo.averagePnL ?? 0)} avg (${lo.tradeCount} trades) · ${reliabilityNote(hi.reliability)}`,
       sampleSize: hi.tradeCount + lo.tradeCount,
-      reliability: resolveMatchedDayReliability(0, hi.tradeCount + lo.tradeCount),
+      reliability: resolvePsychologyReliability(hi.tradeCount + lo.tradeCount),
       rankingScore: 0.65,
     })
   } else if (highConf.length >= 1) {
     const hi = psychologyTradeMetrics(highConf)
-    hi.reliability = resolveMatchedDayReliability(0, hi.tradeCount)
+    hi.reliability = resolvePsychologyReliability(hi.tradeCount)
     cards.push({
       id: "trade.confidence.high",
       category: "conviction",
@@ -366,9 +367,9 @@ function buildTradeTagCards(trades: readonly TradeWithPnL[]): PsychologyInsightC
       category: "discipline",
       sectionTitle: "Discipline",
       headline: "Plan followed vs not followed",
-      detail: `Followed: ${formatPsychologyMoney(f.averagePnL ?? 0)} avg (${f.tradeCount}) vs not: ${formatPsychologyMoney(b.averagePnL ?? 0)} avg (${b.tradeCount}) · ${reliabilityNote(resolveMatchedDayReliability(0, f.tradeCount + b.tradeCount))}`,
+      detail: `Followed: ${formatPsychologyMoney(f.averagePnL ?? 0)} avg (${f.tradeCount}) vs not: ${formatPsychologyMoney(b.averagePnL ?? 0)} avg (${b.tradeCount}) · ${reliabilityNote(resolvePsychologyReliability(f.tradeCount + b.tradeCount))}`,
       sampleSize: f.tradeCount + b.tradeCount,
-      reliability: resolveMatchedDayReliability(0, f.tradeCount + b.tradeCount),
+      reliability: resolvePsychologyReliability(f.tradeCount + b.tradeCount),
       rankingScore: 0.75,
     })
   }
@@ -397,9 +398,9 @@ function buildTradeTagCards(trades: readonly TradeWithPnL[]): PsychologyInsightC
         category: "emotion",
         sectionTitle: "Emotion",
         headline: `"${best.emotion}" tagged trades`,
-        detail: `${formatPsychologyMoney(best.metrics.totalPnL)} total · ${formatPsychologyWinRate(best.metrics.winRate)} win rate · ${best.metrics.tradeCount} trades · ${reliabilityNote(resolveMatchedDayReliability(0, best.metrics.tradeCount))}`,
+        detail: `${formatPsychologyMoney(best.metrics.totalPnL)} total · ${formatPsychologyWinRate(best.metrics.winRate)} win rate · ${best.metrics.tradeCount} trades · ${reliabilityNote(resolvePsychologyReliability(best.metrics.tradeCount))}`,
         sampleSize: best.metrics.tradeCount,
-        reliability: resolveMatchedDayReliability(0, best.metrics.tradeCount),
+        reliability: resolvePsychologyReliability(best.metrics.tradeCount),
         rankingScore: 0.35,
       })
     }

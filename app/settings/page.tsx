@@ -7,7 +7,7 @@ import { SkeletonSettingsPage } from "../components/ui/skeletons"
 import { ProfileAvatarImg } from "../components/SafeProfileAvatar"
 import AffiliateApplyModal from "../components/AffiliateApplyModal"
 import CustomSelect from "@/app/components/CustomSelect"
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import ContextualTourReplayButton from "@/app/components/contextualTour/ContextualTourReplayButton"
 import {
   CONTEXTUAL_TOUR_SETTINGS_TAB_EVENT,
@@ -19,6 +19,7 @@ import type { TableUpdate } from "@/lib/supabaseTypes"
 import { uploadAvatarFile } from "@/lib/avatarUpload"
 import ImageCropModal from "@/app/components/ImageCropModal"
 import ActionButton from "@/app/components/ui/ActionButton"
+import HoldToPermanentlyDeleteButton from "@/app/components/HoldToPermanentlyDeleteButton"
 import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import {
@@ -89,6 +90,9 @@ import TradingAccountsSettingsSection from "@/app/components/TradingAccountsSett
 import BrokerIntegrationsSettingsSection from "@/app/components/BrokerIntegrationsSettingsSection"
 import CopyTradingGroupsSection from "@/app/components/CopyTradingGroupsSection"
 import NotificationPreferencesSettingsSection from "@/app/components/NotificationPreferencesSettingsSection"
+import TradingAnalyticsPreferencesSection from "@/app/components/settings/TradingAnalyticsPreferencesSection"
+import TradingRulesUnsavedChangesDialog from "@/app/components/settings/TradingRulesUnsavedChangesDialog"
+import type { TradingRulesDraftApi } from "@/app/components/settings/tradingRulesDraft"
 import CreatePasswordModal from "@/app/components/CreatePasswordModal"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { disableDemoMode, isDemoModeActive } from "@/lib/demo/demoMode"
@@ -134,6 +138,7 @@ type TabId =
   | "trading-accounts"
   | "broker-integrations"
   | "notifications"
+  | "trading-analytics"
   | "appearance"
   | "vault"
 
@@ -146,6 +151,7 @@ function resolveSettingsTabFromHash(hash: string): TabId | null {
     requested === "privacy" ||
     requested === "subscription" ||
     requested === "notifications" ||
+    requested === "trading-analytics" ||
     requested === "appearance" ||
     requested === "vault"
   ) {
@@ -282,6 +288,12 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
         id: "notifications",
         label: "Notifications",
         description: "Choose which alerts you receive",
+      },
+      {
+        kind: "panel",
+        id: "trading-analytics",
+        label: "Trading Analytics Preferences",
+        description: "Optional style, sessions, and personal limits",
       },
       {
         kind: "panel",
@@ -426,20 +438,68 @@ export default function SettingsPage() {
   const skipScrollOnInitialTab = useRef(true)
   const tour = useContextualTourOptional()
   const isNativeIos = useIsNativeIos()
+  const [tradingRulesDraft, setTradingRulesDraft] =
+    useState<TradingRulesDraftApi | null>(null)
+  const [tradingRulesUnsavedOpen, setTradingRulesUnsavedOpen] = useState(false)
+  const [tradingRulesExitSaving, setTradingRulesExitSaving] = useState(false)
+  const pendingTradingRulesNavRef = useRef<(() => void) | null>(null)
+  const activeTabRef = useRef(activeTab)
+  const tradingRulesDirtyRef = useRef(false)
+
+  activeTabRef.current = activeTab
+  tradingRulesDirtyRef.current = Boolean(
+    tradingRulesDraft?.hasUnsavedChanges
+  )
+
+  const applySelectSettingsPanel = useCallback((id: TabId) => {
+    setActiveTab(id)
+    setMobileSectionOpen(true)
+    if (typeof window === "undefined") return
+    const nextHash = `#${id}`
+    if (window.location.hash === nextHash) return
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}${nextHash}`
+    )
+  }, [])
+
+  const applyCloseMobileSettingsSection = useCallback(() => {
+    setMobileSectionOpen(false)
+    if (typeof window === "undefined") return
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}`
+    )
+  }, [])
+
+  const runAfterTradingRulesGuard = useCallback((action: () => void) => {
+    if (
+      activeTabRef.current !== "trading-analytics" ||
+      !tradingRulesDirtyRef.current
+    ) {
+      action()
+      return
+    }
+    pendingTradingRulesNavRef.current = action
+    setTradingRulesUnsavedOpen(true)
+  }, [])
 
   useEffect(() => {
     function onTourTab(event: Event) {
       const tab = (event as CustomEvent<{ tab: ContextualTourSettingsTabId }>)
         .detail?.tab
       if (tab === "appearance" || tab === "broker-integrations") {
-        setActiveTab(tab)
-        setMobileSectionOpen(true)
+        runAfterTradingRulesGuard(() => {
+          applySelectSettingsPanel(tab)
+        })
       }
     }
     window.addEventListener(CONTEXTUAL_TOUR_SETTINGS_TAB_EVENT, onTourTab)
     return () =>
       window.removeEventListener(CONTEXTUAL_TOUR_SETTINGS_TAB_EVENT, onTourTab)
-  }, [])
+  }, [applySelectSettingsPanel, runAfterTradingRulesGuard])
   const [isAdmin, setIsAdmin] = useState(false)
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
 
@@ -453,9 +513,18 @@ export default function SettingsPage() {
   const formSeededRef = useRef(false)
   const [savingPassword, setSavingPassword] = useState(false)
   const [showCreatePasswordModal, setShowCreatePasswordModal] = useState(false)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showDeleteExplainer, setShowDeleteExplainer] = useState(false)
+  const [showDeleteFinalConfirm, setShowDeleteFinalConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [confirmText, setConfirmText] = useState("")
+
+  const DELETE_ACCOUNT_FINAL_TITLE = "Are you absolutely sure?"
+  const DELETE_ACCOUNT_FINAL_MESSAGE =
+    "This is your final warning. Deleting your account will permanently remove your trades, trading history, posts, messages, and account data. This action cannot be undone."
+
+  function cancelDeleteAccountFlow() {
+    setShowDeleteExplainer(false)
+    setShowDeleteFinalConfirm(false)
+  }
   const [manageLoading, setManageLoading] = useState(false)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [upgradeBillingInterval, setUpgradeBillingInterval] =
@@ -616,16 +685,45 @@ export default function SettingsPage() {
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    function syncTabFromHash() {
+    function applyTabFromHash() {
       const tab = resolveSettingsTabFromHash(window.location.hash)
       setActiveTab(tab ?? "account")
       setMobileSectionOpen(tab != null)
     }
 
-    syncTabFromHash()
-    window.addEventListener("hashchange", syncTabFromHash)
-    return () => window.removeEventListener("hashchange", syncTabFromHash)
-  }, [])
+    function guardOrApplyFromHash() {
+      const nextTab = resolveSettingsTabFromHash(window.location.hash)
+      const leavingTradingRules =
+        activeTabRef.current === "trading-analytics" &&
+        tradingRulesDirtyRef.current &&
+        nextTab !== "trading-analytics"
+
+      if (leavingTradingRules) {
+        const path = `${window.location.pathname}${window.location.search}`
+        window.history.replaceState(null, "", `${path}#trading-analytics`)
+        pendingTradingRulesNavRef.current = () => {
+          if (nextTab == null) {
+            applyCloseMobileSettingsSection()
+          } else {
+            applySelectSettingsPanel(nextTab)
+          }
+        }
+        setTradingRulesUnsavedOpen(true)
+        return
+      }
+      applyTabFromHash()
+    }
+
+    applyTabFromHash()
+    const onHashChange = () => guardOrApplyFromHash()
+    const onPopState = () => guardOrApplyFromHash()
+    window.addEventListener("hashchange", onHashChange)
+    window.addEventListener("popstate", onPopState)
+    return () => {
+      window.removeEventListener("hashchange", onHashChange)
+      window.removeEventListener("popstate", onPopState)
+    }
+  }, [applyCloseMobileSettingsSection, applySelectSettingsPanel])
 
   useEffect(() => {
     if (skipScrollOnInitialTab.current) {
@@ -652,26 +750,34 @@ export default function SettingsPage() {
   }, [user?.id, user?.email])
 
   function selectSettingsPanel(id: TabId) {
-    setActiveTab(id)
-    setMobileSectionOpen(true)
-    if (typeof window === "undefined") return
-    const nextHash = `#${id}`
-    if (window.location.hash === nextHash) return
-    window.history.replaceState(
-      null,
-      "",
-      `${window.location.pathname}${window.location.search}${nextHash}`
-    )
+    if (id === activeTab) return
+    runAfterTradingRulesGuard(() => applySelectSettingsPanel(id))
   }
 
   function closeMobileSettingsSection() {
-    setMobileSectionOpen(false)
-    if (typeof window === "undefined") return
-    window.history.replaceState(
-      null,
-      "",
-      `${window.location.pathname}${window.location.search}`
-    )
+    runAfterTradingRulesGuard(() => applyCloseMobileSettingsSection())
+  }
+
+  function clearTradingRulesUnsavedDialog() {
+    pendingTradingRulesNavRef.current = null
+    setTradingRulesUnsavedOpen(false)
+    setTradingRulesExitSaving(false)
+  }
+
+  async function saveTradingRulesAndContinue() {
+    if (!tradingRulesDraft?.hasUnsavedChanges) {
+      const next = pendingTradingRulesNavRef.current
+      clearTradingRulesUnsavedDialog()
+      next?.()
+      return
+    }
+    setTradingRulesExitSaving(true)
+    const ok = await tradingRulesDraft.saveAll()
+    setTradingRulesExitSaving(false)
+    if (!ok) return
+    const next = pendingTradingRulesNavRef.current
+    clearTradingRulesUnsavedDialog()
+    next?.()
   }
 
   async function handleSignOut() {
@@ -940,6 +1046,8 @@ export default function SettingsPage() {
   }
 
   async function handleDeleteAccount() {
+    if (deleting) return
+    if (!showDeleteFinalConfirm) return
     setDeleting(true)
 
     try {
@@ -965,8 +1073,7 @@ export default function SettingsPage() {
         return
       }
 
-      setShowDeleteConfirm(false)
-      setConfirmText("")
+      cancelDeleteAccountFlow()
       try {
         const { unregisterNativeIosPush, setNativeIosBadgeCount } = await import(
           "@/lib/nativeIosPush"
@@ -1239,6 +1346,18 @@ export default function SettingsPage() {
 
   return (
     <>
+      <TradingRulesUnsavedChangesDialog
+        open={tradingRulesUnsavedOpen}
+        saving={tradingRulesExitSaving}
+        onKeepEditing={clearTradingRulesUnsavedDialog}
+        onDiscard={() => {
+          tradingRulesDraft?.discardChanges()
+          const next = pendingTradingRulesNavRef.current
+          clearTradingRulesUnsavedDialog()
+          next?.()
+        }}
+        onSaveAndExit={() => void saveTradingRulesAndContinue()}
+      />
 
       <div
         className={`tt-phase4-dark min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white md:py-6${
@@ -1929,8 +2048,8 @@ export default function SettingsPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        setConfirmText("")
-                        setShowDeleteConfirm(true)
+                        cancelDeleteAccountFlow()
+                        setShowDeleteExplainer(true)
                       }}
                       className="rounded-lg bg-red-500/10 px-5 py-2 text-red-400 hover:bg-red-500/20"
                     >
@@ -1962,6 +2081,13 @@ export default function SettingsPage() {
 
             {activeTab === "notifications" && (
               <NotificationPreferencesSettingsSection userId={user?.id} />
+            )}
+
+            {activeTab === "trading-analytics" && (
+              <TradingAnalyticsPreferencesSection
+                userId={user?.id}
+                onDraftApiChange={setTradingRulesDraft}
+              />
             )}
 
             {activeTab === "subscription" && (
@@ -2182,45 +2308,93 @@ export default function SettingsPage() {
             : "Affiliate application"
         }
       />
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="w-full max-w-md rounded-xl bg-[#0f172a] p-6">
-            <h2 className="mb-2 text-lg font-semibold text-red-400">Delete Account</h2>
-            <p className="mb-4 text-sm text-gray-400">
-              This action is permanent and cannot be undone.
+      {showDeleteExplainer && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => cancelDeleteAccountFlow()}
+          role="presentation"
+        >
+          <div
+            className="w-full max-w-md rounded-xl bg-[#0f172a] p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-account-explainer-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2
+              id="delete-account-explainer-title"
+              className="mb-2 text-lg font-semibold text-red-400"
+            >
+              Delete your account?
+            </h2>
+            <p className="mb-6 text-sm text-gray-400">
+              Deleting your TradeTraxs account permanently deletes your account
+              and associated data. This cannot be undone.
             </p>
-            <input
-              type="text"
-              placeholder='Type "DELETE" to confirm'
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              className="mt-3 w-full rounded-lg border border-white/10 bg-[#020617] px-3 py-2 text-sm"
-            />
-
-            <div className="flex justify-end gap-3">
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button
                 type="button"
-                onClick={() => {
-                  setShowDeleteConfirm(false)
-                  setConfirmText("")
-                }}
-                className="px-3 py-1 text-gray-400"
+                onClick={() => cancelDeleteAccountFlow()}
+                className="rounded-lg px-4 py-2 text-gray-400 hover:text-gray-200"
               >
                 Cancel
               </button>
-
               <button
                 type="button"
-                onClick={() => void handleDeleteAccount()}
-                disabled={confirmText !== "DELETE" || deleting}
-                className={`rounded-lg px-4 py-2 ${
-                  confirmText === "DELETE"
-                    ? "bg-red-500 text-white"
-                    : "cursor-not-allowed bg-gray-700 text-gray-400"
-                }`}
+                onClick={() => {
+                  setShowDeleteExplainer(false)
+                  setShowDeleteFinalConfirm(true)
+                }}
+                className="rounded-lg bg-red-500/20 px-4 py-2 font-medium text-red-300 hover:bg-red-500/30"
               >
-                {deleting ? "Deleting..." : "Confirm Delete"}
+                Continue
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showDeleteFinalConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 p-4"
+          onClick={() => {
+            if (!deleting) cancelDeleteAccountFlow()
+          }}
+          role="presentation"
+        >
+          <div
+            className="w-full max-w-md rounded-xl bg-[#0f172a] p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-account-final-title"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.preventDefault()
+            }}
+          >
+            <h2
+              id="delete-account-final-title"
+              className="mb-2 text-lg font-semibold text-white"
+            >
+              {DELETE_ACCOUNT_FINAL_TITLE}
+            </h2>
+            <p className="mb-6 text-sm text-gray-400">
+              {DELETE_ACCOUNT_FINAL_MESSAGE}
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                autoFocus
+                onClick={() => cancelDeleteAccountFlow()}
+                disabled={deleting}
+                className="w-full rounded-lg bg-blue-500 px-4 py-2.5 font-semibold text-white hover:bg-blue-600 disabled:opacity-60"
+              >
+                Keep My Account
+              </button>
+              <HoldToPermanentlyDeleteButton
+                disabled={!showDeleteFinalConfirm}
+                processing={deleting}
+                onHoldComplete={() => void handleDeleteAccount()}
+              />
             </div>
           </div>
         </div>

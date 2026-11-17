@@ -27,6 +27,12 @@ enum HomeRoute: Hashable, Codable, Sendable {
     case report(ReportID)
     /// Owner-only psychology analytics detail.
     case psychologyAnalytics
+    /// Personal trading rules — compliance, violations, trends, and impact.
+    case tradingRulesAnalytics
+    /// Drill-down for a single rule’s compliance history.
+    case tradingRulesRuleDetail(String)
+    /// Violations for one Eastern trading day (`YYYY-MM-DD`).
+    case tradingRulesDayDetail(String)
     /// Trading Scorecard Phase 1 (plan-adherence composite + category breakdown).
     case tradingScorecard
     /// Owner-only psychology coach (AI explains deterministic facts).
@@ -80,6 +86,9 @@ enum FeedRoute: Hashable, Codable, Sendable {
     case roomSettings(RoomID)
     /// Hierarchical Settings — owned by the Feed tab stack that opened Settings.
     case settings(SettingsRoute)
+    case tradingRulesAnalytics
+    case tradingRulesRuleDetail(String)
+    case tradingRulesDayDetail(String)
 }
 
 /// Messages tab push hierarchy (DMs + Trade Rooms opened from inbox).
@@ -102,6 +111,9 @@ enum MessagesRoute: Hashable, Codable, Sendable {
     case roomSettings(RoomID)
     /// Hierarchical Settings — owned by the Messages tab stack that opened Settings.
     case settings(SettingsRoute)
+    case tradingRulesAnalytics
+    case tradingRulesRuleDetail(String)
+    case tradingRulesDayDetail(String)
 }
 
 /// Profile (You) tab push hierarchy.
@@ -131,6 +143,9 @@ enum ProfileRoute: Hashable, Codable, Sendable {
     case roomSettings(RoomID)
     /// Admin utility subdestinations (pushed above Settings → Admin).
     case admin(AdminRoute)
+    case tradingRulesAnalytics
+    case tradingRulesRuleDetail(String)
+    case tradingRulesDayDetail(String)
 }
 
 /// Settings navigation hierarchy (Instagram / Apple Settings style).
@@ -152,6 +167,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
     case notificationsProduct = "notifications-product"
     case subscription
     case tradingAccounts = "trading-accounts"
+    case tradingAnalytics = "trading-analytics"
     case brokerIntegrations = "broker-integrations"
     case copyTradingAccounts = "copy-trading-accounts"
     case payouts
@@ -193,6 +209,7 @@ enum SettingsRoute: String, Hashable, Codable, Sendable, CaseIterable {
         case .notificationsProduct: return "Product Updates"
         case .subscription: return "Plan"
         case .tradingAccounts: return "Manage Accounts"
+        case .tradingAnalytics: return "Trading Rules"
         case .brokerIntegrations: return "Broker Integrations"
         case .copyTradingAccounts: return "Copy Trading Accounts"
         case .payouts: return "Withdrawals"

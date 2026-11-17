@@ -251,7 +251,11 @@ export default function DashboardEquityCurve({
         <div className="mb-3 flex items-baseline justify-between gap-3">
           <h2 className="tt-dash-section-title">Equity Curve</h2>
           <p className="tt-dash-section-subtitle">
-            {[timeframeLabel, `${totalTrades.toLocaleString()} ${totalTrades === 1 ? "trade" : "trades"}`]
+            {[
+              "Futures day, 6 PM ET",
+              timeframeLabel,
+              `${totalTrades.toLocaleString()} ${totalTrades === 1 ? "trade" : "trades"}`,
+            ]
               .filter(Boolean)
               .join(" · ")}
           </p>

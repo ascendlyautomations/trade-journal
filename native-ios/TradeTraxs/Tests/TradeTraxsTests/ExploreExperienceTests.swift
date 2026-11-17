@@ -229,6 +229,45 @@ final class ExploreExperienceTests: XCTestCase {
         XCTAssertEqual(ranked.first?.id, highWithoutAvatar.id)
     }
 
+    func testSuggestedTradersSelectionLimitsHomePreviewToEligibleAvatars() {
+        let viewer = ProfileID("viewer")
+        let withAvatar = exploreSuggestion(id: "a", username: "aa", avatarID: "https://cdn.example.com/a.jpg")
+        let noAvatar = exploreSuggestion(id: "b", username: "bb", avatarID: nil)
+        let following = exploreSuggestion(id: "c", username: "cc", avatarID: "https://cdn.example.com/c.jpg")
+        let pool = [noAvatar, withAvatar, following]
+
+        let eligible = ExploreSuggestedTradersSelection.eligible(
+            pool,
+            viewerID: viewer,
+            followingIDs: [following.id],
+            profile: \.profile
+        )
+        XCTAssertEqual(eligible.map(\.id), [withAvatar.id])
+
+        let directory = ExploreSuggestedTradersSelection.discoverableAvatarFirst(
+            pool,
+            viewerID: viewer,
+            followingIDs: [following.id],
+            profile: \.profile
+        )
+        XCTAssertEqual(directory.map(\.id), [withAvatar.id, noAvatar.id])
+
+        let many = (0 ..< 8).map { index in
+            exploreSuggestion(
+                id: "p\(index)",
+                username: "p\(index)",
+                avatarID: "https://cdn.example.com/\(index).jpg"
+            )
+        }
+        let preview = ExploreSuggestedTradersSelection.homePreview(
+            many,
+            viewerID: viewer,
+            followingIDs: [],
+            profile: \.profile
+        )
+        XCTAssertEqual(preview.count, 5)
+    }
+
     func testPreservingOrderPreferringProfilePicturesKeepsRelativeOrderWithinGroups() {
         let avatarA = exploreSuggestion(id: "a", username: "aa", avatarID: "https://cdn.example.com/a.jpg")
         let noAvatarB = exploreSuggestion(id: "b", username: "bb", avatarID: nil)

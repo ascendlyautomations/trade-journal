@@ -3,14 +3,20 @@ import SwiftUI
 struct DashboardInsightsSection: View {
     let presentation: DashboardInsightsPresentation
 
+    private static let previewCount = 3
+
     @Environment(\.themeColors) private var colors
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isSectionExpanded = true
+    @State private var showsAllPerformance = false
+    @State private var showsAllAdvancedEdge = false
+    @State private var showsAllRiskBehavior = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
             DashboardCollapsibleSectionHeader(
                 title: "Insights",
-                subtitle: "What your trading data is telling you",
+                info: "Short reads from the trades in this filter. Performance compares sessions, markets, and direction once each has enough trades. Advanced Edge and Risk & Behavior call out setups and behavior that stand out.",
                 isExpanded: isSectionExpanded,
                 onToggle: { isSectionExpanded.toggle() }
             )
@@ -35,40 +41,67 @@ struct DashboardInsightsSection: View {
     private var content: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
             if !presentation.performance.isEmpty {
-                insightGroup(title: "Performance") {
-                    ForEach(presentation.performance) { insight in
-                        insightCard(insight)
-                    }
-                }
+                collapsibleInsightGroup(
+                    title: "Performance",
+                    items: presentation.performance,
+                    showsAll: $showsAllPerformance,
+                    accessibilityID: "dashboard.insights.performance"
+                )
             }
             if !presentation.advancedEdge.isEmpty {
-                insightGroup(title: "Advanced Edge") {
-                    ForEach(presentation.advancedEdge) { insight in
-                        insightCard(insight)
-                    }
-                }
+                collapsibleInsightGroup(
+                    title: "Advanced Edge",
+                    items: presentation.advancedEdge,
+                    showsAll: $showsAllAdvancedEdge,
+                    accessibilityID: "dashboard.insights.advancedEdge"
+                )
             }
             if !presentation.riskBehavior.isEmpty {
-                insightGroup(title: "Risk & Behavior") {
-                    ForEach(presentation.riskBehavior) { insight in
-                        insightCard(insight)
-                    }
-                }
+                collapsibleInsightGroup(
+                    title: "Risk & Behavior",
+                    items: presentation.riskBehavior,
+                    showsAll: $showsAllRiskBehavior,
+                    accessibilityID: "dashboard.insights.riskBehavior"
+                )
             }
         }
     }
 
-    private func insightGroup<Content: View>(
+    private func collapsibleInsightGroup(
         title: String,
-        @ViewBuilder content: () -> Content
+        items: [DashboardInsightItem],
+        showsAll: Binding<Bool>,
+        accessibilityID: String
     ) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+        let visible = showsAll.wrappedValue
+            ? items
+            : Array(items.prefix(Self.previewCount))
+        let showsToggle = items.count > Self.previewCount
+
+        return VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
             Text(title)
                 .experienceStyle(.subheadline, color: colors.primaryText)
                 .fontWeight(.semibold)
                 .accessibilityAddTraits(.isHeader)
             VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-                content()
+                ForEach(visible) { insight in
+                    insightCard(insight)
+                }
+                if showsToggle {
+                    DashboardInsightViewMoreControl(
+                        isExpanded: showsAll.wrappedValue,
+                        collapsedTitle: "Show more",
+                        expandedTitle: "Show less"
+                    ) {
+                        ExperienceHaptics.play(.selection)
+                        withAnimation(
+                            ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion)
+                        ) {
+                            showsAll.wrappedValue.toggle()
+                        }
+                    }
+                    .accessibilityIdentifier("\(accessibilityID).toggle")
+                }
             }
         }
         .accessibilityElement(children: .contain)

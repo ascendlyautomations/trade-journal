@@ -11,6 +11,11 @@ nonisolated struct DashboardTradeWireV1: Codable, Sendable, Equatable {
     var image_url: String?
     var ticker: String?
     var rr: PostgresFlexibleDouble?
+    var max_rr_reached: PostgresFlexibleDouble?
+    var realized_rr: PostgresFlexibleDouble?
+    var full_tp: PostgresFlexibleBool?
+    var early_exit: PostgresFlexibleBool?
+    var exit_rr: PostgresFlexibleDouble?
     var points: PostgresFlexibleDouble?
     var session: String?
     var account_type: String?
@@ -70,6 +75,11 @@ nonisolated struct DashboardTradeWireV1: Codable, Sendable, Equatable {
             exit_time: exit_time,
             pnl: flex(pnl),
             rr: flex(rr),
+            max_rr_reached: flex(max_rr_reached),
+            realized_rr: flex(realized_rr),
+            full_tp: full_tp?.value,
+            early_exit: early_exit?.value,
+            exit_rr: flex(exit_rr),
             points: flex(points),
             session: session,
             is_public: is_public?.value,
@@ -125,6 +135,11 @@ nonisolated extension DashboardTradeWireV1 {
         exit_time = trade.exitAt.map(ISO8601.string(from:))
         pnl = PostgresFlexibleDouble(trade.realizedPnL.map { NSDecimalNumber(decimal: $0.amount).doubleValue })
         rr = PostgresFlexibleDouble(trade.riskReward.map { NSDecimalNumber(decimal: $0).doubleValue })
+        max_rr_reached = PostgresFlexibleDouble(trade.maxRrReached.map { NSDecimalNumber(decimal: $0).doubleValue })
+        realized_rr = PostgresFlexibleDouble(trade.realizedRr.map { NSDecimalNumber(decimal: $0).doubleValue })
+        full_tp = PostgresFlexibleBool(trade.fullTakeProfit)
+        early_exit = PostgresFlexibleBool(trade.earlyExit)
+        exit_rr = PostgresFlexibleDouble(trade.exitRr.map { NSDecimalNumber(decimal: $0).doubleValue })
         points = PostgresFlexibleDouble(trade.points.map { NSDecimalNumber(decimal: $0).doubleValue })
         session = trade.sessionLabel
         strategy = trade.strategy

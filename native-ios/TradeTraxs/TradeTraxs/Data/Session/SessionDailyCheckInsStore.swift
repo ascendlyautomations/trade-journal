@@ -47,7 +47,16 @@ final class SessionDailyCheckInsStore {
         endDate: String
     ) -> Bool {
         guard self.profileID == profileID, let loadedRange else { return true }
-        if checkIns.isEmpty { return true }
-        return loadedRange.start > startDate || loadedRange.end < endDate
+        if loadedRange.start > startDate || loadedRange.end < endDate { return true }
+        return false
+    }
+
+    /// Window was hydrated (including an authoritative empty result) for this profile.
+    func hasSatisfiedWindow(
+        for profileID: ProfileID,
+        startDate: String,
+        endDate: String
+    ) -> Bool {
+        !needsLoad(for: profileID, startDate: startDate, endDate: endDate)
     }
 }

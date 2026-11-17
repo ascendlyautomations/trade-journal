@@ -182,6 +182,10 @@ nonisolated struct DevelopmentProfileRepository: ProfileRepository {
         try await base.unfollow(from: viewer, to: target)
     }
 
+    func removeFollower(_ follower: ProfileID, from owner: ProfileID) async throws {
+        try await base.removeFollower(follower, from: owner)
+    }
+
     func followers(of profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Profile> {
         try await base.followers(of: profileID, page: page)
     }

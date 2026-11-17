@@ -29,6 +29,7 @@ struct FollowListView: View {
     }
 
     var body: some View {
+        @Bindable var viewModel = viewModel
         Group {
             switch viewModel.phase {
             case .idle where viewModel.items.isEmpty, .loading where viewModel.items.isEmpty:
@@ -71,7 +72,9 @@ struct FollowListView: View {
             titleVisibility: .visible
         ) {
             Button("Unfollow", role: .destructive) {
-                Task { await viewModel.confirmUnfollow() }
+                guard let profile = viewModel.pendingUnfollow else { return }
+                viewModel.pendingUnfollow = nil
+                Task { await viewModel.confirmUnfollow(profile) }
             }
             Button("Cancel", role: .cancel) {
                 viewModel.pendingUnfollow = nil
@@ -86,7 +89,13 @@ struct FollowListView: View {
             titleVisibility: .visible
         ) {
             Button("Remove", role: .destructive) {
-                Task { await viewModel.confirmRemove() }
+                guard let profile = viewModel.pendingRemove else { return }
+                FollowListRemoveDiagnostics.confirmInvoked(
+                    followerID: profile.id.rawValue,
+                    ownerID: viewModel.listOwnerID.rawValue
+                )
+                viewModel.pendingRemove = nil
+                Task { await viewModel.confirmRemove(profile) }
             }
             Button("Cancel", role: .cancel) {
                 viewModel.pendingRemove = nil
@@ -96,12 +105,26 @@ struct FollowListView: View {
                 Text("@\(profile.username) won’t be notified.")
             }
         }
+        .alert(
+            "Couldn't remove follower",
+            isPresented: Binding(
+                get: { viewModel.removeFollowerErrorMessage != nil },
+                set: { if !$0 { viewModel.removeFollowerErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                viewModel.removeFollowerErrorMessage = nil
+            }
+        } message: {
+            if let message = viewModel.removeFollowerErrorMessage {
+                Text(message)
+            }
+        }
         .accessibilityIdentifier("followList.\(viewModel.kind.rawValue)")
     }
 
     private var listContent: some View {
-        let _ = viewModel.followRevision
-        return List {
+        List {
             if viewModel.showsFilteredEmpty {
                 Text("No results for “\(viewModel.searchText)”")
                     .experienceStyle(.subheadline, color: colors.secondaryText)
@@ -110,10 +133,12 @@ struct FollowListView: View {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             } else {
-                ForEach(viewModel.visibleItems) { profile in
+                ForEach(viewModel.visibleItems, id: \.id) { profile in
                     FollowListRowView(
                         profile: profile,
+                        viewerProfileID: viewModel.authenticatedProfileID,
                         imagePipeline: imagePipeline,
+                        followButtonRevision: viewModel.followRevision,
                         isFollowing: viewModel.isFollowing(profile),
                         showsRemove: viewModel.kind == .followers && viewModel.isOwnList,
                         onOpen: { viewModel.openProfile(profile) },
@@ -136,7 +161,10 @@ struct FollowListView: View {
                                 Label("Remove", systemImage: "person.badge.minus")
                             }
                         }
-                        if viewModel.kind == .following && viewModel.isFollowing(profile) {
+                        if viewModel.kind == .following,
+                           profile.id != viewModel.authenticatedProfileID,
+                           viewModel.isFollowing(profile)
+                        {
                             Button(role: .destructive) {
                                 viewModel.toggleFollow(for: profile)
                             } label: {
@@ -156,17 +184,19 @@ struct FollowListView: View {
                         } label: {
                             Label("Copy Username", systemImage: "doc.on.doc")
                         }
-                        if viewModel.isFollowing(profile) {
-                            Button(role: .destructive) {
-                                viewModel.toggleFollow(for: profile)
-                            } label: {
-                                Label("Unfollow", systemImage: "person.badge.minus")
-                            }
-                        } else {
-                            Button {
-                                viewModel.toggleFollow(for: profile)
-                            } label: {
-                                Label("Follow", systemImage: "person.badge.plus")
+                        if profile.id != viewModel.authenticatedProfileID {
+                            if viewModel.isFollowing(profile) {
+                                Button(role: .destructive) {
+                                    viewModel.toggleFollow(for: profile)
+                                } label: {
+                                    Label("Unfollow", systemImage: "person.badge.minus")
+                                }
+                            } else {
+                                Button {
+                                    viewModel.toggleFollow(for: profile)
+                                } label: {
+                                    Label("Follow", systemImage: "person.badge.plus")
+                                }
                             }
                         }
                         if viewModel.kind == .followers && viewModel.isOwnList {
@@ -180,7 +210,9 @@ struct FollowListView: View {
                     } preview: {
                         FollowListRowView(
                             profile: profile,
+                            viewerProfileID: viewModel.authenticatedProfileID,
                             imagePipeline: imagePipeline,
+                            followButtonRevision: viewModel.followRevision,
                             isFollowing: viewModel.isFollowing(profile),
                             showsRemove: false,
                             onOpen: {},
@@ -193,10 +225,6 @@ struct FollowListView: View {
             }
         }
         .experiencePlainListStyle()
-        .animation(
-            ExperienceMotion.preferred(ExperienceMotion.selection, reduceMotion: reduceMotion),
-            value: viewModel.visibleItems.map(\.id)
-        )
     }
 
     private var skeleton: some View {

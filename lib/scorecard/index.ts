@@ -6,6 +6,7 @@ export type {
   ScorecardCategoryResult,
   ScorecardBuildInput,
   ScorecardCategoryId,
+  ScorecardAdherenceReadout,
 } from "./types.ts"
 export {
   SCORECARD_MIN_TRADES_OVERALL,

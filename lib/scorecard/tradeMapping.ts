@@ -62,6 +62,7 @@ export function mapDashboardRowToScorecardTrade(
     mistakeType: asText(row.mistake_type),
     confidence: asNumber(row.confidence),
     executionRating: asNumber(row.execution_rating),
+    emotion: asText(row.emotion),
     entryTimeMs: entryAtMs,
     tradingDayKey: getDashboardTradingDayKey(row),
     psychologyDayKey: psychologyDayKeyFromFields(entryIso, row),
@@ -85,7 +86,7 @@ export function mergeScorecardTrades(
       existing?.psychologyDayKey ?? psychologyDayKeyFromFields(entryIso)
     byId.set(journal.id, {
       id: journal.id,
-      pnl: journal.pnl,
+      pnl: journal.pnl ?? existing?.pnl ?? 0,
       rr: journal.rr ?? existing?.rr ?? null,
       maxRrReached: existing?.maxRrReached ?? null,
       realizedRr: journal.realizedRr ?? existing?.realizedRr ?? null,
@@ -93,6 +94,7 @@ export function mergeScorecardTrades(
       mistakeType: existing?.mistakeType ?? null,
       confidence: journal.confidence ?? existing?.confidence ?? null,
       executionRating: journal.executionRating ?? existing?.executionRating ?? null,
+      emotion: journal.emotion ?? existing?.emotion ?? null,
       entryTimeMs: journal.entryAtMs,
       tradingDayKey: existing?.tradingDayKey ?? null,
       psychologyDayKey,
@@ -101,7 +103,15 @@ export function mergeScorecardTrades(
   return [...byId.values()].sort((a, b) => a.entryTimeMs - b.entryTimeMs)
 }
 
-export function postTripleLossWinRate(trades: readonly ScorecardTrade[]): number | null {
+export type PostTripleLossWindow = {
+  winRate: number
+  /** Trades inside the recovery window, not every trade in scope. */
+  sampleSize: number
+}
+
+export function postTripleLossWindow(
+  trades: readonly ScorecardTrade[]
+): PostTripleLossWindow | null {
   if (trades.length < 4) return null
   for (let i = 0; i <= trades.length - 4; i++) {
     const a = trades[i].pnl
@@ -110,9 +120,13 @@ export function postTripleLossWinRate(trades: readonly ScorecardTrade[]): number
     if (a < 0 && b < 0 && c < 0) {
       const next = trades.slice(i + 3, i + 8)
       if (next.length < 5) continue
-      const wins = next.filter((t) => t.pnl > 0).length
-      return wins / next.length
+      const wins = next.filter((trade) => trade.pnl > 0).length
+      return { winRate: wins / next.length, sampleSize: next.length }
     }
   }
   return null
+}
+
+export function postTripleLossWinRate(trades: readonly ScorecardTrade[]): number | null {
+  return postTripleLossWindow(trades)?.winRate ?? null
 }

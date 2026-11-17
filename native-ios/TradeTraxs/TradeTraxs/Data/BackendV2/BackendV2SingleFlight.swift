@@ -213,9 +213,9 @@ nonisolated enum BackendV2FlightKeys {
         "\(viewerID)|\(BackendV2Versioning.RPCName.propFirm.rawValue)"
     }
 
-    static func activity(viewerID: String, limit: Int, cursor: String?) -> String {
+    static func activity(viewerID: String, limit: Int, cursor: String?, filterKey: String = "-") -> String {
         let c = cursor ?? "-"
-        return "\(viewerID)|\(BackendV2Versioning.RPCName.activity.rawValue)|\(limit)|\(c)"
+        return "\(viewerID)|\(BackendV2Versioning.RPCName.activity.rawValue)|\(limit)|\(c)|\(filterKey)"
     }
 
     static func explore(viewerID: String, traderOffset: Int) -> String {

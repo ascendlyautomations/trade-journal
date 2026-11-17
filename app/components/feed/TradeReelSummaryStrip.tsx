@@ -5,10 +5,11 @@ import SharedTradeMessageCard from "@/app/components/SharedTradeMessageCard"
 import { formatRR } from "@/lib/formatDisplay"
 import { formatPnlCurrency } from "@/lib/formatMoney"
 import {
-  isTradeAttachedReel,
+  hasResolvableLinkedTrade,
   resolveReelTradeJoin,
   type LinkedTradeSummary,
 } from "@/lib/reels"
+import { shouldHideLinkedTradeDescription } from "@/lib/linkedContentCaptionDedup"
 
 type TradeReelSummaryStripProps = {
   post: {
@@ -20,6 +21,8 @@ type TradeReelSummaryStripProps = {
   className?: string
   openTradeRef?: MutableRefObject<Record<string, boolean>>
   tradeExpandSignal?: number
+  /** Clip caption shown above the linked-trade block — suppress duplicate trade text. */
+  displayedClipCaption?: string | null
 }
 
 export default function TradeReelSummaryStrip({
@@ -28,6 +31,7 @@ export default function TradeReelSummaryStrip({
   className = "",
   openTradeRef,
   tradeExpandSignal = 0,
+  displayedClipCaption = null,
 }: TradeReelSummaryStripProps) {
   const reelId = post.id != null ? String(post.id) : ""
   const [tradeExpanded, setTradeExpanded] = useState(
@@ -44,7 +48,7 @@ export default function TradeReelSummaryStrip({
     openTradeRef.current[reelId] = false
   }, [openTradeRef, reelId, tradeExpandSignal])
 
-  if (!isTradeAttachedReel(post)) return null
+  if (!hasResolvableLinkedTrade(post, viewerUserId)) return null
 
   const trade = resolveReelTradeJoin(post)
   if (!trade?.id) return null
@@ -67,6 +71,11 @@ export default function TradeReelSummaryStrip({
         ? "LOSS"
         : "BE"
     : null
+
+  const suppressTradePublicDescription = shouldHideLinkedTradeDescription(
+    displayedClipCaption,
+    trade
+  )
 
   const toggleTradePanel = () => {
     setTradeExpanded((prev) => {
@@ -139,6 +148,7 @@ export default function TradeReelSummaryStrip({
                 viewerUserId={viewerUserId}
                 onViewTrade={() => {}}
                 hideViewTradeAction
+                suppressPublicDescription={suppressTradePublicDescription}
                 className="w-full"
               />
             </div>

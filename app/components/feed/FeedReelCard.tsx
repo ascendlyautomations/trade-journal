@@ -7,7 +7,11 @@ import FeedPostHeader from "./FeedPostHeader"
 import FeedPostModerationMenu from "./FeedPostModerationMenu"
 import FeedReelOwnerMenu from "./FeedReelOwnerMenu"
 import type { FeedLikeMeta } from "./FeedPostCard"
-import { resolveReelCaption, isTradeAttachedReel } from "@/lib/reels"
+import {
+  resolveReelCaption,
+  isTradeAttachedReel,
+  hasResolvableLinkedTrade,
+} from "@/lib/reels"
 import { useIsNativeIos } from "@/lib/useIsNativeIos"
 import { MOBILE_WEB_FEED_CARD_FLUSH } from "@/lib/mobileWebPageSurface"
 
@@ -102,6 +106,7 @@ function FeedReelCard({
   const profileUsername = post.profiles?.username || "User"
   const caption = useMemo(() => resolveReelCaption(post), [post])
   const tradeAttached = isTradeAttachedReel(post)
+  const showLinkedTrade = hasResolvableLinkedTrade(post, user?.id ?? null)
 
   return (
     <article
@@ -159,7 +164,7 @@ function FeedReelCard({
         commentCount={commentCount ?? comments.length}
         likeMeta={likeMeta}
         likeBusy={likeBusy}
-        showLinkedTradeBadge={tradeAttached}
+        showLinkedTradeBadge={showLinkedTrade}
         onToggleLike={onToggleLike}
         onOpenComments={handleOpenComments}
         onSharePost={onSharePost}

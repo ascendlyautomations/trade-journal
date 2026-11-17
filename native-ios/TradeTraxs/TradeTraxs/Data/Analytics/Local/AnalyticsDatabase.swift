@@ -97,6 +97,10 @@ actor AnalyticsDatabase {
             try db.execute(sql: AnalyticsLocalSchema.createProfileAnalyticsSnapshot)
             try db.execute(sql: AnalyticsLocalSchema.createProfileAnalyticsSnapshotIndex)
         }
+        migrator.registerMigration("v4_dashboard_revision_indexes") { db in
+            try db.execute(sql: AnalyticsLocalSchema.createDashboardPresetRevisionIndex)
+            try db.execute(sql: AnalyticsLocalSchema.createDashboardChartRevisionIndex)
+        }
         try migrator.migrate(queue)
     }
 

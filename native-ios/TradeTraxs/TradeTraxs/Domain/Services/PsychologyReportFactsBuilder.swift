@@ -70,7 +70,7 @@ nonisolated enum PsychologyReportFactsBuilder {
                 consecutiveLossCheckpoint: nil,
                 consecutiveLossWinRateAfter: report.behavior.afterTwoLossesWinRate,
                 consecutiveLossBaselineWinRate: report.behavior.afterTwoLossesBaselineWinRate,
-                lowSleepHoursThreshold: report.checkInSummary.averageSleepHours.map { _ in 6 },
+                lowSleepHoursThreshold: nil,
                 lowSleepExpectancy: nil,
                 maxTradesDaySoftLimit: nil,
                 lateTradeAveragePnL: report.behavior.lateTradeAvgPnL,

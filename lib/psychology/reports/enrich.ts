@@ -1,3 +1,8 @@
+import {
+  rulesActiveAt,
+  type PreferenceRuleContext,
+} from "@/lib/analytics/preferenceCompliance.ts"
+import { scopedDayBucket } from "@/lib/analytics/tradingRuleScope.ts"
 import type { TraderDailyCheckIn } from "../../dailyCheckIn/types.ts"
 import { psychologyTradeDateKey } from "../tradeDateKey.ts"
 import { pnlSign } from "./metrics.ts"
@@ -5,7 +10,8 @@ import type { PsychologyEnrichedTrade, PsychologyReportTrade } from "./types.ts"
 
 export function enrichPsychologyTrades(
   trades: readonly PsychologyReportTrade[],
-  checkIns: readonly TraderDailyCheckIn[]
+  checkIns: readonly TraderDailyCheckIn[],
+  preferences: PreferenceRuleContext | null = null
 ): PsychologyEnrichedTrade[] {
   const byDate = new Map<string, TraderDailyCheckIn>()
   for (const checkIn of checkIns) {
@@ -19,8 +25,14 @@ export function enrichPsychologyTrades(
 
   return chronological.map((trade) => {
     const dayKey = psychologyTradeDateKey(trade)
-    const nextNumber = (dayCounts.get(dayKey) ?? 0) + 1
-    dayCounts.set(dayKey, nextNumber)
+    const rules = preferences
+      ? rulesActiveAt(preferences, trade.entryAtMs, trade.accountId ?? null)
+      : null
+    const bucketKey = rules
+      ? scopedDayBucket(dayKey, trade.accountId ?? null, rules.maxTradesPerDayScope)
+      : dayKey
+    const nextNumber = (dayCounts.get(bucketKey) ?? 0) + 1
+    dayCounts.set(bucketKey, nextNumber)
 
     const snapshot: PsychologyEnrichedTrade = {
       trade,

@@ -22,6 +22,21 @@ export function isBroadcastScreenShareCancelled(err: unknown): boolean {
   return false
 }
 
+/**
+ * Tab audio is optional. A browser that cannot capture it, or a token that
+ * rejects the extra track, must fall back to video-only instead of failing the share.
+ * User cancel and permission denial stay failures so the picker is not shown twice.
+ */
+export function shouldRetryBrowserScreenShareWithoutAudio(err: unknown): boolean {
+  if (isBroadcastScreenShareCancelled(err)) return false
+  if (!(err instanceof Error)) return false
+  if (err.name === "NotSupportedError" || err.name === "OverconstrainedError") {
+    return true
+  }
+  const message = err.message.toLowerCase()
+  return message.includes("audio") || message.includes("insufficient permissions")
+}
+
 export function tradeRoomBroadcastShareScreenWhileLiveAvailable(
   snapshot: ShareScreenSnapshot
 ): boolean {

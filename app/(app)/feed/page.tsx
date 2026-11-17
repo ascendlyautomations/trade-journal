@@ -109,6 +109,14 @@ import {
   removeFeedReelFromSessionsForUser,
   type FeedSessionSnapshot,
 } from "@/lib/feedSessionCache"
+import {
+  TRADE_DELETED_EVENT,
+  TRADE_VISIBILITY_EVENT,
+  type TradeDeletedDetail,
+  type TradeVisibilityDetail,
+  patchFeedItemUnlinkedFromTrade,
+  patchFeedItemTradeVisibility,
+} from "@/lib/tradeDeleteSync"
 import { readExploreSession } from "@/lib/exploreSessionCache"
 import { useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
@@ -290,6 +298,64 @@ function FeedPageContent() {
       )
       setBlockedListRevision((n) => n + 1)
     })
+  }, [])
+
+  useEffect(() => {
+    function onTradeDeleted(event: Event) {
+      const detail = (event as CustomEvent<TradeDeletedDetail>).detail
+      const tradeId = String(detail?.tradeId ?? "").trim()
+      if (!tradeId) return
+      const uid = userIdRef.current
+      if (detail.userId && uid && detail.userId !== uid) return
+
+      setPosts((prev) =>
+        prev.map((post) => patchFeedItemUnlinkedFromTrade(post, tradeId))
+      )
+      setFeedModalPost((prev) => {
+        if (!prev) return prev
+        const patched = patchFeedItemUnlinkedFromTrade(prev, tradeId)
+        return patched === prev ? prev : (patched as FeedItem)
+      })
+      const buffer = mergeBufferRef.current
+      const nextBuffer = buffer.map(
+        (item) => patchFeedItemUnlinkedFromTrade(item, tradeId) as FeedItem
+      )
+      if (nextBuffer.some((item, index) => item !== buffer[index])) {
+        mergeBufferRef.current = nextBuffer
+      }
+    }
+
+    function onTradeVisibility(event: Event) {
+      const detail = (event as CustomEvent<TradeVisibilityDetail>).detail
+      const tradeId = String(detail?.tradeId ?? "").trim()
+      if (!tradeId) return
+      const uid = userIdRef.current
+      if (detail.userId && uid && detail.userId !== uid) return
+      const isPublic = detail.isPublic === true
+
+      setPosts((prev) =>
+        prev.map((post) => patchFeedItemTradeVisibility(post, tradeId, isPublic))
+      )
+      setFeedModalPost((prev) => {
+        if (!prev) return prev
+        const patched = patchFeedItemTradeVisibility(prev, tradeId, isPublic)
+        return patched === prev ? prev : (patched as FeedItem)
+      })
+      const buffer = mergeBufferRef.current
+      const nextBuffer = buffer.map(
+        (item) => patchFeedItemTradeVisibility(item, tradeId, isPublic) as FeedItem
+      )
+      if (nextBuffer.some((item, index) => item !== buffer[index])) {
+        mergeBufferRef.current = nextBuffer
+      }
+    }
+
+    window.addEventListener(TRADE_DELETED_EVENT, onTradeDeleted)
+    window.addEventListener(TRADE_VISIBILITY_EVENT, onTradeVisibility)
+    return () => {
+      window.removeEventListener(TRADE_DELETED_EVENT, onTradeDeleted)
+      window.removeEventListener(TRADE_VISIBILITY_EVENT, onTradeVisibility)
+    }
   }, [])
   const profileRef = useRef(profile)
   profileRef.current = profile
@@ -3132,19 +3198,28 @@ function FeedPageContent() {
     [setFollowingIds]
   )
 
+  const [clipFollowBusyUserId, setClipFollowBusyUserId] = useState<string | null>(null)
   const handleFollowFromClip = useCallback(
-    async (userId: string) => {
-      if (!user?.id) return
-      const result = await followOrRequest(supabase, user.id, { id: userId })
-      if (!result.ok) {
-        showPopup({ type: "error", message: result.message })
-        return
-      }
-      if (result.state === "following") {
-        handleSuggestedFollowingChange(userId, true)
+    async (userId: string, isPrivate: boolean) => {
+      if (!user?.id || clipFollowBusyUserId) return
+      setClipFollowBusyUserId(userId)
+      try {
+        const result = await followOrRequest(supabase, user.id, {
+          id: userId,
+          is_private: isPrivate,
+        })
+        if (!result.ok) {
+          showPopup({ type: "error", message: result.message })
+          return
+        }
+        if (result.state === "following") {
+          handleSuggestedFollowingChange(userId, true)
+        }
+      } finally {
+        setClipFollowBusyUserId(null)
       }
     },
-    [handleSuggestedFollowingChange, showPopup, user?.id]
+    [clipFollowBusyUserId, handleSuggestedFollowingChange, showPopup, user?.id]
   )
 
   return (
@@ -3381,6 +3456,7 @@ function FeedPageContent() {
                       onSharePost={handleSharePost}
                       onOpenLinkedTrade={handleOpenLinkedTrade}
                       onFollow={handleFollowFromClip}
+                      followBusyUserId={clipFollowBusyUserId}
                       onLoadMore={loadPosts}
                       hasMore={hasMore}
                       loadingMore={loading}

@@ -44,23 +44,24 @@ export function psychologyTradeMetrics(
 ): PsychologyGroupMetrics {
   if (trades.length === 0) return EMPTY_PSYCHOLOGY_METRICS
 
-  const pnls = trades.map((trade) =>
-    Number.isFinite(trade.pnl) ? trade.pnl : 0
+  const knownPnls = trades.flatMap((trade) =>
+    trade.pnl != null && Number.isFinite(trade.pnl) ? [trade.pnl] : []
   )
-  const wins = pnls.filter((value) => value > 0)
-  const losses = pnls.filter((value) => value < 0)
+  const wins = knownPnls.filter((value) => value > 0)
+  const losses = knownPnls.filter((value) => value < 0)
   const tradeCount = trades.length
+  const knownCount = knownPnls.length
   const winCount = wins.length
   const lossCount = losses.length
   const grossWins = wins.reduce((sum, value) => sum + value, 0)
   const grossLosses = losses.reduce((sum, value) => sum + value, 0)
-  const totalPnL = pnls.reduce((sum, value) => sum + value, 0)
-  const winRate = tradeCount > 0 ? winCount / tradeCount : null
+  const totalPnL = knownPnls.reduce((sum, value) => sum + value, 0)
+  const winRate = knownCount > 0 ? winCount / knownCount : null
   const avgWin = winCount > 0 ? grossWins / winCount : null
   const avgLossAbs = lossCount > 0 ? Math.abs(grossLosses) / lossCount : null
-  const lossRate = tradeCount > 0 ? lossCount / tradeCount : 0
+  const lossRate = knownCount > 0 ? lossCount / knownCount : 0
   const expectancy =
-    tradeCount > 0
+    knownCount > 0
       ? (winRate ?? 0) * (avgWin ?? 0) - lossRate * (avgLossAbs ?? 0)
       : null
   const profitFactor = grossLosses < 0 ? grossWins / Math.abs(grossLosses) : null
@@ -79,7 +80,7 @@ export function psychologyTradeMetrics(
     lossCount,
     winRate,
     totalPnL,
-    averagePnL: totalPnL / tradeCount,
+    averagePnL: knownCount > 0 ? totalPnL / knownCount : null,
     expectancy,
     averageRR: rrCount > 0 ? rrSum / rrCount : null,
     profitFactor,
@@ -88,6 +89,7 @@ export function psychologyTradeMetrics(
 }
 
 export function pnlSign(trade: PsychologyReportTrade): "win" | "loss" | "flat" {
+  if (trade.pnl == null || !Number.isFinite(trade.pnl)) return "flat"
   if (trade.pnl > 0) return "win"
   if (trade.pnl < 0) return "loss"
   return "flat"

@@ -41,11 +41,11 @@ struct ScorecardScoreRingView: View {
                         .foregroundStyle(colors.primaryText)
                         .contentTransition(.numericText())
                 } else {
-                    Text("—")
-                        .font(.system(size: size * 0.22, weight: .semibold, design: .rounded))
+                    Text(buildingCaption)
+                        .font(.system(size: size * 0.16, weight: .semibold, design: .rounded))
                         .foregroundStyle(colors.secondaryText)
                 }
-                Text(score != nil ? "Score" : (buildingProgress != nil ? buildingCaption : "Score"))
+                Text(score != nil ? "Score" : "")
                     .experienceStyle(.caption2, color: colors.tertiaryText)
                 if score == nil, let buildingHint, !buildingHint.isEmpty {
                     Text(buildingHint)
@@ -252,31 +252,6 @@ struct ScorecardCoverageBarsView: View {
     }
 }
 
-// MARK: - Home category snapshot (building composite)
-
-struct ScorecardHomeCategorySnapshotGrid: View {
-    let result: ScorecardResult
-
-    @Environment(\.themeColors) private var colors
-
-    private let columns = [
-        GridItem(.flexible(), spacing: ExperienceSpacing.sm),
-        GridItem(.flexible(), spacing: ExperienceSpacing.sm),
-    ]
-
-    var body: some View {
-        LazyVGrid(columns: columns, spacing: ExperienceSpacing.sm) {
-            ForEach(result.categories, id: \.id) { category in
-                ScorecardMetricTile(
-                    label: category.title,
-                    value: ScorecardVisualSupport.homeSnapshotValue(category: category),
-                    footnote: ScorecardVisualSupport.homeSnapshotFootnote(category: category)
-                )
-            }
-        }
-    }
-}
-
 // MARK: - Building gate chips (Home)
 
 struct ScorecardGateChip: Identifiable, Hashable {
@@ -429,39 +404,6 @@ enum ScorecardVisualSupport {
 
     static func categoryBarRepresentsScore(_ category: ScorecardCategoryResult) -> Bool {
         category.score != nil
-    }
-
-    static func homeSnapshotValue(category: ScorecardCategoryResult) -> String {
-        switch category.id {
-        case .risk:
-            return "\(category.coveragePercent)%"
-        case .psychology:
-            if let matched = category.subMetrics.first(where: { $0.id == "psych.matched_days" }) {
-                return "\(matched.value)d"
-            }
-            return "\(category.coveragePercent)%"
-        case .consistency:
-            if let score = category.score { return "\(score)/100" }
-            let pool = postLossScorePoolCount(category)
-            return "\(pool)/\(ScorecardPlanAdherence.minPostLossPlanTagged) tags"
-        case .discipline:
-            if let score = category.score { return "\(score)/100" }
-            let tagged = planTaggedTradeCount(category)
-            return tagged >= ScorecardDiscipline.minPlanTaggedForScore
-                ? "Scoring…"
-                : "\(tagged)/\(ScorecardDiscipline.minPlanTaggedForScore) tags"
-        }
-    }
-
-    static func homeSnapshotFootnote(category: ScorecardCategoryResult) -> String? {
-        switch category.id {
-        case .risk: return "Data coverage"
-        case .psychology: return "Matched check-ins"
-        case .consistency:
-            return category.score != nil ? category.reliability.label : "After-loss plan tags"
-        case .discipline:
-            return category.score != nil ? category.reliability.label : "Any plan tags"
-        }
     }
 
     static func homeCategoryValueLabel(_ category: ScorecardCategoryResult) -> String {

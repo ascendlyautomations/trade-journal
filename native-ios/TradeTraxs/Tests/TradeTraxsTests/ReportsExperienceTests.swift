@@ -18,6 +18,46 @@ final class ReportsExperienceTests: XCTestCase {
         }
     }
 
+    func testHistoricalWeekOpensTheStoredMonday() throws {
+        let later = ISO8601DateFormatter().date(from: "2026-11-21T17:00:00Z")!
+        let ref = TradingReportWeekRef.parse(reportID: ReportID("week:2026-11-09"))
+        XCTAssertEqual(ref?.mondayKey, "2026-11-09")
+        XCTAssertNil(TradingReportWeekRef.parse(reportID: ReportID("week:2026-11-10")))
+        XCTAssertNil(TradingReportWeekRef.parse(reportID: ReportID("weekly_last")))
+
+        let bounds = TradingReportPeriods.bounds(forWeekStarting: "2026-11-09", now: later)
+        XCTAssertEqual(
+            TraderPsychologyAnalyticsFoundation.tradeDateKey(for: bounds?.start ?? later),
+            "2026-11-09"
+        )
+        XCTAssertEqual(
+            TraderPsychologyAnalyticsFoundation.tradeDateKey(for: bounds?.end ?? later),
+            "2026-11-15"
+        )
+
+        let saturday = ISO8601DateFormatter().date(from: "2026-11-14T17:00:00Z")!
+        let inProgress = TradingReportPeriods.bounds(forWeekStarting: "2026-11-09", now: saturday)
+        XCTAssertEqual(
+            TraderPsychologyAnalyticsFoundation.tradeDateKey(for: inProgress?.end ?? saturday),
+            "2026-11-14"
+        )
+
+        let content = """
+        {"title":"Your Weekly Trading Report is Ready","href":"/dashboard?report=weekly_last","periodKey":"weekly_last","periodId":"week:2026-11-09","kind":"weekly"}
+        """
+        let envelope: [String: Any] = [
+            "id": "n-week",
+            "type": "trading_report",
+            "content": content,
+            "created_at": "2026-11-14T17:00:00Z",
+            "read": false,
+        ]
+        let data = try JSONSerialization.data(withJSONObject: envelope)
+        let dto = try JSONDecoder().decode(NotificationDTO.Item.self, from: data)
+        let mapped = DefaultNotificationRepository.mapNotification(dto)
+        XCTAssertEqual(mapped?.reportID?.rawValue, "week:2026-11-09")
+    }
+
     func testPeriodBoundsMatchWebCalendarWindows() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
@@ -315,6 +355,18 @@ final class ReportsExperienceTests: XCTestCase {
         XCTAssertFalse(viewModel.yearlyCard?.availableYears.isEmpty ?? true)
     }
 
+    func testPushRegistrationFlightAllowsALaterUploadOfTheSameToken() async throws {
+        let flight = DevicePushRegistrationFlight()
+        let counter = PushUploadCounter()
+        try await flight.register(token: "abc", previousDeviceToken: nil) {
+            counter.value += 1
+        }
+        try await flight.register(token: "abc", previousDeviceToken: nil) {
+            counter.value += 1
+        }
+        XCTAssertEqual(counter.value, 2)
+    }
+
     // MARK: - Helpers
 
     private func makeDetailViewModel(
@@ -403,6 +455,15 @@ private actor StubTradingReportRepository: TradingReportRepository {
             trades: trades,
             filters: filters
         )
+    }
+
+    func weekReport(mondayKey: String, forceNetwork: Bool) async throws -> TradingReport {
+        _ = forceNetwork
+        let trades = ProfileTradeFixtures.samples(owner: ProfileID("dev.reports.stub"))
+        guard let week = TradingReportWeekRef.parse(reportID: ReportID("week:\(mondayKey)")) else {
+            throw AppError.unknown(message: "Invalid week")
+        }
+        return TradingReportGenerator.generate(trades: trades, week: week)
     }
 }
 
@@ -519,4 +580,8 @@ private final class StubReportsTradeRepository: TradeRepository, @unchecked Send
     func setAccountActive(id: TradingAccountID, isActive: Bool) async throws {}
     func updateAccountNote(id: TradingAccountID, note: String?) async throws {}
     func importCSVTrades(_ drafts: [TradeDraft], isInitialImport: Bool) async throws -> Int { 0 }
+}
+
+private final class PushUploadCounter: @unchecked Sendable {
+    var value = 0
 }

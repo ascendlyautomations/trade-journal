@@ -11,6 +11,13 @@ import { supabase } from "@/lib/supabaseClient"
 import { buildPsychologyAnalyticsReport } from "./reports/engine.ts"
 import { buildPsychologyCoachDeterministicSummary } from "./reports/coach.ts"
 import { buildPsychologyCoachFacts } from "./reports/facts.ts"
+import {
+  loadTradingPreferenceBundle,
+} from "@/lib/analytics/tradingPreferencesStore"
+import {
+  preferenceFingerprint,
+  type PreferenceRuleContext,
+} from "@/lib/analytics/preferenceCompliance"
 import { ensurePsychologyJournalTrades } from "./reports/journalTrades.ts"
 import type { PsychologyReportTrade } from "./reports/types.ts"
 import type { PsychologyCoachSummary } from "./reports/coach.ts"
@@ -113,8 +120,19 @@ export async function hydratePsychologySession(
     userId,
     dashboardTrades
   )
+  let preferences: PreferenceRuleContext | null = null
+  try {
+    preferences = await loadTradingPreferenceBundle(supabase, userId)
+  } catch {
+    preferences = null
+  }
+  const scopeFingerprint = `${scope.fingerprint}:${preferenceFingerprint(preferences)}`
 
-  if (scopeUnchanged && !options.forceRebuild) {
+  if (
+    scopeUnchanged &&
+    !options.forceRebuild &&
+    current.scopeFingerprint === scopeFingerprint
+  ) {
     return {
       report: current.report,
       facts: current.facts,
@@ -125,15 +143,15 @@ export async function hydratePsychologySession(
     }
   }
 
-  const report = buildPsychologyAnalyticsReport(journalTrades, checkIns)
-  const facts = buildPsychologyCoachFacts(report, journalTrades, checkIns)
+  const report = buildPsychologyAnalyticsReport(journalTrades, checkIns, new Date(), preferences)
+  const facts = buildPsychologyCoachFacts(report, journalTrades, checkIns, new Date(), preferences)
   const summary = buildPsychologyCoachDeterministicSummary(facts)
   setPsychologySession({
     report,
     facts,
     summary,
     userId,
-    scopeFingerprint: scope.fingerprint,
+    scopeFingerprint,
     scopeLabel: scope.label,
   })
 

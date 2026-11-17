@@ -12,6 +12,8 @@ type RoomMessageActionsMenuProps = {
   isRoomOwner: boolean
   isRoomModerator?: boolean
   roomOwnerUserId?: string | null
+  senderTagIds?: string[]
+  roomMemberTags?: { id: string; name: string }[]
   activeMenuId: string | null
   setActiveMenuId: (id: string | null) => void
   onEdit: () => void
@@ -25,6 +27,8 @@ export default function RoomMessageActionsMenu({
   isRoomOwner,
   isRoomModerator = false,
   roomOwnerUserId,
+  senderTagIds,
+  roomMemberTags,
   activeMenuId,
   setActiveMenuId,
   onEdit,
@@ -35,6 +39,8 @@ export default function RoomMessageActionsMenu({
     isRoomOwner,
     isRoomModerator,
     roomOwnerUserId,
+    senderTagIds,
+    tags: roomMemberTags,
   }
 
   if (!canModerateRoomMessage(viewerUserId, message, moderationOptions)) {

@@ -7,7 +7,10 @@ import { isProActive } from "@/lib/subscription"
 import { fetchProfileOwnerPrivateFields } from "@/lib/profileOwnerPrivateFields"
 import { inferTradeDirectionFromPrices } from "@/lib/inferTradeDirection"
 import { parseOptionalRr } from "@/lib/tradeRr"
-import { realizedRrForManualTradeSave } from "@/lib/tradePointsAndRealizedRr"
+import {
+  realizedRrForManualTradeSave,
+  validateRealizedRrAgainstTargeted,
+} from "@/lib/tradePointsAndRealizedRr"
 import { assertAccountAllowsNewTrades } from "@/lib/freePlanAccountSlots"
 import { uploadContentImageToStorage } from "@/lib/contentImagePipeline"
 import { createMonotonicReporter } from "@/lib/uploadProgress/reportProgress"
@@ -38,6 +41,9 @@ export type SaveManualTradeInput = {
   entryPrice?: number | null
   exitPrice?: number | null
   rr?: number | null
+  /** Recorded only when the user enters it — never inferred. */
+  plannedDollarRisk?: number | null
+  fullTp?: boolean
   publicDescription?: string
   isPublic: boolean
   imageFile?: File | null
@@ -227,22 +233,34 @@ export async function saveManualTrade(
     input.exitPrice != null && Number.isFinite(input.exitPrice)
       ? input.exitPrice
       : null
-  const realizedRr = realizedRrForManualTradeSave({
+  const saveRiskSource = {
     points,
     rr: parsedRr,
+    pnl: Number.isFinite(input.pnl) ? input.pnl : 0,
+    full_tp: input.fullTp === true,
     entry_price: entryPrice,
     exit_price: exitPrice,
     direction,
-  })
+  }
+  const realizedCap = validateRealizedRrAgainstTargeted(saveRiskSource)
+  if (realizedCap != null) {
+    return { ok: false, code: "save", message: realizedCap }
+  }
+  const realizedRr = realizedRrForManualTradeSave(saveRiskSource)
 
   const tradeData = {
     ticker: input.ticker.trim(),
     direction,
     pnl: Number.isFinite(input.pnl) ? input.pnl : 0,
     rr: parsedRr,
-    ...(realizedRr != null ? { realized_rr: realizedRr } : {}),
+    realized_rr: realizedRr,
+    full_tp: input.fullTp === true,
     points,
     contracts: Number.isFinite(input.contracts) ? input.contracts : 0,
+    dollar_risk:
+      input.plannedDollarRisk != null && input.plannedDollarRisk > 0
+        ? input.plannedDollarRisk
+        : null,
     session: sessionToSave,
     notes: null,
     public_description: input.publicDescription?.trim() || "",

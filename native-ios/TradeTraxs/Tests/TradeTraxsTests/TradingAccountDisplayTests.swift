@@ -91,7 +91,7 @@ final class TradingAccountDisplayTests: XCTestCase {
                 accountNumber: "500123",
                 audience: .public
             ),
-            "Alpha Futures"
+            "Alpha Futures · Eval"
         )
         XCTAssertEqual(
             TradeDisplay.accountIdentityLine(
@@ -101,7 +101,7 @@ final class TradingAccountDisplayTests: XCTestCase {
                 audience: .public,
                 category: .propFirm
             ),
-            "Evaluation Account"
+            "Eval"
         )
     }
 

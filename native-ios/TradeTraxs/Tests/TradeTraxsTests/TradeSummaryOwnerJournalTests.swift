@@ -24,7 +24,8 @@ final class TradeSummaryOwnerJournalTests: XCTestCase {
           "strategy": "ORB",
           "entry_price": 21452.25,
           "exit_price": 21474,
-          "session": "NY"
+          "session": "NY",
+          "max_rr_reached": 3.5
         }
         """
         let wire = try JSONDecoder().decode(TradeOwnerJournalSummaryWireV1.self, from: Data(json.utf8))
@@ -34,6 +35,8 @@ final class TradeSummaryOwnerJournalTests: XCTestCase {
         XCTAssertEqual(summary.accountName, "Alpha 50K")
         XCTAssertEqual(summary.strategy, "ORB")
         XCTAssertEqual(summary.sessionLabel, "NY")
+        XCTAssertEqual(summary.maxRrReached, Decimal(string: "3.5"))
+        XCTAssertEqual(TradeDisplay.compactRRText(summary.maxRrReached), "+3.5R")
     }
 
     func testJournalSummaryV2NotProductionShipped() {
@@ -55,6 +58,7 @@ final class TradeSummaryOwnerJournalTests: XCTestCase {
             exitAt: Date(timeIntervalSince1970: 1_700_000_100),
             realizedPnL: Money(amount: 50),
             riskReward: Decimal(string: "2"),
+            maxRrReached: Decimal(string: "2.25"),
             points: Decimal(string: "1"),
             sessionLabel: "NY",
             visibility: .private,
@@ -69,5 +73,6 @@ final class TradeSummaryOwnerJournalTests: XCTestCase {
         let summary = TradeSummaryMapper.ownerJournal(from: detail)
         XCTAssertEqual(summary.summary.notePreview, "preview")
         XCTAssertEqual(summary.strategy, "Breakout")
+        XCTAssertEqual(summary.maxRrReached, Decimal(string: "2.25"))
     }
 }

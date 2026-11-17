@@ -54,6 +54,7 @@ final class ProfileShellViewModel {
                 navigationCoordinator: navigationCoordinator,
                 detailCache: data.detailCache,
                 tradeDetailRepository: data.tradeDetailRepository,
+                feed: data.feed,
                 engagementStore: data.engagementStore,
                 isOwner: isOwner
             )
@@ -247,6 +248,7 @@ final class ProfileShellViewModel {
                     navigationCoordinator: navigationCoordinator,
                     detailCache: data.detailCache,
                     tradeDetailRepository: data.tradeDetailRepository,
+                    feed: data.feed,
                     engagementStore: data.engagementStore,
                     isOwner: isOwner
                 )

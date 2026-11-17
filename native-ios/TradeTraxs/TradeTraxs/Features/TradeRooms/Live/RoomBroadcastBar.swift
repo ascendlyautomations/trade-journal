@@ -40,7 +40,7 @@ struct RoomBroadcastBar: View {
             HStack(spacing: ExperienceSpacing.sm) {
                 liveBadge
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(coordinator.obsHostBarSession?.roomTitle ?? "Live stream")
+                    Text(coordinator.obsHostBarSession?.roomTitle ?? coordinator.polledStatus.streamTitle ?? "Live stream")
                         .experienceStyle(.caption, color: colors.primaryText)
                         .lineLimit(1)
                     Text("You're streaming")
@@ -62,7 +62,11 @@ struct RoomBroadcastBar: View {
                 HStack(spacing: ExperienceSpacing.sm) {
                     liveBadge
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(coordinator.watchSession?.roomTitle ?? "Live stream")
+                        Text(
+                            coordinator.polledStatus.streamTitle
+                                ?? coordinator.watchSession?.roomTitle
+                                ?? "Live stream"
+                        )
                             .experienceStyle(.caption, color: colors.primaryText)
                             .lineLimit(1)
                         Text(coordinator.broadcastStatusLabel)
@@ -87,16 +91,7 @@ struct RoomBroadcastBar: View {
             .buttonStyle(.experiencePlain)
             .accessibilityLabel(coordinator.isBroadcastHandRaised ? "Lower hand" : "Raise hand")
 
-            Button {
-                Task { await coordinator.toggleStreamPlaybackMute() }
-            } label: {
-                Image(systemName: coordinator.isStreamPlaybackMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(colors.secondaryText)
-                    .frame(width: 36, height: 36)
-            }
-            .buttonStyle(.experiencePlain)
-            .accessibilityLabel(coordinator.isStreamPlaybackMuted ? "Unmute stream" : "Mute stream")
+            RoomBroadcastAudioControl(coordinator: coordinator, style: .bar)
 
             Button {
                 Task { await coordinator.leaveWatch() }

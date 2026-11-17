@@ -1,8 +1,13 @@
+import SwiftUI
 import XCTest
 @testable import TradeTraxs
 
 @MainActor
 final class CalendarExperienceTests: XCTestCase {
+    func testCalendarOutsideMonthOpacityMutesOnlyInDark() {
+        XCTAssertEqual(CalendarCellAppearance.outsideMonthCellOpacity(colorScheme: .dark), 0.35)
+        XCTAssertEqual(CalendarCellAppearance.outsideMonthCellOpacity(colorScheme: .light), 1)
+    }
     func testTradingDayKeyUsesEasternSixPMRollover() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TradingCalendarDay.timeZone

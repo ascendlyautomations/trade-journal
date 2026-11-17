@@ -66,35 +66,7 @@ struct SettingsHomeView: View {
             let _ = monetizationConfigRevision
             ForEach(SettingsHomeModel.sections) { section in
                 Section {
-                    ForEach(section.items) { item in
-                        Button {
-                            ExperienceHaptics.play(.selection)
-                            stackNavigation?.pushSettings(item.route)
-                        } label: {
-                            SettingsNavigationRow(
-                                title: item.rowTitle,
-                                systemImage: item.systemImage
-                            )
-                        }
-                        .buttonStyle(.experiencePlain)
-                        .accessibilityIdentifier("settings.row.\(item.route.rawValue)")
-                        .modifier(SettingsAppearanceTourTarget(isAppearance: item.route == .appearance))
-                    }
-                    if section.id == "support" {
-                        Button {
-                            ExperienceHaptics.play(.selection)
-                            guard let url = AppStoreProductReview.writeReviewURL() else { return }
-                            openURL(url)
-                        } label: {
-                            SettingsNavigationRow(
-                                title: "Leave a Rating",
-                                systemImage: "star"
-                            )
-                        }
-                        .buttonStyle(.experiencePlain)
-                        .accessibilityIdentifier("settings.row.leaveRating")
-                    }
-                    if section.id == "personal" {
+                    if section.id == "tradetraxs" {
                         Button {
                             ExperienceHaptics.play(.selection)
                             appEnvironment.navigation.coordinator.selectTab(.home)
@@ -108,6 +80,35 @@ struct SettingsHomeView: View {
                         }
                         .buttonStyle(.experiencePlain)
                         .accessibilityIdentifier("settings.row.appWalkthrough")
+                    }
+                    ForEach(section.items) { item in
+                        Button {
+                            ExperienceHaptics.play(.selection)
+                            stackNavigation?.pushSettings(item.route)
+                        } label: {
+                            SettingsNavigationRow(
+                                title: item.rowTitle,
+                                systemImage: item.systemImage
+                            )
+                        }
+                        .buttonStyle(.experiencePlain)
+                        .accessibilityIdentifier("settings.row.\(item.route.rawValue)")
+                        .modifier(SettingsAppearanceTourTarget(isAppearance: item.route == .appearance))
+                        .modifier(SettingsTradingRulesTourTarget(isTradingRules: item.route == .tradingAnalytics))
+                    }
+                    if section.id == "tradetraxs" {
+                        Button {
+                            ExperienceHaptics.play(.selection)
+                            guard let url = AppStoreProductReview.writeReviewURL() else { return }
+                            openURL(url)
+                        } label: {
+                            SettingsNavigationRow(
+                                title: "Leave a Rating",
+                                systemImage: "star"
+                            )
+                        }
+                        .buttonStyle(.experiencePlain)
+                        .accessibilityIdentifier("settings.row.leaveRating")
                     }
                 } header: {
                     Text(section.title)
@@ -202,8 +203,6 @@ struct SettingsHomeView: View {
         }
         .task {
             showsAdminEntry = SessionBootstrapStore.shared.isPlatformAdmin
-        }
-        .task {
             await refreshMonetizationConfigurationForSettings()
         }
         .onChange(of: ContextualTourCoordinator.shared.scrollTarget) { _, target in
@@ -249,7 +248,6 @@ struct SettingsHomeView: View {
     }
 }
 
-
 /// Spotlight only the Appearance row. Other settings rows stay unchanged.
 private struct SettingsAppearanceTourTarget: ViewModifier {
     let isAppearance: Bool
@@ -263,3 +261,19 @@ private struct SettingsAppearanceTourTarget: ViewModifier {
         }
     }
 }
+
+/// Spotlight only the Trading Rules row on Settings home.
+private struct SettingsTradingRulesTourTarget: ViewModifier {
+    let isTradingRules: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isTradingRules {
+            content.contextualTourTarget(.settingsTradingRules)
+        } else {
+            content
+        }
+    }
+}
+
+

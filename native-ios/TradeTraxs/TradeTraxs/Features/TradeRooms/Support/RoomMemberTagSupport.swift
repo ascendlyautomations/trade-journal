@@ -32,6 +32,7 @@ enum RoomMemberTagSupport {
 struct RoomMemberTagChipsView: View {
     let tags: [RoomMemberTag]
     var showsOwnerBadge: Bool = false
+    var showsModeratorBadge: Bool = false
     var limit: Int = 4
     /// Member rows use a full-width wrapping row so tag names are not truncated beside join date.
     var wraps: Bool = false
@@ -43,6 +44,9 @@ struct RoomMemberTagChipsView: View {
             ExperienceFlowLayout(spacing: ExperienceSpacing.xxs, rowSpacing: ExperienceSpacing.xxs) {
                 if showsOwnerBadge {
                     tagCapsule(label: "Owner", color: colors.accent)
+                }
+                if showsModeratorBadge {
+                    tagCapsule(label: "Moderator", color: colors.accent)
                 }
                 ForEach(tags) { tag in
                     tagCapsule(
@@ -58,6 +62,9 @@ struct RoomMemberTagChipsView: View {
             HStack(spacing: ExperienceSpacing.xxs) {
                 if showsOwnerBadge {
                     tagCapsule(label: "Owner", color: colors.accent)
+                }
+                if showsModeratorBadge {
+                    tagCapsule(label: "Moderator", color: colors.accent)
                 }
                 ForEach(visible) { tag in
                     tagCapsule(

@@ -48,6 +48,42 @@ final class TradeRoomObsBroadcastController {
 
     private(set) var hostContextRoomID: RoomID?
     private(set) var hostContextRoomTitle: String?
+    private(set) var streamTitle: String?
+    private var pendingStreamTitle: String?
+
+    func setPendingStreamTitle(_ raw: String) {
+        pendingStreamTitle = TradeRoomBroadcastStreamTitle.normalize(raw)
+    }
+
+    func updateStreamTitle(roomID: RoomID, draft: String) async {
+        guard let client, let sessionId = broadcastSessionId else { return }
+        guard let normalized = TradeRoomBroadcastStreamTitle.normalize(draft) else {
+            errorMessage = "Stream title is required (1–\(TradeRoomBroadcastStreamTitle.maxLength) characters)."
+            return
+        }
+        errorMessage = nil
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            let saved = try await client.patchStreamTitle(
+                roomID: roomID,
+                sessionId: sessionId,
+                streamTitle: normalized
+            )
+            streamTitle = saved
+            await broadcastCoordinator.refreshStatus(roomID: roomID)
+            syncObsHostBarSession()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func resolvedStreamTitleForStart() -> String? {
+        if let pending = pendingStreamTitle {
+            return pending
+        }
+        return TradeRoomBroadcastStreamTitle.normalize(streamTitle ?? "")
+    }
 
     /// Unstructured task so SwiftUI `.task` cancellation does not tear down in-flight setup.
     private var ensurePrivateObsSessionTask: Task<Void, Never>?
@@ -118,10 +154,27 @@ final class TradeRoomObsBroadcastController {
               !sessionId.isEmpty,
               let roomID = hostContextRoomID
         else {
+            if broadcastCoordinator.isObsManageStreamPresented {
+                if let roomID = hostContextRoomID {
+                    TradeRoomObsBroadcastDiagnostics.log(
+                        "hostBar.skipClear",
+                        roomID: roomID,
+                        detail: "phase=\(phase) manageSheet=presented"
+                    )
+                }
+                return
+            }
+            if let roomID = hostContextRoomID {
+                TradeRoomObsBroadcastDiagnostics.log(
+                    "hostBar.clear",
+                    roomID: roomID,
+                    detail: "phase=\(phase)"
+                )
+            }
             broadcastCoordinator.clearObsHostBarSession()
             return
         }
-        let title = hostContextRoomTitle ?? "Trade Room"
+        let title = streamTitle ?? hostContextRoomTitle ?? "Trade Room"
         broadcastCoordinator.setObsHostBarSession(roomID: roomID, roomTitle: title)
     }
 
@@ -194,6 +247,14 @@ final class TradeRoomObsBroadcastController {
         await ensurePrivateObsSessionTask?.value
     }
 
+    /// User-initiated retry after a failed or idle setup state.
+    func retryPrivateObsSessionEnsure(roomID: RoomID) {
+        cancelInFlightPrivateObsSessionEnsure()
+        errorMessage = nil
+        startPrivateObsSessionEnsureIfNeeded(roomID: roomID)
+        TradeRoomObsBroadcastDiagnostics.log("ensure.retry", roomID: roomID)
+    }
+
     private func cancelInFlightPrivateObsSessionEnsure() {
         ensurePrivateObsSessionTask?.cancel()
         ensurePrivateObsSessionTask = nil
@@ -235,11 +296,17 @@ final class TradeRoomObsBroadcastController {
         if isEnsuringPrivateObsSession, let cached = cachedStartResponse(for: sessionId) {
             return cached
         }
+        guard let title = resolvedStreamTitleForStart() else {
+            throw AppError.unknown(message: "Stream title is required before starting.")
+        }
         let start = try await client.startBroadcast(
             roomID: roomID,
             voiceMode: "broadcast_only",
-            videoSource: "obs"
+            videoSource: "obs",
+            streamTitle: title
         )
+        streamTitle = start.streamTitle ?? title
+        pendingStreamTitle = nil
         rememberObsHostStartResponse(start, sessionId: sessionId)
         return start
     }
@@ -273,7 +340,8 @@ final class TradeRoomObsBroadcastController {
             TradeRoomObsBroadcastDiagnostics.log("ensure.status", roomID: roomID)
             #endif
             let status = try await client.fetchStatus(roomID: roomID, reconcile: true, lite: false)
-            await applyStatus(status, roomID: roomID)
+            guard generation == ensurePrivateObsSessionGeneration else { return }
+            await applyStatus(status, roomID: roomID, expectedEnsureGeneration: generation)
 
             if phase == .livePublic {
                 if let sid = broadcastSessionId {
@@ -322,11 +390,18 @@ final class TradeRoomObsBroadcastController {
             #if DEBUG
             TradeRoomObsBroadcastDiagnostics.log("ensure.start", roomID: roomID)
             #endif
+            guard let title = resolvedStreamTitleForStart() else {
+                errorMessage = "Stream title is required before starting."
+                return
+            }
             let start = try await client.startBroadcast(
                 roomID: roomID,
                 voiceMode: "broadcast_only",
-                videoSource: "obs"
+                videoSource: "obs",
+                streamTitle: title
             )
+            streamTitle = start.streamTitle ?? title
+            pendingStreamTitle = nil
             guard let sessionId = start.broadcastSessionId, !sessionId.isEmpty else {
                 throw AppError.unknown(message: "Invalid broadcast start response.")
             }
@@ -446,16 +521,41 @@ final class TradeRoomObsBroadcastController {
 
     // MARK: - Private
 
-    private func applyStatus(_ status: LiveKitBroadcastStatusResponse, roomID: RoomID) async {
+    private func applyStatus(
+        _ status: LiveKitBroadcastStatusResponse,
+        roomID: RoomID,
+        expectedEnsureGeneration: UInt64? = nil
+    ) async {
+        if let expectedEnsureGeneration,
+           expectedEnsureGeneration != ensurePrivateObsSessionGeneration
+        {
+            TradeRoomObsBroadcastDiagnostics.log(
+                "status.stale",
+                roomID: roomID,
+                detail: "gen=\(expectedEnsureGeneration)"
+            )
+            return
+        }
+
         visibility = status.visibility
         publicDiscoverableLive = status.publicLive ?? false
         broadcasterUserId = status.broadcasterUserId
+        if let fromServer = TradeRoomBroadcastStreamTitle.normalize(status.streamTitle ?? "") {
+            streamTitle = fromServer
+        }
         foreignHostPreparing = false
 
         let vis = status.visibility?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let isObs = (status.videoSource == "obs") || (status.broadcastSource == "obs")
 
         guard let sessionId = status.broadcastSessionId, !sessionId.isEmpty else {
+            if isEnsuringPrivateObsSession, hostContextRoomID == roomID {
+                TradeRoomObsBroadcastDiagnostics.log(
+                    "status.noSessionDuringEnsure",
+                    roomID: roomID
+                )
+                return
+            }
             phase = .idle
             broadcastSessionId = nil
             rtmpURL = nil

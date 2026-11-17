@@ -36,6 +36,30 @@ export async function notifyTradeRoomMembersBroadcastLive(params: {
     return { pushed: 0, skipped: true }
   }
 
+  const { data: sessionRow, error: sessionErr } = await supabaseServiceRole
+    .from("room_live_broadcasts")
+    .select("stream_title")
+    .eq("id", broadcastSessionId)
+    .eq("room_id", roomId)
+    .is("ended_at", null)
+    .maybeSingle()
+
+  if (sessionErr) {
+    console.error(
+      "[livekit/broadcast/live-notify] session lookup failed",
+      sessionErr
+    )
+    return { pushed: 0, skipped: true }
+  }
+
+  const streamTitle = sessionRow?.stream_title?.trim() ?? ""
+  if (!streamTitle) {
+    console.warn("[livekit/broadcast/live-notify] missing stream_title", {
+      broadcastSessionId,
+    })
+    return { pushed: 0, skipped: true }
+  }
+
   const { data: members, error: membersErr } = await supabaseServiceRole
     .from("room_members")
     .select("user_id")
@@ -66,6 +90,7 @@ export async function notifyTradeRoomMembersBroadcastLive(params: {
     roomSlug: roomRow.slug,
     roomName: roomRow.name ?? "Trade Room",
     broadcastSessionId,
+    streamTitle,
   })
 
   const contentJson = JSON.stringify(content)
@@ -80,7 +105,7 @@ export async function notifyTradeRoomMembersBroadcastLive(params: {
           sender_id: broadcasterUserId,
           room_id: roomId,
           content: contentJson,
-          preferenceKey: "room_messages_enabled",
+          preferenceKey: "room_live_streams_enabled",
         })
       )
     )

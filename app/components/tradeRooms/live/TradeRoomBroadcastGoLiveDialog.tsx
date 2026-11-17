@@ -10,11 +10,14 @@ import type {
   TradeRoomBroadcastVideoSource,
   TradeRoomBroadcastVoiceMode,
 } from "@/lib/livekit/tradeRoomBroadcastVoiceMode.ts"
+import { TRADE_ROOM_BROADCAST_STREAM_TITLE_MAX } from "@/lib/livekit/tradeRoomBroadcastStreamTitle.ts"
+import TradeRoomBroadcastStreamTitleField from "./TradeRoomBroadcastStreamTitleField.tsx"
 
 export type GoLiveDialogResult = {
   videoSource: TradeRoomBroadcastVideoSource
   voiceMode: TradeRoomBroadcastVoiceMode
   enableBroadcasterMic: boolean
+  streamTitle: string
 }
 
 type Props = {
@@ -35,6 +38,7 @@ export default function TradeRoomBroadcastGoLiveDialog({
   const [voiceMode, setVoiceMode] =
     useState<TradeRoomBroadcastVoiceMode>("broadcast_only")
   const [enableMic, setEnableMic] = useState(true)
+  const [streamTitle, setStreamTitle] = useState("")
   const phoneWeb = usePhoneWebTouchTarget()
   const [mounted, setMounted] = useState(false)
   const dismiss = useMobileWebSheetDismiss(onClose)
@@ -67,6 +71,14 @@ export default function TradeRoomBroadcastGoLiveDialog({
           Stream video and your microphone in a dedicated live session — separate
           from General Voice.
         </p>
+
+        <div className="mt-4">
+          <TradeRoomBroadcastStreamTitleField
+            value={streamTitle}
+            onChange={setStreamTitle}
+            disabled={busy}
+          />
+        </div>
 
         <fieldset className="mt-4 space-y-2">
           <legend className="text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -212,12 +224,17 @@ export default function TradeRoomBroadcastGoLiveDialog({
           </button>
           <button
             type="button"
-            disabled={busy}
+            disabled={
+              busy ||
+              streamTitle.trim().length === 0 ||
+              streamTitle.trim().length > TRADE_ROOM_BROADCAST_STREAM_TITLE_MAX
+            }
             onClick={() =>
               onConfirm({
                 videoSource,
                 voiceMode,
                 enableBroadcasterMic: enableMic,
+                streamTitle: streamTitle.trim(),
               })
             }
             className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"

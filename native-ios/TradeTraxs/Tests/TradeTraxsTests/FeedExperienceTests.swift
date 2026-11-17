@@ -1,8 +1,67 @@
+import SwiftUI
 import XCTest
 @testable import TradeTraxs
 
 @MainActor
 final class FeedExperienceTests: XCTestCase {
+    func testFeedFilterBarScrollCoordinatorThresholds() {
+        let coordinator = FeedFilterBarScrollCoordinator()
+        coordinator.processContentOffset(0)
+        XCTAssertTrue(coordinator.isVisible)
+
+        coordinator.processContentOffset(200)
+        XCTAssertFalse(coordinator.isVisible)
+
+        coordinator.processContentOffset(240)
+        XCTAssertFalse(coordinator.isVisible)
+
+        coordinator.processContentOffset(200)
+        coordinator.processContentOffset(125)
+        XCTAssertTrue(coordinator.isVisible)
+
+        coordinator.processContentOffset(10)
+        XCTAssertTrue(coordinator.isVisible)
+    }
+
+    func testFeedListScrollPresentationRetainedAcrossStore() {
+        FeedTabModelStore.clearForTesting()
+        let navigation = NavigationCoordinator(store: NavigationStore())
+        let viewModel = FeedScreenViewModel(
+            feed: FeedStubFeedRepository(),
+            trades: FeedStubTradeRepository(),
+            profiles: FeedStubProfileRepository(),
+            achievements: FeedStubAchievementRepository(),
+            session: FeedStubSession(userID: FeedFixtures.viewerID.rawValue),
+            detailCache: DetailPresentationCache(),
+            engagementStore: EngagementStore(repository: FeedStubInteractionRepository()),
+            vaultStore: VaultStore.testInstance(),
+            navigationCoordinator: navigation
+        )
+        viewModel.rememberListScrollOffset(420)
+        viewModel.rememberClipsActiveEntryID("clip-a")
+
+        let returned = FeedTabModelStore.presentation(
+            retainsTabPresentation: true,
+            makeViewModel: { viewModel },
+            makePlayback: { FeedVideoPlaybackCoordinator(storage: FeedStubObjectStorage()) }
+        ).0
+
+        XCTAssertEqual(returned.retainedListScrollOffset, 420)
+        XCTAssertEqual(returned.retainedClipsActiveEntryID, "clip-a")
+
+        let anchor = FeedTabModelStore.listScrollAnchor(restoredOffset: returned.retainedListScrollOffset)
+        anchor.applyRetainedOffset(420)
+        XCTAssertEqual(anchor.offset, 420)
+        viewModel.rememberListScrollOffset(512)
+        XCTAssertEqual(viewModel.retainedListScrollOffset, 512)
+
+        viewModel.resetScrollPresentation()
+        XCTAssertNil(viewModel.retainedListScrollOffset)
+        XCTAssertNil(viewModel.retainedClipsActiveEntryID)
+        XCTAssertEqual(viewModel.listScrollPresentationEpoch, 1)
+        FeedTabModelStore.clearForTesting()
+    }
+
     func testFeedContentFilterSwipeNeighborsFollowStripOrder() {
         XCTAssertEqual(FeedContentFilter.all.adjacentFilter(offset: 1), .trades)
         XCTAssertEqual(FeedContentFilter.trades.adjacentFilter(offset: 1), .clips)

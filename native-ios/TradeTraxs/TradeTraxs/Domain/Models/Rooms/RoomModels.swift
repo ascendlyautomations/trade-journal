@@ -254,7 +254,7 @@ nonisolated struct RoomUpdateRequest: Sendable {
         description = configuration.trimmedDescription
         imageURL = configuration.imageURL
         showsOnProfile = configuration.showsOnProfile
-        isPrivate = configuration.visibility == .private
+        isPrivate = configuration.persistedIsPrivate
         category = configuration.category
         discoveryTags = configuration.discoveryTags
         joinPolicy = configuration.effectiveJoinPolicy
@@ -277,7 +277,7 @@ nonisolated struct RoomChannelUpdateRequest: Sendable {
 }
 
 nonisolated enum RoomChannelValidation {
-    static let maxCount = 5
+    static let maxCount = 10
     static let minCount = 1
     static let nameMaxLength = 64
 }

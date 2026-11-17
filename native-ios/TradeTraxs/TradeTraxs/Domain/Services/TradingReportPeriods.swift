@@ -9,60 +9,106 @@ nonisolated enum TradingReportPeriods {
         var end: Date
     }
 
+    static let eastern: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York") ?? .gmt
+        return calendar
+    }()
+
     static func bounds(
         for key: TradingReportPeriodKey,
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> Bounds {
-        let today = calendar.startOfDay(for: now)
+        _ = calendar
+        let eastern = Self.eastern
+        let today = eastern.startOfDay(for: now)
 
         switch key {
         case .weeklyThis, .weeklyLast:
-            var monday = mondayOfWeek(containing: today, calendar: calendar)
+            var monday = mondayOfWeek(containing: today, calendar: eastern)
             if key == .weeklyLast {
-                monday = calendar.date(byAdding: .day, value: -7, to: monday) ?? monday
+                monday = eastern.date(byAdding: .day, value: -7, to: monday) ?? monday
             }
-            let sunday = endOfDay(
-                calendar.date(byAdding: .day, value: 6, to: monday) ?? monday,
-                calendar: calendar
-            )
-            let end = key == .weeklyThis ? endOfDay(now, calendar: calendar) : sunday
+            let sunday = eastern.date(byAdding: .day, value: 6, to: monday) ?? monday
+            let naturalEnd = endOfDay(sunday, calendar: eastern)
+            let end = key == .weeklyThis ? min(endOfDay(now, calendar: eastern), naturalEnd) : naturalEnd
             return Bounds(key: key, kind: .weekly, start: monday, end: end)
 
         case .monthlyThis:
-            let comps = calendar.dateComponents([.year, .month], from: today)
-            let start = calendar.date(from: DateComponents(
+            let comps = eastern.dateComponents([.year, .month], from: today)
+            let start = eastern.date(from: DateComponents(
+                calendar: eastern,
+                timeZone: eastern.timeZone,
                 year: comps.year,
                 month: comps.month,
                 day: 1
             )) ?? today
+            let nextMonth = eastern.date(byAdding: .month, value: 1, to: start) ?? start
+            let lastDay = eastern.date(byAdding: .day, value: -1, to: nextMonth) ?? start
+            let naturalEnd = endOfDay(lastDay, calendar: eastern)
             return Bounds(
                 key: key,
                 kind: .monthly,
-                start: calendar.startOfDay(for: start),
-                end: endOfDay(now, calendar: calendar)
+                start: eastern.startOfDay(for: start),
+                end: min(endOfDay(now, calendar: eastern), naturalEnd)
             )
 
         case .monthlyLast:
-            let comps = calendar.dateComponents([.year, .month], from: today)
-            let thisMonthStart = calendar.date(from: DateComponents(
+            let comps = eastern.dateComponents([.year, .month], from: today)
+            let thisMonthStart = eastern.date(from: DateComponents(
+                calendar: eastern,
+                timeZone: eastern.timeZone,
                 year: comps.year,
                 month: comps.month,
                 day: 1
             )) ?? today
-            let start = calendar.date(byAdding: .month, value: -1, to: thisMonthStart) ?? thisMonthStart
-            let endDay = calendar.date(byAdding: .day, value: -1, to: thisMonthStart) ?? start
+            let start = eastern.date(byAdding: .month, value: -1, to: thisMonthStart) ?? thisMonthStart
+            let endDay = eastern.date(byAdding: .day, value: -1, to: thisMonthStart) ?? start
             return Bounds(
                 key: key,
                 kind: .monthly,
-                start: calendar.startOfDay(for: start),
-                end: endOfDay(endDay, calendar: calendar)
+                start: eastern.startOfDay(for: start),
+                end: endOfDay(endDay, calendar: eastern)
             )
         }
     }
 
+    /// Monday–Sunday for `week:YYYY-MM-DD`. In-progress weeks end today.
+    static func bounds(forWeekStarting mondayKey: String, now: Date = Date()) -> Bounds? {
+        guard let ref = TradingReportWeekRef.parse(reportID: ReportID("week:\(mondayKey)")) else {
+            return nil
+        }
+        let calendar = eastern
+        let parts = ref.mondayKey.split(separator: "-")
+        guard parts.count == 3,
+              let year = Int(parts[0]),
+              let month = Int(parts[1]),
+              let day = Int(parts[2]),
+              let monday = calendar.date(from: DateComponents(
+                calendar: calendar,
+                timeZone: calendar.timeZone,
+                year: year,
+                month: month,
+                day: day
+              ))
+        else { return nil }
+        let mondayStart = calendar.startOfDay(for: monday)
+        let sunday = calendar.date(byAdding: .day, value: 6, to: mondayStart) ?? mondayStart
+        let naturalEnd = endOfDay(sunday, calendar: calendar)
+        let todayKey = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: now)
+        let sundayKey = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: sunday)
+        let inProgress = todayKey >= ref.mondayKey && todayKey < sundayKey
+        return Bounds(
+            key: inProgress ? .weeklyThis : .weeklyLast,
+            kind: .weekly,
+            start: mondayStart,
+            end: inProgress ? min(endOfDay(now, calendar: calendar), naturalEnd) : naturalEnd
+        )
+    }
+
     static func dateRangeLabel(start: Date, end: Date, kind: TradingReportKind) -> String {
-        let calendar = Calendar.current
+        let calendar = eastern
         if calendar.isDate(start, inSameDayAs: end) {
             return Self.medium.string(from: start)
         }
@@ -95,7 +141,15 @@ nonisolated enum TradingReportPeriods {
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> Bounds {
-        let start = calendar.date(from: DateComponents(year: year, month: 1, day: 1)) ?? now
+        _ = calendar
+        let calendar = eastern
+        let start = calendar.date(from: DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: year,
+            month: 1,
+            day: 1
+        )) ?? now
         let startDay = calendar.startOfDay(for: start)
         let currentYear = calendar.component(.year, from: now)
         let end: Date
@@ -118,7 +172,15 @@ nonisolated enum TradingReportPeriods {
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> Bounds {
-        let start = calendar.date(from: DateComponents(year: year, month: month, day: 1)) ?? now
+        _ = calendar
+        let calendar = eastern
+        let start = calendar.date(from: DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: year,
+            month: month,
+            day: 1
+        )) ?? now
         let startDay = calendar.startOfDay(for: start)
         let currentYear = calendar.component(.year, from: now)
         let currentMonth = calendar.component(.month, from: now)
@@ -139,9 +201,12 @@ nonisolated enum TradingReportPeriods {
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> [Int] {
+        _ = calendar
+        _ = now
         var years = Set<Int>()
         for trade in trades where trade.mode != .backtest {
-            years.insert(calendar.component(.year, from: trade.entryAt))
+            let key = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: trade)
+            if let year = Int(key.prefix(4)) { years.insert(year) }
         }
         return years.sorted(by: >)
     }
@@ -151,15 +216,19 @@ nonisolated enum TradingReportPeriods {
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> String {
-        let bounds = yearBounds(year: year, now: now, calendar: calendar)
-        let currentYear = calendar.component(.year, from: now)
+        _ = calendar
+        let bounds = yearBounds(year: year, now: now)
+        let currentYear = eastern.component(.year, from: now)
         if year == currentYear {
             let formatter = DateFormatter()
             formatter.locale = .current
+            formatter.timeZone = eastern.timeZone
             formatter.setLocalizedDateFormatFromTemplate("MMMMyyyy")
             let startLabel = formatter.string(from: bounds.start)
             let endLabel = Self.medium.string(from: bounds.end)
-            return "\(startLabel) – \(endLabel)"
+            let today = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: now)
+            let partial = today.hasSuffix("-12-31") ? "" : " (partial)"
+            return "\(startLabel) – \(endLabel)\(partial)"
         }
         let formatter = DateFormatter()
         formatter.locale = .current
@@ -172,13 +241,10 @@ nonisolated enum TradingReportPeriods {
         let bounds = bounds(for: key, now: now)
         switch bounds.kind {
         case .weekly:
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withFullDate]
-            return "week:\(formatter.string(from: bounds.start))"
+            return "week:\(TraderPsychologyAnalyticsFoundation.tradeDateKey(for: bounds.start))"
         case .monthly:
-            let comps = Calendar.current.dateComponents([.year, .month], from: bounds.start)
-            let month = String(format: "%02d", comps.month ?? 1)
-            return "month:\(comps.year ?? 0)-\(month)"
+            let key = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: bounds.start)
+            return "month:\(key.prefix(7))"
         }
     }
 
@@ -200,6 +266,7 @@ nonisolated enum TradingReportPeriods {
     private static let medium: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = .current
+        formatter.timeZone = TimeZone(identifier: "America/New_York")
         formatter.setLocalizedDateFormatFromTemplate("MMMdyyyy")
         return formatter
     }()
@@ -207,6 +274,7 @@ nonisolated enum TradingReportPeriods {
     private static let monthDay: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = .current
+        formatter.timeZone = TimeZone(identifier: "America/New_York")
         formatter.setLocalizedDateFormatFromTemplate("MMMd")
         return formatter
     }()
@@ -214,6 +282,7 @@ nonisolated enum TradingReportPeriods {
     private static let monthYear: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = .current
+        formatter.timeZone = TimeZone(identifier: "America/New_York")
         formatter.setLocalizedDateFormatFromTemplate("MMMMyyyy")
         return formatter
     }()

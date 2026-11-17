@@ -33,7 +33,7 @@ final class DetailExperienceTests: XCTestCase {
         XCTAssertEqual(viewModel.trade?.symbol.ticker, "NQ")
         XCTAssertEqual(viewModel.accountName, "Alpha Futures")
         // Public audience when session user ≠ trade owner.
-        XCTAssertEqual(viewModel.accountIdentityLine, "Alpha Futures")
+        XCTAssertEqual(viewModel.accountIdentityLine, "Alpha Futures · Eval")
         XCTAssertFalse(viewModel.notes.isEmpty)
     }
 
@@ -171,6 +171,19 @@ final class DetailExperienceTests: XCTestCase {
             storage: StubObjectStorage()
         )
         XCTAssertEqual(url?.absoluteString, "https://example.com/clip.mp4")
+    }
+    func testDetailCommentsScrollIntentConsumedOnce() {
+        let cache = DetailPresentationCache()
+        let tradeID = TradeID("detail-scroll-intent-trade")
+        XCTAssertFalse(cache.consumeScrollToComments(.trade(tradeID)))
+
+        cache.requestScrollToComments(.trade(tradeID))
+        XCTAssertTrue(cache.consumeScrollToComments(.trade(tradeID)))
+        XCTAssertFalse(cache.consumeScrollToComments(.trade(tradeID)))
+
+        let postID = PostID("detail-scroll-intent-post")
+        cache.requestScrollToComments(.post(postID))
+        XCTAssertTrue(cache.consumeScrollToComments(.post(postID)))
     }
 }
 

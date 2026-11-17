@@ -196,12 +196,30 @@ final class NavigationCoordinator {
             invokeCreateAction(source: .tabSelection)
             return
         }
-        if store.selectedTab != tab {
+        let reselectedSameTab = store.selectedTab == tab
+        if !reselectedSameTab {
             ExperienceHaptics.play(.selection)
         }
         store.rememberContentTabIfNeeded(tab)
         store.selectedTab = tab
         emit(.tabSelected(tab))
+        if reselectedSameTab {
+            scrollRootListToTopWhenTabReselected(tab)
+        }
+    }
+
+    /// Tab reselect scroll-to-top — UIKit `scrollsToTop` is off on tab roots; scroll programmatically instead.
+    private func scrollRootListToTopWhenTabReselected(_ tab: TabIdentifier) {
+        switch tab {
+        case .home:
+            guard store.paths.home.isEmpty else { return }
+            DashboardTabModelStore.scrollToTopWhenTabReselectedAtRoot()
+        case .feed:
+            guard store.paths.feed.isEmpty else { return }
+            FeedTabModelStore.scrollToTopWhenTabReselectedAtRoot()
+        default:
+            break
+        }
     }
 
     /// Create tab is an action — presents chooser and keeps content tab selected.
@@ -330,7 +348,8 @@ final class NavigationCoordinator {
             InboxMarkReadCoordinator.shared.prepareOpenConversation(conversationID)
         case .room(let roomID):
             InboxMarkReadCoordinator.shared.prepareOpenRoom(roomID)
-        case .roomMembers, .roomInfo, .manageRoom, .roomSettings, .sharedTrade, .sharedPost, .sharedReel, .sharedAchievement, .profile, .followers, .following, .rooms, .settings:
+        case .roomMembers, .roomInfo, .manageRoom, .roomSettings, .sharedTrade, .sharedPost, .sharedReel, .sharedAchievement, .profile, .followers, .following, .rooms, .settings,
+            .tradingRulesAnalytics, .tradingRulesRuleDetail, .tradingRulesDayDetail:
             break
         }
         let pathBefore = store.paths.messages.count
@@ -513,6 +532,55 @@ final class NavigationCoordinator {
         }
     }
 
+    /// Trading Rules Analytics on the active tab stack (Settings often opens from Profile).
+    func pushTradingRulesAnalytics() {
+        ExperienceHaptics.play(.selection)
+        switch store.selectedTab {
+        case .home:
+            pushHome(.tradingRulesAnalytics)
+        case .feed:
+            pushFeed(.tradingRulesAnalytics)
+        case .messages:
+            pushMessages(.tradingRulesAnalytics)
+        case .profile:
+            pushProfile(.tradingRulesAnalytics)
+        case .create:
+            break
+        }
+    }
+
+    func pushTradingRulesRuleDetail(_ ruleIDRaw: String) {
+        ExperienceHaptics.play(.selection)
+        switch store.selectedTab {
+        case .home:
+            pushHome(.tradingRulesRuleDetail(ruleIDRaw))
+        case .feed:
+            pushFeed(.tradingRulesRuleDetail(ruleIDRaw))
+        case .messages:
+            pushMessages(.tradingRulesRuleDetail(ruleIDRaw))
+        case .profile:
+            pushProfile(.tradingRulesRuleDetail(ruleIDRaw))
+        case .create:
+            break
+        }
+    }
+
+    func pushTradingRulesDayDetail(_ dayKey: String) {
+        ExperienceHaptics.play(.selection)
+        switch store.selectedTab {
+        case .home:
+            pushHome(.tradingRulesDayDetail(dayKey))
+        case .feed:
+            pushFeed(.tradingRulesDayDetail(dayKey))
+        case .messages:
+            pushMessages(.tradingRulesDayDetail(dayKey))
+        case .profile:
+            pushProfile(.tradingRulesDayDetail(dayKey))
+        case .create:
+            break
+        }
+    }
+
     func pushOtherProfile(_ profileID: ProfileID) {
         ExperienceHaptics.play(.selection)
         switch store.selectedTab {
@@ -595,6 +663,60 @@ final class NavigationCoordinator {
         case .create:
             break
         }
+    }
+
+    /// Swap the current Trade Room conversation route without popping to Your Rooms.
+    func switchTradeRoom(to roomID: RoomID, host: TradeRoomNavigationHost) {
+        let canonical = RoomNavigationFocusStore.shared.canonicalRoomID(roomID)
+        ExperienceHaptics.play(.selection)
+        InboxMarkReadCoordinator.shared.prepareOpenRoom(canonical)
+
+        switch host {
+        case .home:
+            if replaceTopHomeRoom(with: canonical) { return }
+            pushHome(.room(canonical))
+        case .feed:
+            if replaceTopFeedRoom(with: canonical) { return }
+            pushFeed(.room(canonical))
+        case .messages:
+            if replaceTopMessagesRoom(with: canonical) { return }
+            pushMessages(.room(canonical))
+        case .profile:
+            if replaceTopProfileRoom(with: canonical) { return }
+            pushProfile(.room(canonical))
+        }
+    }
+
+    @discardableResult
+    private func replaceTopHomeRoom(with roomID: RoomID) -> Bool {
+        guard case .room(let current) = store.paths.home.last else { return false }
+        guard !RoomNavigationFocusStore.shared.sameRoom(current, roomID) else { return true }
+        store.paths.home[store.paths.home.count - 1] = .room(roomID)
+        return true
+    }
+
+    @discardableResult
+    private func replaceTopFeedRoom(with roomID: RoomID) -> Bool {
+        guard case .room(let current) = store.paths.feed.last else { return false }
+        guard !RoomNavigationFocusStore.shared.sameRoom(current, roomID) else { return true }
+        store.paths.feed[store.paths.feed.count - 1] = .room(roomID)
+        return true
+    }
+
+    @discardableResult
+    private func replaceTopMessagesRoom(with roomID: RoomID) -> Bool {
+        guard case .room(let current) = store.paths.messages.last else { return false }
+        guard !RoomNavigationFocusStore.shared.sameRoom(current, roomID) else { return true }
+        store.paths.messages[store.paths.messages.count - 1] = .room(roomID)
+        return true
+    }
+
+    @discardableResult
+    private func replaceTopProfileRoom(with roomID: RoomID) -> Bool {
+        guard case .room(let current) = store.paths.profile.last else { return false }
+        guard !RoomNavigationFocusStore.shared.sameRoom(current, roomID) else { return true }
+        store.paths.profile[store.paths.profile.count - 1] = .room(roomID)
+        return true
     }
 
     /// Push using an explicit tab stack (e.g. Trade Room host) without changing the selected tab.

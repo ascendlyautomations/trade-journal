@@ -647,52 +647,8 @@ struct DashboardHoldHistogramView: View {
         } else {
             ProposedWidthClamp {
             VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-                Chart(buckets) { bucket in
-                    BarMark(
-                        x: .value("Bucket", bucket.label),
-                        y: .value("Trades", bucket.count)
-                    )
-                    .foregroundStyle(colors.accent.opacity(0.85))
-                    .cornerRadius(4)
-                }
-                .chartYAxis {
-                    AxisMarks(position: .leading, values: .automatic(desiredCount: 3))
-                }
-                .chartXAxis {
-                    AxisMarks { value in
-                        AxisValueLabel {
-                            if let label = value.as(String.self) {
-                                Text(label)
-                                    .font(.system(.caption2, design: .rounded))
-                                    .foregroundStyle(colors.tertiaryText)
-                            }
-                        }
-                    }
-                }
-                .frame(height: 120)
-                .accessibilityLabel("Hold time distribution")
-
-                // One count chip per X-axis bucket — labels live on the chart only.
-                HStack(spacing: 0) {
-                    ForEach(buckets) { bucket in
-                        Button {
-                            ExperienceHaptics.play(.selection)
-                            onSelectBucket?(bucket.label)
-                        } label: {
-                            Text("\(bucket.count)")
-                                .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
-                                .foregroundStyle(colors.primaryText)
-                                .padding(.horizontal, ExperienceSpacing.xs)
-                                .padding(.vertical, 4)
-                                .background(colors.fillSecondary.opacity(0.55), in: Capsule())
-                                .contentTransition(.numericText())
-                        }
-                        .buttonStyle(.experiencePlain)
-                        .frame(maxWidth: .infinity)
-                        .disabled(bucket.count == 0 || onSelectBucket == nil)
-                        .accessibilityLabel("\(bucket.label), \(bucket.count) trades. Double tap to view.")
-                    }
-                }
+                holdColumns
+                    .accessibilityLabel("Hold time distribution")
 
                 if !averages.isEmpty {
                     HStack(spacing: 0) {
@@ -722,17 +678,21 @@ struct DashboardHoldHistogramView: View {
                         spacing: ExperienceSpacing.sm
                     ) {
                         ForEach(holdExtremes, id: \.label) { row in
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .center, spacing: 4) {
                                 Text(row.label)
                                     .experienceStyle(.caption2, color: colors.tertiaryText)
-                                Text(formatDuration(row.durationSeconds))
-                                    .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
-                                    .foregroundStyle(colors.primaryText)
-                                Text(signedMoney(row.pnl))
-                                    .font(.system(.caption2, design: .rounded).weight(.medium).monospacedDigit())
-                                    .foregroundStyle(row.pnl >= 0 ? colors.profit : colors.loss)
+                                    .multilineTextAlignment(.center)
+                                VStack(alignment: .center, spacing: 2) {
+                                    Text(formatDuration(row.durationSeconds))
+                                        .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
+                                        .foregroundStyle(colors.primaryText)
+                                    Text(signedMoney(row.pnl))
+                                        .font(.system(.caption2, design: .rounded).weight(.medium).monospacedDigit())
+                                        .foregroundStyle(row.pnl >= 0 ? colors.profit : colors.loss)
+                                }
+                                .multilineTextAlignment(.center)
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(maxWidth: .infinity, alignment: .center)
                         }
                     }
                     .padding(.top, ExperienceSpacing.xs)
@@ -740,6 +700,59 @@ struct DashboardHoldHistogramView: View {
             }
             }
         }
+    }
+
+    private var holdPlotHeight: CGFloat { 88 }
+
+    private var holdColumns: some View {
+        let peak = max(buckets.map(\.count).max() ?? 0, 1)
+        return HStack(alignment: .top, spacing: ExperienceSpacing.xxs) {
+            ForEach(buckets) { bucket in
+                VStack(spacing: 6) {
+                    ZStack(alignment: .bottom) {
+                        Color.clear
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(colors.accent.opacity(bucket.count == 0 ? 0.28 : 0.85))
+                            .frame(width: 18, height: barHeight(for: bucket.count, peak: peak))
+                    }
+                    .frame(height: holdPlotHeight)
+                    .frame(maxWidth: .infinity)
+
+                    Button {
+                        ExperienceHaptics.play(.selection)
+                        onSelectBucket?(bucket.label)
+                    } label: {
+                        Text("\(bucket.count)")
+                            .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
+                            .foregroundStyle(colors.primaryText)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, ExperienceSpacing.xs)
+                            .padding(.vertical, 4)
+                            .background(colors.fillSecondary.opacity(0.55), in: Capsule())
+                            .contentTransition(.numericText())
+                    }
+                    .buttonStyle(.experiencePlain)
+                    .frame(maxWidth: .infinity)
+                    .disabled(bucket.count == 0 || onSelectBucket == nil)
+                    .accessibilityLabel("\(bucket.label), \(bucket.count) trades. Double tap to view.")
+
+                    Text(bucket.label)
+                        .font(.system(.caption2, design: .rounded))
+                        .foregroundStyle(colors.tertiaryText)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .frame(maxWidth: .infinity)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func barHeight(for count: Int, peak: Int) -> CGFloat {
+        guard count > 0 else { return 2 }
+        return max(8, holdPlotHeight * CGFloat(count) / CGFloat(peak))
     }
 
     private func formatDuration(_ seconds: Double) -> String {

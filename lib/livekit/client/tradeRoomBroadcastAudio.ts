@@ -6,20 +6,52 @@ import {
   type RemoteTrack,
   type RemoteTrackPublication,
 } from "livekit-client"
+import {
+  BROADCAST_MEDIA_ATTR,
+  BROADCAST_REMOTE_AUDIO_ROOT_ID,
+} from "../mobileWebLivePolicy.ts"
+import {
+  broadcastElementListen,
+  clampBroadcastListenVolume,
+  replaceAttachedAudioSlot,
+} from "../broadcastListenState.ts"
 
-const ROOT_ID = "tradetraxs-broadcast-remote-audio"
+const ROOT_ID = BROADCAST_REMOTE_AUDIO_ROOT_ID
 const attachedBySid = new Map<string, HTMLAudioElement>()
 let streamListenMuted = false
+let streamListenVolume = 1
+
+function applyListenState(el: HTMLAudioElement): void {
+  const next = broadcastElementListen({
+    muted: streamListenMuted,
+    volume: streamListenVolume,
+  })
+  el.volume = next.volume
+  el.muted = next.muted
+}
+
+function applyListenStateAll(): void {
+  for (const el of attachedBySid.values()) {
+    applyListenState(el)
+  }
+}
 
 export function setBroadcastStreamListenMuted(muted: boolean): void {
   streamListenMuted = muted
-  for (const el of attachedBySid.values()) {
-    el.muted = muted
-  }
+  applyListenStateAll()
 }
 
 export function getBroadcastStreamListenMuted(): boolean {
   return streamListenMuted
+}
+
+export function setBroadcastStreamListenVolume(volume: number): void {
+  streamListenVolume = clampBroadcastListenVolume(volume)
+  applyListenStateAll()
+}
+
+export function getBroadcastStreamListenVolume(): number {
+  return streamListenVolume
 }
 
 function audioRoot(): HTMLElement | null {
@@ -30,6 +62,7 @@ function audioRoot(): HTMLElement | null {
     el.id = ROOT_ID
     el.hidden = true
     el.setAttribute("aria-hidden", "true")
+    el.setAttribute(BROADCAST_MEDIA_ATTR, "true")
     document.body.appendChild(el)
   }
   return el
@@ -42,10 +75,26 @@ function attachRemoteAudio(track: RemoteTrack): void {
   if (!root) return
   const el = track.attach() as HTMLAudioElement
   el.autoplay = true
-  el.muted = streamListenMuted
-  attachedBySid.set(sid, el)
+  applyListenState(el)
+  replaceAttachedAudioSlot(attachedBySid, sid, el, (previous) => {
+    try {
+      track.detach(previous)
+    } catch {
+      /* stale element */
+    }
+    previous.remove()
+  })
   root.appendChild(el)
   void el.play().catch(() => {})
+}
+
+/** Replay already-attached program audio without changing mute or volume. */
+export function replayBroadcastRemoteAudio(): void {
+  for (const el of attachedBySid.values()) {
+    applyListenState(el)
+    if (streamListenMuted) continue
+    void el.play().catch(() => {})
+  }
 }
 
 function detachRemoteAudio(track: RemoteTrack): void {
@@ -60,10 +109,15 @@ function detachRemoteAudio(track: RemoteTrack): void {
   }
 }
 
-export function cleanupBroadcastRemoteAudio(): void {
+export function cleanupBroadcastRemoteAudio(options?: {
+  preserveListenMute?: boolean
+}): void {
   attachedBySid.clear()
   document.getElementById(ROOT_ID)?.replaceChildren()
-  streamListenMuted = false
+  if (!options?.preserveListenMute) {
+    streamListenMuted = false
+    streamListenVolume = 1
+  }
 }
 
 export type BroadcastRemoteAudioContext = {
@@ -72,7 +126,7 @@ export type BroadcastRemoteAudioContext = {
   primaryMediaPublisherIdentity?: string | null
 }
 
-function shouldAttachRemoteBroadcastAudio(
+export function shouldAttachRemoteBroadcastAudio(
   ctx: BroadcastRemoteAudioContext,
   participant: RemoteParticipant,
   pub: RemoteTrackPublication
@@ -89,6 +143,15 @@ function shouldAttachRemoteBroadcastAudio(
 
   if (pub.source === Track.Source.Microphone) {
     // Browser host mic, or OBS host moderation mic, or invited / open-voice speakers.
+    return true
+  }
+
+  // Tab / display audio is a separate track from the microphone. Only the host's copy.
+  if (
+    pub.source === Track.Source.ScreenShareAudio &&
+    hostId !== "" &&
+    participant.identity === hostId
+  ) {
     return true
   }
 
@@ -136,6 +199,6 @@ export function registerBroadcastRemoteAudioHandlers(
   return () => {
     room.off(RoomEvent.TrackSubscribed, onSubscribed)
     room.off(RoomEvent.TrackUnsubscribed, onUnsubscribed)
-    cleanupBroadcastRemoteAudio()
+    cleanupBroadcastRemoteAudio({ preserveListenMute: true })
   }
 }

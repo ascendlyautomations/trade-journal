@@ -27,11 +27,13 @@ final class ContextualTourCoordinator {
     private(set) var navigationRequest: ContextualTourSurface?
     /// Shown after Exit. Nil while the walkthrough is running.
     private(set) var exitNotice: String?
+    private(set) var shouldOpenTradingRulesAfterCompletion = false
 
     private var userID: String?
     private var createdAt: Date?
     private var gates = ContextualTourGates()
     private var analyticsReady = false
+    private var feedChromeReady = false
     private var replayArmed = false
     /// Stops an exhausted pass from immediately re-arming until the user leaves Dashboard.
     private var suppressedUntilGatesDrop = false
@@ -75,7 +77,12 @@ final class ContextualTourCoordinator {
     }
 
     var isFinalStep: Bool {
-        currentStep?.role == .finish
+        switch currentStep?.role {
+        case .finish, .tradingRulesPrompt:
+            return true
+        default:
+            return false
+        }
     }
 
     /// Full explanation card — hidden during cross-surface transitions and section prompts.
@@ -95,13 +102,19 @@ final class ContextualTourCoordinator {
         switch step.role {
         case .spotlight, .narration:
             return step.target
-        case .sectionContinue, .finish:
+        case .sectionContinue, .finish, .tradingRulesPrompt:
             return nil
         }
     }
 
     var visibleStepIndex: Int {
         phase == .presenting ? stepIndex : displayedStepIndex
+    }
+
+    /// Feed filters step — keep the horizontal filter strip visible and sized intrinsically for measurement.
+    var pinsFeedFilterBar: Bool {
+        guard phase == .measuring || phase == .presenting else { return false }
+        return currentStep?.target == .feedContentFilters
     }
 
     /// Geometry stays dormant unless this target is the step being measured or shown.
@@ -116,6 +129,12 @@ final class ContextualTourCoordinator {
         reevaluate()
     }
 
+    func setFeedChromeReady(_ ready: Bool) {
+        guard feedChromeReady != ready else { return }
+        feedChromeReady = ready
+        reevaluate()
+    }
+
     func syncShell(userID: String?, createdAt: Date?, gates: ContextualTourGates) {
         if userID != self.userID {
             clearMemory()
@@ -124,6 +143,18 @@ final class ContextualTourCoordinator {
         self.createdAt = createdAt
         self.gates = gates
         reevaluate()
+    }
+
+    /// Walkthrough state for the analytics-preferences invitation.
+    func analyticsPreferenceTourGate() -> (eligible: Bool, settled: Bool, blocking: Bool) {
+        let eligible = ContextualTourEligibility.isAccountEligible(createdAt: createdAt, cutoff: cutoff)
+        let settled: Bool
+        if let userID {
+            settled = progress.dismissedVersion(for: definition.id, userID: userID) >= definition.version
+        } else {
+            settled = false
+        }
+        return (eligible, settled, phase != .idle)
     }
 
     /// In-memory replay. Does not lower or rewrite a stored dismissed version.
@@ -160,6 +191,18 @@ final class ContextualTourCoordinator {
         }
     }
 
+    /// Ends the tour and optionally opens Trading Rules after the overlay dismisses.
+    func completeTour(configureTradingRules: Bool) {
+        shouldOpenTradingRulesAfterCompletion = configureTradingRules
+        acknowledge()
+    }
+
+    func consumeOpenTradingRulesAfterCompletion() -> Bool {
+        let open = shouldOpenTradingRulesAfterCompletion
+        shouldOpenTradingRulesAfterCompletion = false
+        return open
+    }
+
     #if DEBUG
     /// Clears this user's stored dismissal and arms the tour again on the next eligible Dashboard.
     func resetStoredTourForDebug() {
@@ -180,7 +223,9 @@ final class ContextualTourCoordinator {
         createdAt = nil
         gates = ContextualTourGates()
         analyticsReady = false
+        feedChromeReady = false
         exitNotice = nil
+        shouldOpenTradingRulesAfterCompletion = false
     }
 
     func noteMeasuredFrame(
@@ -213,6 +258,19 @@ final class ContextualTourCoordinator {
         }
 
         guard let frame, ContextualTourGeometry.isUsable(frame) else {
+            return
+        }
+
+        if spotlightTarget == .feedContentFilters,
+           ContextualTourGeometry.isMeasurableTarget(frame, in: viewport),
+           FeedFilterBarTourLayoutGate.mayMeasure
+        {
+#if DEBUG
+            ContextualTourDebug.log(
+                "feedFilters measure viewport=\(viewport) frame=\(frame) retained=\(spotlightFrame)"
+            )
+#endif
+            presentResolvedStep(frame: frame)
             return
         }
 
@@ -365,7 +423,7 @@ final class ContextualTourCoordinator {
         case .dashboard:
             return gates.homeRootActive && analyticsReady
         case .feed:
-            return gates.feedRootActive
+            return gates.feedRootActive && feedChromeReady
         case .profile:
             return gates.profileRootActive
         case .settings:
@@ -411,6 +469,11 @@ final class ContextualTourCoordinator {
         scrollIssuedForStep = nil
         scrollTarget = nil
         resolveStartedAt = Date()
+        if step.target == .feedContentFilters {
+            FeedFilterBarTourLayoutGate.resetForTourStep()
+        } else {
+            FeedFilterBarTourLayoutGate.clear()
+        }
         navigationRequest = isSurfaceReady(step) ? nil : step.surface
         if step.role != .spotlight {
             presentResolvedStep(frame: .zero)

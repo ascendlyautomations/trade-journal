@@ -6,10 +6,14 @@ struct TradeRoomsHomeView: View {
     private let data: DataEnvironment?
     private let imagePipeline: any ImagePipeline
     private let armPresentCreateOnAppear: Bool
+    private let navigationHost: TradeRoomNavigationHost
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.tabIsActive) private var tabIsActive
+    @Bindable private var favoritesStore = TradeRoomFavoritesStore.shared
+    @Bindable private var membershipStore = TradeRoomMembershipStore.shared
+    @Bindable private var inboxStore = MessagesInboxStore.shared
 
     init(
         data: DataEnvironment,
@@ -18,6 +22,7 @@ struct TradeRoomsHomeView: View {
         presentCreateOnAppear: Bool = false
     ) {
         self.armPresentCreateOnAppear = presentCreateOnAppear
+        self.navigationHost = navigationHost
         _viewModel = State(
             initialValue: TradeRoomsHomeScreenStore.viewModel(host: navigationHost) {
                 TradeRoomsHomeViewModel(
@@ -44,6 +49,7 @@ struct TradeRoomsHomeView: View {
         self.data = nil
         self.imagePipeline = imagePipeline
         self.armPresentCreateOnAppear = false
+        self.navigationHost = .messages
     }
 
     var body: some View {
@@ -81,6 +87,7 @@ struct TradeRoomsHomeView: View {
         .experienceNavigationTitle("Trade Rooms")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                let _ = inboxStore.rooms
                 headerOwnershipAction
             }
         }
@@ -99,6 +106,9 @@ struct TradeRoomsHomeView: View {
             ActiveScreenBootstrapPriorityGate.tradeRooms.setScreenActive(true)
             viewModel.setHostingTabActive(tabIsActive)
             viewModel.noteViewAppeared()
+            if let scope = TradeRoomsHomeScreenStore.consumePendingDiscoveryScope(for: navigationHost) {
+                viewModel.selectDiscoveryScope(TradeRoomDiscoveryScope.normalizedHomeScope(scope))
+            }
             if armPresentCreateOnAppear || TradeRoomCreationIntent.shared.consumePresentCreate() {
                 viewModel.armPresentCreateOnAppear()
             }
@@ -126,6 +136,12 @@ struct TradeRoomsHomeView: View {
         .onReceive(NotificationCenter.default.publisher(for: .tradeRoomMetadataDidChange)) { notification in
             guard let room = notification.tradeRoomMetadataPayload else { return }
             viewModel.applyRoomMetadata(room)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .tradeRoomFavoriteDidChange)) { _ in
+            viewModel.syncFavoritePresentation()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .tradeRoomMembershipDidChange)) { _ in
+            viewModel.syncMembershipPresentationFromStore()
         }
         .confirmationDialog(
             "Leave this Trade Room?",
@@ -178,9 +194,15 @@ struct TradeRoomsHomeView: View {
                 .accessibilityIdentifier("tradeRooms.yourRoom")
             } else {
                 Button(action: { viewModel.presentCreateRoom() }) {
-                    Label("Create Trade Room", systemImage: "plus")
-                        .font(.subheadline.weight(.semibold))
+                    Image(systemName: "plus")
+                        .font(.body.weight(.semibold))
+                        .frame(
+                            width: ExperienceAccessibility.minTouchTarget,
+                            height: ExperienceAccessibility.minTouchTarget
+                        )
+                        .contentShape(Rectangle())
                 }
+                .accessibilityLabel("Create Trade Room")
                 .accessibilityIdentifier("tradeRooms.create")
             }
         }
@@ -191,82 +213,100 @@ struct TradeRoomsHomeView: View {
         MessagesInboxStore.shared.roomUnread
     }
 
+    @ViewBuilder
     private var roomList: some View {
         let _ = roomUnreadObservation
-        return ScrollView {
+        let _ = favoritesStore.revision
+        if viewModel.showsDiscoverySection {
+            discoveryRoomScrollList
+        } else {
+            tradeRoomsSearchResultsContent
+        }
+    }
+
+    private var discoveryRoomScrollList: some View {
+        ScrollView {
             LazyVStack(spacing: ExperienceSpacing.sm) {
-                if viewModel.showsDiscoverySection {
-                    discoverySection
-                }
-
-                if viewModel.showsFilteredEmpty {
-                    ExperienceEmptyState(
-                        icon: .search,
-                        title: "No matches",
-                        message: "Try a different room name or keyword."
-                    )
-                    .padding(.top, ExperienceSpacing.xl)
-                }
-
-                if !viewModel.showsDiscoverySection {
-                    if viewModel.searchDiscoveryPhase == .loading,
-                       viewModel.searchDiscoveryDisplayRooms.isEmpty
-                    {
-                        discoverySkeleton
-                    }
-                    ForEach(viewModel.searchDiscoveryDisplayRooms) { room in
-                        discoveryRow(for: room, isYourRoomsContext: false)
-                    }
-                }
-
-                if !viewModel.filteredItems.isEmpty, !viewModel.showsDiscoverySection {
-                    ForEach(viewModel.filteredItems) { item in
-                    Button {
-                        viewModel.openRoom(item)
-                    } label: {
-                        TradeRoomCardView(item: item, imagePipeline: imagePipeline)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.experiencePlain)
-                    .contextMenu {
-                        Button {
-                            viewModel.openRoom(item)
-                        } label: {
-                            Label("Open", systemImage: "person.3")
-                        }
-                        Button {
-                            viewModel.toggleMute(roomID: item.id)
-                        } label: {
-                            Label(
-                                item.isMuted ? "Unmute" : "Mute",
-                                systemImage: item.isMuted ? "bell.fill" : "bell.slash.fill"
-                            )
-                        }
-                        Divider()
-                        Button(role: .destructive) {
-                            viewModel.requestLeaveRoom(id: item.id)
-                        } label: {
-                            Label("Leave Room", systemImage: "rectangle.portrait.and.arrow.right")
-                        }
-                    } preview: {
-                        TradeRoomCardView(item: item, imagePipeline: imagePipeline)
-                            .frame(width: 320)
-                            .padding()
-                    }
-                    }
-                }
+                discoverySection
             }
             .padding(.horizontal, ExperienceSpacing.md)
             .padding(.bottom, ExperienceSpacing.sm)
-            .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: viewModel.searchText)
         }
         .scrollContentBackground(.hidden)
         .accessibilityIdentifier("tradeRooms.list")
     }
 
     @ViewBuilder
+    private var tradeRoomsSearchResultsContent: some View {
+        if viewModel.searchDiscoveryPhase == .loading,
+           viewModel.searchDiscoveryDisplayRooms.isEmpty,
+           viewModel.filteredItems.isEmpty
+        {
+            ProgressView("Searching…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityIdentifier("tradeRooms.search.loading")
+        } else if viewModel.showsFilteredEmpty {
+            ExperienceEmptyState(
+                icon: .search,
+                title: "No matches",
+                message: "Try a different room name or keyword."
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityIdentifier("tradeRooms.search.empty")
+        } else {
+            tradeRoomsSearchResultsList
+        }
+    }
+
+    private var tradeRoomsSearchResultsList: some View {
+        List {
+            ForEach(viewModel.searchDiscoveryDisplayRooms) { room in
+                discoveryRow(for: room, isYourRoomsContext: false, presentation: .plainList)
+                    .listRowBackground(colors.backgroundPrimary)
+                    .accessibilityIdentifier("tradeRooms.search.discovery.\(room.id.rawValue)")
+            }
+
+            ForEach(viewModel.filteredItems) { item in
+                TradeRoomInboxSearchListRow(
+                    item: item,
+                    imagePipeline: imagePipeline,
+                    onOpen: { viewModel.openRoom(item) }
+                )
+                .listRowBackground(colors.backgroundPrimary)
+                .contextMenu {
+                    Button {
+                        Task { await viewModel.toggleFavorite(roomID: item.id) }
+                    } label: {
+                        Label(
+                            viewModel.isRoomFavorited(item.id) ? "Unfavorite Room" : "Favorite Room",
+                            systemImage: viewModel.isRoomFavorited(item.id) ? "star.fill" : "star"
+                        )
+                    }
+                }
+            }
+
+            if viewModel.searchDiscoveryPhase == .loading,
+               viewModel.searchDiscoveryDisplayRooms.isEmpty,
+               !viewModel.filteredItems.isEmpty
+            {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                    Spacer()
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .accessibilityIdentifier("tradeRooms.search.loadingMore")
+            }
+        }
+        .experiencePlainListStyle()
+        .accessibilityIdentifier("tradeRooms.search.results")
+    }
+
+    @ViewBuilder
     private var discoverySection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            let _ = membershipStore.revision
             TradeRoomDiscoveryScopeToggle(
                 scope: viewModel.activeDiscoveryScope,
                 onSelect: { viewModel.selectDiscoveryScope($0) }
@@ -276,8 +316,7 @@ struct TradeRoomsHomeView: View {
 
             if viewModel.discoveryPhase == .loading,
                viewModel.activeDiscoveryScope.showsDiscoverableLists,
-               viewModel.suggestedDiscoverableRooms.isEmpty,
-               viewModel.popularDiscoverableRooms.isEmpty
+               discoveryListsAreEmpty
             {
                 discoverySkeleton
             } else if viewModel.discoveryPhase == .loading,
@@ -287,8 +326,7 @@ struct TradeRoomsHomeView: View {
                 discoverySkeleton
             } else if let message = viewModel.discoveryErrorMessage,
                       viewModel.activeDiscoveryScope.showsDiscoverableLists,
-                      viewModel.suggestedDiscoverableRooms.isEmpty,
-                      viewModel.popularDiscoverableRooms.isEmpty
+                      discoveryListsAreEmpty
             {
                 VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
                     Text(message)
@@ -300,20 +338,16 @@ struct TradeRoomsHomeView: View {
                 }
                 .padding(.vertical, ExperienceSpacing.xs)
             } else {
-                if viewModel.activeDiscoveryScope.showsSuggestedDiscovery {
-                    discoveryRoomSection(
-                        title: TradeRoomDiscoveryMode.suggested.title,
-                        rooms: viewModel.suggestedDiscoverableRooms,
-                        emptyMessage: TradeRoomDiscoveryMode.suggested.emptyMessage
-                    )
+                if viewModel.activeDiscoveryScope.showsAllScopeUnifiedDiscoveryList {
+                    allScopeDiscoverySection
                 }
 
-                if viewModel.activeDiscoveryScope.showsPopularDiscovery {
-                    discoveryRoomSection(
-                        title: TradeRoomDiscoveryMode.popular.title,
-                        rooms: viewModel.popularDiscoverableRooms,
-                        emptyMessage: TradeRoomDiscoveryMode.popular.emptyMessage
-                    )
+                if viewModel.activeDiscoveryScope.showsUnifiedDiscoveryList {
+                    unifiedDiscoverySection
+                }
+
+                if viewModel.activeDiscoveryScope.showsFavoritesDiscovery {
+                    favoritesDiscoverySection
                 }
 
                 if viewModel.activeDiscoveryScope.showsYourRoomsDiscovery {
@@ -323,6 +357,89 @@ struct TradeRoomsHomeView: View {
         }
         .padding(.bottom, ExperienceSpacing.sm)
         .accessibilityIdentifier("tradeRooms.discovery.section")
+    }
+
+    private var discoveryListsAreEmpty: Bool {
+        if viewModel.activeDiscoveryScope.showsAllScopeUnifiedDiscoveryList {
+            return viewModel.allScopeDiscoverableRooms.isEmpty
+        }
+        if viewModel.activeDiscoveryScope.showsUnifiedDiscoveryList {
+            return viewModel.unifiedDiscoverableRooms.isEmpty
+        }
+        return viewModel.suggestedDiscoverableRooms.isEmpty
+            && viewModel.popularDiscoverableRooms.isEmpty
+    }
+
+    private var allScopeDiscoverySection: some View {
+        let rooms = viewModel.allScopeDisplayedDiscoverableRooms
+        let emptyMessage = viewModel.activeDiscoveryScope.allScopeDiscoveryEmptyMessage
+        return VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            if rooms.isEmpty, viewModel.discoveryPhase == .loaded {
+                Text(emptyMessage)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+            } else {
+                ForEach(rooms) { room in
+                    discoveryRow(for: room, isYourRoomsContext: false)
+                }
+
+                if viewModel.showsAllScopeShowMore {
+                    Button {
+                        viewModel.showMoreAllScopeDiscovery()
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if viewModel.isLoadingMoreDiscovery {
+                                ProgressView()
+                            } else {
+                                Text("Show More")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.experiencePlain)
+                    .disabled(viewModel.isLoadingMoreDiscovery)
+                    .accessibilityIdentifier("tradeRooms.all.showMore")
+                }
+            }
+        }
+    }
+
+    private var unifiedDiscoverySection: some View {
+        let rooms = viewModel.unifiedDiscoverableRooms
+        let emptyMessage = viewModel.activeDiscoveryScope.unifiedDiscoveryEmptyMessage
+        return VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            if rooms.isEmpty, viewModel.discoveryPhase == .loaded {
+                Text(emptyMessage)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+            } else {
+                ForEach(rooms) { room in
+                    discoveryRow(for: room, isYourRoomsContext: false)
+                        .onAppear {
+                            Task {
+                                await viewModel.loadMoreDiscoveryIfNeeded(currentRoomID: room.id)
+                            }
+                        }
+                }
+            }
+        }
+    }
+
+    private var favoritesDiscoverySection: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            if viewModel.favoriteRooms.isEmpty, viewModel.discoveryPhase == .loaded {
+                ExperienceEmptyState(
+                    icon: .rooms,
+                    title: "No favorites yet",
+                    message: "Press and hold a joined room to favorite it and pin it here."
+                )
+                .padding(.vertical, ExperienceSpacing.xs)
+            } else {
+                ForEach(viewModel.favoriteRooms) { room in
+                    discoveryRow(for: room, isYourRoomsContext: true)
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -376,9 +493,8 @@ struct TradeRoomsHomeView: View {
                 ForEach(rooms) { room in
                     discoveryRow(for: room, isYourRoomsContext: false)
                         .onAppear {
-                            guard viewModel.activeDiscoveryScope == .all else { return }
                             Task {
-                                await viewModel.loadMoreAllScopeDiscoveryIfNeeded(currentRoomID: room.id)
+                                await viewModel.loadMoreDiscoveryIfNeeded(currentRoomID: room.id)
                             }
                         }
                 }
@@ -386,24 +502,25 @@ struct TradeRoomsHomeView: View {
         }
     }
 
-    private func discoveryRow(for room: ExploreRoomSuggestion, isYourRoomsContext: Bool) -> some View {
+    private func discoveryRow(
+        for room: ExploreRoomSuggestion,
+        isYourRoomsContext: Bool,
+        presentation: TradeRoomDiscoveryRow.Presentation = .elevatedCard
+    ) -> some View {
         let showsMembershipActions = isYourRoomsContext
-            && room.viewerIsMember
-            && !room.viewerIsOwner
+            && (room.viewerIsMember || room.viewerIsOwner)
         return TradeRoomDiscoveryRow(
             room: room,
             joinState: viewModel.joinState(for: room.id),
             isYourRoomsContext: isYourRoomsContext,
             isOwner: viewModel.isViewerOwner(of: room),
+            presentation: presentation,
             imagePipeline: imagePipeline,
             onOpen: { viewModel.openDiscoveryRoom(room) },
             onJoin: { Task { await viewModel.joinDiscoveryRoom(room) } },
-            isMuted: viewModel.isRoomMuted(room.id),
-            onToggleMute: showsMembershipActions
-                ? { viewModel.toggleMute(roomID: room.id) }
-                : nil,
-            onLeave: showsMembershipActions
-                ? { viewModel.requestLeaveRoom(id: room.id) }
+            isFavorited: viewModel.isRoomFavorited(room.id),
+            onToggleFavorite: showsMembershipActions
+                ? { Task { await viewModel.toggleFavorite(roomID: room.id) } }
                 : nil
         )
     }

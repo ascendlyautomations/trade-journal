@@ -8,10 +8,15 @@ import Observation
 ///
 /// Bootstrap is progressive:
 /// 1. Trades + accounts (blocking for first useful render)
-/// 2. Achievements / payouts (deferred — updates Payouts chip when ready)
+/// 2. Withdrawal ledger / prop cycles (deferred — updates Payouts chip when ready)
 ///
 /// `home.dashboard` is intentionally not called — it duplicated a 500-trade fetch
 /// and never drove UI math.
+@MainActor
+private final class TradingRulesHydrationTicket {
+    var task: Task<Void, Never>?
+}
+
 @Observable
 @MainActor
 final class DashboardViewModel {
@@ -21,6 +26,8 @@ final class DashboardViewModel {
     private(set) var psychologyInsightsUnlockProgress: PsychologyInsightsUnlockProgress = .zero
     /// False until daily check-ins for psychology have been loaded (avoids 0/5 · 0/5 flash).
     private(set) var psychologyUnlockMetricsReady = false
+    /// True after the first trade-based psychology report pass (does not wait on check-in hydrate).
+    private(set) var psychologyInsightsReady = false
     private(set) var psychologyGuardrailNotices: [PsychologyGuardrailNotice] = []
     private(set) var accounts: [TradingAccount] = []
     private(set) var accountNames: [TradingAccountID: String] = [:]
@@ -49,13 +56,23 @@ final class DashboardViewModel {
     private let navigationCoordinator: NavigationCoordinator
     private let realtimeHub: RealtimeHub?
     private let rpc: (any RPCClient)?
+    private let tradingPreferences: (any TradingPreferencesRepository)?
+    private var preferenceContext: PreferenceRuleContext?
+    private var preferenceLoadGeneration: UInt64 = 0
+    private var tradingRulesHydrationTask: Task<Void, Never>?
 
     private var profileID: ProfileID?
     private var tradeInputs: [DashboardChartMetrics.Input] = []
     private var payoutTotal: Decimal?
     private var loadTask: Task<Void, Never>?
     private var secondaryTask: Task<Void, Never>?
-    private var hasLoaded = false
+    private(set) var hasLoaded = false
+    /// Vertical offset saved when leaving the dashboard. Restored once when the Home tab view is created again.
+    private(set) var retainedScrollOffset: CGFloat?
+    /// Incremented when the Home tab is reselected at root — resets scroll without system scroll-to-top.
+    private(set) var listScrollPresentationEpoch: UInt64 = 0
+    /// Deferred bell / getting-started / check-in bootstrap. Lives on the model so a recreated Home tab does not start it again.
+    private var didStartDeferredDashboardBootstrap = false
     private var coldLoadFinished = false
     private(set) var coldLoadAttemptCount = 0
     private static let maxColdLoadAttempts = 3
@@ -63,6 +80,8 @@ final class DashboardViewModel {
     private var contractDecodeFailed = false
     private var loadGeneration: UInt64 = 0
     private var pendingHistoryBackfill = false
+    /// Prevents overlapping dashboard psychology check-in hydrates (launch + secondary).
+    private var psychologyCheckInsHydrationInFlight = false
     /// Manual date-range override (persists across account switches).
     private var hasUserSelectedDateRangeForCurrentFilter = false
     /// When true, pick the best preset for ``accountFilter`` once trade history is authoritative.
@@ -73,6 +92,9 @@ final class DashboardViewModel {
     private var authoritativeTotalTradeCount: Int?
     /// Funded prop-firm payout cycles keyed by account — drives Prop Firm Status card boundaries.
     private var payoutCyclesByAccount: [TradingAccountID: [AccountPayoutCycle]] = [:]
+    /// False until ledger (+ prop cycles when applicable) are loaded or session cache is authoritative.
+    private var withdrawalRecordsHydrationComplete = false
+    private var withdrawalRecordsHydrationInFlight = false
     /// Dashboard V3 authoritative analytical payload (no fat trade window).
     private var analyticsV3Bootstrap: AnalyticsDashboardBootstrapV3?
     private var equityChartSummary: DashboardChartMetrics.Summary?
@@ -99,6 +121,10 @@ final class DashboardViewModel {
     private var pendingChartOverlayRefreshAfterInactive = false
     /// One remote hydrate attempt per revision + account scope; prevents drop/refetch loops.
     private var chartOverlayFetchSettledSelectionKey: String?
+    private var tradingRulesRecomputeTask: Task<Void, Never>?
+    private var tradingRulesRecomputeSequence: UInt64 = 0
+    private var tradingRulesColdPresentationBootstrapped = false
+    private var prioritizedOwnerTradesForRulesTask: Task<Void, Never>?
 
     private final class LiveBox {
         weak var model: DashboardViewModel?
@@ -125,7 +151,8 @@ final class DashboardViewModel {
         detailCache: DetailPresentationCache,
         navigationCoordinator: NavigationCoordinator,
         realtimeHub: RealtimeHub? = nil,
-        rpc: (any RPCClient)? = nil
+        rpc: (any RPCClient)? = nil,
+        tradingPreferences: (any TradingPreferencesRepository)? = nil
     ) {
         _ = home
         self.trades = trades
@@ -136,6 +163,7 @@ final class DashboardViewModel {
         self.navigationCoordinator = navigationCoordinator
         self.realtimeHub = realtimeHub
         self.rpc = rpc
+        self.tradingPreferences = tradingPreferences
         Self.register(self)
     }
 
@@ -159,11 +187,17 @@ final class DashboardViewModel {
         accountChartHydrateTask?.cancel()
         aggregateChartHydrateTask?.cancel()
         scopeFilterTradesHydrateTask?.cancel()
+        tradingRulesHydrationTask?.cancel()
         loadTask = nil
         secondaryTask = nil
         accountChartHydrateTask = nil
         aggregateChartHydrateTask = nil
         scopeFilterTradesHydrateTask = nil
+        tradingRulesHydrationTask = nil
+        tradingRulesColdPresentationBootstrapped = false
+        prioritizedOwnerTradesForRulesTask?.cancel()
+        prioritizedOwnerTradesForRulesTask = nil
+        TradingRulesComplianceRecomputeCoordinator.resetForSessionBoundary()
         loadGeneration &+= 1
         hasLoaded = false
         coldLoadFinished = false
@@ -175,11 +209,15 @@ final class DashboardViewModel {
         psychologyReport = nil
         psychologyInsightsUnlockProgress = .zero
         psychologyUnlockMetricsReady = false
+        psychologyInsightsReady = false
         psychologyGuardrailNotices = []
+        preferenceContext = nil
         accounts = []
         accountNames = [:]
         tradeInputs = []
         payoutTotal = nil
+        withdrawalRecordsHydrationComplete = false
+        withdrawalRecordsHydrationInFlight = false
         analyticsV3Bootstrap = nil
         analyticsV3Revision = 0
         equityChartSummary = nil
@@ -198,7 +236,29 @@ final class DashboardViewModel {
         scopeMetricsSelectionToken = 0
         isScopeFilteredMetricsLoading = false
         ownerTradesWireNetworkRefreshAttempted = false
+        retainedScrollOffset = nil
+        didStartDeferredDashboardBootstrap = false
         phase = .idle
+    }
+
+    var hasInFlightLoad: Bool { loadTask != nil }
+
+    /// Records the scroll offset when the dashboard leaves the screen. Not called while the user is scrolling.
+    func rememberScrollOffset(_ y: CGFloat) {
+        guard retainedScrollOffset != y else { return }
+        retainedScrollOffset = y
+    }
+
+    func scrollToTopForTabReselect() {
+        retainedScrollOffset = nil
+        listScrollPresentationEpoch &+= 1
+    }
+
+    /// Returns false when this presentation already started the post-paint bootstrap.
+    func beginDeferredDashboardBootstrapIfNeeded() -> Bool {
+        if didStartDeferredDashboardBootstrap { return false }
+        didStartDeferredDashboardBootstrap = true
+        return true
     }
 
     /// Bound from ``DashboardHomeView`` via ``Environment/tabIsActive`` — gates chart overlay RPC work.
@@ -216,6 +276,7 @@ final class DashboardViewModel {
         if pendingChartOverlayRefreshAfterInactive {
             pendingChartOverlayRefreshAfterInactive = false
         }
+        restoreTradingRulesPresentationIfNeeded()
         ensureEquityChartOverlayIfNeeded()
     }
 
@@ -224,10 +285,89 @@ final class DashboardViewModel {
         navigationCoordinator.pushHome(.psychologyAnalytics)
     }
 
+    func openTradingRulesAnalytics() {
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator.pushTradingRulesAnalytics()
+    }
+
+    func openTradingRulesSettings() {
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator.pushHome(.settings(.tradingAnalytics))
+    }
+
+    func isTradingRulesComplianceDashboardSource(profileID: ProfileID) -> Bool {
+        self.profileID == profileID
+    }
+
+    var profileIDForTradingRulesCache: ProfileID? {
+        profileID
+    }
+
+    func ensureTradingRulesComplianceForPresentation(
+        dependencies: TradingRulesComplianceLoadDependencies? = nil,
+        discardIfOlderThan baseline: UInt64? = nil
+    ) async {
+        guard let profileID else { return }
+        let publishBaseline = baseline ?? TradingRulesComplianceRecomputeCoordinator.currentGeneration
+        let deps = dependencies ?? TradingRulesComplianceLoadDependencies(
+            detailCache: detailCache,
+            tradesRepository: trades,
+            tradingPreferences: tradingPreferences
+        )
+        let accountList: [TradingAccount]
+        if !accounts.isEmpty {
+            accountList = accounts
+        } else if let cached = SessionAccountsStore.shared.cached(for: profileID) {
+            accountList = cached
+        } else if let seeded = detailCache.accounts(for: profileID) {
+            accountList = seeded
+        } else {
+            accountList = []
+        }
+        let scope = PsychologyAnalyticsScopeResolver.resolve(
+            filter: clientScopeFilter(),
+            profileID: profileID,
+            accounts: accountList
+        )
+        adoptCachedTradingRulesPreferencesIfNeeded()
+        let output = await TradingRulesComplianceSnapshotBuilder.build(
+            profileID: profileID,
+            scope: scope,
+            accounts: accountList,
+            dependencies: deps,
+            injectedPreferences: preferenceContext,
+            dashboardInsights: insightsPresentation
+        )
+        guard !Task.isCancelled else { return }
+        guard TradingRulesComplianceRecomputeCoordinator.isCurrent(publishBaseline) else { return }
+        let preferencesUnavailable = output.preferencesContext == nil || output.preferencesError != nil
+        if preferencesUnavailable,
+           !output.hasConfiguredRules,
+           TradingRulesComplianceSessionStore.shared.retainsConfiguredRules(for: profileID)
+        {
+            return
+        }
+        let token = TradingRulesComplianceRecomputeCoordinator.beginPublish()
+        TradingRulesComplianceSessionStore.shared.commit(
+            output: output,
+            profileID: profileID,
+            scope: scope,
+            ready: true,
+            inputFingerprint: nil,
+            generation: token,
+            preferencesUnavailable: preferencesUnavailable
+        )
+        if preferenceContext == nil, let context = output.preferencesContext {
+            preferenceContext = context
+            TradingRulesCompliancePreferencesCache.store(context, for: profileID)
+        }
+    }
+
     func ensurePsychologyAnalyticsReportForPresentation() async {
         guard let profileID else { return }
         await primePsychologyCheckInsForDashboard(profileID: profileID, forceNetwork: false)
         recomputePsychology()
+        scheduleTradingRulesComplianceRecompute()
     }
 
     func isPsychologyAnalyticsDashboardSource(profileID: ProfileID) -> Bool {
@@ -484,11 +624,14 @@ final class DashboardViewModel {
 
     /// Keeps prop balance/summary aligned after local withdrawal store mutations.
     func syncAfterWithdrawalStoreMutation() {
-        guard case .account(let accountID) = accountFilter else { return }
-        if let cycles = WithdrawalsHistoryStore.shared.cyclesByAccount[accountID] {
+        for (accountID, cycles) in WithdrawalsHistoryStore.shared.cyclesByAccount {
             payoutCyclesByAccount[accountID] = cycles
         }
         lastDisplayedEquityHeroChartPoints = []
+        withdrawalRecordsHydrationComplete = true
+        refreshAuthoritativePayoutTotal()
+        attachAccountLevelPayoutsToSummary()
+        recompute()
     }
 
     func openEquityDrawdownSettings() {
@@ -727,13 +870,130 @@ final class DashboardViewModel {
                 value: Self.money(summary.maxDrawdown),
                 tone: summary.maxDrawdown > 0 ? .negative : .neutral
             ),
-            DashboardMetricChip(
-                id: "payouts",
-                label: "Payouts",
-                value: ProfileDisplay.formatMoney(summary.payouts),
-                tone: (summary.payouts ?? 0) > 0 ? .positive : .neutral
-            ),
         ]
+    }
+
+    /// Performance → Payouts card — reads ``WithdrawalsHistoryStore`` live (same math as Withdrawals home).
+    func payoutsCardMetricChip(
+        withdrawalsHistory: WithdrawalsHistoryStore,
+        ledgerRowCount: Int,
+        completedPropCycleCount: Int,
+        achievementPayoutCount: Int
+    ) -> DashboardMetricChip {
+        _ = ledgerRowCount
+        _ = completedPropCycleCount
+        _ = achievementPayoutCount
+        noteWithdrawalsDisplayIfStoreAlreadyHydrated(withdrawalsHistory: withdrawalsHistory)
+        let display = payoutsCardDisplay(withdrawalsHistory: withdrawalsHistory)
+        return DashboardMetricChip(
+            id: "payouts",
+            label: "Payouts",
+            value: display.formatted,
+            tone: display.tone
+        )
+    }
+
+    private struct PayoutsCardDisplay {
+        var formatted: String
+        var tone: DashboardMetricTone
+        var total: Decimal?
+    }
+
+    private func payoutsCardDataReady(withdrawalsHistory: WithdrawalsHistoryStore) -> Bool {
+        if withdrawalRecordsHydrationComplete { return true }
+        guard let profileID, withdrawalsHistory.profileID == profileID else { return false }
+        guard !accounts.isEmpty else { return false }
+        return accounts.map(\.id).allSatisfy { withdrawalsHistory.ledgerByAccount[$0] != nil }
+    }
+
+    private func noteWithdrawalsDisplayIfStoreAlreadyHydrated(
+        withdrawalsHistory: WithdrawalsHistoryStore
+    ) {
+        if payoutsCardDataReady(withdrawalsHistory: withdrawalsHistory) {
+            withdrawalRecordsHydrationComplete = true
+        }
+    }
+
+    private func payoutsCardDisplay(
+        withdrawalsHistory: WithdrawalsHistoryStore
+    ) -> PayoutsCardDisplay {
+        guard payoutsCardDataReady(withdrawalsHistory: withdrawalsHistory) else {
+            #if DEBUG
+            let withdrawalsPageTotal = PayoutHistorySupport.withdrawalsScreenTotal(
+                accounts: accounts,
+                entriesByAccount: withdrawalsHistory.ledgerByAccount,
+                cyclesByAccount: mergedWithdrawalCyclesByAccount(
+                    withdrawalsHistory: withdrawalsHistory
+                ),
+                achievementPayouts: withdrawalsHistory.achievementPayouts
+            )
+            DashboardWithdrawalsTotalProbe.log(
+                withdrawalsPageTotal: withdrawalsPageTotal,
+                dashboardComputedTotal: nil,
+                dashboardUIBoundTotal: nil,
+                ledgerRows: withdrawalsHistory.ledgerEntryCount(),
+                completedPropCycles: withdrawalsHistory.completedPropCycleCount(),
+                achievementExtraRows: withdrawalsHistory.achievementPayouts.count,
+                hydrationComplete: withdrawalRecordsHydrationComplete,
+                accountFilter: accountFilterTitle,
+                dateScope: scopeFilterTimeLabel
+            )
+            #endif
+            return PayoutsCardDisplay(
+                formatted: ProfileHeaderMetric.placeholderValue,
+                tone: .neutral,
+                total: nil
+            )
+        }
+
+        let cycles = mergedWithdrawalCyclesByAccount(withdrawalsHistory: withdrawalsHistory)
+        let scope = clientScopeFilter()
+        let total = PayoutHistorySupport.dashboardPayoutsCardTotal(
+            accounts: accounts,
+            entriesByAccount: withdrawalsHistory.ledgerByAccount,
+            cyclesByAccount: cycles,
+            achievementPayouts: withdrawalsHistory.achievementPayouts,
+            accountFilter: accountFilter,
+            scope: scope
+        )
+        let withdrawalsPageTotal = PayoutHistorySupport.withdrawalsScreenTotal(
+            accounts: accounts,
+            entriesByAccount: withdrawalsHistory.ledgerByAccount,
+            cyclesByAccount: cycles,
+            achievementPayouts: withdrawalsHistory.achievementPayouts
+        )
+        payoutTotal = total
+        attachAccountLevelPayoutsToSummary()
+        #if DEBUG
+        DashboardWithdrawalsTotalProbe.log(
+            withdrawalsPageTotal: withdrawalsPageTotal,
+            dashboardComputedTotal: total,
+            dashboardUIBoundTotal: total,
+            ledgerRows: withdrawalsHistory.ledgerEntryCount(),
+            completedPropCycles: withdrawalsHistory.completedPropCycleCount(),
+            achievementExtraRows: withdrawalsHistory.achievementPayouts.count,
+            hydrationComplete: withdrawalRecordsHydrationComplete,
+            accountFilter: accountFilterTitle,
+            dateScope: scopeFilterTimeLabel
+        )
+        #endif
+        return PayoutsCardDisplay(
+            formatted: ProfileDisplay.formatMoney(total),
+            tone: total > 0 ? .positive : .neutral,
+            total: total
+        )
+    }
+
+    private func mergedWithdrawalCyclesByAccount(
+        withdrawalsHistory: WithdrawalsHistoryStore
+    ) -> [TradingAccountID: [AccountPayoutCycle]] {
+        var merged = withdrawalsHistory.cyclesByAccount
+        for (accountID, cycles) in payoutCyclesByAccount where !cycles.isEmpty {
+            if merged[accountID]?.isEmpty != false {
+                merged[accountID] = cycles
+            }
+        }
+        return merged
     }
 
     func loadIfNeeded() {
@@ -747,6 +1007,7 @@ final class DashboardViewModel {
             }
             flushDeferredHomeSurfaceWork()
             ensureEquityChartOverlayIfNeeded()
+            restoreTradingRulesPresentationIfNeeded()
             return
         }
         if summary == nil,
@@ -759,6 +1020,42 @@ final class DashboardViewModel {
         loadGeneration &+= 1
         let generation = loadGeneration
         loadTask = Task { await performLoad(generation: generation) }
+        Task { await loadTradingPreferences() }
+    }
+
+    func refreshTradingPreferencesAfterEditorSave() {
+        Task { await loadTradingPreferences() }
+    }
+
+    private func loadTradingPreferences() async {
+        preferenceLoadGeneration &+= 1
+        let loadToken = preferenceLoadGeneration
+        guard let tradingPreferences, let signedIn = await session.currentUserID else {
+            return
+        }
+        guard loadToken == preferenceLoadGeneration else { return }
+        let userID = ProfileID(signedIn.rawValue)
+        let outcome = await TradingRulesCompliancePreferencesCache.load(
+            for: userID,
+            repository: tradingPreferences,
+            injected: nil
+        )
+        guard loadToken == preferenceLoadGeneration else { return }
+        switch outcome {
+        case .loaded(let loaded):
+            preferenceContext = loaded
+            recomputePsychology()
+            scheduleTradingRulesComplianceRecompute()
+        case .failed:
+            adoptCachedTradingRulesPreferencesIfNeeded()
+            if preferenceContext != nil {
+                recomputePsychology()
+                scheduleTradingRulesComplianceRecompute()
+            }
+        case .skipped:
+            adoptCachedTradingRulesPreferencesIfNeeded()
+        }
+        refreshDashboardReadinessProbes()
     }
 
     /// Lazy V3 equity curve — re-request chart overlay when the dashboard becomes visible before hydration finished or after a failed/cancelled fetch.
@@ -842,13 +1139,12 @@ final class DashboardViewModel {
             if !includesTradeInDashboardScope(trade) {
                 return
             }
+            upsertTrade(trade)
             if usesDashboardAnalyticsV3 {
                 if AnalyticsReconciliationGate.isEnabled {
                     break
                 }
                 scheduleAnalyticsV3RefreshAfterMutation()
-            } else {
-                upsertTrade(trade)
             }
         case .deleted(let id, _):
             if usesDashboardAnalyticsV3 {
@@ -889,6 +1185,7 @@ final class DashboardViewModel {
             Task { await reloadAfterPayout(accountID: accountID) }
         case .generic:
             patchAccountsFromSessionStore()
+            recomputeTradingRulesCompliance()
             if usesDashboardAnalyticsV3, !AnalyticsReconciliationGate.isEnabled {
                 scheduleAnalyticsV3RefreshAfterMutation()
             }
@@ -899,24 +1196,23 @@ final class DashboardViewModel {
         guard case .achievement(let achievement) = ContentMutationStore.shared.latest else { return }
         guard achievement.isPublic, ProfilePayoutTotals.isPayout(achievement.kind) else { return }
         detailCache.seed(achievement)
-        let prior = payoutTotal ?? 0
-        payoutTotal = prior + (achievement.value?.amount ?? 0)
-        recompute()
     }
 
     func handleCheckInMutation() {
         recomputePsychology()
+        scheduleTradingRulesComplianceRecompute()
     }
 
     /// Re-run unlock gate when dashboard metrics/check-ins change without a full recompute.
     func refreshPsychologyUnlockMetrics() {
         recomputePsychology()
+        scheduleTradingRulesComplianceRecompute()
     }
 
     /// Refetch session check-ins after a save on another device or surface.
     func syncDailyCheckInsFromNetwork() async {
         guard let profileID else { return }
-        await hydrateCheckIns(profileID: profileID, forceNetwork: true)
+        await hydrateCheckIns(profileID: profileID, forceNetwork: true, reason: "explicitSync")
     }
 
     func setAccountFilter(_ filter: DashboardAccountFilter) {
@@ -936,6 +1232,9 @@ final class DashboardViewModel {
         lastAccountScopedSummary = nil
         lastAccountScopedFilter = nil
         accountFilter = filter
+        if let profileID {
+            persistScopeFilters(profileID: profileID)
+        }
         if hasCachedChartOverlayReadyForCurrentSelection() {
             // Recompute will refresh equity from the per-account cache — avoid a false empty chart.
         } else {
@@ -1056,6 +1355,47 @@ final class DashboardViewModel {
         )
     }
 
+    /// Eastern-aligned trade sample for Trading Rules compliance (not general dashboard KPIs).
+    func complianceScopedTradesForRules() -> [Trade] {
+        guard profileID != nil else { return [] }
+        let pool: [Trade]
+        if let profileID,
+           let cached = SessionOwnerTradesStore.shared.cached(for: profileID),
+           !cached.isEmpty
+        {
+            pool = cached
+        } else if !tradeInputs.isEmpty {
+            pool = tradeInputs.map(\.trade)
+        } else {
+            pool = resolvedFilteredTradesForDashboard()
+        }
+        var filter = clientScopeFilter()
+        filter.linkedAccountModes = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.mode) })
+        return PsychologyAnalyticsTradeScope.complianceScopedTrades(
+            ownerTrades: pool,
+            accounts: accounts,
+            scope: filter
+        )
+    }
+
+    /// Apply scope edits from Trading Rules Analytics — persists and recomputes dashboard state.
+    func applyClientScopeFromAnalytics(_ scope: DashboardClientScopeFilter) {
+        guard let profileID else { return }
+        scopeMetricsSelectionToken &+= 1
+        accountFilter = DashboardAccountScopePolicy.sanitizedFilter(
+            scope.accountFilter,
+            accounts: ownerAccountSource()
+        )
+        dateRange = scope.dateRange
+        customDateInterval = scope.customInterval
+        accountTypeFilter = scope.accountMode
+        showPublicOnly = scope.showPublicOnly
+        hasUserSelectedDateRangeForCurrentFilter = true
+        pendingAutomaticDateRangeResolution = false
+        persistScopeFilters(profileID: profileID)
+        recompute()
+    }
+
     func openCalendar() {
         ExperienceHaptics.play(.selection)
         navigationCoordinator.open(.home(.calendar))
@@ -1085,17 +1425,14 @@ final class DashboardViewModel {
             trades: trades,
             strategyHighlights: summary?.strategyHighlights,
             isLoading: isDashboardInsightsLoading,
-            tradeCount: count
+            tradeCount: count,
+            preferences: preferenceContext
         )
     }
 
-    /// Psychology cards — early matched-day insights plus full report cards when available (web parity).
+    /// Psychology cards from the strict comparison engine. Early matched-day cards are not merged in.
     var dashboardPsychologyInsightCards: [PsychologyInsightCard] {
-        let trades = resolvedFilteredTradesForDashboard()
-        let checkIns = psychologyCheckInsForUnlockGate()
-        let early = EarlyPsychologyInsightsBuilder.build(trades: trades, checkIns: checkIns)
-        let reportCards = psychologyReport?.dashboardCards ?? []
-        return EarlyPsychologyInsightsBuilder.merge(early: early, reportCards: reportCards)
+        psychologyReport?.dashboardCards ?? []
     }
 
     /// True while V3 chart overlay (insights source) has not resolved for the current selection.
@@ -1548,7 +1885,7 @@ final class DashboardViewModel {
                         payoutTotal = payout
                     }
                     hasLoaded = true
-                    await primePsychologyCheckInsForDashboard(
+                    scheduleDashboardPsychologyCheckInsHydration(
                         profileID: profileID,
                         forceNetwork: forceNetwork
                     )
@@ -1580,7 +1917,6 @@ final class DashboardViewModel {
                         await self?.runSecondaryHydration(
                             profileID: profileID,
                             forceNetwork: forceNetwork,
-                            skipPayouts: v2.payoutTotal != nil
                         )
                         if v2.payoutTotal == nil {
                             DashboardLoadProbe.markFullHydration()
@@ -1641,7 +1977,7 @@ final class DashboardViewModel {
                 return
             }
             hasLoaded = true
-            await primePsychologyCheckInsForDashboard(
+            scheduleDashboardPsychologyCheckInsHydration(
                 profileID: profileID,
                 forceNetwork: forceNetwork
             )
@@ -1664,8 +2000,7 @@ final class DashboardViewModel {
                 await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
                 await self?.runSecondaryHydration(
                     profileID: profileID,
-                    forceNetwork: forceNetwork,
-                    skipPayouts: false
+                    forceNetwork: forceNetwork
                 )
                 DashboardLoadProbe.markFullHydration()
             }
@@ -1738,8 +2073,7 @@ final class DashboardViewModel {
                 await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
                 await self?.runSecondaryHydration(
                     profileID: profileID,
-                    forceNetwork: false,
-                    skipPayouts: v2.payoutTotal != nil
+                    forceNetwork: false
                 )
                 if v2.payoutTotal == nil {
                     DashboardLoadProbe.markFullHydration()
@@ -1950,53 +2284,120 @@ final class DashboardViewModel {
         return CursorPage(items: items, nextCursor: nil)
     }
 
-    private func hasAuthoritativeDashboardPayoutFromV3() -> Bool {
-        guard usesDashboardAnalyticsV3 else { return false }
-        if payoutTotal != nil { return true }
-        return analyticsV3Bootstrap?.data.payout_total != nil
+    private func refreshAuthoritativePayoutTotal() {
+        let store = WithdrawalsHistoryStore.shared
+        _ = payoutsCardDisplay(withdrawalsHistory: store)
     }
 
-    private func hydratePayouts(profileID: ProfileID, forceNetwork: Bool) async {
-        if hasAuthoritativeDashboardPayoutFromV3() {
-#if DEBUG
-            SupabaseEfficiencyProbe.dashboardPayoutSource(.v3)
-#endif
-            if payoutTotal == nil,
-               let wire = analyticsV3Bootstrap?.data.payout_total,
-               let value = wire.value
-            {
-                payoutTotal = Decimal(value)
-                recompute()
+    private func primeWithdrawalsHistoryStore(for profileID: ProfileID) {
+        WithdrawalsHistoryStore.shared.bindProfile(profileID)
+        WithdrawalsHistoryStore.shared.hydrateFromSessionCaches(profileID: profileID)
+    }
+
+    /// Session caches mirror the Withdrawals screen bootstrap — no network.
+    @discardableResult
+    private func tryPrimeWithdrawalRecordsFromSessionCache(profileID: ProfileID) -> Bool {
+        guard !accounts.isEmpty else { return false }
+        primeWithdrawalsHistoryStore(for: profileID)
+        let accountIDs = accounts.map(\.id)
+        let ledger = WithdrawalsHistoryStore.shared.ledgerByAccount
+        guard accountIDs.allSatisfy({ ledger[$0] != nil }) else { return false }
+
+        let fundedIDs = fundedPropAccountIDs()
+        for accountID in fundedIDs {
+            let hasCyclesInStore = WithdrawalsHistoryStore.shared.cyclesByAccount[accountID] != nil
+            let hasSessionCycles = SessionPayoutCyclesStore.shared.cached(
+                for: accountID,
+                profileID: profileID
+            ) != nil
+            if !hasCyclesInStore, !hasSessionCycles {
+                return false
             }
+        }
+        if !fundedIDs.isEmpty {
+            WithdrawalsHistoryStore.shared.hydrateCyclesFromSessionStore(
+                profileID: profileID,
+                accountIDs: fundedIDs
+            )
+            for accountID in fundedIDs {
+                if let cached = SessionPayoutCyclesStore.shared.cached(for: accountID, profileID: profileID) {
+                    payoutCyclesByAccount[accountID] = cached
+                }
+            }
+        }
+        withdrawalRecordsHydrationComplete = true
+        refreshAuthoritativePayoutTotal()
+        return true
+    }
+
+    private func scheduleDashboardWithdrawalRecordsHydration(
+        profileID: ProfileID,
+        forceNetwork: Bool = false
+    ) {
+        guard !withdrawalRecordsHydrationComplete else { return }
+        guard !withdrawalRecordsHydrationInFlight else { return }
+        withdrawalRecordsHydrationInFlight = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.withdrawalRecordsHydrationInFlight = false }
+            await self.hydrateDashboardWithdrawalRecords(
+                profileID: profileID,
+                forceNetwork: forceNetwork
+            )
+        }
+    }
+
+    /// Mirrors Withdrawals screen: all `account_payout_entries` + funded prop cycles.
+    private func hydrateDashboardWithdrawalRecords(
+        profileID: ProfileID,
+        forceNetwork: Bool
+    ) async {
+        if tryPrimeWithdrawalRecordsFromSessionCache(profileID: profileID) {
+            recompute()
             return
         }
-#if DEBUG
-        SupabaseEfficiencyProbe.dashboardPayoutSource(.legacyAchievements)
-#endif
-        if !forceNetwork, payoutTotal != nil { return }
-        do {
-            let achievementPage = try await DashboardLoadProbe.measure(
-                "dashboard.achievements",
-                kind: .network,
-                blocksFirstUsefulRender: false,
-                note: "public achievements for payouts chip"
-            ) {
-                try await achievements.achievements(
-                    for: profileID,
-                    page: PageRequest(limit: 500),
-                    publicOnly: true
+        primeWithdrawalsHistoryStore(for: profileID)
+        let accountIDs = accounts.map(\.id)
+        guard !accountIDs.isEmpty else {
+            withdrawalRecordsHydrationComplete = true
+            refreshAuthoritativePayoutTotal()
+            recompute()
+            return
+        }
+
+        if !forceNetwork,
+           WithdrawalsHistoryStore.shared.profileID == profileID,
+           accountIDs.allSatisfy({ WithdrawalsHistoryStore.shared.ledgerByAccount[$0] != nil })
+        {
+            // Ledger keys exist — still need prop cycles network when missing.
+        } else {
+            do {
+                let rows = try await trades.payoutEntries(for: accountIDs)
+                var grouped: [TradingAccountID: [AccountPayoutEntry]] = [:]
+                for accountID in accountIDs {
+                    grouped[accountID] = []
+                }
+                for entry in rows {
+                    grouped[entry.accountID, default: []].append(entry)
+                }
+                WithdrawalsHistoryStore.shared.applyLedgerSnapshot(grouped, profileID: profileID)
+            } catch {
+                WithdrawalsTrace.log(
+                    "dashboardLedgerFetchFailed",
+                    detail: error.localizedDescription
                 )
             }
-            guard !Task.isCancelled else { return }
-            detailCache.seed(achievements: achievementPage.items)
-            payoutTotal = ProfilePayoutTotals.sum(from: achievementPage.items)
-            recompute()
-        } catch {
-            if payoutTotal == nil, let stats = detailCache.stats(for: profileID) {
-                payoutTotal = stats.payoutTotal
-                recompute()
-            }
         }
+
+        await hydratePropFirmPayoutCycles(
+            profileID: profileID,
+            accountIDs: fundedPropAccountIDs(),
+            forceNetwork: forceNetwork
+        )
+
+        withdrawalRecordsHydrationComplete = true
+        refreshAuthoritativePayoutTotal()
+        recompute()
     }
 
     private func applyFixtures(profileID: ProfileID) {
@@ -2016,11 +2417,19 @@ final class DashboardViewModel {
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
         detailCache.seed(accounts: accounts, for: profileID)
-        payoutTotal = ProfilePayoutTotals.sum(
-            from: profileID == DemoExperienceSupport.profileID
-                ? DemoCanonicalDataset.achievements()
-                : ProfileAchievementFixtures.samples(owner: profileID)
-        )
+        var entriesByAccount: [TradingAccountID: [AccountPayoutEntry]] = [:]
+        for account in seededAccounts {
+            let entries = profileID == DemoExperienceSupport.profileID
+                ? DemoCanonicalDataset.payoutEntries(for: account.id)
+                : []
+            if !entries.isEmpty {
+                entriesByAccount[account.id] = entries
+            }
+        }
+        primeWithdrawalsHistoryStore(for: profileID)
+        WithdrawalsHistoryStore.shared.applyLedgerSnapshot(entriesByAccount, profileID: profileID)
+        withdrawalRecordsHydrationComplete = true
+        refreshAuthoritativePayoutTotal()
         tradeInputs = samples.map { trade in
             DashboardChartMetrics.Input(
                 trade: trade,
@@ -2074,6 +2483,11 @@ final class DashboardViewModel {
                     linkedAccountType: linked
                 )
             }
+            if let profileID = self.profileID {
+                if !tryPrimeWithdrawalRecordsFromSessionCache(profileID: profileID) {
+                    scheduleDashboardWithdrawalRecordsHydration(profileID: profileID)
+                }
+            }
         }
     }
 
@@ -2094,6 +2508,7 @@ final class DashboardViewModel {
             at: 0
         )
         recompute()
+        recomputeTradingRulesCompliance()
     }
 
     private func removeTrade(id: TradeID) {
@@ -2101,6 +2516,15 @@ final class DashboardViewModel {
         SessionNetworkProbe.record(.localMutation, resource: "dashboard.trades.remove", detail: id.rawValue)
         tradeInputs.removeAll { $0.trade.id == id }
         recompute()
+        recomputeTradingRulesCompliance()
+    }
+
+    func handleTradingRulesOwnerTradesChangedNotification(_ notification: Notification) {
+        guard let profileID,
+              let raw = notification.userInfo?["profileID"] as? String,
+              raw == profileID.rawValue
+        else { return }
+        recomputeTradingRulesCompliance()
     }
 
     private func patchAccountsFromSessionStore() {
@@ -2168,12 +2592,7 @@ final class DashboardViewModel {
             accountIDs: [accountID],
             forceNetwork: true
         )
-        await hydrateManualPayoutLedgerEntries(
-            profileID: profileID,
-            accountIDs: [accountID],
-            forceNetwork: true
-        )
-        recompute()
+        await hydrateDashboardWithdrawalRecords(profileID: profileID, forceNetwork: true)
         #if DEBUG
         if let snapshot = propFirmStatus {
             PayoutCycleRefreshProbe.logDashboardReload(
@@ -2233,6 +2652,7 @@ final class DashboardViewModel {
             return
         }
         resolveAutomaticDateRangeIfNeeded()
+        refreshAuthoritativePayoutTotal()
         let scope = clientScopeFilter()
         let scopedTradeInputs = tradeInputsForScopeFiltering()
 
@@ -2259,6 +2679,8 @@ final class DashboardViewModel {
             }
             isScopeFilteredMetricsLoading = false
             applyClientTradeScopeMetrics(scope)
+            scheduleTradingRulesComplianceRecompute()
+            refreshDashboardReadinessProbes()
             return
         }
 
@@ -2278,6 +2700,8 @@ final class DashboardViewModel {
         if usesDashboardAnalyticsV3, let bootstrap = analyticsV3Bootstrap {
             recomputeFromAnalyticsV3(bootstrap: bootstrap)
             attachAccountLevelPayoutsToSummary()
+            scheduleTradingRulesComplianceRecompute()
+            refreshDashboardReadinessProbes()
             return
         }
 
@@ -2289,6 +2713,8 @@ final class DashboardViewModel {
         summary = assigningAccountLevelPayouts(to: result)
         refreshEquityChartPresentation()
         recomputePsychology()
+        scheduleTradingRulesComplianceRecompute()
+        refreshDashboardReadinessProbes()
     }
 
     /// Cached rows missing `mode` / `account_type` cannot satisfy Live/Funded/Eval filters (web uses row columns).
@@ -2306,7 +2732,7 @@ final class DashboardViewModel {
         }
     }
 
-    /// Payouts / achievements — not scoped by dashboard trade filters (matches web + profile header).
+    /// Recorded withdrawals — scoped to the active account + date filters (ledger + prop cycles).
     private func assigningAccountLevelPayouts(
         to summary: DashboardChartMetrics.Summary
     ) -> DashboardChartMetrics.Summary {
@@ -2406,6 +2832,7 @@ final class DashboardViewModel {
 
     private func markChartOverlayFetchSettledForCurrentSelection() {
         chartOverlayFetchSettledSelectionKey = currentChartOverlaySelectionKey()
+        refreshDashboardReadinessProbes()
     }
 
     private func needsEquityChartOverlayFetch(ignoreSettlement: Bool = false) -> Bool {
@@ -2640,6 +3067,7 @@ final class DashboardViewModel {
     }
 
     private func recomputeFromAnalyticsV3(bootstrap: AnalyticsDashboardBootstrapV3) {
+        defer { overlayClientRrJournalMetrics() }
         let resolution = DashboardAnalyticsMapper.resolve(
             in: bootstrap,
             accountFilter: accountFilter,
@@ -2736,11 +3164,10 @@ final class DashboardViewModel {
         #if DEBUG
         runV3ParityAgainstLegacyDiskCacheIfPresent(bootstrap: bootstrap)
         #endif
-        overlayClientRrJournalMetrics()
         recomputePsychology()
     }
 
-    /// V3 SQL aggregates use targeted `rr`; journal R:R KPIs and breakdowns use owner trades (web parity).
+    /// V3 SQL aggregates targeted `rr`; journal overlay uses filtered owner trades (web parity).
     private func overlayClientRrJournalMetrics() {
         guard var current = summary else { return }
         let scope = clientScopeFilter()
@@ -2837,11 +3264,10 @@ final class DashboardViewModel {
             totalTradeCount: applied.bootstrap.data.aggregatePresets["all"]?.metrics.trade_count,
             historyComplete: true
         )
-        hasLoaded = true
-        await primePsychologyCheckInsForDashboard(profileID: profileID, forceNetwork: forceNetwork)
-        recompute()
-        kickDashboardOwnerTradesHydration(profileID: profileID)
-        phase = .loaded
+            hasLoaded = true
+            recompute()
+            kickDashboardOwnerTradesHydration(profileID: profileID)
+            phase = .loaded
         DashboardAnalyticsGRDBProbe.logRender(
             source: "network",
             revision: analyticsV3Revision,
@@ -2866,8 +3292,7 @@ final class DashboardViewModel {
             await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
             await self?.runSecondaryHydration(
                 profileID: profileID,
-                forceNetwork: forceNetwork,
-                skipPayouts: applied.payoutTotal != nil
+                forceNetwork: forceNetwork
             )
             if applied.payoutTotal == nil {
                 DashboardLoadProbe.markFullHydration()
@@ -2903,7 +3328,6 @@ final class DashboardViewModel {
                 historyComplete: true
             )
             hasLoaded = true
-            await primePsychologyCheckInsForDashboard(profileID: profileID, forceNetwork: false)
             recompute()
             kickDashboardOwnerTradesHydration(profileID: profileID)
             phase = .loaded
@@ -2965,8 +3389,7 @@ final class DashboardViewModel {
                 await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
                 await self?.runSecondaryHydration(
                     profileID: profileID,
-                    forceNetwork: false,
-                    skipPayouts: applied.payoutTotal != nil
+                    forceNetwork: false
                 )
             }
             await SessionNetworkGate.shared.awaitReady()
@@ -3318,6 +3741,7 @@ final class DashboardViewModel {
         if let publicOnly = stored.showPublicOnly {
             showPublicOnly = publicOnly
         }
+        accountFilter = DashboardScopeFilterPersistence.accountFilter(from: stored.accountFilterKey)
         if stored.hasUserSelectedDateRange == true {
             hasUserSelectedDateRangeForCurrentFilter = true
             pendingAutomaticDateRangeResolution = false
@@ -3333,7 +3757,8 @@ final class DashboardViewModel {
                 customEnd: customDateInterval?.end,
                 accountModeRaw: accountTypeFilter.rawValue,
                 showPublicOnly: showPublicOnly,
-                hasUserSelectedDateRange: hasUserSelectedDateRangeForCurrentFilter
+                hasUserSelectedDateRange: hasUserSelectedDateRangeForCurrentFilter,
+                accountFilterKey: DashboardScopeFilterPersistence.accountFilterKey(for: accountFilter)
             )
         )
     }
@@ -3343,7 +3768,8 @@ final class DashboardViewModel {
         let gateCheckIns = psychologyCheckInsForUnlockGate()
         let report = TraderPsychologyAnalyticsEngine.buildReport(
             trades: trades,
-            checkIns: gateCheckIns
+            checkIns: gateCheckIns,
+            preferences: preferenceContext
         )
         psychologyReport = report
         psychologyInsightsUnlockProgress = PsychologyInsightsUnlockProgress(
@@ -3362,14 +3788,16 @@ final class DashboardViewModel {
                 scopedTrades: trades,
                 checkIns: gateCheckIns,
                 profileID: profileID,
-                scope: scope
+                scope: scope,
+                preferences: preferenceContext
             )
         }
 
         let facts = PsychologyCoachFactsBuilder.build(
             report: report,
             trades: trades,
-            checkIns: gateCheckIns
+            checkIns: gateCheckIns,
+            preferences: preferenceContext
         )
         let summary = PsychologyCoachDeterministicCoach.buildSummary(from: facts)
         PsychologyCoachSessionStore.shared.update(facts: facts, summary: summary)
@@ -3387,6 +3815,75 @@ final class DashboardViewModel {
             tradingDay: todayKey
         )
         recomputeTradingScorecard()
+        psychologyInsightsReady = true
+        refreshDashboardReadinessProbes()
+    }
+
+    private func scheduleTradingRulesComplianceRecompute() {
+        tradingRulesRecomputeSequence &+= 1
+        let sequence = tradingRulesRecomputeSequence
+        tradingRulesRecomputeTask?.cancel()
+        tradingRulesRecomputeTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 48_000_000)
+            guard let self, !Task.isCancelled, sequence == self.tradingRulesRecomputeSequence else { return }
+            self.recomputeTradingRulesCompliance()
+            self.refreshDashboardReadinessProbes()
+        }
+    }
+
+    private func refreshDashboardReadinessProbes() {
+        guard summary != nil else { return }
+        bootstrapTradingRulesPresentationAfterColdPaintIfNeeded()
+        let equityReady = !isEquityChartOverlayLoading
+            || selectedChartOverlayLoaded
+            || !usesDashboardAnalyticsV3
+        if equityReady {
+            DashboardLoadProbe.markSectionReady(.equityChart)
+        }
+        if psychologyInsightsReady {
+            DashboardLoadProbe.markSectionReady(.psychologyInsights)
+            DashboardLoadProbe.markSectionReady(.psychology)
+        }
+        if psychologyUnlockMetricsReady {
+            DashboardLoadProbe.markSectionReady(.psychologyUnlock)
+        }
+        let rulesStore = TradingRulesComplianceSessionStore.shared
+        let rulesUIReady = rulesStore.profileID == profileID
+            && rulesStore.ready
+            && (
+                rulesStore.result != nil
+                    || !rulesStore.hasConfiguredRules
+                    || rulesStore.insufficientScope
+            )
+        if rulesUIReady {
+            DashboardLoadProbe.markSectionReady(.tradingRulesUI)
+            DashboardLoadProbe.markSectionReady(.tradingRules)
+        }
+        if rulesStore.profileID == profileID,
+           rulesStore.ready,
+           rulesStore.isAuthoritative,
+           rulesStore.result != nil
+        {
+            DashboardLoadProbe.markSectionReady(.tradingRulesAuthoritative)
+        }
+        let checkInsReady = profileID.map { profileID in
+            let window = PsychologyDashboardCheckInsLoader.dashboardWindow()
+            return SessionDailyCheckInsStore.shared.hasSatisfiedWindow(
+                for: profileID,
+                startDate: window.start,
+                endDate: window.end
+            )
+        } ?? false
+        if checkInsReady {
+            DashboardLoadProbe.markSectionReady(.checkIns)
+        }
+        DashboardLoadProbe.markDashboardInteractiveIfReady(
+            summaryReady: summary != nil,
+            equityReady: equityReady,
+            rulesUIReady: rulesUIReady,
+            psychologyInsightsReady: psychologyInsightsReady,
+            checkInsReady: checkInsReady
+        )
     }
 
     private func enrichedTodayTrades(
@@ -3410,67 +3907,30 @@ final class DashboardViewModel {
 
     private func runSecondaryHydration(
         profileID: ProfileID,
-        forceNetwork: Bool,
-        skipPayouts: Bool
+        forceNetwork: Bool
     ) async {
-        if !skipPayouts {
-            await hydratePayouts(profileID: profileID, forceNetwork: forceNetwork)
+        let window = PsychologyDashboardCheckInsLoader.dashboardWindow()
+        if SessionDailyCheckInsStore.shared.needsLoad(
+            for: profileID,
+            startDate: window.start,
+            endDate: window.end
+        ) {
+            await hydrateCheckIns(profileID: profileID, forceNetwork: forceNetwork, reason: "secondary")
         }
-        WithdrawalsHistoryStore.shared.bindProfile(profileID)
-        WithdrawalsHistoryStore.shared.hydrateFromSessionCaches(profileID: profileID)
-        let ledgerAccountIDs = accounts
-            .filter { AccountTrackedBalanceSupport.usesManualLedgerForTrackedBalance(account: $0) }
-            .map(\.id)
-        if !ledgerAccountIDs.isEmpty {
-            await hydrateManualPayoutLedgerEntries(
-                profileID: profileID,
-                accountIDs: ledgerAccountIDs,
-                forceNetwork: forceNetwork
-            )
+        if TradingRulesComplianceSupport.hasConfiguredRules(context: preferenceContext),
+           !SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
+        {
+            await awaitPrioritizedOwnerTradesForTradingRules(profileID: profileID)
+        } else {
+            await ensureOwnerTradesForInsights(profileID: profileID, forceNetwork: forceNetwork)
         }
-        // Payout cycles load on demand when a prop account is selected (prop firm card).
-        await ensureOwnerTradesForInsights(profileID: profileID, forceNetwork: forceNetwork)
-        await hydrateCheckIns(profileID: profileID, forceNetwork: forceNetwork)
+        scheduleTradingRulesComplianceRecompute()
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        await hydrateDashboardWithdrawalRecords(profileID: profileID, forceNetwork: forceNetwork)
     }
 
     private func fundedPropAccountIDs() -> [TradingAccountID] {
         accounts.filter { PropFirmPayoutPolicy.supportsRecordPayout(for: $0) }.map(\.id)
-    }
-
-    /// One batched fetch for `account_payout_entries` — drives live Account Value.
-    private func hydrateManualPayoutLedgerEntries(
-        profileID: ProfileID,
-        accountIDs: [TradingAccountID],
-        forceNetwork: Bool
-    ) async {
-        let unique = Array(Set(accountIDs))
-        guard !unique.isEmpty else { return }
-
-        if !forceNetwork {
-            WithdrawalsHistoryStore.shared.hydrateFromSessionCaches(profileID: profileID)
-            let cached = WithdrawalsHistoryStore.shared.ledgerByAccount
-            if WithdrawalsHistoryStore.shared.profileID == profileID,
-               unique.allSatisfy({ cached[$0] != nil })
-            {
-                recompute()
-                return
-            }
-        }
-
-        do {
-            let rows = try await trades.payoutEntries(for: unique)
-            var grouped: [TradingAccountID: [AccountPayoutEntry]] = [:]
-            for accountID in unique {
-                grouped[accountID] = []
-            }
-            for entry in rows {
-                grouped[entry.accountID, default: []].append(entry)
-            }
-            WithdrawalsHistoryStore.shared.applyLedgerSnapshot(grouped, profileID: profileID)
-            recompute()
-        } catch {
-            WithdrawalsTrace.log("dashboardLedgerFetchFailed", detail: error.localizedDescription)
-        }
     }
 
     private func hydratePropFirmPayoutCycles(
@@ -3545,7 +4005,11 @@ final class DashboardViewModel {
         }
     }
 
-    private func hydrateCheckIns(profileID: ProfileID, forceNetwork: Bool) async {
+    private func hydrateCheckIns(
+        profileID: ProfileID,
+        forceNetwork: Bool,
+        reason: String = "dashboard"
+    ) async {
         let range = PsychologyDashboardCheckInsLoader.dashboardWindow()
         if !forceNetwork,
            !SessionDailyCheckInsStore.shared.needsLoad(
@@ -3556,30 +4020,53 @@ final class DashboardViewModel {
         {
             psychologyUnlockMetricsReady = true
             recomputePsychology()
+            refreshDashboardReadinessProbes()
             return
         }
+
+        psychologyCheckInsHydrationInFlight = true
+        defer { psychologyCheckInsHydrationInFlight = false }
+
         do {
             let items = try await DashboardLoadProbe.measure(
                 "dashboard.psychologyCheckIns",
                 kind: .network,
                 blocksFirstUsefulRender: false,
-                note: "web fetchPsychologyDashboardCheckIns parity"
+                note: reason
             ) {
-                try await PsychologyDashboardCheckInsLoader.load(
+                try await PsychologyDashboardCheckInsCoordinator.load(
                     profileID: profileID,
                     dailyCheckIns: dailyCheckIns,
-                    rpc: rpc
+                    rpc: rpc,
+                    forceNetwork: forceNetwork
                 )
             }
             guard !Task.isCancelled else { return }
             commitPsychologyCheckInsForGate(items, profileID: profileID, window: range)
             psychologyUnlockMetricsReady = true
             recomputePsychology()
+            scheduleTradingRulesComplianceRecompute()
+            refreshDashboardReadinessProbes()
         } catch {
             await loadPsychologyCheckInsHistoryFallback(profileID: profileID, range: range)
+            commitEmptyPsychologyCheckInWindowIfNeeded(profileID: profileID, window: range)
             psychologyUnlockMetricsReady = true
             recomputePsychology()
+            refreshDashboardReadinessProbes()
         }
+    }
+
+    /// Marks the dashboard window satisfied so failed hydrates do not retry on every recompute.
+    private func commitEmptyPsychologyCheckInWindowIfNeeded(
+        profileID: ProfileID,
+        window range: (start: String, end: String)
+    ) {
+        guard SessionDailyCheckInsStore.shared.needsLoad(
+            for: profileID,
+            startDate: range.start,
+            endDate: range.end
+        ) else { return }
+        SessionDailyCheckInsStore.shared.seed([], for: profileID, range: range)
     }
 
     private func commitPsychologyCheckInsForGate(
@@ -3621,15 +4108,10 @@ final class DashboardViewModel {
         if let rows = try? await PsychologyDashboardCheckInsLoader.loadHistoryWindow(
             profileID: profileID,
             dailyCheckIns: dailyCheckIns
-        ), !rows.isEmpty {
+        ) {
             commitPsychologyCheckInsForGate(rows, profileID: profileID, window: range)
             return
         }
-        guard BackendV2FeatureFlags.isEnabled(.dashboard), let rpc else { return }
-        guard let rpcRows = try? await PsychologyCheckInBootstrapLoader.load(rpc: rpc, accountID: nil),
-              !rpcRows.isEmpty
-        else { return }
-        commitPsychologyCheckInsForGate(rpcRows, profileID: profileID, window: range)
     }
 
 
@@ -3684,7 +4166,6 @@ final class DashboardViewModel {
                 historyComplete: true
             )
             hasLoaded = true
-            await primePsychologyCheckInsForDashboard(profileID: profileID, forceNetwork: false)
             recompute()
             phase = .loaded
             DashboardAnalyticsGRDBProbe.logRender(
@@ -3711,8 +4192,7 @@ final class DashboardViewModel {
                 await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
                 await self?.runSecondaryHydration(
                     profileID: profileID,
-                    forceNetwork: false,
-                    skipPayouts: applied.payoutTotal != nil
+                    forceNetwork: false
                 )
             }
             if case .account(let id) = accountFilter {
@@ -3843,7 +4323,29 @@ final class DashboardViewModel {
         await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
         guard usesDashboardAnalyticsV3, let rpc else { return }
         guard generation == loadGeneration, !Task.isCancelled else { return }
+        if DashboardAuthoritativeRefreshCoordinator.shared.hasInFlight(viewerID: profileID) {
+            await DashboardAuthoritativeRefreshCoordinator.shared.awaitInFlightIfNeeded(viewerID: profileID)
+            return
+        }
         let localRevision = analyticsV3Revision
+        if localRevision > 0,
+           let remoteRevision = await DashboardAnalyticsV3AuthoritativeFetch.fetchRemoteRevision(
+               viewerID: profileID,
+               rpc: rpc
+           ),
+           remoteRevision <= localRevision
+        {
+            DashboardAnalyticsGRDBProbe.logReconcile(
+                localRevision: localRevision,
+                serverRevision: remoteRevision,
+                changed: false
+            )
+            await AnalyticsReconciliationCoordinator.shared.noteAuthoritativeDashboardRevision(
+                remoteRevision,
+                viewerID: profileID
+            )
+            return
+        }
         do {
             let loadResult = try await DashboardAnalyticsV3Loader.load(
                 viewerID: profileID,
@@ -3920,7 +4422,8 @@ final class DashboardViewModel {
                 scopeLabel: tradingScorecardScopeLabel,
                 trades: scorecardTrades,
                 checkIns: checkIns,
-                analytics: analytics
+                analytics: analytics,
+                preferenceContext: preferenceContext
             ),
             domainTrades: trades
         )
@@ -3933,6 +4436,401 @@ final class DashboardViewModel {
             highlights: highlights,
             psychologyInsightCards: psychCards
         )
+    }
+
+    private func bootstrapTradingRulesPresentationAfterColdPaintIfNeeded() {
+        guard let profileID, hasLoaded, !tradingRulesColdPresentationBootstrapped else { return }
+        tradingRulesColdPresentationBootstrapped = true
+        restoreTradingRulesPresentationIfNeeded()
+        kickPrioritizedOwnerTradesForTradingRules(profileID: profileID)
+    }
+
+    private func kickPrioritizedOwnerTradesForTradingRules(profileID: ProfileID) {
+        guard TradingRulesComplianceSupport.hasConfiguredRules(context: preferenceContext) else { return }
+        guard !SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID) else { return }
+        guard prioritizedOwnerTradesForRulesTask == nil else { return }
+        guard tradingRulesHydrationTask == nil else { return }
+        prioritizedOwnerTradesForRulesTask = Task { @MainActor [weak self] in
+            defer { self?.prioritizedOwnerTradesForRulesTask = nil }
+            guard let self, !Task.isCancelled else { return }
+            await SessionNetworkGate.shared.awaitReady()
+            guard !Task.isCancelled else { return }
+            do {
+                let rows = try await SessionOwnerTradesStore.shared.ensureCompleteAnalyticsSnapshot(
+                    for: profileID,
+                    detailCache: self.detailCache,
+                    repository: self.trades
+                )
+                guard !Task.isCancelled, self.profileID == profileID else { return }
+                self.promoteOwnerTradesFromSessionCache(profileID: profileID)
+                if !rows.isEmpty, self.tradeInputs.isEmpty {
+                    let accountList = self.accounts.isEmpty
+                        ? (self.detailCache.accounts(for: profileID) ?? [])
+                        : self.accounts
+                    self.apply(trades: rows, accounts: accountList, profileID: profileID)
+                } else {
+                    self.recompute()
+                }
+                self.scheduleTradingRulesComplianceRecompute()
+            } catch {
+                guard !Task.isCancelled else { return }
+            }
+        }
+    }
+
+    private func awaitPrioritizedOwnerTradesForTradingRules(profileID: ProfileID) async {
+        kickPrioritizedOwnerTradesForTradingRules(profileID: profileID)
+        await prioritizedOwnerTradesForRulesTask?.value
+        if !SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID) {
+            await ensureOwnerTradesForInsights(profileID: profileID, forceNetwork: false)
+        }
+    }
+
+    /// Reuses the on-screen rules snapshot when it still matches this dashboard.
+    /// Rebuilds from memory when the store is missing or says no rules while preferences are cached.
+    func restoreTradingRulesPresentationIfNeeded() {
+        guard let profileID else { return }
+        TradingRulesComplianceSessionStore.shared.clearIfProfileMismatch(profileID)
+        adoptCachedTradingRulesPreferencesIfNeeded()
+        let scope = PsychologyAnalyticsScopeResolver.resolve(
+            filter: clientScopeFilter(),
+            profileID: profileID
+        )
+        let store = TradingRulesComplianceSessionStore.shared
+        let preferencesConfigured = TradingRulesComplianceSupport.hasConfiguredRules(context: preferenceContext)
+        if TradingRulesCompliancePresentationBridge.revealCachedSnapshotIfPossible(
+            profileID: profileID,
+            detailCache: detailCache
+        ) {
+            refreshDashboardReadinessProbes()
+            scheduleTradingRulesComplianceRecompute()
+            return
+        }
+        if store.ready, store.matchesCachedPresentation(profileID: profileID, scopeFingerprint: scope.fingerprint) {
+            if store.hasConfiguredRules || !preferencesConfigured {
+                return
+            }
+        }
+        guard preferencesConfigured else { return }
+        recomputeTradingRulesCompliance()
+    }
+
+    func recomputeTradingRulesCompliance() {
+        let ready = !isScopeFilteredMetricsLoading && profileID != nil
+
+        guard let profileID else {
+            TradingRulesComplianceRecomputeCoordinator.resetForSessionBoundary()
+            return
+        }
+
+        adoptCachedTradingRulesPreferencesIfNeeded()
+
+        let scope = PsychologyAnalyticsScopeResolver.resolve(
+            filter: clientScopeFilter(),
+            profileID: profileID,
+            accounts: accounts
+        )
+
+        let scopedTrades = complianceScopedTradesForRules()
+
+        let hasRulesConfigured = TradingRulesComplianceSupport.hasConfiguredRules(context: preferenceContext)
+        let preferencesUnavailable = preferenceContext == nil
+        if preferencesUnavailable, !hasRulesConfigured {
+            if TradingRulesComplianceSessionStore.shared.retainsConfiguredRules(for: profileID) {
+                return
+            }
+            let store = TradingRulesComplianceSessionStore.shared
+            let alreadyWaiting = !store.ready
+                && store.profileID == profileID
+                && store.scopeFingerprint == scope.fingerprint
+            if !alreadyWaiting {
+                let token = TradingRulesComplianceRecomputeCoordinator.beginPublish()
+                store.publish(
+                    ready: false,
+                    profileID: profileID,
+                    scopeFingerprint: scope.fingerprint,
+                    scopeLabel: scope.label,
+                    hasConfiguredRules: false,
+                    result: nil,
+                    error: nil,
+                    generation: token
+                )
+            }
+            scheduleTradingRulesFullHydrationIfNeeded(
+                output: TradingRulesComplianceSnapshotBuilder.Output(
+                    result: nil,
+                    hasConfiguredRules: false,
+                    scopedTradeCount: scopedTrades.count,
+                    ownerTradeCount: scopedTrades.count,
+                    preferencesContext: nil,
+                    preferencesError: nil,
+                    tradesError: nil,
+                    insufficientScope: false,
+                    historyComplete: false,
+                    eligibility: nil
+                ),
+                profileID: profileID
+            )
+            return
+        }
+
+        let historyComplete = SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
+        if hasRulesConfigured, scopedTrades.isEmpty {
+            let fingerprint = tradingRulesInputFingerprint(
+                scope: scope,
+                trades: scopedTrades,
+                psychologyHistoryTrades: [],
+                historyComplete: historyComplete
+            )
+            let emptyOutput = TradingRulesComplianceSnapshotBuilder.Output(
+                result: nil,
+                hasConfiguredRules: true,
+                scopedTradeCount: 0,
+                ownerTradeCount: SessionOwnerTradesStore.shared.cached(for: profileID)?.count ?? 0,
+                preferencesContext: preferenceContext,
+                preferencesError: nil,
+                tradesError: nil,
+                insufficientScope: true,
+                historyComplete: historyComplete,
+                eligibility: nil
+            )
+            commitTradingRulesSnapshot(
+                output: emptyOutput,
+                profileID: profileID,
+                scope: scope,
+                ready: ready,
+                inputFingerprint: fingerprint,
+                preferencesUnavailable: false
+            )
+            scheduleTradingRulesFullHydrationIfNeeded(output: emptyOutput, profileID: profileID)
+            return
+        }
+
+        guard hasRulesConfigured, !scopedTrades.isEmpty else {
+            let fingerprint = tradingRulesInputFingerprint(
+                scope: scope,
+                trades: scopedTrades,
+                psychologyHistoryTrades: [],
+                historyComplete: false
+            )
+            let output = TradingRulesComplianceSnapshotBuilder.Output(
+                result: nil,
+                hasConfiguredRules: hasRulesConfigured,
+                scopedTradeCount: scopedTrades.count,
+                ownerTradeCount: scopedTrades.count,
+                preferencesContext: preferenceContext,
+                preferencesError: nil,
+                tradesError: nil,
+                insufficientScope: false,
+                historyComplete: false,
+                eligibility: nil
+            )
+            commitTradingRulesSnapshot(
+                output: output,
+                profileID: profileID,
+                scope: scope,
+                ready: ready,
+                inputFingerprint: fingerprint,
+                preferencesUnavailable: preferencesUnavailable
+            )
+            scheduleTradingRulesFullHydrationIfNeeded(output: output, profileID: profileID)
+            return
+        }
+
+        let ownerTrades = SessionOwnerTradesStore.shared.cached(for: profileID) ?? scopedTrades
+        let prepared = TradingRulesComplianceDisciplineContextBuilder.prepare(
+            ownerTrades: ownerTrades,
+            accounts: accounts,
+            scopeFilter: clientScopeFilter(),
+            preferences: preferenceContext,
+            historyComplete: historyComplete
+        )
+
+        let complianceAuthoritative = historyComplete || !prepared.requiresCompleteHistoryForPsychology
+
+        let fingerprint = tradingRulesInputFingerprint(
+            scope: scope,
+            trades: scopedTrades,
+            psychologyHistoryTrades: prepared.psychologyContextTrades,
+            historyComplete: historyComplete
+        )
+
+        let preferences = preferenceContext
+        let insights = insightsPresentation
+        let preferDashboardInsightsCache = !isDashboardInsightsLoading
+        let tradesForCompute = scopedTrades
+        let discipline = prepared.discipline
+        let ownerCount = prepared.ownerTradeCount
+
+        TradingRulesComplianceRecomputeCoordinator.request(
+            profileID: profileID,
+            scopeFingerprint: scope.fingerprint,
+            fingerprint: fingerprint
+        ) {
+            await TradingRulesComplianceCompute.computeScoped(
+                trades: tradesForCompute,
+                context: preferences,
+                dashboardInsights: insights,
+                preferDashboardInsightsCache: preferDashboardInsightsCache,
+                discipline: discipline
+            )
+        } onComplete: { [weak self] payload in
+            guard let self else { return }
+            TradingRulesComplianceDiagnostics.logTimings(payload.timings, source: "dashboard_publish")
+            var output = TradingRulesComplianceSnapshotBuilder.outputFromComputedPayload(
+                payload: payload,
+                preferences: preferences,
+                scopedTradeCount: tradesForCompute.count,
+                ownerTradeCount: ownerCount,
+                historyComplete: historyComplete,
+                isAuthoritative: complianceAuthoritative
+            )
+            if !complianceAuthoritative {
+                output.isAuthoritative = false
+            }
+            self.refreshDashboardReadinessProbes()
+            TradingRulesComplianceSessionStore.shared.commit(
+                output: output,
+                profileID: profileID,
+                scope: scope,
+                ready: ready,
+                inputFingerprint: fingerprint,
+                generation: TradingRulesComplianceRecomputeCoordinator.currentGeneration,
+                preferencesUnavailable: false
+            )
+            self.scheduleTradingRulesFullHydrationIfNeeded(output: output, profileID: profileID)
+            if !complianceAuthoritative {
+                self.kickPrioritizedOwnerTradesForTradingRules(profileID: profileID)
+            }
+        }
+    }
+
+    /// Installs in-memory dashboard inputs so rules can recompute without a network load.
+    func seedLocalDashboardForTradingRules(
+        profileID: ProfileID,
+        preferences: PreferenceRuleContext?,
+        trades: [Trade],
+        accounts: [TradingAccount] = []
+    ) {
+        self.profileID = profileID
+        preferenceContext = preferences
+        self.accounts = accounts
+        hasLoaded = true
+        phase = .loaded
+        isScopeFilteredMetricsLoading = false
+        let accountTypes = Dictionary(
+            uniqueKeysWithValues: accounts.map {
+                ($0.id, ProfileStatisticsMetrics.accountTypeString(for: $0.mode))
+            }
+        )
+        tradeInputs = trades.map { trade in
+            DashboardScopeFilterSupport.makeChartInput(
+                trade: trade,
+                linkedAccountType: trade.accountID.flatMap { accountTypes[$0] }
+            )
+        }
+        if let preferences {
+            TradingRulesCompliancePreferencesCache.store(preferences, for: profileID)
+        }
+    }
+
+    /// Drops the view-model copy only. The preference cache and session snapshot stay put.
+    func forgetInMemoryTradingRulesPreferences() {
+        preferenceContext = nil
+    }
+
+    private func adoptCachedTradingRulesPreferencesIfNeeded() {
+        guard preferenceContext == nil, let profileID else { return }
+        guard let cached = TradingRulesCompliancePreferencesCache.cachedContext(for: profileID) else { return }
+        preferenceContext = cached
+    }
+
+    private func tradingRulesInputFingerprint(
+        scope: PsychologyAnalyticsScopeResolver.Resolved,
+        trades: [Trade],
+        psychologyHistoryTrades: [Trade],
+        historyComplete: Bool
+    ) -> String {
+        TradingRulesComplianceInputFingerprint.make(
+            scopeFingerprint: scope.fingerprint,
+            preferencesFingerprint: PreferenceComplianceEngine.fingerprint(preferenceContext),
+            trades: trades,
+            psychologyHistoryTrades: psychologyHistoryTrades,
+            ownerHistoryComplete: historyComplete,
+            preferCachedInsights: !isDashboardInsightsLoading
+        )
+    }
+
+    private func commitTradingRulesSnapshot(
+        output: TradingRulesComplianceSnapshotBuilder.Output,
+        profileID: ProfileID,
+        scope: PsychologyAnalyticsScopeResolver.Resolved,
+        ready: Bool,
+        inputFingerprint: String?,
+        preferencesUnavailable: Bool
+    ) {
+        if preferencesUnavailable,
+           !output.hasConfiguredRules,
+           TradingRulesComplianceSessionStore.shared.retainsConfiguredRules(for: profileID)
+        {
+            return
+        }
+        if let inputFingerprint,
+           TradingRulesComplianceRecomputeCoordinator.shouldSkip(
+               profileID: profileID,
+               scopeFingerprint: scope.fingerprint,
+               inputFingerprint: inputFingerprint
+           )
+        {
+            return
+        }
+        let token = TradingRulesComplianceRecomputeCoordinator.beginPublish()
+        TradingRulesComplianceSessionStore.shared.commit(
+            output: output,
+            profileID: profileID,
+            scope: scope,
+            ready: ready,
+            inputFingerprint: inputFingerprint,
+            generation: token,
+            preferencesUnavailable: preferencesUnavailable
+        )
+    }
+
+    private func scheduleTradingRulesFullHydrationIfNeeded(
+        output: TradingRulesComplianceSnapshotBuilder.Output,
+        profileID: ProfileID
+    ) {
+        let ownerCount = SessionOwnerTradesStore.shared.cached(for: profileID)?.count ?? 0
+        let historyComplete = SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
+        let shouldHydrateFullSnapshot = !isScopeFilteredMetricsLoading
+            && !output.insufficientScope
+            && preferenceContext == nil
+            && (ownerCount == 0 || !historyComplete)
+            && !TradingRulesComplianceSessionStore.shared.retainsConfiguredRules(for: profileID)
+
+        guard shouldHydrateFullSnapshot,
+              tradingRulesHydrationTask == nil,
+              prioritizedOwnerTradesForRulesTask == nil
+        else { return }
+        let deps = TradingRulesComplianceLoadDependencies(
+            detailCache: detailCache,
+            tradesRepository: trades,
+            tradingPreferences: tradingPreferences
+        )
+        let baseline = TradingRulesComplianceRecomputeCoordinator.currentGeneration
+        let ticket = TradingRulesHydrationTicket()
+        let task = Task { [weak self] in
+            await self?.ensureTradingRulesComplianceForPresentation(
+                dependencies: deps,
+                discardIfOlderThan: baseline
+            )
+            guard let self else { return }
+            if self.tradingRulesHydrationTask == ticket.task {
+                self.tradingRulesHydrationTask = nil
+            }
+        }
+        ticket.task = task
+        tradingRulesHydrationTask = task
     }
 
     var tradingScorecardScopeLabel: String {

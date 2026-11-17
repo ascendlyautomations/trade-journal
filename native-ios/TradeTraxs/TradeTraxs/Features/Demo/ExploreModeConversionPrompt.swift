@@ -141,9 +141,7 @@ private struct ExploreModeConversionPromptSheet: View {
         .padding(ExperienceSpacing.xl)
         .frame(maxWidth: .infinity, alignment: .leading)
         .experienceScreenBackground()
-        .presentationDetents([.medium])
-        .presentationDragIndicator(.visible)
-        .interactiveDismissDisabled(false)
+        .experienceSheetChrome(detents: [.medium])
     }
 }
 

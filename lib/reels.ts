@@ -108,7 +108,7 @@ export function resolveTradeAttachedReel(
 export const PROFILE_REELS_SELECT = `${REEL_ROW_SELECT}, ${REEL_TRADE_EMBED}`
 
 export const FEED_REELS_SELECT =
-  `id, user_id, caption, video_url, thumbnail_url, duration_seconds, visibility, trade_id, kind, created_at, profiles(username, avatar_url), ${REEL_TRADE_EMBED}`
+  `id, user_id, caption, video_url, thumbnail_url, duration_seconds, visibility, trade_id, kind, created_at, profiles(username, avatar_url, is_private), ${REEL_TRADE_EMBED}`
 
 type SupabaseErr = {
   message?: string
@@ -229,13 +229,31 @@ export function isTradeAttachedReel(
   return id != null && String(id).trim() !== ""
 }
 
+/** True when the viewer may see the clip's linked journal trade (exists + visibility). */
+export function hasResolvableLinkedTrade(
+  reel: {
+    trade_id?: string | null
+    user_id?: string | null
+    trades?: ReelRow["trades"]
+  } | null | undefined,
+  viewerUserId?: string | null
+): boolean {
+  if (!reel || !isTradeAttachedReel(reel)) return false
+  const trade = resolveReelTradeJoin(reel)
+  if (!trade?.id) return false
+  const owner = String(reel.user_id ?? "").trim()
+  const viewer = String(viewerUserId ?? "").trim()
+  if (viewer && owner && viewer === owner) return true
+  return trade.is_public === true
+}
+
 export function resolveReelTradeJoin(
   reel: { trades?: ReelRow["trades"] } | null | undefined
 ): LinkedTradeSummary | null {
   return normalizeTradeJoin(reel?.trades ?? null)
 }
 
-/** Caption: trade public_description when attached; else reel.caption. */
+/** Caption: stored reel caption first; trade-linked rows may fall back to trade public text. */
 export function resolveReelCaption(
   reel: {
     trade_id?: string | null
@@ -244,6 +262,11 @@ export function resolveReelCaption(
   } | null | undefined
 ): string | null {
   if (!reel) return null
+  const rawCaption = reel.caption
+  if (rawCaption != null) {
+    const trimmed = String(rawCaption).trim()
+    if (trimmed !== "") return trimmed
+  }
   if (isTradeAttachedReel(reel)) {
     const trade = resolveReelTradeJoin(reel)
     const fromTrade = trade?.public_description
@@ -251,10 +274,7 @@ export function resolveReelCaption(
     const trimmed = String(fromTrade).trim()
     return trimmed !== "" ? trimmed : null
   }
-  const raw = reel.caption
-  if (raw == null) return null
-  const trimmed = String(raw).trim()
-  return trimmed !== "" ? trimmed : null
+  return null
 }
 
 /**
@@ -1128,6 +1148,209 @@ export async function updateReelCaption(
   }
 
   return { reel: data as ReelRow }
+}
+
+/** Trade ids that already have an owner reel (`reels.trade_id`). */
+export async function fetchTradeIdsWithAttachedReels(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from("reels")
+    .select("trade_id")
+    .eq("user_id", userId)
+    .not("trade_id", "is", null)
+
+  if (error) {
+    console.error("[fetchTradeIdsWithAttachedReels]", error)
+    return new Set()
+  }
+
+  const ids = new Set<string>()
+  for (const row of data ?? []) {
+    if (row.trade_id) ids.add(String(row.trade_id))
+  }
+  return ids
+}
+
+const UNATTACHED_REELS_LIMIT = 30
+
+/** Clips with no `trade_id` — optional `includingReelId` keeps the current link when editing. */
+export async function fetchUnattachedReelsForUser(
+  supabase: SupabaseClient,
+  userId: string,
+  options?: { limit?: number; includingReelId?: string | null }
+): Promise<ReelRow[]> {
+  const limit = Math.min(Math.max(options?.limit ?? UNATTACHED_REELS_LIMIT, 1), 40)
+  const { data, error } = await supabase
+    .from("reels")
+    .select(REEL_ROW_SELECT)
+    .eq("user_id", userId)
+    .is("trade_id", null)
+    .order("created_at", { ascending: false })
+    .limit(limit)
+
+  if (error) {
+    console.error("[fetchUnattachedReelsForUser]", error)
+    return []
+  }
+
+  let reels = (data ?? []) as ReelRow[]
+  const including = options?.includingReelId?.trim()
+  if (
+    including &&
+    !reels.some((row) => String(row.id) === including)
+  ) {
+    const { data: preserved, error: preservedError } = await supabase
+      .from("reels")
+      .select(REEL_ROW_SELECT)
+      .eq("user_id", userId)
+      .eq("id", including)
+      .maybeSingle()
+
+    if (preservedError) {
+      console.error("[fetchUnattachedReelsForUser] include:", preservedError)
+    } else if (preserved) {
+      reels = [preserved as ReelRow, ...reels]
+    }
+  }
+
+  return reels.slice(0, limit)
+}
+
+const PUBLIC_TRADE_LINK_PICKER_SELECT =
+  "id, ticker, direction, pnl, rr, image_url, created_at, is_public"
+
+export type PublicTradeLinkPickerRow = {
+  id: string
+  ticker: string | null
+  direction: string | null
+  pnl: number | null
+  rr: number | null
+  image_url: string | null
+  created_at: string | null
+  is_public: boolean | null
+}
+
+/** Shared (public) trades without an attached reel; `includingTradeId` preserves the current link. */
+export async function fetchPublicTradesEligibleForReelLink(
+  supabase: SupabaseClient,
+  userId: string,
+  options?: { limit?: number; includingTradeId?: string | null }
+): Promise<PublicTradeLinkPickerRow[]> {
+  const limit = Math.min(Math.max(options?.limit ?? 30, 1), 40)
+  const [tradesResult, busyTradeIds] = await Promise.all([
+    supabase
+      .from("trades")
+      .select(PUBLIC_TRADE_LINK_PICKER_SELECT)
+      .eq("user_id", userId)
+      .eq("is_public", true)
+      .order("created_at", { ascending: false })
+      .limit(limit),
+    fetchTradeIdsWithAttachedReels(supabase, userId),
+  ])
+
+  if (tradesResult.error) {
+    console.error("[fetchPublicTradesEligibleForReelLink]", tradesResult.error)
+    return []
+  }
+
+  const including = options?.includingTradeId?.trim() ?? null
+  return ((tradesResult.data ?? []) as PublicTradeLinkPickerRow[]).filter((trade) => {
+    const id = String(trade.id)
+    return !busyTradeIds.has(id) || (including != null && id === including)
+  })
+}
+
+export type LinkExistingReelToTradeInput = {
+  reelId: string
+  tradeId: string
+  userId: string
+}
+
+/** PATCH an existing reel onto a trade (caption unchanged). Mirrors native `linkReelToTrade`. */
+export async function linkExistingReelToTrade(
+  supabase: SupabaseClient,
+  input: LinkExistingReelToTradeInput
+): Promise<{ reel: ReelRow } | { error: string }> {
+  const { data: tradeRow, error: tradeError } = await supabase
+    .from("trades")
+    .select("id, is_public")
+    .eq("id", input.tradeId)
+    .eq("user_id", input.userId)
+    .maybeSingle()
+
+  if (tradeError) {
+    return { error: formatReelMutationError(tradeError) }
+  }
+  if (!tradeRow?.id) {
+    return { error: "Trade not found or you do not have permission to link a clip." }
+  }
+
+  const { data: reelRow, error: reelError } = await supabase
+    .from("reels")
+    .select("id, trade_id")
+    .eq("id", input.reelId)
+    .eq("user_id", input.userId)
+    .maybeSingle()
+
+  if (reelError) {
+    return { error: formatReelMutationError(reelError) }
+  }
+  if (!reelRow?.id) {
+    return { error: "Clip not found." }
+  }
+
+  const existingTradeId =
+    reelRow.trade_id != null ? String(reelRow.trade_id).trim() : ""
+  if (existingTradeId && existingTradeId !== String(input.tradeId)) {
+    return { error: "This clip is already linked to another trade." }
+  }
+  if (existingTradeId === String(input.tradeId)) {
+    const hydrated = await fetchTradeReel(supabase, input.tradeId)
+    if (hydrated) return { reel: hydrated }
+  }
+
+  const { data: tradeClip, error: busyError } = await supabase
+    .from("reels")
+    .select("id")
+    .eq("trade_id", input.tradeId)
+    .eq("user_id", input.userId)
+    .limit(1)
+    .maybeSingle()
+
+  if (busyError) {
+    return { error: formatReelMutationError(busyError) }
+  }
+  if (tradeClip?.id && String(tradeClip.id) !== String(input.reelId)) {
+    return { error: "This trade already has a clip attached." }
+  }
+
+  const reelVisibility = visibilityFromTradePublic(tradeRow.is_public === true)
+
+  const { data, error } = await supabase
+    .from("reels")
+    .update({
+      trade_id: input.tradeId,
+      visibility: reelVisibility,
+    })
+    .eq("id", input.reelId)
+    .eq("user_id", input.userId)
+    .select(REEL_ROW_SELECT)
+    .single()
+
+  if (error) {
+    console.error("[linkExistingReelToTrade]", error)
+    return { error: formatReelMutationError(error) }
+  }
+
+  invalidateReelsByTradeIdsCache({
+    viewerId: input.userId,
+    tradeIds: [input.tradeId],
+  })
+
+  const hydrated = await fetchTradeReel(supabase, input.tradeId)
+  return hydrated ? { reel: hydrated } : { reel: data as ReelRow }
 }
 
 export async function deleteReel(

@@ -194,7 +194,23 @@ struct RoomMembersView: View {
                     selectedMember = nil
                     memberForTags = item
                 }
-                : nil
+                : nil,
+            moderatorActionTitle: viewModel.moderatorActionTitle(for: member),
+            onModeratorAction: viewModel.canManageModeratorStatus(for: member)
+                ? {
+                    viewModel.requestModeratorStatusChange(for: member)
+                }
+                : nil,
+            showsModeratorConfirmation: $viewModel.showsModeratorConfirmation,
+            moderatorDialogTitle: viewModel.moderatorConfirmationTitle,
+            moderatorConfirmButtonTitle: viewModel.moderatorConfirmationButtonTitle,
+            onConfirmModerator: {
+                Task {
+                    await viewModel.confirmModeratorStatusChange()
+                    selectedMember = nil
+                }
+            },
+            onCancelModerator: { viewModel.cancelModeratorStatusChange() }
         )
     }
 

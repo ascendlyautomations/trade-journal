@@ -8,10 +8,32 @@ struct ExploreTraderCard: View {
 
     let trader: ExploreTraderSuggestion
     let profile: Profile
+    let viewerProfileID: ProfileID?
     let imagePipeline: any ImagePipeline
     let isFollowing: Bool
+    let showsFollowControl: Bool
     let onOpen: () -> Void
     let onToggleFollow: () -> Void
+
+    init(
+        trader: ExploreTraderSuggestion,
+        profile: Profile,
+        viewerProfileID: ProfileID? = nil,
+        imagePipeline: any ImagePipeline,
+        isFollowing: Bool,
+        showsFollowControl: Bool = true,
+        onOpen: @escaping () -> Void,
+        onToggleFollow: @escaping () -> Void
+    ) {
+        self.trader = trader
+        self.profile = profile
+        self.viewerProfileID = viewerProfileID
+        self.imagePipeline = imagePipeline
+        self.isFollowing = isFollowing
+        self.showsFollowControl = showsFollowControl
+        self.onOpen = onOpen
+        self.onToggleFollow = onToggleFollow
+    }
 
     @Environment(\.themeColors) private var colors
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -67,7 +89,15 @@ struct ExploreTraderCard: View {
             }
             .buttonStyle(.experiencePlain)
 
-            followButton
+            ExperienceProfileListFollowTrailing(
+                profileID: profile.id,
+                viewerProfileID: viewerProfileID,
+                isFollowing: isFollowing,
+                showsFollowControl: showsFollowControl,
+                style: .exploreCard,
+                accessibilityPrefix: "explore.trader",
+                onToggleFollow: onToggleFollow
+            )
         }
         .padding(ExperienceSpacing.sm)
         .frame(width: cardWidth, height: usesCompactLayout ? cardHeight : nil, alignment: .topLeading)
@@ -86,51 +116,27 @@ struct ExploreTraderCard: View {
             } label: {
                 Label("Copy Username", systemImage: "doc.on.doc")
             }
-            Button(action: onToggleFollow) {
-                Label(
-                    isFollowing ? "Unfollow" : "Follow",
-                    systemImage: isFollowing ? "person.badge.minus" : "person.badge.plus"
-                )
+            if showsFollowControl {
+                Button(action: onToggleFollow) {
+                    Label(
+                        isFollowing ? "Unfollow" : "Follow",
+                        systemImage: isFollowing ? "person.badge.minus" : "person.badge.plus"
+                    )
+                }
             }
         } preview: {
             ExploreTraderCard(
                 trader: trader,
                 profile: profile,
+                viewerProfileID: viewerProfileID,
                 imagePipeline: imagePipeline,
                 isFollowing: isFollowing,
+                showsFollowControl: showsFollowControl,
                 onOpen: {},
                 onToggleFollow: {}
             )
         }
         .accessibilityIdentifier("explore.trader.\(trader.id.rawValue)")
-    }
-
-    private var followButton: some View {
-        Button(action: onToggleFollow) {
-            Text(isFollowing ? "Following" : "Follow")
-                .font(.system(.caption, design: .rounded).weight(.semibold))
-                .foregroundStyle(isFollowing ? colors.primaryText : colors.onAccent)
-                .frame(maxWidth: .infinity)
-                .frame(height: followButtonHeight)
-                .background(
-                    RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous)
-                        .fill(isFollowing ? colors.fillSecondary : colors.accent)
-                )
-                .overlay {
-                    if isFollowing {
-                        RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous)
-                            .stroke(colors.border, lineWidth: ExperienceBorder.thin)
-                    }
-                }
-                .contentShape(Rectangle())
-                .frame(minHeight: ExperienceAccessibility.minTouchTarget)
-        }
-        .buttonStyle(.experiencePlain)
-        .accessibilityIdentifier(
-            isFollowing
-                ? "explore.trader.following.\(trader.id.rawValue)"
-                : "explore.trader.follow.\(trader.id.rawValue)"
-        )
     }
 
     private func fixedTextRow(

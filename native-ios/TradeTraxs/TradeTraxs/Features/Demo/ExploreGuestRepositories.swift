@@ -71,7 +71,12 @@ nonisolated struct GuestPublicFeedRepository: FeedRepository, @unchecked Sendabl
 
     func createReel(_ reel: Reel) async throws -> Reel { throw DemoAuthRequired.error }
     func deleteReel(id: ReelID) async throws { throw DemoAuthRequired.error }
-    func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel] { [] }
+    func unattachedReels(
+        for profileID: ProfileID,
+        limit: Int,
+        includingReelID: ReelID?
+    ) async throws -> [Reel] { [] }
+    func tradeIDsWithAttachedReels(owner: ProfileID) async throws -> Set<TradeID> { [] }
 }
 
 nonisolated struct GuestPublicExploreRepository: ExploreRepository, @unchecked Sendable {

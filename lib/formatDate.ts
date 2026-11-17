@@ -1,4 +1,4 @@
-import { getSessionFromDate } from "./tradingSession"
+import { getSessionFromDate } from "./tradingSession.ts"
 
 const EST_TIMEZONE = "America/New_York"
 

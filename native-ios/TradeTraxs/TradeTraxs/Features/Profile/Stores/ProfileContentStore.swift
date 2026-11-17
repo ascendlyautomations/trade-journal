@@ -228,14 +228,58 @@ final class ProfileContentStore {
         let mutationEpoch = followMutationEpoch
         defer { followInFlight = false }
 
-        let previous = isFollowing
-        let next = !previous
-        isFollowing = next
-        FollowMutationCoordinator.shared.applyEdgeChange(
-            viewer: viewerID,
-            target: profileID,
-            isFollowing: next
-        )
+        enum FollowIntent {
+            case follow
+            case request
+            case unfollow
+            case cancelRequest
+        }
+
+        let previousFollowing = isFollowing
+        let previousRequested = isRequested
+        let intent: FollowIntent
+        if previousFollowing {
+            intent = .unfollow
+        } else if previousRequested {
+            intent = .cancelRequest
+        } else if profile?.isPrivate == true {
+            intent = .request
+        } else {
+            intent = .follow
+        }
+
+        switch intent {
+        case .follow:
+            isFollowing = true
+            isRequested = false
+            FollowMutationCoordinator.shared.applyEdgeChange(
+                viewer: viewerID,
+                target: profileID,
+                isFollowing: true
+            )
+        case .request:
+            isFollowing = false
+            isRequested = true
+            FollowMutationCoordinator.shared.applyFollowRequestPresentation(
+                viewer: viewerID,
+                target: profileID,
+                isRequested: true
+            )
+        case .unfollow:
+            isFollowing = false
+            FollowMutationCoordinator.shared.applyEdgeChange(
+                viewer: viewerID,
+                target: profileID,
+                isFollowing: false
+            )
+        case .cancelRequest:
+            isRequested = false
+            FollowMutationCoordinator.shared.applyFollowRequestPresentation(
+                viewer: viewerID,
+                target: profileID,
+                isRequested: false
+            )
+        }
         if let patched = detailCache.stats(for: profileID) {
             stats = patched
         }
@@ -251,19 +295,30 @@ final class ProfileContentStore {
         }
 
         do {
-            if next {
+            switch intent {
+            case .follow, .request:
                 try await profiles.follow(from: viewerID, to: profileID)
-            } else {
+            case .unfollow, .cancelRequest:
                 try await profiles.unfollow(from: viewerID, to: profileID)
             }
         } catch {
             guard followMutationEpoch == mutationEpoch else { return }
-            isFollowing = previous
-            FollowMutationCoordinator.shared.applyEdgeChange(
-                viewer: viewerID,
-                target: profileID,
-                isFollowing: previous
-            )
+            isFollowing = previousFollowing
+            isRequested = previousRequested
+            switch intent {
+            case .follow, .unfollow:
+                FollowMutationCoordinator.shared.applyEdgeChange(
+                    viewer: viewerID,
+                    target: profileID,
+                    isFollowing: previousFollowing
+                )
+            case .request, .cancelRequest:
+                FollowMutationCoordinator.shared.applyFollowRequestPresentation(
+                    viewer: viewerID,
+                    target: profileID,
+                    isRequested: previousRequested
+                )
+            }
             if let patched = detailCache.stats(for: profileID) {
                 stats = patched
             }

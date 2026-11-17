@@ -1,8 +1,9 @@
+import { knownPnl } from "@/lib/analytics/knownPnl"
 import type { EquityChartPoint } from "@/app/components/dashboard/DashboardEquityCurve"
 import {
   compareDashboardTradesChronological,
-  resolveDashboardTradeDate,
 } from "@/lib/dashboardTradeDate"
+import { psychologyTradeDateKey } from "@/lib/psychology/tradeDateKey"
 import { computeMaxDrawdown } from "@/lib/dashboardMaxDrawdown"
 import { formatPnlCurrency } from "@/lib/formatMoney"
 import { computePerformanceStats } from "@/lib/performanceShare"
@@ -28,32 +29,46 @@ import type { TradingReport } from "./tradingReportTypes"
 export { availableTradingReportYears }
 
 function filterTradesForInterval(trades: any[], start: Date, end: Date): any[] {
+  const startKey = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(start)
+  const endKey = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(end)
   return trades.filter((trade) => {
     if (isBacktestTrade(trade)) return false
-    const tradeDate = resolveDashboardTradeDate(trade)
-    if (!tradeDate) return false
-    return tradeDate >= start && tradeDate <= end
+    const key = psychologyTradeDateKey(trade)
+    if (!key) return false
+    return key >= startKey && key <= endKey
   })
 }
 
 function computeProfitFactor(trades: any[]): number | null {
-  const grossProfit = trades
-    .filter((t) => (Number(t.pnl) || 0) > 0)
-    .reduce((sum, t) => sum + (Number(t.pnl) || 0), 0)
-  const grossLoss = trades
-    .filter((t) => (Number(t.pnl) || 0) < 0)
-    .reduce((sum, t) => sum + Math.abs(Number(t.pnl) || 0), 0)
-  if (grossLoss === 0) return grossProfit > 0 ? null : null
+  const values = trades.flatMap((trade) => {
+    const pnl = knownPnl(trade.pnl)
+    return pnl == null ? [] : [pnl]
+  })
+  const grossProfit = values.filter((pnl) => pnl > 0).reduce((sum, pnl) => sum + pnl, 0)
+  const grossLoss = values
+    .filter((pnl) => pnl < 0)
+    .reduce((sum, pnl) => sum + Math.abs(pnl), 0)
+  if (grossLoss === 0) return null
   return grossProfit / grossLoss
 }
 
 function computeDailyPnl(trades: any[]): Map<string, number> {
   const map = new Map<string, number>()
   for (const trade of trades) {
-    const date = resolveDashboardTradeDate(trade)
-    if (!date) continue
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
-    map.set(key, (map.get(key) ?? 0) + (Number(trade.pnl) || 0))
+    const key = psychologyTradeDateKey(trade)
+    const pnl = knownPnl(trade.pnl)
+    if (!key || pnl == null) continue
+    map.set(key, (map.get(key) ?? 0) + pnl)
   }
   return map
 }
@@ -87,22 +102,32 @@ function pickExtremeDay(
 }
 
 function averagePnl(trades: any[], wins: boolean): number | null {
-  const filtered = trades.filter((t) =>
-    wins ? (Number(t.pnl) || 0) > 0 : (Number(t.pnl) || 0) < 0
-  )
+  const filtered = trades.flatMap((trade) => {
+    const pnl = knownPnl(trade.pnl)
+    if (pnl == null) return []
+    if (wins ? pnl <= 0 : pnl >= 0) return []
+    return [pnl]
+  })
   if (filtered.length === 0) return null
-  const sum = filtered.reduce((s, t) => s + (Number(t.pnl) || 0), 0)
-  return sum / filtered.length
+  return filtered.reduce((sum, pnl) => sum + pnl, 0) / filtered.length
 }
 
 function computeExpectancy(trades: any[]): number | null {
-  if (trades.length === 0) return null
-  const wins = trades.filter((t) => (Number(t.pnl) || 0) > 0)
-  const losses = trades.filter((t) => (Number(t.pnl) || 0) < 0)
-  const winRate = wins.length / trades.length
-  const lossRate = losses.length / trades.length
-  const avgWin = averagePnl(trades, true) ?? 0
-  const avgLoss = averagePnl(trades, false) ?? 0
+  const priced = trades.flatMap((trade) => {
+    const pnl = knownPnl(trade.pnl)
+    return pnl == null ? [] : [pnl]
+  })
+  if (priced.length === 0) return null
+  const wins = priced.filter((pnl) => pnl > 0)
+  const losses = priced.filter((pnl) => pnl < 0)
+  const winRate = wins.length / priced.length
+  const lossRate = losses.length / priced.length
+  const avgWin = wins.length
+    ? wins.reduce((sum, pnl) => sum + pnl, 0) / wins.length
+    : 0
+  const avgLoss = losses.length
+    ? losses.reduce((sum, pnl) => sum + pnl, 0) / losses.length
+    : 0
   return winRate * avgWin + lossRate * avgLoss
 }
 
@@ -111,29 +136,28 @@ function buildYearlyMetrics(trades: any[]): TradingYearlyReportMetrics {
   const daily = computeDailyPnl(trades)
   const bestDay = pickExtremeDay(daily, "best")
   const worstDay = pickExtremeDay(daily, "worst")
-  const wins = trades.filter((t) => (Number(t.pnl) || 0) > 0)
-  const losses = trades.filter((t) => (Number(t.pnl) || 0) < 0)
-  let bestTrade: number | null = null
-  let worstTrade: number | null = null
-  for (const t of trades) {
-    const pnl = Number(t.pnl) || 0
-    if (bestTrade == null || pnl > bestTrade) bestTrade = pnl
-    if (worstTrade == null || pnl < worstTrade) worstTrade = pnl
-  }
+  const priced = trades.flatMap((trade) => {
+    const pnl = knownPnl(trade.pnl)
+    return pnl == null ? [] : [pnl]
+  })
+  const wins = priced.filter((pnl) => pnl > 0)
+  const losses = priced.filter((pnl) => pnl < 0)
+  const bestTrade = wins.length ? Math.max(...wins) : null
+  const worstTrade = losses.length ? Math.min(...losses) : null
   const winningDays = [...daily.values()].filter((v) => v > 0).length
   const losingDays = [...daily.values()].filter((v) => v < 0).length
 
   return {
     netPnl: stats.totalPnL,
     tradeCount: stats.totalTrades,
-    winRate: stats.totalTrades > 0 ? stats.winRate : null,
+    winRate: priced.length > 0 ? (wins.length / priced.length) * 100 : null,
     profitFactor: computeProfitFactor(trades),
     averageWinner: averagePnl(trades, true),
     averageLoser: averagePnl(trades, false),
     averageRr: stats.avgRR,
     expectancy: computeExpectancy(trades),
-    bestTrade: trades.length > 0 ? bestTrade : null,
-    worstTrade: trades.length > 0 ? worstTrade : null,
+    bestTrade,
+    worstTrade,
     bestDayLabel: bestDay.label,
     bestDayPnl: bestDay.pnl,
     worstDayLabel: worstDay.label,
@@ -149,14 +173,19 @@ function buildYearlyMetrics(trades: any[]): TradingYearlyReportMetrics {
 function buildEquityCurve(trades: any[]): EquityChartPoint[] {
   const chronological = [...trades].sort(compareDashboardTradesChronological)
   let running = 0
-  return chronological.map((trade) => {
-    running += Number(trade.pnl) || 0
-    const date = resolveDashboardTradeDate(trade)
-    return {
-      date: (date ?? new Date()).toISOString(),
+  const points: EquityChartPoint[] = []
+  for (const trade of chronological) {
+    const pnl = knownPnl(trade.pnl)
+    if (pnl == null) continue
+    running += pnl
+    points.push({
+      date: new Date(
+        trade.exit_time || trade.entry_time || trade.created_at || Date.now()
+      ).toISOString(),
       equity: running,
-    }
-  })
+    })
+  }
+  return points
 }
 
 function buildExecutiveSummary(
@@ -164,7 +193,10 @@ function buildExecutiveSummary(
   year: number
 ): string {
   if (metrics.tradeCount === 0) {
-    return `No trades matched your filters during ${year}. Log trades to unlock yearly insights.`
+    return `No trades matched your filters during ${year}.`
+  }
+  if (metrics.winRate == null) {
+    return `${year} has ${metrics.tradeCount} trades, but none have a P&L yet.`
   }
   const tone =
     metrics.netPnl > 0 ? "positive" : metrics.netPnl < 0 ? "challenging" : "mixed"
@@ -180,8 +212,14 @@ function buildMonthRows(
   trades: any[],
   now: Date
 ): TradingYearlyMonthRow[] {
-  const currentYear = now.getFullYear()
-  const currentMonth = now.getMonth() + 1
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now)
+  const currentYear = Number(today.slice(0, 4))
+  const currentMonth = Number(today.slice(5, 7))
   const rows: TradingYearlyMonthRow[] = []
 
   for (let month = 1; month <= 12; month += 1) {
@@ -200,7 +238,10 @@ function buildMonthRows(
       monthLabel: label,
       netPnl: stats.totalPnL,
       tradeCount: stats.totalTrades,
-      winRate: stats.totalTrades > 0 ? stats.winRate : null,
+      winRate:
+        monthTrades.some((trade) => knownPnl(trade.pnl) != null)
+          ? stats.winRate
+          : null,
       monthRef,
     }
     rows.push({

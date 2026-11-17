@@ -13,6 +13,9 @@ nonisolated struct HTTPRequest: Sendable {
     var allowsRetry: Bool = true
     /// Scheduling lane — background requests yield while visible work is in flight.
     var schedulingPriority: NetworkSchedulingPriority = .visible
+    /// When true, 4xx/5xx are returned as ``HTTPResponse`` instead of thrown ``NetworkError``.
+    /// Default false — only Trade AI BFF analysis opts in.
+    var acceptsNonSuccessStatusCodes: Bool = false
 
     var urlRequest: URLRequest {
         var request = URLRequest(url: url)

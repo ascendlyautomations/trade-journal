@@ -1,6 +1,9 @@
 import Foundation
+import OSLog
 
 enum TradeRoomObsBroadcastDiagnostics {
+    private static let logger = Logger(subsystem: AppLog.subsystem, category: "obs-broadcast")
+
     static func log(
         _ step: String,
         roomID: RoomID,
@@ -8,13 +11,15 @@ enum TradeRoomObsBroadcastDiagnostics {
         statusCode: Int? = nil,
         detail: String? = nil
     ) {
-        #if DEBUG
         var parts = ["[OBS]", "step=\(step)", "room=\(roomID.rawValue)"]
         if let sessionId, !sessionId.isEmpty { parts.append("session=\(sessionId)") }
         if let statusCode { parts.append("http=\(statusCode)") }
         if let detail, !detail.isEmpty { parts.append(detail) }
-        print(parts.joined(separator: " "))
+        let line = parts.joined(separator: " ")
+        #if DEBUG
+        print(line)
         #endif
+        logger.info("\(line, privacy: .public)")
     }
 
     /// Redact RTMP keys and JWT-like secrets from debug body snippets.

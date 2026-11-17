@@ -1,7 +1,7 @@
 import Foundation
 
 nonisolated enum AnalyticsLocalSchema {
-    static let localSchemaVersion = 3
+    static let localSchemaVersion = 4
 
     static let domainCalendar = "calendar"
     static let domainDashboardBootstrap = "dashboard_bootstrap"
@@ -122,6 +122,16 @@ nonisolated enum AnalyticsLocalSchema {
     static let createDashboardChartIndex = """
         CREATE INDEX IF NOT EXISTS dashboard_chart_bundle_viewer_idx
         ON dashboard_chart_bundle (viewer_id, account_scope_key);
+        """
+
+    static let createDashboardPresetRevisionIndex = """
+        CREATE INDEX IF NOT EXISTS dashboard_preset_metrics_viewer_revision_idx
+        ON dashboard_preset_metrics (viewer_id, ingested_revision);
+        """
+
+    static let createDashboardChartRevisionIndex = """
+        CREATE INDEX IF NOT EXISTS dashboard_chart_bundle_viewer_scope_revision_idx
+        ON dashboard_chart_bundle (viewer_id, account_scope_key, ingested_revision);
         """
 
     /// Profile Statistics V2 — keyed by viewer + subject + contract + visibility (not owner sync state).

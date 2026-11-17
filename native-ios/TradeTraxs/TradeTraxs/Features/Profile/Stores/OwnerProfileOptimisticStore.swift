@@ -67,10 +67,17 @@ final class OwnerProfileOptimisticStore {
         revision += 1
     }
 
+    static func invalidateLinkedReelsByTradeFlight(for ownerID: ProfileID) {
+        RepositoryRequestFlight.shared.invalidate(
+            prefix: "feed.reelsByTradeIds:\(ownerID.rawValue)"
+        )
+    }
+
     func noteReelCreated(_ reel: Reel) {
         RepositoryRequestFlight.shared.invalidate(
             prefix: "feed.profileReels:\(reel.authorProfileID.rawValue)"
         )
+        Self.invalidateLinkedReelsByTradeFlight(for: reel.authorProfileID)
         guard Self.isListedOnOwnerProfile(reel) else {
             // Still notify Feed / other observers; Profile Clips skips private trade-linked.
             ContentMutationStore.shared.noteReelCreated(reel)
@@ -98,6 +105,9 @@ final class OwnerProfileOptimisticStore {
     }
 
     func noteReelDeleted(id: ReelID) {
+        if let removed = reels.first(where: { $0.id == id }) {
+            Self.invalidateLinkedReelsByTradeFlight(for: removed.authorProfileID)
+        }
         reels.removeAll { $0.id == id }
         deletedReelIDs.insert(id)
         ownerScreen?.applyOptimisticReelRemoval(id: id)

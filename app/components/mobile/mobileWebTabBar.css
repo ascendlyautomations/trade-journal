@@ -55,6 +55,7 @@
    */
   html.tt-mobile-web-clips-immersive:not(.tt-native-ios) {
     --navbar-height: 0px;
+    --app-header-offset: 0px;
     --app-tab-bar-height: 0px;
     --app-tab-bar-offset: 0px;
     --app-viewport-height: 100dvh;

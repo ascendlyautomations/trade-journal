@@ -30,7 +30,11 @@ export type ActiveTradeRoomBroadcast = {
   visibility: TradeRoomBroadcastVisibility
   /** When push fan-out for go-live ran (at most once per session). */
   goLiveNotifiedAt: string | null
+  streamTitle: string | null
 }
+
+const ACTIVE_BROADCAST_SELECT =
+  "id, room_id, broadcaster_user_id, started_at, voice_mode, video_source, broadcast_source, primary_media_publisher_identity, livekit_ingress_id, ingress_status_snapshot, visibility, go_live_notified_at, stream_title"
 
 function normalizeBroadcastSource(
   raw: string | null | undefined
@@ -81,6 +85,7 @@ function rowToActive(
     visibility: normalizeVisibilityFromRow(row),
     goLiveNotifiedAt:
       (row.go_live_notified_at as string | null)?.trim() || null,
+    streamTitle: (row.stream_title as string | null)?.trim() || null,
   }
 }
 
@@ -163,9 +168,7 @@ export async function getActiveTradeRoomBroadcast(
   }
 
   const { data, error } = await broadcastsTable(admin)
-    .select(
-      "id, room_id, broadcaster_user_id, started_at, voice_mode, video_source, broadcast_source, primary_media_publisher_identity, livekit_ingress_id, ingress_status_snapshot, visibility, go_live_notified_at"
-    )
+    .select(ACTIVE_BROADCAST_SELECT)
     .eq("room_id", roomId)
     .is("ended_at", null)
     .maybeSingle()
@@ -211,6 +214,7 @@ export async function claimTradeRoomBroadcastSession(
     broadcasterUserId: string
     voiceMode: TradeRoomBroadcastVoiceMode
     videoSource: TradeRoomBroadcastVideoSource
+    streamTitle: string
   }
 ): Promise<
   | { ok: true; session: ActiveTradeRoomBroadcast }
@@ -237,14 +241,22 @@ export async function claimTradeRoomBroadcastSession(
       existing.videoSource === "obs" &&
       existing.visibility === "preparing"
     ) {
+      type BroadcastPatch = Database["public"]["Tables"]["room_live_broadcasts"]["Update"]
+      const patch: BroadcastPatch = {}
       if (existing.voiceMode !== options.voiceMode) {
+        patch.voice_mode = options.voiceMode
+      }
+      if ((existing.streamTitle ?? "") !== options.streamTitle) {
+        patch.stream_title = options.streamTitle
+      }
+      if (Object.keys(patch).length > 0) {
         const { error: vmErr } = await broadcastsTable(admin)
-          .update({ voice_mode: options.voiceMode })
+          .update(patch)
           .eq("id", existing.id)
           .eq("room_id", roomId)
           .is("ended_at", null)
         if (vmErr) {
-          console.error("[livekit/broadcast] voice_mode update failed", vmErr.message)
+          console.error("[livekit/broadcast] prep session patch failed", vmErr.message)
         }
       }
       const refreshed = await getActiveTradeRoomBroadcast(admin, roomId, {
@@ -298,13 +310,12 @@ export async function claimTradeRoomBroadcastSession(
       broadcaster_user_id: broadcasterUserId,
       voice_mode: options.voiceMode,
       video_source: options.videoSource,
+      stream_title: options.streamTitle,
       /** OBS encoder sessions use ingress; keep in sync with UI and status API from row one. */
       broadcast_source: isObsSession ? "obs" : "browser",
       visibility: isObsSession ? "preparing" : "public",
     })
-    .select(
-      "id, room_id, broadcaster_user_id, started_at, voice_mode, video_source, broadcast_source, primary_media_publisher_identity, livekit_ingress_id, ingress_status_snapshot, visibility, go_live_notified_at"
-    )
+    .select(ACTIVE_BROADCAST_SELECT)
     .single()
 
   if (error) {
@@ -563,4 +574,33 @@ export async function endTradeRoomBroadcastIfActive(
   await clearBroadcastInteractiveStateForSession(admin, options.sessionId)
 
   return true
+}
+
+export async function updateTradeRoomBroadcastStreamTitle(
+  admin: SupabaseClient<Database>,
+  options: {
+    roomId: string
+    sessionId: string
+    broadcasterUserId: string
+    streamTitle: string
+  }
+): Promise<{ ok: true; streamTitle: string } | { ok: false; status: number; error: string }> {
+  const { data, error } = await broadcastsTable(admin)
+    .update({ stream_title: options.streamTitle })
+    .eq("id", options.sessionId)
+    .eq("room_id", options.roomId)
+    .eq("broadcaster_user_id", options.broadcasterUserId)
+    .is("ended_at", null)
+    .select("stream_title")
+    .maybeSingle()
+
+  if (error) {
+    console.error("[livekit/broadcast] stream_title update failed", error.message)
+    return { ok: false, status: 500, error: "Could not update stream title." }
+  }
+  if (!data) {
+    return { ok: false, status: 404, error: "No active broadcast session found." }
+  }
+  const next = (data.stream_title as string | null)?.trim() || options.streamTitle
+  return { ok: true, streamTitle: next }
 }

@@ -157,6 +157,15 @@ final class ClipsContainerViewModel {
         notifyClipsSectionPersistence(items)
     }
 
+    /// Owner link/unlink — merge cache-authoritative reel into visible clips (no refetch).
+    func applyReelLinkMutation(_ reel: Reel) {
+        guard reel.authorProfileID == profileOwnerID else { return }
+        guard let index = items.firstIndex(where: { $0.id == reel.id }) else { return }
+        items[index] = reel
+        detailCache.seed(reel)
+        notifyClipsSectionPersistence(items)
+    }
+
     /// Owner publish — upsert immediately, then refresh using the same path as manual reload.
     func notePublishSucceeded(_ reel: Reel, preservingExisting existingItems: [Reel] = []) {
         guard reel.authorProfileID == profileOwnerID else { return }

@@ -148,6 +148,7 @@ nonisolated enum DashboardAnalyticsMapper {
             profitFactor: DashboardAnalyticsComposer.profitFactor(ingredients),
             payouts: payoutTotal,
             expectancy: DashboardAnalyticsComposer.expectancy(ingredients),
+            // Avg Targeted R:R — V3 `sum_rr` fallback; `overlayClientRrJournalMetrics` prefers filtered journal rows.
             averageRR: DashboardAnalyticsComposer.averageRR(ingredients),
             averageMaxRrReached: nil,
             rrTargetAnalysis: DashboardRrTargetAnalysis(

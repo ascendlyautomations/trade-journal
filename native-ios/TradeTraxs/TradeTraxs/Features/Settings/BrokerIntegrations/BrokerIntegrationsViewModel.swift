@@ -319,6 +319,33 @@ final class BrokerIntegrationsViewModel {
         }
     }
 
+    /// Providers offered in compact connect pickers (dashboard `+`, onboarding).
+    var connectSheetProviders: [BrokerIntegrationProvider] {
+        BrokerIntegrationsCatalog.providers.filter { provider in
+            switch provider {
+            case .tradovate:
+                return true
+            case .rithmic:
+                return showsRithmicBrokerOnboardingOption
+            }
+        }
+    }
+
+    func isConnectDisabled(for provider: BrokerIntegrationProvider) -> Bool {
+        if isBrokerConnectionMutationActive { return true }
+        if provider == .rithmic, !isRithmicConnectUIAvailable { return true }
+        return false
+    }
+
+    func beginConnect(for provider: BrokerIntegrationProvider) {
+        switch provider {
+        case .tradovate:
+            promptConnectTradovate()
+        case .rithmic:
+            presentRithmicConnect()
+        }
+    }
+
     func promptConnectTradovate(reconnectConnectionId: String? = nil) {
         guard !isBrokerConnectionMutationActive else { return }
         pendingTradovateReconnectConnectionId = reconnectConnectionId

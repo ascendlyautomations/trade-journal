@@ -72,10 +72,6 @@ final class CreateRoomViewModel {
         configuration.hasUnsavedDraftChanges || imageData != nil
     }
 
-    var showsJoinPolicy: Bool {
-        configuration.visibility == .public
-    }
-
     func loadIfNeeded() {
         guard !hasPrepared else { return }
         hasPrepared = true
@@ -97,13 +93,6 @@ final class CreateRoomViewModel {
     func clearImage() {
         imageData = nil
         imagePreview = nil
-    }
-
-    func setVisibility(_ visibility: TradeRoomVisibility) {
-        configuration.visibility = visibility
-        if visibility == .private {
-            configuration.joinPolicy = .open
-        }
     }
 
     func toggleDiscoveryTag(_ tag: String) {

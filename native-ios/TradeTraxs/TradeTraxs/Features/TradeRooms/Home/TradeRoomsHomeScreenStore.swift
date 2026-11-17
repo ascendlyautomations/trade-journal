@@ -9,6 +9,7 @@ import Foundation
 @MainActor
 enum TradeRoomsHomeScreenStore {
     private static var viewModels: [TradeRoomNavigationHost: TradeRoomsHomeViewModel] = [:]
+    private static var pendingDiscoveryScope: [TradeRoomNavigationHost: TradeRoomDiscoveryScope] = [:]
 
     static func viewModel(
         host: TradeRoomNavigationHost,
@@ -24,9 +25,29 @@ enum TradeRoomsHomeScreenStore {
 
     static func retire(host: TradeRoomNavigationHost) {
         viewModels.removeValue(forKey: host)
+        pendingDiscoveryScope.removeValue(forKey: host)
     }
 
     static func retireAll() {
         viewModels.removeAll()
+        pendingDiscoveryScope.removeAll()
+    }
+
+    /// Deep links / onboarding — apply once when Trade Rooms home mounts (e.g. Getting Started → All).
+    static func requestDiscoveryScope(
+        _ scope: TradeRoomDiscoveryScope,
+        host: TradeRoomNavigationHost
+    ) {
+        pendingDiscoveryScope[host] = scope
+        if let existing = viewModels[host] {
+            existing.selectDiscoveryScope(scope)
+            pendingDiscoveryScope.removeValue(forKey: host)
+        }
+    }
+
+    static func consumePendingDiscoveryScope(
+        for host: TradeRoomNavigationHost
+    ) -> TradeRoomDiscoveryScope? {
+        pendingDiscoveryScope.removeValue(forKey: host)
     }
 }

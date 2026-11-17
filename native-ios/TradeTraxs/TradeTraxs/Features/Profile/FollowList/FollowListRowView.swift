@@ -2,7 +2,9 @@ import SwiftUI
 
 struct FollowListRowView: View {
     let profile: Profile
+    let viewerProfileID: ProfileID?
     let imagePipeline: any ImagePipeline
+    var followButtonRevision: Int = 0
     let isFollowing: Bool
     let showsRemove: Bool
     let onOpen: () -> Void
@@ -12,6 +14,7 @@ struct FollowListRowView: View {
     @Environment(\.themeColors) private var colors
 
     var body: some View {
+        let _ = followButtonRevision
         HStack(spacing: ExperienceSpacing.md) {
             Button(action: onOpen) {
                 HStack(spacing: ExperienceSpacing.md) {
@@ -35,7 +38,15 @@ struct FollowListRowView: View {
             .buttonStyle(.experiencePlain)
             .accessibilityIdentifier("followList.row.\(profile.id.rawValue)")
 
-            followControl
+            ExperienceProfileListFollowTrailing(
+                profileID: profile.id,
+                viewerProfileID: viewerProfileID,
+                isFollowing: isFollowing,
+                showsFollowControl: true,
+                style: .followList,
+                accessibilityPrefix: "followList",
+                onToggleFollow: onToggleFollow
+            )
 
             if showsRemove {
                 Menu {
@@ -58,35 +69,4 @@ struct FollowListRowView: View {
         .contentShape(Rectangle())
     }
 
-    @ViewBuilder
-    private var followControl: some View {
-        Button(action: onToggleFollow) {
-            Text(isFollowing ? "Following" : "Follow")
-                .font(.system(.footnote, design: .default).weight(.semibold))
-                .foregroundStyle(isFollowing ? colors.primaryText : colors.onAccent)
-                .padding(.horizontal, 14)
-                .frame(height: 32)
-                .background(
-                    RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous)
-                        .fill(isFollowing ? colors.fillSecondary : colors.accent)
-                )
-                .overlay {
-                    if isFollowing {
-                        RoundedRectangle(cornerRadius: ExperienceRadius.button, style: .continuous)
-                            .stroke(colors.border, lineWidth: ExperienceBorder.thin)
-                    }
-                }
-                .frame(
-                    minWidth: ExperienceAccessibility.minTouchTarget,
-                    minHeight: ExperienceAccessibility.minTouchTarget
-                )
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.experiencePlain)
-        .accessibilityIdentifier(
-            isFollowing
-                ? "followList.following.\(profile.id.rawValue)"
-                : "followList.follow.\(profile.id.rawValue)"
-        )
-    }
 }

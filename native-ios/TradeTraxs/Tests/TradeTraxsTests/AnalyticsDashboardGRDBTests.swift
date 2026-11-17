@@ -154,6 +154,19 @@ struct AnalyticsDashboardGRDBTests {
         #expect(bCharts.equity.points.isEmpty)
     }
 
+    @Test("Duplicate bootstrap revision skips heavy GRDB rewrite")
+    func idempotentBootstrapIngest() async throws {
+        let (url, store) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let viewer = ProfileID("dash-idempotent")
+        let bootstrap = try sampleBootstrap(revision: 218)
+        let first = try await store.ingestDashboardBootstrap(viewerID: viewer, bootstrap: bootstrap)
+        #expect(first.metricsWritten > 0)
+        let second = try await store.ingestDashboardBootstrap(viewerID: viewer, bootstrap: bootstrap)
+        #expect(second.metricsWritten == 0)
+        #expect(second.chartBundlesWritten == 0)
+    }
+
     @Test("Stale revision cannot regress analytics_sync_state")
     func monotonicRevision() async throws {
         let (url, store) = try makeStore()

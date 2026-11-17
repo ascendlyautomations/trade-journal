@@ -247,7 +247,7 @@ function FeedCommentsSection({
 
     return (
       <div
-        className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-2"
+        className="tt-mobile-web-keyboard-composer flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-2"
         onClick={stopPropagation}
         onKeyDown={stopPropagation}
       >

@@ -4,6 +4,7 @@ import SwiftUI
 struct ExploreTraderListRow: View {
     let trader: ExploreTraderSuggestion
     let profile: Profile
+    let viewerProfileID: ProfileID?
     let imagePipeline: any ImagePipeline
     let isFollowing: Bool
     let showsFollowControl: Bool
@@ -15,6 +16,7 @@ struct ExploreTraderListRow: View {
     init(
         trader: ExploreTraderSuggestion,
         profile: Profile,
+        viewerProfileID: ProfileID? = nil,
         imagePipeline: any ImagePipeline,
         isFollowing: Bool,
         showsFollowControl: Bool = true,
@@ -23,6 +25,7 @@ struct ExploreTraderListRow: View {
     ) {
         self.trader = trader
         self.profile = profile
+        self.viewerProfileID = viewerProfileID
         self.imagePipeline = imagePipeline
         self.isFollowing = isFollowing
         self.showsFollowControl = showsFollowControl
@@ -57,24 +60,15 @@ struct ExploreTraderListRow: View {
             }
             .buttonStyle(.experiencePlain)
 
-            if showsFollowControl {
-                Button(action: onToggleFollow) {
-                    Text(isFollowing ? "Following" : "Follow")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(isFollowing ? colors.primaryText : colors.onAccent)
-                        .padding(.horizontal, 12)
-                        .frame(height: 30)
-                        .background(
-                            Capsule().fill(isFollowing ? colors.fillSecondary : colors.accent)
-                        )
-                }
-                .buttonStyle(.experiencePlain)
-                .accessibilityIdentifier(
-                    isFollowing
-                        ? "explore.trader.following.\(trader.id.rawValue)"
-                        : "explore.trader.follow.\(trader.id.rawValue)"
-                )
-            }
+            ExperienceProfileListFollowTrailing(
+                profileID: profile.id,
+                viewerProfileID: viewerProfileID,
+                isFollowing: isFollowing,
+                showsFollowControl: showsFollowControl,
+                style: .exploreList,
+                accessibilityPrefix: "explore.trader",
+                onToggleFollow: onToggleFollow
+            )
         }
         .accessibilityIdentifier("explore.trader.row.\(trader.id.rawValue)")
     }

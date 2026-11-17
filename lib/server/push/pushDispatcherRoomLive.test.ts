@@ -9,6 +9,7 @@ test("room_live push content carries uuid slug and session for routing", () => {
     roomSlug: "momentum",
     roomName: "Momentum",
     broadcastSessionId: "sess-abc",
+    streamTitle: "London Open",
   })
   const parsed = JSON.parse(
     JSON.stringify(content)

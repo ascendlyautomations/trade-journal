@@ -61,9 +61,11 @@ import {
   parseOptionalRr,
 } from "@/lib/tradeRr"
 import {
+  canComputeRealizedRrFromPricesAndPlan,
   realizedRrForManualTradeSave,
   validateManualTradeRiskFields,
 } from "@/lib/tradePointsAndRealizedRr"
+import { parseOptionalPlannedDollarRisk } from "@/lib/plannedTradeRisk"
 import {
   resolveCopyGroupAccounts,
 } from "@/lib/copyTradingGroups"
@@ -147,6 +149,17 @@ import {
   upsertAccountInCache,
   upsertTradeInCache,
 } from "@/lib/appDataCache"
+import { patchLinkedTradeVisibilityInSessions } from "@/lib/feedSessionCache"
+import { notifyTradeVisibilityChanged } from "@/lib/tradeDeleteSync"
+import {
+  resolveTradePsychologyValue,
+  TRADE_EMOTION_OPTIONS,
+  TRADE_EMOTION_PRESETS,
+  TRADE_MARKET_CONDITION_OPTIONS,
+  TRADE_MARKET_CONDITION_PRESETS,
+  TRADE_PSYCHOLOGY_CUSTOM_TOKEN,
+  tradePsychologyPickerState,
+} from "@/lib/tradeReviewCatalog"
 
 type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
 
@@ -305,9 +318,11 @@ export default function InputTradeForm({
   }
 
   const [emotion, setEmotion] = useState("")
+  const [customEmotion, setCustomEmotion] = useState("")
   const [followedPlan, setFollowedPlan] = useState(false)
   const [mistakeType, setMistakeType] = useState("")
   const [market, setMarket] = useState("")
+  const [customMarket, setCustomMarket] = useState("")
   const [newsEvent, setNewsEvent] = useState(false)
   const [timeframe, setTimeframe] = useState("")
   const [customTimeframe, setCustomTimeframe] = useState("")
@@ -332,6 +347,9 @@ export default function InputTradeForm({
   const [direction, setDirection] = useState("Long")
   const [pnl, setPnl] = useState("")
   const [rr, setRR] = useState("")
+  const [fullTp, setFullTp] = useState(false)
+  const [earlyExit, setEarlyExit] = useState(false)
+  const [exitRr, setExitRr] = useState("")
   const [maxRrReached, setMaxRrReached] = useState("")
   const [points, setPoints] = useState("")
   const [session, setSession] = useState<string>(DEFAULT_TRADING_SESSION)
@@ -372,6 +390,7 @@ export default function InputTradeForm({
   const [entryPrice, setEntryPrice] = useState("")
   const [exitPrice, setExitPrice] = useState("")
   const [contracts, setContracts] = useState("")
+  const [plannedDollarRisk, setPlannedDollarRisk] = useState("")
   const [entryTime, setEntryTime] = useState("")
   const [exitTime, setExitTime] = useState("")
   const fileInputRef = imageCrop.fileInputRef
@@ -726,11 +745,23 @@ export default function InputTradeForm({
       t.pnl != null && t.pnl !== "" ? String(t.pnl).replace(/,/g, "") : ""
     )
     setRR(t.rr != null && t.rr !== "" ? String(t.rr) : "")
+    setFullTp(Boolean((t as { full_tp?: boolean | null }).full_tp))
+    setEarlyExit(Boolean((t as { early_exit?: boolean | null }).early_exit))
+    const exitRrStored = (t as { exit_rr?: unknown }).exit_rr
+    setExitRr(
+      exitRrStored != null && exitRrStored !== ""
+        ? String(exitRrStored).replace(/,/g, "")
+        : ""
+    )
     const maxRr = (t as { max_rr_reached?: unknown }).max_rr_reached
     setMaxRrReached(
       maxRr != null && maxRr !== "" ? String(maxRr).replace(/,/g, "") : ""
     )
     setPoints(t.points != null && t.points !== "" ? String(t.points) : "")
+    const risk = (t as { dollar_risk?: unknown }).dollar_risk
+    setPlannedDollarRisk(
+      risk != null && risk !== "" ? String(risk).replace(/,/g, "") : ""
+    )
     setSession(t.session || DEFAULT_TRADING_SESSION)
     // Preserve the saved session; do not let auto-detect overwrite while editing.
     setSessionManuallySet(true)
@@ -786,10 +817,22 @@ export default function InputTradeForm({
     setConfidence(
       t.confidence != null && t.confidence !== "" ? String(t.confidence) : ""
     )
-    setEmotion(t.emotion ?? "")
+    const savedEmotion = String(t.emotion ?? "").trim()
+    const emotionState = tradePsychologyPickerState(
+      savedEmotion || null,
+      TRADE_EMOTION_PRESETS
+    )
+    setEmotion(emotionState.selection)
+    setCustomEmotion(emotionState.custom)
     setFollowedPlan(Boolean(t.followed_plan))
     setMistakeType(t.mistake_type ?? "")
-    setMarket(t.market_condition ?? "")
+    const savedMarket = String(t.market_condition ?? "").trim()
+    const marketState = tradePsychologyPickerState(
+      savedMarket || null,
+      TRADE_MARKET_CONDITION_PRESETS
+    )
+    setMarket(marketState.selection)
+    setCustomMarket(marketState.custom)
     setNewsEvent(Boolean(t.news_event))
     const savedTimeframe = String(t.timeframe ?? "").trim()
     if (!savedTimeframe) {
@@ -846,6 +889,9 @@ export default function InputTradeForm({
     setDirection("Long")
     setPnl("")
     setRR("")
+    setFullTp(false)
+    setEarlyExit(false)
+    setExitRr("")
     setMaxRrReached("")
     setPoints("")
     setSession(DEFAULT_TRADING_SESSION)
@@ -870,9 +916,11 @@ export default function InputTradeForm({
     setCopyDestinationAccountIds([])
     setConfidence("")
     setEmotion("")
+    setCustomEmotion("")
     setFollowedPlan(false)
     setMistakeType("")
     setMarket("")
+    setCustomMarket("")
     setNewsEvent(false)
     setTimeframe("")
     setCustomTimeframe("")
@@ -1119,17 +1167,35 @@ export default function InputTradeForm({
     }
 
     const parsedPnl = parseFloat(String(pnl).replace(/,/g, "")) || 0
-    const riskValidation = validateManualTradeRiskFields({
+    const parsedPlannedDollarRisk = parseOptionalPlannedDollarRisk(plannedDollarRisk)
+    if (parsedPlannedDollarRisk === "invalid") {
+      const message = "Enter a dollar amount above 0 for planned risk, or leave it blank."
+      showPopup(persistentError("Save Failed", message))
+      throw new Error(message)
+    }
+    const entryValForRisk =
+      entryPrice.trim() === "" ? null : Number(entryPrice)
+    const exitValForRisk = exitPrice.trim() === "" ? null : Number(exitPrice)
+  const riskValidation = validateManualTradeRiskFields({
       pnl: parsedPnl,
       pointsRaw: points,
       targetedRrRaw: rr,
       maxRrReachedRaw: maxRrReached,
+      fullTp,
+      earlyExit,
+      exitRrRaw: exitRr,
+      entryPriceRaw: entryValForRisk,
+      exitPriceRaw: exitValForRisk,
+      direction,
     })
     if (!riskValidation.ok) {
       const message =
+        riskValidation.outcomeMode ??
         riskValidation.pointsTarget ??
         riskValidation.targetedRr ??
         riskValidation.maxRrReached ??
+        riskValidation.exitRr ??
+        riskValidation.realizedRr ??
         "Complete required risk fields."
       showPopup(persistentError("Required Fields", message))
       throw new Error(message)
@@ -1137,18 +1203,33 @@ export default function InputTradeForm({
 
     const parsedRR = parseOptionalRr(rr)
     const parsedMaxRrReached = parseOptionalRr(maxRrReached)
+    const parsedExitRr = parseOptionalRr(exitRr)
     const maxRrForInsert =
       parsedPnl > 0 ? parsedMaxRrReached : parsedMaxRrReached
     const realizedRrForSave = realizedRrForManualTradeSave({
       points,
       rr: parsedRR,
+      pnl: parsedPnl,
+      full_tp: fullTp,
+      early_exit: earlyExit,
+      exit_rr: parsedExitRr,
       direction,
-      entry_price: parseFloat(entryPrice) || null,
-      exit_price: parseFloat(exitPrice) || null,
+      entry_price: entryValForRisk,
+      exit_price: exitValForRisk,
     })
+    const canComputeExitRr = canComputeRealizedRrFromPricesAndPlan({
+      points,
+      rr: parsedRR,
+      direction,
+      entry_price: entryValForRisk,
+      exit_price: exitValForRisk,
+    })
+    const exitRrForSave =
+      earlyExit && !canComputeExitRr ? parsedExitRr : null
     const maxRrForUpdate = maxRrReachedForTradeSave(
       parsedPnl,
-      parsedMaxRrReached
+      parsedMaxRrReached,
+      { earlyExit }
     )
     const parsedPoints = parseFloat(points) || 0
     const parsedContracts = Number.parseInt(contracts, 10)
@@ -1176,6 +1257,9 @@ export default function InputTradeForm({
       timeframe === "Custom"
         ? customTimeframe.trim() || null
         : timeframe.trim() || null
+
+    const emotionToSave = resolveTradePsychologyValue(emotion, customEmotion)
+    const marketToSave = resolveTradePsychologyValue(market, customMarket)
 
     const selectedCopyGroup = selectedCopyGroupId
       ? (copyGroups.find((group) => group.id === selectedCopyGroupId) ?? null)
@@ -1239,6 +1323,7 @@ export default function InputTradeForm({
         rr: parsedRR,
         points: hasStoredTradePoints(points) ? Number(points) : null,
         contracts: contracts ? Number(contracts) : null,
+        dollar_risk: parsedPlannedDollarRisk,
         session: sessionToSave,
         notes: confluences || null,
         public_description: publicDescription,
@@ -1256,15 +1341,18 @@ export default function InputTradeForm({
         psychology_notes: psychologyVal,
         trade_type: tradeTypeToSave,
         confidence: confidence ? Number(confidence) : null,
-        emotion: emotion || null,
+        emotion: emotionToSave,
         followed_plan: followedPlan,
         mistake_type: mistakeType || null,
-        market_condition: market || null,
+        market_condition: marketToSave,
         news_event: newsEvent,
         timeframe: timeframeToSave,
         is_public: isPublic,
         max_rr_reached: maxRrForInsert,
         realized_rr: realizedRrForSave,
+        full_tp: fullTp,
+        early_exit: earlyExit,
+        exit_rr: exitRrForSave,
       }
 
       const copyResult = await insertCopyTradedTrades({
@@ -1352,6 +1440,7 @@ export default function InputTradeForm({
         rr: parsedRR,
         points: hasStoredTradePoints(points) ? Number(points) : null,
         contracts: contracts ? Number(contracts) : null,
+        dollar_risk: parsedPlannedDollarRisk,
         session: sessionToSave,
         notes: confluences || null,
         public_description: publicDescription,
@@ -1369,15 +1458,18 @@ export default function InputTradeForm({
         psychology_notes: psychologyVal,
         trade_type: tradeTypeToSave,
         confidence: confidence ? Number(confidence) : null,
-        emotion: emotion || null,
+        emotion: emotionToSave,
         followed_plan: followedPlan,
         mistake_type: mistakeType || null,
-        market_condition: market || null,
+        market_condition: marketToSave,
         news_event: newsEvent,
         timeframe: timeframeToSave,
         is_public: isPublic,
         max_rr_reached: maxRrForInsert,
         realized_rr: realizedRrForSave,
+        full_tp: fullTp,
+        early_exit: earlyExit,
+        exit_rr: exitRrForSave,
       }
 
       const copyResult = await insertCopyTradedTrades({
@@ -1542,9 +1634,13 @@ export default function InputTradeForm({
         ...(maxRrForUpdate !== undefined
           ? { max_rr_reached: maxRrForUpdate }
           : {}),
-        ...(realizedRrForSave != null ? { realized_rr: realizedRrForSave } : {}),
+        realized_rr: realizedRrForSave,
+        full_tp: fullTp,
+        early_exit: earlyExit,
+        exit_rr: exitRrForSave,
         points: Number.isFinite(parsedPoints) ? parsedPoints : 0,
         contracts: contractsNum,
+        dollar_risk: parsedPlannedDollarRisk,
         session: sessionToSave,
         top_confluences: confluences || null,
         public_description: publicDescription ?? "",
@@ -1581,10 +1677,10 @@ export default function InputTradeForm({
         psychology_notes: psychologyVal,
         trade_type: tradeTypeToSave,
         confidence: confidence ? Number(confidence) : null,
-        emotion: emotion || null,
+        emotion: emotionToSave,
         followed_plan: followedPlan,
         mistake_type: mistakeType || null,
-        market_condition: market || null,
+        market_condition: marketToSave,
         news_event: newsEvent,
         timeframe: timeframeToSave,
         is_public: isPublic,
@@ -1647,6 +1743,16 @@ export default function InputTradeForm({
           String(existingTrade.id),
           isPublic
         )
+        patchLinkedTradeVisibilityInSessions(
+          userId,
+          String(existingTrade.id),
+          isPublic
+        )
+        notifyTradeVisibilityChanged({
+          tradeId: String(existingTrade.id),
+          userId,
+          isPublic,
+        })
       }
 
       const replayError = await syncTradeReplayAfterSave(
@@ -1710,6 +1816,7 @@ export default function InputTradeForm({
       rr: parsedTrade.rr,
       points: parsedTrade.points,
       contracts: parsedTrade.contracts,
+      dollar_risk: parsedPlannedDollarRisk,
       session: sessionToSave,
       notes: confluences || null,
       public_description: publicDescription,
@@ -1742,15 +1849,18 @@ export default function InputTradeForm({
       psychology_notes: psychologyVal,
       trade_type: tradeTypeToSave,
       confidence: confidence ? Number(confidence) : null,
-      emotion: emotion || null,
+      emotion: emotionToSave,
       followed_plan: followedPlan,
       mistake_type: mistakeType || null,
-      market_condition: market || null,
+      market_condition: marketToSave,
       news_event: newsEvent,
       timeframe: timeframeToSave,
       is_public: isPublic,
       max_rr_reached: maxRrForInsert,
       realized_rr: realizedRrForSave,
+      full_tp: fullTp,
+      early_exit: earlyExit,
+      exit_rr: exitRrForSave,
       ...(createAsUnreviewed ? { reviewed: false } : {}),
     }
 
@@ -2633,33 +2743,6 @@ export default function InputTradeForm({
             </p>
           )}
 
-          <div>
-            <label className={fieldLabelClass}>
-              Max R:R Reached
-              {(parseFloat(String(pnl).replace(/,/g, "")) || 0) <= 0 ? (
-                <span className="text-red-400/90"> *</span>
-              ) : null}
-            </label>
-            <input
-              placeholder="e.g. 2.5"
-              type="text"
-              value={maxRrReached}
-              onChange={(e) =>
-                handleTradeNumericInput(e.target.value, setMaxRrReached, {
-                  allowDecimal: true,
-                  onDecimalError: setDecimalError,
-                })
-              }
-              className={TRADE_FIELD_CONTROL_CLASS}
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              Highest reward-to-risk ratio reached before the trade closed.
-              {(parseFloat(String(pnl).replace(/,/g, "")) || 0) > 0
-                ? " Optional on winning trades."
-                : " Required on breakeven and losing trades."}
-            </p>
-          </div>
-
           {/* Mobile: Symbol + Strategy share a row; sm+ keeps the stacked layout. */}
           <div className="tt-mobile-web-form-stack grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-1">
             <div>
@@ -2777,6 +2860,109 @@ export default function InputTradeForm({
                 }
                 className={TRADE_FIELD_CONTROL_CLASS}
               />
+              <div className="mt-2 space-y-1.5">
+                <label className="flex cursor-pointer items-center gap-2 text-[11px] font-medium text-slate-400">
+                  <input
+                    type="checkbox"
+                    checked={fullTp}
+                    onChange={(e) => {
+                      const on = e.target.checked
+                      setFullTp(on)
+                      if (on) setEarlyExit(false)
+                    }}
+                    className="h-3.5 w-3.5 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500/40"
+                  />
+                  Full TP?
+                </label>
+                <label className="flex cursor-pointer items-center gap-2 text-[11px] font-medium text-slate-400">
+                  <input
+                    type="checkbox"
+                    checked={earlyExit}
+                    onChange={(e) => {
+                      const on = e.target.checked
+                      setEarlyExit(on)
+                      if (on) setFullTp(false)
+                    }}
+                    className="h-3.5 w-3.5 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500/40"
+                  />
+                  Early Exit?
+                </label>
+              </div>
+              {(() => {
+                const parsedPnlPreview =
+                  parseFloat(String(pnl).replace(/,/g, "")) || 0
+                const showMaxRr =
+                  earlyExit || parsedPnlPreview <= 0
+                const entryPreview =
+                  entryPrice.trim() === "" ? null : Number(entryPrice)
+                const exitPreview =
+                  exitPrice.trim() === "" ? null : Number(exitPrice)
+                const needsExitRr =
+                  earlyExit &&
+                  parsedPnlPreview > 0 &&
+                  !canComputeRealizedRrFromPricesAndPlan({
+                    points,
+                    rr: parseOptionalRr(rr),
+                    direction,
+                    entry_price: entryPreview,
+                    exit_price: exitPreview,
+                  })
+                if (!showMaxRr && !needsExitRr) return null
+                return (
+                  <div className="mt-2 space-y-2">
+                    {showMaxRr ? (
+                      <div>
+                        <label className={fieldLabelClass}>
+                          Max R:R Reached
+                          <span className="text-red-400/90"> *</span>
+                        </label>
+                        <input
+                          placeholder="e.g. 1.5"
+                          type="text"
+                          value={maxRrReached}
+                          onChange={(e) =>
+                            handleTradeNumericInput(
+                              e.target.value,
+                              setMaxRrReached,
+                              {
+                                allowDecimal: true,
+                                onDecimalError: setDecimalError,
+                              }
+                            )
+                          }
+                          className={TRADE_FIELD_CONTROL_CLASS}
+                        />
+                        <p className="mt-1 text-xs text-gray-500">
+                          Highest R:R reached during the trade (not necessarily
+                          at exit).
+                        </p>
+                      </div>
+                    ) : null}
+                    {needsExitRr ? (
+                      <div>
+                        <label className={fieldLabelClass}>
+                          Exit R:R<span className="text-red-400/90"> *</span>
+                        </label>
+                        <input
+                          placeholder="e.g. 1.0"
+                          type="text"
+                          value={exitRr}
+                          onChange={(e) =>
+                            handleTradeNumericInput(e.target.value, setExitRr, {
+                              allowDecimal: true,
+                              onDecimalError: setDecimalError,
+                            })
+                          }
+                          className={TRADE_FIELD_CONTROL_CLASS}
+                        />
+                        <p className="mt-1 text-xs text-gray-500">
+                          Realized R:R at exit when prices cannot derive it.
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              })()}
             </div>
             <div>
               <label className={fieldLabelClass}>
@@ -2816,6 +3002,18 @@ export default function InputTradeForm({
                 })
               }
               className={TRADE_FIELD_CONTROL_CLASS}
+            />
+          </div>
+
+          <div>
+            <label className={fieldLabelClass}>Planned Risk ($)</label>
+            <TradeFormCurrencyInput
+              value={plannedDollarRisk}
+              onChange={setPlannedDollarRisk}
+              onDecimalError={setDecimalError}
+              tabIndex={8}
+              inputClassName={TRADE_FIELD_CURRENCY_CONTROL_CLASS}
+              placeholder="Optional"
             />
           </div>
 
@@ -3000,17 +3198,24 @@ export default function InputTradeForm({
               onChange={setEmotion}
               placeholder="Select emotion"
               triggerClassName={SELECT_TRIGGER_COMPACT_CLASS}
-              options={[
-                { label: "Confident", value: "Confident" },
-                { label: "Calm", value: "Calm" },
-                { label: "Focused", value: "Focused" },
-                { label: "Fearful", value: "Fearful" },
-                { label: "FOMO", value: "FOMO" },
-                { label: "Overconfident", value: "Overconfident" },
-                { label: "Hesitant", value: "Hesitant" },
-                { label: "Frustrated", value: "Frustrated" },
-              ]}
+              options={TRADE_EMOTION_OPTIONS.map((option) => ({
+                label: option,
+                value: option,
+              }))}
             />
+            {emotion === TRADE_PSYCHOLOGY_CUSTOM_TOKEN ? (
+              <div className="mt-2">
+                <label className={fieldLabelClass}>Custom Emotion</label>
+                <input
+                  type="text"
+                  tabIndex={19}
+                  value={customEmotion}
+                  onChange={(e) => setCustomEmotion(e.target.value)}
+                  placeholder="Describe how you felt before the trade"
+                  className={TRADE_FIELD_CONTROL_LG_CLASS}
+                />
+              </div>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <label className={TRADE_FIELD_CHECKBOX_LABEL_CLASS}>
@@ -3040,17 +3245,24 @@ export default function InputTradeForm({
               onChange={setMarket}
               placeholder="Select market condition"
               triggerClassName={SELECT_TRIGGER_COMPACT_CLASS}
-              options={[
-                { label: "Trending", value: "Trending" },
-                { label: "Strong Trend", value: "Strong Trend" },
-                { label: "Ranging", value: "Ranging" },
-                { label: "Choppy", value: "Choppy" },
-                { label: "Low Volume", value: "Low Volume" },
-                { label: "High Volume", value: "High Volume" },
-                { label: "News Driven", value: "News Driven" },
-                { label: "Volatile", value: "Volatile" },
-              ]}
+              options={TRADE_MARKET_CONDITION_OPTIONS.map((option) => ({
+                label: option,
+                value: option,
+              }))}
             />
+            {market === TRADE_PSYCHOLOGY_CUSTOM_TOKEN ? (
+              <div className="mt-2">
+                <label className={fieldLabelClass}>Custom Market Condition</label>
+                <input
+                  type="text"
+                  tabIndex={20}
+                  value={customMarket}
+                  onChange={(e) => setCustomMarket(e.target.value)}
+                  placeholder="Describe the market environment"
+                  className={TRADE_FIELD_CONTROL_LG_CLASS}
+                />
+              </div>
+            ) : null}
           </div>
           <div className="space-y-1">
           <div>
@@ -3162,7 +3374,7 @@ export default function InputTradeForm({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  className="hidden"
+                  className="sr-only"
                   accept="image/*"
                   onChange={(e) => {
                     selectTradeImage(e.target.files?.[0])
@@ -3185,7 +3397,7 @@ export default function InputTradeForm({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  className="hidden"
+                  className="sr-only"
                   accept="image/*"
                   onChange={(e) => {
                     selectTradeImage(e.target.files?.[0])

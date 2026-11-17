@@ -75,7 +75,6 @@ struct SettingsDestinationView: View {
                 SettingsNotificationsView(
                     data: data,
                     navigationCoordinator: navigationCoordinator,
-                    category: .achievements,
                     pushNotifications: appEnvironment.pushNotifications
                 )
             case .notificationsProduct:
@@ -96,6 +95,11 @@ struct SettingsDestinationView: View {
                 }
             case .tradingAccounts:
                 SettingsTradingAccountsView(
+                    data: data,
+                    navigationCoordinator: navigationCoordinator
+                )
+            case .tradingAnalytics:
+                TradingAnalyticsPreferencesView(
                     data: data,
                     navigationCoordinator: navigationCoordinator
                 )

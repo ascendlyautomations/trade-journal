@@ -5,6 +5,7 @@ actor DefaultPsychologyReportRepository: PsychologyReportRepository {
     private let dailyCheckIns: any TraderDailyCheckInRepository
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
+    private let tradingPreferences: (any TradingPreferencesRepository)?
 
     private var snapshot: PsychologyReportsSnapshot?
     private var fingerprint: String?
@@ -13,22 +14,30 @@ actor DefaultPsychologyReportRepository: PsychologyReportRepository {
         trades: any TradeRepository,
         dailyCheckIns: any TraderDailyCheckInRepository,
         session: any SessionProviding,
-        detailCache: DetailPresentationCache
+        detailCache: DetailPresentationCache,
+        tradingPreferences: (any TradingPreferencesRepository)? = nil
     ) {
         self.trades = trades
         self.dailyCheckIns = dailyCheckIns
         self.session = session
         self.detailCache = detailCache
+        self.tradingPreferences = tradingPreferences
     }
 
     func ensureSnapshot(forceNetwork: Bool) async throws -> PsychologyReportsSnapshot {
-        let (eligibleTrades, checkIns, fp) = try await loadInputs(forceNetwork: forceNetwork)
+        let (eligibleTrades, checkIns, loadedFingerprint) = try await loadInputs(forceNetwork: forceNetwork)
+        let preferences = await loadPreferences()
+        let fp = loadedFingerprint + ":" + PreferenceComplianceEngine.fingerprint(preferences)
 
         if !forceNetwork, let snapshot, fingerprint == fp {
             return snapshot
         }
 
-        let next = PsychologyReportGenerator.generateAll(trades: eligibleTrades, checkIns: checkIns)
+        let next = PsychologyReportGenerator.generateAll(
+            trades: eligibleTrades,
+            checkIns: checkIns,
+            preferences: preferences
+        )
         snapshot = next
         fingerprint = fp
         await MainActor.run {
@@ -38,9 +47,6 @@ actor DefaultPsychologyReportRepository: PsychologyReportRepository {
     }
 
     func report(for reportID: ReportID, forceNetwork: Bool) async throws -> PsychologyReport {
-        if let cached = await MainActor.run(body: { PsychologyReportSessionStore.shared.report(for: reportID) }) {
-            return cached
-        }
         let snap = try await ensureSnapshot(forceNetwork: forceNetwork)
         guard let report = snap.report(for: reportID) else {
             throw AppError.unknown(message: "Psychology report unavailable.")
@@ -98,6 +104,25 @@ actor DefaultPsychologyReportRepository: PsychologyReportRepository {
 
         let fp = Self.fingerprint(trades: eligible, checkIns: checkIns)
         return (eligible, checkIns, fp)
+    }
+
+    private func loadPreferences() async -> PreferenceRuleContext? {
+        guard let tradingPreferences else { return nil }
+        let userID = await session.currentUserID
+        guard let userID else { return nil }
+        let profileID = ProfileID(userID.rawValue)
+        do {
+            async let global = tradingPreferences.globalPreferences(for: profileID)
+            async let overrides = tradingPreferences.accountOverrides(for: profileID)
+            async let revisions = tradingPreferences.revisions(for: profileID)
+            return PreferenceRuleContext(
+                revisions: try await revisions,
+                global: try await global,
+                overrides: try await overrides
+            )
+        } catch {
+            return nil
+        }
     }
 
     private static func fingerprint(trades: [Trade], checkIns: [TraderDailyCheckIn]) -> String {

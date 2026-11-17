@@ -67,6 +67,7 @@ enum DashboardSessionBoundary {
         SessionViewerGate.shared.endSession()
         DashboardHomeSurfaceGate.resetForSessionBoundary()
         DashboardViewModel.resetAllForSessionBoundary()
+        TradingRulesComplianceRecomputeCoordinator.resetForSessionBoundary()
         DashboardAnalyticsAggregateChartsStore.shared.invalidate()
         DashboardAnalyticsAccountChartsStore.shared.invalidate()
     }

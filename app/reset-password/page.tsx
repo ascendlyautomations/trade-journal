@@ -142,7 +142,7 @@ export default function ResetPasswordPage() {
     !isSubmitting
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center text-white">
+    <div className="relative flex min-h-dvh items-center justify-center overflow-y-auto px-4 pt-[max(4.5rem,calc(env(safe-area-inset-top,0px)+3.25rem))] pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] text-white">
       <img
         src="/tradetrax-bg.webp"
         alt=""
@@ -152,7 +152,7 @@ export default function ResetPasswordPage() {
 
       <Link
         href="/login"
-        className="absolute left-3 top-3 z-20 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-base leading-none text-gray-200 backdrop-blur-md transition hover:bg-white/15 hover:text-white md:left-6 md:top-6 md:h-auto md:min-h-[44px] md:w-auto md:gap-2 md:px-4 md:py-2 md:text-sm md:font-medium"
+        className="absolute left-3 top-[max(0.75rem,env(safe-area-inset-top,0px))] z-20 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-base leading-none text-gray-200 backdrop-blur-md transition hover:bg-white/15 hover:text-white md:left-6 md:top-[max(1.5rem,env(safe-area-inset-top,0px))] md:h-auto md:min-h-[44px] md:w-auto md:gap-2 md:px-4 md:py-2 md:text-sm md:font-medium"
         aria-label="Return to login"
       >
         <span aria-hidden="true">←</span>

@@ -209,12 +209,14 @@ export default function MobileWebProfileHeader({
           />
         )}
 
-        <div className="min-w-0 flex-1 pr-10">
-          <h1 className="text-[1.1875rem] font-semibold leading-tight tracking-tight text-[color:var(--tt-text,#1f2328)]">
+        <div
+          className={`min-w-0 flex-1 ${isOwnProfile ? "pr-[5.75rem]" : "pr-12"}`}
+        >
+          <h1 className="truncate text-base font-semibold leading-tight tracking-tight text-[color:var(--tt-text,#1f2328)] min-[380px]:text-[1.1875rem]">
             {profile.name || profile.username || "User"}
           </h1>
           {profile.username ? (
-            <p className="truncate text-[14px] text-[color:var(--tt-text-muted,#57606a)]">
+            <p className="truncate text-[13px] text-[color:var(--tt-text-muted,#57606a)] min-[380px]:text-[14px]">
               {formatUsernameHandle(profile.username)}
             </p>
           ) : null}

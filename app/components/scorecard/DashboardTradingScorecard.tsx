@@ -28,7 +28,7 @@ export default function DashboardTradingScorecard({
   filteredTrades,
   tradesReady,
   scopeLabel,
-  proFeatureUnlocked,
+  proFeatureUnlocked: _proFeatureUnlocked,
   analytics,
   filterFingerprint,
   scopeFilters,
@@ -39,7 +39,7 @@ export default function DashboardTradingScorecard({
     [filteredTrades]
   )
 
-  const { ready, result, highlights } = useTradingScorecard({
+  const { ready, result } = useTradingScorecard({
     userId,
     dashboardTrades: dashboardRows,
     tradesReady,
@@ -65,9 +65,7 @@ export default function DashboardTradingScorecard({
     <TradingScorecardDashboardSection
       result={result}
       ready={ready}
-      highlights={highlights}
       onOpenDetail={onOpenDetail}
-      proFeatureUnlocked={proFeatureUnlocked}
     />
   )
 }

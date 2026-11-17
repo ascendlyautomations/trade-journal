@@ -43,14 +43,22 @@ describe("tradeRoomModerationPermission", () => {
     )
   })
 
-  it("owner can manage elevated tags; moderator cannot", () => {
+  it("elevated tags are not assignable via Manage Tags; moderators assign cosmetic tags only", () => {
     assert.equal(
       canAssignRoomMemberTag({
         tagName: "Moderator",
         canManageRoom: true,
         canModerateRoom: true,
       }),
-      true
+      false
+    )
+    assert.equal(
+      canAssignRoomMemberTag({
+        tagName: "Admin",
+        canManageRoom: true,
+        canModerateRoom: true,
+      }),
+      false
     )
     assert.equal(
       canAssignRoomMemberTag({

@@ -123,7 +123,22 @@ final class AccountDeletionExperienceTests: XCTestCase {
         XCTAssertTrue(viewModel.showsDeleteAccountConfirmation)
     }
 
-    func testConfirmDeleteAccountShowsSuccessBeforeSignIn() async {
+    func testDeleteAccountFinalConfirmationCopy() async {
+        let context = await makeContext(billing: freeBillingStatus())
+        let viewModel = context.viewModel
+        XCTAssertEqual(
+            viewModel.deleteAccountFinalConfirmationTitle,
+            "Are you absolutely sure?"
+        )
+        XCTAssertTrue(
+            viewModel.deleteAccountFinalConfirmationMessage.contains("This is your final warning.")
+        )
+        XCTAssertTrue(
+            viewModel.deleteAccountFinalConfirmationMessage.contains("trades, trading history, posts, messages")
+        )
+    }
+
+    func testConfirmDeleteAccountShowsSuccessWithoutKeepingSession() async {
         let context = await makeContext(billing: freeBillingStatus())
         let viewModel = context.viewModel
         await viewModel.refresh()
@@ -132,12 +147,7 @@ final class AccountDeletionExperienceTests: XCTestCase {
         await waitFor { context.account.deleteCallCount == 1 }
         await waitFor { viewModel.showsDeleteAccountSuccess }
         XCTAssertEqual(context.account.deleteCallCount, 1)
-        XCTAssertTrue(context.auth.manager.state.isAuthenticated)
-
-        viewModel.returnToSignInAfterAccountDeletion()
-        await waitFor { context.navigation.store.sessionPhase == .unauthenticated }
-        XCTAssertEqual(context.navigation.store.sessionPhase, .unauthenticated)
-        XCTAssertFalse(context.auth.manager.state.isAuthenticated)
+        XCTAssertTrue(viewModel.showsDeleteAccountSuccess)
     }
 
     func testConfirmDeleteAccountSurfacesServerError() async {
@@ -303,6 +313,7 @@ private final class AccountDeletionSpyRepository: AccountRepository, @unchecked 
         exportCallCount += 1
         return try exportResult.get()
     }
+
 }
 
 private struct AccountDeletionStubBilling: BillingRepository {

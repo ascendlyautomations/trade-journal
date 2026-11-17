@@ -216,13 +216,12 @@ nonisolated enum ProfileStatisticsMetrics {
         let analytics = selectedMode == .backtest ? filtered : excludingBacktest(filtered)
 
         let totalTrades = analytics.count
-        let wins = analytics.filter { ($0.pnl ?? 0) > 0 }.count
-        let totalPnl = analytics.reduce(Decimal(0)) { $0 + ($1.pnl ?? 0) }
+        let priced = analytics.compactMap(\.pnl)
+        let wins = priced.filter { $0 > 0 }.count
+        let totalPnl = priced.reduce(Decimal(0), +)
 
-        let biggestWin: Decimal = analytics.isEmpty
-            ? 0
-            : analytics.map { $0.pnl ?? 0 }.max() ?? 0
-        let losingPnls = analytics.map { $0.pnl ?? 0 }.filter { $0 < 0 }
+        let biggestWin: Decimal = priced.filter { $0 > 0 }.max() ?? 0
+        let losingPnls = priced.filter { $0 < 0 }
         let biggestLoss: Decimal? = losingPnls.isEmpty ? nil : losingPnls.min()
         let longTrades = analytics.filter(\.isLong).count
 
@@ -230,32 +229,28 @@ nonisolated enum ProfileStatisticsMetrics {
             let chronological = chronologicalTradeOrder(analytics)
             var points: [EquityPoint] = []
             var running = Decimal(0)
-            for (index, trade) in chronological.enumerated() {
-                running += trade.pnl ?? 0
+            for trade in chronological {
+                guard let pnl = trade.pnl else { continue }
+                running += pnl
                 points.append(
-                    EquityPoint(index: index, equity: running, date: trade.createdAt)
+                    EquityPoint(index: points.count, equity: running, date: trade.createdAt)
                 )
             }
             return chartOrderedEquityPoints(points)
         }()
         let currentEquity = equityData.last?.equity ?? 0
 
-        let grossWins = analytics.reduce(Decimal(0)) { sum, trade in
-            let pnl = trade.pnl ?? 0
-            return pnl > 0 ? sum + pnl : sum
-        }
-        let grossLosses = analytics.reduce(Decimal(0)) { sum, trade in
-            let pnl = trade.pnl ?? 0
-            return pnl < 0 ? sum + pnl : sum
-        }
+        let grossWins = priced.filter { $0 > 0 }.reduce(Decimal(0), +)
+        let grossLosses = priced.filter { $0 < 0 }.reduce(Decimal(0), +)
         let profitFactor: Decimal? = grossLosses < 0
             ? grossWins / abs(grossLosses)
             : nil
         let averageWinner: Decimal? = wins > 0 ? grossWins / Decimal(wins) : nil
-        let lossCount = analytics.filter { ($0.pnl ?? 0) < 0 }.count
+        let lossCount = priced.filter { $0 < 0 }.count
         let averageLoser: Decimal? = lossCount > 0 ? grossLosses / Decimal(lossCount) : nil
-        let profitPerTrade: Decimal? = totalTrades > 0 ? totalPnl / Decimal(totalTrades) : nil
-        let winRate: Decimal? = totalTrades > 0 ? Decimal(wins) / Decimal(totalTrades) : nil
+        let pricedCount = priced.count
+        let profitPerTrade: Decimal? = pricedCount > 0 ? totalPnl / Decimal(pricedCount) : nil
+        let winRate: Decimal? = pricedCount > 0 ? Decimal(wins) / Decimal(pricedCount) : nil
 
         let streaks = maxStreaks(analytics)
         let sessions = sessionBreakdown(analytics)
@@ -321,7 +316,7 @@ nonisolated enum ProfileStatisticsMetrics {
         var maxWin = 0
         var maxLoss = 0
         for trade in ordered {
-            let pnl = trade.pnl ?? 0
+            guard let pnl = trade.pnl else { continue }
             if pnl > 0 {
                 currentWin += 1
                 currentLoss = 0

@@ -90,7 +90,7 @@ struct CreateReelView: View {
                 )
             }
             .experienceSheetChrome()
-            .onAppear { viewModel.loadTradesIfNeeded() }
+            .onAppear { viewModel.reloadTradesForPicker() }
         }
         .fullScreenCover(isPresented: $showsCamera) {
             CameraVideoPicker(

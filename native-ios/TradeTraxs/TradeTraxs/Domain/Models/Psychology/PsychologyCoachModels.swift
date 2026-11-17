@@ -51,6 +51,12 @@ nonisolated struct PsychologyCoachGuardrailFacts: Hashable, Codable, Sendable {
     var maxTradesDaySoftLimit: Int?
     var lateTradeAveragePnL: Double?
     var earlyTradeAveragePnL: Double?
+    /// True only when lower-stress trades beat higher-stress trades.
+    var highStressWeaker: Bool = false
+    /// True only when higher-focus trades beat lower-focus trades.
+    var lowFocusWeaker: Bool = false
+    var personalLossPause: Bool = false
+    var personalTradeCap: Bool = false
 }
 
 nonisolated struct PsychologyCoachSummary: Hashable, Sendable {

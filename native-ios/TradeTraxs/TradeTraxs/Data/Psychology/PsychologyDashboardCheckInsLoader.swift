@@ -8,22 +8,26 @@ nonisolated enum PsychologyDashboardCheckInsLoader {
         rpc: (any RPCClient)?
     ) async throws -> [TraderDailyCheckIn] {
         let range = dashboardWindow()
-        let rangeRows = try await dailyCheckIns.checkIns(
+        async let rangeRows = dailyCheckIns.checkIns(
             for: profileID,
             from: range.start,
             to: range.end
         )
+        async let rpcRows: [TraderDailyCheckIn] = {
+            guard BackendV2FeatureFlags.isEnabled(.dashboard), let rpc else {
+                return []
+            }
+            // Web: RPC failure must not discard the 90-day range fetch.
+            return (try? await PsychologyCheckInBootstrapLoader.load(
+                rpc: rpc,
+                accountID: nil
+            )) ?? []
+        }()
 
-        guard BackendV2FeatureFlags.isEnabled(.dashboard), let rpc else {
-            return rangeRows
-        }
-
-        // Web: RPC failure must not discard the 90-day range fetch.
-        let rpcRows = (try? await PsychologyCheckInBootstrapLoader.load(
-            rpc: rpc,
-            accountID: nil
-        )) ?? []
-        return TraderDailyCheckInMerge.preferNewer(primary: rangeRows, secondary: rpcRows)
+        return TraderDailyCheckInMerge.preferNewer(
+            primary: try await rangeRows,
+            secondary: await rpcRows
+        )
     }
 
     /// Same 90-day PostgREST window as Check-In History (authoritative for psych gate).

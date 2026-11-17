@@ -2,9 +2,11 @@ import SwiftUI
 
 struct PsychologyInsightsSection: View {
     let title: String
-    var subtitle: String? = nil
+    var info: String? = nil
     let cards: [PsychologyInsightCard]
     var unlockProgress: PsychologyInsightsUnlockProgress = .zero
+    /// Trade-based insight cards may render before check-in unlock metrics finish hydrating.
+    var insightsReady: Bool = true
     var unlockMetricsReady: Bool = true
     var hasMatchedCheckInDays: Bool = false
     var postUnlockGapMessages: [String] = []
@@ -31,7 +33,7 @@ struct PsychologyInsightsSection: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
             DashboardCollapsibleSectionHeader(
                 title: title,
-                subtitle: subtitle,
+                info: info,
                 isExpanded: isSectionExpanded,
                 trailing: cards.isEmpty
                     ? nil
@@ -45,7 +47,7 @@ struct PsychologyInsightsSection: View {
 
             if isSectionExpanded {
                 if cards.isEmpty {
-                    if !unlockMetricsReady {
+                    if !insightsReady {
                         loadingState
                     } else if !hasMatchedCheckInDays {
                         noMatchedDaysEmptyState

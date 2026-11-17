@@ -36,15 +36,21 @@ nonisolated struct DefaultNotificationPreferencesRepository: NotificationPrefere
         self.cache = cache
     }
 
-    func preferences(for userID: ProfileID) async throws -> NotificationPreferences {
+    func invalidateCachedPreferences(for userID: ProfileID) {
+        cache.memory.remove(forKey: Self.cacheKey(userID))
+    }
+
+    func preferences(for userID: ProfileID, forceRefresh: Bool) async throws -> NotificationPreferences {
         let cacheKey = Self.cacheKey(userID)
-        if let cached = cache.memory.value(forKey: cacheKey, as: NotificationPreferences.self) {
+        if !forceRefresh,
+           let cached = cache.memory.value(forKey: cacheKey, as: NotificationPreferences.self)
+        {
             return cached
         }
 
-        let prefs: NotificationPreferences
+        let rows: [NotificationPreferencesDTO]
         do {
-            let rows: [NotificationPreferencesDTO] = try await supabase.database.select(
+            rows = try await supabase.database.select(
                 NotificationPreferencesDTO.self,
                 from: "notification_preferences",
                 query: [
@@ -53,13 +59,15 @@ nonisolated struct DefaultNotificationPreferencesRepository: NotificationPrefere
                     URLQueryItem(name: "limit", value: "1"),
                 ]
             )
-            if let dto = rows.first {
-                prefs = Self.map(dto, fallbackUserID: userID)
-            } else {
-                prefs = .defaults(for: userID)
-            }
         } catch {
-            // Mirror web: on load failure, fall back to defaults rather than blocking Settings.
+            NotificationPreferencesSaveDiagnostics.logLoadFailure(error)
+            throw error
+        }
+
+        let prefs: NotificationPreferences
+        if let dto = rows.first {
+            prefs = Self.map(dto, fallbackUserID: userID)
+        } else {
             prefs = .defaults(for: userID)
         }
         cache.memory.set(prefs, forKey: cacheKey)
@@ -71,7 +79,7 @@ nonisolated struct DefaultNotificationPreferencesRepository: NotificationPrefere
         for userID: ProfileID
     ) async throws -> NotificationPreferences {
         guard !patch.isEmpty else {
-            return try await preferences(for: userID)
+            return try await preferences(for: userID, forceRefresh: true)
         }
 
         var body: [String: Bool] = [:]
@@ -85,13 +93,19 @@ nonisolated struct DefaultNotificationPreferencesRepository: NotificationPrefere
             updated_at: ISO8601.string(from: Date())
         )
 
-        let dto: NotificationPreferencesDTO = try await supabase.database.upsert(
-            payload,
-            into: "notification_preferences",
-            onConflict: "user_id",
-            returning: NotificationPreferencesDTO.self,
-            select: Self.selectColumns
-        )
+        let dto: NotificationPreferencesDTO
+        do {
+            dto = try await supabase.database.upsert(
+                payload,
+                into: "notification_preferences",
+                onConflict: "user_id",
+                returning: NotificationPreferencesDTO.self,
+                select: Self.selectColumns
+            )
+        } catch {
+            NotificationPreferencesSaveDiagnostics.logSaveFailure(error, patch: patch)
+            throw error
+        }
 
         let prefs = Self.map(dto, fallbackUserID: userID)
         cache.memory.set(prefs, forKey: Self.cacheKey(userID))

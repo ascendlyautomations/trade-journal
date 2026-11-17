@@ -116,6 +116,8 @@ nonisolated struct PsychologyAnalyticsReport: Hashable, Sendable {
     var sections: [PsychologyAnalyticsSection]
     var enrichedTradeCount: Int
     var checkInMatchedTradeCount: Int
+    /// Unique Eastern dates with a complete check-in and at least one trade.
+    var matchedDayCount: Int
 }
 
 nonisolated struct PsychologyEnrichedTrade: Hashable, Sendable {

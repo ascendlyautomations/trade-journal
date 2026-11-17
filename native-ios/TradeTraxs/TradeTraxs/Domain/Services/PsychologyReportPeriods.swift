@@ -39,15 +39,13 @@ nonisolated enum PsychologyReportPeriods {
     }
 
     static func weeklyRefs(from earliest: Date, now: Date, limit: Int) -> [PsychologyReportPeriodRef] {
-        let calendar = Calendar.current
+        let calendar = TradingReportPeriods.eastern
         var monday = mondayOfWeek(containing: now, calendar: calendar)
         var refs: [PsychologyReportPeriodRef] = []
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withFullDate]
 
         for _ in 0..<limit {
             if monday < calendar.startOfDay(for: earliest) { break }
-            let id = "week:\(formatter.string(from: monday))"
+            let id = "week:\(TraderPsychologyAnalyticsFoundation.tradeDateKey(for: monday))"
             refs.append(PsychologyReportPeriodRef(template: .weekly, periodID: id))
             guard let prev = calendar.date(byAdding: .day, value: -7, to: monday) else { break }
             monday = prev
@@ -56,7 +54,7 @@ nonisolated enum PsychologyReportPeriods {
     }
 
     static func monthlyRefs(from earliest: Date, now: Date, limit: Int) -> [PsychologyReportPeriodRef] {
-        let calendar = Calendar.current
+        let calendar = TradingReportPeriods.eastern
         var comps = calendar.dateComponents([.year, .month], from: now)
         var refs: [PsychologyReportPeriodRef] = []
 
@@ -64,7 +62,13 @@ nonisolated enum PsychologyReportPeriods {
             guard let year = comps.year, let month = comps.month else { break }
             let id = String(format: "month:%04d-%02d", year, month)
             refs.append(PsychologyReportPeriodRef(template: .monthly, periodID: id))
-            guard let start = calendar.date(from: DateComponents(year: year, month: month, day: 1)),
+            guard let start = calendar.date(from: DateComponents(
+                calendar: calendar,
+                timeZone: calendar.timeZone,
+                year: year,
+                month: month,
+                day: 1
+            )),
                   start >= calendar.startOfDay(for: earliest)
             else { break }
             guard let prev = calendar.date(byAdding: .month, value: -1, to: start) else { break }
@@ -74,27 +78,32 @@ nonisolated enum PsychologyReportPeriods {
     }
 
     private static func defaultPeriodicRefs(now: Date) -> [PsychologyReportPeriodRef] {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withFullDate]
-        let monday = mondayOfWeek(containing: now, calendar: .current)
-        let comps = Calendar.current.dateComponents([.year, .month], from: now)
+        let calendar = TradingReportPeriods.eastern
+        let monday = mondayOfWeek(containing: now, calendar: calendar)
+        let comps = calendar.dateComponents([.year, .month], from: now)
         let monthID = String(format: "month:%04d-%02d", comps.year ?? 2026, comps.month ?? 1)
         return [
-            PsychologyReportPeriodRef(template: .weekly, periodID: "week:\(formatter.string(from: monday))"),
+            PsychologyReportPeriodRef(
+                template: .weekly,
+                periodID: "week:\(TraderPsychologyAnalyticsFoundation.tradeDateKey(for: monday))"
+            ),
             PsychologyReportPeriodRef(template: .monthly, periodID: monthID),
         ]
     }
 
     private static func periodicBounds(for ref: PsychologyReportPeriodRef, now: Date) -> Bounds {
-        let calendar = Calendar.current
+        let calendar = TradingReportPeriods.eastern
         if ref.periodID.hasPrefix("week:") {
             let dateStr = String(ref.periodID.dropFirst("week:".count))
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = [.withFullDate]
+            formatter.timeZone = calendar.timeZone
             let monday = formatter.date(from: dateStr) ?? now
             let sunday = calendar.date(byAdding: .day, value: 6, to: monday) ?? monday
-            let end = min(endOfDay(sunday, calendar: calendar), endOfDay(now, calendar: calendar))
-            let label = TradingReportPeriods.dateRangeLabel(start: monday, end: end, kind: .weekly)
+            let naturalEnd = endOfDay(sunday, calendar: calendar)
+            let end = min(naturalEnd, endOfDay(now, calendar: calendar))
+            var label = TradingReportPeriods.dateRangeLabel(start: monday, end: end, kind: .weekly)
+            if end < naturalEnd { label += " (partial)" }
             return Bounds(ref: ref, start: monday, end: end, dateRangeLabel: label)
         }
 
@@ -102,12 +111,20 @@ nonisolated enum PsychologyReportPeriods {
             let parts = ref.periodID.dropFirst("month:".count).split(separator: "-")
             let year = Int(parts.first ?? "2026") ?? 2026
             let month = Int(parts.dropFirst().first ?? "1") ?? 1
-            let start = calendar.date(from: DateComponents(year: year, month: month, day: 1)) ?? now
+            let start = calendar.date(from: DateComponents(
+                calendar: calendar,
+                timeZone: calendar.timeZone,
+                year: year,
+                month: month,
+                day: 1
+            )) ?? now
             let nextMonth = calendar.date(byAdding: .month, value: 1, to: start) ?? start
             let endDay = calendar.date(byAdding: .day, value: -1, to: nextMonth) ?? start
+            let naturalEnd = endOfDay(endDay, calendar: calendar)
             let isCurrentMonth = calendar.isDate(start, equalTo: now, toGranularity: .month)
-            let end = isCurrentMonth ? endOfDay(now, calendar: calendar) : endOfDay(endDay, calendar: calendar)
-            let label = TradingReportPeriods.dateRangeLabel(start: start, end: end, kind: .monthly)
+            let end = isCurrentMonth ? min(endOfDay(now, calendar: calendar), naturalEnd) : naturalEnd
+            var label = TradingReportPeriods.dateRangeLabel(start: start, end: end, kind: .monthly)
+            if end < naturalEnd { label += " (partial)" }
             return Bounds(ref: ref, start: start, end: end, dateRangeLabel: label)
         }
 
@@ -115,7 +132,7 @@ nonisolated enum PsychologyReportPeriods {
     }
 
     private static func rollingBounds(for template: PsychologyReportTemplate, now: Date) -> Bounds {
-        let calendar = Calendar.current
+        let calendar = TradingReportPeriods.eastern
         let end = endOfDay(now, calendar: calendar)
         let start = calendar.date(byAdding: .day, value: -89, to: calendar.startOfDay(for: now)) ?? now
         let ref = PsychologyReportPeriodRef(template: template, periodID: "rolling:90d")

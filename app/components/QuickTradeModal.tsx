@@ -12,6 +12,7 @@ import {
   saveManualTrade,
   type ManualTradeAccount,
 } from "@/lib/saveManualTrade"
+import { parseOptionalPlannedDollarRisk } from "@/lib/plannedTradeRisk"
 import {
   validateQuickTradeForm,
   type QuickTradeValidationFailure,
@@ -232,6 +233,7 @@ export default function QuickTradeModal({
   const [decimalError, setDecimalError] = useState("")
   const [points, setPoints] = useState("")
   const [contracts, setContracts] = useState("")
+  const [plannedDollarRisk, setPlannedDollarRisk] = useState("")
   const [rr, setRr] = useState("")
   const [direction, setDirection] = useState<TradeDirection>("Long")
   const [directionManuallySet, setDirectionManuallySet] = useState(false)
@@ -373,6 +375,7 @@ export default function QuickTradeModal({
     setPnl(patch.pnl)
     setPoints(patch.points)
     setContracts(patch.contracts)
+    setPlannedDollarRisk(patch.plannedDollarRisk)
     setRr(patch.rr)
     setEntryDate(patch.entryDate || getESTDate())
     setExitDate(patch.exitDate || patch.entryDate || getESTDate())
@@ -840,6 +843,16 @@ export default function QuickTradeModal({
       String(contracts).replace(/,/g, ""),
       10
     )
+    const parsedPlannedDollarRisk = parseOptionalPlannedDollarRisk(plannedDollarRisk)
+    if (parsedPlannedDollarRisk === "invalid") {
+      showPopup(
+        persistentError(
+          "Save Failed",
+          "Enter a dollar amount above 0 for planned risk, or leave it blank."
+        )
+      )
+      throw new Error("Invalid planned dollar risk")
+    }
     const entryVal = parseTradePriceInput(entryPrice)
     const exitVal = parseTradePriceInput(exitPrice)
 
@@ -880,6 +893,7 @@ export default function QuickTradeModal({
               rr: parseOptionalRr(rr),
               points: parsedPoints,
               contracts: parsedContracts,
+              dollar_risk: parsedPlannedDollarRisk,
               session: "NY AM",
               notes: description.trim() || null,
               public_description: description.trim() || null,
@@ -963,6 +977,7 @@ export default function QuickTradeModal({
               pnl: parsedPnl,
               points: parsedPoints,
               contracts: parsedContracts,
+              plannedDollarRisk: parsedPlannedDollarRisk,
               entryDate,
               exitDate,
               entryTime: entryTime || undefined,
@@ -1284,6 +1299,23 @@ export default function QuickTradeModal({
                     if (/^\d*$/.test(v)) setContracts(v)
                   }}
                   placeholder="2"
+                  className={`${INPUT_CLASS} mt-2 tabular-nums`}
+                />
+              </div>
+              <div>
+                <FieldLabel htmlFor="quick-trade-planned-risk">
+                  Planned Risk ($)
+                </FieldLabel>
+                <input
+                  id="quick-trade-planned-risk"
+                  type="text"
+                  inputMode="decimal"
+                  value={plannedDollarRisk}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/[$,\s]/g, "")
+                    if (/^\d*\.?\d*$/.test(v)) setPlannedDollarRisk(v)
+                  }}
+                  placeholder="Optional"
                   className={`${INPUT_CLASS} mt-2 tabular-nums`}
                 />
               </div>

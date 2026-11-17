@@ -12,6 +12,7 @@ export type ReelThumbnailPreviewProps = {
   priority?: boolean
   /** Defaults to max-w-[280px] — use a smaller width on compact trade cards. */
   maxWidthClass?: string
+  showDuration?: boolean
 }
 
 function ReelThumbnailPreview({
@@ -20,6 +21,7 @@ function ReelThumbnailPreview({
   className = "",
   maxWidthClass = "max-w-[280px]",
   priority = false,
+  showDuration = true,
 }: ReelThumbnailPreviewProps) {
   const interactive = onClick != null
 
@@ -44,7 +46,7 @@ function ReelThumbnailPreview({
         className="aspect-[9/16] w-full object-cover"
       />
       <ReelClipPlayOverlay />
-      {reel.duration_seconds != null ? (
+      {showDuration && reel.duration_seconds != null ? (
         <span className="pointer-events-none absolute bottom-2 right-2 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white">
           {formatReelDuration(Number(reel.duration_seconds))}
         </span>

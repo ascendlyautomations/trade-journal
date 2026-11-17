@@ -9,6 +9,7 @@ struct CheckInDayDetailView: View {
     @State private var showsEditCheckIn = false
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
 
     init(dateKey: String, data: DataEnvironment, navigationCoordinator: NavigationCoordinator) {
         self.dateKey = dateKey
@@ -89,8 +90,7 @@ struct CheckInDayDetailView: View {
                     .experienceStyle(.footnote, color: colors.secondaryText)
             }
         }
-        .padding(ExperienceSpacing.md)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
+        .checkInHistorySectionCard()
     }
 
     private var performanceSection: some View {
@@ -113,8 +113,7 @@ struct CheckInDayDetailView: View {
                 ])
             }
         }
-        .padding(ExperienceSpacing.md)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
+        .checkInHistorySectionCard()
     }
 
     private var tradesSection: some View {
@@ -122,31 +121,40 @@ struct CheckInDayDetailView: View {
             Text("Trades")
                 .experienceStyle(.headline, color: colors.primaryText)
 
-            ForEach(detail.trades) { trade in
-                Button {
-                    navigationCoordinator.pushHome(.tradeDetail(trade.id))
-                } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(trade.symbol.ticker)
-                                .experienceStyle(.subheadline, color: colors.primaryText)
-                                .fontWeight(.semibold)
-                            Text(trade.side == .long ? "Long" : "Short")
-                                .experienceStyle(.caption, color: colors.tertiaryText)
-                        }
-                        Spacer()
-                        Text(TraderPsychologyAnalyticsEngine.money(trade.realizedPnL?.amount ?? 0))
-                            .font(.subheadline.weight(.semibold).monospacedDigit())
+            ForEach(Array(detail.trades.enumerated()), id: \.element.id) { index, trade in
+                    if index > 0 {
+                        Divider()
                             .foregroundStyle(
-                                (trade.realizedPnL?.amount ?? 0) >= 0 ? colors.profit : colors.loss
+                                colors.separator.opacity(
+                                    CheckInHistoryCardChrome.rowDividerOpacity(colorScheme: colorScheme)
+                                )
                             )
                     }
-                    .padding(ExperienceSpacing.md)
-                    .background(colors.surfaceSecondary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
+                    Button {
+                        navigationCoordinator.pushHome(.tradeDetail(trade.id))
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(trade.symbol.ticker)
+                                    .experienceStyle(.subheadline, color: colors.primaryText)
+                                    .fontWeight(.semibold)
+                                Text(trade.side == .long ? "Long" : "Short")
+                                    .experienceStyle(.caption, color: colors.tertiaryText)
+                            }
+                            Spacer()
+                            Text(TraderPsychologyAnalyticsEngine.money(trade.realizedPnL?.amount ?? 0))
+                                .font(.subheadline.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(
+                                    (trade.realizedPnL?.amount ?? 0) >= 0 ? colors.profit : colors.loss
+                                )
+                        }
+                        .padding(.vertical, ExperienceSpacing.xs)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.experiencePlain)
                 }
-                .buttonStyle(.experiencePlain)
-            }
         }
+        .checkInHistorySectionCard()
     }
 
     private func metricGrid(_ rows: [(String, String)]) -> some View {

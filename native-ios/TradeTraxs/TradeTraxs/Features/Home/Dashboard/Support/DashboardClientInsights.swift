@@ -16,8 +16,9 @@ nonisolated enum DashboardClientInsights {
         var items: [DashboardInsightItem] = []
         let groups = analyzeBestSetups(trades)
 
-        if let bestSession = groups.first(where: { $0.type == "session" }),
-           bestSession.value != "—"
+        if let bestSession = groups.first(where: { $0.type == "session" && $0.avgPnL > 0 }),
+           bestSession.value != "—",
+           groups.filter({ $0.type == "session" && $0.trades >= 5 }).count >= 2
         {
             items.append(
                 DashboardInsightItem(
@@ -31,8 +32,9 @@ nonisolated enum DashboardClientInsights {
             )
         }
 
-        if let bestTicker = groups.first(where: { $0.type == "ticker" }),
-           bestTicker.value != "—"
+        if let bestTicker = groups.first(where: { $0.type == "ticker" && $0.avgPnL > 0 }),
+           bestTicker.value != "—",
+           groups.filter({ $0.type == "ticker" && $0.trades >= 5 }).count >= 2
         {
             items.append(
                 DashboardInsightItem(
@@ -46,8 +48,9 @@ nonisolated enum DashboardClientInsights {
             )
         }
 
-        if let bestDirection = groups.first(where: { $0.type == "direction" }),
-           bestDirection.value != "—"
+        if let bestDirection = groups.first(where: { $0.type == "direction" && $0.avgPnL > 0 }),
+           bestDirection.value != "—",
+           groups.filter({ $0.type == "direction" && $0.trades >= 5 }).count >= 2
         {
             items.append(
                 DashboardInsightItem(
@@ -91,8 +94,8 @@ nonisolated enum DashboardClientInsights {
 
     static func advancedEdge(from trades: [Trade]) -> [DashboardInsightItem] {
         let results = analyzeCombinedSetups(trades)
-        let meaningful = results.filter { !$0.key.contains("—") }
-        guard let best = meaningful.first else { return [] }
+        let meaningful = results.filter { !$0.key.contains("—") && $0.trades >= 5 }
+        guard meaningful.count >= 2, let best = meaningful.first, best.avgPnL > 0 else { return [] }
         return [
             DashboardInsightItem(
                 id: "client.advanced.combo",
@@ -107,8 +110,11 @@ nonisolated enum DashboardClientInsights {
 
     static func worstCombinedSetup(from trades: [Trade]) -> DashboardInsightItem? {
         let results = analyzeCombinedSetups(trades)
-            .filter { !$0.key.contains("—") && $0.trades >= 3 }
-        guard let worst = results.min(by: { $0.avgPnL < $1.avgPnL }) else { return nil }
+            .filter { !$0.key.contains("—") && $0.trades >= 5 }
+        guard results.count >= 2,
+              let worst = results.min(by: { $0.avgPnL < $1.avgPnL }),
+              worst.avgPnL < 0
+        else { return nil }
         return DashboardInsightItem(
             id: "client.risk.worst_combo",
             title: "Risk",
@@ -119,24 +125,35 @@ nonisolated enum DashboardClientInsights {
         )
     }
 
-    static func behaviorWarnings(from trades: [Trade]) -> [DashboardInsightItem] {
+    static func behaviorWarnings(
+        from trades: [Trade],
+        preferences: PreferenceRuleContext? = nil
+    ) -> [DashboardInsightItem] {
         var items: [DashboardInsightItem] = []
         let chronological = trades.sorted { lhs, rhs in
             if lhs.entryAt != rhs.entryAt { return lhs.entryAt < rhs.entryAt }
             return lhs.id.rawValue < rhs.id.rawValue
         }
 
-        if let lossStreakRate = detectLossStreak(chronological), lossStreakRate < 0.45 {
-            items.append(
-                DashboardInsightItem(
-                    id: "client.risk.loss_streak",
-                    title: "After losing streaks",
-                    body: "After 3 consecutive losses, your win rate drops to \(percent(lossStreakRate)) in the next few trades.",
-                    kind: .direction,
-                    tone: .warning,
-                    section: .riskBehavior
+        let pause = PreferenceComplianceEngine.currentPsychologyRules(in: preferences).consecutiveLossPause
+        if let lossStreakRate = detectLossStreak(chronological, streakLength: pause ?? 3) {
+            let show = pause != nil || lossStreakRate < 0.45
+            if show {
+                let rate = percent(lossStreakRate)
+                let body = pause != nil
+                    ? "After your pause of \(pause!) consecutive losses, win rate on the next priced trades was \(rate), below the rest of this sample."
+                    : "After 3 consecutive losses, your win rate drops to \(rate) in the next few trades."
+                items.append(
+                    DashboardInsightItem(
+                        id: "client.risk.loss_streak",
+                        title: "After losing streaks",
+                        body: body,
+                        kind: .direction,
+                        tone: .warning,
+                        section: .riskBehavior
+                    )
                 )
-            )
+            }
         }
 
         if let rr = detectRRThreshold(trades) {
@@ -145,6 +162,23 @@ nonisolated enum DashboardClientInsights {
                     id: "client.risk.rr_threshold",
                     title: "Behavior warning",
                     body: rr,
+                    kind: .direction,
+                    tone: .warning,
+                    section: .riskBehavior
+                )
+            )
+        }
+
+        let summary = PreferenceComplianceEngine.evaluate(
+            trades.map(PreferenceComplianceEngine.input(from:)),
+            context: preferences
+        )
+        for (index, line) in PreferenceComplianceEngine.lines(for: summary).enumerated() {
+            items.append(
+                DashboardInsightItem(
+                    id: "client.risk.preference.\(index)",
+                    title: "Personal rules",
+                    body: line,
                     kind: .direction,
                     tone: .warning,
                     section: .riskBehavior
@@ -171,7 +205,8 @@ nonisolated enum DashboardClientInsights {
         var groupStats: [String: (type: String, value: String, totalPnL: Decimal, trades: Int, wins: Int)] = [:]
 
         for trade in trades {
-            let pnl = trade.realizedPnL?.amount ?? 0
+            let pnl = trade.realizedPnL?.amount
+            guard let pnl else { continue }
             let session = normalizedSession(trade.sessionLabel) ?? "—"
             let ticker = trade.symbol.ticker.isEmpty ? "—" : trade.symbol.ticker
             let direction = trade.side == .long ? "Long" : "Short"
@@ -202,7 +237,7 @@ nonisolated enum DashboardClientInsights {
                     winRate: row.trades > 0 ? Double(row.wins) / Double(row.trades) : 0
                 )
             }
-            .filter { $0.trades >= 3 }
+            .filter { $0.trades >= 5 }
             .sorted { $0.avgPnL > $1.avgPnL }
     }
 
@@ -210,7 +245,8 @@ nonisolated enum DashboardClientInsights {
         var stats: [String: (key: String, totalPnL: Decimal, trades: Int, wins: Int)] = [:]
 
         for trade in trades {
-            let pnl = trade.realizedPnL?.amount ?? 0
+            let pnl = trade.realizedPnL?.amount
+            guard let pnl else { continue }
             let session = normalizedSession(trade.sessionLabel) ?? "—"
             let ticker = trade.symbol.ticker.isEmpty ? "—" : trade.symbol.ticker
             let direction = trade.side == .long ? "Long" : "Short"
@@ -242,7 +278,7 @@ nonisolated enum DashboardClientInsights {
                     winRate: row.trades > 0 ? Double(row.wins) / Double(row.trades) : 0
                 )
             }
-            .filter { $0.trades >= 3 }
+            .filter { $0.trades >= 5 }
             .sorted { $0.avgPnL > $1.avgPnL }
     }
 
@@ -260,37 +296,35 @@ nonisolated enum DashboardClientInsights {
         return parts.joined(separator: " ")
     }
 
-    private static func detectLossStreak(_ trades: [Trade]) -> Double? {
-        guard trades.count >= 4 else { return nil }
-        for index in 0...(trades.count - 4) {
-            let a = trades[index].realizedPnL?.amount ?? 0
-            let b = trades[index + 1].realizedPnL?.amount ?? 0
-            let c = trades[index + 2].realizedPnL?.amount ?? 0
-            if a < 0, b < 0, c < 0 {
-                let next = Array(trades[(index + 3)..<min(index + 8, trades.count)])
-                guard !next.isEmpty else { return nil }
-                let wins = next.filter { ($0.realizedPnL?.amount ?? 0) > 0 }.count
-                return Double(wins) / Double(next.count)
-            }
+    private static func detectLossStreak(_ trades: [Trade], streakLength: Int = 3) -> Double? {
+        let priced = trades.compactMap { $0.realizedPnL?.amount }
+        guard priced.count >= 5 + streakLength else { return nil }
+        let baseline = Double(priced.filter { $0 > 0 }.count) / Double(priced.count)
+        guard priced.count >= streakLength else { return nil }
+        for index in 0...(priced.count - streakLength) {
+            let streak = priced[index..<(index + streakLength)]
+            guard streak.allSatisfy({ $0 < 0 }) else { continue }
+            let end = min(index + streakLength + 5, priced.count)
+            let next = Array(priced[(index + streakLength)..<end])
+            guard next.count >= 5 else { return nil }
+            let nextRate = Double(next.filter { $0 > 0 }.count) / Double(next.count)
+            if nextRate <= baseline - 0.08 { return nextRate }
+            return nil
         }
         return nil
     }
 
     private static func detectRRThreshold(_ trades: [Trade]) -> String? {
-        let lowRR = trades.filter { trade in
-            guard let rr = trade.riskReward else { return false }
-            return rr < 1
+        func priced(_ rows: [Trade]) -> [Decimal] {
+            rows.compactMap(\.realizedPnL?.amount)
         }
-        let highRR = trades.filter { trade in
-            guard let rr = trade.riskReward else { return false }
-            return rr >= 1
-        }
-        guard lowRR.count >= 3, highRR.count >= 3 else { return nil }
-
-        let lowWin = Double(lowRR.filter { ($0.realizedPnL?.amount ?? 0) > 0 }.count) / Double(lowRR.count)
-        let highWin = Double(highRR.filter { ($0.realizedPnL?.amount ?? 0) > 0 }.count) / Double(highRR.count)
+        let lowRR = priced(trades.filter { ($0.riskReward ?? 1) < 1 && $0.riskReward != nil })
+        let highRR = priced(trades.filter { ($0.riskReward ?? 0) >= 1 })
+        guard lowRR.count >= 5, highRR.count >= 5 else { return nil }
+        let lowWin = Double(lowRR.filter { $0 > 0 }.count) / Double(lowRR.count)
+        let highWin = Double(highRR.filter { $0 > 0 }.count) / Double(highRR.count)
         if highWin > lowWin + 0.2 {
-            return "You perform significantly better when RR ≥ 1"
+            return "Win rate is higher on trades with R at least 1 than on trades below 1"
         }
         return nil
     }
@@ -299,7 +333,7 @@ nonisolated enum DashboardClientInsights {
         from trades: [Trade],
         highlights: DashboardStrategyHighlights?
     ) -> DashboardStrategyHighlight? {
-        if let best = highlights?.best, best.trades >= 3 {
+        if let best = highlights?.best, best.trades >= 5, best.netPnL > 0 {
             return best
         }
         return bestStrategyHighlight(from: trades)
@@ -311,13 +345,17 @@ nonisolated enum DashboardClientInsights {
             let key = (trade.strategy ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard !key.isEmpty else { continue }
             var row = map[key] ?? (0, 0, 0)
-            let pnl = trade.realizedPnL?.amount ?? 0
+            let pnl = trade.realizedPnL?.amount
+            guard let pnl else { continue }
             row.pnl += pnl
             row.trades += 1
             if pnl > 0 { row.wins += 1 }
             map[key] = row
         }
-        guard let best = map.filter({ $0.value.trades >= 3 }).max(by: { $0.value.pnl < $1.value.pnl })
+        let qualified = map.filter { $0.value.trades >= 5 }
+        guard qualified.count >= 2,
+              let best = qualified.max(by: { $0.value.pnl < $1.value.pnl }),
+              best.value.pnl > 0
         else { return nil }
         return DashboardStrategyHighlight(
             strategy: best.key,

@@ -8,6 +8,10 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
   "image/png",
   "image/webp",
   "image/gif",
+  "image/heic",
+  "image/heif",
+  "image/heic-sequence",
+  "image/heif-sequence",
 ])
 
 const ALLOWED_IMAGE_EXTENSIONS = new Set([
@@ -16,6 +20,8 @@ const ALLOWED_IMAGE_EXTENSIONS = new Set([
   ".png",
   ".webp",
   ".gif",
+  ".heic",
+  ".heif",
 ])
 
 function fileExtension(name: string): string {
@@ -44,11 +50,16 @@ export function validateImageUpload(file: File): string | null {
     return null
   }
 
-  if (mime.startsWith("image/")) {
-    return "Unsupported image format. Use JPEG, PNG, WebP, or GIF."
+  if (!mime) {
+    if (!ext || ALLOWED_IMAGE_EXTENSIONS.has(ext)) return null
+    return "File must be an image (JPEG, PNG, WebP, GIF, or HEIC)."
   }
 
-  return "File must be an image (JPEG, PNG, WebP, or GIF)."
+  if (mime.startsWith("image/")) {
+    return "Unsupported image format. Use JPEG, PNG, WebP, GIF, or HEIC."
+  }
+
+  return "File must be an image (JPEG, PNG, WebP, GIF, or HEIC)."
 }
 
 export function validateCsvUpload(file: File): string | null {

@@ -80,7 +80,10 @@ struct ExploreLiveTraderCard: View {
                             .foregroundStyle(colors.secondaryText)
                             .lineLimit(1)
                     }
-                    Text(item.roomName)
+                    Text({
+                        let custom = item.streamTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                        return custom.isEmpty ? item.roomName : custom
+                    }())
                         .font(ExperienceTypography.caption2)
                         .foregroundStyle(colors.tertiaryText)
                         .lineLimit(2)

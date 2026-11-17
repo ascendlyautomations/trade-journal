@@ -106,4 +106,25 @@ nonisolated enum AccountTrackedBalanceSupport {
         }
         return nil
     }
+
+    /// Same rules as ``withdrawalSummary(account:payoutCycles:ledgerEntries:)`` but respects the dashboard date window.
+    static func withdrawalSummary(
+        account: TradingAccount,
+        payoutCycles: [AccountPayoutCycle],
+        ledgerEntries: [AccountPayoutEntry],
+        scope: DashboardClientScopeFilter,
+        now: Date = Date()
+    ) -> WithdrawalSummary? {
+        let scopedCycles = payoutCycles.filter {
+            PayoutHistorySupport.matchesDashboardDate($0.endedAt ?? $0.startedAt, scope: scope, now: now)
+        }
+        let scopedLedger = ledgerEntries.filter {
+            PayoutHistorySupport.matchesDashboardDate($0.payoutDate, scope: scope, now: now)
+        }
+        return withdrawalSummary(
+            account: account,
+            payoutCycles: scopedCycles,
+            ledgerEntries: scopedLedger
+        )
+    }
 }

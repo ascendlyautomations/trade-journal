@@ -8,11 +8,13 @@ import type { StoryBarProfile } from "./FeedStoriesBar"
 import StoryFrame from "./StoryFrame"
 import StoryReplyInput from "./StoryReplyInput"
 import { optimizeStorageImageUrl } from "@/lib/optimizedStorageImage"
+import type { StoryTextOverlay } from "@/lib/activeStories"
 
 type StorySlide = {
   id: string
   image_url: string
   created_at: string
+  text_overlays?: StoryTextOverlay[] | null
 }
 
 type FeedStoryViewerProps = {
@@ -327,6 +329,7 @@ function FeedStoryViewer({
             key={activeStoryUser}
             profile={activeProfile}
             imageUrl={currentStory.image_url}
+            textOverlays={currentStory.text_overlays}
             priority={phoneWeb}
             imageKey={currentStory.id}
             timestamp={currentStory.created_at}

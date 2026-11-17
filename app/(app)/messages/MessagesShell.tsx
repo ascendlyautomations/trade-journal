@@ -48,6 +48,7 @@ import {
 } from "@/lib/conversationInboxSync"
 import { markConversationOpenFromInbox } from "@/lib/conversationOpenIntent"
 import { usePathname, useRouter } from "next/navigation"
+import { realtimeChannelsToReplace } from "@/lib/messages/realtimeChannelTopic"
 import MessagesConversationList from "../../components/messages/MessagesConversationList"
 import { MobileWebViewport } from "@/app/components/mobile/MobileWebViewport"
 import MobileWebMessagesInbox from "@/app/components/mobile/messages/MobileWebMessagesInbox"
@@ -187,6 +188,11 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
 
   const router = useRouter()
   const user = authUser
+  const viewingConversationIdRef = useRef<string | null>(null)
+  const conversationIdsRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    conversationIdsRef.current = new Set(conversations.map((item) => String(item.id)))
+  }, [conversations])
   const inboxScrollRef = useRef<HTMLDivElement | null>(null)
   const pendingInboxScrollRef = useRef<number | null>(null)
   const inboxRequestGenerationRef = useRef(0)
@@ -674,6 +680,70 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
     }
   }, [user?.id, fetchConversations])
 
+  useEffect(() => {
+    if (!user?.id || isDemoSupabaseBlocked()) return
+    const uid = user.id
+    const topic = `inbox-messages-${uid}`
+    let cancelled = false
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
+    void (async () => {
+      const stale = realtimeChannelsToReplace(supabase.getChannels(), topic)
+      await Promise.all(stale.map((existing) => supabase.removeChannel(existing)))
+      if (cancelled) return
+
+      channel = supabase.channel(topic)
+      channel.on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages" },
+        (payload) => {
+          const row = payload.new as {
+            conversation_id?: string
+            sender_id?: string
+            content?: string | null
+            created_at?: string | null
+          }
+          const conversationId = row.conversation_id?.trim()
+          if (!conversationId || row.sender_id === uid) return
+          if (viewingConversationIdRef.current === conversationId) return
+          if (!conversationIdsRef.current.has(conversationId)) {
+            void fetchConversations(uid, "realtime-insert")
+            dispatchUnreadMessagesRefresh()
+            return
+          }
+
+          const preview = row.content?.trim()
+          setConversations((prev) =>
+            sortConversationsDesc(
+              prev.map((item) =>
+                item.id === conversationId
+                  ? {
+                      ...item,
+                      unreadCount: (item.unreadCount ?? 0) + 1,
+                      lastMessage: preview || item.lastMessage,
+                      last_message_at: row.created_at ?? item.last_message_at,
+                    }
+                  : item
+              )
+            )
+          )
+          dispatchUnreadMessagesRefresh()
+        }
+      )
+      if (cancelled) {
+        void supabase.removeChannel(channel)
+        channel = null
+        return
+      }
+      channel.subscribe()
+    })()
+
+    return () => {
+      cancelled = true
+      if (channel) void supabase.removeChannel(channel)
+    }
+  }, [fetchConversations, user?.id])
+
   const openConversation = useCallback(
     (conversationId: string, options?: { replace?: boolean }) => {
       void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
@@ -1117,6 +1187,7 @@ export default function MessagesShell({ children }: { children: ReactNode }) {
         username === normalizeProfileUsername(activeSegment)
       )
     })?.id ?? null
+  viewingConversationIdRef.current = selectedConversationId
 
   return (
     <>

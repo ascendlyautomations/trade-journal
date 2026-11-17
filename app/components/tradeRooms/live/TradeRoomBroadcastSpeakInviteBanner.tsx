@@ -8,6 +8,7 @@ import {
   getTradeRoomBroadcastViewerVideoElement,
 } from "@/lib/livekit/client/tradeRoomBroadcastStore.ts"
 import { fetchBroadcastConversationJoinPayload } from "@/lib/livekit/client/tradeRoomBroadcastJoinConversation.ts"
+import { getTradeRoomBroadcastViewerBootstrapVideo } from "@/lib/livekit/client/tradeRoomBroadcastStudioNavigation.ts"
 
 type Props = {
   roomId: string
@@ -24,7 +25,9 @@ export default function TradeRoomBroadcastSpeakInviteBanner({
   busy,
   onNeedOpenStream,
 }: Props) {
-  const videoReady = Boolean(getTradeRoomBroadcastViewerVideoElement())
+  const resolveVideo = () =>
+    getTradeRoomBroadcastViewerVideoElement() ??
+    getTradeRoomBroadcastViewerBootstrapVideo()
 
   return (
     <div className="mb-2 rounded-lg border border-emerald-400/40 bg-emerald-950/80 px-3 py-3 text-sm text-emerald-50 shadow-lg">
@@ -33,12 +36,10 @@ export default function TradeRoomBroadcastSpeakInviteBanner({
         <div className="min-w-0 flex-1">
           <p className="font-semibold">You&apos;ve been invited to speak</p>
           <p className="mt-1 text-xs text-emerald-100/90">
-            {videoReady
-              ? "Accept to join with your microphone. Others will hear you on the stream."
-              : "Waiting for the studio player… accept when the stream is ready."}
+            Accept to join with your microphone. Others will hear you on the stream.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {!videoReady && onNeedOpenStream ? (
+            {onNeedOpenStream ? (
               <button
                 type="button"
                 className="rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold text-emerald-50"
@@ -49,10 +50,10 @@ export default function TradeRoomBroadcastSpeakInviteBanner({
             ) : null}
             <button
               type="button"
-              disabled={busy || !videoReady}
+              disabled={busy}
               className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-black disabled:opacity-50"
               onClick={() => {
-                const videoElement = getTradeRoomBroadcastViewerVideoElement()
+                const videoElement = resolveVideo()
                 if (!videoElement) {
                   onNeedOpenStream?.()
                   return

@@ -6,37 +6,28 @@ import DetailModalShell, {
   scrollModalCommentsPane,
 } from "@/app/components/ui/DetailModalShell"
 import { mobileWebOpenInAppContentLink } from "@/lib/mobileWebOpenInApp"
-import DetailModalImage from "@/app/components/ui/DetailModalImage"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
+import TradeDetailMediaWithClipOverlay from "@/app/components/trade/TradeDetailMediaWithClipOverlay"
+import PublicSocialTradeStatsPanel from "@/app/components/trade/PublicSocialTradeStatsPanel"
 import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
 import { vaultRefFromFeedItem } from "@/lib/vault/refs"
-import TradeCardTimingBlock from "@/app/components/TradeCardTimingBlock"
-import ReelThumbnailPreview from "@/app/components/ReelThumbnailPreview"
 import CopyTradedBadge from "@/app/components/trade/CopyTradedBadge"
-import ExpandableText from "@/app/components/ui/ExpandableText"
+import { publicSocialHeaderAccountBadge } from "@/lib/tradeSocialDetailDisplay"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
-import {
-  formatPoints,
-  formatRR,
-  formatSignedPnlDisplay,
-} from "@/lib/formatDisplay"
-import { resolveTradePoints } from "@/lib/resolveTradePoints"
+import { formatRR, formatSignedPnlDisplay } from "@/lib/formatDisplay"
 import { isCopyTradedMode } from "@/lib/tradeMode"
 import FeedCommentsSection from "./FeedCommentsSection"
 import FeedPostHeader from "./FeedPostHeader"
 import FeedPostMetaRow from "./FeedPostMetaRow"
 import {
   feedCommentTarget,
-  getModeStyles,
-  normalizeFeedAccountType,
   postAttachedReel,
   postImageSrc,
   postPublicDescription,
   postTradeJoin,
 } from "./feedPostHelpers"
 import type { ReelRow } from "@/lib/reels"
-import { formatPublicAccountTypeLabel } from "@/lib/publicAccountPrivacy"
 import {
   detailModalEngagementInPanel,
   DETAIL_MODAL_MEDIA_ACTIONS_WRAP_CLASS,
@@ -126,18 +117,8 @@ export default function FeedPostDetailModal({
       publicDesc: postPublicDescription(post),
       ticker: tradeJoin?.ticker != null ? String(tradeJoin.ticker) : "—",
       dir: tradeJoin?.direction != null ? String(tradeJoin.direction) : "—",
-      acctNorm: (() => {
-        const raw = normalizeFeedAccountType(
-          tradeJoin?.account_type ?? tradeJoin?.mode
-        )
-        return formatPublicAccountTypeLabel(raw) ?? raw
-      })(),
-      acctStyleKey: normalizeFeedAccountType(
-        tradeJoin?.account_type ?? tradeJoin?.mode
-      ),
       pnl,
       pnlPositive: !Number.isNaN(pnl) && pnl >= 0,
-      points: resolveTradePoints(tradeJoin),
       timingTrade: tradeJoin,
       showCopyBadge: isCopyTradedMode(tradeJoin),
       postedAt: post.created_at,
@@ -170,15 +151,19 @@ export default function FeedPostDetailModal({
     </>
   )
 
-  const splitMedia =
-    modalPostDetails.imageSrc != null ? (
-      <DetailModalImage
-        src={modalPostDetails.imageSrc}
-        onClick={setLightboxUrl}
-      />
-    ) : null
+  const splitMedia = (
+    <TradeDetailMediaWithClipOverlay
+      imageSrc={modalPostDetails.imageSrc}
+      attachedReel={attachedReel}
+      onOpenImage={setLightboxUrl}
+      onOpenClip={
+        attachedReel && onOpenAttachedReel ? openAttachedReel : undefined
+      }
+    />
+  )
 
-  const hasMedia = splitMedia != null
+  const hasMedia =
+    modalPostDetails.imageSrc != null || (attachedReel != null && onOpenAttachedReel != null)
   const showEngagementInPanel = detailModalEngagementInPanel(
     hasMedia,
     commentsFocused,
@@ -207,7 +192,6 @@ export default function FeedPostDetailModal({
   const splitPanel = (
     <MobileCommentFocusLayout
       commentsFocused={commentsFocused}
-      mobileMediaBeforeHeader
       mobileMedia={
         hasMedia && !commentsFocused ? (
           <div className="flex flex-col">
@@ -248,76 +232,60 @@ export default function FeedPostDetailModal({
       }
       engagement={showEngagementInPanel ? engagementRow : undefined}
       collapsibleContent={
-        <div className="min-w-0 space-y-1 overflow-hidden border-b border-white/10 px-4 py-1 text-xs md:text-sm">
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 md:flex-nowrap">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <div
-                className={`shrink-0 text-base font-semibold tabular-nums md:text-lg ${
+        <div className="min-w-0 space-y-2 overflow-hidden border-b border-white/10 px-3 py-2 text-xs md:px-4 md:text-sm">
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="min-w-0 space-y-0.5">
+              <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
+                <span className="text-base font-semibold text-white md:text-lg">
+                  {modalPostDetails.ticker}
+                </span>
+                {!modalPostDetails.showCopyBadge &&
+                modalPostDetails.timingTrade &&
+                publicSocialHeaderAccountBadge(modalPostDetails.timingTrade) ? (
+                  <>
+                    <span className="text-sm font-medium text-gray-500">|</span>
+                    <span className="text-sm font-medium text-gray-400">
+                      {publicSocialHeaderAccountBadge(modalPostDetails.timingTrade)}
+                    </span>
+                  </>
+                ) : null}
+              </div>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-300">
+                {modalPostDetails.dir}
+              </span>
+              {modalPostDetails.showCopyBadge ? (
+                <CopyTradedBadge
+                  trade={modalPostDetails.timingTrade}
+                  className="mt-1"
+                />
+              ) : null}
+            </div>
+            <div className="shrink-0 text-right">
+              <p
+                className={`text-base font-semibold tabular-nums md:text-lg ${
                   modalPostDetails.pnlPositive
                     ? "text-emerald-400"
                     : "text-red-400"
                 }`}
               >
                 {formatSignedPnlDisplay(modalPostDetails.pnl)}
-              </div>
-              <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-white md:text-sm">
-                <span className="min-w-0 truncate">
-                  {modalPostDetails.ticker} • {modalPostDetails.dir}
-                </span>
-                {modalPostDetails.showCopyBadge ? (
-                  <CopyTradedBadge
-                    trade={modalPostDetails.timingTrade}
-                    className="shrink-0"
-                  />
-                ) : modalPostDetails.acctNorm ? (
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] md:text-xs ${getModeStyles(modalPostDetails.acctStyleKey)}`}
-                  >
-                    {modalPostDetails.acctNorm}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-2 text-xs text-gray-300 md:text-sm">
+              </p>
               {post.rr != null && post.rr !== "" ? (
-                <span className="tabular-nums">RR {formatRR(post.rr)}</span>
-              ) : null}
-              {modalPostDetails.points !== null ? (
-                <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] text-gray-200 md:text-sm">
-                  {formatPoints(modalPostDetails.points)} pts
-                </span>
+                <p className="text-xs font-semibold tabular-nums text-gray-400 md:text-sm">
+                  {formatRR(post.rr)} R:R
+                </p>
               ) : null}
             </div>
           </div>
 
           {modalPostDetails.publicDesc ? (
-            <ExpandableText
-              className="min-w-0 text-xs leading-relaxed text-white md:text-sm"
-              textClassName="break-words text-white"
-            >
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-white">
               {modalPostDetails.publicDesc}
-            </ExpandableText>
+            </p>
           ) : null}
 
-          {modalPostDetails.timingTrade || attachedReel ? (
-            <TradeCardTimingBlock
-              trade={modalPostDetails.timingTrade ?? {}}
-              onViewReel={
-                attachedReel && onOpenAttachedReel
-                  ? openAttachedReel
-                  : undefined
-              }
-            />
-          ) : null}
-
-          {attachedReel && onOpenAttachedReel ? (
-            <div className="pt-1">
-              <ReelThumbnailPreview
-                reel={attachedReel}
-                onClick={openAttachedReel}
-                maxWidthClass="max-w-[140px]"
-              />
-            </div>
+          {modalPostDetails.timingTrade ? (
+            <PublicSocialTradeStatsPanel trade={modalPostDetails.timingTrade} />
           ) : null}
         </div>
       }

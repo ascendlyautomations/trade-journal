@@ -16,6 +16,14 @@ export function formatPsychologyDecimal(
   })
 }
 
+/** Null when the value was not computed. Zero stays "$0". */
+export function formatOptionalPsychologyMoney(
+  value: number | null | undefined
+): string | null {
+  if (value == null || !Number.isFinite(value)) return null
+  return formatPsychologyMoney(value)
+}
+
 export function formatPsychologyMoney(value: number): string {
   if (!Number.isFinite(value)) return "—"
   const rounded = Math.round(value)

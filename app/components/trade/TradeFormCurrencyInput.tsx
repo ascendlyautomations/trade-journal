@@ -16,6 +16,7 @@ type TradeFormCurrencyInputProps = {
   onDecimalError?: TradeNumericInputOptions["onDecimalError"]
   tabIndex?: number
   inputClassName: string
+  placeholder?: string
   prefixClassName?: string
   wrapperClassName?: string
 }
@@ -31,6 +32,7 @@ export default function TradeFormCurrencyInput({
   onDecimalError,
   tabIndex,
   inputClassName,
+  placeholder,
   prefixClassName = DEFAULT_PREFIX_CLASS,
   wrapperClassName = "relative w-full",
 }: TradeFormCurrencyInputProps) {
@@ -43,6 +45,7 @@ export default function TradeFormCurrencyInput({
         inputMode="decimal"
         autoComplete="off"
         tabIndex={tabIndex}
+        placeholder={placeholder}
         value={getTradeFormCurrencyInputDisplayValue(value)}
         onChange={(e) =>
           handleTradeNumericInput(e.target.value, onChange, {

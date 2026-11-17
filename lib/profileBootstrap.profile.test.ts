@@ -250,6 +250,23 @@ describe("Profile deferred loads", () => {
     assert.doesNotMatch(src, /import Link from "next\/link"/)
   })
 
+  it("ProfileTradeCard owner overflow is post editing only (no journal delete)", () => {
+    const cardSrc = fs.readFileSync(
+      path.join(__dirname, "../app/components/profile/ProfileTradeCard.tsx"),
+      "utf8"
+    )
+    assert.match(cardSrc, /label: "Edit Post"/)
+    assert.doesNotMatch(cardSrc, /Delete Trade/)
+    assert.doesNotMatch(cardSrc, /onDeleteTrade/)
+
+    const pageSrc = fs.readFileSync(
+      path.join(__dirname, "../app/profile/[id]/page.tsx"),
+      "utf8"
+    )
+    assert.doesNotMatch(pageSrc, /useDeleteTradeConfirmation/)
+    assert.doesNotMatch(pageSrc, /deleteUserTrade/)
+  })
+
   it("Profile page defers stories and rooms on idle mount", () => {
     const pageSrc = fs.readFileSync(
       path.join(__dirname, "../app/profile/[id]/page.tsx"),

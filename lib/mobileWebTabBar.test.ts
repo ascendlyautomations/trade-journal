@@ -2,6 +2,10 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 import { setMobileWebTradeTitle } from "./mobileWebTradeTitle.ts"
 import {
+  resetMobileWebInAppHistoryForTests,
+  syncMobileWebInAppHistory,
+} from "./mobileWebInAppHistory.ts"
+import {
   isMobileWebMessageThreadPath,
   resolveMobileWebActiveTab,
   resolveMobileWebNavChrome,
@@ -198,26 +202,18 @@ describe("resolveMobileWebNavChrome", () => {
 })
 
 describe("shouldUseMobileWebHistoryBack", () => {
-  it("uses history only for same-origin in-app navigations", () => {
-    assert.equal(
-      shouldUseMobileWebHistoryBack(
-        "http://localhost:3000/dashboard",
-        "http://localhost:3000",
-        3
-      ),
-      true
-    )
-    assert.equal(
-      shouldUseMobileWebHistoryBack("", "http://localhost:3000", 2),
-      false
-    )
-    assert.equal(
-      shouldUseMobileWebHistoryBack(
-        "https://example.com/",
-        "http://localhost:3000",
-        4
-      ),
-      false
-    )
+  it("pops an in-app visit and replaces a deep link", () => {
+    resetMobileWebInAppHistoryForTests()
+    syncMobileWebInAppHistory("/messages/thread")
+    assert.equal(shouldUseMobileWebHistoryBack(), false)
+    syncMobileWebInAppHistory("/messages")
+    syncMobileWebInAppHistory("/messages/thread")
+    assert.equal(shouldUseMobileWebHistoryBack(), false)
+    resetMobileWebInAppHistoryForTests()
+    syncMobileWebInAppHistory("/messages")
+    syncMobileWebInAppHistory("/messages/thread")
+    assert.equal(shouldUseMobileWebHistoryBack(), true)
+    syncMobileWebInAppHistory("/messages")
+    assert.equal(shouldUseMobileWebHistoryBack(), false)
   })
 })

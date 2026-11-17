@@ -5,6 +5,10 @@ import type { StoryBarProfile } from "./FeedStoriesBar"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import StorageImage from "@/app/components/ui/StorageImage"
 import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
+import {
+  storyMediaIsVideo,
+  type StoryTextOverlay,
+} from "@/lib/activeStories"
 
 export function storyTimeAgo(iso: string): string {
   return formatSocialTimestamp(iso)
@@ -23,6 +27,7 @@ type StoryFrameProps = {
   hasFooter?: boolean
   /** Load the visible slide immediately. Off by default so desktop stays lazy. */
   priority?: boolean
+  textOverlays?: StoryTextOverlay[] | null
   children?: ReactNode
 }
 
@@ -36,6 +41,7 @@ export default function StoryFrame({
   footer,
   hasFooter = Boolean(footer),
   priority = false,
+  textOverlays = null,
   children,
 }: StoryFrameProps) {
   const username = profile.username?.trim() || "User"
@@ -67,16 +73,51 @@ export default function StoryFrame({
           hasFooter ? "pb-[4.75rem]" : ""
         }`}
       >
-        <StorageImage
-          key={imageKey ?? imageUrl}
-          src={imageUrl}
-          originalSrc={imageUrl}
-          preset="story"
-          alt=""
-          priority={priority}
-          className="block max-h-full max-w-full animate-[storyFadeIn_0.28s_ease-out] object-contain"
-          draggable={false}
-        />
+        {storyMediaIsVideo(imageUrl) ? (
+          <video
+            key={imageKey ?? imageUrl}
+            src={imageUrl}
+            className="block max-h-full max-w-full object-contain"
+            playsInline
+            muted
+            autoPlay
+            controls={false}
+          />
+        ) : (
+          <StorageImage
+            key={imageKey ?? imageUrl}
+            src={imageUrl}
+            originalSrc={imageUrl}
+            preset="story"
+            alt=""
+            priority={priority}
+            className="block max-h-full max-w-full animate-[storyFadeIn_0.28s_ease-out] object-contain"
+            draggable={false}
+          />
+        )}
+        {textOverlays?.map((overlay, index) => {
+          const text = overlay.text?.trim()
+          if (!text) return null
+          const red = Math.round((overlay.red ?? 1) * 255)
+          const green = Math.round((overlay.green ?? 1) * 255)
+          const blue = Math.round((overlay.blue ?? 1) * 255)
+          const alpha = overlay.alpha ?? 1
+          return (
+            <p
+              key={overlay.id ?? `${index}-${text}`}
+              className="pointer-events-none absolute z-[2] max-w-[80%] text-center text-sm font-semibold"
+              style={{
+                left: `${(overlay.x ?? 0.5) * 100}%`,
+                top: `${(overlay.y ?? 0.5) * 100}%`,
+                transform: `translate(-50%, -50%) scale(${overlay.scale ?? 1}) rotate(${overlay.rotation ?? 0}rad)`,
+                color: `rgba(${red}, ${green}, ${blue}, ${alpha})`,
+                background: overlay.background ? "rgba(0,0,0,0.45)" : undefined,
+              }}
+            >
+              {text}
+            </p>
+          )
+        })}
       </div>
 
       {footer ? (

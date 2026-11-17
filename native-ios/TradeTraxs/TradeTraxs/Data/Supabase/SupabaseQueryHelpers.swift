@@ -31,6 +31,22 @@ nonisolated enum SupabaseQuery {
         URLQueryItem(name: column, value: "neq.\(value)")
     }
 
+    static func gte(_ column: String, _ value: String) -> URLQueryItem {
+        URLQueryItem(name: column, value: "gte.\(value)")
+    }
+
+    static func lt(_ column: String, _ value: String) -> URLQueryItem {
+        URLQueryItem(name: column, value: "lt.\(value)")
+    }
+
+    static func isNotNull(_ column: String) -> URLQueryItem {
+        URLQueryItem(name: column, value: "not.is.null")
+    }
+
+    static func isNull(_ column: String) -> URLQueryItem {
+        URLQueryItem(name: column, value: "is.null")
+    }
+
     /// PostgREST `column=in.(a,b,c)`.
     static func isIn(_ column: String, _ values: [String]) -> URLQueryItem {
         let joined = values.joined(separator: ",")

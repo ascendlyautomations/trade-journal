@@ -19,7 +19,7 @@ nonisolated enum DashboardDateRange: String, CaseIterable, Identifiable, Sendabl
         case .thirtyDays: return "30D"
         case .ninetyDays: return "90D"
         case .oneYear: return "1Y"
-        case .ytd: return "1Y"
+        case .ytd: return "YTD"
         }
     }
 

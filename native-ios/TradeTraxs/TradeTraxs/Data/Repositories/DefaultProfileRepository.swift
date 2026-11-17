@@ -778,6 +778,12 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
     }
 
     func follow(from viewer: ProfileID, to target: ProfileID) async throws {
+        guard viewer != target else { return }
+        if await isPrivateProfile(target) {
+            try await insertFollowRequest(from: viewer, to: target)
+            return
+        }
+
         struct Body: Encodable, Decodable {
             var follower_id: String
             var following_id: String
@@ -790,30 +796,138 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             )
         } catch {
             if Self.isFollowUniqueViolation(error) { return }
+            if Self.isFollowPrivacyViolation(error) {
+                try await insertFollowRequest(from: viewer, to: target)
+                return
+            }
             throw error
         }
-        cache.memory.remove(forKey: "profile-stats:\(viewer.rawValue)")
-        cache.memory.remove(forKey: "profile-stats:\(target.rawValue)")
-        RepositoryRequestFlight.shared.invalidate(
-            prefix: "profiles.followState:\(viewer.rawValue)->\(target.rawValue)"
-        )
+        invalidateFollowEdgeCaches(follower: viewer, following: target)
         await MainActor.run {
             GettingStartedRefreshCenter.noteFollowSucceeded(viewer: viewer, target: target)
         }
+        await activityNotifications.notifyFollow(followingID: target.rawValue)
     }
 
     func unfollow(from viewer: ProfileID, to target: ProfileID) async throws {
+        guard viewer != target else { return }
+        let cancelledRequest: Bool
+        if cachedIsPrivate(target) == false {
+            cancelledRequest = false
+        } else {
+            cancelledRequest = await deletePendingFollowRequestIfPresent(from: viewer, to: target)
+        }
+        if cancelledRequest {
+            await activityNotifications.removeFollowRequest(targetID: target.rawValue)
+            return
+        }
+        try await deleteFollowEdge(follower: viewer, following: target)
+        await activityNotifications.removeFollow(followingID: target.rawValue)
+    }
+
+    func removeFollower(_ follower: ProfileID, from owner: ProfileID) async throws {
+        struct Row: Decodable, Sendable {
+            var follower_id: String?
+            var following_id: String?
+        }
+        let rows = try await supabase.database.deleteReturning(
+            Row.self,
+            from: "followers",
+            query: [
+                SupabaseQuery.eq("follower_id", follower.rawValue),
+                SupabaseQuery.eq("following_id", owner.rawValue),
+            ]
+        )
+        guard !rows.isEmpty else {
+            throw AppError.unknown(message: "Couldn't remove follower")
+        }
+        invalidateFollowEdgeCaches(follower: follower, following: owner)
+    }
+
+    private var activityNotifications: ActivityNotificationClient {
+        ActivityNotificationClient(transport: supabase.transport)
+    }
+
+    private func cachedIsPrivate(_ id: ProfileID) -> Bool? {
+        cache.memory.value(forKey: "profile:\(id.rawValue)", as: Profile.self)?.isPrivate
+    }
+
+    private func isPrivateProfile(_ id: ProfileID) async -> Bool {
+        if let cached = cachedIsPrivate(id) {
+            return cached
+        }
+        struct Row: Decodable, Sendable { var is_private: Bool? }
+        let rows: [Row] = (try? await supabase.database.select(
+            Row.self,
+            from: "profiles",
+            query: [
+                SupabaseQuery.select("is_private"),
+                SupabaseQuery.eq("id", id.rawValue),
+                URLQueryItem(name: "limit", value: "1"),
+            ]
+        )) ?? []
+        return rows.first?.is_private == true
+    }
+
+    private func insertFollowRequest(from viewer: ProfileID, to target: ProfileID) async throws {
+        struct Body: Encodable, Decodable {
+            var requester_id: String
+            var target_id: String
+            var status: String
+        }
+        do {
+            _ = try await supabase.database.insert(
+                Body(
+                    requester_id: viewer.rawValue,
+                    target_id: target.rawValue,
+                    status: "pending"
+                ),
+                into: "follow_requests",
+                returning: Body.self
+            )
+        } catch {
+            if Self.isFollowUniqueViolation(error) { return }
+            throw error
+        }
+        invalidateFollowEdgeCaches(follower: viewer, following: target)
+        await activityNotifications.notifyFollowRequest(targetID: target.rawValue)
+    }
+
+    private func deletePendingFollowRequestIfPresent(from viewer: ProfileID, to target: ProfileID) async -> Bool {
+        struct Row: Decodable, Sendable {
+            var id: String?
+        }
+        let rows = (try? await supabase.database.deleteReturning(
+            Row.self,
+            from: "follow_requests",
+            query: [
+                SupabaseQuery.eq("requester_id", viewer.rawValue),
+                SupabaseQuery.eq("target_id", target.rawValue),
+                URLQueryItem(name: "status", value: "eq.pending"),
+            ]
+        )) ?? []
+        if !rows.isEmpty {
+            invalidateFollowEdgeCaches(follower: viewer, following: target)
+        }
+        return !rows.isEmpty
+    }
+
+    private func deleteFollowEdge(follower: ProfileID, following: ProfileID) async throws {
         try await supabase.database.delete(
             from: "followers",
             query: [
-                SupabaseQuery.eq("follower_id", viewer.rawValue),
-                SupabaseQuery.eq("following_id", target.rawValue),
+                SupabaseQuery.eq("follower_id", follower.rawValue),
+                SupabaseQuery.eq("following_id", following.rawValue),
             ]
         )
-        cache.memory.remove(forKey: "profile-stats:\(viewer.rawValue)")
-        cache.memory.remove(forKey: "profile-stats:\(target.rawValue)")
+        invalidateFollowEdgeCaches(follower: follower, following: following)
+    }
+
+    private func invalidateFollowEdgeCaches(follower: ProfileID, following: ProfileID) {
+        cache.memory.remove(forKey: "profile-stats:\(follower.rawValue)")
+        cache.memory.remove(forKey: "profile-stats:\(following.rawValue)")
         RepositoryRequestFlight.shared.invalidate(
-            prefix: "profiles.followState:\(viewer.rawValue)->\(target.rawValue)"
+            prefix: "profiles.followState:\(follower.rawValue)->\(following.rawValue)"
         )
     }
 
@@ -1105,6 +1219,13 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
     private static func isFollowUniqueViolation(_ error: Error) -> Bool {
         let text = String(describing: error).lowercased()
         return text.contains("23505") || text.contains("duplicate") || text.contains("unique")
+    }
+
+    private static func isFollowPrivacyViolation(_ error: Error) -> Bool {
+        let text = String(describing: error).lowercased()
+        return text.contains("42501")
+            || text.contains("row-level security")
+            || text.contains("followers_insert_own")
     }
 }
 

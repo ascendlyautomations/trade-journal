@@ -41,7 +41,7 @@ struct ThirdPartyAIConsentSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .experienceSheetChrome()
         .accessibilityIdentifier("aiConsent.sheet")
     }
 }

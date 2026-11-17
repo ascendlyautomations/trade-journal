@@ -51,10 +51,13 @@ nonisolated enum PsychologyGuardrailEngine {
             wrText = "Historically your performance declines after this point."
         }
 
+        let message = facts.guardrailFacts.personalLossPause
+            ? "You've reached your pause of \(NumberDisplay.integer(checkpoint)) consecutive losses. \(wrText)"
+            : "You've taken \(NumberDisplay.integer(checkpoint)) consecutive losses. \(wrText)"
         return PsychologyGuardrailNotice(
             id: "guardrail.consecutiveLoss.\(checkpoint)",
             title: "Psychology Check",
-            message: "You've taken \(NumberDisplay.integer(checkpoint)) consecutive losses. \(wrText)",
+            message: message,
             kind: .consecutiveLosses
         )
     }
@@ -86,9 +89,7 @@ nonisolated enum PsychologyGuardrailEngine {
         checkIn: TraderDailyCheckIn?
     ) -> PsychologyGuardrailNotice? {
         guard let stress = checkIn?.stressLevel, TraderDailyCheckInStressScale.isElevated(stress) else { return nil }
-        guard facts.topInsights.contains(where: { $0.category == "mentalState" && $0.headline.localizedCaseInsensitiveContains("stress") }) else {
-            return nil
-        }
+        guard facts.guardrailFacts.highStressWeaker else { return nil }
         return PsychologyGuardrailNotice(
             id: "guardrail.highStress",
             title: "High Stress",
@@ -102,9 +103,7 @@ nonisolated enum PsychologyGuardrailEngine {
         checkIn: TraderDailyCheckIn?
     ) -> PsychologyGuardrailNotice? {
         guard let focus = checkIn?.focusLevel, focus <= 2 else { return nil }
-        guard facts.topInsights.contains(where: { $0.category == "mentalState" && $0.headline.localizedCaseInsensitiveContains("focus") }) else {
-            return nil
-        }
+        guard facts.guardrailFacts.lowFocusWeaker else { return nil }
         return PsychologyGuardrailNotice(
             id: "guardrail.lowFocus",
             title: "Low Focus",
@@ -120,10 +119,13 @@ nonisolated enum PsychologyGuardrailEngine {
         guard let limit = facts.guardrailFacts.maxTradesDaySoftLimit else { return nil }
         guard let last = enriched.last, last.tradeNumberInDay > limit else { return nil }
 
+        let message = facts.guardrailFacts.personalTradeCap
+            ? "You're on trade #\(last.tradeNumberInDay) today, past your daily cap of \(limit). Trades within that cap have been stronger in your history."
+            : "You're on trade #\(last.tradeNumberInDay) today. Your first three trades have been stronger than later ones."
         return PsychologyGuardrailNotice(
             id: "guardrail.tradeCount.\(limit)",
             title: "Trade Count",
-            message: "You're on trade #\(last.tradeNumberInDay) today. Your first \(limit) trades historically outperform later ones in your journal.",
+            message: message,
             kind: .tradeCount
         )
     }

@@ -19,6 +19,9 @@ struct FeedClipsPagerView: View {
     let onShare: (FeedTimelineEntry) -> Void
     let onOpenDetail: (FeedTimelineEntry) -> Void
     let onLoadMore: (String) -> Void
+    var preservedActiveClipEntryID: String?
+    var onActiveClipEntryIDChange: (String?) -> Void = { _ in }
+    var listScrollPresentationEpoch: UInt64 = 0
 
     @State private var activeClipIndex = 0
     @State private var activeClipEntryID: String?
@@ -83,6 +86,9 @@ struct FeedClipsPagerView: View {
             }
         }
         .onAppear {
+            if activeClipEntryID == nil, let preservedActiveClipEntryID {
+                activeClipEntryID = preservedActiveClipEntryID
+            }
             if clipEntries.isEmpty {
                 activeClipIndex = 0
                 activeClipEntryID = nil
@@ -107,6 +113,13 @@ struct FeedClipsPagerView: View {
             guard isActive, scenePhase == .active, !clipEntries.isEmpty else { return }
             handlePageBecameActive(index: activeClipIndex, scrollDirection: 1)
         }
+        .onChange(of: listScrollPresentationEpoch) { _, _ in
+            activeClipIndex = 0
+            activeClipEntryID = clipEntries.first?.id
+            guard clipEntries.indices.contains(0) else { return }
+            handlePageBecameActive(index: 0, scrollDirection: 1)
+        }
+        .experienceDisablesSystemScrollToTop()
         .accessibilityIdentifier("feed.clips.pager")
     }
 
@@ -152,6 +165,7 @@ struct FeedClipsPagerView: View {
         guard clipEntries.indices.contains(index) else { return }
         let entry = clipEntries[index]
         activeClipEntryID = entry.id
+        onActiveClipEntryIDChange(entry.id)
         activateEntry(entry, atIndex: index)
         prefetchNeighborClip(from: index, scrollDirection: scrollDirection)
         syncClipEngagementRealtimeRetention(activeIndex: index)
@@ -440,6 +454,7 @@ private struct FeedClipsPageView: View {
                 ClipLinkedTradeSection(
                     trade: linkedTrade,
                     style: .clipsOverlay,
+                    displayedClipCaption: entry.feedCaptionText,
                     onOpen: { onOpenLinkedTrade(linkedTrade.id) }
                 )
             }

@@ -7,11 +7,16 @@ nonisolated enum PsychologyCoachFactsBuilder {
         report: PsychologyAnalyticsReport,
         trades: [Trade],
         checkIns: [TraderDailyCheckIn],
-        now: Date = Date()
+        now: Date = Date(),
+        preferences: PreferenceRuleContext? = nil
     ) -> PsychologyCoachFacts {
         let enriched = TraderPsychologyAnalyticsEngine.enrich(trades: trades, checkIns: checkIns)
         let trends = PsychologyTrendAnalyzer.analyze(trades: trades, checkIns: checkIns)
-        let guardrails = buildGuardrailFacts(enriched: enriched, baseline: report.baseline)
+        let guardrails = buildGuardrailFacts(
+            enriched: enriched,
+            baseline: report.baseline,
+            preferences: preferences
+        )
 
         let topInsights = report.dashboardCards.map { factInsight(from: $0) }
         let combined = report.dashboardCards
@@ -88,60 +93,11 @@ nonisolated enum PsychologyCoachFactsBuilder {
 
     private static func buildGuardrailFacts(
         enriched: [PsychologyEnrichedTrade],
-        baseline: PsychologyGroupMetrics
+        baseline: PsychologyGroupMetrics,
+        preferences: PreferenceRuleContext? = nil
     ) -> PsychologyCoachGuardrailFacts {
-        let afterTwo = enriched.filter { $0.consecutiveLossesBefore >= 2 }
-        let afterTwoMetrics = TraderPsychologyAnalyticsEngine.metrics(for: afterTwo.map(\.trade))
-
-        var lowSleepThreshold: Double?
-        var lowSleepExpectancy: Double?
-        let lowSleep = enriched.filter {
-            guard let hours = $0.dailyCheckIn?.sleepHours else { return false }
-            return NSDecimalNumber(decimal: hours).doubleValue < 6
-        }
-        if lowSleep.count >= 10 {
-            let m = TraderPsychologyAnalyticsEngine.metrics(for: lowSleep.map(\.trade))
-            if m.reliability.qualifiesForComparison {
-                lowSleepThreshold = 6
-                lowSleepExpectancy = decimalDouble(m.expectancy ?? m.averagePnL)
-            }
-        }
-
-        var maxTrades: Int?
-        var lateAvg: Double?
-        var earlyAvg: Double?
-        let grouped = Dictionary(grouping: enriched) {
-            TraderPsychologyAnalyticsEngine.TradeSequenceBucket.resolve($0.tradeNumberInDay)
-        }
-        let early = (grouped[.first] ?? []) + (grouped[.second] ?? []) + (grouped[.third] ?? [])
-        let late = grouped[.fifthPlus] ?? []
-        if early.count >= 5, late.count >= 5 {
-            let earlyM = TraderPsychologyAnalyticsEngine.metrics(for: early.map(\.trade))
-            let lateM = TraderPsychologyAnalyticsEngine.metrics(for: late.map(\.trade))
-            if earlyM.reliability.qualifiesForDashboardCard,
-               lateM.reliability.qualifiesForDashboardCard,
-               (earlyM.averagePnL ?? 0) > (lateM.averagePnL ?? 0) + 5 {
-                maxTrades = 4
-                earlyAvg = decimalDouble(earlyM.averagePnL)
-                lateAvg = decimalDouble(lateM.averagePnL)
-            }
-        }
-
-        let checkpoint: Int? = afterTwo.count >= 10 && afterTwoMetrics.reliability.qualifiesForComparison
-            && (afterTwoMetrics.winRate ?? 0) < (baseline.winRate ?? 0) - Decimal(0.05)
-            ? 2
-            : nil
-
-        return PsychologyCoachGuardrailFacts(
-            consecutiveLossCheckpoint: checkpoint,
-            consecutiveLossWinRateAfter: decimalDouble(afterTwoMetrics.winRate),
-            consecutiveLossBaselineWinRate: decimalDouble(baseline.winRate),
-            lowSleepHoursThreshold: lowSleepThreshold,
-            lowSleepExpectancy: lowSleepExpectancy,
-            maxTradesDaySoftLimit: maxTrades,
-            lateTradeAveragePnL: lateAvg,
-            earlyTradeAveragePnL: earlyAvg
-        )
+        _ = baseline
+        return PsychologyComparisonBuilder.build(enriched: enriched, preferences: preferences).guardrails
     }
 
     static func dataGapMessages(
@@ -161,7 +117,7 @@ nonisolated enum PsychologyCoachFactsBuilder {
         if report.baseline.tradeCount < 5 {
             gaps.append("Log at least 5 trades to unlock personalized coaching.")
         }
-        if report.checkInMatchedTradeCount < 5 {
+        if report.matchedDayCount < 5 {
             gaps.append("Complete daily check-ins on trading days to unlock sleep and mental-state patterns.")
         }
         let withConviction = enriched.filter { ($0.trade.confidence ?? 0) > 0 }.count

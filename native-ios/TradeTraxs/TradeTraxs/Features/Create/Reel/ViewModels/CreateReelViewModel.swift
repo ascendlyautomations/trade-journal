@@ -49,7 +49,6 @@ final class CreateReelViewModel {
     private var publishTask: Task<Void, Never>?
     private var didHandOffBackgroundPublish = false
     private var hasPrepared = false
-    private var hasLoadedTrades = false
 
     private var selectionGeneration: UInt64 = 0
     private var currentSelectionID: String?
@@ -317,12 +316,16 @@ final class CreateReelViewModel {
         current.linkedTradeID = nil
         current.linkedTradeSummary = nil
         draft = current
+        reloadTradesForPicker()
+    }
+
+    /// Refreshes linkable trades from the database (call when the picker opens and after link changes).
+    func reloadTradesForPicker() {
+        Task { await loadTrades() }
     }
 
     func loadTradesIfNeeded() {
-        guard !hasLoadedTrades else { return }
-        hasLoadedTrades = true
-        Task { await loadTrades() }
+        reloadTradesForPicker()
     }
 
     func publish() {
@@ -402,8 +405,13 @@ final class CreateReelViewModel {
         isLoadingTrades = true
         defer { isLoadingTrades = false }
         guard let viewerID else { return }
+        let includingTradeID = draft?.linkedTradeID
         if viewerID.rawValue.hasPrefix("dev.") {
-            pickerTrades = Self.publicTradesOnly(CreateReelFixtures.sampleTrades(owner: viewerID))
+            pickerTrades = Self.eligiblePublicTrades(
+                from: CreateReelFixtures.sampleTrades(owner: viewerID),
+                busyTradeIDs: [],
+                includingTradeID: includingTradeID
+            )
             reconcileLinkedTradeAfterPickerReload()
             return
         }
@@ -414,7 +422,12 @@ final class CreateReelViewModel {
                 page: PageRequest(limit: 30),
                 publicOnly: true
             )
-            pickerTrades = Self.publicTradesOnly(page.items)
+            let busy = try await feed.tradeIDsWithAttachedReels(owner: viewerID)
+            pickerTrades = Self.eligiblePublicTrades(
+                from: page.items,
+                busyTradeIDs: busy,
+                includingTradeID: includingTradeID
+            )
             reconcileLinkedTradeAfterPickerReload()
         } catch {
             pickerTrades = []
@@ -1035,6 +1048,16 @@ final class CreateReelViewModel {
 
     private static func publicTradesOnly(_ trades: [Trade]) -> [Trade] {
         trades.filter { $0.visibility == .public }
+    }
+
+    private static func eligiblePublicTrades(
+        from trades: [Trade],
+        busyTradeIDs: Set<TradeID>,
+        includingTradeID: TradeID?
+    ) -> [Trade] {
+        publicTradesOnly(trades).filter { trade in
+            !busyTradeIDs.contains(trade.id) || trade.id == includingTradeID
+        }
     }
 
     private static func elapsedMilliseconds(since start: ContinuousClock.Instant) -> Double {

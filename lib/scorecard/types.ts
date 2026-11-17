@@ -57,11 +57,29 @@ export type ScorecardOverallResult = {
   nominalWeightIncluded: number
 }
 
+export type ScorecardAdherenceReadout = {
+  id: "plan_overall" | "plan_after_loss" | "check_in"
+  label: string
+  /** Ready percent, such as "72%". */
+  value: string | null
+  /** Progress while a score is locked, such as "2 of 3 tagged trades". */
+  pending: string | null
+  /** Readable sample shown once when the percent is ready. */
+  sample: string | null
+}
+
+export type ScorecardInsight = {
+  id: string
+  text: string
+}
+
 export type ScorecardResult = {
   scopeLabel: string
   generatedAtMs: number
   overall: ScorecardOverallResult
   categories: ScorecardCategoryResult[]
+  adherence: ScorecardAdherenceReadout[]
+  insights: ScorecardInsight[]
 }
 
 export type ScorecardTrade = {
@@ -74,6 +92,7 @@ export type ScorecardTrade = {
   mistakeType: string | null
   confidence: number | null
   executionRating: number | null
+  emotion: string | null
   entryTimeMs: number
   /** Dashboard futures session day (6 PM ET rollover). */
   tradingDayKey: string | null

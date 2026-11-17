@@ -1,7 +1,7 @@
 import Foundation
 
 nonisolated protocol NotificationRepository: Sendable {
-    func notifications(page: PageRequest) async throws -> CursorPage<ActivityNotification>
+    func notifications(page: PageRequest, filter: ActivityNotificationListFilter) async throws -> CursorPage<ActivityNotification>
     /// Fetches a single notification by id (Realtime hydration).
     func notification(id: NotificationID) async throws -> ActivityNotification?
     func unreadCount() async throws -> Int
@@ -18,4 +18,10 @@ nonisolated protocol NotificationRepository: Sendable {
     func delete(ids: [NotificationID]) async throws -> Int
     /// Batch-load actor profiles for Activity rows (anti-N+1).
     func profiles(ids: [ProfileID]) async throws -> [Profile]
+}
+
+extension NotificationRepository {
+    func notifications(page: PageRequest) async throws -> CursorPage<ActivityNotification> {
+        try await notifications(page: page, filter: .all)
+    }
 }

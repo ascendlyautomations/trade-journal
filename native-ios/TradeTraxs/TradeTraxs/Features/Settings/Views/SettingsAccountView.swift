@@ -64,81 +64,73 @@ struct SettingsAccountView: View {
                         value: createdAt.formatted(date: .abbreviated, time: .omitted)
                     )
                 }
+
+                if !AppLaunchController.shared.isDemoExperienceActive {
+                    Button {
+                        ExperienceHaptics.play(.selection)
+                        stackNavigation?.pushSettings(.security)
+                    } label: {
+                        SettingsNavigationRow(title: "Password & Security", systemImage: "lock.shield")
+                    }
+                    .buttonStyle(.experiencePlain)
+
+                    Button {
+                        ExperienceHaptics.play(.selection)
+                        viewModel.downloadAccountData()
+                    } label: {
+                        SettingsNavigationRow(
+                            title: "Download Account Data",
+                            systemImage: "square.and.arrow.down",
+                            showsChevron: false
+                        )
+                        .overlay(alignment: .trailing) {
+                            if viewModel.isExportingAccountData {
+                                ProgressView()
+                                    .accessibilityIdentifier("settings.account.downloading")
+                            }
+                        }
+                    }
+                    .buttonStyle(.experiencePlain)
+                    .disabled(viewModel.isDeletingAccount || viewModel.isExportingAccountData || viewModel.exportShareItem != nil)
+                    .accessibilityLabel("Download Account Data")
+                    .accessibilityIdentifier("settings.account.downloadData")
+
+                    Button {
+                        viewModel.confirmsLogout = true
+                    } label: {
+                        SettingsNavigationRow(
+                            title: "Log Out",
+                            systemImage: "rectangle.portrait.and.arrow.right",
+                            isDestructive: true
+                        )
+                    }
+                    .buttonStyle(.experiencePlain)
+                    .disabled(viewModel.isDeletingAccount)
+                }
             } header: {
                 Text("Account Information")
-            } footer: {
-                Text("Your sign-in email and public username.")
             }
 
             if !AppLaunchController.shared.isDemoExperienceActive {
-            Section("Security") {
-                Button {
-                    ExperienceHaptics.play(.selection)
-                    stackNavigation?.pushSettings(.security)
-                } label: {
-                    SettingsNavigationRow(title: "Password & Security", systemImage: "lock.shield")
-                }
-                .buttonStyle(.experiencePlain)
-            }
-
-            Section {
-                Button {
-                    ExperienceHaptics.play(.selection)
-                    viewModel.downloadAccountData()
-                } label: {
-                    SettingsNavigationRow(
-                        title: "Download Account Data",
-                        systemImage: "square.and.arrow.down",
-                        showsChevron: false
-                    )
-                    .overlay(alignment: .trailing) {
-                        if viewModel.isExportingAccountData {
-                            ProgressView()
-                                .accessibilityIdentifier("settings.account.downloading")
-                        }
+                Section {
+                    Button {
+                        ExperienceHaptics.play(.warning)
+                        viewModel.requestDeleteAccount()
+                    } label: {
+                        SettingsNavigationRow(
+                            title: "Delete Account",
+                            systemImage: "trash",
+                            isDestructive: true,
+                            showsChevron: false
+                        )
                     }
+                    .buttonStyle(.experiencePlain)
+                    .disabled(viewModel.isDeletingAccount)
+                    .accessibilityLabel("Delete Account")
+                    .accessibilityHint("Permanently deletes your TradeTraxs account and associated data")
+                } footer: {
+                    Text("Permanently delete your TradeTraxs account and associated data.")
                 }
-                .buttonStyle(.experiencePlain)
-                .disabled(viewModel.isDeletingAccount || viewModel.isExportingAccountData || viewModel.exportShareItem != nil)
-                .accessibilityLabel("Download Account Data")
-                .accessibilityIdentifier("settings.account.downloadData")
-            }
-
-            Section {
-                Button {
-                    ExperienceHaptics.play(.warning)
-                    viewModel.requestDeleteAccount()
-                } label: {
-                    SettingsNavigationRow(
-                        title: "Delete Account",
-                        systemImage: "trash",
-                        isDestructive: true,
-                        showsChevron: false
-                    )
-                }
-                .buttonStyle(.experiencePlain)
-                .disabled(viewModel.isDeletingAccount)
-                .accessibilityLabel("Delete Account")
-                .accessibilityHint("Permanently deletes your TradeTraxs account and associated data")
-            } header: {
-                Text("Delete Account")
-            } footer: {
-                Text("Permanently delete your TradeTraxs account and associated data.")
-            }
-
-            Section {
-                Button {
-                    viewModel.confirmsLogout = true
-                } label: {
-                    SettingsNavigationRow(
-                        title: "Log Out",
-                        systemImage: "rectangle.portrait.and.arrow.right",
-                        isDestructive: true
-                    )
-                }
-                .buttonStyle(.experiencePlain)
-                .disabled(viewModel.isDeletingAccount)
-            }
             }
         }
         .experienceInsetGroupedListStyle(pageBackground: true)
@@ -197,8 +189,7 @@ struct SettingsAccountView: View {
                     viewModel.cancelDeleteAccountFlow()
                 }
             )
-            .presentationDetents([.medium])
-            .presentationDragIndicator(.visible)
+            .experienceSheetChrome(detents: [.medium])
         }
         .confirmationDialog(
             "Delete your account?",
@@ -221,26 +212,17 @@ struct SettingsAccountView: View {
         } message: {
             Text(viewModel.deleteAccountExplainerMessage)
         }
-        .confirmationDialog(
-            "Delete Account",
-            isPresented: Binding(
-                get: { viewModel.showsDeleteAccountConfirmation },
-                set: { isPresented in
-                    if !isPresented, !viewModel.isDeletingAccount {
-                        viewModel.cancelDeleteAccountFlow()
-                    }
-                }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Delete Account", role: .destructive) {
-                viewModel.confirmDeleteAccount()
-            }
-            Button("Cancel", role: .cancel) {
-                viewModel.cancelDeleteAccountFlow()
-            }
-        } message: {
-            Text(viewModel.deleteAccountConfirmationMessage)
+        .fullScreenCover(isPresented: Binding(
+            get: { viewModel.showsDeleteAccountConfirmation },
+            set: { _ in }
+        )) {
+            AccountDeletionFinalConfirmationView(
+                title: viewModel.deleteAccountFinalConfirmationTitle,
+                message: viewModel.deleteAccountFinalConfirmationMessage,
+                isDeleting: viewModel.isDeletingAccount,
+                onKeepAccount: { viewModel.cancelDeleteAccountFlow() },
+                onHoldToDeleteComplete: { viewModel.confirmDeleteAccount() }
+            )
         }
         .fullScreenCover(isPresented: Binding(
             get: { viewModel.showsDeleteAccountSuccess },
@@ -251,6 +233,174 @@ struct SettingsAccountView: View {
             }
         }
         .accessibilityIdentifier("settings.account")
+    }
+}
+
+/// Full-screen final delete confirmation — shown alone after the first alert.
+private struct AccountDeletionFinalConfirmationView: View {
+    let title: String
+    let message: String
+    let isDeleting: Bool
+    let onKeepAccount: () -> Void
+    let onHoldToDeleteComplete: () -> Void
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: ExperienceSpacing.xl)
+
+            VStack(spacing: ExperienceSpacing.lg) {
+                Image(systemName: "trash.fill")
+                    .font(.system(size: 48, weight: .semibold))
+                    .foregroundStyle(colors.loss)
+                    .accessibilityHidden(true)
+
+                VStack(spacing: ExperienceSpacing.sm) {
+                    Text(title)
+                        .experienceStyle(.title3, color: colors.primaryText)
+                        .fontWeight(.semibold)
+                        .multilineTextAlignment(.center)
+
+                    Text(message)
+                        .experienceStyle(.footnote, color: colors.secondaryText)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                VStack(spacing: ExperienceSpacing.sm) {
+                    Button(action: onKeepAccount) {
+                        Text("Keep My Account")
+                            .experienceStyle(.body, color: colors.onAccent)
+                            .fontWeight(.semibold)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: HoldToPermanentlyDeleteControl.preferredHeight)
+                            .background(colors.accent, in: RoundedRectangle(
+                                cornerRadius: ExperienceRadius.md,
+                                style: .continuous
+                            ))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isDeleting)
+                    .accessibilityIdentifier("settings.account.deleteFinal.keep")
+
+                    HoldToPermanentlyDeleteControl(
+                        isEnabled: !isDeleting,
+                        isProcessing: isDeleting,
+                        onHoldComplete: onHoldToDeleteComplete
+                    )
+                    .accessibilityIdentifier("settings.account.deleteFinal.hold")
+                }
+                .padding(.top, ExperienceSpacing.xs)
+            }
+            .padding(.horizontal, ExperienceSpacing.xl)
+            .frame(maxWidth: 440)
+
+            Spacer(minLength: ExperienceSpacing.xl)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .experienceScreenBackground()
+        .interactiveDismissDisabled(isDeleting)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
+        .accessibilityIdentifier("settings.account.deleteFinal.overlay")
+    }
+}
+
+/// Five-second continuous press with red fill progress; resets on release or backgrounding.
+private struct HoldToPermanentlyDeleteControl: View {
+    private static let holdDuration: TimeInterval = 5
+    fileprivate static let preferredHeight: CGFloat = 54
+
+    let isEnabled: Bool
+    let isProcessing: Bool
+    let onHoldComplete: () -> Void
+
+    @Environment(\.themeColors) private var colors
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var progress: CGFloat = 0
+    @State private var holdStart: Date?
+    @State private var tickTask: Task<Void, Never>?
+
+    private var buttonShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous)
+    }
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            buttonShape
+                .fill(colors.loss)
+
+            buttonShape
+                .fill(Color.red.opacity(0.55))
+                .scaleEffect(x: max(progress, 0.001), y: 1, anchor: .leading)
+
+            Group {
+                if isProcessing {
+                    ProgressView()
+                        .tint(colors.textInverse)
+                } else {
+                    Text("Hold 5 Seconds to Delete")
+                        .experienceStyle(.body, color: colors.textInverse)
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: Self.preferredHeight)
+        .clipShape(buttonShape)
+        .contentShape(buttonShape)
+        .opacity(isEnabled && !isProcessing ? 1 : 0.6)
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    guard isEnabled, !isProcessing else { return }
+                    if holdStart == nil {
+                        beginHold()
+                    }
+                }
+                .onEnded { _ in
+                    cancelHold()
+                }
+        )
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active {
+                cancelHold()
+            }
+        }
+        .accessibilityLabel("Hold five seconds to permanently delete account")
+        .accessibilityAddTraits(.updatesFrequently)
+    }
+
+    private func beginHold() {
+        holdStart = Date()
+        progress = 0
+        tickTask?.cancel()
+        tickTask = Task { @MainActor in
+            while !Task.isCancelled, let started = holdStart {
+                let elapsed = Date().timeIntervalSince(started)
+                let next = min(1, CGFloat(elapsed / Self.holdDuration))
+                progress = next
+                if next >= 1 {
+                    holdStart = nil
+                    progress = 0
+                    ExperienceHaptics.play(.success)
+                    onHoldComplete()
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+        }
+    }
+
+    private func cancelHold() {
+        tickTask?.cancel()
+        tickTask = nil
+        holdStart = nil
+        progress = 0
     }
 }
 

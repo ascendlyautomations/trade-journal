@@ -12,6 +12,7 @@ struct RoomConversationHeaderView: View {
     let onJoinTap: () -> Void
     let onMembersTap: () -> Void
     let onInfoTap: () -> Void
+    var onCollapseTap: (() -> Void)? = nil
     let imagePipeline: any ImagePipeline
 
     @Environment(\.themeColors) private var colors
@@ -74,10 +75,19 @@ struct RoomConversationHeaderView: View {
                     .disabled(!isJoinEnabled || isJoining)
                     .accessibilityIdentifier("tradeRooms.conversation.join")
                 }
+                if let onCollapseTap {
+                    headerIconButton(
+                        systemName: "chevron.up",
+                        accessibilityLabel: "Collapse room header",
+                        accessibilityIdentifier: "tradeRooms.conversation.header.collapse",
+                        action: onCollapseTap
+                    )
+                }
             }
         }
         .padding(.horizontal, ExperienceSpacing.md)
-        .padding(.vertical, ExperienceSpacing.xs)
+        .padding(.top, ExperienceSpacing.xs)
+        .padding(.bottom, showsJoinButton ? ExperienceSpacing.xs : ExperienceSpacing.xxs)
         .task(id: room.image?.id) {
             await loadLogo()
         }

@@ -15,6 +15,7 @@ import {
   mapDashboardRowToScorecardTrade,
   mergeScorecardTrades,
   postTripleLossWinRate,
+  postTripleLossWindow,
 } from "./tradeMapping.ts"
 import { resolveScorecardReliability } from "./reliability.ts"
 import {
@@ -41,6 +42,7 @@ function makeTrade(index: number, overrides: Partial<ScorecardTrade> = {}): Scor
     mistakeType: null,
     confidence: null,
     executionRating: null,
+    emotion: null,
     entryTimeMs: Date.parse(`${day}T14:00:00.000Z`) + index * 3600_000,
     tradingDayKey: day,
     psychologyDayKey: day,
@@ -110,9 +112,8 @@ describe("scoreConsistencyCategory", () => {
     const cat = scoreConsistencyCategory(trades, 8, 0.2)
     assert.ok(cat.score != null)
     assert.equal(cat.score, 100)
-    const winCtx = cat.subMetrics.find((m) => m.id === "streak.after_three_losses_win_rate")
-    assert.ok(winCtx)
-    assert.ok(!cat.subMetrics.some((m) => m.label.includes("Win rate") && m.id !== "streak.after_three_losses_win_rate"))
+    assert.equal(cat.subMetrics.some((metric) => metric.id === "consistency.plan_after_loss"), true)
+    assert.equal(cat.subMetrics.some((metric) => metric.id === "consistency.active_trading_days"), false)
   })
 
   it("stays unscored below 3 post-loss tags and scores at 3", () => {
@@ -136,8 +137,8 @@ describe("scoreRiskCategory", () => {
     const cat = scoreRiskCategory(trades, 500, 100, -50)
     assert.equal(cat.score, null)
     assert.equal(cat.eligible, false)
-    assert.ok(cat.subMetrics.some((m) => m.id === "risk.target_attainment_context"))
-    assert.ok(cat.subMetrics.some((m) => m.id === "risk.avg_loss_vs_win_context"))
+    assert.equal(cat.subMetrics.some((metric) => metric.id === "risk.avg_loss_vs_win_context"), false)
+    assert.equal(cat.subMetrics.some((metric) => metric.id === "risk.max_drawdown_context"), false)
   })
 })
 
@@ -150,7 +151,9 @@ describe("scorePsychologyCategory", () => {
     const cat = scorePsychologyCategory(trades, checkIns, 6)
     assert.equal(cat.score, null)
     assert.equal(cat.eligible, false)
-    assert.ok(cat.subMetrics.some((m) => m.id === "psych.phase1_mode"))
+    const coverage = cat.subMetrics.find((metric) => metric.id === "psych.checkin_coverage")
+    assert.equal(coverage?.value, "5 of 8 trading days")
+    assert.equal(coverage?.sampleSize, 8)
   })
 })
 
@@ -275,6 +278,9 @@ describe("postTripleLossWinRate", () => {
       makeTrade(index, { pnl: index < 3 ? -10 : 50 })
     )
     assert.equal(postTripleLossWinRate(full), 1)
+    const window = postTripleLossWindow(full)
+    assert.equal(window?.sampleSize, 5)
+    assert.notEqual(window?.sampleSize, full.length)
   })
 })
 
@@ -297,7 +303,7 @@ describe("tradeMapping", () => {
         pnl: 100,
         rr: 3,
         realizedRr: 1.1,
-        emotion: null,
+        emotion: "Calm",
         confidence: null,
         followedPlan: null,
         executionRating: null,
@@ -306,6 +312,7 @@ describe("tradeMapping", () => {
     const merged = mergeScorecardTrades(dashboard, journal)
     assert.equal(merged[0].rr, 3)
     assert.equal(merged[0].realizedRr, 1.1)
+    assert.equal(merged[0].emotion, "Calm")
   })
 })
 
@@ -335,6 +342,74 @@ describe("scorecard scope persistence helpers", () => {
       showPublicOnly: false,
     })
     assert.ok(key.startsWith("u1|"))
+  })
+})
+
+describe("scorecard insights", () => {
+  it("mentions after-loss adherence only when it is lower", () => {
+    const followed = Array.from({ length: 6 }, (_, index) =>
+      makeTrade(index, { followedPlan: true, pnl: 40 })
+    )
+    const afterLoss = tradesWithPostLossTags(3, 0).map((trade, index) => ({
+      ...trade,
+      id: `post-${index}`,
+      entryTimeMs: followed[followed.length - 1]!.entryTimeMs + (index + 1) * 3_600_000,
+    }))
+    const trades = [...followed, ...afterLoss]
+    const result = buildTradingScorecard({
+      scopeLabel: "Test",
+      trades,
+      checkIns: [],
+      analytics: {
+        periodTradingDayCount: 1,
+        maxDrawdown: 0,
+        avgWin: 30,
+        avgLoss: -40,
+        totalTrades: trades.length,
+        postTripleLossWinRate: null,
+      },
+    })
+    assert.ok(result.insights.some((insight) => insight.id === "plan_after_loss"))
+
+    const steady = Array.from({ length: 4 }, (_, index) =>
+      makeTrade(index, { followedPlan: true, pnl: index === 0 ? -10 : 20 })
+    )
+    const quiet = buildTradingScorecard({
+      scopeLabel: "Test",
+      trades: steady,
+      checkIns: [],
+      analytics: {
+        periodTradingDayCount: 1,
+        maxDrawdown: 0,
+        avgWin: 20,
+        avgLoss: -10,
+        totalTrades: steady.length,
+        postTripleLossWinRate: null,
+      },
+    })
+    assert.equal(quiet.insights.some((insight) => insight.id === "plan_after_loss"), false)
+  })
+
+  it("shows max R shortfall from the paired sample only", () => {
+    const trades = Array.from({ length: 6 }, (_, index) =>
+      makeTrade(index, { rr: 2, maxRrReached: 1, followedPlan: true, pnl: 10 })
+    )
+    const result = buildTradingScorecard({
+      scopeLabel: "Test",
+      trades,
+      checkIns: [],
+      analytics: {
+        periodTradingDayCount: 1,
+        maxDrawdown: 0,
+        avgWin: 10,
+        avgLoss: -10,
+        totalTrades: trades.length,
+        postTripleLossWinRate: null,
+      },
+    })
+    const insight = result.insights.find((row) => row.id === "max_r_shortfall")
+    assert.ok(insight)
+    assert.match(insight.text, /Based on 6 trades/)
   })
 })
 

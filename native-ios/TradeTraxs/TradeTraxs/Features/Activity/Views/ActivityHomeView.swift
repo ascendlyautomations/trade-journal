@@ -39,35 +39,43 @@ struct ActivityHomeView: View {
     }
 
     var body: some View {
-        Group {
-            switch viewModel.phase {
-            case .idle, .loading:
-                if viewModel.sections.isEmpty {
-                    ExperienceListSkeleton(style: .inboxRow, rowCount: 8)
-                } else {
-                    listContent
-                }
-            case .failed(let message):
-                if viewModel.sections.isEmpty {
-                    ExperienceErrorState(
-                        title: "Couldn't load Activity",
-                        message: message,
-                        onRetry: { Task { await viewModel.refresh() } }
-                    )
-                } else {
-                    listContent
-                }
-            case .loaded:
-                if viewModel.showsEmpty {
-                    ExperienceEmptyState(
-                        icon: .activity,
-                        title: "No activity yet",
-                        message: "When people interact with your trades, posts, profile, or Trade Rooms, you'll see it here."
-                    )
-                } else {
-                    listContent
+        VStack(spacing: 0) {
+            ActivityNotificationFilterBar(viewModel: viewModel)
+            Group {
+                switch viewModel.phase {
+                case .idle, .loading:
+                    if viewModel.sections.isEmpty && (viewModel.phase == .loading || viewModel.isReloadingFiltered) {
+                        ExperienceListSkeleton(style: .inboxRow, rowCount: 8)
+                    } else {
+                        listContent
+                    }
+                case .failed(let message):
+                    if viewModel.sections.isEmpty {
+                        ExperienceErrorState(
+                            title: "Couldn't load Activity",
+                            message: message,
+                            onRetry: { Task { await viewModel.refresh() } }
+                        )
+                    } else {
+                        listContent
+                    }
+                case .loaded:
+                    if viewModel.isReloadingFiltered && viewModel.sections.isEmpty {
+                        ExperienceListSkeleton(style: .inboxRow, rowCount: 8)
+                    } else if viewModel.showsEmpty {
+                        ExperienceEmptyState(
+                            icon: .activity,
+                            title: viewModel.emptyStateTitle,
+                            message: viewModel.emptyStateMessage
+                        )
+                    } else {
+                        listContent
+                    }
                 }
             }
+        }
+        .sheet(isPresented: $viewModel.showsCustomDateSheet) {
+            ActivityCustomDateRangeSheet(viewModel: viewModel)
         }
         .experienceScreenBackground()
         .experienceNavigationTitle("Activity")
@@ -203,6 +211,8 @@ struct ActivityHomeView: View {
                 }
             }
         }
+        .listSectionSpacing(ActivityInboxLayout.sectionSpacing)
+        .contentMargins(.top, ActivityInboxLayout.listTopContentMargin, for: .scrollContent)
         .experiencePlainListStyle()
     }
 }

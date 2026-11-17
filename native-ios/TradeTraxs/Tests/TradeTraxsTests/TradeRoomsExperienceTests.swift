@@ -8,6 +8,70 @@ final class TradeRoomsExperienceTests: XCTestCase {
         MessagesInboxStore.shared.resetForTesting()
         MessagingDomain.shared.invalidate()
         SessionTradeRoomsDiscoveryStore.shared.invalidate()
+        TradeRoomFavoritesStore.shared.resetForTesting()
+        TradeRoomMembershipStore.shared.resetForTesting()
+        TradeRoomConfirmedMembershipCache.resetForTesting()
+    }
+
+    func testMembershipStoreMergePreservesOptimisticJoinAndHonorsLeave() {
+        let room = RoomID("room-opt")
+        TradeRoomMembershipStore.shared.setJoined(room, joined: true)
+        XCTAssertTrue(TradeRoomMembershipStore.shared.isJoined(room))
+
+        TradeRoomMembershipStore.shared.mergeServerMembership([])
+        XCTAssertTrue(TradeRoomMembershipStore.shared.isJoined(room))
+
+        TradeRoomMembershipStore.shared.mergeServerMembership([room])
+        XCTAssertTrue(TradeRoomMembershipStore.shared.isJoined(room))
+
+        TradeRoomMembershipStore.shared.setJoined(room, joined: false)
+        XCTAssertFalse(TradeRoomMembershipStore.shared.isJoined(room))
+
+        TradeRoomMembershipStore.shared.mergeServerMembership([room])
+        XCTAssertFalse(TradeRoomMembershipStore.shared.isJoined(room))
+    }
+
+    func testTradeRoomAccessModePreservesLegacyPrivateUntilPublic() {
+        var config = TradeRoomConfiguration.defaultDraft(username: "trader")
+        config.preservesLegacyPrivate = true
+        config.visibility = .private
+        config.joinPolicy = .open
+        XCTAssertEqual(config.accessMode, .requestToJoin)
+        XCTAssertTrue(config.persistedIsPrivate)
+        XCTAssertEqual(config.effectiveJoinPolicy, .open)
+
+        config.accessMode = .publicOpen
+        XCTAssertFalse(config.preservesLegacyPrivate)
+        XCTAssertFalse(config.persistedIsPrivate)
+        XCTAssertEqual(config.effectiveJoinPolicy, .open)
+
+        config.accessMode = .requestToJoin
+        XCTAssertFalse(config.persistedIsPrivate)
+        XCTAssertEqual(config.joinPolicy, .approval)
+        XCTAssertEqual(config.effectiveJoinPolicy, .approval)
+    }
+
+    func testJoinStateUsesMembershipStoreWhenRoomNotInDiscoveryPool() {
+        let store = MessagesInboxStore.shared
+        let viewer = TradeRoomsFixtures.viewerID
+        TradeRoomsFixtures.seedInbox(store, viewerID: viewer)
+
+        let roomID = RoomID("room-opt-discovery")
+        let viewModel = TradeRoomsHomeViewModel(
+            messages: TradeRoomsStubMessageRepository(),
+            rooms: TradeRoomsStubRoomRepository(),
+            explore: TradeRoomsStubExploreRepository(),
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: viewer.rawValue),
+            detailCache: DetailPresentationCache(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
+            inboxStore: store
+        )
+
+        XCTAssertEqual(viewModel.joinState(for: roomID), .idle)
+
+        TradeRoomMembershipStore.shared.setJoined(roomID, joined: true)
+        XCTAssertEqual(viewModel.joinState(for: roomID), .joined)
     }
 
     func testHomeLoadsFixtureRoomsForDevelopmentViewer() async {
@@ -1012,6 +1076,159 @@ final class TradeRoomsExperienceTests: XCTestCase {
         XCTAssertTrue(viewModel.yourRooms.isEmpty)
     }
 
+    func testRoomSwitcherOrdersFavoritesWithinOwnedAndJoinedGroups() {
+        let viewer = TradeRoomsFixtures.viewerID
+        let peerOwner = ProfileID("dev.follower.ada")
+        let favoritedJoined = ExploreRoomSuggestion(
+            id: TradeRoomsFixtures.riskRoomID,
+            name: "Fav Joined",
+            slug: "fav-joined",
+            memberCount: 10,
+            ownerProfileID: peerOwner,
+            isJoined: true,
+            isMember: true,
+            isFavorited: true
+        )
+        let plainJoined = ExploreRoomSuggestion(
+            id: RoomID("room.plain-joined"),
+            name: "Plain Joined",
+            slug: "plain-joined",
+            memberCount: 9,
+            ownerProfileID: peerOwner,
+            isJoined: true,
+            isMember: true
+        )
+        let favoritedOwned = ExploreRoomSuggestion(
+            id: TradeRoomsFixtures.deskRoomID,
+            name: "Fav Owned",
+            slug: "fav-owned",
+            memberCount: 5,
+            ownerProfileID: viewer,
+            isJoined: true,
+            isOwner: true,
+            isMember: true,
+            isFavorited: true
+        )
+        let plainOwned = ExploreRoomSuggestion(
+            id: RoomID("room.plain-owned"),
+            name: "Plain Owned",
+            slug: "plain-owned",
+            memberCount: 4,
+            ownerProfileID: viewer,
+            isJoined: true,
+            isOwner: true,
+            isMember: true
+        )
+        TradeRoomFavoritesStore.shared.setFavorited(favoritedOwned.id, favorited: true)
+        TradeRoomFavoritesStore.shared.setFavorited(favoritedJoined.id, favorited: true)
+        let input = [plainJoined, favoritedOwned, plainOwned, favoritedJoined]
+        let ordered = TradeRoomYourRoomsCatalog.orderOwnedFirstForSwitcher(input, viewerID: viewer)
+        XCTAssertEqual(
+            ordered.map(\.id),
+            [favoritedOwned.id, plainOwned.id, favoritedJoined.id, plainJoined.id]
+        )
+    }
+
+    func testRoomSwitcherOrdersOwnedRoomsFirstPreservingGroupOrder() {
+        let viewer = TradeRoomsFixtures.viewerID
+        let peerOwner = ProfileID("dev.follower.ada")
+        let joinedA = ExploreRoomSuggestion(
+            id: TradeRoomsFixtures.riskRoomID,
+            name: "Joined A",
+            slug: "joined-a",
+            memberCount: 10,
+            ownerProfileID: peerOwner,
+            isJoined: true,
+            isOwner: false,
+            isMember: true
+        )
+        let owned1 = ExploreRoomSuggestion(
+            id: TradeRoomsFixtures.deskRoomID,
+            name: "Owned One",
+            slug: "owned-one",
+            memberCount: 5,
+            ownerProfileID: viewer,
+            isJoined: true,
+            isOwner: true,
+            isMember: true
+        )
+        let joinedB = ExploreRoomSuggestion(
+            id: RoomID("room.joined-b"),
+            name: "Joined B",
+            slug: "joined-b",
+            memberCount: 8,
+            ownerProfileID: peerOwner,
+            isJoined: true,
+            isOwner: false,
+            isMember: true
+        )
+        let owned2 = ExploreRoomSuggestion(
+            id: RoomID("room.owned-two"),
+            name: "Owned Two",
+            slug: "owned-two",
+            memberCount: 3,
+            ownerProfileID: viewer,
+            isJoined: true,
+            isOwner: true,
+            isMember: true
+        )
+        let input = [joinedA, owned1, joinedB, owned2]
+        let ordered = TradeRoomYourRoomsCatalog.orderOwnedFirstForSwitcher(input, viewerID: viewer)
+        XCTAssertEqual(ordered.map(\.id), [owned1.id, owned2.id, joinedA.id, joinedB.id])
+    }
+
+    func testViewerOwnedRoomResolvesFromInboxBeforeEmptyDetailCache() {
+        let viewer = TradeRoomsFixtures.viewerID
+        let store = MessagesInboxStore.shared
+        store.resetForTesting()
+        TradeRoomsFixtures.seedInbox(store, viewerID: viewer)
+        let owned = TradeRoomsFixtures.rooms(ownerID: viewer).first!
+
+        let cache = DetailPresentationCache()
+        cache.seedOwnedTradeRoom(nil, for: viewer)
+
+        let viewModel = TradeRoomsHomeViewModel(
+            messages: TradeRoomsStubMessageRepository(),
+            rooms: TradeRoomsStubRoomRepository(),
+            explore: TradeRoomsStubExploreRepository(),
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: viewer.rawValue),
+            detailCache: cache,
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
+            inboxStore: store
+        )
+        viewModel.syncOwnedTradeRoomPresentationFromLocalStores()
+
+        XCTAssertEqual(viewModel.viewerOwnedRoom?.id, owned.id)
+        XCTAssertEqual(cache.ownedTradeRoom(for: viewer)?.id, owned.id)
+    }
+
+    func testViewerOwnedRoomResolvesFromDetailCacheBeforeBootstrap() {
+        let viewer = TradeRoomsFixtures.viewerID
+        let store = MessagesInboxStore.shared
+        store.resetForTesting()
+        TradeRoomsFixtures.seedInbox(store, viewerID: viewer)
+        let ownedRoom = TradeRoomsFixtures.rooms(ownerID: viewer).first!
+
+        let cache = DetailPresentationCache()
+        cache.seedOwnedTradeRoom(ownedRoom, for: viewer)
+
+        let viewModel = TradeRoomsHomeViewModel(
+            messages: TradeRoomsStubMessageRepository(),
+            rooms: TradeRoomsStubRoomRepository(),
+            explore: TradeRoomsStubExploreRepository(),
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: viewer.rawValue),
+            detailCache: cache,
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
+            inboxStore: store
+        )
+
+        XCTAssertTrue(viewModel.isHeaderOwnershipResolved)
+        XCTAssertEqual(viewModel.viewerOwnedRoom?.id, ownedRoom.id)
+        XCTAssertNil(viewModel.viewerOwnedRoom?.imageURL)
+    }
+
     func testYourRoomsListsOwnedRoomFirst() async {
         let store = MessagesInboxStore.shared
         let viewer = TradeRoomsFixtures.viewerID
@@ -1125,10 +1342,35 @@ final class TradeRoomsExperienceTests: XCTestCase {
         ])
     }
 
-    func testAllScopePopularListUsesMemberCountSortNotFollowedCount() async {
-        let store = MessagesInboxStore.shared
-        TradeRoomsFixtures.seedInbox(store)
+    func testMemberCountReconcilePreservesDiscoveryWhenListReturnsZeroForGuests() {
+        XCTAssertEqual(
+            RoomMemberCountReconcile.choose(
+                listedActiveCount: 0,
+                currentCount: 25,
+                viewerCanQueryMemberList: false
+            ),
+            25
+        )
+        XCTAssertEqual(
+            RoomMemberCountReconcile.choose(
+                listedActiveCount: 30,
+                currentCount: 25,
+                viewerCanQueryMemberList: false
+            ),
+            30
+        )
+        XCTAssertEqual(
+            RoomMemberCountReconcile.choose(
+                listedActiveCount: 0,
+                currentCount: 3,
+                viewerCanQueryMemberList: true
+            ),
+            0
+        )
+        XCTAssertEqual(RoomMemberCountReconcile.adjustedAfterMembershipChange(currentCount: 25, delta: -1), 24)
+    }
 
+    func testAllScopePopularListUsesMemberCountSortNotFollowedCount() {
         let lowFollowHighMembers = ExploreRoomSuggestion(
             id: RoomID("dev.discovery.high-members"),
             name: "High Members",
@@ -1147,31 +1389,36 @@ final class TradeRoomsExperienceTests: XCTestCase {
             imageURL: nil,
             followedMemberCount: 200
         )
-        let explore = TradeRoomsFilteringExploreRepository(
-            rooms: [highFollowLowMembers, lowFollowHighMembers]
-        )
+        let popularOrdered = TradeRoomDiscoveryMemberCountSort.sorted([
+            highFollowLowMembers,
+            lowFollowHighMembers,
+        ])
+        XCTAssertEqual(popularOrdered.first?.id, lowFollowHighMembers.id)
+        XCTAssertEqual(popularOrdered.last?.id, highFollowLowMembers.id)
+        XCTAssertTrue(TradeRoomDiscoveryScope.all.showsAllScopeUnifiedDiscoveryList)
+    }
 
-        let viewModel = TradeRoomsHomeViewModel(
-            messages: TradeRoomsStubMessageRepository(),
-            rooms: TradeRoomsStubRoomRepository(),
-            explore: explore,
-            profiles: TradeRoomsStubProfileRepository(),
-            session: TradeRoomsStubSession(userID: TradeRoomsFixtures.viewerID.rawValue),
-            detailCache: DetailPresentationCache(),
-            navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
-            inboxStore: store
-        )
-        viewModel.loadIfNeeded()
-        await waitFor { viewModel.discoveryPhase == .loaded }
-        viewModel.selectDiscoveryScope(TradeRoomDiscoveryScope.all)
-        await waitFor {
-            viewModel.activeDiscoveryScope == TradeRoomDiscoveryScope.all
-                && viewModel.discoveryPhase == MessagingState.Phase.loaded
-        }
+    @MainActor
+    func testGettingStartedTradeRoomNavigationRequestsAllDiscoveryScope() {
+        TradeRoomsHomeScreenStore.retireAll()
+        TradeRoomsHomeScreenStore.requestDiscoveryScope(.all, host: .feed)
+        XCTAssertEqual(TradeRoomsHomeScreenStore.consumePendingDiscoveryScope(for: .feed), .all)
+    }
 
-        let popular = viewModel.popularDiscoverableRooms
-        XCTAssertEqual(popular.first?.id, lowFollowHighMembers.id)
-        XCTAssertEqual(popular.last?.id, highFollowLowMembers.id)
+    func testDiscoveryHomeToggleOrderAndUnifiedScopes() {
+        XCTAssertEqual(
+            TradeRoomDiscoveryScope.homeToggleOrder,
+            [.all, .favorites, .yourRooms, .popular]
+        )
+        XCTAssertEqual(TradeRoomDiscoveryScope.normalizedHomeScope(.official), .all)
+        XCTAssertEqual(TradeRoomDiscoveryScope.normalizedHomeScope(.community), .all)
+        XCTAssertTrue(TradeRoomDiscoveryScope.popular.showsUnifiedDiscoveryList)
+        XCTAssertFalse(TradeRoomDiscoveryScope.popular.showsSuggestedDiscovery)
+        XCTAssertTrue(TradeRoomDiscoveryScope.all.showsAllScopeUnifiedDiscoveryList)
+        XCTAssertFalse(TradeRoomDiscoveryScope.all.showsSuggestedDiscovery)
+        XCTAssertTrue(TradeRoomDiscoveryScope.official.showsUnifiedDiscoveryList)
+        XCTAssertEqual(TradeRoomDiscoveryScope.official.bootstrapCacheScope, .official)
+        XCTAssertEqual(TradeRoomDiscoveryScope.popular.bootstrapCacheScope, .all)
     }
 
     func testSuggestedRoomsKeepJoinButtonTitle() {
@@ -1312,6 +1559,37 @@ final class TradeRoomsExperienceTests: XCTestCase {
         )
     }
 
+    func testConversationHeaderHidesOwnerAndJoinedStatusButtons() {
+        XCTAssertFalse(
+            TradeRoomJoinPresentation.showsConversationHeaderJoinButton(
+                isOwner: true,
+                isMember: true,
+                state: .joined
+            )
+        )
+        XCTAssertFalse(
+            TradeRoomJoinPresentation.showsConversationHeaderJoinButton(
+                isOwner: false,
+                isMember: true,
+                state: .joined
+            )
+        )
+        XCTAssertTrue(
+            TradeRoomJoinPresentation.showsConversationHeaderJoinButton(
+                isOwner: false,
+                isMember: false,
+                state: .idle
+            )
+        )
+        XCTAssertTrue(
+            TradeRoomJoinPresentation.showsConversationHeaderJoinButton(
+                isOwner: false,
+                isMember: false,
+                state: .requesting
+            )
+        )
+    }
+
     func testManagedMemberRowDecodesProductionCreatedAtSchema() throws {
         let json = """
         [
@@ -1439,7 +1717,7 @@ private struct TradeRoomsFilteringExploreRepository: ExploreRepository {
     ) async throws -> [ExploreRoomSuggestion] {
         let filtered: [ExploreRoomSuggestion]
         switch scope {
-        case .all, .yourRooms, .popular: filtered = rooms
+        case .all, .yourRooms, .popular, .favorites: filtered = rooms
         case .official: filtered = rooms.filter(\.isOfficial)
         case .community: filtered = rooms.filter { !$0.isOfficial }
         }
@@ -1454,12 +1732,13 @@ private struct TradeRoomsFilteringExploreRepository: ExploreRepository {
     ) async throws -> TradeRoomsHomeBootstrap {
         _ = suggestedCursor
         _ = popularCursor
+        let popularOrdered = TradeRoomDiscoveryMemberCountSort.sorted(rooms)
         return TradeRoomsHomeBootstrap(
             viewerID: nil,
             scope: scope,
             yourRooms: [],
             suggested: rooms,
-            popular: rooms
+            popular: popularOrdered
         )
     }
 }

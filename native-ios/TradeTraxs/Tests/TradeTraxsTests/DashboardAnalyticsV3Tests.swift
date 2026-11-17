@@ -180,6 +180,81 @@ struct DashboardAnalyticsV3Tests {
         #expect(summary.strategyHighlights?.best?.strategy == "Opening Drive")
     }
 
+    @Test("V3 preset summary exposes SQL avg targeted R:R until journal overlay")
+    func v3SummarySqlAverageTargetedRrFallback() {
+        let metrics = AnalyticsDashboardMetricsWireV1(
+            trade_count: 5,
+            win_count: 3,
+            loss_count: 2,
+            breakeven_count: 0,
+            net_pnl: PostgresFlexibleDouble(100),
+            gross_profit: PostgresFlexibleDouble(200),
+            gross_loss: PostgresFlexibleDouble(-100),
+            long_count: 5,
+            long_pnl: PostgresFlexibleDouble(100),
+            short_count: 0,
+            short_pnl: PostgresFlexibleDouble(0),
+            sum_rr: PostgresFlexibleDouble(0),
+            rr_count: 5,
+            sum_hold_seconds: PostgresFlexibleDouble(0),
+            hold_count: 0,
+            largest_win: nil,
+            largest_loss: nil
+        )
+        let bundle = AnalyticsDashboardPresetBundleV1(
+            preset: "d30",
+            start: "2026-08-01",
+            end: "2026-08-31",
+            metrics: metrics,
+            equity: AnalyticsDashboardEquityWireV1(
+                points: [],
+                max_drawdown: PostgresFlexibleDouble(0),
+                current_equity: PostgresFlexibleDouble(0)
+            ),
+            distributions: AnalyticsDashboardDistributionsWireV1(
+                sessions: [],
+                symbols: [],
+                daily: nil,
+                streaks: nil,
+                weekday_bars: [],
+                weekday_heatmap: [],
+                hour_bars: [],
+                hour_heatmap: [],
+                hour_highlights: nil,
+                avg_hold_seconds: nil,
+                avg_winner_hold_seconds: nil,
+                avg_loser_hold_seconds: nil,
+                hold_histogram: [],
+                hold_extremes: nil,
+                long_short: [],
+                long_short_detail: nil,
+                long_trade_count: 0,
+                short_trade_count: 0,
+                strategies: nil
+            ),
+            insights: []
+        )
+        #expect(DashboardAnalyticsComposer.averageRR(DashboardAnalyticsComposer.ingredients(from: metrics)) == 0)
+        let summary = DashboardAnalyticsMapper.summary(from: bundle, payoutTotal: nil)
+        #expect(summary.averageRR == 0)
+    }
+
+    @Test("Dashboard client metrics average targeted R from journal trades")
+    func chartMetricsAverageTargetedRr() {
+        let trades = [
+            makeJournalTrade(id: "a", riskReward: 2, realizedRr: 1),
+            makeJournalTrade(id: "b", riskReward: 4, realizedRr: 3),
+        ]
+        let inputs = trades.map { DashboardChartMetrics.Input(trade: $0, accountType: nil) }
+        let summary = DashboardChartMetrics.compute(
+            from: inputs,
+            accountFilter: .all,
+            dateRange: .all,
+            payoutTotal: nil
+        )
+        #expect(summary.averageRR == 3)
+    }
+
     @Test("Missing account metrics never falls back to aggregate")
     func missingAccountMetrics() throws {
         let bootstrap = try makeBootstrap()
@@ -788,4 +863,34 @@ struct DashboardAnalyticsV3Tests {
         next.data.account_preset_metrics = rows
         return next
     }
+}
+
+private func makeJournalTrade(
+    id: String,
+    riskReward: Decimal,
+    realizedRr: Decimal
+) -> Trade {
+    Trade(
+        id: TradeID(id),
+        ownerProfileID: ProfileID("owner-dashboard-rr"),
+        accountID: nil,
+        symbol: Symbol(ticker: "MNQ"),
+        side: .long,
+        mode: .live,
+        quantity: 1,
+        entryPrice: 20_000,
+        exitPrice: 20_050,
+        entryAt: Date(),
+        exitAt: Date(),
+        realizedPnL: Money(amount: 200, currencyCode: "USD"),
+        riskReward: riskReward,
+        maxRrReached: 1,
+        realizedRr: realizedRr,
+        points: 50,
+        sessionLabel: "NY",
+        visibility: .private,
+        publicCaption: nil,
+        createdAt: Date(),
+        updatedAt: Date()
+    )
 }

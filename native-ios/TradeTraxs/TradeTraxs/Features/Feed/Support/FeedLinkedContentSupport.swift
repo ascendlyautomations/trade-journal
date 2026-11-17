@@ -23,8 +23,15 @@ enum FeedLinkedContentResolver {
         for entry: FeedTimelineEntry,
         cache: DetailPresentationCache
     ) -> Trade? {
-        guard let summary = linkedTradeSummary(for: entry, cache: cache) else { return nil }
-        return TradeSummaryMapper.previewTrade(from: summary)
+        switch entry {
+        case .clip(_, let reel):
+            guard let tradeID = reel.linkedTradeID else { return nil }
+            guard let summary = cache.tradeSummary(id: tradeID) else { return nil }
+            return TradeSummaryMapper.previewTrade(from: summary)
+        default:
+            guard let summary = linkedTradeSummary(for: entry, cache: cache) else { return nil }
+            return TradeSummaryMapper.previewTrade(from: summary)
+        }
     }
 
     static func linkedReel(
@@ -34,7 +41,10 @@ enum FeedLinkedContentResolver {
         switch entry {
         case .trade(_, let summary):
             return visibleLinkedReel(for: summary.id, cache: cache, viewerID: nil)
-        case .post, .clip, .achievement:
+        case .post(_, let post):
+            guard let tradeID = post.linkedTradeID else { return nil }
+            return visibleLinkedReel(for: tradeID, cache: cache, viewerID: nil)
+        case .clip, .achievement:
             return nil
         }
     }
@@ -129,6 +139,7 @@ struct FeedLinkedClipThumbnail: View {
     let reel: Reel
     let imagePipeline: any ImagePipeline
     var side: CGFloat = 56
+    var showsPlayOverlay: Bool = true
 
     var body: some View {
         ZStack(alignment: .center) {
@@ -139,8 +150,10 @@ struct FeedLinkedClipThumbnail: View {
                 contentMode: .fill,
                 side: side
             )
-            ExperienceIcon(icon: .play, size: .md, color: .white)
-                .shadow(radius: 2)
+            if showsPlayOverlay {
+                ExperienceIcon(icon: .play, size: .md, color: .white)
+                    .shadow(radius: 2)
+            }
         }
         .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
         .accessibilityHidden(true)
@@ -182,6 +195,61 @@ struct FeedLinkedClipCompactPreview: View {
     }
 }
 
+/// Compact clip control overlaid on trade screenshots — does not block image zoom outside the control.
+struct FeedLinkedClipImageOverlay: View {
+    let reel: Reel
+    let imagePipeline: any ImagePipeline
+    let onOpen: () -> Void
+    var thumbnailSide: CGFloat = 26
+    var accessibilityIdentifier: String?
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        Button(action: onOpen) {
+            HStack(alignment: .center, spacing: 6) {
+                FeedLinkedClipThumbnail(
+                    reel: reel,
+                    imagePipeline: imagePipeline,
+                    side: thumbnailSide,
+                    showsPlayOverlay: false
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.35), lineWidth: 0.5)
+                )
+
+                Text("Linked Clip")
+                    .font(.system(.caption, design: .default).weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .padding(.leading, 5)
+            .padding(.trailing, ExperienceSpacing.sm)
+            .padding(.vertical, 6)
+            .background {
+                ZStack {
+                    Capsule()
+                        .fill(Color(red: 0.45, green: 0.32, blue: 0.78).opacity(0.42))
+                    Capsule()
+                        .fill(colors.surfaceSecondary.opacity(0.55))
+                }
+            }
+            .overlay(
+                Capsule()
+                    .strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.4), radius: 5, y: 2)
+        }
+        .buttonStyle(.experiencePlain)
+        .accessibilityLabel("Linked Clip")
+        .accessibilityIdentifier(
+            accessibilityIdentifier ?? "detail.trade.linkedClip.overlay.\(reel.id.rawValue)"
+        )
+    }
+}
+
 /// Trade detail header — horizontal clip row sized to align with entry/date/account lines.
 struct FeedLinkedClipTradeDetailHeaderRow: View {
     let reel: Reel
@@ -197,19 +265,10 @@ struct FeedLinkedClipTradeDetailHeaderRow: View {
             HStack(alignment: .center, spacing: ExperienceSpacing.xs) {
                 FeedLinkedClipThumbnail(reel: reel, imagePipeline: imagePipeline, side: thumbnailSide)
 
-                HStack(spacing: ExperienceSpacing.xxs) {
-                    Text("Linked Clip")
-                        .font(.system(.caption, design: .default).weight(.medium))
-                        .foregroundStyle(colors.secondaryText)
-                        .lineLimit(1)
-                    if let seconds = reel.durationSeconds, seconds > 0 {
-                        Text("\(seconds) sec")
-                            .font(.system(.caption, design: .rounded).weight(.medium))
-                            .foregroundStyle(colors.tertiaryText)
-                            .monospacedDigit()
-                            .lineLimit(1)
-                    }
-                }
+                Text("Linked Clip")
+                    .font(.system(.caption, design: .default).weight(.medium))
+                    .foregroundStyle(colors.secondaryText)
+                    .lineLimit(1)
             }
         }
         .buttonStyle(.experiencePlain)
@@ -256,19 +315,21 @@ struct FeedLinkedClipEmbed: View {
     let reel: Reel
     let imagePipeline: any ImagePipeline
     let onOpen: () -> Void
+    var showsDuration: Bool = true
+    var thumbnailSide: CGFloat = 60
 
     @Environment(\.themeColors) private var colors
 
     var body: some View {
         Button(action: onOpen) {
             HStack(alignment: .center, spacing: ExperienceSpacing.md) {
-                FeedLinkedClipThumbnail(reel: reel, imagePipeline: imagePipeline, side: 60)
+                FeedLinkedClipThumbnail(reel: reel, imagePipeline: imagePipeline, side: thumbnailSide)
 
                 VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                     Text(ReelCaptionDisplay.displayText(for: reel))
                         .experienceStyle(.headline, color: colors.primaryText)
                         .lineLimit(2)
-                    if let seconds = reel.durationSeconds, seconds > 0 {
+                    if showsDuration, let seconds = reel.durationSeconds, seconds > 0 {
                         Text(formatDuration(seconds))
                             .experienceStyle(.caption, color: colors.secondaryText)
                     }

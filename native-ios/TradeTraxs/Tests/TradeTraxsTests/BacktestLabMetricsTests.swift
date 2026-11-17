@@ -25,6 +25,44 @@ final class BacktestLabMetricsTests: XCTestCase {
         XCTAssertEqual(filtered.first?.strategy, "ORB")
     }
 
+    func testSnapshotProfitFactorAndAverages() {
+        let trades = [
+            makeTrade(pnl: 300, rr: 2),
+            makeTrade(pnl: 100, rr: 1),
+            makeTrade(pnl: -200, rr: 1),
+        ]
+        let snap = BacktestLabMetrics.snapshot(for: trades)
+        XCTAssertEqual(snap.profitFactor, 2)
+        XCTAssertEqual(snap.averageWin, 200)
+        XCTAssertEqual(snap.averageLoss, 200)
+    }
+
+    func testSnapshotProfitFactorNilWithoutLosses() {
+        let trades = [makeTrade(pnl: 50, rr: 1)]
+        let snap = BacktestLabMetrics.snapshot(for: trades)
+        XCTAssertNil(snap.profitFactor)
+        XCTAssertEqual(snap.averageWin, 50)
+        XCTAssertNil(snap.averageLoss)
+    }
+
+    func testBacktestLabFiltersAccountAndTime() {
+        let accountA = TradingAccountID("acct-a")
+        let accountB = TradingAccountID("acct-b")
+        var tradeA = makeTrade(pnl: 10, rr: 1, strategy: "A")
+        tradeA.accountID = accountA
+        var tradeB = makeTrade(pnl: -5, rr: 1, strategy: "B")
+        tradeB.accountID = accountB
+        let filtered = BacktestLabFilters.apply(
+            [tradeA, tradeB],
+            accountFilter: .account(accountA),
+            strategy: BacktestLabMetrics.allStrategiesToken,
+            timeFilter: .allTime,
+            customInterval: nil
+        )
+        XCTAssertEqual(filtered.count, 1)
+        XCTAssertEqual(filtered.first?.accountID, accountA)
+    }
+
     func testStrategyFilterAndBreakdown() {
         let all = [
             makeTrade(pnl: 10, rr: 1, strategy: "Opening Drive"),

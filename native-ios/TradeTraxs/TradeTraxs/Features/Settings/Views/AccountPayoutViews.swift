@@ -176,7 +176,10 @@ struct AccountPayoutEditorSheet: View {
                 }
             }
         }
-        .presentationDetents(canEditImage ? [.medium, .large] : [.medium])
+        .experienceSheetChrome(
+            detents: canEditImage ? [.medium, .large] : [.medium],
+            interactiveDismiss: false
+        )
         .experienceProtectedFormDismiss()
     }
 

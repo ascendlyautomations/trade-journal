@@ -112,6 +112,7 @@ export async function mintLiveKitBroadcastPublisherToken(
     canPublishData: true,
     canPublishSources: [
       TrackSource.SCREEN_SHARE,
+      TrackSource.SCREEN_SHARE_AUDIO,
       TrackSource.CAMERA,
       TrackSource.MICROPHONE,
     ],

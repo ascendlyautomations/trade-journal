@@ -4,6 +4,9 @@ import { isProActive } from "./subscription"
 import { removeTradeFromCache } from "./appDataCache"
 import { invalidateTradeDetail } from "./tradeDetailCache"
 import { invalidateTradeSocial } from "./tradeSocialCache"
+import { unlinkReelsFromDeletedTradeInSessions } from "./feedSessionCache"
+import { invalidateReelsByTradeIdsCache } from "./reelsByTradeIdsCache"
+import { notifyTradeDeleted } from "./tradeDeleteSync"
 
 /** Deletes a trade and all dependent records via delete_own_trade RPC. */
 export async function deleteUserTrade(
@@ -46,7 +49,10 @@ export async function deleteUserTrade(
 
   if (options?.userId) {
     removeTradeFromCache(options.userId, tradeId)
+    unlinkReelsFromDeletedTradeInSessions(options.userId, tradeId)
+    notifyTradeDeleted({ tradeId, userId: options.userId })
   }
+  invalidateReelsByTradeIdsCache({ tradeIds: [tradeId] })
   invalidateTradeDetail(tradeId)
   invalidateTradeSocial(tradeId)
 }

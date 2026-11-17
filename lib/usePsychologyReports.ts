@@ -39,6 +39,10 @@ import type {
   PsychologyReportTrade,
 } from "@/lib/psychology/reports/types"
 import type { TraderDailyCheckIn } from "@/lib/dailyCheckIn/types"
+import type { PreferenceRuleContext } from "@/lib/analytics/preferenceCompliance"
+import {
+  loadTradingPreferenceBundle,
+} from "@/lib/analytics/tradingPreferencesStore"
 
 export type PsychologyReportCard = {
   template: PsychologyReportTemplate
@@ -52,6 +56,7 @@ type PsychologyReportsState = {
   trades: PsychologyReportTrade[]
   checkIns: TraderDailyCheckIn[]
   catalog: PsychologyReportPeriodRef[]
+  preferences: PreferenceRuleContext | null
 }
 
 const reportCache = new Map<string, PsychologyReport>()
@@ -73,7 +78,7 @@ export function usePsychologyReports(
   const load = useCallback(async () => {
     if (!userId || !enabled) return
     if (isDemoUserId(userId)) {
-      setInputs({ trades: [], checkIns: [], catalog: availablePsychologyCatalog([]) })
+      setInputs({ trades: [], checkIns: [], catalog: availablePsychologyCatalog([]), preferences: null })
       setReady(true)
       return
     }
@@ -97,11 +102,18 @@ export function usePsychologyReports(
       if (cachedCheckIns === undefined) {
         writeRecentCheckInsCache(userId, start, end, checkIns)
       }
+      let preferences: PreferenceRuleContext | null = null
+      try {
+        preferences = await loadTradingPreferenceBundle(supabase, userId)
+      } catch {
+        preferences = null
+      }
       reportCache.clear()
       setInputs({
         trades,
         checkIns,
         catalog: availablePsychologyCatalog(trades),
+        preferences,
       })
       setLoadError(null)
       setReady(true)
@@ -142,7 +154,13 @@ export function usePsychologyReports(
       const id = reportIDForRef(ref)
       const cached = reportCache.get(id)
       if (cached) return cached
-      const report = generatePsychologyReport(ref, inputs.trades, inputs.checkIns)
+      const report = generatePsychologyReport(
+        ref,
+        inputs.trades,
+        inputs.checkIns,
+        new Date(),
+        inputs.preferences
+      )
       reportCache.set(id, report)
       return report
     },

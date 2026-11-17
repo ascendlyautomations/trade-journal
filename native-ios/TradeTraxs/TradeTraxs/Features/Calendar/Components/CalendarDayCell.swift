@@ -7,6 +7,7 @@ struct CalendarDayCell: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Button(action: onTap) {
@@ -41,7 +42,11 @@ struct CalendarDayCell: View {
         }
         .buttonStyle(.experiencePlain)
         .disabled(cell.dayNumber == nil)
-        .opacity(cell.isCurrentMonth ? 1 : 0.35)
+        .opacity(
+            cell.isCurrentMonth
+                ? 1
+                : CalendarCellAppearance.outsideMonthCellOpacity(colorScheme: colorScheme)
+        )
         .accessibilityLabel(CalendarFormatting.accessibilityLabel(for: cell))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier(cell.dayKey.map { "calendar.day.\($0)" } ?? "calendar.day.empty")
@@ -69,19 +74,13 @@ struct CalendarDayCell: View {
     }
 
     private var fillColor: Color {
-        guard cell.isCurrentMonth, let summary = cell.summary else {
-            return colors.fillTertiary.opacity(0.35)
-        }
-        switch summary.outcome {
-        case .profit:
-            return colors.profit.opacity(0.12)
-        case .loss:
-            return colors.loss.opacity(0.12)
-        case .breakeven:
-            return colors.neutralMetric.opacity(0.12)
-        case .none:
-            return colors.fillTertiary.opacity(0.35)
-        }
+        let outcome = cell.isCurrentMonth ? cell.summary?.outcome : nil
+        return CalendarCellAppearance.dayCellFill(
+            colors: colors,
+            colorScheme: colorScheme,
+            isCurrentMonth: cell.isCurrentMonth,
+            outcome: outcome
+        )
     }
 
     private var borderColor: Color {

@@ -131,6 +131,14 @@
     padding-bottom: calc(var(--keyboard-height, 0px) + 16px);
   }
 
+  /* Composer sits beside the scroller, so the dialog column itself has to shrink. */
+  html:not(.tt-native-ios).tt-mobile-web-keyboard-open
+    [role="dialog"]
+    .tt-mobile-web-keyboard-composer {
+    box-sizing: border-box;
+    padding-bottom: var(--keyboard-height, 0px);
+  }
+
   /* Fixed-height shells (message thread) keep the composer above the keyboard. */
   html:not(.tt-native-ios) .tt-mobile-web-keyboard-shell {
     box-sizing: border-box;

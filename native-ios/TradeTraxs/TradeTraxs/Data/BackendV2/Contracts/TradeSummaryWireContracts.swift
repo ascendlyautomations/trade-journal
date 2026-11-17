@@ -77,6 +77,7 @@ nonisolated struct TradeOwnerJournalSummaryWireV1: Codable, Sendable, Equatable 
     var account_name: String?
     var strategy: String?
     var session: String?
+    var max_rr_reached: PostgresFlexibleDouble?
     var source_account_id: String?
     var copied_account_ids: [String]?
     var copy_trading_group_id: String?

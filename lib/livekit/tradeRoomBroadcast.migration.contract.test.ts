@@ -22,6 +22,10 @@ const visibilitySql = readFileSync(
   "supabase/migrations/20261107190000_trade_room_broadcast_visibility.sql",
   "utf8"
 )
+const streamTitleSql = readFileSync(
+  "supabase/migrations/20261113230000_room_live_broadcast_stream_title.sql",
+  "utf8"
+)
 
 describe("Trade Room live broadcast migration contract", () => {
   it("defines room_live_broadcasts with one active row per room", () => {
@@ -54,5 +58,10 @@ describe("Trade Room live broadcast migration contract", () => {
     assert.match(visibilitySql, /visibility/)
     assert.match(visibilitySql, /preparing/)
     assert.match(visibilitySql, /go_live_notified_at/)
+  })
+
+  it("adds stream_title with length check", () => {
+    assert.match(streamTitleSql, /stream_title/)
+    assert.match(streamTitleSql, /<= 100/)
   })
 })

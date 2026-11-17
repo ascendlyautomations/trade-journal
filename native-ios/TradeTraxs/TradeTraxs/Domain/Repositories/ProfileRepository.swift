@@ -42,6 +42,8 @@ nonisolated protocol ProfileRepository: Sendable {
     func followState(from viewer: ProfileID, to target: ProfileID) async throws -> FollowState
     func follow(from viewer: ProfileID, to target: ProfileID) async throws
     func unfollow(from viewer: ProfileID, to target: ProfileID) async throws
+    /// Owner removes an incoming follower (`following_id` = owner). Production verifies row deletion (RLS).
+    func removeFollower(_ follower: ProfileID, from owner: ProfileID) async throws
     func followers(of profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Profile>
     func following(of profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Profile>
     func creator(for profileID: ProfileID) async throws -> Creator?
@@ -142,5 +144,9 @@ nonisolated extension ProfileRepository {
             }
         }
         return result
+    }
+
+    func removeFollower(_ follower: ProfileID, from owner: ProfileID) async throws {
+        try await unfollow(from: follower, to: owner)
     }
 }

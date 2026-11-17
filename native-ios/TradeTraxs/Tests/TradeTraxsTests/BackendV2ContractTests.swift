@@ -350,7 +350,7 @@ enum BackendV2ContractFixtures {
     """
 
     static let explore = """
-    {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"traders":[{"id":"22222222-2222-2222-2222-222222222222","username":"trader_a","name":"Trader A","bio":"bio","avatar_url":null,"trader_type":"Futures","is_private":false}],"rooms":[{"id":"r1111111-1111-1111-1111-111111111111","name":"Room","slug":"room","member_count":12,"image_url":null}],"social_counts":{"22222222-2222-2222-2222-222222222222":{"followers":5,"following":2}},"following_ids":["33333333-3333-3333-3333-333333333333"],"activity_meta":{"22222222-2222-2222-2222-222222222222":{"trade_count":10,"last_trade_at":"2026-08-19T20:00:00.000Z"}},"traders_next_cursor":"24"}}
+    {"meta":{"contract_version":"v1","server_time":"2026-08-19T20:00:00.000Z","viewer_id":"11111111-1111-1111-1111-111111111111"},"data":{"traders":[{"id":"22222222-2222-2222-2222-222222222222","username":"trader_a","name":"Trader A","bio":"bio","avatar_url":null,"trader_type":"Futures","is_private":false}],"suggested_traders":[{"id":"44444444-4444-4444-4444-444444444444","username":"trader_pic","name":"Trader Pic","bio":"bio","avatar_url":"https://cdn.example.com/a.jpg","trader_type":"Futures","is_private":false}],"rooms":[{"id":"r1111111-1111-1111-1111-111111111111","name":"Room","slug":"room","member_count":12,"image_url":null}],"social_counts":{"22222222-2222-2222-2222-222222222222":{"followers":5,"following":2}},"following_ids":["33333333-3333-3333-3333-333333333333"],"activity_meta":{"22222222-2222-2222-2222-222222222222":{"trade_count":10,"last_trade_at":"2026-08-19T20:00:00.000Z"}},"traders_next_cursor":"24"}}
     """
 
     static let leaderboard = """

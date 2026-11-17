@@ -28,6 +28,8 @@ type TradingReportModalProps = {
   hidePeriodSelector?: boolean
   bestTradeHeading?: string
   onOpenYearlyReports?: () => void
+  preferenceDiscovery?: ReactNode
+  tradingRulesContent?: ReactNode
 }
 
 function MetricCell({ label, value }: { label: string; value: string }) {
@@ -68,6 +70,8 @@ export default function TradingReportModal({
   hidePeriodSelector = false,
   bestTradeHeading,
   onOpenYearlyReports,
+  preferenceDiscovery,
+  tradingRulesContent,
 }: TradingReportModalProps) {
   const metrics = report?.metrics
   const showPsychology = tab === "psychology"
@@ -82,6 +86,7 @@ export default function TradingReportModal({
       backdropClassName="bg-black/70 backdrop-blur-sm"
     >
       <div className="space-y-6">
+        {preferenceDiscovery}
         {onTabChange ? (
           <div
             className="flex gap-1 rounded-lg border border-white/10 bg-white/5 p-1 pr-12"
@@ -164,15 +169,26 @@ export default function TradingReportModal({
               </p>
             </section>
 
+            {tradingRulesContent ? (
+              <section className="space-y-2">{tradingRulesContent}</section>
+            ) : null}
+
             {metrics ? (
               <section className="space-y-3">
                 <h3 className="text-sm font-semibold text-white">Key Metrics</h3>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                  <MetricCell label="Net P&L" value={formatMetricPnl(metrics.netPnl)} />
+                  <MetricCell
+                    label="Net P&L"
+                    value={
+                      metrics.knownResultCount > 0
+                        ? formatMetricPnl(metrics.netPnl)
+                        : "—"
+                    }
+                  />
                   <MetricCell
                     label="Win Rate"
                     value={
-                      metrics.tradesTaken > 0
+                      metrics.knownResultCount > 0
                         ? `${metrics.winRate.toFixed(1)}%`
                         : "—"
                     }

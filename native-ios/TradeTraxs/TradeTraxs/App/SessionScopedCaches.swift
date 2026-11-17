@@ -15,10 +15,12 @@ enum SessionScopedCaches {
         // Viewer-keyed Dashboard disk, Backend V2 bootstrap disk, and GRDB rows stay.
         // Reads must reject a blob whose owner is not the active viewer.
         DashboardSessionBoundary.resetInMemoryPresentation()
+        FeedTabModelStore.resetForSessionBoundary()
         currentUserProfile.clear()
         MessagesInboxStore.shared.invalidate()
         MessagingDomain.shared.invalidate()
         ActivityInboxStore.shared.invalidate()
+        NotificationPreferencesSessionStore.shared.resetForSessionBoundary()
         RoomNavigationFocusStore.shared.clear()
         ExploreSessionStore.shared.invalidate()
         LeaderboardSessionStore.shared.invalidate()
@@ -90,6 +92,9 @@ enum SessionScopedCaches {
             await TradeImportReminderCoordinator.shared.cancelAll()
         }
         SessionDailyCheckInsStore.shared.invalidate()
+        PsychologyDashboardCheckInsCoordinator.reset()
+        AnalyticsDashboardGRDBSessionCache.resetAll()
+        TradingRulesCompliancePreferencesCache.resetAll()
         PsychologyAnalyticsSessionStore.shared.clearSession()
         PsychologyCoachSessionStore.shared.invalidate()
         PsychologyGuardrailDismissStore.shared.resetSession()

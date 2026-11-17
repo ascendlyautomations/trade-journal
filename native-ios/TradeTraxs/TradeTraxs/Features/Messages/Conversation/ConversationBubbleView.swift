@@ -127,10 +127,11 @@ struct ConversationBubbleView: View {
                         .font(.system(.caption, design: .default).weight(.semibold))
                         .foregroundStyle(colors.secondaryText)
                         .lineLimit(1)
-                    if item.showsOwnerBadge || !item.authorTags.isEmpty {
+                    if item.showsOwnerBadge || item.showsModeratorBadge || !item.authorTags.isEmpty {
                         RoomMemberTagChipsView(
                             tags: item.authorTags,
                             showsOwnerBadge: item.showsOwnerBadge,
+                            showsModeratorBadge: item.showsModeratorBadge,
                             limit: 3
                         )
                     }

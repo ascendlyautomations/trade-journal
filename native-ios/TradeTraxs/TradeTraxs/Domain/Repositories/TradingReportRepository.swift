@@ -3,7 +3,7 @@ import Foundation
 /// Trading Reports — same deterministic engine as web Dashboard Trading Reports.
 ///
 /// There is no generate/fetch BFF for report bodies. Persistence is the session
-/// snapshot (web `tradingReportCache`). Weekly push is server-scheduled (Vercel cron).
+/// snapshot (web `tradingReportCache`). Weekly push is scheduled by Supabase pg_cron.
 nonisolated protocol TradingReportRepository: Sendable {
     /// Web `ensureTradingReportsLoaded` — load owner trades, generate all periods, cache.
     func ensureSnapshot(forceNetwork: Bool) async throws -> TradingReportsSnapshot
@@ -27,4 +27,7 @@ nonisolated protocol TradingReportRepository: Sendable {
         filters: TradingReportFilters,
         forceNetwork: Bool
     ) async throws -> TradingReport
+
+    /// Eastern week identified by `week:YYYY-MM-DD`, including weeks that are no longer last week.
+    func weekReport(mondayKey: String, forceNetwork: Bool) async throws -> TradingReport
 }

@@ -46,7 +46,16 @@ private struct ExperienceScrollEdgeChromeModifier: ViewModifier {
 /// Screen fill that reaches physical edges without moving interactive content.
 struct ExperienceScreenBackgroundModifier: ViewModifier {
     var fillsContentArea: Bool
+    var usesGroupedFillInLightMode: Bool = false
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var screenFill: Color {
+        if usesGroupedFillInLightMode, colorScheme == .light {
+            return colors.groupedBackground
+        }
+        return colors.primaryBackground
+    }
 
     func body(content: Content) -> some View {
         Group {
@@ -57,7 +66,7 @@ struct ExperienceScreenBackgroundModifier: ViewModifier {
             }
         }
         .background {
-            colors.primaryBackground
+            screenFill
                 .ignoresSafeArea()
         }
     }
@@ -83,8 +92,16 @@ extension View {
 
     /// Page fill behind NavigationStack content — background ignores safe areas;
     /// the content itself stays system-inset.
-    func experienceScreenBackground(fillsContentArea: Bool = true) -> some View {
-        modifier(ExperienceScreenBackgroundModifier(fillsContentArea: fillsContentArea))
+    func experienceScreenBackground(
+        fillsContentArea: Bool = true,
+        usesGroupedFillInLightMode: Bool = false
+    ) -> some View {
+        modifier(
+            ExperienceScreenBackgroundModifier(
+                fillsContentArea: fillsContentArea,
+                usesGroupedFillInLightMode: usesGroupedFillInLightMode
+            )
+        )
     }
 
     /// Expands placeholder content to the navigation content area (same treatment as Messages empty).

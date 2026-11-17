@@ -9,8 +9,7 @@ struct PsychologyReportDetailView: View {
         _viewModel = State(
             initialValue: PsychologyReportDetailViewModel(
                 reportID: reportID,
-                psychologyReports: data.psychologyReports,
-                ai: data.ai
+                psychologyReports: data.psychologyReports
             )
         )
     }
@@ -35,7 +34,6 @@ struct PsychologyReportDetailView: View {
         .toolbar(.hidden, for: .tabBar)
         .task {
             await viewModel.bootstrapIfNeeded()
-            await viewModel.loadAISummaryIfNeeded()
         }
         .accessibilityIdentifier("psychologyReport.detail")
     }
@@ -45,16 +43,7 @@ struct PsychologyReportDetailView: View {
             VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
                 header(report)
 
-                if let ai = viewModel.aiSummary {
-                    aiSummarySection(ai)
-                } else if viewModel.isLoadingAI {
-                    ProgressView("Generating AI summary…")
-                        .frame(maxWidth: .infinity)
-                }
-
-                let showDeterministicHighlights = viewModel.aiSummary == nil && !viewModel.isLoadingAI
-
-                if showDeterministicHighlights, !report.doingWell.isEmpty {
+                if !report.doingWell.isEmpty {
                     bulletSection(title: "What Went Well", items: report.doingWell, tint: colors.success)
                 }
 
@@ -62,11 +51,11 @@ struct PsychologyReportDetailView: View {
                     sectionCard(section)
                 }
 
-                if showDeterministicHighlights, !report.watchItems.isEmpty {
+                if !report.watchItems.isEmpty {
                     bulletSection(title: "What to Watch", items: report.watchItems, tint: colors.warning)
                 }
 
-                if showDeterministicHighlights, !report.comparisons.isEmpty {
+                if !report.comparisons.isEmpty {
                     comparisonsSection(report.comparisons)
                 }
             }
@@ -88,19 +77,6 @@ struct PsychologyReportDetailView: View {
         .padding(ExperienceSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.card))
-    }
-
-    private func aiSummarySection(_ text: String) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("AI Psychology Summary")
-                .experienceStyle(.headline, color: colors.primaryText)
-            Text(text)
-                .experienceStyle(.subheadline, color: colors.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
-            ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.psychologyReportAI)
-        }
-        .padding(ExperienceSpacing.md)
-        .background(colors.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
     }
 
     private func sectionCard(_ section: PsychologyReportSection) -> some View {

@@ -19,8 +19,15 @@ final class BacktestLabViewModel {
 
     private(set) var phase: Phase = .idle
     private(set) var allTrades: [Trade] = []
+    private(set) var accounts: [TradingAccount] = []
     private(set) var accountNames: [TradingAccountID: String] = [:]
+    var accountFilter: DashboardAccountFilter = .all
     var selectedStrategy = BacktestLabMetrics.allStrategiesToken
+    var timeFilter: BacktestLabTimeFilter = .allTime
+    var customTimeInterval: DateInterval?
+    var showsCustomTimeSheet = false
+    var draftCustomRangeStart: Date?
+    var draftCustomRangeEnd: Date?
     var calendarMonth = CalendarMonthID.current()
     var pendingDelete: TradeOwnerJournalSummary?
     var sharePayload: SharePayload?
@@ -51,8 +58,24 @@ final class BacktestLabViewModel {
         [BacktestLabMetrics.allStrategiesToken] + BacktestLabMetrics.distinctStrategies(in: allTrades)
     }
 
+    var scopedTrades: [Trade] {
+        BacktestLabFilters.apply(
+            allTrades,
+            accountFilter: accountFilter,
+            strategy: BacktestLabMetrics.allStrategiesToken,
+            timeFilter: timeFilter,
+            customInterval: customTimeInterval
+        )
+    }
+
     var filteredTrades: [Trade] {
-        BacktestLabMetrics.filter(allTrades, strategy: selectedStrategy)
+        BacktestLabFilters.apply(
+            allTrades,
+            accountFilter: accountFilter,
+            strategy: selectedStrategy,
+            timeFilter: timeFilter,
+            customInterval: customTimeInterval
+        )
     }
 
     var journalItems: [TradeOwnerJournalSummary] {
@@ -65,7 +88,7 @@ final class BacktestLabViewModel {
 
     var strategyBreakdown: [BacktestLabMetrics.StrategyBreakdown] {
         let pool = selectedStrategy == BacktestLabMetrics.allStrategiesToken
-            ? allTrades
+            ? scopedTrades
             : filteredTrades
         return BacktestLabMetrics.strategyBreakdown(from: pool)
     }
@@ -83,6 +106,45 @@ final class BacktestLabViewModel {
         selectedStrategy == BacktestLabMetrics.allStrategiesToken ? "All Strategies" : selectedStrategy
     }
 
+    var timeMenuTitle: String {
+        BacktestLabFilters.compactTimeLabel(
+            timeFilter: timeFilter,
+            customInterval: customTimeInterval
+        )
+    }
+
+    var accountMenuTitle: String {
+        switch accountFilter {
+        case .all:
+            return "All Accounts"
+        case .account(let id):
+            if let account = accounts.first(where: { $0.id == id }) {
+                return TradingAccountDisplay.ownerDropdownLine(for: account)
+            }
+            return displayAccountTitle(for: id) ?? "Account"
+        }
+    }
+
+    var ownerAccountsProfileID: ProfileID? { profileID }
+
+    var backtestAccountsForMenu: [TradingAccount] {
+        let eligible = BacktestLabFilters.eligibleBacktestAccounts(accounts)
+        let selectedID: TradingAccountID? = {
+            if case .account(let id) = accountFilter { return id }
+            return nil
+        }()
+        return OwnerAccountDropdownSupport.menuAccounts(
+            profileID: profileID,
+            fallback: eligible,
+            preservingSelection: selectedID
+        )
+    }
+
+    var canApplyCustomTimeRange: Bool {
+        guard let start = draftCustomRangeStart, let end = draftCustomRangeEnd else { return false }
+        return start <= end
+    }
+
     func loadIfNeeded() {
         guard loadTask == nil, phase != .loaded || allTrades.isEmpty else { return }
         loadTask = Task { await performLoad() }
@@ -97,6 +159,47 @@ final class BacktestLabViewModel {
         guard selectedStrategy != strategy else { return }
         ExperienceHaptics.play(.selection)
         selectedStrategy = strategy
+    }
+
+    func setAccountFilter(_ filter: DashboardAccountFilter) {
+        guard accountFilter != filter else { return }
+        ExperienceHaptics.play(.selection)
+        accountFilter = filter
+    }
+
+    func setTimeFilter(_ filter: BacktestLabTimeFilter) {
+        guard filter != .custom else {
+            openCustomTimeRangeEditor()
+            return
+        }
+        guard timeFilter != filter else { return }
+        ExperienceHaptics.play(.selection)
+        timeFilter = filter
+        customTimeInterval = nil
+    }
+
+    func openCustomTimeRangeEditor() {
+        if let customTimeInterval {
+            draftCustomRangeStart = customTimeInterval.start
+            draftCustomRangeEnd = customTimeInterval.end
+        } else {
+            let end = Date()
+            draftCustomRangeEnd = end
+            draftCustomRangeStart = Calendar.current.date(byAdding: .day, value: -7, to: end)
+        }
+        showsCustomTimeSheet = true
+    }
+
+    func applyCustomTimeRange() {
+        guard let start = draftCustomRangeStart, let end = draftCustomRangeEnd, start <= end else { return }
+        customTimeInterval = DashboardScopeFilterSupport.normalizedCustomInterval(start: start, end: end)
+        timeFilter = .custom
+        ExperienceHaptics.play(.selection)
+    }
+
+    func openManageAccounts() {
+        ExperienceHaptics.play(.selection)
+        navigationCoordinator.pushHome(.settings(.tradingAccounts))
     }
 
     func shiftCalendarMonth(by delta: Int) {
@@ -197,9 +300,10 @@ final class BacktestLabViewModel {
             let profileID = ProfileID(viewer.rawValue)
             self.profileID = profileID
             async let backtests = trades.backtestLabTrades(ownedBy: profileID)
-            async let accounts = trades.accounts(for: profileID)
+            async let loadedAccounts = trades.accounts(for: profileID)
             let loaded = try await backtests
-            let accountList = try await accounts
+            let accountList = try await loadedAccounts
+            self.accounts = accountList
             accountNames = Dictionary(uniqueKeysWithValues: accountList.map { ($0.id, $0.name) })
             allTrades = loaded
             phase = .loaded

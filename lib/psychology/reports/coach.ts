@@ -60,10 +60,15 @@ export function buildPsychologyCoachSummary(facts: PsychologyCoachFacts): {
   for (const insight of facts.topInsights) {
     const headline = insight.headline.toLowerCase()
     if (
-      headline.includes("outperform") ||
-      headline.includes("strongest") ||
-      headline.includes("stable") ||
-      headline.includes("best")
+      !headline.includes("in this sample") &&
+      !headline.includes("worse") &&
+      !headline.includes("less often") &&
+      (headline.includes("outperform") ||
+        headline.includes("strongest") ||
+        headline.includes("stable") ||
+        headline.includes("best") ||
+        headline.includes("performed better") ||
+        headline.includes("won more often"))
     ) {
       doingWell.push(insight.headline)
     }
@@ -87,7 +92,10 @@ export function buildPsychologyCoachSummary(facts: PsychologyCoachFacts): {
         return (
           headline.includes("drop") ||
           headline.includes("weaker") ||
-          headline.includes("underperform")
+          headline.includes("underperform") ||
+          headline.includes("worse") ||
+          headline.includes("less often") ||
+          headline.includes("in this sample")
         )
       })
       .map((insight) => insight.headline),
@@ -114,29 +122,28 @@ export function buildPsychologyRecommendations(facts: PsychologyCoachFacts): str
   const recs: string[] = []
   if (facts.guardrailFacts.consecutiveLossCheckpoint != null) {
     recs.push(
-      `Consider using ${facts.guardrailFacts.consecutiveLossCheckpoint} consecutive losses as a checkpoint before taking another trade, historically your results weaken after this point.`
+      facts.guardrailFacts.personalLossPause
+        ? `Results have been weaker after your pause of ${facts.guardrailFacts.consecutiveLossCheckpoint} consecutive losses.`
+        : `Results have been weaker after ${facts.guardrailFacts.consecutiveLossCheckpoint} consecutive losses. That is a result difference, not a reason those trades were taken.`
     )
   }
   if (facts.guardrailFacts.maxTradesDaySoftLimit != null) {
+    const limit = facts.guardrailFacts.maxTradesDaySoftLimit
     recs.push(
-      `Your first ${facts.guardrailFacts.maxTradesDaySoftLimit} trades currently outperform later trades. Consider reviewing whether additional setups are becoming lower quality.`
+      facts.guardrailFacts.personalTradeCap
+        ? `Trades beyond your daily cap of ${limit} have been weaker than trades within it.`
+        : "Later trades in the day have been weaker than your first three. Reviewing whether those extra setups are lower quality may help."
     )
   }
   if (facts.guardrailFacts.lowSleepHoursThreshold != null) {
     recs.push(
-      "Your historical results are weaker below 6 hours of sleep. Consider treating low-sleep sessions as higher-risk days."
+      "Be cautious after fewer than 6 hours of sleep. Those sessions have been weaker than better-rested ones."
     )
   }
-  for (const insight of facts.topInsights) {
-    if (
-      insight.category === "mentalState" &&
-      insight.headline.toLowerCase().includes("stress")
-    ) {
-      recs.push(
-        "High-stress days correlate with weaker results in your journal. A brief reset before the next trade may help."
-      )
-      break
-    }
+  if (facts.guardrailFacts.highStressWeaker) {
+    recs.push(
+      "Reset when stress is high. Lower-stress days have been the stronger ones."
+    )
   }
   return recs
 }

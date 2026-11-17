@@ -1,3 +1,5 @@
+import { applyPublicVisibilityFilter } from "./analytics/publicTradeFilter"
+import { knownPnl } from "./analytics/knownPnl"
 import { compareDashboardTradesChronological } from "./dashboardTradeDate"
 import { averageRrFromTrades } from "./tradeRr"
 import {
@@ -96,10 +98,7 @@ export function filterTradesForPerformanceSharePool(
     return true
   })
 
-  if (showPublicOnly) {
-    const pub = pool.filter(tradeIsPublic)
-    pool = pub.length > 0 ? pub : pool
-  }
+  pool = applyPublicVisibilityFilter(pool, Boolean(showPublicOnly), tradeIsPublic)
 
   return pool
 }
@@ -197,9 +196,13 @@ function computeMostTradedTicker(trades: any[]): string | null {
 
 export function computePerformanceStats(trades: any[]): PerformanceStats {
   const totalTrades = trades.length
-  const wins = trades.filter((t) => (Number(t.pnl) || 0) > 0).length
-  const winRate = totalTrades ? (wins / totalTrades) * 100 : 0
-  const totalPnL = trades.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0)
+  const priced = trades.flatMap((trade) => {
+    const pnl = knownPnl(trade.pnl)
+    return pnl == null ? [] : [pnl]
+  })
+  const wins = priced.filter((pnl) => pnl > 0).length
+  const winRate = priced.length ? (wins / priced.length) * 100 : 0
+  const totalPnL = priced.reduce((sum, pnl) => sum + pnl, 0)
   const avgRR = averageRrFromTrades(trades)
 
   const durations = trades
@@ -247,7 +250,9 @@ export function buildEquityCurveFromTrades(trades: any[]): EquityCurvePoint[] {
   const points: EquityCurvePoint[] = [{ step: 0, equity: 0 }]
   let cum = 0
   sorted.forEach((t, i) => {
-    cum += Number(t.pnl) || 0
+    const pnl = knownPnl(t.pnl)
+    if (pnl == null) return
+    cum += pnl
     points.push({ step: i + 1, equity: cum })
   })
   return points

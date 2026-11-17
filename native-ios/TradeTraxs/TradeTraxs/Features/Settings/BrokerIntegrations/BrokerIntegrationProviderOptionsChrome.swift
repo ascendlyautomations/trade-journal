@@ -82,3 +82,39 @@ struct BrokerIntegrationProviderConnectOptionsStack: View {
         .padding(.vertical, BrokerIntegrationProviderOptionsLayout.groupVerticalPadding)
     }
 }
+
+/// Provider picker sheet — Tradovate / Rithmic connect entry reused by dashboard and onboarding-style flows.
+struct BrokerIntegrationConnectBrokerSheet: View {
+    @Bindable var viewModel: BrokerIntegrationsViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                BrokerIntegrationProviderConnectOptionsStack(
+                    providers: viewModel.connectSheetProviders,
+                    isConnectDisabled: viewModel.isConnectDisabled(for:),
+                    onConnect: connect
+                )
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.vertical, ExperienceSpacing.sm)
+            }
+            .experienceScreenBackground()
+            .experienceNavigationTitle("Connect Broker")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .accessibilityIdentifier("brokerIntegrations.connectBroker.cancel")
+                }
+            }
+        }
+        .experienceSheetChrome()
+        .accessibilityIdentifier("brokerIntegrations.connectBrokerSheet")
+    }
+
+    private func connect(_ provider: BrokerIntegrationProvider) {
+        ExperienceHaptics.play(.selection)
+        dismiss()
+        viewModel.beginConnect(for: provider)
+    }
+}

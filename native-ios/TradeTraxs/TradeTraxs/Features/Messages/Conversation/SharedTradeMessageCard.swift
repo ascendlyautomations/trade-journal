@@ -9,6 +9,7 @@ struct SharedTradeMessageCard: View {
     var isOutgoing: Bool
     var includesBackground: Bool = true
     var mediaLayoutWidth: CGFloat? = nil
+    var accountProviderName: String? = nil
 
     @Environment(\.themeColors) private var colors
 
@@ -183,10 +184,15 @@ struct SharedTradeMessageCard: View {
     }
 
     private func modeLabel(for trade: Trade) -> String? {
-        if let badge = trade.publicAccountBadge?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !badge.isEmpty
-        {
-            return badge
+        if trade.mode == .copyTraded {
+            return TradeDisplay.tradeModeFallbackTitle(.copyTraded)
+        }
+        if let caption = TradeDisplay.publicPostedAccountCaption(
+            providerName: accountProviderName,
+            accountMode: trade.accountMode,
+            publicAccountBadge: trade.publicAccountBadge
+        ) {
+            return caption
         }
         return TradeDisplay.tradeModeFallbackTitle(trade.mode)
     }

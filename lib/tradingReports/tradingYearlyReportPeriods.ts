@@ -1,5 +1,9 @@
-import { resolveDashboardTradeDate } from "@/lib/dashboardTradeDate"
-import { endOfDay, startOfDay } from "./tradingReportPeriods"
+import { checkInDateKey } from "@/lib/dailyCheckIn/dateKey"
+import { psychologyTradeDateKey } from "@/lib/psychology/tradeDateKey"
+import {
+  endOfEasternDay,
+  startOfEasternDay,
+} from "@/lib/psychology/reports/periods"
 
 export type YearPeriodBounds = {
   start: Date
@@ -10,17 +14,19 @@ export function getTradingYearBounds(
   year: number,
   now = new Date()
 ): YearPeriodBounds {
-  const start = startOfDay(new Date(year, 0, 1))
-  const currentYear = now.getFullYear()
-  let end: Date
-  if (year === currentYear) {
-    end = endOfDay(now)
-  } else if (year < currentYear) {
-    end = endOfDay(new Date(year, 11, 31))
-  } else {
-    end = endOfDay(start)
+  const today = checkInDateKey(now)
+  const currentYear = Number(today.slice(0, 4))
+  const startKey = `${year}-01-01`
+  const endKey =
+    year === currentYear
+      ? today
+      : year < currentYear
+        ? `${year}-12-31`
+        : startKey
+  return {
+    start: startOfEasternDay(startKey),
+    end: endOfEasternDay(endKey),
   }
-  return { start, end }
 }
 
 export function getTradingMonthBounds(
@@ -28,36 +34,50 @@ export function getTradingMonthBounds(
   month: number,
   now = new Date()
 ): YearPeriodBounds {
-  const start = startOfDay(new Date(year, month - 1, 1))
-  const currentYear = now.getFullYear()
-  const currentMonth = now.getMonth() + 1
-  let end: Date
-  if (year === currentYear && month === currentMonth) {
-    end = endOfDay(now)
-  } else {
-    end = endOfDay(new Date(year, month, 0))
+  const today = checkInDateKey(now)
+  const currentYear = Number(today.slice(0, 4))
+  const currentMonth = Number(today.slice(5, 7))
+  const startKey = `${year}-${String(month).padStart(2, "0")}-01`
+  const next =
+    month === 12
+      ? `${year + 1}-01-01`
+      : `${year}-${String(month + 1).padStart(2, "0")}-01`
+  const last = new Date(startOfEasternDay(next).getTime() - 1)
+  const lastKey = checkInDateKey(last)
+  const endKey =
+    year === currentYear && month === currentMonth
+      ? today < lastKey
+        ? today
+        : lastKey
+      : lastKey
+  return {
+    start: startOfEasternDay(startKey),
+    end: endOfEasternDay(endKey),
   }
-  return { start, end }
 }
 
 export function formatTradingYearDateRangeLabel(
   year: number,
   now = new Date()
 ): string {
-  const bounds = getTradingYearBounds(year, now)
-  if (year === now.getFullYear()) {
-    const startLabel = bounds.start.toLocaleDateString(undefined, {
-      month: "long",
-      year: "numeric",
-    })
-    const endLabel = bounds.end.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    })
-    return `${startLabel} – ${endLabel}`
-  }
-  return String(year)
+  const today = checkInDateKey(now)
+  const currentYear = Number(today.slice(0, 4))
+  if (year !== currentYear) return String(year)
+  const start = startOfEasternDay(`${year}-01-01`)
+  const end = endOfEasternDay(today)
+  const startLabel = start.toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "America/New_York",
+  })
+  const endLabel = end.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "America/New_York",
+  })
+  const partial = !today.endsWith("-12-31")
+  return `${startLabel} – ${endLabel}${partial ? " (partial)" : ""}`
 }
 
 export function monthLabel(month: number): string {
@@ -86,12 +106,13 @@ export function availableTradingReportYears(
   const years = new Set<number>()
   for (const trade of trades) {
     if (isBacktestTrade(trade)) continue
-    const date = resolveDashboardTradeDate(trade)
-    if (!date) continue
-    years.add(date.getFullYear())
+    const key = psychologyTradeDateKey(trade)
+    if (!key) continue
+    years.add(Number(key.slice(0, 4)))
   }
-  if (years.size === 0 && now.getFullYear() > 0) {
-    years.add(now.getFullYear())
+  if (years.size === 0) {
+    const today = checkInDateKey(now)
+    if (today) years.add(Number(today.slice(0, 4)))
   }
   return [...years].sort((a, b) => b - a)
 }

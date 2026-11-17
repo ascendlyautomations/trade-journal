@@ -4,7 +4,6 @@ import IntentPrefetchLink from "@/lib/IntentPrefetchLink"
 import { useEffect, useRef, useState } from "react"
 import DropdownMenu from "@/app/components/ui/DropdownMenu"
 import ContentMediaPreview from "@/app/components/ContentMediaPreview"
-import DetailModalImage from "@/app/components/ui/DetailModalImage"
 import {
   TradeSocialProvider,
   TradeSocialEngagementBar,
@@ -14,6 +13,11 @@ import { formatRR, formatTradePoints } from "@/lib/formatDisplay"
 import { resolveTradePoints } from "@/lib/resolveTradePoints"
 import TradeCardTimingBlock from "@/app/components/TradeCardTimingBlock"
 import ExpandableText from "@/app/components/ui/ExpandableText"
+import PublicSocialTradeStatsPanel from "@/app/components/trade/PublicSocialTradeStatsPanel"
+import TradeDetailMediaWithClipOverlay from "@/app/components/trade/TradeDetailMediaWithClipOverlay"
+import {
+  publicSocialHeaderAccountBadge,
+} from "@/lib/tradeSocialDetailDisplay"
 import FeedPostMetaRow from "@/app/components/feed/FeedPostMetaRow"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
@@ -57,7 +61,6 @@ export type ProfileTradeCardProps = {
   canManageTrade?: boolean
   onStartEditTrade?: () => void
   onTogglePinTrade?: () => void
-  onDeleteTrade?: () => void
   showInteractions?: boolean
   onOpenDetail?: () => void
   onOpenComments?: () => void
@@ -92,7 +95,6 @@ export default function ProfileTradeCard({
   canManageTrade,
   onStartEditTrade,
   onTogglePinTrade,
-  onDeleteTrade,
   showInteractions,
   onOpenDetail,
   onOpenComments,
@@ -132,6 +134,9 @@ export default function ProfileTradeCard({
     ? String(trade.public_description).trim()
     : ""
   const showCopyBadge = isCopyTradedMode(trade)
+  const hasTradeMedia = Boolean(
+    imageSrc || (attachedReel && onOpenReplay)
+  )
 
   useEffect(() => {
     // This external focus request intentionally re-opens comments for deep links.
@@ -157,6 +162,54 @@ export default function ProfileTradeCard({
         {ticker} · {direction}
       </span>
     </>
+  )
+
+  const modalTradeHeader = (
+    <div className="flex min-w-0 items-start justify-between gap-3">
+      <div className="min-w-0 space-y-0.5">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
+          <span className="text-base font-semibold text-white md:text-lg">{ticker}</span>
+          {!showCopyBadge && publicSocialHeaderAccountBadge(trade) ? (
+            <>
+              <span className="text-sm font-medium text-gray-500">|</span>
+              <span className="text-sm font-medium text-gray-400">
+                {publicSocialHeaderAccountBadge(trade)}
+              </span>
+            </>
+          ) : null}
+        </div>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-300">
+          {direction}
+        </span>
+        {showCopyBadge ? <CopyTradedBadge trade={trade} className="mt-1" /> : null}
+      </div>
+      <div className="shrink-0 text-right">
+        <span
+          className={`text-base font-semibold tabular-nums md:text-lg ${
+            Number.isFinite(pnl)
+              ? pnl >= 0
+                ? "text-emerald-400"
+                : "text-red-400"
+              : "text-gray-400"
+          }`}
+        >
+          {pnlLabel}
+        </span>
+        <p className="text-xs font-semibold tabular-nums text-gray-400 md:text-sm">
+          RR {rr}
+        </p>
+      </div>
+    </div>
+  )
+
+  const tradeModalDetails = (
+    <div className="space-y-2">
+      {modalTradeHeader}
+      {desc ? (
+        <p className="whitespace-pre-wrap text-sm leading-relaxed text-white">{desc}</p>
+      ) : null}
+      <PublicSocialTradeStatsPanel trade={trade} />
+    </div>
   )
 
   const tradeDetails = (
@@ -288,19 +341,13 @@ export default function ProfileTradeCard({
               items={[
                 {
                   id: "edit",
-                  label: "Edit Trade",
+                  label: "Edit Post",
                   onSelect: () => onStartEditTrade?.(),
                 },
                 {
                   id: "pin",
                   label: trade.is_pinned ? "Unpin Trade" : "Pin Trade",
                   onSelect: () => onTogglePinTrade?.(),
-                },
-                {
-                  id: "delete",
-                  label: "Delete Trade",
-                  variant: "danger",
-                  onSelect: () => onDeleteTrade?.(),
                 },
               ]}
             />
@@ -310,17 +357,16 @@ export default function ProfileTradeCard({
     </div>
   )
 
-  const tradeImageBlock = imageSrc ? (
-    <DetailModalImage
-      src={imageSrc}
-      onClick={onImageClick}
+  const tradeImageBlock = (
+    <TradeDetailMediaWithClipOverlay
+      imageSrc={imageSrc}
       displayMode={trade.image_display_mode as string | null | undefined}
       imageCrop={trade.image_crop}
+      attachedReel={attachedReel}
+      onOpenImage={onImageClick ? (url) => onImageClick(url) : undefined}
+      onOpenClip={attachedReel && onOpenReplay ? onOpenReplay : undefined}
+      imageClassName="block w-full overflow-hidden rounded-none"
     />
-  ) : (
-    <div className="flex min-h-[80px] w-full items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] text-xs text-gray-400">
-      No screenshot
-    </div>
   )
 
   const tradeFeedImage = imageSrc ? (
@@ -351,7 +397,7 @@ export default function ProfileTradeCard({
   if (inDetailModal) {
     const modalArticle = (
       <article className={cardShellClass}>
-        {imageSrc ? (
+        {hasTradeMedia ? (
           <div className="hidden md:min-h-0 md:flex-1 md:flex-col md:overflow-y-auto md:border-r md:border-white/10 md:flex">
             <div className={DETAIL_MODAL_MEDIA_COLUMN_STACK_CLASS}>
               {tradeImageBlock}
@@ -368,7 +414,6 @@ export default function ProfileTradeCard({
           {showInteractions ? (
               <MobileCommentFocusLayout
                 commentsFocused={commentsFocused}
-                mobileMediaBeforeHeader
                 header={tradeAuthorHeader}
                 compactHeader={
                   <CommentFocusCompactStrip
@@ -391,16 +436,16 @@ export default function ProfileTradeCard({
                   />
                 }
                 mobileMedia={
-                  imageSrc ? (
+                  hasTradeMedia && !commentsFocused ? (
                     <div className="flex flex-col">
                       {tradeImageBlock}
                       {tradeEngagementBar &&
                       !detailModalEngagementInPanel(
-                        true,
+                        hasTradeMedia,
                         commentsFocused,
                         isMobile
                       ) ? (
-                        <div className="border-b border-white/10 px-4 py-1">
+                        <div className={DETAIL_MODAL_MEDIA_ACTIONS_WRAP_CLASS}>
                           {tradeEngagementBar}
                         </div>
                       ) : null}
@@ -409,7 +454,7 @@ export default function ProfileTradeCard({
                 }
                 engagement={
                   detailModalEngagementInPanel(
-                    Boolean(imageSrc),
+                    hasTradeMedia,
                     commentsFocused,
                     isMobile
                   )
@@ -419,7 +464,7 @@ export default function ProfileTradeCard({
                 engagementClassName={`${DETAIL_MODAL_PANEL_ENGAGEMENT_CLASS} md:px-4`}
                 collapsibleContent={
                   <div className="space-y-2 px-3 pb-2 pt-1.5 md:space-y-2 md:px-4 md:pb-3 md:pt-2">
-                    {tradeDetails}
+                    {tradeModalDetails}
                   </div>
                 }
                 comments={
@@ -437,7 +482,7 @@ export default function ProfileTradeCard({
               {imageSrc ? (
                 <div className="shrink-0 md:hidden">{tradeImageBlock}</div>
               ) : null}
-              <div className="space-y-2 p-3 md:space-y-3 md:p-4">{tradeDetails}</div>
+              <div className="space-y-2 p-3 md:space-y-3 md:p-4">{tradeModalDetails}</div>
             </>
           )}
         </div>

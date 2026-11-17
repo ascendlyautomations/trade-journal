@@ -211,15 +211,36 @@ final class CreateExperienceTests: XCTestCase {
         await waitFor { ContentMutationStore.shared.revision >= 1 }
     }
 
+    func testCreateReelPickerOmitsTradesThatAlreadyHaveClips() async throws {
+        let trade = CreateReelFixtures.sampleTrade()
+        let feed = CreatePreflightBlockingFeedRepository(blockedTradeID: trade.id)
+        let viewModel = CreateReelViewModel(
+            feed: feed,
+            trades: CreateStubTradeRepository(),
+            session: CreateStubSession(userID: "user.real"),
+            detailCache: DetailPresentationCache(),
+            uploadService: CreateStubUpload(),
+            objectStorage: CreateStubStorage(),
+            onDismiss: {}
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .ready }
+        viewModel.reloadTradesForPicker()
+        await waitFor { !viewModel.isLoadingTrades }
+        XCTAssertTrue(viewModel.pickerTrades.isEmpty)
+    }
+
     func testCreateReelPreflightBlocksTradeWithExistingClip() async {
         let trade = CreateReelFixtures.sampleTrade()
+        let cache = DetailPresentationCache()
+        cache.seed(trade)
         let feed = CreatePreflightBlockingFeedRepository(blockedTradeID: trade.id)
         var dismissed = false
         let viewModel = CreateReelViewModel(
             feed: feed,
             trades: CreateStubTradeRepository(),
             session: CreateStubSession(userID: "user.real"),
-            detailCache: DetailPresentationCache(),
+            detailCache: cache,
             uploadService: CreateStubUpload(),
             objectStorage: CreateStubStorage(),
             onDismiss: { dismissed = true }
@@ -479,7 +500,12 @@ private struct CreateStubFeedRepository: FeedRepository {
         ProfileReelsResult(reels: [], embeddedTrades: [])
     }
     func createReel(_ reel: Reel) async throws -> Reel { reel }
-    func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel] { [] }
+    func unattachedReels(
+        for profileID: ProfileID,
+        limit: Int,
+        includingReelID: ReelID?
+    ) async throws -> [Reel] { [] }
+    func tradeIDsWithAttachedReels(owner: ProfileID) async throws -> Set<TradeID> { [] }
     func attachReel(id: ReelID, to tradeID: TradeID) async throws {}
     func tradeHasAttachedReel(_ tradeID: TradeID) async throws -> Bool { false }
 }
@@ -531,7 +557,12 @@ private final class CreateCountingFeedRepository: FeedRepository, @unchecked Sen
         lastCreatedReel = reel
         return reel
     }
-    func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel] { [] }
+    func unattachedReels(
+        for profileID: ProfileID,
+        limit: Int,
+        includingReelID: ReelID?
+    ) async throws -> [Reel] { [] }
+    func tradeIDsWithAttachedReels(owner: ProfileID) async throws -> Set<TradeID> { [] }
     func attachReel(id: ReelID, to tradeID: TradeID) async throws {}
     func tradeHasAttachedReel(_ tradeID: TradeID) async throws -> Bool { false }
 }
@@ -581,7 +612,14 @@ private final class CreatePreflightBlockingFeedRepository: FeedRepository, @unch
         createCalls += 1
         return reel
     }
-    func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel] { [] }
+    func unattachedReels(
+        for profileID: ProfileID,
+        limit: Int,
+        includingReelID: ReelID?
+    ) async throws -> [Reel] { [] }
+    func tradeIDsWithAttachedReels(owner: ProfileID) async throws -> Set<TradeID> {
+        [blockedTradeID]
+    }
     func attachReel(id: ReelID, to tradeID: TradeID) async throws {}
     func tradeHasAttachedReel(_ tradeID: TradeID) async throws -> Bool {
         preflightCalls += 1

@@ -155,6 +155,7 @@ const LOGICAL_FIELD_LABELS: Record<LogicalField, string> = {
   entryTime: "Entry time",
   exitTime: "Exit time",
   duration: "Duration",
+  dollar_risk: "Planned risk",
 }
 
 const OPTIONAL_FLEX_FIELDS: LogicalField[] = [

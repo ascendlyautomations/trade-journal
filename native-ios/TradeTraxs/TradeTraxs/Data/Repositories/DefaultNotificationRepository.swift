@@ -18,18 +18,35 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
         self.session = session
     }
 
-    func notifications(page: PageRequest) async throws -> CursorPage<ActivityNotification> {
+    func notifications(
+        page: PageRequest,
+        filter: ActivityNotificationListFilter
+    ) async throws -> CursorPage<ActivityNotification> {
         guard let userID = await session.currentUserID else {
             throw AppError.domain(.permission(.notAuthenticated))
+        }
+        let typeValues = filter.types ?? NotificationInboxType.all
+        var query: [URLQueryItem] = SupabaseQuery.page(page) + [
+            SupabaseQuery.select(NotificationDTO.selectColumns),
+            SupabaseQuery.eq("user_id", userID.rawValue),
+            SupabaseQuery.isIn("type", typeValues),
+        ]
+        if filter.achievementPostsOnly {
+            query.append(SupabaseQuery.isNotNull("achievement_post_id"))
+        }
+        if filter.excludeAchievementPosts {
+            query.append(SupabaseQuery.isNull("achievement_post_id"))
+        }
+        if let createdAfter = filter.createdAfter {
+            query.append(SupabaseQuery.gte("created_at", ISO8601.string(from: createdAfter)))
+        }
+        if let createdBefore = filter.createdBefore {
+            query.append(SupabaseQuery.lt("created_at", ISO8601.string(from: createdBefore)))
         }
         let rows: [NotificationDTO.Item] = try await supabase.database.select(
             NotificationDTO.Item.self,
             from: "notifications",
-            query: SupabaseQuery.page(page) + [
-                SupabaseQuery.select(NotificationDTO.selectColumns),
-                SupabaseQuery.eq("user_id", userID.rawValue),
-                SupabaseQuery.isIn("type", NotificationInboxType.all),
-            ]
+            query: query
         )
         let items = rows.compactMap(Self.mapNotification)
         return CursorPage(
@@ -217,6 +234,10 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
 
         let roomID = (dto.room_id ?? parsed.roomID).map { RoomID($0) }
         let resolvedReportID: ReportID? = {
+            if let periodId = parsed.periodId,
+               TradingReportWeekRef.parse(reportID: ReportID(periodId)) != nil {
+                return ReportID(periodId)
+            }
             if let period = parsed.periodKey, !period.isEmpty {
                 return ReportID(period)
             }
@@ -281,6 +302,7 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
         var messageID: String?
         var messagePreview: String?
         var periodKey: String?
+        var periodId: String?
         var isReply: Bool = false
         var isMention: Bool = false
 
@@ -330,7 +352,8 @@ nonisolated struct DefaultNotificationRepository: NotificationRepository {
                 sectionName: string("section_name"),
                 messageID: string("message_id"),
                 messagePreview: string("message_preview"),
-                periodKey: string("periodKey") ?? string("period_key") ?? string("periodId"),
+                periodKey: string("periodKey") ?? string("period_key"),
+                periodId: string("periodId") ?? string("period_id"),
                 isReply: isReply,
                 isMention: isMention
             )

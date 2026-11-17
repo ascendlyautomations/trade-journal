@@ -54,7 +54,11 @@ struct SettingsNotificationsView: View {
                 ProgressView()
             }
         }
-        .onAppear { viewModel.loadIfNeeded() }
+        .refreshable { await viewModel.refresh() }
+        .onAppear {
+            viewModel.loadIfNeeded()
+            Task { await viewModel.refreshSystemAuthorization() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             Task { await viewModel.refreshSystemAuthorization() }
         }
@@ -75,6 +79,20 @@ struct SettingsNotificationsView: View {
                 )
             )
             .accessibilityIdentifier("settings.notifications.allow")
+
+            if viewModel.showsRequestSystemNotificationAuthorization {
+                Button {
+                    Task { await viewModel.requestSystemNotificationAuthorization() }
+                } label: {
+                    SettingsNavigationRow(
+                        title: "Allow Notifications",
+                        subtitle: nil,
+                        systemImage: "bell.badge",
+                        showsChevron: false
+                    )
+                }
+                .buttonStyle(.experiencePlain)
+            }
 
             if viewModel.showsOpenSystemSettings {
                 Button {
@@ -113,7 +131,6 @@ struct SettingsNotificationsView: View {
                     NotificationPreferenceCategory.messages,
                     .social,
                     .rooms,
-                    .achievements,
                     .product,
                 ],
                 id: \.self
@@ -132,8 +149,6 @@ struct SettingsNotificationsView: View {
             }
         } header: {
             Text("Categories")
-        } footer: {
-            Text("Turn a category off to pause that type of alert.")
         }
 
         if case .failed(let message) = viewModel.phase {
@@ -146,10 +161,16 @@ struct SettingsNotificationsView: View {
     }
 
     private var iosPermissionsFooter: String {
-        if viewModel.showsOpenSystemSettings {
-            return "Status: \(viewModel.systemPushStatusLabel). Enable notifications in iOS Settings to receive alerts."
+        if !viewModel.hasResolvedSystemAuthorization {
+            return "Device permission is separate from the categories below."
         }
-        return "Device permission is separate from the categories below."
+        if viewModel.showsRequestSystemNotificationAuthorization {
+            return "Status: Off. Allow iOS notifications to receive push alerts from TradeTraxs."
+        }
+        if viewModel.showsOpenSystemSettings {
+            return "Status: Off. Enable notifications in iOS Settings to receive alerts."
+        }
+        return "Status: \(viewModel.systemPushStatusLabel). Device permission is separate from the categories below."
     }
 
     @ViewBuilder

@@ -1,6 +1,24 @@
 "use client"
 
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
+import {
+  COMPARATIVE_MIN_PER_SIDE,
+  easternHour,
+  knownPnl,
+  qualifiedExtreme,
+} from "@/lib/analytics/knownPnl"
+import { supabase } from "@/lib/supabaseClient"
+import {
+  complianceTradeFromRow,
+  currentPsychologyRules,
+  evaluatePreferenceCompliance,
+  preferenceComplianceLines,
+  type PreferenceRuleContext,
+} from "@/lib/analytics/preferenceCompliance"
+import {
+  loadTradingPreferenceBundle,
+} from "@/lib/analytics/tradingPreferencesStore"
+import { applyPublicVisibilityFilter } from "@/lib/analytics/publicTradeFilter"
 import { tradeMatchesAccountFilter } from "@/lib/tradeAccountDisplay"
 import { devLog } from "@/lib/devLog"
 import {
@@ -18,6 +36,7 @@ import {
 import { averageMaxRrReachedFromTrades, hasStoredRr } from "@/lib/tradeRr"
 import {
   averageRealizedRrFromTrades,
+  averageTargetedRrFromTrades,
   resolveRealizedRr,
 } from "@/lib/tradePointsAndRealizedRr"
 import {
@@ -61,7 +80,8 @@ function analyzeBestSetups(trades: DashboardTradeRow[]): SetupGroupResult[] {
 
   trades.forEach((trade) => {
     const { session, ticker, direction } = trade
-    const pnl = Number(trade.pnl) || 0
+    const pnl = knownPnl(trade.pnl)
+    if (pnl == null) return
 
     const groups = [
       { type: "session", value: session ?? "—" },
@@ -94,7 +114,6 @@ function analyzeBestSetups(trades: DashboardTradeRow[]): SetupGroupResult[] {
       avgPnL: g.trades ? g.totalPnL / g.trades : 0,
       winRate: g.trades ? g.wins / g.trades : 0,
     }))
-    .filter((g) => g.trades >= 3)
     .sort((a, b) => b.avgPnL - a.avgPnL)
 }
 
@@ -111,14 +130,15 @@ function generateInsights(results: SetupGroupResult[]): string[] {
   if (!results.length) return []
 
   const insights: string[] = []
-
-  const bestSession = results.find((r) => r.type === "session")
-  const bestTicker = results.find((r) => r.type === "ticker")
-  const bestDirection = results.find((r) => r.type === "direction")
-
   const formatPct = (v: number) => `${(v * 100).toFixed(0)}%`
+  const ofType = (type: string) =>
+    results.filter((row) => row.type === type && row.value !== "—")
 
-  if (bestSession && bestSession.value !== "—") {
+  const bestSession = qualifiedExtreme(ofType("session"), "best")
+  const bestTicker = qualifiedExtreme(ofType("ticker"), "best")
+  const bestDirection = qualifiedExtreme(ofType("direction"), "best")
+
+  if (bestSession) {
     insights.push(
       `You perform best trading ${bestSession.value} session (${formatPerformanceInsightMoney(
         bestSession.avgPnL
@@ -126,7 +146,7 @@ function generateInsights(results: SetupGroupResult[]): string[] {
     )
   }
 
-  if (bestTicker && bestTicker.value !== "—") {
+  if (bestTicker) {
     insights.push(
       `${bestTicker.value} is your most profitable market (${formatPerformanceInsightMoney(
         bestTicker.avgPnL
@@ -134,7 +154,7 @@ function generateInsights(results: SetupGroupResult[]): string[] {
     )
   }
 
-  if (bestDirection && bestDirection.value !== "—") {
+  if (bestDirection) {
     insights.push(
       `You are more profitable going ${bestDirection.value} (${formatPerformanceInsightMoney(
         bestDirection.avgPnL
@@ -162,7 +182,8 @@ function analyzeCombinedSetups(trades: DashboardTradeRow[]): CombinedSetupResult
 
   trades.forEach((trade) => {
     const { session, ticker, direction } = trade
-    const pnl = Number(trade.pnl) || 0
+    const pnl = knownPnl(trade.pnl)
+    if (pnl == null) return
 
     const s = session ?? "—"
     const t = ticker ?? "—"
@@ -191,7 +212,6 @@ function analyzeCombinedSetups(trades: DashboardTradeRow[]): CombinedSetupResult
       avgPnL: row.trades ? row.totalPnL / row.trades : 0,
       winRate: row.trades ? row.wins / row.trades : 0,
     }))
-    .filter((row) => row.trades >= 3)
     .sort((a, b) => b.avgPnL - a.avgPnL)
 }
 
@@ -214,14 +234,12 @@ function formatCombo(key: string): string {
 
 function generateCombinedInsights(results: CombinedSetupResult[]): string[] {
   const meaningful = results.filter(
-    (r) => !r.key.includes("—") && !r.key.includes("undefined")
+    (row) => !row.key.includes("—") && !row.key.includes("undefined")
   )
-  if (!meaningful.length) return []
+  const best = qualifiedExtreme(meaningful, "best")
+  if (!best) return []
 
   const formatPct = (v: number) => `${(v * 100).toFixed(0)}%`
-
-  const best = meaningful[0]
-
   return [
     `Your strongest setup is trading ${formatCombo(
       best.key
@@ -231,11 +249,14 @@ function generateCombinedInsights(results: CombinedSetupResult[]): string[] {
   ]
 }
 
-function generateWorstInsight(worst: CombinedSetupResult | undefined): string | null {
+function generateWorstInsight(results: CombinedSetupResult[]): string | null {
+  const meaningful = results.filter(
+    (row) => !row.key.includes("—") && !row.key.includes("undefined")
+  )
+  const worst = qualifiedExtreme(meaningful, "worst")
   if (!worst) return null
 
   const formatPct = (v: number) => `${(v * 100).toFixed(0)}%`
-
   return `You struggle most trading ${formatCombo(
     worst.key
   )} (${formatPerformanceInsightMoney(worst.avgPnL)} avg, ${formatPct(
@@ -243,75 +264,76 @@ function generateWorstInsight(worst: CombinedSetupResult | undefined): string | 
   )} win rate over ${worst.trades} trades)`
 }
 
-function detectLossStreak(trades: DashboardTradeRow[]): number | null {
-  if (trades.length < 4) return null
+function detectLossStreak(trades: DashboardTradeRow[], streakLength = 3): number | null {
+  const priced = trades.flatMap((trade) => {
+    const pnl = knownPnl(trade.pnl)
+    return pnl == null ? [] : [pnl]
+  })
+  if (priced.length < COMPARATIVE_MIN_PER_SIDE + streakLength) return null
 
-  for (let i = 0; i <= trades.length - 4; i++) {
-    const a = Number(trades[i].pnl) || 0
-    const b = Number(trades[i + 1].pnl) || 0
-    const c = Number(trades[i + 2].pnl) || 0
-
-    if (a < 0 && b < 0 && c < 0) {
-      const nextTrades = trades.slice(i + 3, i + 8)
-      if (nextTrades.length === 0) return null
-
-      const wins = nextTrades.filter((t) => (Number(t.pnl) || 0) > 0).length
-      return wins / nextTrades.length
-    }
+  for (let i = 0; i <= priced.length - streakLength; i++) {
+    if (!priced.slice(i, i + streakLength).every((pnl) => pnl < 0)) continue
+    const next = priced.slice(i + streakLength, i + streakLength + COMPARATIVE_MIN_PER_SIDE)
+    if (next.length < COMPARATIVE_MIN_PER_SIDE) return null
+    const nextRate = next.filter((pnl) => pnl > 0).length / next.length
+    const baseline = priced.filter((pnl) => pnl > 0).length / priced.length
+    if (nextRate <= baseline - 0.08) return nextRate
+    return null
   }
 
   return null
 }
 
 function detectRRThreshold(trades: DashboardTradeRow[]): string | null {
-  const lowRR = trades.filter((t) => {
-    if (!hasStoredRr(t.rr)) return false
-    return Number(t.rr) < 1
-  })
-  const highRR = trades.filter((t) => {
-    if (!hasStoredRr(t.rr)) return false
-    return Number(t.rr) >= 1
-  })
+  const priced = (rows: DashboardTradeRow[]) =>
+    rows.flatMap((trade) => {
+      const pnl = knownPnl(trade.pnl)
+      return pnl == null ? [] : [pnl]
+    })
+  const lowRR = priced(
+    trades.filter((t) => hasStoredRr(t.rr) && Number(t.rr) < 1)
+  )
+  const highRR = priced(
+    trades.filter((t) => hasStoredRr(t.rr) && Number(t.rr) >= 1)
+  )
 
-  if (lowRR.length < 3 || highRR.length < 3) return null
+  if (
+    lowRR.length < COMPARATIVE_MIN_PER_SIDE ||
+    highRR.length < COMPARATIVE_MIN_PER_SIDE
+  ) {
+    return null
+  }
 
-  const lowWin = lowRR.filter((t) => (Number(t.pnl) || 0) > 0).length / lowRR.length
-  const highWin =
-    highRR.filter((t) => (Number(t.pnl) || 0) > 0).length / highRR.length
+  const lowWin = lowRR.filter((pnl) => pnl > 0).length / lowRR.length
+  const highWin = highRR.filter((pnl) => pnl > 0).length / highRR.length
 
-  if (highWin > lowWin + 0.2) {
-    return "You perform significantly better when RR ≥ 1"
+  if (highWin > lowWin + 0.2 && highWin > lowWin) {
+    return "Win rate is higher on trades with R at least 1 than on trades below 1"
   }
 
   return null
 }
 
 function calculateExpectancy(trades: DashboardTradeRow[]) {
-  if (!trades || trades.length === 0) return null
+  const priced = trades.flatMap((trade) => {
+    const pnl = knownPnl(trade.pnl)
+    return pnl == null ? [] : [pnl]
+  })
+  if (priced.length === 0) return null
 
-  const wins = trades.filter((t) => (Number(t.pnl) || 0) > 0)
-  const losses = trades.filter((t) => (Number(t.pnl) || 0) < 0)
-
-  const winRate = wins.length / trades.length
-  const lossRate = losses.length / trades.length
-
-  const avgWin =
-    wins.length > 0
-      ? wins.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0) / wins.length
-      : 0
-
-  const avgLoss =
-    losses.length > 0
-      ? Math.abs(
-          losses.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0) /
-            losses.length
-        )
-      : 0
-
-  const expectancy = winRate * avgWin - lossRate * avgLoss
+  const wins = priced.filter((pnl) => pnl > 0)
+  const losses = priced.filter((pnl) => pnl < 0)
+  const winRate = wins.length / priced.length
+  const lossRate = losses.length / priced.length
+  const avgWin = wins.length
+    ? wins.reduce((sum, pnl) => sum + pnl, 0) / wins.length
+    : 0
+  const avgLoss = losses.length
+    ? Math.abs(losses.reduce((sum, pnl) => sum + pnl, 0) / losses.length)
+    : 0
 
   return {
-    expectancy,
+    expectancy: winRate * avgWin - lossRate * avgLoss,
     winRate,
     avgWin,
     avgLoss,
@@ -331,7 +353,8 @@ function calculateStreaks(trades: DashboardTradeRow[]) {
   let tempType: "win" | "loss" | "even" | null = null
 
   trades.forEach((trade) => {
-    const pnl = Number(trade.pnl) || 0
+    const pnl = knownPnl(trade.pnl)
+    if (pnl == null) return
     const type: "win" | "loss" | "even" =
       pnl > 0 ? "win" : pnl < 0 ? "loss" : "even"
 
@@ -377,7 +400,7 @@ function parseHourFromEntryOrExit(timeSource: unknown): number | null {
 
   const date = new Date(raw)
   if (!Number.isNaN(date.getTime())) {
-    return date.getHours()
+    return easternHour(date)
   }
 
   const m = raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
@@ -399,7 +422,9 @@ function analyzeTradingHours(trades: DashboardTradeRow[]): TradingHoursSummary |
     const hour = parseHourFromEntryOrExit(timeSource)
     if (hour === null) return
 
-    hourlyMap[hour] = (hourlyMap[hour] || 0) + (Number(trade.pnl) || 0)
+    const pnl = knownPnl(trade.pnl)
+    if (pnl == null) return
+    hourlyMap[hour] = (hourlyMap[hour] || 0) + pnl
   })
 
   const hasValidTradingHoursData = Object.keys(hourlyMap).length > 1
@@ -471,6 +496,7 @@ export type UseDashboardAnalyticsParams = {
   customRangeEnd: string
   accountById: Record<string, DashboardAccountRow>
   copyGroupAccountIds: string[] | null
+  userId?: string | null
 }
 
 export type DashboardAnalyticsResult = {
@@ -528,7 +554,28 @@ export function useDashboardAnalytics({
   customRangeEnd,
   accountById,
   copyGroupAccountIds,
+  userId,
 }: UseDashboardAnalyticsParams): DashboardAnalyticsResult {
+  const [preferences, setPreferences] = useState<PreferenceRuleContext | null>(null)
+  useEffect(() => {
+    if (!userId) {
+      setPreferences(null)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const bundle = await loadTradingPreferenceBundle(supabase, userId)
+        if (!cancelled) setPreferences(bundle)
+      } catch {
+        if (!cancelled) setPreferences(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
+
   return useMemo(() => {
     if (process.env.NODE_ENV === "development") {
       devLog("Trades:", deferredTradesExcludingBacktest)
@@ -589,35 +636,30 @@ export function useDashboardAnalytics({
       return true
     })
 
-    let filteredTrades = withoutPublicFilter
-    if (showPublicOnly) {
-      const publicFiltered = withoutPublicFilter.filter((t) => tradeIsPublic(t))
-      filteredTrades =
-        publicFiltered.length > 0 ? publicFiltered : withoutPublicFilter
-    }
+    const filteredTrades = applyPublicVisibilityFilter(
+      withoutPublicFilter,
+      showPublicOnly,
+      tradeIsPublic
+    ).sort(compareDashboardTradesChronological)
 
-    filteredTrades = filteredTrades.sort(compareDashboardTradesChronological)
-
+    const pricedPnls = filteredTrades.flatMap((trade) => {
+      const pnl = knownPnl(trade.pnl)
+      return pnl == null ? [] : [pnl]
+    })
     const totalTrades = filteredTrades.length
-    const wins = filteredTrades.filter(t => (Number(t.pnl) || 0) > 0)
-    const winRate = totalTrades ? (wins.length / totalTrades) * 100 : 0
-    const totalPnL = filteredTrades.reduce((sum, t) => sum + (t.pnl || 0), 0)
+    const wins = pricedPnls.filter((pnl) => pnl > 0)
+    const winRate = pricedPnls.length ? (wins.length / pricedPnls.length) * 100 : 0
+    const totalPnL = pricedPnls.reduce((sum, pnl) => sum + pnl, 0)
 
-    const avgRR = averageRealizedRrFromTrades(filteredTrades)
+    const avgRR = averageTargetedRrFromTrades(filteredTrades)
     const avgMaxRrReached = averageMaxRrReachedFromTrades(filteredTrades)
     const rrTargetAnalysis = computeDashboardRrTargetAnalysis(filteredTrades)
 
-    const losses = filteredTrades
-  .map(t => Number(t.pnl) || 0)
-  .filter(p => p < 0)
+    const losses = pricedPnls.filter((pnl) => pnl < 0)
 
-const biggestLoss = losses.length > 0
-  ? Math.min(...losses)
-  : 0
+    const biggestLoss = losses.length > 0 ? Math.min(...losses) : 0
 
-    const bestTrade = filteredTrades.length
-      ? Math.max(...filteredTrades.map((t) => Number(t.pnl) || 0))
-      : 0
+    const bestTrade = pricedPnls.length ? Math.max(...pricedPnls) : 0
 
     const symbolStats: Record<
       string,
@@ -626,29 +668,26 @@ const biggestLoss = losses.length > 0
 
     filteredTrades.forEach((t) => {
       const ticker = String(t.ticker)
+      const pnl = knownPnl(t.pnl)
+      if (!ticker || ticker === "undefined" || pnl == null) return
       if (!symbolStats[ticker]) {
-        symbolStats[ticker] = {
-          pnl: 0,
-          trades: 0,
-          wins: 0
-        }
+        symbolStats[ticker] = { pnl: 0, trades: 0, wins: 0 }
       }
-
-      symbolStats[ticker].pnl += Number(t.pnl) || 0
+      symbolStats[ticker].pnl += pnl
       symbolStats[ticker].trades += 1
-      if ((Number(t.pnl) || 0) > 0) symbolStats[ticker].wins += 1
+      if (pnl > 0) symbolStats[ticker].wins += 1
     })
 
-    let insightBestSymbol: string | null = null
-    let insightBestSymbolAvg = -Infinity
-    Object.entries(symbolStats).forEach(([symbol, data]) => {
-      if (!symbol || symbol === "undefined" || data.trades < 3) return
-      const avg = Number(data.pnl) / data.trades
-      if (avg > insightBestSymbolAvg) {
-        insightBestSymbolAvg = avg
-        insightBestSymbol = symbol
-      }
-    })
+    const symbolLead = qualifiedExtreme(
+      Object.entries(symbolStats).map(([symbol, data]) => ({
+        symbol,
+        avgPnL: data.trades ? data.pnl / data.trades : 0,
+        trades: data.trades,
+      })),
+      "best"
+    )
+    const insightBestSymbol = symbolLead?.symbol ?? null
+    const insightBestSymbolAvg = symbolLead?.avgPnL ?? 0
 
     const tickerAgg: Record<
       string,
@@ -657,12 +696,14 @@ const biggestLoss = losses.length > 0
 
     filteredTrades.forEach((t) => {
       const ticker = t.ticker || "—"
+      const pnl = knownPnl(t.pnl)
+      if (pnl == null) return
       if (!tickerAgg[ticker]) {
         tickerAgg[ticker] = { totalPnL: 0, wins: 0, totalTrades: 0, rrSum: 0, rrCount: 0 }
       }
-      tickerAgg[ticker].totalPnL += Number(t.pnl) || 0
+      tickerAgg[ticker].totalPnL += pnl
       tickerAgg[ticker].totalTrades += 1
-      if ((Number(t.pnl) || 0) > 0) tickerAgg[ticker].wins += 1
+      if (pnl > 0) tickerAgg[ticker].wins += 1
       const realized = resolveRealizedRr(t)
       if (realized != null) {
         tickerAgg[ticker].rrSum += realized
@@ -689,12 +730,14 @@ const biggestLoss = losses.length > 0
     filteredTrades.forEach((t) => {
       const strategy = (t.strategy && String(t.strategy).trim()) || ""
       if (!strategy) return
+      const pnl = knownPnl(t.pnl)
+      if (pnl == null) return
       if (!strategyAgg[strategy]) {
         strategyAgg[strategy] = { totalPnL: 0, wins: 0, totalTrades: 0, rrSum: 0, rrCount: 0 }
       }
-      strategyAgg[strategy].totalPnL += Number(t.pnl) || 0
+      strategyAgg[strategy].totalPnL += pnl
       strategyAgg[strategy].totalTrades += 1
-      if ((Number(t.pnl) || 0) > 0) strategyAgg[strategy].wins += 1
+      if (pnl > 0) strategyAgg[strategy].wins += 1
       const realized = resolveRealizedRr(t)
       if (realized != null) {
         strategyAgg[strategy].rrSum += realized
@@ -727,8 +770,10 @@ const biggestLoss = losses.length > 0
       const b = normalizeSessionBucket(t.session)
       if (!b) return
       sessionBuckets[b].totalTrades += 1
-      sessionBuckets[b].totalPnL += Number(t.pnl) || 0
-      if ((Number(t.pnl) || 0) > 0) sessionBuckets[b].wins += 1
+      const pnl = knownPnl(t.pnl)
+      if (pnl == null) return
+      sessionBuckets[b].totalPnL += pnl
+      if (pnl > 0) sessionBuckets[b].wins += 1
     })
 
     const sessionPieData = DASHBOARD_SESSION_DISPLAY_ORDER.map((name) => ({
@@ -762,7 +807,9 @@ const biggestLoss = losses.length > 0
       if (!longDay) return
       const short = tradingLongToShort[longDay]
       if (!short) return
-      weekdayMap[short] += Number(t.pnl) || 0
+      const pnl = knownPnl(t.pnl)
+      if (pnl == null) return
+      weekdayMap[short] += pnl
     })
 
     const weekdayData = (["Mon", "Tue", "Wed", "Thu", "Fri"] as const).map((day) => ({
@@ -776,27 +823,31 @@ const biggestLoss = losses.length > 0
       if (!resolved) return
       const day = getTradingWeekday(resolved)
       if (!day) return
+      const pnl = knownPnl(trade.pnl)
+      if (pnl == null) return
       if (!weekdayInsightStats[day]) {
         weekdayInsightStats[day] = { pnl: 0, trades: 0 }
       }
-      weekdayInsightStats[day].pnl += Number(trade.pnl) || 0
+      weekdayInsightStats[day].pnl += pnl
       weekdayInsightStats[day].trades += 1
     })
 
-    let insightBestWeekday: string | null = null
-    let insightBestWeekdayAvg = -Infinity
-    Object.entries(weekdayInsightStats).forEach(([day, data]) => {
-      if (data.trades < 2) return
-      const avg = data.pnl / data.trades
-      if (avg > insightBestWeekdayAvg) {
-        insightBestWeekdayAvg = avg
-        insightBestWeekday = day
-      }
-    })
-
-    const bestStrategyRow = strategyPerformanceRows.find(
-      (row) => row.totalTrades >= 3
+    const weekdayLead = qualifiedExtreme(
+      Object.entries(weekdayInsightStats).map(([day, data]) => ({
+        day,
+        avgPnL: data.trades ? data.pnl / data.trades : 0,
+        trades: data.trades,
+      })),
+      "best"
     )
+    const insightBestWeekday = weekdayLead?.day ?? null
+    const insightBestWeekdayAvg = weekdayLead?.avgPnL ?? 0
+
+    const qualifiedStrategies = strategyPerformanceRows.filter(
+      (row) => row.totalTrades >= COMPARATIVE_MIN_PER_SIDE && row.totalPnL > 0
+    )
+    const bestStrategyRow =
+      qualifiedStrategies.length >= 2 ? qualifiedStrategies[0] : null
     const bestSetup = bestStrategyRow
       ? {
           strategy: bestStrategyRow.strategy,
@@ -812,14 +863,7 @@ const biggestLoss = losses.length > 0
     const combinedResults = analyzeCombinedSetups(filteredTrades)
     const combinedInsights = generateCombinedInsights(combinedResults)
 
-    const meaningfulCombined = combinedResults.filter(
-      (r) => !r.key.includes("—") && !r.key.includes("undefined")
-    )
-    const worstResults = [...meaningfulCombined]
-      .filter((r) => r.trades >= 3)
-      .sort((a, b) => a.avgPnL - b.avgPnL)
-    const worst = worstResults[0]
-    const worstInsight = generateWorstInsight(worst)
+    const worstInsight = generateWorstInsight(combinedResults)
 
     const chronologicalTrades = [...filteredTrades].sort(
       compareDashboardTradesChronological
@@ -834,9 +878,10 @@ const biggestLoss = losses.length > 0
     const equityDrawdownChartData = chronologicalTrades.reduce<
       DashboardEquityPoint[]
     >((points, trade, index) => {
+      const pnl = knownPnl(trade.pnl)
+      if (pnl == null) return points
       const runningEquity =
-        (points.length > 0 ? points[points.length - 1].equity : 0) +
-        (Number(trade.pnl) || 0)
+        (points.length > 0 ? points[points.length - 1].equity : 0) + pnl
 
       if (process.env.NODE_ENV === "development" && index < 5) {
         devLog({
@@ -850,27 +895,38 @@ const biggestLoss = losses.length > 0
       })
       return points
     }, [])
-    const lossStreakRate = detectLossStreak(chronologicalTrades)
+    const pause = currentPsychologyRules(preferences).consecutiveLossPause
+    const lossStreakRate = detectLossStreak(chronologicalTrades, pause ?? 3)
     const rrInsight = detectRRThreshold(filteredTrades)
 
     const warnings: string[] = []
     if (lossStreakRate !== null && Number.isFinite(lossStreakRate)) {
+      const rate = `${(lossStreakRate * 100).toFixed(0)}%`
       warnings.push(
-        `After 3 consecutive losses, your win rate drops to ${(
-          lossStreakRate * 100
-        ).toFixed(0)}% in the next few trades`
+        pause != null
+          ? `After your pause of ${pause} consecutive losses, win rate on the next priced trades was ${rate}, below the rest of this sample.`
+          : `After 3 consecutive losses, your win rate drops to ${rate} in the next few trades`
       )
     }
     if (rrInsight) {
       warnings.push(rrInsight)
     }
+    const preferenceRows = filteredTrades.flatMap((trade) => {
+      const row = complianceTradeFromRow(trade)
+      return row ? [row] : []
+    })
+    warnings.push(
+      ...preferenceComplianceLines(evaluatePreferenceCompliance(preferenceRows, preferences))
+    )
 
     const dailyMap: Record<string, number> = {}
 
     filteredTrades.forEach((t) => {
       const dateKey = getDashboardTradingDayKey(t)
       if (!dateKey) return
-      dailyMap[dateKey] = (dailyMap[dateKey] || 0) + (Number(t.pnl) || 0)
+      const pnl = knownPnl(t.pnl)
+      if (pnl == null) return
+      dailyMap[dateKey] = (dailyMap[dateKey] || 0) + pnl
     })
 
     const dailyPnLs = Object.values(dailyMap)
@@ -884,16 +940,16 @@ const biggestLoss = losses.length > 0
       ? Math.min(...dailyPnLs)
       : 0
 
-    const winsOnly = filteredTrades.filter(t => (Number(t.pnl) || 0) > 0)
-    const lossesOnly = filteredTrades.filter(t => (Number(t.pnl) || 0) < 0)
+    const winsOnly = pricedPnls.filter((pnl) => pnl > 0)
+    const lossesOnly = pricedPnls.filter((pnl) => pnl < 0)
 
-    const avgWin =
-      winsOnly.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0) /
-      (winsOnly.length || 1)
+    const avgWin = winsOnly.length
+      ? winsOnly.reduce((sum, pnl) => sum + pnl, 0) / winsOnly.length
+      : 0
 
-    const avgLoss =
-      lossesOnly.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0) /
-      (lossesOnly.length || 1)
+    const avgLoss = lossesOnly.length
+      ? lossesOnly.reduce((sum, pnl) => sum + pnl, 0) / lossesOnly.length
+      : 0
 
     const hasTradingDayTimeSource = filteredTrades.some(
       (t) => resolveDashboardTradeTimeSource(t) != null
@@ -959,5 +1015,6 @@ const biggestLoss = losses.length > 0
     customRangeEnd,
     accountById,
     copyGroupAccountIds,
+    preferences,
   ])
 }

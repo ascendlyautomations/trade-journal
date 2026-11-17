@@ -68,8 +68,8 @@ export function canAssignRoomMemberTag(options: {
   canModerateRoom: boolean
 }): boolean {
   if (!options.canModerateRoom) return false
-  if (options.canManageRoom) return true
-  return !isElevatedRoomMemberTagName(options.tagName)
+  if (isElevatedRoomMemberTagName(options.tagName)) return false
+  return true
 }
 
 export function canModerateRoomMemberTarget(options: {

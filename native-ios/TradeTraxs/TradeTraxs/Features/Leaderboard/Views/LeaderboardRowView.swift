@@ -4,6 +4,7 @@ import SwiftUI
 struct LeaderboardRowView: View {
     let row: LeaderboardRow
     let profile: Profile
+    let viewerProfileID: ProfileID?
     let imagePipeline: any ImagePipeline
     let showsFollowButton: Bool
     let onOpen: () -> Void
@@ -34,9 +35,17 @@ struct LeaderboardRowView: View {
                 metricColumn
                     .frame(width: metricWidth, alignment: .trailing)
 
-                if showsFollowButton {
-                    followButton
-                        .frame(width: followWidth, alignment: .trailing)
+                if showsFollowButton || isAuthenticatedViewer {
+                    ExperienceProfileListFollowTrailing(
+                        profileID: profile.id,
+                        viewerProfileID: viewerProfileID,
+                        isFollowing: row.isFollowing,
+                        showsFollowControl: showsFollowButton,
+                        style: .leaderboard,
+                        accessibilityPrefix: "leaderboard",
+                        onToggleFollow: onToggleFollow
+                    )
+                    .frame(width: followWidth, alignment: .trailing)
                 }
             }
             .padding(.horizontal, ExperienceSpacing.md)
@@ -85,23 +94,9 @@ struct LeaderboardRowView: View {
         }
     }
 
-    private var followButton: some View {
-        Button(action: onToggleFollow) {
-            Text(row.isFollowing ? "Following" : "Follow")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(row.isFollowing ? colors.primaryText : colors.onAccent)
-                .lineLimit(1)
-                .minimumScaleFactor(0.9)
-                .padding(.horizontal, row.isFollowing ? 8 : 10)
-                .frame(height: 30)
-                .frame(maxWidth: .infinity)
-                .background(
-                    Capsule().fill(row.isFollowing ? colors.fillSecondary : colors.accent)
-                )
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.experiencePlain)
-        .accessibilityLabel(row.isFollowing ? "Following" : "Follow")
+    private var isAuthenticatedViewer: Bool {
+        guard let viewerProfileID else { return row.isCurrentUser }
+        return profile.id == viewerProfileID
     }
 
     private var trendIcon: some View {

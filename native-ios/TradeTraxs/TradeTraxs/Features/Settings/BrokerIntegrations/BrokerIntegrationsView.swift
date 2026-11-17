@@ -178,7 +178,7 @@ struct BrokerIntegrationsView: View {
                     }
                 }
             }
-            .presentationDetents([.medium])
+            .experienceSheetChrome(detents: [.medium])
         }
         .onAppear {
             BrokerIntegrationsLoadPriorityGate.setScreenActive(true)

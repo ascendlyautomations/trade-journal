@@ -252,6 +252,7 @@ final class SessionOwnerTradesStore {
             persistTrades(list, for: owner)
         }
         SessionNetworkProbe.record(.localMutation, resource: "ownerTrades", detail: trade.id.rawValue)
+        TradingRulesComplianceInvalidation.ownerTradesDidMutate(profileID: owner)
     }
 
     func remove(id: TradeID, owner: ProfileID) {
@@ -269,6 +270,7 @@ final class SessionOwnerTradesStore {
             persistTrades(list, for: owner)
         }
         SessionNetworkProbe.record(.localMutation, resource: "ownerTrades.remove", detail: id.rawValue)
+        TradingRulesComplianceInvalidation.ownerTradesDidMutate(profileID: owner)
     }
 
     func invalidate(profileID: ProfileID? = nil) {

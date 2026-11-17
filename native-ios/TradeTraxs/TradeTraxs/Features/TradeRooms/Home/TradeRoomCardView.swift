@@ -5,6 +5,7 @@ import UIKit
 struct TradeRoomCardView: View {
     let item: TradeRoomInboxItem
     let imagePipeline: any ImagePipeline
+    var isFavorited: Bool = false
 
     @Environment(\.themeColors) private var colors
     @State private var logoImage: Image?
@@ -23,6 +24,12 @@ struct TradeRoomCardView: View {
                             color: colors.primaryText
                         )
                         .lineLimit(1)
+                    if isFavorited {
+                        Image(systemName: "star.fill")
+                            .font(.caption)
+                            .foregroundStyle(colors.accent)
+                            .accessibilityLabel("Favorited")
+                    }
                     Spacer(minLength: 4)
                     if let timestamp = item.timestamp {
                         Text(MessagesInboxSupport.relativeTimestamp(timestamp))

@@ -57,6 +57,8 @@ export type SharedTradeMessageCardProps = {
   optimizeMessagePreview?: boolean
   /** Trading report best-trade: light-mode styling via `tradingReportLight.css`. */
   surface?: "message" | "report"
+  /** Hide public description when it duplicates clip caption shown above (display only). */
+  suppressPublicDescription?: boolean
 }
 
 /**
@@ -77,6 +79,7 @@ export default function SharedTradeMessageCard({
   deferUntilVisible = false,
   optimizeMessagePreview = false,
   surface = "message",
+  suppressPublicDescription = false,
 }: SharedTradeMessageCardProps) {
   const reportShellClass =
     surface === "report" ? " tt-shared-trade-card-shell" : ""
@@ -294,7 +297,7 @@ export default function SharedTradeMessageCard({
           <span className="tabular-nums">Points: {formatTradePoints(trade)}</span>
         </div>
 
-        {trade.public_description ? (
+        {trade.public_description && !suppressPublicDescription ? (
           <ExpandableText
             className="mt-2 text-xs leading-snug text-gray-300"
             textClassName="text-gray-300"

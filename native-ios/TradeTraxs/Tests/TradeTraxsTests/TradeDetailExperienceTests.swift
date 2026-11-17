@@ -71,7 +71,7 @@ final class TradeDetailExperienceTests: XCTestCase {
         }
         XCTAssertEqual(viewModel.accountName, "Alpha Futures")
         // Non-owner session → public title never includes account number.
-        XCTAssertEqual(viewModel.accountIdentityLine, "Alpha Futures")
+        XCTAssertEqual(viewModel.accountIdentityLine, "Alpha Futures · Eval")
         XCTAssertFalse(viewModel.accountIdentityLine?.contains("500123") == true)
         XCTAssertEqual(viewModel.mediaReference?.id.contains("http"), true)
     }
@@ -87,6 +87,12 @@ final class TradeDetailExperienceTests: XCTestCase {
 
     func testTradeDetailExperiencesAreDistinct() {
         XCTAssertNotEqual(TradeDetailExperience.journal, TradeDetailExperience.social)
+    }
+
+    func testSocialHeaderAccountBadgePrefersPublicBadge() {
+        var trade = ProfileTradeFixtures.samples(owner: ProfileID("viewer"))[0]
+        trade.publicAccountBadge = "Funded"
+        XCTAssertEqual(TradeDisplay.socialHeaderAccountBadge(for: trade), "Funded")
     }
 
     func testAccountIdentityLineUsesOwnerVersusPublicRules() {
@@ -108,7 +114,7 @@ final class TradeDetailExperienceTests: XCTestCase {
                 accountNumber: "500123",
                 audience: .public
             ),
-            "Alpha Futures"
+            "Alpha Futures · Eval"
         )
         XCTAssertEqual(
             TradeDisplay.accountIdentityLine(
@@ -182,6 +188,46 @@ final class TradeDetailExperienceTests: XCTestCase {
             "https://proj.supabase.co/storage/v1/object/public/screenshots/abc/def/ghi.jpg"
         )
         XCTAssertFalse(url?.absoluteString.contains("%2F") == true)
+    }
+
+    func testJournalAccountSummaryLineIncludesFullAccountNumber() async {
+        let environment = CompositionRoot.bootstrapAppEnvironment()
+        let profileID = ProfileID("dev.trade-detail-owner-line")
+        let trade = ProfileTradeFixtures.samples(owner: profileID)[0]
+        let cache = environment.data.detailCache
+        cache.seedAuthoritativeDetail(trade, authority: .authoritativeNetwork)
+        await environment.data.tradeDetailRepository.replaceCachedDetail(trade, authority: .authoritativeNetwork)
+        var accounts = PropFirmFixtures.accounts(owner: profileID)
+        if let index = accounts.indices.first {
+            accounts[index].accountNumber = "500123"
+        }
+        cache.seed(accounts: accounts, for: profileID)
+
+        let session = TradeDetailStubSession(userID: profileID.rawValue)
+        let viewModel = TradeDetailViewModel(
+            tradeID: trade.id,
+            trades: environment.data.trades,
+            profiles: environment.data.profiles,
+            session: session,
+            imagePipeline: environment.data.imagePipeline,
+            cache: cache,
+            navigationCoordinator: environment.navigation.coordinator,
+            rpc: environment.data.rpc,
+            experience: .journal
+        )
+        viewModel.loadIfNeeded()
+        for _ in 0..<60 {
+            if viewModel.isOwner, viewModel.accountSummaryLine?.contains("500123") == true { break }
+            try? await Task.sleep(nanoseconds: 25_000_000)
+        }
+        XCTAssertTrue(viewModel.isOwner)
+        XCTAssertEqual(viewModel.accountSummaryLine, "Alpha Futures • 500123 • Eval")
+    }
+
+    func testJournalTradeDetailExecutionRangeOmitsWithoutExit() {
+        var trade = makeAnalyticsTrade(id: "open", ticker: "NQ", pnl: 0, rr: 1, dayOffset: 0)
+        trade.exitAt = nil
+        XCTAssertNil(TradeDisplay.journalTradeDetailExecutionRangeText(for: trade))
     }
 
     func testExecutionTimestampTextUsesTimeOnlyOnSameDay() {
@@ -333,4 +379,12 @@ private struct FailingDownloadService: DownloadService {
     func download(_ request: DownloadRequest) async throws -> Data {
         throw AppError.network(.connectivity)
     }
+}
+
+private struct TradeDetailStubSession: SessionProviding {
+    let userID: String
+    var currentUserID: UserID? {
+        get async { UserID(userID) }
+    }
+    var accessToken: String? { get async { nil } }
 }

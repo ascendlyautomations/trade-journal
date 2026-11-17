@@ -264,6 +264,9 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
                 if Self.isUniqueViolation(error) { return }
                 throw error
             }
+            await activityNotifications.notifyLike(
+                .content(target, contentID: contentID)
+            )
         } else {
             try await supabase.database.delete(
                 from: tables.likes,
@@ -342,6 +345,7 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
         guard let mapped = Self.mapComment(row, target: target) else {
             throw AppError.unknown(message: "Failed to map comment")
         }
+        await activityNotifications.notifyComment(commentID: mapped.id.rawValue)
         return mapped
     }
 
@@ -420,6 +424,9 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
                 if Self.isUniqueViolation(error) { return }
                 throw error
             }
+            await activityNotifications.notifyLike(
+                .commentLike(commentID: trimmed, source: source)
+            )
         } else {
             try await supabase.database.delete(
                 from: "comment_likes",
@@ -449,6 +456,10 @@ nonisolated struct DefaultInteractionRepository: InteractionRepository {
     }
 
     // MARK: - Routing (web parity)
+
+    private var activityNotifications: ActivityNotificationClient {
+        ActivityNotificationClient(transport: supabase.transport)
+    }
 
     private func effectiveContentID(for target: InteractionTarget) async throws -> String {
         switch target.kind {

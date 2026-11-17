@@ -478,6 +478,9 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
     }
 
     func save(_ draft: TradeDraft) async throws -> Trade {
+        if let message = TradePointsAndRealizedRr.validateRealizedRrAgainstTargeted(draft: draft) {
+            throw AppError.domain(.tradeValidation(.message(message)))
+        }
         if draft.copyTradingPlan != nil {
             guard let source = try await saveCopyTraded(draft).first else {
                 throw AppError.unknown(message: "Copy trading group has no linked accounts.")
@@ -611,6 +614,9 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
     func update(id: TradeID, draft: TradeDraft, previous: Trade) async throws -> Trade {
         guard let userID = await session.currentUserID else {
             throw AppError.domain(.permission(.notAuthenticated))
+        }
+        if let message = TradePointsAndRealizedRr.validateRealizedRrAgainstTargeted(draft: draft) {
+            throw AppError.domain(.tradeValidation(.message(message)))
         }
         let body = TradeMapper.updateBody(from: draft, createdAt: previous.createdAt, previous: previous)
         #if DEBUG

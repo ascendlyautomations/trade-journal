@@ -653,6 +653,8 @@ nonisolated struct ExploreBootstrapV1: Codable, Sendable, Equatable {
 
     nonisolated struct DataPayload: Codable, Sendable, Equatable {
         var traders: [ExploreTraderWireV1]
+        /// Avatar-qualified home-rail candidates (offset-0 bootstrap only).
+        var suggested_traders: [ExploreTraderWireV1]?
         var rooms: [ExploreRoomWireV1]
         var social_counts: [String: SocialCount]
         var following_ids: [String]

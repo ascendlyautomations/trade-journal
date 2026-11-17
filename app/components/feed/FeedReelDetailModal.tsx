@@ -314,6 +314,7 @@ export default function FeedReelDetailModal({
             viewerUserId={user?.id ?? null}
             openTradeRef={openTradeRef}
             tradeExpandSignal={tradeExpandSignal}
+            displayedClipCaption={modalDetails.caption}
           />
           {modalDetails.caption ? (
             <p className="whitespace-pre-wrap leading-relaxed text-white">

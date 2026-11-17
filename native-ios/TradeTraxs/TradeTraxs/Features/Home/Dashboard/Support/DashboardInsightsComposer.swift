@@ -18,7 +18,8 @@ nonisolated enum DashboardInsightsComposer {
         trades: [Trade],
         strategyHighlights: DashboardStrategyHighlights?,
         isLoading: Bool,
-        tradeCount: Int
+        tradeCount: Int,
+        preferences: PreferenceRuleContext? = nil
     ) -> DashboardInsightsPresentation {
         var performance: [DashboardInsightItem] = []
         var advancedEdge: [DashboardInsightItem] = []
@@ -44,7 +45,7 @@ nonisolated enum DashboardInsightsComposer {
                 riskBehavior.append(worst)
                 coverage.worstSetup = true
             }
-            riskBehavior.append(contentsOf: DashboardClientInsights.behaviorWarnings(from: trades))
+        riskBehavior.append(contentsOf: DashboardClientInsights.behaviorWarnings(from: trades, preferences: preferences))
             markCoverage(riskBehavior, into: &coverage)
         }
 

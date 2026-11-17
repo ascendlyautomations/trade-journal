@@ -82,7 +82,6 @@ enum ExperienceThemedMaterial {
 
 private struct ExperienceInsetGroupedListModifier: ViewModifier {
     var pageBackground: Bool
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.themeColors) private var colors
 
     func body(content: Content) -> some View {
@@ -93,7 +92,7 @@ private struct ExperienceInsetGroupedListModifier: ViewModifier {
             .background {
                 if pageBackground {
                     colors.groupedBackground.ignoresSafeArea()
-                } else if colorScheme == .dark {
+                } else {
                     colors.backgroundPrimary.ignoresSafeArea()
                 }
             }
@@ -114,7 +113,6 @@ private struct ExperiencePlainListModifier: ViewModifier {
 
 private struct ExperienceTradeTraxsFormModifier: ViewModifier {
     var pageBackground: Bool
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.themeColors) private var colors
 
     func body(content: Content) -> some View {
@@ -124,7 +122,7 @@ private struct ExperienceTradeTraxsFormModifier: ViewModifier {
             .background {
                 if pageBackground {
                     colors.groupedBackground.ignoresSafeArea()
-                } else if colorScheme == .dark {
+                } else {
                     colors.backgroundPrimary.ignoresSafeArea()
                 }
             }
@@ -132,15 +130,10 @@ private struct ExperienceTradeTraxsFormModifier: ViewModifier {
 }
 
 private struct ExperienceChromeBarBackgroundModifier: ViewModifier {
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.themeColors) private var colors
 
     func body(content: Content) -> some View {
-        if colorScheme == .dark {
-            content.background(colors.backgroundSecondary)
-        } else {
-            content.background(.bar)
-        }
+        content.background(colors.backgroundSecondary)
     }
 }
 

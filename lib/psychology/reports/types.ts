@@ -81,7 +81,10 @@ export type PsychologyAnalyticsReport = {
   dashboardCards: PsychologyInsightCard[]
   sections: PsychologyAnalyticsSection[]
   enrichedTradeCount: number
+  /** Trades that found any check-in on their Eastern calendar date. */
   checkInMatchedTradeCount: number
+  /** Unique Eastern calendar dates with a complete check-in and at least one trade. */
+  matchedDayCount: number
 }
 
 export type PsychologyReportTrade = {
@@ -89,11 +92,12 @@ export type PsychologyReportTrade = {
   entryAtMs: number
   entry_time: string
   created_at?: string | null
-  pnl: number
+  pnl: number | null
   rr: number | null
   realizedRr?: number | null
   mode?: string | null
   account_type?: string | null
+  accountId?: string | null
   emotion: string | null
   confidence: number | null
   followedPlan: boolean | null
@@ -134,6 +138,9 @@ export type PsychologyReportBehaviorSummary = {
   afterTwoLossesBaselineWinRate: number | null
   earlyTradeAvgPnL: number | null
   lateTradeAvgPnL: number | null
+  afterLossLabel?: string | null
+  earlyLabel?: string | null
+  lateLabel?: string | null
 }
 
 export type PsychologyReportComparison = {
@@ -201,6 +208,12 @@ export type PsychologyCoachGuardrailFacts = {
   maxTradesDaySoftLimit: number | null
   lateTradeAveragePnL: number | null
   earlyTradeAveragePnL: number | null
+  /** True only when lower stress actually beat higher stress. */
+  highStressWeaker: boolean
+  /** True only when higher focus actually beat lower focus. */
+  lowFocusWeaker: boolean
+  personalLossPause?: boolean
+  personalTradeCap?: boolean
 }
 
 export type PsychologyCoachFacts = {

@@ -4,6 +4,9 @@ import Foundation
 ///
 /// No duplicate token storage on the server — reuses `device_push_tokens`.
 protocol DevicePushTokenClienting: Sendable {
+    /// Login-shell clients must stay false so a no-op upload cannot count as registered.
+    var registersTokensWithServer: Bool { get }
+
     func register(
         deviceToken: String,
         previousDeviceToken: String?,
@@ -12,6 +15,10 @@ protocol DevicePushTokenClienting: Sendable {
     ) async throws
 
     func unregister(deviceToken: String?, allDevices: Bool) async throws
+}
+
+extension DevicePushTokenClienting {
+    var registersTokensWithServer: Bool { true }
 }
 
 struct DevicePushTokenClient: DevicePushTokenClienting {

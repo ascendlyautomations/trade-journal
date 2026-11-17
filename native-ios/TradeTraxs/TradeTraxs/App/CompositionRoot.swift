@@ -765,6 +765,8 @@ final class AccessTokenSource: @unchecked Sendable {
 
 /// Push token registration deferred until production bootstrap completes.
 private struct LoginShellDevicePushTokenClient: DevicePushTokenClienting {
+    var registersTokensWithServer: Bool { false }
+
     func register(
         deviceToken: String,
         previousDeviceToken: String?,

@@ -45,7 +45,7 @@ export default function PsychologyAnalyticsOverview({
       <div className="grid grid-cols-3 gap-2">
         <CountTile label="Check-in days" value={counts.checkInPsychDays} />
         <CountTile label="Qualifying trades" value={counts.scopedTradeCount} />
-        <CountTile label="Matched days" value={counts.matchedTradeCount} />
+        <CountTile label="Matched days" value={counts.matchedDayCount} />
       </div>
 
       {showMetrics ? (
@@ -60,18 +60,14 @@ export default function PsychologyAnalyticsOverview({
                 {formatPsychologyWinRate(baseline.winRate)}
               </p>
             </div>
-            <div>
-              <p className="text-[10px] uppercase text-gray-500">Avg P&L / trade</p>
-              <p className="font-semibold tabular-nums text-white">
-                {formatPsychologyMoney(baseline.averagePnL ?? 0)}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase text-gray-500">Expected $ / trade</p>
-              <p className="font-semibold tabular-nums text-white">
-                {formatPsychologyMoney(baseline.expectancy ?? 0)}
-              </p>
-            </div>
+            {baseline.averagePnL != null ? (
+              <div>
+                <p className="text-[10px] uppercase text-gray-500">Avg P&L / trade</p>
+                <p className="font-semibold tabular-nums text-white">
+                  {formatPsychologyMoney(baseline.averagePnL)}
+                </p>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

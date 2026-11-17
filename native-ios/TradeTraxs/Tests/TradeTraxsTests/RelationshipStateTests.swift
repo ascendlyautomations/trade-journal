@@ -61,6 +61,44 @@ final class RelationshipStateTests: XCTestCase {
         XCTAssertNil(unknown)
     }
 
+    func testRemoveFollowerPatchesOwnerStatsAndFollowersList() {
+        let cache = DetailPresentationCache()
+        configureCoordinator(cache: cache)
+        let owner = viewerA
+        let follower = target
+        let stats = ProfileStats(
+            profileID: owner,
+            followerCount: 4,
+            followingCount: 2,
+            postCount: 0,
+            tradeCount: 0,
+            publicTradeCount: 0
+        )
+        cache.seed(stats: stats)
+        let fan = Profile(
+            id: follower,
+            userID: UserID(follower.rawValue),
+            username: "fan",
+            displayName: "Fan",
+            bio: nil,
+            avatar: nil,
+            traderType: nil,
+            tradingStyle: nil,
+            primaryMarket: nil,
+            startedTradingAt: nil,
+            isPrivate: false,
+            isCreator: false,
+            createdAt: Date()
+        )
+        cache.seed(followers: [fan], for: owner)
+
+        FollowMutationCoordinator.shared.applyFollowerRemoved(owner: owner, follower: follower)
+
+        XCTAssertEqual(cache.stats(for: owner)?.followerCount, 3)
+        XCTAssertTrue(cache.followers(for: owner)?.isEmpty == true)
+        XCTAssertEqual(FollowMutationCoordinator.shared.latest, .followerRemoved(owner: owner, follower: follower))
+    }
+
     func testFollowPatchesMemoryAndDisk() async {
         let cache = DetailPresentationCache()
         configureCoordinator(cache: cache)

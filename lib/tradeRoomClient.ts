@@ -1,10 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import {
   effectiveJoinPolicy,
+  persistedTradeRoomIsPrivate,
   normalizedChannelName,
   type TradeRoomCategory,
   type TradeRoomConfiguration,
   type TradeRoomJoinPolicy,
+  TRADE_ROOM_VALIDATION,
   validateTradeRoomConfiguration,
 } from "@/lib/tradeRoomConfiguration"
 import { clearRoomSessionsForUser } from "@/lib/roomSessionCache"
@@ -61,7 +63,9 @@ function mapRpcCreateError(message: string): string {
   }
   if (message.includes("room_name_required")) return "Room name is required."
   if (message.includes("too_many_discovery_tags")) return "Choose up to 5 tags."
-  if (message.includes("too_many_channels")) return "You can have up to 5 sub-rooms."
+  if (message.includes("too_many_channels")) {
+    return `You can have up to ${TRADE_ROOM_VALIDATION.maxChannels} sub-rooms.`
+  }
   if (message.includes("duplicate_channel_name")) {
     return "Sub-room names must be unique."
   }
@@ -86,7 +90,7 @@ export async function createTradeRoomViaRpc(
     p_description: configuration.description.trim() || null,
     p_image_url: configuration.imageUrl,
     p_show_on_profile: configuration.showsOnProfile,
-    p_is_private: configuration.visibility === "private",
+    p_is_private: persistedTradeRoomIsPrivate(configuration),
     p_category: configuration.category,
     p_discovery_tags: configuration.discoveryTags,
     p_join_policy: effectiveJoinPolicy(configuration),

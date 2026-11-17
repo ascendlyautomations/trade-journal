@@ -3,6 +3,7 @@ import { scoreConsistencyCategory } from "./consistency.ts"
 import { scoreDisciplineCategory } from "./discipline.ts"
 import { scorePsychologyCategory } from "./psychologyCategory.ts"
 import { scoreRiskCategory } from "./risk.ts"
+import { buildScorecardAdherence, buildScorecardInsights } from "./readout.ts"
 import { postTripleLossWinRate } from "./tradeMapping.ts"
 import type {
   ScorecardBuildInput,
@@ -10,6 +11,7 @@ import type {
   ScorecardOverallContribution,
   ScorecardResult,
 } from "./types.ts"
+import type { PreferenceRuleContext } from "../analytics/preferenceCompliance.ts"
 import {
   SCORECARD_CATEGORY_WEIGHTS,
   SCORECARD_MIN_TRADES_OVERALL,
@@ -62,7 +64,7 @@ function computeOverall(
 
   if (scored.length === 0) {
     return baseBuilding(
-      "Building your score, tag plan adherence after losses and on more trades to unlock category scores. Category breakdowns below show coverage and insights."
+      "Tag plan adherence on trades to unlock the score."
     )
   }
 
@@ -104,11 +106,7 @@ function computeOverall(
     "strong"
   )
 
-  let statusMessage = "Overall trading score for the current dashboard scope."
-  if (nominalIncluded < 0.999) {
-    const pct = Math.round(nominalIncluded * 100)
-    statusMessage += ` Based on ${scored.length} of 4 categories (${pct}% of nominal weight), Psychology and Risk are insights/coverage only in Phase 1.`
-  }
+  const statusMessage = "How consistently you followed your plan in this scope."
 
   return {
     score,
@@ -123,7 +121,10 @@ function computeOverall(
   }
 }
 
-export function buildTradingScorecard(input: ScorecardBuildInput): ScorecardResult {
+export function buildTradingScorecard(
+  input: ScorecardBuildInput,
+  preferences: PreferenceRuleContext | null = null
+): ScorecardResult {
   const { trades, checkIns, analytics, scopeLabel } = input
   const postLoss = analytics.postTripleLossWinRate ?? postTripleLossWinRate(trades)
 
@@ -150,6 +151,8 @@ export function buildTradingScorecard(input: ScorecardBuildInput): ScorecardResu
     generatedAtMs: Date.now(),
     overall,
     categories,
+    adherence: buildScorecardAdherence(trades, checkIns),
+    insights: buildScorecardInsights(trades, preferences),
   }
 }
 

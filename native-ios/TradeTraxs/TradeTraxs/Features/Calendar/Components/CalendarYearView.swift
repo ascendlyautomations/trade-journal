@@ -102,6 +102,7 @@ private struct CalendarYearMonthGrid: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
+    @Environment(\.colorScheme) private var colorScheme
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: ExperienceSpacing.xs), count: 3)
 
@@ -151,12 +152,15 @@ private struct CalendarYearMonthGrid: View {
     }
 
     private func background(for card: TradingYearMonthCard) -> Color {
-        if card.isFutureMonth || (card.summary.tradingDayCount == 0 && card.summary.tradeCount == 0) {
-            return colors.fillTertiary.opacity(0.35)
-        }
-        if card.summary.netPnL > 0 { return colors.profit.opacity(0.12) }
-        if card.summary.netPnL < 0 { return colors.loss.opacity(0.12) }
-        return colors.neutralMetric.opacity(0.12)
+        let isNeutral = card.isFutureMonth
+            || (card.summary.tradingDayCount == 0 && card.summary.tradeCount == 0)
+        let netPnL = card.isFutureMonth ? 0 : card.summary.netPnL
+        return CalendarCellAppearance.yearMonthCardFill(
+            colors: colors,
+            colorScheme: colorScheme,
+            isNeutral: isNeutral,
+            netPnL: netPnL
+        )
     }
 }
 

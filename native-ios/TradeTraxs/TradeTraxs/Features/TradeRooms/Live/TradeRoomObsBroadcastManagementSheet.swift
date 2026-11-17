@@ -8,8 +8,9 @@ struct TradeRoomObsBroadcastManagementSheet: View {
     let imagePipeline: any ImagePipeline
     let chatUserId: String?
     let chatDisplayName: String
+    @State private var streamTitleDraft: String = ""
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.themeColors) private var colors
+  @Environment(\.themeColors) private var colors
 
     var body: some View {
         Group {
@@ -71,7 +72,7 @@ struct TradeRoomObsBroadcastManagementSheet: View {
                     } else {
                         switch controller.phase {
                         case .livePublic:
-                            EmptyView()
+                            goingLiveSection
                         case .preparing:
                             preparingSection
                         case .idle:
@@ -84,9 +85,17 @@ struct TradeRoomObsBroadcastManagementSheet: View {
                     }
 
                     if let err = controller.errorMessage, !err.isEmpty, !showsObsInitializingPlaceholder {
-                        Text(err)
-                            .font(.system(.footnote, design: .rounded))
-                            .foregroundStyle(colors.error)
+                        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                            Text(err)
+                                .font(.system(.footnote, design: .rounded))
+                                .foregroundStyle(colors.error)
+                            Button("Try again") {
+                                controller.retryPrivateObsSessionEnsure(roomID: roomID)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(colors.accent)
+                            .disabled(controller.isBusy)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -137,7 +146,27 @@ struct TradeRoomObsBroadcastManagementSheet: View {
             Text("No active OBS preparation session for this room.")
                 .font(.system(.subheadline, design: .rounded))
                 .foregroundStyle(colors.textSecondary)
+            Button("Set up OBS") {
+                controller.retryPrivateObsSessionEnsure(roomID: roomID)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(colors.accent)
+            .disabled(controller.isBusy || controller.isEnsuringPrivateObsSession)
         }
+    }
+
+    private var goingLiveSection: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            HStack(spacing: ExperienceSpacing.sm) {
+                ProgressView()
+                Text("Opening live stream controls…")
+                    .font(.system(.subheadline, design: .rounded))
+                    .foregroundStyle(colors.textSecondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Opening live stream controls")
     }
 
     private var foreignHostSection: some View {
@@ -152,6 +181,8 @@ struct TradeRoomObsBroadcastManagementSheet: View {
 
     private var preparingSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+            streamTitleEditor
+
             Text("Private setup — stream is not visible to the room until you tap Go live to room.")
                 .font(.system(.subheadline, design: .rounded))
                 .foregroundStyle(colors.textSecondary)
@@ -266,6 +297,35 @@ struct TradeRoomObsBroadcastManagementSheet: View {
                 Text("Ingress: \(snap)")
                     .font(.system(.caption2, design: .rounded))
                     .foregroundStyle(colors.textSecondary)
+            }
+        }
+    }
+
+    private var streamTitleEditor: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            Text("Stream title")
+                .font(.system(.caption, design: .rounded).weight(.semibold))
+                .foregroundStyle(colors.textSecondary)
+            TextField("e.g. Trading NY Session — NQ Futures", text: $streamTitleDraft)
+                .textInputAutocapitalization(.sentences)
+                .onAppear {
+                    streamTitleDraft = controller.streamTitle ?? streamTitleDraft
+                }
+                .onChange(of: controller.streamTitle) { _, newValue in
+                    if streamTitleDraft.isEmpty, let newValue {
+                        streamTitleDraft = newValue
+                    }
+                }
+            HStack {
+                Text("\(streamTitleDraft.trimmingCharacters(in: .whitespacesAndNewlines).count)/\(TradeRoomBroadcastStreamTitle.maxLength)")
+                    .font(.caption2)
+                    .foregroundStyle(colors.textSecondary)
+                Spacer()
+                Button("Save title") {
+                    Task { await controller.updateStreamTitle(roomID: roomID, draft: streamTitleDraft) }
+                }
+                .font(.caption.weight(.semibold))
+                .disabled(controller.isBusy)
             }
         }
     }

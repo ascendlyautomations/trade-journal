@@ -143,6 +143,7 @@ struct SuggestedTradersView: View {
                 ExploreTraderListRow(
                     trader: trader,
                     profile: viewModel.resolvedProfile(for: trader),
+                    viewerProfileID: viewModel.authenticatedProfileID,
                     imagePipeline: imagePipeline,
                     isFollowing: viewModel.isFollowing(trader),
                     showsFollowControl: viewModel.showsFollowControl(for: trader),

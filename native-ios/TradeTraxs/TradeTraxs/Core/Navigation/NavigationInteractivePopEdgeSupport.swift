@@ -26,14 +26,14 @@ enum NavigationInteractivePopEdgeSupport {
 
 // MARK: - UIKit enabler
 
-struct NavigationInteractivePopEdgeEnabler: UIViewControllerRepresentable {
+struct NavigationInteractivePopEdgeEnabler: UIViewControllerRepresentable, Equatable {
+    static func == (lhs: Self, rhs: Self) -> Bool { true }
+
     func makeUIViewController(context: Context) -> Controller {
         Controller()
     }
 
-    func updateUIViewController(_ uiViewController: Controller, context: Context) {
-        uiViewController.enableInteractivePopIfNeeded()
-    }
+    func updateUIViewController(_ uiViewController: Controller, context: Context) {}
 
     final class Controller: UIViewController {
         private let popDelegate = PopGestureDelegate()
@@ -76,6 +76,6 @@ struct NavigationInteractivePopEdgeEnabler: UIViewControllerRepresentable {
 extension View {
     /// Re-enables swipe-back, limited to the leading edge (content-area swipes stay local).
     func navigationInteractivePopFromLeadingEdgeOnly() -> some View {
-        background(NavigationInteractivePopEdgeEnabler())
+        background(NavigationInteractivePopEdgeEnabler().equatable())
     }
 }

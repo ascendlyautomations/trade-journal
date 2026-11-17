@@ -15,6 +15,25 @@ export type TradeRoomCategory = (typeof TRADE_ROOM_CATEGORIES)[number]["value"]
 export type TradeRoomVisibility = "public" | "private"
 export type TradeRoomJoinPolicy = "open" | "approval"
 
+export type TradeRoomAccessMode = "public_open" | "request_to_join"
+
+export const TRADE_ROOM_ACCESS_OPTIONS: {
+  value: TradeRoomAccessMode
+  label: string
+  summary: string
+}[] = [
+  {
+    value: "public_open",
+    label: "Public",
+    summary: "Anyone can join instantly.",
+  },
+  {
+    value: "request_to_join",
+    label: "Request to Join",
+    summary: "Users request membership and are approved before joining.",
+  },
+]
+
 export type TradeRoomDraftChannel = {
   id: string
   name: string
@@ -35,6 +54,8 @@ export type TradeRoomConfiguration = {
   membersCanShareTrades: boolean
   membersCanShareMedia: boolean
   channels: TradeRoomDraftChannel[]
+  /** Set when loading `is_private` rooms — preserved when access stays Request to Join. */
+  preservesLegacyPrivate?: boolean
 }
 
 export const TRADE_ROOM_PRESET_DISCOVERY_TAGS = [
@@ -54,7 +75,7 @@ export const TRADE_ROOM_VALIDATION = {
   descriptionMaxLength: 500,
   rulesMaxLength: 2000,
   maxDiscoveryTags: 5,
-  maxChannels: 5,
+  maxChannels: 10,
   channelNameMaxLength: 64,
 } as const
 
@@ -99,8 +120,36 @@ export function hasDuplicateChannelNames(channels: TradeRoomDraftChannel[]): boo
   return false
 }
 
+export function tradeRoomAccessMode(config: TradeRoomConfiguration): TradeRoomAccessMode {
+  if (config.preservesLegacyPrivate) return "request_to_join"
+  return config.joinPolicy === "approval" ? "request_to_join" : "public_open"
+}
+
+export function applyTradeRoomAccessMode(
+  config: TradeRoomConfiguration,
+  mode: TradeRoomAccessMode,
+): TradeRoomConfiguration {
+  if (mode === "public_open") {
+    return {
+      ...config,
+      preservesLegacyPrivate: false,
+      visibility: "public",
+      joinPolicy: "open",
+    }
+  }
+  return {
+    ...config,
+    joinPolicy: "approval",
+    visibility: config.preservesLegacyPrivate ? "private" : "public",
+  }
+}
+
+export function persistedTradeRoomIsPrivate(config: TradeRoomConfiguration): boolean {
+  return Boolean(config.preservesLegacyPrivate && tradeRoomAccessMode(config) === "request_to_join")
+}
+
 export function effectiveJoinPolicy(config: TradeRoomConfiguration): TradeRoomJoinPolicy {
-  if (config.visibility === "private") return "approval"
+  if (persistedTradeRoomIsPrivate(config)) return "open"
   return config.joinPolicy
 }
 
@@ -158,8 +207,9 @@ export function validateTradeRoomConfiguration(
   return null
 }
 
-export function tradeRoomVisibilitySummary(visibility: TradeRoomVisibility): string {
-  return visibility === "public"
-    ? "Discoverable in Suggested, Popular, and Explore."
-    : "Hidden from public discovery. Invite or link access only."
+export function legacyPrivateAccessFootnote(config: TradeRoomConfiguration): string | null {
+  if (!config.preservesLegacyPrivate || tradeRoomAccessMode(config) !== "request_to_join") {
+    return null
+  }
+  return "This room uses a legacy private setting and stays hidden from discovery until you switch it to Public."
 }

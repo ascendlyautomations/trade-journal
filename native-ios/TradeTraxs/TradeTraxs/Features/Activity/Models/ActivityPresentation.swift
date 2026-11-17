@@ -7,13 +7,22 @@ enum ActivityLoadPhase: Equatable {
     case failed(String)
 }
 
+/// Chronological inbox sections — newest sections first; each notification belongs to exactly one bucket.
 enum ActivityTimeSection: String, CaseIterable, Identifiable, Hashable {
     case today = "Today"
     case yesterday = "Yesterday"
     case thisWeek = "This Week"
-    case earlier = "Earlier"
+    case lastWeek = "Last Week"
+    case thisMonth = "This Month"
+    case lastMonth = "Last Month"
+    case older = "Older"
 
     var id: String { rawValue }
+
+    /// Display order — newest window first.
+    static let displayOrder: [ActivityTimeSection] = [
+        .today, .yesterday, .thisWeek, .lastWeek, .thisMonth, .lastMonth, .older,
+    ]
 }
 
 struct ActivityRowModel: Identifiable, Hashable {
@@ -46,6 +55,48 @@ struct ActivitySectionModel: Identifiable, Hashable {
     var rows: [ActivityRowModel]
 }
 
+/// Inclusive/exclusive day boundaries for mutual-exclusive Activity sections (local ``Calendar``).
+struct ActivityTimeSectionBoundaries: Equatable {
+    let startOfToday: Date
+    let startOfYesterday: Date
+    let startOfThisWeek: Date
+    let startOfLastWeek: Date
+    let startOfThisMonth: Date
+    let startOfLastMonth: Date
+
+    init(now: Date, calendar: Calendar) {
+        startOfToday = calendar.startOfDay(for: now)
+        startOfYesterday = calendar.date(byAdding: .day, value: -1, to: startOfToday) ?? startOfToday
+        startOfThisWeek = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? startOfToday
+        let lastWeekAnchor = calendar.date(byAdding: .day, value: -1, to: startOfThisWeek) ?? startOfThisWeek
+        startOfLastWeek = calendar.dateInterval(of: .weekOfYear, for: lastWeekAnchor)?.start ?? startOfThisWeek
+        startOfThisMonth = calendar.dateInterval(of: .month, for: now)?.start ?? startOfToday
+        startOfLastMonth = calendar.date(byAdding: .month, value: -1, to: startOfThisMonth) ?? startOfThisMonth
+    }
+
+    func section(for createdAt: Date) -> ActivityTimeSection {
+        if createdAt >= startOfToday {
+            return .today
+        }
+        if createdAt >= startOfYesterday {
+            return .yesterday
+        }
+        if createdAt >= startOfThisWeek {
+            return .thisWeek
+        }
+        if createdAt >= startOfLastWeek {
+            return .lastWeek
+        }
+        if createdAt >= startOfThisMonth {
+            return .thisMonth
+        }
+        if createdAt >= startOfLastMonth {
+            return .lastMonth
+        }
+        return .older
+    }
+}
+
 enum ActivityPresentation {
     static func sections(
         from notifications: [ActivityNotification],
@@ -53,16 +104,9 @@ enum ActivityPresentation {
         now: Date = .now,
         calendar: Calendar = .current
     ) -> [ActivitySectionModel] {
-        let startOfToday = calendar.startOfDay(for: now)
-        let startOfYesterday = calendar.date(byAdding: .day, value: -1, to: startOfToday) ?? startOfToday
-        let startOfWeek = calendar.date(byAdding: .day, value: -7, to: startOfToday) ?? startOfToday
+        let boundaries = ActivityTimeSectionBoundaries(now: now, calendar: calendar)
 
-        var buckets: [ActivityTimeSection: [ActivityRowModel]] = [
-            .today: [],
-            .yesterday: [],
-            .thisWeek: [],
-            .earlier: [],
-        ]
+        var buckets: [ActivityTimeSection: [ActivityRowModel]] = [:]
 
         let grouped = ActivityNotificationGrouping.group(notifications, actors: actors)
         for item in grouped {
@@ -87,21 +131,13 @@ enum ActivityPresentation {
                 groupedNotificationIDs: item.notificationIDs
             )
 
-            let section: ActivityTimeSection
-            if notification.createdAt >= startOfToday {
-                section = .today
-            } else if notification.createdAt >= startOfYesterday {
-                section = .yesterday
-            } else if notification.createdAt >= startOfWeek {
-                section = .thisWeek
-            } else {
-                section = .earlier
-            }
+            let section = boundaries.section(for: notification.createdAt)
             buckets[section, default: []].append(row)
         }
 
-        return ActivityTimeSection.allCases.compactMap { section in
-            guard let rows = buckets[section], !rows.isEmpty else { return nil }
+        return ActivityTimeSection.displayOrder.compactMap { section in
+            guard var rows = buckets[section], !rows.isEmpty else { return nil }
+            rows.sort { $0.notification.createdAt > $1.notification.createdAt }
             return ActivitySectionModel(section: section, rows: rows)
         }
     }

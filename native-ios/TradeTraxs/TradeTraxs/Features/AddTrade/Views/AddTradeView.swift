@@ -131,8 +131,7 @@ struct AddTradeView: View {
                     onClose: { showsInstrumentPicker = false }
                 )
             }
-            .experienceSheetChrome()
-            .presentationDetents([.fraction(0.75)])
+            .experienceSheetChrome(detents: [.fraction(0.75)])
         }
         .confirmationDialog(
             "Add Clip",
@@ -182,7 +181,7 @@ struct AddTradeView: View {
                 )
             }
             .experienceSheetChrome()
-            .onAppear { viewModel.loadUnattachedReelsIfNeeded() }
+            .onAppear { viewModel.reloadUnattachedReelsForPicker() }
         }
         .sheet(isPresented: $showsPsychologySheet) {
             AddTradePsychologySheet(viewModel: viewModel) {
@@ -478,14 +477,38 @@ struct AddTradeView: View {
                     VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                         Text("Targeted Risk/Reward *")
                             .experienceStyle(.caption, color: colors.secondaryText)
-                        HStack(spacing: ExperienceSpacing.xs) {
-                            Text("1 :")
-                                .experienceStyle(.body, color: colors.secondaryText)
-                            TextField("2.35", text: $viewModel.rrText.numericInput(.riskReward))
-                                .keyboardType(.decimalPad)
-                                .focused($focusedField, equals: .rr)
-                                .accessibilityLabel("Risk reward ratio")
-                                .accessibilityIdentifier("addTrade.rr")
+                        HStack(alignment: .center, spacing: ExperienceSpacing.xs) {
+                            HStack(spacing: ExperienceSpacing.xxs) {
+                                Text("1 :")
+                                    .experienceStyle(.body, color: colors.secondaryText)
+                                TextField("2.35", text: $viewModel.rrText.numericInput(.riskReward))
+                                    .keyboardType(.decimalPad)
+                                    .focused($focusedField, equals: .rr)
+                                    .accessibilityLabel("Risk reward ratio")
+                                    .accessibilityIdentifier("addTrade.rr")
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                outcomeModeCheckbox(
+                                    title: "Full TP?",
+                                    isOn: viewModel.fullTakeProfit,
+                                    id: "addTrade.fullTp"
+                                ) {
+                                    viewModel.toggleFullTakeProfit()
+                                }
+                                outcomeModeCheckbox(
+                                    title: "Early Exit?",
+                                    isOn: viewModel.earlyExit,
+                                    id: "addTrade.earlyExit"
+                                ) {
+                                    viewModel.toggleEarlyExit()
+                                }
+                            }
+                            .fixedSize(horizontal: true, vertical: false)
+                        }
+                        if let error = viewModel.fieldErrors[.realizedRr] {
+                            Text(error).foregroundStyle(colors.loss).font(.caption)
                         }
                         if let error = viewModel.fieldErrors[.rr] {
                             Text(error).foregroundStyle(colors.loss).font(.caption)
@@ -494,28 +517,24 @@ struct AddTradeView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .listRowInsets(AddTradeFormLayout.rowInsets)
-            } header: {
-                addTradeSectionHeader("Risk & Result")
-            }
 
-            if viewModel.showsMaxRrReachedField {
-                Section {
-                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                        Text("Max R:R Reached *")
-                            .experienceStyle(.caption, color: colors.secondaryText)
-                        TextField("2.5", text: $viewModel.maxRrReachedText.numericInput(.riskReward))
-                            .keyboardType(.decimalPad)
-                            .focused($focusedField, equals: .maxRrReached)
-                            .accessibilityLabel("Maximum risk reward reached")
-                            .accessibilityIdentifier("addTrade.maxRrReached")
-                        Text("Highest reward-to-risk ratio reached before the trade closed.")
-                            .experienceStyle(.caption2, color: colors.tertiaryText)
-                        if let error = viewModel.fieldErrors[.maxRrReached] {
-                            Text(error).foregroundStyle(colors.loss).font(.caption)
+                if viewModel.earlyExit, viewModel.showsMaxRrReachedField {
+                    HStack(alignment: .top, spacing: ExperienceSpacing.md) {
+                        earlyExitMaxRrReachedField
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if viewModel.showsExitRrField {
+                            earlyExitExitRrField
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                     .listRowInsets(AddTradeFormLayout.rowInsets)
+                } else if viewModel.showsMaxRrReachedField {
+                    earlyExitMaxRrReachedField
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .listRowInsets(AddTradeFormLayout.rowInsets)
                 }
+            } header: {
+                addTradeSectionHeader("Risk & Result")
             }
 
             Section {
@@ -539,7 +558,7 @@ struct AddTradeView: View {
 
                 HStack(alignment: .top, spacing: ExperienceSpacing.md) {
                     compactNumericField(
-                        "Contracts",
+                        "Contracts *",
                         text: $viewModel.contractsText,
                         field: .contracts,
                         error: viewModel.fieldErrors[.contracts],
@@ -553,6 +572,15 @@ struct AddTradeView: View {
                         style: .tradeQuantity
                     )
                 }
+                .listRowInsets(AddTradeFormLayout.rowInsets)
+
+                compactNumericField(
+                    "Planned Risk ($)",
+                    text: $viewModel.plannedRiskText,
+                    field: .plannedRisk,
+                    error: viewModel.fieldErrors[.plannedRisk],
+                    style: .propFirmAmount
+                )
                 .listRowInsets(AddTradeFormLayout.rowInsets)
             } header: {
                 addTradeSectionHeader("Execution")
@@ -657,7 +685,7 @@ struct AddTradeView: View {
 
                 inlineNotesEditor(
                     text: $viewModel.notesText,
-                    placeholder: "Top confluences, context, what you saw…",
+                    placeholder: "Notes: Top confluences, context, what you saw…",
                     minHeight: 64,
                     accessibilityIdentifier: "addTrade.notes"
                 )
@@ -676,6 +704,27 @@ struct AddTradeView: View {
                         .accessibilityIdentifier("addTrade.timeframe.custom")
                 }
 
+                Picker("Followed plan?", selection: followedPlanBinding) {
+                    Text("Not set").tag(AddTradeFollowedPlanPickerValue.unset)
+                    Text("Yes").tag(AddTradeFollowedPlanPickerValue.yes)
+                    Text("No").tag(AddTradeFollowedPlanPickerValue.no)
+                }
+                .accessibilityIdentifier("addTrade.followedPlan")
+
+                Picker("Market condition", selection: $viewModel.marketConditionPickerSelection) {
+                    Text("Not set").tag("")
+                    ForEach(TradeReviewCatalog.marketConditionOptions, id: \.self) { condition in
+                        Text(condition).tag(condition)
+                    }
+                }
+                .accessibilityIdentifier("addTrade.marketCondition")
+
+                if viewModel.marketConditionPickerSelection == TradeReviewCatalog.customPsychologyToken {
+                    TextField("Custom market condition", text: $viewModel.marketConditionCustomText)
+                        .textInputAutocapitalization(.sentences)
+                        .accessibilityIdentifier("addTrade.marketCondition.custom")
+                }
+
                 Toggle("News event", isOn: $viewModel.newsEvent)
                     .accessibilityIdentifier("addTrade.newsEvent")
 
@@ -686,6 +735,25 @@ struct AddTradeView: View {
             }
             .accessibilityIdentifier("addTrade.tradeReview")
         }
+    }
+
+    private var followedPlanBinding: Binding<AddTradeFollowedPlanPickerValue> {
+        Binding(
+            get: {
+                switch viewModel.followedPlan {
+                case nil: return .unset
+                case true: return .yes
+                case false: return .no
+                }
+            },
+            set: { value in
+                switch value {
+                case .unset: viewModel.followedPlan = nil
+                case .yes: viewModel.followedPlan = true
+                case .no: viewModel.followedPlan = false
+                }
+            }
+        )
     }
 
     private var psychologyRow: some View {
@@ -992,6 +1060,36 @@ struct AddTradeView: View {
         createAccountSheet = CreateAccountSheetPresentation(data: brokerData)
     }
 
+    private var earlyExitMaxRrReachedField: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            Text("Max R:R Reached\(viewModel.requiresMaxRrReached ? " *" : "")")
+                .experienceStyle(.caption, color: colors.secondaryText)
+            TextField("2.5", text: $viewModel.maxRrReachedText.numericInput(.riskReward))
+                .keyboardType(.decimalPad)
+                .focused($focusedField, equals: .maxRrReached)
+                .accessibilityLabel("Maximum risk reward reached")
+                .accessibilityIdentifier("addTrade.maxRrReached")
+            if let error = viewModel.fieldErrors[.maxRrReached] {
+                Text(error).foregroundStyle(colors.loss).font(.caption)
+            }
+        }
+    }
+
+    private var earlyExitExitRrField: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            Text("Exit R:R *")
+                .experienceStyle(.caption, color: colors.secondaryText)
+            TextField("1.0", text: $viewModel.exitRrText.numericInput(.riskReward))
+                .keyboardType(.decimalPad)
+                .focused($focusedField, equals: .exitRr)
+                .accessibilityLabel("Exit risk reward ratio")
+                .accessibilityIdentifier("addTrade.exitRr")
+            if let error = viewModel.fieldErrors[.exitRr] {
+                Text(error).foregroundStyle(colors.loss).font(.caption)
+            }
+        }
+    }
+
     private func compactNumericField(
         _ title: String,
         text: Binding<String>,
@@ -1003,7 +1101,7 @@ struct AddTradeView: View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             Text(title)
                 .experienceStyle(.caption, color: colors.secondaryText)
-            TextField(title == "Contracts" ? "0" : title, text: text.numericInput(style))
+            TextField(title.hasPrefix("Contracts") ? "0" : title, text: text.numericInput(style))
                 .keyboardType(keyboard)
                 .focused($focusedField, equals: field)
             if let error {
@@ -1064,9 +1162,9 @@ struct AddTradeView: View {
             viewModel.timeframeSelection = "5m"
             viewModel.newsEvent = true
             viewModel.confidenceLevel = 4
-            viewModel.emotionSelection = "Confident"
+            viewModel.emotionPickerSelection = "Confident"
             viewModel.followedPlan = true
-            viewModel.marketConditionSelection = "Trending"
+            viewModel.marketConditionPickerSelection = "Trending"
             viewModel.psychologyNotesText = "UI test psychology notes"
             showsPsychologySheet = true
         }
@@ -1180,9 +1278,34 @@ struct AddTradeView: View {
         Text(title)
             .padding(.top, -ExperienceSpacing.xxs)
     }
+
+    private func outcomeModeCheckbox(
+        title: String,
+        isOn: Bool,
+        id: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: isOn ? "checkmark.square.fill" : "square")
+                Text(title)
+            }
+            .font(.caption)
+            .foregroundStyle(colors.secondaryText)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(id)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
 }
 
 // MARK: - Create account sheet (matches Manage Accounts `.sheet(item:)` pattern)
+
+enum AddTradeFollowedPlanPickerValue: Hashable {
+    case unset
+    case yes
+    case no
+}
 
 private struct CreateAccountSheetPresentation: Identifiable {
     let id = UUID()

@@ -59,6 +59,10 @@ nonisolated protocol RoomRepository: Sendable {
     func requestJoin(roomID: RoomID) async throws -> TradeRoomJoinRequestState
     /// `rpc_v1_viewer_trade_room_join_request` — current viewer request row.
     func viewerJoinRequest(roomID: RoomID) async throws -> TradeRoomJoinRequestState?
+    /// Sets `room_members.is_favorited` for the active membership row.
+    func setRoomFavorited(roomID: RoomID, profileID: ProfileID, favorited: Bool) async throws
+    /// Active memberships the viewer has favorited.
+    func favoritedRoomIDs(for profileID: ProfileID) async throws -> Set<RoomID>
 }
 
 extension RoomRepository {
@@ -96,4 +100,8 @@ extension RoomRepository {
     func deleteMessage(roomID: RoomID, messageID: RoomMessageID) async throws {
         throw AppError.notImplemented(feature: "deleteMessage")
     }
+
+    func setRoomFavorited(roomID: RoomID, profileID: ProfileID, favorited: Bool) async throws {}
+
+    func favoritedRoomIDs(for profileID: ProfileID) async throws -> Set<RoomID> { [] }
 }

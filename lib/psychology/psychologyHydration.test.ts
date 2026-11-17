@@ -42,6 +42,7 @@ function emptyReport(overrides: Partial<PsychologyAnalyticsReport> = {}): Psycho
     sections: [],
     enrichedTradeCount: 5,
     checkInMatchedTradeCount: 0,
+    matchedDayCount: 0,
     ...overrides,
   }
 }

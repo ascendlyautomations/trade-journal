@@ -371,6 +371,10 @@ nonisolated struct DemoProfileRepository: ProfileRepository {
 
     func unfollow(from viewer: ProfileID, to target: ProfileID) async throws { throw DemoAuthRequired.error }
 
+    func removeFollower(_ follower: ProfileID, from owner: ProfileID) async throws {
+        throw DemoAuthRequired.error
+    }
+
     func followers(of profileID: ProfileID, page: PageRequest) async throws -> CursorPage<Profile> {
         CursorPage(items: [], nextCursor: nil)
     }

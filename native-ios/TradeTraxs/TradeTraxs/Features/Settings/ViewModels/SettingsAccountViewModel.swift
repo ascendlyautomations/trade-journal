@@ -73,8 +73,17 @@ final class SettingsAccountViewModel {
         return parts.joined(separator: "\n\n")
     }
 
-    var deleteAccountConfirmationMessage: String {
-        "This permanently deletes your TradeTraxs account and associated data. This action cannot be undone."
+    static let deleteAccountFinalConfirmationTitle = "Are you absolutely sure?"
+
+    static let deleteAccountFinalConfirmationMessage =
+        "This is your final warning. Deleting your account will permanently remove your trades, trading history, posts, messages, and account data. This action cannot be undone."
+
+    var deleteAccountFinalConfirmationTitle: String {
+        Self.deleteAccountFinalConfirmationTitle
+    }
+
+    var deleteAccountFinalConfirmationMessage: String {
+        Self.deleteAccountFinalConfirmationMessage
     }
 
     var appleSubscriptionDeletionWarningMessage: String {
@@ -264,6 +273,7 @@ final class SettingsAccountViewModel {
     }
 
     func confirmDeleteAccount() {
+        guard showsDeleteAccountConfirmation else { return }
         guard !isDeletingAccount else { return }
 #if DEBUG
         AccountDeletionDebugLog.confirmed()

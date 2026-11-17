@@ -123,6 +123,7 @@ struct LeaderboardScreenView: View {
                         LeaderboardRowView(
                             row: row,
                             profile: viewModel.resolvedProfile(for: row.profileID),
+                            viewerProfileID: viewModel.authenticatedProfileID,
                             imagePipeline: imagePipeline,
                             showsFollowButton: !row.isCurrentUser,
                             onOpen: { viewModel.openProfile(row) },

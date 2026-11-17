@@ -94,9 +94,14 @@ export default function ExploreLiveTradersNowSection({
                     </p>
                   ) : null}
                 </Link>
-                <p className="mt-1 line-clamp-2 text-[11px] text-[color:var(--tt-text-tertiary,#a8b3c2)]">
-                  {item.roomName}
+                <p className="mt-1 line-clamp-2 text-[11px] font-medium text-[color:var(--tt-text,#f0f3f6)]">
+                  {item.streamTitle?.trim() || item.roomName}
                 </p>
+                {item.streamTitle?.trim() ? (
+                  <p className="line-clamp-1 text-[10px] text-[color:var(--tt-text-tertiary,#a8b3c2)]">
+                    {item.roomName}
+                  </p>
+                ) : null}
                 {typeof item.viewerCount === "number" ? (
                   <p className="mt-1 text-[11px] text-[color:var(--tt-text-tertiary,#a8b3c2)]">
                     {item.viewerCount} watching

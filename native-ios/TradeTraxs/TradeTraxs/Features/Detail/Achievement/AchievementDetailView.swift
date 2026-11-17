@@ -10,7 +10,6 @@ struct AchievementDetailView: View {
     private let data: DataEnvironment
 
     @Environment(\.themeColors) private var colors
-    @Environment(\.experienceTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
@@ -180,6 +179,15 @@ struct AchievementDetailView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
+            .detailCommentsScrollOnOpen(
+                intent: .achievement(viewModel.achievementID),
+                anchorID: Self.commentsAnchorID,
+                isContentReady: viewModel.achievement != nil,
+                contentRevealed: contentRevealed,
+                detailCache: data.detailCache,
+                scrollProxy: proxy,
+                reduceMotion: reduceMotion
+            )
         }
     }
 
@@ -236,21 +244,9 @@ struct AchievementDetailView: View {
 
     @ViewBuilder
     private func achievementTextContent(_ achievement: Achievement) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            achievementTitleRow(achievement)
-
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             achievementMetadataTags(achievement)
-
-            if let description = achievement.description?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-               !description.isEmpty
-            {
-                Text(description)
-                    .experienceStyle(.body, color: colors.primaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("detail.achievement.description")
-            }
+            AchievementDetailMetadataSection(achievement: achievement)
         }
     }
 
@@ -276,68 +272,12 @@ struct AchievementDetailView: View {
     }
 
     @ViewBuilder
-    private func achievementTitleRow(_ achievement: Achievement) -> some View {
-        if ProfilePayoutTotals.isPayout(achievement.kind),
-           let payoutText = payoutDisplayText(for: achievement)
-        {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                Text(payoutText)
-                    .font(ExperienceTypography.headline.monospacedDigit())
-                    .foregroundStyle(payoutAmountColor(for: achievement))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("detail.achievement.payoutAmount")
-
-                Text(achievement.title)
-                    .font(ExperienceTypography.headline)
-                    .foregroundStyle(colors.primaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("detail.achievement.payoutHeadline")
-        } else {
-            Text(achievement.title)
-                .experienceStyle(.headline, color: colors.primaryText)
-        }
-    }
-
-    @ViewBuilder
     private func achievementMetadataTags(_ achievement: Achievement) -> some View {
-        let showsInlinePayout =
-            ProfilePayoutTotals.isPayout(achievement.kind)
-            && payoutDisplayText(for: achievement) != nil
-        let showsValueTag = !showsInlinePayout && achievement.value != nil
-        if achievement.isFeatured || showsValueTag {
-            HStack(spacing: ExperienceSpacing.xs) {
-                if achievement.isFeatured {
-                    ExperienceTag(title: "Featured", tone: .success)
-                }
-                if !showsInlinePayout, let value = achievement.value {
-                    Text(TradeDisplay.pnlText(value))
-                        .experienceStyle(
-                            .metric,
-                            color: theme.metricColor(
-                                for: NSDecimalNumber(decimal: value.amount).doubleValue
-                            )
-                        )
-                }
-            }
+        if achievement.isFeatured {
+            ExperienceTag(title: "Featured", tone: .success)
         }
     }
 
-    private func payoutDisplayText(for achievement: Achievement) -> String? {
-        ProfilePayoutTotals.payoutDisplayText(for: achievement)
-    }
-
-    private func payoutAmountColor(for achievement: Achievement) -> Color {
-        if let value = achievement.value {
-            return theme.metricColor(
-                for: NSDecimalNumber(decimal: value.amount).doubleValue
-            )
-        }
-        return colors.primaryText
-    }
 }
 
 private struct AchievementDetailShareSheet: UIViewControllerRepresentable {

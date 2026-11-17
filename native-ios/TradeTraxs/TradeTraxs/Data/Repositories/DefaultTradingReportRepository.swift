@@ -3,11 +3,12 @@ import Foundation
 /// Native Trading Reports — mirrors web `ensureTradingReportsLoaded`.
 ///
 /// Report bodies are generated locally with ``TradingReportGenerator`` (web
-/// `generateTradingReport.ts`). Weekly push is server-scheduled (Vercel cron).
+/// `generateTradingReport.ts`). Weekly push is scheduled by Supabase pg_cron.
 actor DefaultTradingReportRepository: TradingReportRepository {
     private let trades: any TradeRepository
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
+    private let tradingPreferences: (any TradingPreferencesRepository)?
 
     private var snapshot: TradingReportsSnapshot?
     private var tradeFingerprint: String?
@@ -16,16 +17,19 @@ actor DefaultTradingReportRepository: TradingReportRepository {
     init(
         trades: any TradeRepository,
         session: any SessionProviding,
-        detailCache: DetailPresentationCache
+        detailCache: DetailPresentationCache,
+        tradingPreferences: (any TradingPreferencesRepository)? = nil
     ) {
         self.trades = trades
         self.session = session
         self.detailCache = detailCache
+        self.tradingPreferences = tradingPreferences
     }
 
     func ensureSnapshot(forceNetwork: Bool) async throws -> TradingReportsSnapshot {
         let eligible = try await loadEligibleTrades(forceNetwork: forceNetwork)
-        let fingerprint = Self.fingerprint(eligible)
+        let preferences = await loadPreferences()
+        let fingerprint = Self.fingerprint(eligible) + ":" + PreferenceComplianceEngine.fingerprint(preferences)
 
         if !forceNetwork,
            let snapshot,
@@ -33,7 +37,7 @@ actor DefaultTradingReportRepository: TradingReportRepository {
             return snapshot
         }
 
-        let reports = TradingReportGenerator.generateAll(trades: eligible)
+        let reports = TradingReportGenerator.generateAll(trades: eligible, preferences: preferences)
         let next = TradingReportsSnapshot(
             reports: reports,
             computedAt: Date().timeIntervalSince1970 * 1000
@@ -92,6 +96,38 @@ actor DefaultTradingReportRepository: TradingReportRepository {
             trades: eligible,
             filters: filters
         )
+    }
+
+    func weekReport(mondayKey: String, forceNetwork: Bool) async throws -> TradingReport {
+        let eligible = try await loadEligibleTrades(forceNetwork: forceNetwork)
+        let preferences = await loadPreferences()
+        guard let week = TradingReportWeekRef.parse(reportID: ReportID("week:\(mondayKey)")) else {
+            throw AppError.unknown(message: "Report unavailable for week \(mondayKey).")
+        }
+        return TradingReportGenerator.generate(
+            trades: eligible,
+            week: week,
+            preferences: preferences
+        )
+    }
+
+    private func loadPreferences() async -> PreferenceRuleContext? {
+        guard let tradingPreferences else { return nil }
+        let userID = await session.currentUserID
+        guard let userID else { return nil }
+        let profileID = ProfileID(userID.rawValue)
+        do {
+            async let global = tradingPreferences.globalPreferences(for: profileID)
+            async let overrides = tradingPreferences.accountOverrides(for: profileID)
+            async let revisions = tradingPreferences.revisions(for: profileID)
+            return PreferenceRuleContext(
+                revisions: try await revisions,
+                global: try await global,
+                overrides: try await overrides
+            )
+        } catch {
+            return nil
+        }
     }
 
     // MARK: - Trade load

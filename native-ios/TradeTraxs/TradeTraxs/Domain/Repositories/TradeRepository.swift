@@ -169,6 +169,8 @@ extension TradeRepository {
         trade.followedPlan = draft.followedPlan
         trade.marketCondition = draft.marketCondition
         trade.psychologyNotes = draft.psychologyNotes
+        trade.exitEmotion = draft.exitEmotion
+        trade.executionRating = draft.executionRating
         trade.durationText = draft.durationText
         trade.durationSeconds = draft.durationSeconds
         trade.imageDisplayMode = draft.imageDisplayMode

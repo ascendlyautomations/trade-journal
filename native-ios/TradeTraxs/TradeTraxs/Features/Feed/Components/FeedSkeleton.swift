@@ -1,11 +1,18 @@
 import SwiftUI
 
 struct FeedSkeleton: View {
+    var topClearance: CGFloat = 0
+
     @Environment(\.themeColors) private var colors
 
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
+                if topClearance > 0.5 {
+                    Color.clear
+                        .frame(height: topClearance)
+                        .accessibilityHidden(true)
+                }
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: ExperienceSpacing.md) {
                         ForEach(0..<5, id: \.self) { _ in

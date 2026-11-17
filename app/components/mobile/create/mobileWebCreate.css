@@ -39,7 +39,7 @@
     border-top: 1px solid var(--tt-border, rgb(255 255 255 / 0.12));
     background: color-mix(in srgb, var(--tt-surface, #0d1117) 96%, transparent);
     padding: 0.625rem 0.75rem;
-    padding-bottom: max(0.625rem, env(safe-area-inset-bottom, 0px));
+    padding-bottom: 0.625rem;
   }
 
   html:not(.tt-native-ios).tt-mobile-web-keyboard-open

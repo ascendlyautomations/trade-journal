@@ -6,8 +6,9 @@ import {
   type RemoteTrack,
   type RemoteTrackPublication,
 } from "livekit-client"
+import { LIVE_VOICE_REMOTE_AUDIO_ROOT_ID } from "../mobileWebLivePolicy.ts"
 
-const REMOTE_AUDIO_ROOT_ID = "tradetraxs-live-voice-remote-audio"
+const REMOTE_AUDIO_ROOT_ID = LIVE_VOICE_REMOTE_AUDIO_ROOT_ID
 
 /** sid → attached media element (for cleanup). */
 const attachedByTrackSid = new Map<string, HTMLMediaElement>()

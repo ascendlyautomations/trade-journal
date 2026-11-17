@@ -21,8 +21,12 @@ final class RoomMembersViewModel {
     var pendingMemberAction: ManageRoomViewModel.MemberAction?
     var showsMemberActionConfirmation = false
     var showsBanMemberConfirmation = false
+    var showsModeratorConfirmation = false
+    var pendingModeratorMake: Bool?
+    var pendingModeratorProfileID: ProfileID?
     var statusMessage: String?
     var isMutatingTag = false
+    var isMutatingModerator = false
 
     private let rooms: any RoomRepository
     private let profiles: any ProfileRepository
@@ -237,7 +241,13 @@ final class RoomMembersViewModel {
     ) async -> Bool {
         guard let management = rooms as? any RoomManagementRepository else { return false }
         let assignableIDs = Set(roomTags.filter { canAssignTag($0) }.map(\.id))
-        let targetIDs = selectedTagIDs.intersection(assignableIDs)
+        let elevatedIDs = Set(
+            savedTagIDs(for: member.id).filter { id in
+                guard let tag = roomTags.first(where: { $0.id == id }) else { return false }
+                return !canAssignTag(tag)
+            }
+        )
+        let targetIDs = selectedTagIDs.intersection(assignableIDs).union(elevatedIDs)
         let currentIDs = savedTagIDs(for: member.id)
 
         guard targetIDs != currentIDs else { return true }
@@ -292,6 +302,77 @@ final class RoomMembersViewModel {
             canManageRoom: canManageRoom,
             canModerateRoom: canModerateRoom
         )
+    }
+
+    func canManageModeratorStatus(for item: RoomMemberItem) -> Bool {
+        guard canManageRoom, let room, let viewerID else { return false }
+        return item.id != viewerID && item.id != room.ownerProfileID
+    }
+
+    func isMemberModerator(_ item: RoomMemberItem) -> Bool {
+        TradeRoomModerationPermission.hasModeratorTag(memberTags: item.tags)
+    }
+
+    func moderatorActionTitle(for item: RoomMemberItem) -> String? {
+        guard canManageModeratorStatus(for: item) else { return nil }
+        return isMemberModerator(item) ? "Remove Moderator" : "Make Moderator"
+    }
+
+    func requestModeratorStatusChange(for item: RoomMemberItem) {
+        guard canManageModeratorStatus(for: item) else { return }
+        pendingModeratorProfileID = item.id
+        pendingModeratorMake = !isMemberModerator(item)
+        showsModeratorConfirmation = true
+    }
+
+    func cancelModeratorStatusChange() {
+        pendingModeratorProfileID = nil
+        pendingModeratorMake = nil
+        showsModeratorConfirmation = false
+    }
+
+    var moderatorConfirmationTitle: String {
+        pendingModeratorMake == true
+            ? "Make this member a moderator?"
+            : "Remove moderator status from this member?"
+    }
+
+    var moderatorConfirmationButtonTitle: String {
+        pendingModeratorMake == true ? "Make Moderator" : "Remove Moderator"
+    }
+
+    func confirmModeratorStatusChange() async {
+        guard canManageRoom,
+              let profileID = pendingModeratorProfileID,
+              let makeModerator = pendingModeratorMake,
+              let management = rooms as? any RoomManagementRepository
+        else { return }
+        pendingModeratorProfileID = nil
+        pendingModeratorMake = nil
+        showsModeratorConfirmation = false
+        isMutatingModerator = true
+        defer { isMutatingModerator = false }
+        do {
+            _ = await tagStore.ensureDefaultTagsIfCanManage(
+                roomID: roomID,
+                canManage: canManageRoom,
+                repository: management
+            )
+            try await TradeRoomModeratorPromotion.setModerator(
+                promoted: makeModerator,
+                roomID: roomID,
+                profileID: profileID,
+                roomTags: tagStore.tags(for: roomID),
+                tagStore: tagStore,
+                management: management
+            )
+            applyCachedTagsToMembers()
+            statusMessage = makeModerator ? "Moderator added." : "Moderator removed."
+            ExperienceHaptics.play(.success)
+        } catch {
+            statusMessage = ConversationThreadSupport.message(for: error)
+            ExperienceHaptics.play(.error)
+        }
     }
 
     func memberActionTitle(for action: ManageRoomViewModel.MemberAction) -> String {

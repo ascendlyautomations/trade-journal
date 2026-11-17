@@ -55,10 +55,9 @@ struct MainTabShellView: View {
             if let trade = postTradeReflectionGate.pendingTrade {
                 PostTradeReflectionSheet(
                     trade: trade,
-                    onSave: { exitEmotion, executionRating in
+                    onSave: { patch in
                         reflectionError = await postTradeReflectionGate.saveReflection(
-                            exitEmotion: exitEmotion,
-                            executionRating: executionRating,
+                            patch: patch,
                             trades: appEnvironment.data.trades,
                             detailCache: appEnvironment.data.detailCache
                         )
@@ -101,12 +100,6 @@ struct MainTabShellView: View {
             OwnerAccountFilterDropdownController.shared.dismiss()
             syncFeedScopedBarChrome(isFeedTab: tab == .feed)
             MainTabBarLayoutMetrics.shared.refresh()
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(120))
-                MainTabBarLayoutMetrics.shared.refresh()
-                try? await Task.sleep(for: .milliseconds(280))
-                MainTabBarLayoutMetrics.shared.refresh()
-            }
         }
         .onChange(of: ContentMutationStore.shared.revision) { _, _ in
             guard let profileID = currentUserProfile.profile?.id else { return }
@@ -421,6 +414,23 @@ struct HomeNavigationStack: View {
                 navigationCoordinator: coordinator,
                 data: appEnvironment.data
             )
+        case .tradingRulesAnalytics:
+            TradingRulesComplianceHomeRouteView(
+                navigationCoordinator: coordinator,
+                data: appEnvironment.data
+            )
+        case .tradingRulesRuleDetail(let ruleIDRaw):
+            TradingRulesRuleDetailView(
+                ruleIDRaw: ruleIDRaw,
+                navigationCoordinator: coordinator,
+                detailCache: appEnvironment.data.detailCache
+            )
+        case .tradingRulesDayDetail(let dayKey):
+            TradingRulesDayDetailView(
+                dayKey: dayKey,
+                navigationCoordinator: coordinator,
+                detailCache: appEnvironment.data.detailCache
+            )
         case .tradingScorecard:
             TradingScorecardDetailView(
                 navigationCoordinator: coordinator,
@@ -438,9 +448,11 @@ struct HomeNavigationStack: View {
             )
         case .analyst:
             // Legacy /analyst links — Trade AI lives on trade detail, not a standalone screen.
+            // Own model so this destination's onDisappear does not stop the Home tab's realtime.
             DashboardHomeView(
                 data: appEnvironment.data,
-                navigationCoordinator: coordinator
+                navigationCoordinator: coordinator,
+                retainsTabPresentation: false
             )
         default:
             NavigationInfrastructurePlaceholder(
@@ -470,6 +482,9 @@ struct HomeNavigationStack: View {
         case .withdrawalDetail: return "Withdrawal"
         case .report: return "Report"
         case .psychologyAnalytics: return "Psychology Analytics"
+        case .tradingRulesAnalytics: return "Trading Rules Analytics"
+        case .tradingRulesRuleDetail: return "Rule detail"
+        case .tradingRulesDayDetail: return "Trading day"
         case .tradingScorecard: return DashboardScorecardDisplayCopy.sectionTitle
         case .psychologyCoach: return "Psychology Coach"
         case .checkInHistory: return "Check-In History"
@@ -637,6 +652,23 @@ struct FeedNavigationStack: View {
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
             )
+        case .tradingRulesAnalytics:
+            TradingRulesComplianceHomeRouteView(
+                navigationCoordinator: coordinator,
+                data: appEnvironment.data
+            )
+        case .tradingRulesRuleDetail(let ruleIDRaw):
+            TradingRulesRuleDetailView(
+                ruleIDRaw: ruleIDRaw,
+                navigationCoordinator: coordinator,
+                detailCache: appEnvironment.data.detailCache
+            )
+        case .tradingRulesDayDetail(let dayKey):
+            TradingRulesDayDetailView(
+                dayKey: dayKey,
+                navigationCoordinator: coordinator,
+                detailCache: appEnvironment.data.detailCache
+            )
         default:
             NavigationInfrastructurePlaceholder(
                 title: feedTitle(route),
@@ -667,6 +699,9 @@ struct FeedNavigationStack: View {
         case .manageRoom: return "Manage Room"
         case .roomSettings: return "Trade Room Settings"
         case .settings(let route): return route.title
+        case .tradingRulesAnalytics: return "Trading Rules Analytics"
+        case .tradingRulesRuleDetail: return "Rule detail"
+        case .tradingRulesDayDetail: return "Trading day"
         }
     }
 }
@@ -802,6 +837,23 @@ struct MessagesNavigationStack: View {
                 authenticationCoordinator: authenticationCoordinator,
                 currentUserProfile: currentUserProfile
             )
+        case .tradingRulesAnalytics:
+            TradingRulesComplianceHomeRouteView(
+                navigationCoordinator: coordinator,
+                data: appEnvironment.data
+            )
+        case .tradingRulesRuleDetail(let ruleIDRaw):
+            TradingRulesRuleDetailView(
+                ruleIDRaw: ruleIDRaw,
+                navigationCoordinator: coordinator,
+                detailCache: appEnvironment.data.detailCache
+            )
+        case .tradingRulesDayDetail(let dayKey):
+            TradingRulesDayDetailView(
+                dayKey: dayKey,
+                navigationCoordinator: coordinator,
+                detailCache: appEnvironment.data.detailCache
+            )
         }
     }
 
@@ -822,6 +874,9 @@ struct MessagesNavigationStack: View {
         case .manageRoom: return "Manage Room"
         case .roomSettings: return "Trade Room Settings"
         case .settings(let settingsRoute): return settingsRoute.title
+        case .tradingRulesAnalytics: return "Trading Rules Analytics"
+        case .tradingRulesRuleDetail: return "Rule detail"
+        case .tradingRulesDayDetail: return "Trading day"
         }
     }
 }
@@ -959,6 +1014,23 @@ struct ProfileNavigationStack: View {
                 currentUserProfile: currentUserProfile
             )
             .environment(\.stackNavigation, StackNavigation.profile(store: store))
+        case .tradingRulesAnalytics:
+            TradingRulesComplianceHomeRouteView(
+                navigationCoordinator: coordinator,
+                data: appEnvironment.data
+            )
+        case .tradingRulesRuleDetail(let ruleIDRaw):
+            TradingRulesRuleDetailView(
+                ruleIDRaw: ruleIDRaw,
+                navigationCoordinator: coordinator,
+                detailCache: appEnvironment.data.detailCache
+            )
+        case .tradingRulesDayDetail(let dayKey):
+            TradingRulesDayDetailView(
+                dayKey: dayKey,
+                navigationCoordinator: coordinator,
+                detailCache: appEnvironment.data.detailCache
+            )
         case .admin(let adminRoute):
             AdminProfileDestinationView.view(
                 route: adminRoute,
@@ -1004,6 +1076,9 @@ struct ProfileNavigationStack: View {
         case .followRequests: return "Follow Requests"
         case .tradeRoomJoinRequest: return "Join Request"
         case .settings(let settingsRoute): return settingsRoute.title
+        case .tradingRulesAnalytics: return "Trading Rules Analytics"
+        case .tradingRulesRuleDetail: return "Rule detail"
+        case .tradingRulesDayDetail: return "Trading day"
         case .admin: return ""
         case .referrals: return "Referrals"
         case .affiliate: return "Affiliate"
@@ -1372,7 +1447,8 @@ private struct PsychologyAnalyticsHomeRouteView: View {
             detailCache: data.detailCache,
             dailyCheckIns: data.dailyCheckIns,
             tradesRepository: data.trades,
-            rpc: data.rpc
+            rpc: data.rpc,
+            tradingPreferences: data.tradingPreferences
         )
     }
 
@@ -1396,7 +1472,11 @@ private struct PsychologyAnalyticsHomeRouteView: View {
                     },
                     onOpenCheckInHistory: {
                         navigationCoordinator.pushHome(.checkInHistory)
-                    }
+                    },
+                    navigationCoordinator: navigationCoordinator,
+                    preferences: data.tradingPreferences,
+                    viewerID: activeProfileID,
+                    detailCache: data.detailCache
                 )
                 .id(presentationRevision)
                 .overlay(alignment: .top) {

@@ -53,6 +53,9 @@ final class ContextualTourTests: XCTestCase {
             presentCurrentStep(coordinator)
             coordinator.advance()
             if let surface = coordinator.navigationRequest {
+                if surface == .feed {
+                    coordinator.setFeedChromeReady(true)
+                }
                 coordinator.syncShell(
                     userID: "user-a",
                     createdAt: afterCutoff,
@@ -62,7 +65,7 @@ final class ContextualTourTests: XCTestCase {
         }
         presentCurrentStep(coordinator)
         XCTAssertTrue(coordinator.isFinalStep)
-        coordinator.advance()
+        coordinator.completeTour(configureTradingRules: false)
 
         XCTAssertEqual(progress.dismissedVersion(for: .dashboard, userID: "user-a"), 1)
         XCTAssertFalse(coordinator.isPresenting)
@@ -134,19 +137,14 @@ final class ContextualTourTests: XCTestCase {
             "Reports",
             "Withdrawals",
             "Calendar",
-            "Notifications",
             "Feed filters",
             "Trade Rooms",
             "Explore",
             "Profile",
             "Your Trade Room",
-            "Withdrawals",
-            "Expense Tracker",
-            "Income",
-            "Tax & profit",
-            "Export Tax CSV",
             "Appearance",
-            "You're all set",
+            "Trading Rules",
+            "Trading Rules",
         ])
         XCTAssertEqual(definition.steps.filter { $0.role == .sectionContinue }.count, 3)
         XCTAssertFalse(informational.contains { $0.title == "Understand your trading" })
@@ -155,6 +153,9 @@ final class ContextualTourTests: XCTestCase {
             let step = informational[index]
             if coordinator.phase == .measuring {
                 let surface = coordinator.navigationRequest ?? step.surface
+                if surface == .feed {
+                    coordinator.setFeedChromeReady(true)
+                }
                 coordinator.syncShell(
                     userID: "user-a",
                     createdAt: afterCutoff,
@@ -171,9 +172,9 @@ final class ContextualTourTests: XCTestCase {
             XCTAssertTrue(coordinator.showsExplanationCard)
             XCTAssertEqual(progress.dismissedVersion(for: .dashboard, userID: "user-a"), 0)
             if index == informational.count - 1 {
-                XCTAssertEqual(step.role, .finish)
+                XCTAssertEqual(step.role, .tradingRulesPrompt)
                 XCTAssertTrue(coordinator.isFinalStep)
-                coordinator.advance()
+                coordinator.completeTour(configureTradingRules: false)
                 XCTAssertEqual(progress.dismissedVersion(for: .dashboard, userID: "user-a"), 1)
                 XCTAssertFalse(coordinator.isPresenting)
                 XCTAssertFalse(coordinator.showsOverlay)
@@ -348,6 +349,9 @@ final class ContextualTourTests: XCTestCase {
                 coordinator.forceTimeout(now: started.addingTimeInterval(ContextualTourGeometry.resolveTimeout))
             }
             if let surface = coordinator.navigationRequest {
+                if surface == .feed {
+                    coordinator.setFeedChromeReady(true)
+                }
                 coordinator.syncShell(
                     userID: "user-a",
                     createdAt: afterCutoff,
@@ -485,6 +489,45 @@ final class ContextualTourTests: XCTestCase {
                 in: viewport
             )
         )
+    }
+
+    func testPinsFeedFilterBarOnlyDuringFeedFiltersStep() {
+        let coordinator = makeCoordinator()
+        arm(coordinator, createdAt: afterCutoff)
+        XCTAssertFalse(coordinator.pinsFeedFilterBar)
+
+        coordinator.syncShell(
+            userID: "user-a",
+            createdAt: afterCutoff,
+            gates: gates(for: .feed)
+        )
+        coordinator.setFeedChromeReady(true)
+        let feedFiltersIndex = ContextualTourCatalog.dashboard.steps.firstIndex {
+            $0.target == .feedContentFilters
+        }
+        XCTAssertNotNil(feedFiltersIndex)
+        while coordinator.stepIndex < feedFiltersIndex! {
+            presentCurrentStep(coordinator)
+            coordinator.advance()
+            if let surface = coordinator.navigationRequest {
+                if surface == .feed {
+                    coordinator.setFeedChromeReady(true)
+                }
+                coordinator.syncShell(
+                    userID: "user-a",
+                    createdAt: afterCutoff,
+                    gates: gates(for: surface)
+                )
+            }
+        }
+        FeedFilterBarTourLayoutGate.markLaidOut()
+        presentCurrentStep(coordinator)
+        XCTAssertEqual(coordinator.currentStep?.target, .feedContentFilters)
+        XCTAssertTrue(coordinator.pinsFeedFilterBar)
+
+        coordinator.advance()
+        FeedFilterBarTourLayoutGate.clear()
+        XCTAssertFalse(coordinator.pinsFeedFilterBar)
     }
 
     func testStableFramesBecomeReadyAndASingleFrameDoesNot() {

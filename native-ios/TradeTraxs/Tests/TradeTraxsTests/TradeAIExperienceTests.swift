@@ -93,6 +93,99 @@ final class TradeAIExperienceTests: XCTestCase {
         XCTAssertEqual(context.mediaAttachments.first?.kind, .screenshot)
     }
 
+    func testAnalyzeHTTPFailureKeepsUserMessageAndDoesNotPersist() async {
+        let trade = makeTrade()
+        let repo = MockAIRepository(
+            reply: "We couldn't complete the analysis right now. Please try again in a moment.",
+            shouldPersist: false
+        )
+        let vm = TradeAISectionViewModel(tradeID: trade.id, ai: repo)
+        vm.updateContext(trade: trade, notes: [])
+        vm.selectedPrompt = TradeAISuggestedPrompts.default
+        await vm.analyzeSelected()
+
+        XCTAssertEqual(repo.analyzeCallCount, 1)
+        XCTAssertEqual(vm.messages.count, 2)
+        XCTAssertEqual(vm.messages.first?.role, .user)
+        XCTAssertEqual(vm.messages.first?.content, "Analyze this trade")
+        XCTAssertEqual(vm.messages.last?.role, .assistant)
+        XCTAssertTrue(vm.messages.last?.content.contains("couldn't complete") == true)
+        XCTAssertNil(vm.errorMessage)
+        XCTAssertNil(vm.persistErrorMessage)
+        XCTAssertFalse(vm.isAnalyzing)
+        XCTAssertEqual(repo.persistedBatches.count, 0)
+    }
+
+    func testAnalyzeTransportFailureKeepsUserMessage() async {
+        let trade = makeTrade()
+        let repo = MockAIRepository(
+            reply: "unused",
+            analyzeError: AppError.transport(.connectivity)
+        )
+        let vm = TradeAISectionViewModel(tradeID: trade.id, ai: repo)
+        vm.updateContext(trade: trade, notes: [])
+        vm.selectedPrompt = TradeAISuggestedPrompts.default
+        await vm.analyzeSelected()
+
+        XCTAssertEqual(vm.messages.count, 1)
+        XCTAssertEqual(vm.messages.first?.role, .user)
+        XCTAssertEqual(vm.messages.first?.content, "Analyze this trade")
+        XCTAssertNotNil(vm.errorMessage)
+        XCTAssertFalse(vm.errorMessage?.contains("NetworkError") == true)
+        XCTAssertFalse(vm.isAnalyzing)
+        XCTAssertEqual(repo.persistedBatches.count, 0)
+    }
+
+    func testAnalyzeTradeHTTPMappingSurfacesBackendReplyWithoutPersisting() {
+        let body = Data(
+            "{\"error\":\"Analysis failed. Please try again.\",\"reply\":\"We couldn't complete the analysis right now. Please try again in a moment.\"}".utf8
+        )
+        let mapped = TradeAIAnalyzeHTTPMapping.map(statusCode: 500, data: body)
+        XCTAssertFalse(mapped.shouldPersist)
+        XCTAssertTrue(mapped.reply.contains("couldn't complete"))
+        XCTAssertEqual(
+            TradeAIAnalyzeHTTPMapping.failureCategory(
+                statusCode: 500,
+                data: body,
+                decoded: try? JSONDecoder().decode(AnalyzeTradeBFFResponse.self, from: body)
+            ),
+            "server"
+        )
+    }
+
+    func testAnalyzeTradeHTTPMappingPersistsSuccessfulReply() {
+        let body = Data(
+            "{\"result\":\"Verdict: Hold the plan.\",\"reply\":\"Verdict: Hold the plan.\"}".utf8
+        )
+        let mapped = TradeAIAnalyzeHTTPMapping.map(statusCode: 200, data: body)
+        XCTAssertTrue(mapped.shouldPersist)
+        XCTAssertTrue(mapped.reply.contains("Hold the plan"))
+    }
+
+    func testAnalyzeTradeHTTPMappingRejectsHTMLAndJSONBlobCopy() {
+        let html = Data("<!DOCTYPE html><html><body>error</body></html>".utf8)
+        let htmlMapped = TradeAIAnalyzeHTTPMapping.map(statusCode: 502, data: html)
+        XCTAssertFalse(htmlMapped.shouldPersist)
+        XCTAssertFalse(htmlMapped.reply.lowercased().contains("<!doctype"))
+        XCTAssertEqual(
+            TradeAIAnalyzeHTTPMapping.failureCategory(statusCode: 502, data: html, decoded: nil),
+            "html"
+        )
+
+        let rawJSON = Data("{\"unexpected\":true}".utf8)
+        let jsonMapped = TradeAIAnalyzeHTTPMapping.map(statusCode: 500, data: rawJSON)
+        XCTAssertFalse(jsonMapped.shouldPersist)
+        XCTAssertFalse(jsonMapped.reply.hasPrefix("{"))
+        XCTAssertEqual(jsonMapped.reply, "We couldn't complete the analysis. Please try again.")
+    }
+
+    func testAnalyzeTradeHTTPMappingUsesProCopyFor403() {
+        let body = Data("{\"error\":\"Pro required\",\"reply\":\"AI Analyst is a Pro feature.\"}".utf8)
+        let mapped = TradeAIAnalyzeHTTPMapping.map(statusCode: 403, data: body)
+        XCTAssertFalse(mapped.shouldPersist)
+        XCTAssertEqual(mapped.reply, TraxProFeatureMessaging.featureRequired)
+    }
+
     func testPersistenceFailureKeepsAnalysisVisible() async {
         let trade = makeTrade()
         let repo = MockAIRepository(reply: coachReply, persistShouldFail: true)
@@ -293,6 +386,7 @@ final class TradeAIExperienceTests: XCTestCase {
             "https://www.tradetraxs.com/api/analyze-trade"
         )
         XCTAssertEqual(analyze.headers["Content-Type"], "application/json")
+        XCTAssertFalse(analyze.acceptsNonSuccessStatusCodes)
 
         let pushRegister = try builder.makeRequest(
             endpoint: Endpoint(host: .bff, path: "/api/push/register", method: .post),
@@ -379,21 +473,32 @@ private final class MockAIRepository: AIRepository, @unchecked Sendable {
     var reply: String
     var history: [TradeAIMessage]
     var persistShouldFail: Bool
+    var shouldPersist: Bool
+    var analyzeError: Error?
     private(set) var analyzeCallCount = 0
     private(set) var loadCallCount = 0
     private(set) var lastRequest: TradeAIAnalyzeRequest?
     private(set) var persistedBatches: [[TradeAIMessage]] = []
 
-    init(reply: String, history: [TradeAIMessage] = [], persistShouldFail: Bool = false) {
+    init(
+        reply: String,
+        history: [TradeAIMessage] = [],
+        persistShouldFail: Bool = false,
+        shouldPersist: Bool = true,
+        analyzeError: Error? = nil
+    ) {
         self.reply = reply
         self.history = history
         self.persistShouldFail = persistShouldFail
+        self.shouldPersist = shouldPersist
+        self.analyzeError = analyzeError
     }
 
     func analyzeTrade(_ request: TradeAIAnalyzeRequest) async throws -> TradeAIAnalyzeResponse {
         analyzeCallCount += 1
         lastRequest = request
-        return TradeAIAnalyzeResponse(reply: reply)
+        if let analyzeError { throw analyzeError }
+        return TradeAIAnalyzeResponse(reply: reply, shouldPersist: shouldPersist)
     }
 
     func loadConversation(tradeID: TradeID) async throws -> [TradeAIMessage] {

@@ -41,6 +41,8 @@ import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import EmptyState from "@/app/components/ui/EmptyState"
 import MessagesTradeRoomsLink from "@/app/components/messages/MessagesTradeRoomsLink"
 import { useParams, useRouter } from "next/navigation"
+import { followMobileWebBack } from "@/lib/mobileWebInAppHistory"
+import { realtimeChannelsToReplace } from "@/lib/messages/realtimeChannelTopic"
 import {
   formatMoneyUnknown,
   formatRR,
@@ -1760,16 +1762,23 @@ export default function DMPage() {
     if (isDemoSupabaseBlocked()) return
 
     const topic = `messages-${activeConversationId}`
-    supabase.getChannels().forEach((c) => {
-      if (c.topic === topic) {
-        supabase.removeChannel(c)
-      }
-    })
+    let cancelled = false
+    let channel: ReturnType<typeof supabase.channel> | null = null
 
-    const channel = supabase.channel(topic, {
-      config: { broadcast: { self: false } },
-    })
-    messagesChannelRef.current = channel
+    void (async () => {
+      const stale = realtimeChannelsToReplace(supabase.getChannels(), topic)
+      await Promise.all(stale.map((existing) => supabase.removeChannel(existing)))
+      if (cancelled) return
+
+      channel = supabase.channel(topic, {
+        config: { broadcast: { self: false } },
+      })
+      if (cancelled) {
+        void supabase.removeChannel(channel)
+        channel = null
+        return
+      }
+      messagesChannelRef.current = channel
 
     channel.on("broadcast", { event: "typing" }, (payload) => {
       const typingUserId = payload?.payload?.userId as string | undefined
@@ -1911,13 +1920,20 @@ export default function DMPage() {
       }
     )
 
-    channel.subscribe()
+      if (cancelled) {
+        void supabase.removeChannel(channel)
+        channel = null
+        return
+      }
+      channel.subscribe()
+    })()
 
     return () => {
+      cancelled = true
       messagesChannelRef.current = null
       setTypingUsers([])
       stopVoicePlayback()
-      supabase.removeChannel(channel)
+      if (channel) void supabase.removeChannel(channel)
     }
   }, [activeConversationId, pageAccess, patchDmMessageReaction, setMessagesWithCache])
 
@@ -3562,7 +3578,7 @@ export default function DMPage() {
     setLeaveBusy(false)
     setConfirmLeaveOpen(false)
     setShowConversationSettings(false)
-    router.push("/messages")
+    followMobileWebBack("/messages", router)
   }
 
   async function deleteForMe(message: any) {
@@ -3753,7 +3769,7 @@ export default function DMPage() {
         >
           <button
             type="button"
-            onClick={() => router.push("/messages")}
+            onClick={() => followMobileWebBack("/messages", router)}
             className="rounded-lg bg-white/10 px-4 py-2 text-sm hover:bg-white/20"
           >
             ← Back to messages
@@ -3799,7 +3815,7 @@ export default function DMPage() {
               <button
                 type="button"
                 aria-label="Back to messages"
-                onClick={() => router.push("/messages")}
+                onClick={() => followMobileWebBack("/messages", router)}
                 className="-ml-0.5 flex h-11 w-11 items-center justify-center text-white"
               >
                 <ChevronLeft className="h-7 w-7" strokeWidth={2.25} />
@@ -3848,7 +3864,7 @@ export default function DMPage() {
               <button
                 type="button"
                 aria-label="Back to messages"
-                onClick={() => router.push("/messages")}
+                onClick={() => followMobileWebBack("/messages", router)}
                 className="inline-flex h-11 w-11 items-center justify-center text-[#4EC4E0]"
               >
                 <ChevronLeft className="h-7 w-7" strokeWidth={2.25} />
@@ -3892,7 +3908,7 @@ export default function DMPage() {
             <div className="hidden shrink-0 items-center justify-between border-b border-white/10 md:flex md:p-4 md:justify-start md:gap-3">
 
               <button
-                onClick={() => router.push("/messages")}
+                onClick={() => followMobileWebBack("/messages", router)}
                 className="rounded-lg p-2 md:border md:border-white/10 md:bg-white/10 md:px-3 md:py-1 md:text-sm md:hover:bg-white/15"
               >
                 ←

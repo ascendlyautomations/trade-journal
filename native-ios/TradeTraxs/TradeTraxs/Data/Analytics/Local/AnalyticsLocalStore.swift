@@ -135,6 +135,20 @@ nonisolated struct AnalyticsLocalStore: Sendable {
         let asOf = bootstrap.data.as_of_et
         let started = Date()
 
+        let queue = try await database.databaseQueue()
+        if try await queue.read({ db -> Bool in
+            guard let state = try AnalyticsSyncStateRecord.fetchOne(db, key: viewer),
+                  state.server_revision >= revision
+            else { return false }
+            return try AnalyticsRangeCoverageRecord
+                .filter(Column("viewer_id") == viewer)
+                .filter(Column("domain") == AnalyticsLocalSchema.domainDashboardBootstrap)
+                .filter(Column("server_revision") == revision)
+                .fetchOne(db) != nil
+        }) {
+            return (0, 0, 0)
+        }
+
         var metricRecords: [DashboardPresetMetricsRecord] = []
         for (key, bundle) in bootstrap.data.aggregatePresets {
             metricRecords.append(
@@ -163,7 +177,6 @@ nonisolated struct AnalyticsLocalStore: Sendable {
         }
 
         let metricRecordsToWrite = metricRecords
-        let queue = try await database.databaseQueue()
         try await queue.write { db in
             try DashboardPresetMetricsRecord
                 .filter(Column("viewer_id") == viewer)
@@ -190,6 +203,7 @@ nonisolated struct AnalyticsLocalStore: Sendable {
             chartBundles: 0,
             elapsedMs: elapsed
         )
+        AnalyticsDashboardGRDBSessionCache.invalidate(viewerID: viewerID)
         return (metricRecords.count, 0, elapsed)
     }
 
@@ -241,6 +255,7 @@ nonisolated struct AnalyticsLocalStore: Sendable {
         }
         let elapsed = Int(Date().timeIntervalSince(started) * 1000)
         AnalyticsGRDBProbe.logAccountChartsIngest(bundles: bundles.count, elapsedMs: elapsed)
+        AnalyticsDashboardGRDBSessionCache.invalidate(viewerID: viewerID)
         return (bundles.count, elapsed)
     }
 
@@ -293,6 +308,7 @@ nonisolated struct AnalyticsLocalStore: Sendable {
         }
         let elapsed = Int(Date().timeIntervalSince(started) * 1000)
         AnalyticsGRDBProbe.logAccountChartsIngest(bundles: bundles.count, elapsedMs: elapsed)
+        AnalyticsDashboardGRDBSessionCache.invalidate(viewerID: viewerID)
         return (bundles.count, elapsed)
     }
 

@@ -2,15 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ConnectionState } from "livekit-client"
-import {
-  Hand,
-  Mic,
-  MicOff,
-  Minimize2,
-  Radio,
-  Volume2,
-  VolumeX,
-} from "lucide-react"
+import { Hand, Minimize2, Radio, Volume2 } from "lucide-react"
+import BroadcastListenControls from "./BroadcastListenControls.tsx"
 import { useTradeRoomBroadcast } from "./useTradeRoomBroadcast.ts"
 import { tradeRoomBroadcastMiniPanelPosition } from "@/lib/livekit/client/tradeRoomBroadcastMiniPlayerLayout.ts"
 import {
@@ -25,14 +18,14 @@ import {
   joinTradeRoomBroadcastConversation,
   leaveTradeRoomBroadcastConversation,
   leaveTradeRoomBroadcastViewer,
+  resumeTradeRoomBroadcastPlayback,
   sendTradeRoomBroadcastChatMessage,
   setTradeRoomBroadcastStudioPresentation,
   syncTradeRoomBroadcastViewerVideoElement,
   toggleTradeRoomBroadcastRaisedHand,
-  toggleTradeRoomBroadcastStreamListenMuted,
-  toggleTradeRoomBroadcastViewerMicMuted,
 } from "@/lib/livekit/client/tradeRoomBroadcastStore.ts"
 import { tradeRoomBroadcastGlobalChromeVisible } from "@/lib/livekit/client/tradeRoomBroadcastGlobalChromeVisibility.ts"
+import { shouldShowBroadcastEnableSound } from "@/lib/livekit/mobileWebLivePolicy.ts"
 import { useIsNativeIos } from "@/lib/useIsNativeIos"
 import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
 
@@ -108,10 +101,11 @@ export default function TradeRoomBroadcastViewerStudioChrome({
     broadcast.connectionState === ConnectionState.Connected ||
     broadcast.connectionState === ConnectionState.Reconnecting
   const canModerateLiveParticipants = broadcast.isWatching || broadcast.isInConversation
-  const broadcasterLabel =
-    broadcast.status.broadcasterDisplayName?.trim() || "Live stream"
   const streamTitle =
-    broadcast.roomTitle?.trim() || broadcasterLabel
+    broadcast.status.streamTitle?.trim() ||
+    broadcast.roomTitle?.trim() ||
+    broadcast.status.broadcasterDisplayName?.trim() ||
+    "Live stream"
   const activeRoomId = broadcast.roomId ?? ""
   const openVoice =
     broadcast.status.voiceMode === "open_voice" &&
@@ -199,50 +193,25 @@ export default function TradeRoomBroadcastViewerStudioChrome({
     await leaveTradeRoomBroadcastViewer()
   }
 
+  const showEnableSound = shouldShowBroadcastEnableSound({
+    isWatching: broadcast.isWatching,
+    isPublishing: broadcast.isPublishing,
+    canPlaybackAudio: broadcast.canPlaybackAudio,
+  })
+
   const controlButtons = (
     <div className="flex flex-wrap items-center gap-2">
-      <button
-        type="button"
-        disabled={
-          broadcast.isInConversation && !broadcast.viewerMicPublishReady
-        }
-        aria-label={
-          broadcast.isInConversation
-            ? broadcast.viewerMicMuted
-              ? "Unmute your mic"
-              : "Mute your mic"
-            : broadcast.streamListenMuted
-              ? "Unmute stream"
-              : "Mute stream"
-        }
-        className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-sm"
-        onClick={() => {
-          if (broadcast.isInConversation) {
-            void toggleTradeRoomBroadcastViewerMicMuted()
-          } else {
-            toggleTradeRoomBroadcastStreamListenMuted()
-          }
-        }}
-      >
-        {broadcast.isInConversation ? (
-          broadcast.viewerMicMuted ? (
-            <MicOff size={16} />
-          ) : (
-            <Mic size={16} />
-          )
-        ) : broadcast.streamListenMuted ? (
-          <VolumeX size={16} />
-        ) : (
+      {showEnableSound ? (
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white"
+          onClick={() => void resumeTradeRoomBroadcastPlayback()}
+        >
           <Volume2 size={16} />
-        )}
-        {broadcast.isInConversation
-          ? broadcast.viewerMicMuted
-            ? "Mic off"
-            : "Mic on"
-          : broadcast.streamListenMuted
-            ? "Muted"
-            : "Sound on"}
-      </button>
+          Enable sound
+        </button>
+      ) : null}
+      <BroadcastListenControls broadcast={broadcast} />
       {openVoice ? (
         <button
           type="button"
@@ -302,6 +271,7 @@ export default function TradeRoomBroadcastViewerStudioChrome({
         <div className="relative aspect-video bg-black">
           <video
             ref={bindViewerVideo}
+            data-tt-broadcast-media="true"
             className="h-full w-full object-contain"
             autoPlay
             muted={broadcast.streamListenMuted && !broadcast.isInConversation}
@@ -323,41 +293,16 @@ export default function TradeRoomBroadcastViewerStudioChrome({
             {streamTitle}
           </p>
           <span className="text-[10px] text-white/50">{connLabel}</span>
-          <button
-            type="button"
-            disabled={
-              broadcast.isInConversation && !broadcast.viewerMicPublishReady
-            }
-            aria-label={
-              broadcast.isInConversation
-                ? broadcast.viewerMicMuted
-                  ? "Unmute your mic"
-                  : "Mute your mic"
-                : broadcast.streamListenMuted
-                  ? "Unmute stream"
-                  : "Mute stream"
-            }
-            className="rounded-md border border-white/15 p-1 text-white"
-            onClick={() => {
-              if (broadcast.isInConversation) {
-                void toggleTradeRoomBroadcastViewerMicMuted()
-              } else {
-                toggleTradeRoomBroadcastStreamListenMuted()
-              }
-            }}
-          >
-            {broadcast.isInConversation ? (
-              broadcast.viewerMicMuted ? (
-                <MicOff size={16} />
-              ) : (
-                <Mic size={16} />
-              )
-            ) : broadcast.streamListenMuted ? (
-              <VolumeX size={16} />
-            ) : (
-              <Volume2 size={16} />
-            )}
-          </button>
+          {showEnableSound ? (
+            <button
+              type="button"
+              className="rounded-md bg-amber-600 px-2 py-1 text-xs font-semibold text-white"
+              onClick={() => void resumeTradeRoomBroadcastPlayback()}
+            >
+              Enable sound
+            </button>
+          ) : null}
+          <BroadcastListenControls broadcast={broadcast} tone="mini" />
           <button
             type="button"
             className="rounded-md bg-emerald-700 px-2 py-1 text-xs font-semibold text-white"
@@ -438,6 +383,7 @@ export default function TradeRoomBroadcastViewerStudioChrome({
           ) : null}
           <video
             ref={bindViewerVideo}
+            data-tt-broadcast-media="true"
             className="h-full w-full object-contain"
             autoPlay
             muted={broadcast.streamListenMuted && !broadcast.isInConversation}

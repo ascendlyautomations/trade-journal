@@ -48,6 +48,38 @@ nonisolated enum TradingReportPeriodKey: String, Hashable, Codable, Sendable, Ca
     var reportID: ReportID { ReportID(rawValue) }
 }
 
+/// Eastern Monday identified by `week:YYYY-MM-DD`.
+nonisolated struct TradingReportWeekRef: Hashable, Sendable {
+    var mondayKey: String
+
+    var reportID: ReportID { ReportID("week:\(mondayKey)") }
+
+    static func parse(reportID: ReportID) -> TradingReportWeekRef? {
+        let raw = reportID.rawValue
+        guard raw.hasPrefix("week:") else { return nil }
+        let day = String(raw.dropFirst("week:".count))
+        let parts = day.split(separator: "-")
+        guard parts.count == 3,
+              let year = Int(parts[0]),
+              let month = Int(parts[1]),
+              let dayOfMonth = Int(parts[2]),
+              (1...12).contains(month),
+              (1...31).contains(dayOfMonth)
+        else { return nil }
+        let calendar = TradingReportPeriods.eastern
+        guard let date = calendar.date(from: DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: year,
+            month: month,
+            day: dayOfMonth
+        )) else { return nil }
+        guard calendar.component(.weekday, from: date) == 2 else { return nil }
+        let normalized = String(format: "%04d-%02d-%02d", year, month, dayOfMonth)
+        return TradingReportWeekRef(mondayKey: normalized)
+    }
+}
+
 nonisolated enum TradingReportKind: String, Hashable, Codable, Sendable {
     case weekly
     case monthly
@@ -63,6 +95,8 @@ nonisolated enum TradingReportKind: String, Hashable, Codable, Sendable {
 struct TradingReportMetrics: Hashable, Codable, Sendable {
     var netPnl: Double
     var winRate: Double
+    /// Trades with a recorded P&L. Missing results are excluded from money and win rate.
+    var knownResultCount: Int
     var averageRr: Double?
     var profitFactor: Double?
     var tradesTaken: Int

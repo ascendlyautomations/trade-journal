@@ -13,12 +13,9 @@ struct TradingScorecardDetailView: View {
             VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
                 if let result = session.result {
                     heroPanel(result: result)
-                    categoryOverviewStrip(result: result)
-                    ForEach(result.categories, id: \.id) { category in
-                        TradingScorecardCategorySection(
-                            category: category,
-                            psychologyCards: category.id == .psychology ? session.psychologyInsightCards : []
-                        )
+                    adherencePanel(result: result)
+                    if !result.insights.isEmpty {
+                        insightsPanel(result: result)
                     }
                     if !restrictsPremiumPsychology {
                         Button {
@@ -66,13 +63,12 @@ struct TradingScorecardDetailView: View {
             HStack(spacing: ExperienceSpacing.lg) {
                 statPill("\(result.overall.tradeCount)", label: "Trades")
                 statPill("\(result.overall.tradingDayCount)", label: "Days")
-                statPill("\(result.overall.coveragePercent)%", label: "Coverage")
             }
 
-            if !result.overall.contributions.isEmpty {
-                contributionsStrip(result: result)
-            } else if result.overall.score == nil {
-                gateHint(result: result)
+            if result.overall.score == nil {
+                Text(result.overall.statusMessage)
+                    .experienceStyle(.caption, color: colors.secondaryText)
+                    .multilineTextAlignment(.center)
             }
         }
         .padding(ExperienceSpacing.md)
@@ -93,61 +89,44 @@ struct TradingScorecardDetailView: View {
         }
     }
 
-    private func contributionsStrip(result: ScorecardResult) -> some View {
-        HStack(spacing: ExperienceSpacing.sm) {
-            ForEach(result.overall.contributions, id: \.id) { row in
-                VStack(spacing: 2) {
-                    Text("\(row.score)")
-                        .font(.system(.caption, design: .rounded).weight(.bold).monospacedDigit())
-                    Text(row.title)
+    private func adherencePanel(result: ScorecardResult) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            ForEach(result.adherence) { row in
+                HStack(alignment: .firstTextBaseline) {
+                    Text(row.label)
+                        .experienceStyle(.subheadline, color: colors.secondaryText)
+                    Spacer(minLength: 8)
+                    Text(row.value ?? row.pending ?? "")
+                        .experienceStyle(.subheadline, color: colors.primaryText)
+                        .fontWeight(.semibold)
+                }
+                if let sample = row.sample {
+                    Text(sample)
                         .experienceStyle(.caption2, color: colors.tertiaryText)
-                        .lineLimit(1)
-                    Text("\(Int(row.effectiveWeight * 100))%")
-                        .experienceStyle(.caption2, color: colors.accent)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, ExperienceSpacing.xs)
-                .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            }
-        }
-    }
-
-    private func gateHint(result: ScorecardResult) -> some View {
-        HStack(spacing: ExperienceSpacing.xs) {
-            Image(systemName: "hourglass")
-                .foregroundStyle(colors.tertiaryText)
-            Text("\(result.overall.tradeCount)/\(ScorecardConstants.minTradesOverall) trades · \(result.overall.tradingDayCount)/\(ScorecardConstants.minTradingDaysOverall) days")
-                .experienceStyle(.caption, color: colors.tertiaryText)
-        }
-    }
-
-    private func categoryOverviewStrip(result: ScorecardResult) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: ExperienceSpacing.sm) {
-                ForEach(result.categories, id: \.id) { category in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(category.title)
-                            .experienceStyle(.caption2, color: colors.tertiaryText)
-                        Text(ScorecardVisualSupport.categoryValueLabel(category))
-                            .font(.system(.footnote, design: .rounded).weight(.semibold).monospacedDigit())
-                            .foregroundStyle(colors.primaryText)
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Capsule().fill(colors.fillSecondary)
-                                Capsule()
-                                    .fill(colors.accent.opacity(category.score != nil ? 0.85 : 0.35))
-                                    .frame(width: geo.size.width * ScorecardVisualSupport.categoryFillFraction(category))
-                            }
-                        }
-                        .frame(height: 4)
-                    }
-                    .padding(ExperienceSpacing.sm)
-                    .frame(width: 108)
-                    .background(colors.elevatedSurface, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
                 }
             }
-            .padding(.horizontal, ExperienceSpacing.md)
         }
+        .padding(ExperienceSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(colors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous))
+        .padding(.horizontal, ExperienceSpacing.md)
+    }
+
+    private func insightsPanel(result: ScorecardResult) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            Text("Insights")
+                .experienceStyle(.headline, color: colors.primaryText)
+            ForEach(result.insights) { insight in
+                Text(insight.text)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
+            }
+        }
+        .padding(ExperienceSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(colors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous))
+        .padding(.horizontal, ExperienceSpacing.md)
     }
 
     private func refreshEntitlementGate() {

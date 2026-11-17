@@ -69,6 +69,10 @@ struct PsychologyAnalyticsDetailView: View {
     var highlightedSectionID: String?
     var onOpenCoach: (() -> Void)?
     var onOpenCheckInHistory: (() -> Void)?
+    var navigationCoordinator: NavigationCoordinator?
+    var preferences: (any TradingPreferencesRepository)?
+    var viewerID: ProfileID?
+    var detailCache: DetailPresentationCache?
 
     @Environment(\.themeColors) private var colors
     @State private var advancedExpanded = false
@@ -95,10 +99,20 @@ struct PsychologyAnalyticsDetailView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+                    if let navigationCoordinator {
+                        TradingPreferenceDiscoverySlot(
+                            surface: .analytics,
+                            userID: viewerID,
+                            repository: preferences,
+                            localHasTrade: report.baseline.tradeCount > 0,
+                            navigationCoordinator: navigationCoordinator
+                        )
+                    }
                     overviewSection
 
-                    if let coachSummary {
-                        PsychologySummarySection(summary: coachSummary, onOpenCoach: onOpenCoach)
+                    if navigationCoordinator != nil {
+                        tradingRulesAnalyticsLink
+                            .padding(.horizontal, ExperienceSpacing.md)
                     }
 
                     if let onOpenCheckInHistory {
@@ -116,7 +130,18 @@ struct PsychologyAnalyticsDetailView: View {
                         noMatchedDaysInsightSection
                     }
 
-                    advancedAnalyticsSection
+                    if let coachSummary, !coachSummary.recommendations.isEmpty {
+                        PsychologySummarySection(
+                            summary: coachSummary,
+                            onOpenCoach: onOpenCoach,
+                            recommendationsOnly: true
+                        )
+                        .padding(.horizontal, ExperienceSpacing.md)
+                    }
+
+                    if !advancedSections.isEmpty {
+                        advancedAnalyticsSection
+                    }
                 }
                 .padding(.vertical, ExperienceSpacing.md)
             }
@@ -137,6 +162,31 @@ struct PsychologyAnalyticsDetailView: View {
         .accessibilityIdentifier("psychologyAnalytics.detail")
     }
 
+    private var tradingRulesAnalyticsLink: some View {
+        Button {
+            navigationCoordinator?.pushTradingRulesAnalytics()
+        } label: {
+            HStack(spacing: ExperienceSpacing.sm) {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                    Text("Trading Rules Analytics")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(colors.primaryText)
+                    Text("Compliance score, violations, trends, and rule impact")
+                        .experienceStyle(.caption, color: colors.secondaryText)
+                }
+                Spacer(minLength: ExperienceSpacing.sm)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(colors.tertiaryText)
+            }
+            .padding(ExperienceSpacing.md)
+            .background(colors.elevatedSurface)
+            .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.lg))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("psychologyAnalytics.openTradingRules")
+    }
+
     private var overviewSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             Text("Overview")
@@ -149,28 +199,26 @@ struct PsychologyAnalyticsDetailView: View {
                     label: "Check-in days"
                 )
                 countTile(value: report.baseline.tradeCount, label: "Qualifying trades")
-                countTile(value: report.checkInMatchedTradeCount, label: "Matched days")
+                countTile(value: report.matchedDayCount, label: "Matched days")
             }
             .padding(.horizontal, ExperienceSpacing.md)
 
-            if report.checkInMatchedTradeCount >= 1 || !unlockProgress.showsRequirementMessage {
+            if report.baseline.tradeCount > 0 {
                 VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
                     Text("Your trades in this scope")
                         .experienceStyle(.caption, color: colors.tertiaryText)
                         .fontWeight(.semibold)
                     HStack(spacing: ExperienceSpacing.md) {
-                        metricPill(
-                            "Win rate",
-                            value: TraderPsychologyAnalyticsEngine.formatWinRate(report.baseline.winRate)
-                        )
-                        metricPill(
-                            "Avg P&L / trade",
-                            value: TraderPsychologyAnalyticsEngine.money(report.baseline.averagePnL ?? 0)
-                        )
-                        metricPill(
-                            "Expected $ / trade",
-                            value: TraderPsychologyAnalyticsEngine.money(report.baseline.expectancy ?? 0)
-                        )
+                        if report.baseline.winRate != nil {
+                            metricPill(
+                                "Win rate",
+                                value: TraderPsychologyAnalyticsEngine.formatWinRate(report.baseline.winRate)
+                            )
+                        }
+                        if report.baseline.tradeCount >= 5,
+                           let average = TraderPsychologyAnalyticsEngine.optionalMoney(report.baseline.averagePnL) {
+                            metricPill("Avg P&L / trade", value: average)
+                        }
                     }
                 }
                 .padding(ExperienceSpacing.md)
@@ -205,8 +253,6 @@ struct PsychologyAnalyticsDetailView: View {
                             .fontWeight(.semibold)
                         Text(card.displayDetail)
                             .experienceStyle(.footnote, color: colors.secondaryText)
-                        Text("\(card.sampleSize) trades · \(card.reliability.label)")
-                            .experienceStyle(.caption2, color: colors.tertiaryText)
                     }
                     .padding(ExperienceSpacing.md)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -223,11 +269,11 @@ struct PsychologyAnalyticsDetailView: View {
 
     private var noMatchedDaysInsightSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("No matched days yet")
+            Text("No insight yet")
                 .experienceStyle(.subheadline, color: colors.primaryText)
                 .fontWeight(.semibold)
             Text(
-                "Complete a daily check-in on the same Eastern calendar day as a trade in this scope to unlock sleep, mood, and performance insights."
+                "A comparison appears after each side has at least 8 trades and a real difference in results."
             )
             .experienceStyle(.caption, color: colors.secondaryText)
             if !postUnlockGapMessages.isEmpty {
@@ -262,7 +308,7 @@ struct PsychologyAnalyticsDetailView: View {
                         Text("Advanced analytics")
                             .experienceStyle(.subheadline, color: colors.primaryText)
                             .fontWeight(.semibold)
-                        Text("Sleep, mental state, conviction, discipline, emotion, and more")
+                        Text("Both sides of each comparison")
                             .experienceStyle(.caption, color: colors.tertiaryText)
                     }
                     Spacer(minLength: 0)
@@ -349,28 +395,15 @@ struct PsychologyAnalyticsDetailView: View {
                 .experienceStyle(.subheadline, color: colors.primaryText)
                 .fontWeight(.semibold)
 
-            if row.metrics.tradeCount == 0 {
-                Text("No trades in this group yet")
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-            } else if row.metrics.reliability == .insufficient {
-                Text("Preview · \(row.metrics.tradeCount) trade\(row.metrics.tradeCount == 1 ? "" : "s")")
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-                    .fontWeight(.medium)
+            if row.metrics.tradeCount >= 5 {
                 HStack(spacing: ExperienceSpacing.md) {
-                    metricPill("Win rate", value: TraderPsychologyAnalyticsEngine.formatWinRate(row.metrics.winRate))
-                    metricPill("Avg P&L / trade", value: TraderPsychologyAnalyticsEngine.money(row.metrics.averagePnL ?? 0))
+                    if row.metrics.winRate != nil {
+                        metricPill("Win rate", value: TraderPsychologyAnalyticsEngine.formatWinRate(row.metrics.winRate))
+                    }
+                    if let average = TraderPsychologyAnalyticsEngine.optionalMoney(row.metrics.averagePnL) {
+                        metricPill("Avg P&L", value: average)
+                    }
                 }
-                Text("\(row.metrics.reliability.label), need 5+ trades for a reliable read")
-                    .experienceStyle(.caption2, color: colors.tertiaryText)
-            } else {
-                HStack(spacing: ExperienceSpacing.md) {
-                    metricPill("Trades", value: "\(row.metrics.tradeCount)")
-                    metricPill("Win rate", value: TraderPsychologyAnalyticsEngine.formatWinRate(row.metrics.winRate))
-                    metricPill("Avg P&L / trade", value: TraderPsychologyAnalyticsEngine.money(row.metrics.averagePnL ?? 0))
-                    metricPill("Expected $ / trade", value: TraderPsychologyAnalyticsEngine.money(row.metrics.expectancy ?? 0))
-                }
-                Text(row.metrics.reliability.label)
-                    .experienceStyle(.caption2, color: colors.tertiaryText)
             }
         }
         .padding(ExperienceSpacing.md)

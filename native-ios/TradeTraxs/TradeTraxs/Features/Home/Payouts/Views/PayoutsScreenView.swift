@@ -32,12 +32,12 @@ struct PayoutsScreenView: View {
     }
 
     private var historyItems: [PayoutHistoryItem] {
-        let recorded = PayoutHistorySupport.buildHistory(
+        PayoutHistorySupport.withdrawalsScreenHistoryItems(
             accounts: accountsViewModel.accounts,
             entriesByAccount: withdrawalsHistory.ledgerByAccount,
-            cyclesByAccount: withdrawalsHistory.cyclesByAccount
+            cyclesByAccount: withdrawalsHistory.cyclesByAccount,
+            achievementPayouts: withdrawalsHistory.achievementPayouts
         )
-        return (recorded + withdrawalsHistory.achievementPayouts).sorted { $0.date > $1.date }
     }
 
     private var accountsByID: [TradingAccountID: TradingAccount] {
@@ -53,7 +53,12 @@ struct PayoutsScreenView: View {
     }
 
     private var totalWithdrawals: Decimal {
-        PayoutHistorySupport.summary(for: historyItems).total
+        PayoutHistorySupport.withdrawalsScreenTotal(
+            accounts: accountsViewModel.accounts,
+            entriesByAccount: withdrawalsHistory.ledgerByAccount,
+            cyclesByAccount: withdrawalsHistory.cyclesByAccount,
+            achievementPayouts: withdrawalsHistory.achievementPayouts
+        )
     }
 
     private var equityCurvePoints: [PayoutEquityCurvePoint] {
@@ -357,5 +362,11 @@ struct PayoutsScreenView: View {
             "published",
             detail: "\(phase) live=\(liveWithdrawals.count) prop=\(propPayouts.count) total=\(totalWithdrawals) ledgerRows=\(withdrawalsHistory.ledgerEntryCount())"
         )
+        #if DEBUG
+        WithdrawalsTrace.log(
+            "withdrawalsPageDisplayedTotal",
+            detail: "total=\(totalWithdrawals) ledgerRows=\(withdrawalsHistory.ledgerEntryCount()) achievementExtras=\(withdrawalsHistory.achievementPayouts.count)"
+        )
+        #endif
     }
 }

@@ -219,18 +219,11 @@ struct BrokerOnboardingView: View {
     }
 
     private func isConnectDisabled(for provider: BrokerIntegrationProvider) -> Bool {
-        if viewModel.isBrokerConnectionMutationActive { return true }
-        if provider == .rithmic, !viewModel.isRithmicConnectUIAvailable { return true }
-        return false
+        viewModel.isConnectDisabled(for: provider)
     }
 
     private func connect(_ provider: BrokerIntegrationProvider) {
-        switch provider {
-        case .tradovate:
-            viewModel.promptConnectTradovate()
-        case .rithmic:
-            viewModel.presentRithmicConnect()
-        }
+        viewModel.beginConnect(for: provider)
     }
 
     private var linkingHint: some View {

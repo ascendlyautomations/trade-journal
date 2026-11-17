@@ -3,7 +3,17 @@ import SwiftUI
 private enum TradeDetailLayout {
     static let sectionSpacing: CGFloat = ExperienceSpacing.md
     static let groupSpacing: CGFloat = ExperienceSpacing.xs
-    static let surfacePadding: CGFloat = ExperienceSpacing.sm
+    /// Space between journal detail blocks (Setup, Execution, etc.) — reads as separate cards on the page.
+    static let journalBlockSpacing: CGFloat = ExperienceSpacing.md
+    static let cardCornerRadius: CGFloat = ExperienceRadius.sm
+
+    static func surfacePadding(colorScheme: ColorScheme) -> CGFloat {
+        colorScheme == .light ? ExperienceSpacing.md : ExperienceSpacing.sm
+    }
+
+    static func detailRowVerticalPadding(colorScheme: ColorScheme) -> CGFloat {
+        colorScheme == .light ? ExperienceSpacing.xxs : 0
+    }
 }
 
 // MARK: - Compact header
@@ -32,8 +42,11 @@ struct TradeDetailCompactHeader: View {
                         .font(.system(.caption, design: .rounded).weight(.semibold))
                         .foregroundStyle(trade.side == .long ? colors.profit : colors.loss)
 
-                    Text(TradeDisplay.dateTimeText(trade.entryAt))
-                        .experienceStyle(.caption2, color: colors.secondaryText)
+                    if let range = TradeDisplay.journalTradeDetailExecutionRangeText(for: trade) {
+                        Text(range)
+                            .experienceStyle(.caption2, color: colors.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 Spacer(minLength: ExperienceSpacing.xs)
@@ -50,6 +63,9 @@ struct TradeDetailCompactHeader: View {
                             .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
                             .foregroundStyle(colors.secondaryText)
                     }
+
+                    TradeJournalVisibilityLabel(visibility: trade.visibility)
+                        .accessibilityIdentifier("detail.trade.visibility")
                 }
             }
 
@@ -68,10 +84,8 @@ struct TradeDetailCompactHeader: View {
 
 struct SocialTradeDetailHeader: View {
     let trade: Trade
-    var accountLine: String?
-    var linkedReel: Reel?
-    var imagePipeline: (any ImagePipeline)?
-    var onOpenLinkedClip: (() -> Void)?
+    var accountBadge: String?
+    var copyTradeSummary: String?
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
@@ -80,18 +94,27 @@ struct SocialTradeDetailHeader: View {
         NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
     }
 
-    private var showsLinkedClip: Bool {
-        linkedReel != nil && imagePipeline != nil && onOpenLinkedClip != nil
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
             HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(TradeDisplay.tickerText(trade.symbol))
-                        .font(.system(.title3, design: .default).weight(.bold))
-                        .foregroundStyle(colors.primaryText)
-                        .lineLimit(1)
+                    HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
+                        Text(TradeDisplay.tickerText(trade.symbol))
+                            .font(.system(.title3, design: .default).weight(.bold))
+                            .foregroundStyle(colors.primaryText)
+                            .lineLimit(1)
+
+                        if let accountBadge, !accountBadge.isEmpty {
+                            Text("|")
+                                .font(.system(.subheadline, design: .default).weight(.medium))
+                                .foregroundStyle(colors.tertiaryText)
+                            Text(accountBadge)
+                                .font(.system(.subheadline, design: .default).weight(.medium))
+                                .foregroundStyle(colors.secondaryText)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.85)
+                        }
+                    }
 
                     Text(TradeDisplay.sideTitle(trade.side).uppercased())
                         .font(.system(.caption, design: .rounded).weight(.semibold))
@@ -115,37 +138,11 @@ struct SocialTradeDetailHeader: View {
                 }
             }
 
-            HStack(alignment: .center, spacing: ExperienceSpacing.xs) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(TradeDisplay.socialSharedExecutionTimeRangeText(for: trade))
-                        .font(.system(.subheadline, design: .rounded).weight(.medium).monospacedDigit())
-                        .foregroundStyle(colors.primaryText)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.85)
-
-                    Text(TradeDisplay.socialSharedTradeDateText(for: trade))
-                        .experienceStyle(.caption, color: colors.secondaryText)
-
-                    if let accountLine, !accountLine.isEmpty {
-                        Text(accountLine)
-                            .experienceStyle(.caption2, color: colors.tertiaryText)
-                            .lineLimit(1)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                if showsLinkedClip,
-                   let linkedReel,
-                   let imagePipeline,
-                   let onOpenLinkedClip
-                {
-                    FeedLinkedClipTradeDetailHeaderRow(
-                        reel: linkedReel,
-                        imagePipeline: imagePipeline,
-                        onOpen: onOpenLinkedClip
-                    )
-                    .fixedSize(horizontal: true, vertical: false)
-                }
+            if let copyTradeSummary, !copyTradeSummary.isEmpty {
+                Text(copyTradeSummary)
+                    .experienceStyle(.caption2, color: colors.tertiaryText)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -153,36 +150,119 @@ struct SocialTradeDetailHeader: View {
     }
 }
 
+struct SocialTradePublicCaptionSection: View {
+    let caption: String
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        Text(caption)
+            .experienceStyle(.subheadline, color: colors.primaryText)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityIdentifier("detail.trade.publicCaption")
+    }
+}
+
 struct SocialTradePublicMetricsSection: View {
     let trade: Trade
 
     var body: some View {
-        TradeDetailGroupedSurface {
+        TradeDetailGroupedSurface(plainGroupedBackgroundInDarkMode: true) {
             TradeExecutionMetricsTwoRowGrid(
                 trade: trade,
                 contentAlignment: .centered,
-                showsPoints: false
+                showsPoints: false,
+                showsSocialExecutionDates: true
             )
         }
         .accessibilityIdentifier("detail.trade.socialMetrics")
     }
 }
 
+struct SocialTradeDetailMediaSection: View {
+    let tradeID: TradeID
+    let mediaReference: MediaReference?
+    let linkedReel: Reel?
+    let imagePipeline: any ImagePipeline
+    var onDoubleTapLike: (() -> Void)? = nil
+    var onOpenLinkedClip: (() -> Void)? = nil
+
+    @ViewBuilder
+    var body: some View {
+        if mediaReference != nil || linkedReel != nil {
+            if let mediaReference {
+                ZStack(alignment: .bottomTrailing) {
+                    TradeDetailMediaView(
+                        mediaID: tradeID.rawValue,
+                        reference: mediaReference,
+                        imagePipeline: imagePipeline,
+                        onDoubleTapLike: onDoubleTapLike
+                    )
+
+                    if let linkedReel, let onOpenLinkedClip {
+                        FeedLinkedClipImageOverlay(
+                            reel: linkedReel,
+                            imagePipeline: imagePipeline,
+                            onOpen: onOpenLinkedClip
+                        )
+                        .padding(ExperienceSpacing.sm)
+                    }
+                }
+                .accessibilityIdentifier("detail.trade.mediaWithClip")
+            } else if let linkedReel, let onOpenLinkedClip {
+                FeedLinkedClipEmbed(
+                    reel: linkedReel,
+                    imagePipeline: imagePipeline,
+                    onOpen: onOpenLinkedClip,
+                    showsDuration: false,
+                    thumbnailSide: 76
+                )
+                .accessibilityIdentifier("detail.trade.linkedClipOnly")
+            }
+        }
+    }
+}
+
 // MARK: - Grouped surfaces
 
 struct TradeDetailGroupedSurface<Content: View>: View {
+    /// When true, social trade detail metrics sit flush on the screen background in dark mode.
+    var plainGroupedBackgroundInDarkMode: Bool = false
     @ViewBuilder var content: () -> Content
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var showsGroupedCardBackground: Bool {
+        if plainGroupedBackgroundInDarkMode && colorScheme == .dark {
+            return false
+        }
+        return true
+    }
 
     var body: some View {
-        content()
-            .padding(TradeDetailLayout.surfacePadding)
+        let padded = content()
+            .padding(TradeDetailLayout.surfacePadding(colorScheme: colorScheme))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                colors.fillSecondary.opacity(0.45),
-                in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-            )
+
+        if showsGroupedCardBackground {
+            if colorScheme == .light {
+                padded.experienceTradingRulesCard(cornerRadius: TradeDetailLayout.cardCornerRadius)
+            } else {
+                padded.background {
+                    colors.fillSecondary.opacity(0.45)
+                        .clipShape(
+                            RoundedRectangle(
+                                cornerRadius: TradeDetailLayout.cardCornerRadius,
+                                style: .continuous
+                            )
+                        )
+                }
+            }
+        } else {
+            padded
+        }
     }
 }
 
@@ -190,13 +270,15 @@ struct TradeDetailSectionHeader: View {
     let title: String
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Text(title)
             .font(.system(.caption2, design: .default).weight(.semibold))
-            .foregroundStyle(colors.secondaryText)
+            .foregroundStyle(colorScheme == .light ? colors.tertiaryText : colors.secondaryText)
             .textCase(.uppercase)
             .tracking(0.35)
+            .padding(.bottom, colorScheme == .light ? ExperienceSpacing.xxs : 0)
     }
 }
 
@@ -207,6 +289,7 @@ struct TradeDetailQuickStatsSection: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
+    @Environment(\.colorScheme) private var colorScheme
 
     private var pnlTone: Color {
         theme.metricColor(
@@ -214,10 +297,14 @@ struct TradeDetailQuickStatsSection: View {
         )
     }
 
+    private var quickStatsRowSpacing: CGFloat {
+        colorScheme == .light ? ExperienceSpacing.sm : TradeDetailLayout.groupSpacing
+    }
+
     var body: some View {
         TradeDetailGroupedSurface {
-            VStack(spacing: TradeDetailLayout.groupSpacing) {
-                TradeDetailCompactStatRow(cells: {
+            VStack(spacing: quickStatsRowSpacing) {
+                TradeDetailCompactStatRow(centered: true, cells: {
                     var cells: [TradeDetailStatCell] = [
                         TradeDetailStatCell(
                             label: "P&L",
@@ -245,24 +332,35 @@ struct TradeDetailQuickStatsSection: View {
 
                 TradeDetailStatDivider()
 
-                TradeDetailCompactStatRow(cells: [
-                    TradeDetailStatCell(
-                        label: "Points Targeted",
-                        value: TradeDisplay.pointsText(trade.points) ?? "—"
-                    ),
-                    TradeDetailStatCell(
-                        label: "Actual Points",
-                        value: TradeDisplay.pointsText(TradePointsAndRealizedRr.computeActualPoints(trade: trade)) ?? "—"
-                    ),
-                    TradeDetailStatCell(
-                        label: "Realized R:R",
-                        value: TradeDisplay.compactRRText(TradePointsAndRealizedRr.resolveRealizedRr(trade: trade)) ?? "—"
-                    ),
-                ])
+                TradeDetailCompactStatRow(centered: true, cells: {
+                    var cells: [TradeDetailStatCell] = [
+                        TradeDetailStatCell(
+                            label: "Points Targeted",
+                            value: TradeDisplay.pointsText(trade.points) ?? "—"
+                        ),
+                        TradeDetailStatCell(
+                            label: "Actual Points",
+                            value: TradeDisplay.pointsText(TradePointsAndRealizedRr.computeActualPoints(trade: trade)) ?? "—"
+                        ),
+                        TradeDetailStatCell(
+                            label: "Realized R:R",
+                            value: TradeDisplay.compactRRText(TradePointsAndRealizedRr.resolveRealizedRr(trade: trade)) ?? "—"
+                        ),
+                    ]
+                    if let risk = trade.dollarRisk, risk > 0 {
+                        cells.append(
+                            TradeDetailStatCell(
+                                label: "Planned Risk",
+                                value: TradeDisplay.priceText(risk)
+                            )
+                        )
+                    }
+                    return cells
+                }())
 
                 TradeDetailStatDivider()
 
-                TradeDetailCompactStatRow(cells: [
+                TradeDetailCompactStatRow(centered: true, cells: [
                     TradeDetailStatCell(
                         label: "Entry",
                         value: TradeDisplay.priceText(trade.entryPrice),
@@ -292,29 +390,41 @@ private struct TradeDetailStatCell {
 }
 
 private struct TradeDetailCompactStatRow: View {
+    var centered: Bool = false
     let cells: [TradeDetailStatCell]
 
     @Environment(\.themeColors) private var colors
 
+    private var columnAlignment: HorizontalAlignment {
+        centered ? .center : .leading
+    }
+
+    private var frameAlignment: Alignment {
+        centered ? .center : .leading
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: ExperienceSpacing.xs) {
             ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: columnAlignment, spacing: 2) {
                     Text(cell.label)
                         .experienceStyle(.caption2, color: colors.tertiaryText)
+                        .multilineTextAlignment(centered ? .center : .leading)
                     Text(cell.value)
                         .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
                         .foregroundStyle(cell.valueColor ?? colors.primaryText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
+                        .multilineTextAlignment(centered ? .center : .leading)
                     if let subtitle = cell.subtitle {
                         Text(subtitle)
                             .experienceStyle(.caption2, color: colors.secondaryText)
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
+                            .multilineTextAlignment(centered ? .center : .leading)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: frameAlignment)
             }
         }
     }
@@ -322,11 +432,12 @@ private struct TradeDetailCompactStatRow: View {
 
 private struct TradeDetailStatDivider: View {
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Rectangle()
-            .fill(colors.separator.opacity(0.6))
-            .frame(height: 0.5)
+            .fill(colors.separator.opacity(colorScheme == .light ? 1 : 0.6))
+            .frame(height: ExperienceBorder.hairline)
     }
 }
 
@@ -494,10 +605,13 @@ struct TradeDetailJournalSection: View {
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        if detailRows.isEmpty, noteBodies.isEmpty {
+        if setupRows.isEmpty,
+           executionPsychologyRows.isEmpty,
+           noteBodies.isEmpty
+        {
             EmptyView()
         } else {
-            VStack(alignment: .leading, spacing: TradeDetailLayout.groupSpacing) {
+            VStack(alignment: .leading, spacing: TradeDetailLayout.journalBlockSpacing) {
                 if !noteBodies.isEmpty {
                     VStack(alignment: .leading, spacing: TradeDetailLayout.groupSpacing) {
                         TradeDetailSectionHeader(title: "Notes")
@@ -516,20 +630,11 @@ struct TradeDetailJournalSection: View {
                     }
                 }
 
-                if !detailRows.isEmpty {
-                    VStack(alignment: .leading, spacing: TradeDetailLayout.groupSpacing) {
-                        TradeDetailSectionHeader(title: "Details")
-                        TradeDetailGroupedSurface {
-                            VStack(spacing: 6) {
-                                ForEach(Array(detailRows.enumerated()), id: \.offset) { index, row in
-                                    detailRow(label: row.0, value: row.1)
-                                    if index < detailRows.count - 1 {
-                                        TradeDetailStatDivider()
-                                    }
-                                }
-                            }
-                        }
-                    }
+                if !setupRows.isEmpty {
+                    TradeDetailJournalFieldGroup(title: "Setup", rows: setupRows)
+                }
+                if !executionPsychologyRows.isEmpty {
+                    TradeDetailJournalFieldGroup(title: "Execution & Psychology", rows: executionPsychologyRows)
                 }
             }
             .accessibilityIdentifier("detail.trade.journal")
@@ -548,54 +653,92 @@ struct TradeDetailJournalSection: View {
         return []
     }
 
-    private var detailRows: [(String, String)] {
+    private var setupRows: [(String, String)] {
         guard isOwner else { return [] }
         var rows: [(String, String)] = []
-        if let setup = trade.strategy?.trimmingCharacters(in: .whitespacesAndNewlines), !setup.isEmpty {
-            rows.append(("Setup", setup))
-        }
         if let session = trade.sessionLabel?.trimmingCharacters(in: .whitespacesAndNewlines), !session.isEmpty {
             rows.append(("Session", session))
         }
         if let timeframe = trade.timeframe?.trimmingCharacters(in: .whitespacesAndNewlines), !timeframe.isEmpty {
             rows.append(("Timeframe", timeframe))
         }
-        if let emotion = trade.emotion?.trimmingCharacters(in: .whitespacesAndNewlines), !emotion.isEmpty {
-            rows.append(("Emotion", emotion))
-        }
-        if let confidence = trade.confidence {
-            rows.append(("Confidence", "\(confidence)/5"))
-        }
-        if let followed = trade.followedPlan {
-            rows.append(("Followed Plan", followed ? "Yes" : "No"))
-        }
         if let market = trade.marketCondition?.trimmingCharacters(in: .whitespacesAndNewlines), !market.isEmpty {
-            rows.append(("Market", market))
+            rows.append(("Market Condition", market))
         }
-        if let exitEmotion = trade.exitEmotion?.trimmingCharacters(in: .whitespacesAndNewlines), !exitEmotion.isEmpty {
-            rows.append(("Exit Emotion", exitEmotion))
-        }
-        if let rating = trade.executionRating {
-            rows.append(("Execution", "\(rating)/5"))
-        }
-        if let psych = trade.psychologyNotes?.trimmingCharacters(in: .whitespacesAndNewlines), !psych.isEmpty {
-            rows.append(("Psychology", psych))
-        }
-        if isOwner {
-            rows.append(("Visibility", trade.visibility == .public ? "Public" : "Private"))
+        if trade.newsEvent == true {
+            rows.append(("News Event", "Yes"))
         }
         return rows
     }
 
-    private func detailRow(label: String, value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
-            Text(label)
-                .experienceStyle(.caption, color: colors.tertiaryText)
-                .frame(width: 88, alignment: .leading)
-            Text(value)
-                .experienceStyle(.subheadline, color: colors.primaryText)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
+    private var executionPsychologyRows: [(String, String)] {
+        guard isOwner else { return [] }
+        var rows: [(String, String)] = []
+        if let followed = trade.followedPlan {
+            rows.append(("Followed Plan", followed ? "Yes" : "No"))
+        }
+        if let confidence = trade.confidence {
+            rows.append(("Conviction", "\(confidence)/5"))
+        }
+        if let rating = trade.executionRating {
+            rows.append(("Execution Rating", "\(rating)/5"))
+        }
+        if let emotion = trade.emotion?.trimmingCharacters(in: .whitespacesAndNewlines), !emotion.isEmpty {
+            rows.append(("Emotion Before", emotion))
+        }
+        if let exitEmotion = trade.exitEmotion?.trimmingCharacters(in: .whitespacesAndNewlines), !exitEmotion.isEmpty {
+            rows.append(("Emotion After", exitEmotion))
+        }
+        if let psych = trade.psychologyNotes?.trimmingCharacters(in: .whitespacesAndNewlines), !psych.isEmpty {
+            rows.append(("Psychology Notes", psych))
+        }
+        return rows
+    }
+
+}
+
+private struct TradeDetailJournalFieldGroup: View {
+    let title: String
+    let rows: [(String, String)]
+
+    @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var labelWidth: CGFloat {
+        colorScheme == .light ? 116 : 88
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: TradeDetailLayout.groupSpacing) {
+            TradeDetailSectionHeader(title: title)
+            TradeDetailGroupedSurface {
+                VStack(spacing: colorScheme == .light ? ExperienceSpacing.xs : 6) {
+                    ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                        HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+                            Text(row.0)
+                                .font(
+                                    .system(
+                                        .caption,
+                                        design: .default,
+                                        weight: colorScheme == .light ? .medium : .regular
+                                    )
+                                )
+                                .foregroundStyle(colors.tertiaryText)
+                                .multilineTextAlignment(.leading)
+                                .frame(width: labelWidth, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(row.1)
+                                .experienceStyle(.subheadline, color: colors.primaryText)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.vertical, TradeDetailLayout.detailRowVerticalPadding(colorScheme: colorScheme))
+                        if index < rows.count - 1 {
+                            TradeDetailStatDivider()
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -5,6 +5,9 @@ nonisolated protocol ExploreRepository: Sendable {
     /// Public discoverable profiles for ranking (offset via `page.cursor` as Int string).
     func discoverableProfiles(page: PageRequest) async throws -> CursorPage<Profile>
 
+    /// Discoverable profiles with a non-empty avatar (Explore home rail fallback).
+    func discoverableProfilesWithAvatars(limit: Int) async throws -> [Profile]
+
     /// Batch follower/following counts via `explore_social_counts`.
     func socialCounts(for profileIDs: [ProfileID]) async throws -> ExploreSocialCounts
 
@@ -37,6 +40,12 @@ nonisolated protocol ExploreRepository: Sendable {
 }
 
 extension ExploreRepository {
+    func discoverableProfilesWithAvatars(limit: Int) async throws -> [Profile] {
+        let capped = max(1, min(limit, 24))
+        let page = try await discoverableProfiles(page: PageRequest(limit: capped))
+        return page.items.filter { ExploreTraderRanking.hasValidProfilePicture($0) }
+    }
+
     func discoverRooms(mode: TradeRoomDiscoveryMode, limit: Int) async throws -> [ExploreRoomSuggestion] {
         try await discoverRooms(mode: mode, scope: .all, limit: limit)
     }

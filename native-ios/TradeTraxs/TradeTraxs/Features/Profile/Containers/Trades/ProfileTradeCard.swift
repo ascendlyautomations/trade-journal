@@ -50,6 +50,8 @@ struct ProfileTradeCard: View {
     var isProfilePinned: Bool = false
     /// Grouped copy-action mode line from Profile display grouping — not recomputed from ``TradeSummary/accountMode``.
     var copyTradeModeSummaryLine: String? = nil
+    /// `Provider · Eval` — resolved by profile list VM from journal + account metadata.
+    var postedAccountCaption: String? = nil
     var detailCache: DetailPresentationCache? = nil
     var profileViewerID: ProfileID? = nil
     var onOpenLinkedClip: ((ReelID) -> Void)? = nil
@@ -69,6 +71,7 @@ struct ProfileTradeCard: View {
         profilePin: ProfilePinCallbacks? = nil,
         isProfilePinned: Bool = false,
         copyTradeModeSummaryLine: String? = nil,
+        postedAccountCaption: String? = nil,
         detailCache: DetailPresentationCache? = nil,
         profileViewerID: ProfileID? = nil,
         onOpenLinkedClip: ((ReelID) -> Void)? = nil
@@ -87,6 +90,7 @@ struct ProfileTradeCard: View {
         self.profilePin = profilePin
         self.isProfilePinned = isProfilePinned
         self.copyTradeModeSummaryLine = copyTradeModeSummaryLine
+        self.postedAccountCaption = postedAccountCaption
         self.detailCache = detailCache
         self.profileViewerID = profileViewerID
         self.onOpenLinkedClip = onOpenLinkedClip
@@ -184,10 +188,9 @@ struct ProfileTradeCard: View {
             ContentOverflowMenu(
                 isOwner: showsOwnerActions,
                 onReport: onReport,
-                editTitle: "Edit Trade",
-                deleteTitle: "Delete Trade",
+                editTitle: "Edit Post",
                 onEdit: showsOwnerActions ? onEdit : nil,
-                onDelete: showsOwnerActions && !isDeleteInProgress ? onDelete : nil,
+                onDelete: nil,
                 onPin: profilePin.map { pin in
                     {
                         pin.requestPin(
@@ -215,10 +218,7 @@ struct ProfileTradeCard: View {
             Button("Open", action: onOpen)
             Button("Share", systemImage: "square.and.arrow.up", action: onShare)
             if showsOwnerActions {
-                Button("Edit Trade", systemImage: "square.and.pencil", action: onEdit)
-                if !isDeleteInProgress, let onDelete {
-                    Button("Delete Trade", systemImage: "trash", role: .destructive, action: onDelete)
-                }
+                Button("Edit Post", systemImage: "square.and.pencil", action: onEdit)
             }
         } preview: {
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
@@ -270,6 +270,17 @@ struct ProfileTradeCard: View {
                 showsProfilePin: isPinnedToProfile
             )
             .accessibilityIdentifier("profile.trade.headline")
+
+            if summary.mode != .copyTraded,
+               let postedAccountCaption,
+               !postedAccountCaption.isEmpty
+            {
+                Text(postedAccountCaption)
+                    .experienceStyle(.caption, color: colors.secondaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .accessibilityIdentifier("profile.trade.accountCaption")
+            }
 
             HStack(spacing: ExperienceSpacing.xs) {
                 Text(TradeDisplay.dateText(summary.createdAt))

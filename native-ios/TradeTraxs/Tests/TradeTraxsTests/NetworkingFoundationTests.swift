@@ -96,6 +96,7 @@ final class NetworkingFoundationTests: XCTestCase {
         XCTAssertEqual(request.url.absoluteString, "https://www.tradetraxs.com/api/health")
         XCTAssertEqual(request.method, .get)
         XCTAssertTrue(request.allowsRetry)
+        XCTAssertFalse(request.acceptsNonSuccessStatusCodes)
         XCTAssertEqual(request.headers["Accept"], "application/json")
     }
 

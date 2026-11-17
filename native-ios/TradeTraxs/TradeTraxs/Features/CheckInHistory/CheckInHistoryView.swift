@@ -138,13 +138,7 @@ struct CheckInHistoryDayRow: View {
                 }
             }
         }
-        .padding(ExperienceSpacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
-        .overlay {
-            RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-                .stroke(colors.border, lineWidth: 1)
-        }
+        .checkInHistorySectionCard(style: .listRow)
     }
 
     /// Unchanged All-tab preview (sleep, focus, stress).

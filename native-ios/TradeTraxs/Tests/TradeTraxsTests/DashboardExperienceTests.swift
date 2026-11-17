@@ -1036,6 +1036,67 @@ final class DashboardExperienceTests: XCTestCase {
         )
     }
 
+    func testDashboardWithdrawalTotalUsesLedgerNotAchievementsAndRespectsDateFilter() {
+        let accountID = TradingAccountID("live-dash")
+        let live = TradingAccount(
+            id: accountID,
+            ownerProfileID: ProfileID("user"),
+            name: "Live",
+            category: .personal,
+            mode: .live,
+            size: Money(amount: 25_000),
+            isActive: true,
+            canAddTrades: true
+        )
+        let now = Date()
+        let recent = AccountPayoutEntry(
+            id: AccountPayoutEntryID("w1"),
+            accountID: accountID,
+            amount: Money(amount: 400),
+            payoutDate: now.addingTimeInterval(-5 * 86_400),
+            note: nil
+        )
+        let older = AccountPayoutEntry(
+            id: AccountPayoutEntryID("w2"),
+            accountID: accountID,
+            amount: Money(amount: 1_600),
+            payoutDate: now.addingTimeInterval(-200 * 86_400),
+            note: nil
+        )
+        let scope30 = DashboardClientScopeFilter(
+            accountFilter: .account(accountID),
+            dateRange: .thirtyDays,
+            customInterval: nil,
+            accountMode: .all,
+            showPublicOnly: false
+        )
+        let total30 = PayoutHistorySupport.recordedWithdrawalsTotal(
+            accounts: [live],
+            entriesByAccount: [accountID: [recent, older]],
+            cyclesByAccount: [:],
+            accountFilter: .account(accountID),
+            scope: scope30,
+            now: now
+        )
+        XCTAssertEqual(total30, 400)
+
+        let allTime = PayoutHistorySupport.recordedWithdrawalsTotal(
+            accounts: [live],
+            entriesByAccount: [accountID: [recent, older]],
+            cyclesByAccount: [:],
+            accountFilter: .account(accountID),
+            scope: DashboardClientScopeFilter(
+                accountFilter: .account(accountID),
+                dateRange: .all,
+                customInterval: nil,
+                accountMode: .all,
+                showPublicOnly: false
+            ),
+            now: now
+        )
+        XCTAssertEqual(allTime, 2_000)
+    }
+
     func testAccountValueWithdrawalSummaryUsesAuthoritativeRecords() {
         let accountID = TradingAccountID("prop-funded")
         let fundedProp = TradingAccount(
@@ -1175,6 +1236,73 @@ final class DashboardExperienceTests: XCTestCase {
         XCTAssertEqual(navigationStore.paths.home.last, .reports)
     }
 
+    func testColdDashboardMatchesWithdrawalsPageRecordedTotalWithoutPriorStoreHydration() async {
+        AuthenticatedLaunchPhasing.reset()
+        WithdrawalsHistoryStore.shared.invalidate()
+        SessionPayoutEntriesStore.shared.invalidate()
+        SessionPayoutCyclesStore.shared.invalidateAll()
+
+        let owner = ProfileID("dashboard-withdrawals-cold.owner")
+        let liveID = TradingAccountID("dashboard-withdrawals-live")
+        let account = TradingAccount(
+            id: liveID,
+            ownerProfileID: owner,
+            name: "Live",
+            category: .personal,
+            mode: .live,
+            size: Money(amount: 25_000),
+            isActive: true,
+            canAddTrades: true
+        )
+        let entry = AccountPayoutEntry(
+            id: AccountPayoutEntryID("dashboard-withdrawal-entry-1"),
+            accountID: liveID,
+            amount: Money(amount: 1_500),
+            payoutDate: Date(),
+            note: nil
+        )
+        let expectedRecorded = PayoutHistorySupport.withdrawalsPageRecordedTotal(
+            accounts: [account],
+            entriesByAccount: [liveID: [entry]],
+            cyclesByAccount: [:]
+        )
+        XCTAssertEqual(expectedRecorded, 1_500)
+
+        let tradesRepo = DashboardWithdrawalLedgerTradeRepository(
+            accounts: [account],
+            payoutEntries: [entry]
+        )
+        let cache = DetailPresentationCache()
+        let viewModel = DashboardViewModel(
+            home: DashboardStubHomeRepository(),
+            trades: tradesRepo,
+            achievements: DashboardStubAchievementRepository(),
+            dailyCheckIns: EmptyTraderDailyCheckInRepository(),
+            session: DashboardStubSession(userID: owner.rawValue),
+            detailCache: cache,
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore())
+        )
+
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+        AuthenticatedLaunchPhasing.markCriticalVisibleSurfaceReady(tab: .home)
+
+        await waitFor(timeout: 5) {
+            viewModel.summary?.payouts == expectedRecorded
+        }
+
+        XCTAssertEqual(viewModel.summary?.payouts, expectedRecorded)
+        XCTAssertEqual(tradesRepo.payoutEntriesBatchCallCount, 1)
+        XCTAssertEqual(
+            PayoutHistorySupport.withdrawalsPageRecordedTotal(
+                accounts: [account],
+                entriesByAccount: WithdrawalsHistoryStore.shared.ledgerByAccount,
+                cyclesByAccount: WithdrawalsHistoryStore.shared.cyclesByAccount
+            ),
+            expectedRecorded
+        )
+    }
+
     func testNetworkBootstrapSkipsHomeDashboardAndDefersAchievements() async {
         DashboardLoadProbe.resetForTesting()
         let tradesRepo = DashboardCountingTradeRepository()
@@ -1194,20 +1322,24 @@ final class DashboardExperienceTests: XCTestCase {
         viewModel.loadIfNeeded()
         await waitFor { viewModel.phase == .loaded && homeRepo.dashboardCallCount == 0 }
 
-        // Allow deferred payouts hydrate to finish.
-        await waitFor { achievementsRepo.achievementsCallCount == 1 }
+        // Allow deferred withdrawal ledger hydrate to finish.
+        try? await Task.sleep(nanoseconds: 150_000_000)
 
         XCTAssertEqual(homeRepo.dashboardCallCount, 0, "home.dashboard must not run on Dashboard")
         XCTAssertEqual(tradesRepo.tradesCallCount, 1)
         XCTAssertEqual(tradesRepo.accountsCallCount, 1)
-        XCTAssertEqual(achievementsRepo.achievementsCallCount, 1)
+        XCTAssertEqual(
+            achievementsRepo.achievementsCallCount,
+            0,
+            "Dashboard payouts chip uses ledger cycles, not achievement sums"
+        )
         XCTAssertNotNil(viewModel.summary)
 
         // Second visit — session cache, no refetch.
         viewModel.loadIfNeeded()
         try? await Task.sleep(nanoseconds: 30_000_000)
         XCTAssertEqual(tradesRepo.tradesCallCount, 1)
-        XCTAssertEqual(achievementsRepo.achievementsCallCount, 1)
+        XCTAssertEqual(achievementsRepo.achievementsCallCount, 0)
 
         let snap = DashboardLoadProbe.snapshot()
         XCTAssertFalse(snap.operations.contains { $0.name.contains("home.dashboard") })
@@ -1658,6 +1790,58 @@ private final class DashboardCountingHomeRepository: HomeRepository, @unchecked 
         interval: DateIntervalValue
     ) async throws -> PerformanceSummary {
         try await dashboard(for: profileID).summary
+    }
+}
+
+private final class DashboardWithdrawalLedgerTradeRepository: TradeRepository, @unchecked Sendable {
+    private let accountsList: [TradingAccount]
+    private let ledgerRows: [AccountPayoutEntry]
+    private(set) var payoutEntriesBatchCallCount = 0
+
+    init(accounts: [TradingAccount], payoutEntries: [AccountPayoutEntry]) {
+        self.accountsList = accounts
+        self.ledgerRows = payoutEntries
+    }
+
+    func trade(id: TradeID) async throws -> Trade { throw AppError.unknown(message: "not found") }
+
+    func trades(
+        ownedBy profileID: ProfileID,
+        accountID: TradingAccountID?,
+        page: PageRequest,
+        publicOnly: Bool
+    ) async throws -> CursorPage<Trade> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+
+    func save(_ draft: TradeDraft) async throws -> Trade { throw AppError.unknown(message: "stub") }
+    func update(_ trade: Trade) async throws -> Trade { trade }
+    func delete(id: TradeID) async throws {}
+    func images(for tradeID: TradeID) async throws -> [TradeImage] { [] }
+    func notes(for tradeID: TradeID) async throws -> [TradeNote] { [] }
+
+    func statistics(
+        for profileID: ProfileID,
+        interval: DateIntervalValue
+    ) async throws -> TradeStatistics {
+        TradeStatistics(
+            tradeCount: 0,
+            winCount: 0,
+            lossCount: 0,
+            totalPnL: Money(amount: 0),
+            averagePnL: Money(amount: 0),
+            averageRiskReward: nil,
+            winRate: 0
+        )
+    }
+
+    func accounts(for profileID: ProfileID) async throws -> [TradingAccount] {
+        accountsList
+    }
+
+    func payoutEntries(for accountIDs: [TradingAccountID]) async throws -> [AccountPayoutEntry] {
+        payoutEntriesBatchCallCount += 1
+        return ledgerRows.filter { accountIDs.contains($0.accountID) }
     }
 }
 

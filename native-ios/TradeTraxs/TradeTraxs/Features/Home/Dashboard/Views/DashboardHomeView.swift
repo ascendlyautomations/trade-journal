@@ -4,8 +4,8 @@ import SwiftUI
 struct DashboardHomeView: View {
     @State private var viewModel: DashboardViewModel
     @State private var activityStore = ActivityInboxStore.shared
-    @State private var contentRevealed = false
-    @State private var deferredDashboardBootstrapStarted = false
+    @State private var contentRevealed: Bool
+    @State private var scrollAnchor: DashboardScrollAnchor
     @State private var gettingStartedStore = GettingStartedStore.shared
     @State private var dailyCheckInStore = TraderDailyCheckInStore.shared
     @Bindable private var brokerImportEligibilityStore = BrokerImportEligibilityStore.shared
@@ -21,10 +21,11 @@ struct DashboardHomeView: View {
 
     init(
         data: DataEnvironment,
-        navigationCoordinator: NavigationCoordinator
+        navigationCoordinator: NavigationCoordinator,
+        retainsTabPresentation: Bool = true
     ) {
-        _viewModel = State(
-            initialValue: DashboardViewModel(
+        let model = DashboardTabModelStore.model(retainsTabPresentation: retainsTabPresentation) {
+            DashboardViewModel(
                 home: data.home,
                 trades: data.trades,
                 achievements: data.achievements,
@@ -33,9 +34,14 @@ struct DashboardHomeView: View {
                 detailCache: data.detailCache,
                 navigationCoordinator: navigationCoordinator,
                 realtimeHub: data.realtimeHub,
-                rpc: data.rpc
+                rpc: data.rpc,
+                tradingPreferences: data.tradingPreferences
             )
-        )
+        }
+        _viewModel = State(initialValue: model)
+        _contentRevealed = State(initialValue: model.summary != nil)
+        let anchor = DashboardTabModelStore.scrollAnchor(restoredOffset: model.retainedScrollOffset)
+        _scrollAnchor = State(initialValue: anchor)
         self.navigationCoordinator = navigationCoordinator
         self.data = data
     }
@@ -46,11 +52,21 @@ struct DashboardHomeView: View {
         navigationCoordinator: NavigationCoordinator
     ) {
         _viewModel = State(initialValue: viewModel)
+        _contentRevealed = State(initialValue: viewModel.summary != nil)
+        let anchor = DashboardTabModelStore.scrollAnchor(restoredOffset: viewModel.retainedScrollOffset)
+        _scrollAnchor = State(initialValue: anchor)
         self.navigationCoordinator = navigationCoordinator
         self.data = nil
     }
 
     var body: some View {
+        applyDashboardNotificationModifiers(
+            to: applyDashboardLifecycleModifiers(to: dashboardRoot)
+        )
+    }
+
+    @ViewBuilder
+    private var dashboardRoot: some View {
         Group {
             switch viewModel.phase {
             case .idle, .loading:
@@ -80,7 +96,7 @@ struct DashboardHomeView: View {
         .experienceScreenBackground()
         .sheet(isPresented: $viewModel.showsScopeFilterSheet) {
             DashboardScopeFilterSheet(viewModel: viewModel)
-                .presentationDetents([.medium, .large])
+                .experienceSheetChrome()
         }
         .sheet(isPresented: $viewModel.showsEquityDrawdownSettings) {
             DashboardEquityDrawdownSettingsSheet(
@@ -126,7 +142,6 @@ struct DashboardHomeView: View {
                     )
                 }
                 .accessibilityIdentifier("dashboard.activity")
-                .contextualTourTarget(.dashboardNotifications)
             }
         }
         .modifier(
@@ -139,6 +154,11 @@ struct DashboardHomeView: View {
             await viewModel.refresh()
             await brokerImportEligibilityStore.refreshAndWait(fromUserAction: true)
         }
+    }
+
+    @ViewBuilder
+    private func applyDashboardLifecycleModifiers<Content: View>(to content: Content) -> some View {
+        content
         .onChange(of: SessionViewerGate.shared.epoch) { _, _ in
             viewModel.loadIfNeeded()
         }
@@ -148,7 +168,6 @@ struct DashboardHomeView: View {
                 brokerImportEligibilityStore.hydrateFromDiskIfNeeded(viewerID: userID)
             }
             viewModel.loadIfNeeded()
-            viewModel.ensureEquityChartOverlayIfNeeded()
             brokerImportEligibilityStore.loadIfNeeded()
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-uitesting-dashboard-propfirm") {
@@ -160,7 +179,6 @@ struct DashboardHomeView: View {
         .onChange(of: viewModel.phase, initial: true) { _, phase in
             guard tabIsActive else { return }
             guard phase == .loaded || viewModel.summary != nil else { return }
-            viewModel.ensureEquityChartOverlayIfNeeded()
             startDeferredDashboardBootstrapIfNeeded()
         }
         .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
@@ -185,16 +203,19 @@ struct DashboardHomeView: View {
         .onChange(of: withdrawalsHistory.completedPropCycleCount()) { _, _ in
             viewModel.syncAfterWithdrawalStoreMutation()
         }
+        .onChange(of: withdrawalsHistory.achievementPayouts.count) { _, _ in
+            viewModel.syncAfterWithdrawalStoreMutation()
+        }
         .onChange(of: BrokerIntegrationMutationStore.shared.revision) { _, _ in
             brokerImportEligibilityStore.refresh(fromUserAction: true)
         }
         .onChange(of: tabIsActive, initial: true) { _, isActive in
+            if !isActive {
+                preserveScrollOffset()
+            }
             viewModel.setHomeTabActive(isActive)
             if isActive {
-                dailyCheckInStore.refresh(fromUserAction: false)
-                Task {
-                    await viewModel.syncDailyCheckInsFromNetwork()
-                }
+                viewModel.ensureEquityChartOverlayIfNeeded()
             }
             guard isActive, brokerImportEligibilityStore.isReady else { return }
             brokerImportEligibilityStore.refreshIfStale(fromUserAction: false)
@@ -209,25 +230,45 @@ struct DashboardHomeView: View {
             viewModel.refreshPsychologyUnlockMetrics()
         }
         .onDisappear {
+            preserveScrollOffset()
             viewModel.onDisappear()
             ContextualTourCoordinator.shared.setDashboardAnalyticsReady(false)
         }
         .onAppear {
             PsychologyAnalyticsPresentationBridge.bind(viewModel)
+            TradingRulesCompliancePresentationBridge.bind(viewModel)
             ContextualTourCoordinator.shared.setDashboardAnalyticsReady(dashboardTourAnalyticsReady)
         }
         .onChange(of: dashboardTourAnalyticsReady) { _, ready in
             ContextualTourCoordinator.shared.setDashboardAnalyticsReady(ready)
         }
+        .onChange(of: viewModel.listScrollPresentationEpoch) { _, _ in
+            scrollAnchor.resetToTop()
+        }
         .onChange(of: dashboardTourAnalyticsDebugLine, initial: true) { _, line in
             ContextualTourDebug.log(line)
         }
         .accessibilityIdentifier("dashboard.home")
+    }
+
+    @ViewBuilder
+    private func applyDashboardNotificationModifiers<Content: View>(to content: Content) -> some View {
+        content
         .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { _ in
             entitlementGateRevision += 1
         }
         .onReceive(NotificationCenter.default.publisher(for: .monetizationConfigurationDidChange)) { _ in
             entitlementGateRevision += 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .tradingPreferencesDidChange)) { _ in
+            if let profileID = viewModel.profileIDForTradingRulesCache {
+                TradingRulesCompliancePreferencesCache.invalidate(profileID: profileID)
+            }
+            TradingRulesComplianceRecomputeCoordinator.reset()
+            viewModel.refreshTradingPreferencesAfterEditorSave()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .tradingRulesComplianceOwnerTradesChanged)) { notification in
+            viewModel.handleTradingRulesOwnerTradesChangedNotification(notification)
         }
     }
 
@@ -283,12 +324,7 @@ struct DashboardHomeView: View {
 
     private var psychologyAnalyticsUpgradeSection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            Text("Psychology Insights")
-                .experienceStyle(.headline, color: colors.primaryText)
-                .padding(.horizontal, ExperienceSpacing.md)
-            Text("Patterns from your trades and daily check-ins")
-                .experienceStyle(.footnote, color: colors.tertiaryText)
-                .padding(.horizontal, ExperienceSpacing.md)
+            sectionHeader("Psychology Insights", info: Self.psychologyInsightsInfo)
 
             VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                 Text("TraxPro psychology analytics")
@@ -327,17 +363,22 @@ struct DashboardHomeView: View {
         return "analytics tab=\(tabIsActive) revealed=\(contentRevealed) summary=\(summary) trades=\(trades.map(String.init) ?? "nil") gettingStarted=\(gettingStartedStore.shouldShowDashboardCard) ready=\(dashboardTourAnalyticsReady)"
     }
 
+    private var discoveryUserID: ProfileID? {
+        SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+    }
+
     private var accountValueWithdrawalSummary: AccountTrackedBalanceSupport.WithdrawalSummary? {
         guard let account = viewModel.selectedAccount else { return nil }
         return AccountTrackedBalanceSupport.withdrawalSummary(
             account: account,
             payoutCycles: viewModel.payoutCyclesForAccountValueSummary(accountID: account.id),
-            ledgerEntries: withdrawalsHistory.ledgerByAccount[account.id] ?? []
+            ledgerEntries: withdrawalsHistory.ledgerByAccount[account.id] ?? [],
+            scope: viewModel.clientScopeFilter()
         )
     }
 
     private var emptyDashboardContent: some View {
-        ScrollView {
+        ScrollView(.vertical) {
             VStack(spacing: ExperienceSpacing.lg) {
                 if gettingStartedStore.shouldShowDashboardCard {
                     GettingStartedCard(
@@ -352,15 +393,26 @@ struct DashboardHomeView: View {
                     title: "No trades yet",
                     message: "Log your first trade to unlock the equity curve and analytics."
                 )
+                TradingPreferenceDiscoverySlot(
+                    surface: .dashboard,
+                    userID: discoveryUserID,
+                    repository: data?.tradingPreferences,
+                    localHasTrade: false,
+                    navigationCoordinator: navigationCoordinator
+                )
+                .padding(.horizontal, ExperienceSpacing.md)
             }
             .padding(.top, ExperienceSpacing.sm)
+            .experienceDisablesSystemScrollToTop()
         }
-        .scrollBounceBehavior(.basedOnSize, axes: .vertical)
+        .dashboardHorizontalLock()
+        .scrollPosition(scrollAnchor.binding)
+        .scrollBounceBehavior(.basedOnSize)
     }
 
     private var scrollContent: some View {
         ScrollViewReader { proxy in
-        ScrollView {
+        ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 0) {
                 dashboardFilterBarChrome
 
@@ -373,6 +425,16 @@ struct DashboardHomeView: View {
                         .padding(.horizontal, ExperienceSpacing.md)
                         .padding(.bottom, ExperienceSpacing.sm)
                     }
+
+                    TradingPreferenceDiscoverySlot(
+                        surface: .dashboard,
+                        userID: discoveryUserID,
+                        repository: data?.tradingPreferences,
+                        localHasTrade: (viewModel.summary?.tradeCount ?? 0) > 0,
+                        navigationCoordinator: navigationCoordinator
+                    )
+                    .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.bottom, ExperienceSpacing.sm)
 
                     dashboardQuickActionsGroup(includeBrokerImport: true)
 
@@ -406,18 +468,24 @@ struct DashboardHomeView: View {
 
                     sectionHeader(
                         "Performance",
-                        subtitle: "Outcome quality for this period"
+                        info: "Average win, average loss, best trade, biggest loss, and max drawdown use realized P&L in the current filter. Wins are above zero and losses are below zero. Max drawdown is the deepest drop from the equity peak. Payouts sum recorded withdrawals (live ledger and prop payouts) for the selected account and date range."
                     )
                     performanceCardsGrid
                         .padding(.bottom, ExperienceSpacing.lg)
 
                     sectionHeader(
                         DashboardScorecardDisplayCopy.sectionTitle,
-                        subtitle: "Category scores for this filter"
+                        info: "The ring is the overall score for this filter once the sample is large enough. It blends consistency, risk, discipline, and psychology. The lines under it show how often tagged trades followed the plan, how often that held after a loss, and check-ins on trading days."
                     )
                     DashboardTradingScorecardSection(showsTitle: false) {
                         viewModel.openTradingScorecard()
                     }
+                    .padding(.bottom, ExperienceSpacing.lg)
+
+                    DashboardTradingRulesComplianceSection(
+                        onOpenDetail: { viewModel.openTradingRulesAnalytics() },
+                        onOpenSettings: { viewModel.openTradingRulesSettings() }
+                    )
                     .padding(.bottom, ExperienceSpacing.xl)
 
                     DashboardChartsSection(
@@ -455,9 +523,10 @@ struct DashboardHomeView: View {
                     } else {
                         PsychologyInsightsSection(
                             title: "Psychology Insights",
-                            subtitle: "Patterns from your trades and daily check-ins",
+                            info: Self.psychologyInsightsInfo,
                             cards: viewModel.dashboardPsychologyInsightCards,
                             unlockProgress: viewModel.psychologyInsightsUnlockProgress,
+                            insightsReady: viewModel.psychologyInsightsReady,
                             unlockMetricsReady: viewModel.psychologyUnlockMetricsReady,
                             hasMatchedCheckInDays: viewModel.psychologyHasMatchedCheckInDays,
                             postUnlockGapMessages: viewModel.psychologyPostUnlockGapMessages,
@@ -482,8 +551,11 @@ struct DashboardHomeView: View {
             .onAppear {
                 revealContentIfNeeded()
             }
+            .experienceDisablesSystemScrollToTop()
         }
-        .scrollBounceBehavior(.basedOnSize, axes: .vertical)
+        .dashboardHorizontalLock()
+        .scrollPosition(scrollAnchor.binding)
+        .scrollBounceBehavior(.basedOnSize)
         .onChange(of: ContextualTourCoordinator.shared.scrollTarget) { _, target in
             guard let target else { return }
             if reduceMotion {
@@ -509,6 +581,18 @@ struct DashboardHomeView: View {
         }
     }
 
+    /// Touches ``WithdrawalsHistoryStore`` so the Payouts card refreshes when ledger/cycles change.
+    private var performanceCardsIncludingPayouts: [DashboardMetricChip] {
+        viewModel.performanceCards + [
+            viewModel.payoutsCardMetricChip(
+                withdrawalsHistory: withdrawalsHistory,
+                ledgerRowCount: withdrawalsHistory.ledgerEntryCount(),
+                completedPropCycleCount: withdrawalsHistory.completedPropCycleCount(),
+                achievementPayoutCount: withdrawalsHistory.achievementPayouts.count
+            ),
+        ]
+    }
+
     private var performanceCardsGrid: some View {
         LazyVGrid(
             columns: [
@@ -517,7 +601,7 @@ struct DashboardHomeView: View {
             ],
             spacing: ExperienceSpacing.sm
         ) {
-            ForEach(viewModel.performanceCards) { chip in
+            ForEach(performanceCardsIncludingPayouts) { chip in
                 VStack(alignment: .leading, spacing: 4) {
                     Text(chip.label)
                         .experienceStyle(.caption2, color: colors.tertiaryText)
@@ -538,19 +622,22 @@ struct DashboardHomeView: View {
         .padding(.horizontal, ExperienceSpacing.md)
     }
 
-    private func sectionHeader(_ title: String, subtitle: String? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+    private static let psychologyInsightsInfo = "Cards compare trades in this filter with the daily check-in on the same trading day. They cover sleep, mental state, conviction, discipline, emotion, behavior after losses, and how often you trade. A card appears when that comparison has a matched sample."
+
+    private func sectionHeader(_ title: String, info: String) -> some View {
+        HStack(alignment: .center, spacing: ExperienceSpacing.xxs) {
             Text(title)
                 .experienceStyle(.headline, color: colors.primaryText)
-            if let subtitle {
-                Text(subtitle)
-                    .experienceStyle(.footnote, color: colors.tertiaryText)
-            }
+                .accessibilityAddTraits(.isHeader)
+            AnalyticsMetricInfoButton(
+                title: title,
+                bodyText: info,
+                accessibilityID: "dashboard.sectionInfo.\(DashboardChartInfo.identifier(for: title))"
+            )
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, ExperienceSpacing.md)
         .padding(.bottom, ExperienceSpacing.md)
-        .accessibilityAddTraits(.isHeader)
-        .accessibilityLabel(subtitle.map { "\(title). \($0)" } ?? title)
     }
 
     private var skeleton: some View {
@@ -605,10 +692,13 @@ struct DashboardHomeView: View {
         }
     }
 
+    private func preserveScrollOffset() {
+        viewModel.rememberScrollOffset(scrollAnchor.offset)
+    }
+
     /// Activity bell, Getting Started, and check-in hydrate after dashboard first paint.
     private func startDeferredDashboardBootstrapIfNeeded() {
-        guard !deferredDashboardBootstrapStarted else { return }
-        deferredDashboardBootstrapStarted = true
+        guard viewModel.beginDeferredDashboardBootstrapIfNeeded() else { return }
         Task(priority: .utility) {
             await AuthenticatedLaunchPhasing.waitUntilDeferredStartupNetworkingAllowed()
             gettingStartedStore.loadIfNeeded()
@@ -624,6 +714,99 @@ struct DashboardHomeView: View {
                 )
             }
         }
+    }
+}
+
+/// The Home tab's `DashboardViewModel` outlives the SwiftUI view.
+///
+/// `TabView` can destroy the inactive Home root after Feed/Clips. `@State` then
+/// evaluates `initialValue` again and used to construct a new model, which
+/// cold-loaded, reread GRDB, and rebuilt charts. This store hands that new view
+/// the model that already finished loading. Session reset clears the model in
+/// place; the next real load is allowed to be cold.
+@MainActor
+enum DashboardTabModelStore {
+    private static var retained: DashboardViewModel?
+    private static var retainedScrollAnchor: DashboardScrollAnchor?
+
+    static func model(
+        retainsTabPresentation: Bool,
+        make: () -> DashboardViewModel
+    ) -> DashboardViewModel {
+        guard retainsTabPresentation else { return make() }
+        if let retained { return retained }
+        let created = make()
+        retained = created
+        return created
+    }
+
+    static func scrollAnchor(restoredOffset: CGFloat?) -> DashboardScrollAnchor {
+        if let retainedScrollAnchor { return retainedScrollAnchor }
+        let created = DashboardScrollAnchor(restoredOffset: restoredOffset)
+        retainedScrollAnchor = created
+        return created
+    }
+
+    static func scrollToTopWhenTabReselectedAtRoot() {
+        retained?.scrollToTopForTabReselect()
+        retainedScrollAnchor?.resetToTop()
+    }
+
+    #if DEBUG
+    static func clearForTesting() {
+        retained = nil
+        retainedScrollAnchor = nil
+    }
+    #endif
+}
+
+/// Holds the dashboard scroll position outside `@Observable` and `@State` writes.
+///
+/// The scroll view updates this binding as the finger moves. Those writes stay on this
+/// object, so the dashboard body does not render again and the restored offset is not
+/// reapplied during the gesture. The view model learns the offset only when the tab leaves.
+@MainActor
+final class DashboardScrollAnchor {
+    private var position: ScrollPosition
+    private(set) var offset: CGFloat
+
+    init(restoredOffset: CGFloat?) {
+        if let restoredOffset {
+            position = ScrollPosition(y: restoredOffset)
+            offset = restoredOffset
+        } else {
+            position = ScrollPosition()
+            offset = 0
+        }
+    }
+
+    var binding: Binding<ScrollPosition> {
+        Binding(
+            get: { self.position },
+            set: { newValue in
+                let y = newValue.point?.y ?? self.offset
+                self.offset = y
+                if let x = newValue.point?.x, abs(x) > 0.5 {
+                    self.position = ScrollPosition(y: y)
+                } else {
+                    self.position = newValue
+                }
+            }
+        )
+    }
+
+    func resetToTop() {
+        position = ScrollPosition()
+        offset = 0
+    }
+}
+
+private extension View {
+    /// Keeps dashboard content exactly as wide as the screen so a sideways drag cannot move it.
+    func dashboardHorizontalLock() -> some View {
+        frame(maxWidth: .infinity, alignment: .leading)
+            .containerRelativeFrame(.horizontal, alignment: .leading)
+            .clipped()
     }
 }
 

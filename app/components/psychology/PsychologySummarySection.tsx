@@ -7,25 +7,34 @@ type PsychologySummarySectionProps = {
   summary: PsychologyCoachSummary
   coachHref?: string
   showCoachLink?: boolean
+  /** Analytics page shows actions only. Written reports keep the fuller summary. */
+  recommendationsOnly?: boolean
 }
 
 export default function PsychologySummarySection({
   summary,
   coachHref = "/psychology/coach",
   showCoachLink = true,
+  recommendationsOnly = false,
 }: PsychologySummarySectionProps) {
+  if (recommendationsOnly && summary.recommendations.length === 0) return null
+
   return (
     <section
       className="rounded-xl border border-white/10 bg-white/5 p-4 max-md:p-3"
       data-testid="psychologyCoach.summary"
     >
-      <h2 className="text-lg font-bold text-white">{summary.title}</h2>
-      <p className="mt-2 text-sm text-gray-300">{summary.overview}</p>
+      <h2 className="text-lg font-bold text-white">
+        {recommendationsOnly ? "Recommendations" : summary.title}
+      </h2>
+      {!recommendationsOnly && summary.overview ? (
+        <p className="mt-2 text-sm text-gray-300">{summary.overview}</p>
+      ) : null}
 
-      {summary.doingWell.length > 0 ? (
+      {!recommendationsOnly && summary.doingWell.length > 0 ? (
         <Bullets title="What You're Doing Well" items={summary.doingWell} tone="text-emerald-400" />
       ) : null}
-      {summary.watchItems.length > 0 ? (
+      {!recommendationsOnly && summary.watchItems.length > 0 ? (
         <Bullets title="What to Watch" items={summary.watchItems} tone="text-amber-400" />
       ) : null}
       {summary.recommendations.length > 0 ? (

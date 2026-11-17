@@ -10,7 +10,7 @@ import { getStripeServer } from "@/lib/stripeServer"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 /**
- * Settings → Delete Account.
+ * Settings → Delete Account (after hold-to-confirm in the client).
  * Uses the same deleteUserAdmin() pipeline as Admin Delete User.
  * Only difference: selfService=true (authorization + skip admin audit log).
  */

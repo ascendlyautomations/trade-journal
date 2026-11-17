@@ -522,6 +522,8 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         guard let mapped = mapComment(dto) else {
             throw AppError.unknown(message: "Failed to map comment")
         }
+        await ActivityNotificationClient(transport: supabase.transport)
+            .notifyComment(commentID: mapped.id.rawValue)
         return mapped
     }
 
@@ -540,6 +542,11 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
                 into: "profile_post_likes",
                 returning: Body.self
             )
+            let viewerID = await session.currentUserID?.rawValue
+            if viewerID != item.authorProfileID.rawValue {
+                await ActivityNotificationClient(transport: supabase.transport)
+                    .notifyLike(.profilePost(profilePostId: postID.rawValue))
+            }
         } else {
             try await supabase.database.delete(
                 from: "profile_post_likes",
@@ -843,6 +850,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
     }
 
     func reel(id: ReelID) async throws -> ReelLoadResult {
+        let viewerID = await session.currentUserID.map { ProfileID($0.rawValue) }
         let row: ProfileReelRow
         do {
             row = try await supabase.database.selectOne(
@@ -869,7 +877,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         guard let mapped = mapReel(row) else {
             throw AppError.domain(.notFound(entity: "reel", id: id.rawValue))
         }
-        let embeddedTrade = mapEmbeddedTrade(from: row)
+        let embeddedTrade = mapEmbeddedTrade(from: row, viewerID: viewerID)
         return ReelLoadResult(reel: mapped, embeddedTrade: embeddedTrade)
     }
 
@@ -897,6 +905,47 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         ) { [self] in
             try await self.fetchProfileReelsUncoalesced(for: profileID)
         }
+    }
+
+    func reels(linkedToTradeIDs tradeIDs: [TradeID], ownerID: ProfileID) async throws -> [Reel] {
+        let normalized = Array(Set(tradeIDs.map(\.rawValue)))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !normalized.isEmpty else { return [] }
+        let flightKey = "feed.reelsByTradeIds:\(ownerID.rawValue):\(normalized.sorted().joined(separator: ","))"
+        return try await RepositoryRequestFlight.shared.coalesce(
+            key: flightKey,
+            resource: "feed.reelsByTradeIds"
+        ) { [self] in
+            try await self.fetchReelsByTradeIDsUncoalesced(normalized, ownerID: ownerID)
+        }
+    }
+
+    private func fetchReelsByTradeIDsUncoalesced(
+        _ tradeIDStrings: [String],
+        ownerID: ProfileID
+    ) async throws -> [Reel] {
+        let batchSize = 40
+        var reels: [Reel] = []
+        reels.reserveCapacity(tradeIDStrings.count)
+        var index = tradeIDStrings.startIndex
+        while index < tradeIDStrings.endIndex {
+            let end = tradeIDStrings.index(index, offsetBy: batchSize, limitedBy: tradeIDStrings.endIndex)
+                ?? tradeIDStrings.endIndex
+            let chunk = Array(tradeIDStrings[index..<end])
+            let rows: [ProfileReelRow] = try await supabase.database.select(
+                ProfileReelRow.self,
+                from: "reels",
+                query: [
+                    SupabaseQuery.select(Self.reelRowSelect),
+                    SupabaseQuery.eq("user_id", ownerID.rawValue),
+                    SupabaseQuery.isIn("trade_id", chunk),
+                ]
+            )
+            reels.append(contentsOf: rows.compactMap(mapReel))
+            index = end
+        }
+        return reels
     }
 
     private func fetchProfileReelsUncoalesced(for profileID: ProfileID) async throws -> ProfileReelsResult {
@@ -938,7 +987,7 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
                 }
                 return mapped
             }
-        let embeddedTrades = rows.compactMap(mapEmbeddedTrade(from:))
+        let embeddedTrades = rows.compactMap { mapEmbeddedTrade(from: $0) }
         return ProfileReelsResult(reels: reels, embeddedTrades: embeddedTrades)
     }
 
@@ -1028,7 +1077,11 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         )
     }
 
-    func unattachedReels(for profileID: ProfileID, limit: Int) async throws -> [Reel] {
+    func unattachedReels(
+        for profileID: ProfileID,
+        limit: Int,
+        includingReelID: ReelID?
+    ) async throws -> [Reel] {
         let bounded = min(max(limit, 1), 40)
         let rows: [ProfileReelRow] = try await supabase.database.select(
             ProfileReelRow.self,
@@ -1041,17 +1094,58 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
                 URLQueryItem(name: "limit", value: String(bounded)),
             ]
         )
-        return rows.compactMap(mapReel)
+        var reels = rows.compactMap(mapReel)
+        if let includingReelID {
+            let included = Set(reels.map(\.id))
+            if !included.contains(includingReelID) {
+                let preservedRows: [ProfileReelRow] = try await supabase.database.select(
+                    ProfileReelRow.self,
+                    from: "reels",
+                    query: [
+                        SupabaseQuery.select(Self.reelRowSelect),
+                        SupabaseQuery.eq("user_id", profileID.rawValue),
+                        SupabaseQuery.eq("id", includingReelID.rawValue),
+                        URLQueryItem(name: "limit", value: "1"),
+                    ]
+                )
+                if let preserved = preservedRows.compactMap(mapReel).first {
+                    reels.insert(preserved, at: 0)
+                }
+            }
+        }
+        return Array(reels.prefix(bounded))
+    }
+
+    func tradeIDsWithAttachedReels(owner: ProfileID) async throws -> Set<TradeID> {
+        struct Row: Decodable { var trade_id: String? }
+        let rows: [Row] = try await supabase.database.select(
+            Row.self,
+            from: "reels",
+            query: [
+                SupabaseQuery.select("trade_id"),
+                SupabaseQuery.eq("user_id", owner.rawValue),
+                URLQueryItem(name: "trade_id", value: "not.is.null"),
+            ]
+        )
+        let ids = rows.compactMap { row -> TradeID? in
+            guard let raw = row.trade_id?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !raw.isEmpty
+            else { return nil }
+            return TradeID(raw)
+        }
+        return Set(ids)
     }
 
     func attachReel(id: ReelID, to tradeID: TradeID) async throws {
-        if try await tradeHasAttachedReel(tradeID) {
-            throw AppError.domain(.conflict(message: "This trade already has a clip attached."))
-        }
         guard let rawOwner = await session.currentUserID?.rawValue else {
             throw AppError.domain(.permission(.notAuthenticated))
         }
         let ownerID = ProfileID(rawOwner)
+        try await validateReelTradeLinkEligibility(
+            reelID: id,
+            tradeID: tradeID,
+            ownerID: ownerID
+        )
         let tradeIsPublic = try await tradeIsPublicFlag(tradeID: tradeID)
         try await linkReelToTrade(
             reelID: id,
@@ -1069,6 +1163,12 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         tradeIsPublic: Bool,
         linkJobID: String?
     ) async throws {
+        try await validateReelTradeLinkEligibility(
+            reelID: reelID,
+            tradeID: tradeID,
+            ownerID: ownerID
+        )
+
         let query: [URLQueryItem] = [
             SupabaseQuery.eq("id", reelID.rawValue),
             SupabaseQuery.eq("user_id", ownerID.rawValue),
@@ -1160,6 +1260,38 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
             ]
         )
         return rows.first?.is_public ?? false
+    }
+
+    private func validateReelTradeLinkEligibility(
+        reelID: ReelID,
+        tradeID: TradeID,
+        ownerID: ProfileID
+    ) async throws {
+        struct ReelLinkRow: Decodable { var trade_id: String? }
+        let reelRows: [ReelLinkRow] = try await supabase.database.select(
+            ReelLinkRow.self,
+            from: "reels",
+            query: [
+                SupabaseQuery.select("trade_id"),
+                SupabaseQuery.eq("id", reelID.rawValue),
+                SupabaseQuery.eq("user_id", ownerID.rawValue),
+                URLQueryItem(name: "limit", value: "1"),
+            ]
+        )
+        guard reelRows.first != nil else {
+            throw AppError.domain(.notFound(entity: "reels", id: reelID.rawValue))
+        }
+        if let linked = reelRows.first?.trade_id?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !linked.isEmpty
+        {
+            if linked == tradeID.rawValue {
+                return
+            }
+            throw AppError.domain(.conflict(message: "This clip is already linked to another trade."))
+        }
+        if try await tradeHasAttachedReel(tradeID) {
+            throw AppError.domain(.conflict(message: "This trade already has a clip attached."))
+        }
     }
 
     func tradeHasAttachedReel(_ tradeID: TradeID) async throws -> Bool {
@@ -1301,11 +1433,12 @@ nonisolated struct DefaultFeedRepository: FeedRepository {
         row.trades?.trades.first
     }
 
-    private func mapEmbeddedTrade(from row: ProfileReelRow) -> Trade? {
+    private func mapEmbeddedTrade(from row: ProfileReelRow, viewerID: ProfileID? = nil) -> Trade? {
         let tradeIDRaw = row.trade_id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !tradeIDRaw.isEmpty else { return nil }
         guard let join = Self.resolveTradeJoin(row) else { return nil }
-        guard join.is_public != false else { return nil }
+        let isReelOwner = viewerID?.rawValue == row.user_id
+        guard join.is_public != false || isReelOwner else { return nil }
 
         var dto = TradeDTO.Trade()
         dto.id = join.id ?? tradeIDRaw

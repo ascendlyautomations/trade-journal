@@ -13,6 +13,11 @@ import {
 } from "@/lib/tradingReports/tradingReportCache"
 import { markTradingReportSeen, subscribeTradingReportSeen } from "@/lib/tradingReports/tradingReportSeen"
 import type { TradingReportPeriodKey } from "@/lib/tradingReports/tradingReportTypes"
+import { supabase } from "@/lib/supabaseClient"
+import {
+  loadTradingPreferenceBundle,
+} from "@/lib/analytics/tradingPreferencesStore"
+import type { PreferenceRuleContext } from "@/lib/analytics/preferenceCompliance"
 
 export function useTradingReports(
   userId: string | null | undefined,
@@ -60,7 +65,20 @@ export function useTradingReports(
 
   useEffect(() => {
     if (!userId) return
-    ensureTradingReportsLoaded(tradesRef.current, userId)
+    let cancelled = false
+    void (async () => {
+      let preferences: PreferenceRuleContext | null = null
+      try {
+        preferences = await loadTradingPreferenceBundle(supabase, userId)
+      } catch {
+        preferences = null
+      }
+      if (cancelled) return
+      ensureTradingReportsLoaded(tradesRef.current, userId, { preferences })
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [userId, tradesFingerprint])
 
   const getReport = useCallback(

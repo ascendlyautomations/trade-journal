@@ -193,6 +193,13 @@ private struct ContextualTourOverlay: View {
                 let accepted = frame.flatMap { candidate in
                     ContextualTourGeometry.isMeasurableTarget(candidate, in: viewport) ? candidate : nil
                 }
+#if DEBUG
+                if target == .feedContentFilters, let accepted {
+                    ContextualTourDebug.log(
+                        "feedFilters overlay resolved=\(accepted) holeWillUse=\(coordinator.spotlightFrame)"
+                    )
+                }
+#endif
                 coordinator.noteMeasuredFrame(
                     accepted,
                     viewport: viewport,
@@ -297,22 +304,41 @@ private struct ContextualTourOverlay: View {
                         .experienceStyle(.caption, color: colors.tertiaryText)
                         .accessibilityLabel("Step \(coordinator.progressLabel)")
                 }
-                HStack(spacing: ExperienceSpacing.sm) {
-                    if step.role != .finish {
+                if step.role == .tradingRulesPrompt {
+                    HStack(spacing: ExperienceSpacing.sm) {
                         ExperienceButton(
-                            title: step.role == .sectionContinue ? "Exit Tour" : "Exit",
+                            title: "Maybe Later",
                             kind: .text,
-                            accessibilityIdentifier: "contextualTour.exit"
+                            accessibilityIdentifier: "contextualTour.tradingRules.later"
                         ) {
-                            coordinator.exitTour()
+                            coordinator.completeTour(configureTradingRules: false)
+                        }
+                        ExperienceButton(
+                            title: "Configure Now",
+                            kind: .primary,
+                            accessibilityIdentifier: "contextualTour.tradingRules.configure"
+                        ) {
+                            coordinator.completeTour(configureTradingRules: true)
                         }
                     }
-                    ExperienceButton(
-                        title: primaryTitle(for: step),
-                        kind: .primary,
-                        accessibilityIdentifier: primaryIdentifier(for: step)
-                    ) {
-                        coordinator.advance()
+                } else {
+                    HStack(spacing: ExperienceSpacing.sm) {
+                        if step.role != .finish {
+                            ExperienceButton(
+                                title: step.role == .sectionContinue ? "Exit Tour" : "Exit",
+                                kind: .text,
+                                accessibilityIdentifier: "contextualTour.exit"
+                            ) {
+                                coordinator.exitTour()
+                            }
+                        }
+                        ExperienceButton(
+                            title: primaryTitle(for: step),
+                            kind: .primary,
+                            accessibilityIdentifier: primaryIdentifier(for: step)
+                        ) {
+                            coordinator.advance()
+                        }
                     }
                 }
             }
@@ -323,6 +349,7 @@ private struct ContextualTourOverlay: View {
         switch step.role {
         case .sectionContinue: return "Continue"
         case .finish: return "Finish"
+        case .tradingRulesPrompt: return "Finish"
         case .spotlight, .narration: return "Next"
         }
     }
@@ -331,6 +358,7 @@ private struct ContextualTourOverlay: View {
         switch step.role {
         case .sectionContinue: return "contextualTour.continue"
         case .finish: return "contextualTour.finish"
+        case .tradingRulesPrompt: return "contextualTour.finish"
         case .spotlight, .narration: return "contextualTour.next"
         }
     }

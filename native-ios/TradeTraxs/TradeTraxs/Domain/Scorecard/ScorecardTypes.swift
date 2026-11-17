@@ -58,11 +58,26 @@ nonisolated struct ScorecardOverallResult: Hashable, Sendable {
     var nominalWeightIncluded: Double
 }
 
+nonisolated struct ScorecardAdherenceReadout: Hashable, Sendable, Identifiable {
+    var id: String
+    var label: String
+    var value: String?
+    var pending: String?
+    var sample: String?
+}
+
+nonisolated struct ScorecardInsight: Hashable, Sendable, Identifiable {
+    var id: String
+    var text: String
+}
+
 nonisolated struct ScorecardResult: Hashable, Sendable {
     var scopeLabel: String
     var generatedAtMs: Int64
     var overall: ScorecardOverallResult
     var categories: [ScorecardCategoryResult]
+    var adherence: [ScorecardAdherenceReadout]
+    var insights: [ScorecardInsight]
 }
 
 nonisolated struct ScorecardTrade: Hashable, Sendable {
@@ -76,8 +91,10 @@ nonisolated struct ScorecardTrade: Hashable, Sendable {
     var confidence: Double?
     var executionRating: Double?
     var entryTimeMs: Int64
+    var dollarRisk: Double? = nil
     var tradingDayKey: String?
     var psychologyDayKey: String?
+    var emotion: String? = nil
 }
 
 nonisolated struct ScorecardAnalyticsContext: Sendable {
@@ -95,6 +112,7 @@ nonisolated struct ScorecardBuildInput: Sendable {
     var trades: [ScorecardTrade]
     var checkIns: [TraderDailyCheckIn]
     var analytics: ScorecardAnalyticsContext
+    var preferenceContext: PreferenceRuleContext? = nil
 }
 
 nonisolated enum ScorecardConstants {

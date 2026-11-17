@@ -24,10 +24,14 @@ enum TradeRoomModerationPermission {
         return viewerHasModeratorTag
     }
 
+    static func cosmeticMemberTags(_ tags: [RoomMemberTag]) -> [RoomMemberTag] {
+        tags.filter { !isElevatedTagName($0.name) }
+    }
+
     static func canAssignTag(tag: RoomMemberTag, canManageRoom: Bool, canModerateRoom: Bool) -> Bool {
         guard canModerateRoom else { return false }
-        if canManageRoom { return true }
-        return !isElevatedTagName(tag.name)
+        if isElevatedTagName(tag.name) { return false }
+        return true
     }
 
     static func canModerateMemberTarget(

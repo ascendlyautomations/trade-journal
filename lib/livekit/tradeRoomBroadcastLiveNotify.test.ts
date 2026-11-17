@@ -10,8 +10,10 @@ test("buildTradeRoomBroadcastLiveNotifyContent includes collapse id", () => {
     roomSlug: "momentum",
     roomName: "Momentum Traders",
     broadcastSessionId: "sess-abc",
+    streamTitle: "NY Open — ES",
   })
   assert.equal(content.room_slug, "momentum")
+  assert.equal(content.stream_title, "NY Open — ES")
   assert.equal(content.collapse_id, "room-live:sess-abc")
 })
 

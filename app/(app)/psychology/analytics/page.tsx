@@ -18,6 +18,11 @@ import { showsPsychologyInsightsRequirement } from "@/lib/psychology/unlockProgr
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 import { MOBILE_WEB_NEUTRAL_PAGE_BG } from "@/lib/mobileWebPageSurface"
 import { useEffect } from "react"
+import TradingPreferenceDiscovery from "@/app/components/analytics/TradingPreferenceDiscovery"
+import { useUserProfile } from "@/lib/useUserProfile"
+import TradingRulesCompliancePanel from "@/app/components/analytics/trading-rules/TradingRulesCompliancePanel"
+import { useTradingRulesCompliance } from "@/lib/analytics/useTradingRulesCompliance"
+import { useCachedTrades } from "@/lib/useAppDataCache"
 
 function PsychologyAnalyticsPageContent() {
   useScrollPageTopOnMount()
@@ -33,6 +38,13 @@ function PsychologyAnalyticsPageContent() {
     checkIns,
     scope,
   } = usePsychologySessionHydration()
+  const { user } = useUserProfile()
+  const { trades: scopeTrades } = useCachedTrades(user?.id)
+  const tradingRules = useTradingRulesCompliance(
+    user?.id,
+    scopeTrades,
+    Boolean(report)
+  )
 
   useEffect(() => {
     if (highlight) {
@@ -59,6 +71,14 @@ function PsychologyAnalyticsPageContent() {
     return (
       <div className="rounded-xl border border-white/10 bg-white/5 p-8 text-center max-md:p-5">
         <p className="font-medium text-white">No analytics yet</p>
+        <div className="mx-auto mt-4 max-w-md text-left">
+          <TradingPreferenceDiscovery
+            userId={user?.id}
+            hasTrade={journalTrades.length > 0}
+            tradesReady={ready}
+            surface="analytics"
+          />
+        </div>
         <p className="mt-2 text-sm text-gray-500">
           Log trades and daily check-ins to build your psychology analytics.
         </p>
@@ -78,6 +98,12 @@ function PsychologyAnalyticsPageContent() {
 
   return (
     <div className="space-y-6 max-md:space-y-3">
+      <TradingPreferenceDiscovery
+        userId={user?.id}
+        hasTrade={journalTrades.length > 0}
+        tradesReady={ready}
+        surface="analytics"
+      />
       {showsRequirement && unlock ? (
         <p
           className="text-xs tabular-nums text-gray-500"
@@ -89,6 +115,13 @@ function PsychologyAnalyticsPageContent() {
           trades {displayTradeCountForGate(unlock)}/{PSYCHOLOGY_INSIGHTS_REQUIRED_COUNT}
         </p>
       ) : null}
+      <TradingRulesCompliancePanel
+        analytics={tradingRules.analytics}
+        loading={tradingRules.loading}
+        error={tradingRules.error}
+        compact
+      />
+
       <PsychologyAnalyticsDetail
         report={report}
         summary={summary}

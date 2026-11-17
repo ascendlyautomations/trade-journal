@@ -132,20 +132,22 @@ function rollingBounds(
 }
 
 function weeklyBounds(periodID: string, now: Date, template: PsychologyReportTemplate): PsychologyPeriodBounds {
+  const today = checkInDateKey(now)
   const mondayKey = periodID.startsWith("week:")
     ? periodID.slice("week:".length)
-    : mondayOfEasternWeek(checkInDateKey(now))
+    : mondayOfEasternWeek(today)
   const sundayKey = addCalendarDaysToDateKey(mondayKey, 6)
-  const today = checkInDateKey(now)
   const endKey = sundayKey > today ? today : sundayKey
   const ref = { template, periodID: `week:${mondayKey}` }
+  const partial = endKey < sundayKey
+  const label = psychologyReportDateRangeLabel(mondayKey, endKey, "weekly")
   return {
     ref,
     startMs: startOfEasternDay(mondayKey).getTime(),
     endMs: endOfEasternDay(endKey).getTime(),
     startDateKey: mondayKey,
     endDateKey: endKey,
-    dateRangeLabel: psychologyReportDateRangeLabel(mondayKey, endKey, "weekly"),
+    dateRangeLabel: partial ? `${label} (partial)` : label,
   }
 }
 
@@ -159,15 +161,17 @@ function monthlyBounds(periodID: string, now: Date, template: PsychologyReportTe
     : `${year}-${String(month + 1).padStart(2, "0")}-01`
   const lastDay = addCalendarDaysToDateKey(nextMonthStart, -1)
   const isCurrentMonth = today.startsWith(raw)
-  const endKey = isCurrentMonth ? today : lastDay
+  const endKey = isCurrentMonth && today < lastDay ? today : lastDay
   const ref = { template, periodID: `month:${raw}` }
+  const partial = endKey < lastDay
+  const label = psychologyReportDateRangeLabel(startKey, endKey, "monthly")
   return {
     ref,
     startMs: startOfEasternDay(startKey).getTime(),
     endMs: endOfEasternDay(endKey).getTime(),
     startDateKey: startKey,
     endDateKey: endKey,
-    dateRangeLabel: psychologyReportDateRangeLabel(startKey, endKey, "monthly"),
+    dateRangeLabel: partial ? `${label} (partial)` : label,
   }
 }
 

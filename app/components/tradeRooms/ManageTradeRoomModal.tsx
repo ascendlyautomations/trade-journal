@@ -5,13 +5,17 @@ import CustomSelect from "@/app/components/CustomSelect"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import {
   TRADE_ROOM_CATEGORIES,
+  TRADE_ROOM_ACCESS_OPTIONS,
   TRADE_ROOM_PRESET_DISCOVERY_TAGS,
   TRADE_ROOM_VALIDATION,
-  tradeRoomVisibilitySummary,
+  applyTradeRoomAccessMode,
+  effectiveJoinPolicy,
+  legacyPrivateAccessFootnote,
+  persistedTradeRoomIsPrivate,
+  tradeRoomAccessMode,
   validateTradeRoomConfiguration,
   type TradeRoomConfiguration,
   type TradeRoomJoinPolicy,
-  type TradeRoomVisibility,
 } from "@/lib/tradeRoomConfiguration"
 import {
   assignMemberTag,
@@ -86,12 +90,15 @@ function roomToDraft(room: TradeRoomRow): TradeRoomConfiguration {
     discoveryTags: room.discovery_tags ?? [],
     visibility: room.is_private ? "private" : "public",
     showsOnProfile: room.show_on_profile !== false,
-    joinPolicy: (room.join_policy as TradeRoomJoinPolicy) ?? "open",
+    joinPolicy: room.is_private
+      ? "open"
+      : ((room.join_policy as TradeRoomJoinPolicy) ?? "open"),
     rules: room.rules ?? "",
     membersCanMessage: room.members_can_message !== false,
     membersCanShareTrades: room.members_can_share_trades !== false,
     membersCanShareMedia: room.members_can_share_media !== false,
     channels: [],
+    preservesLegacyPrivate: Boolean(room.is_private),
   }
 }
 
@@ -186,11 +193,10 @@ export default function ManageTradeRoomModal({
       name: draft.name.trim(),
       description: draft.description.trim() || null,
       show_on_profile: draft.showsOnProfile,
-      is_private: draft.visibility === "private",
+      is_private: persistedTradeRoomIsPrivate(draft),
       category: draft.category,
       discovery_tags: draft.discoveryTags,
-      join_policy:
-        draft.visibility === "private" ? "open" : draft.joinPolicy,
+      join_policy: effectiveJoinPolicy(draft),
       rules: draft.rules.trim() || null,
       members_can_message: draft.membersCanMessage,
       members_can_share_trades: draft.membersCanShareTrades,
@@ -343,61 +349,38 @@ export default function ManageTradeRoomModal({
                 </div>
               </div>
               <div>
-                <label className={LABEL}>Visibility</label>
+                <label className={LABEL}>Room access</label>
                 <div className="grid grid-cols-2 gap-2">
-                  {(["public", "private"] as TradeRoomVisibility[]).map((v) => (
+                  {TRADE_ROOM_ACCESS_OPTIONS.map((opt) => (
                     <button
-                      key={v}
+                      key={opt.value}
                       type="button"
                       onClick={() =>
-                        setDraft((p) => ({
-                          ...p,
-                          visibility: v,
-                          joinPolicy: v === "private" ? "open" : p.joinPolicy,
-                        }))
+                        setDraft((p) => applyTradeRoomAccessMode(p, opt.value))
                       }
-                      className={`rounded-lg border px-3 py-2 text-sm capitalize ${
-                        draft.visibility === v
+                      className={`rounded-lg border px-3 py-2 text-sm ${
+                        tradeRoomAccessMode(draft) === opt.value
                           ? "border-blue-400/40 bg-blue-500/15 text-blue-100"
                           : "border-white/10 text-gray-400"
                       }`}
                     >
-                      {v}
+                      {opt.label}
                     </button>
                   ))}
                 </div>
                 <p className="mt-1 text-xs text-gray-500">
-                  {tradeRoomVisibilitySummary(draft.visibility)}
+                  {
+                    TRADE_ROOM_ACCESS_OPTIONS.find(
+                      (opt) => opt.value === tradeRoomAccessMode(draft),
+                    )?.summary
+                  }
                 </p>
+                {legacyPrivateAccessFootnote(draft) ? (
+                  <p className="mt-1 text-xs text-amber-200/80">
+                    {legacyPrivateAccessFootnote(draft)}
+                  </p>
+                ) : null}
               </div>
-              {draft.visibility === "public" ? (
-                <div>
-                  <label className={LABEL}>Join policy</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(
-                      [
-                        { value: "open", label: "Anyone can join" },
-                        { value: "approval", label: "Request to join" },
-                      ] as const
-                    ).map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() =>
-                          setDraft((p) => ({ ...p, joinPolicy: opt.value }))
-                        }
-                        className={`rounded-lg border px-3 py-2 text-xs ${
-                          draft.joinPolicy === opt.value
-                            ? "border-blue-400/40 bg-blue-500/15 text-blue-100"
-                            : "border-white/10 text-gray-400"
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
               <label className="flex items-center gap-2 text-sm text-gray-300">
                 <input
                   type="checkbox"

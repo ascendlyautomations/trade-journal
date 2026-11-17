@@ -111,6 +111,9 @@ final class TradeDetailViewModel {
                 tradeNonNil: trade != nil
             )
             #endif
+            if experience == .journal {
+                Task { await loadSupplementaries(for: handoff) }
+            }
             return
         }
         if let authoritative = cache.authoritativeDetail(id: tradeID) {
@@ -124,6 +127,7 @@ final class TradeDetailViewModel {
                 tradeNonNil: trade != nil
             )
             #endif
+            Task { await loadSupplementaries(for: authoritative) }
             return
         }
         if let shell = presentationShellTrade() {
@@ -136,6 +140,9 @@ final class TradeDetailViewModel {
                 tradeNonNil: trade != nil
             )
             #endif
+            if experience == .journal {
+                Task { await loadSupplementaries(for: shell) }
+            }
             return
         }
         #if DEBUG
@@ -167,7 +174,8 @@ final class TradeDetailViewModel {
             mode: accountMode,
             accountNumber: accountDisplayAudience == .owner ? accountNumber : nil,
             audience: accountDisplayAudience,
-            category: nil
+            category: nil,
+            publicAccountBadge: trade?.publicAccountBadge
         )
     }
 
@@ -176,17 +184,28 @@ final class TradeDetailViewModel {
         cache.copyTradePublicModeSummary(for: tradeID)
     }
 
-    /// Owner journal summary line — account name + compact mode.
+    /// Share caption (`public_description`) — never private journal notes.
+    var displayPublicCaption: String? {
+        guard experience == .social else { return nil }
+        let trimmed = trade?.publicCaption?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// Owner journal subtitle — `Name • AccountNumber • Funded` (full number, not masked).
     var accountSummaryLine: String? {
         guard experience == .journal, isOwner else { return accountIdentityLine }
         var parts: [String] = []
         if let accountName, !accountName.isEmpty {
             parts.append(accountName)
         }
+        if let accountNumber = TradingAccountDisplay.normalizedAccountNumber(accountNumber) {
+            parts.append(accountNumber)
+        }
         if let accountMode {
             parts.append(TradeDisplay.accountModeCompactTitle(accountMode))
         }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        return parts.isEmpty ? nil : parts.joined(separator: TradingAccountDisplay.separator)
     }
 
     private var accountDisplayAudience: TradingAccountDisplay.Audience {
@@ -447,6 +466,7 @@ final class TradeDetailViewModel {
                 ]
             }
         }
+        applyOwnerAccountMetadataSync(for: seed)
     }
 
     private func loadSupplementaries(for trade: Trade) async {
@@ -625,7 +645,7 @@ final class TradeDetailViewModel {
                 : cached
         }
         if experience == .journal, isOwner, accountNumber == nil {
-            accountNumber = cache.accountNumber(for: accountID)
+            accountNumber = resolveOwnerAccountNumber(accountID: accountID, ownerProfileID: trade.ownerProfileID)
         }
         if accountMode == nil, let cached = cache.accountMode(for: accountID),
            cache.hasAccounts(for: trade.ownerProfileID)
@@ -651,14 +671,14 @@ final class TradeDetailViewModel {
         // Session accounts already resolved for this profile — never refetch.
         if cache.hasAccounts(for: trade.ownerProfileID) {
             if accountNumber == nil {
-                accountNumber = cache.accountNumber(for: accountID)
+                accountNumber = resolveOwnerAccountNumber(accountID: accountID, ownerProfileID: trade.ownerProfileID)
             }
             didResolveAccountMetadata = true
             return
         }
 
-        // Identity complete from list seeding — skip network.
-        if accountName != nil, accountMode != nil {
+        // Skip network only when owner identity (including account number) is already complete.
+        if accountName != nil, accountMode != nil, accountNumber != nil {
             didResolveAccountMetadata = true
             return
         }
@@ -681,7 +701,7 @@ final class TradeDetailViewModel {
             accountName = cache.accountName(for: accountID)
         }
         if accountNumber == nil {
-            accountNumber = cache.accountNumber(for: accountID)
+            accountNumber = resolveOwnerAccountNumber(accountID: accountID, ownerProfileID: trade.ownerProfileID)
         }
         if accountMode == nil {
             accountMode = cache.accountMode(for: accountID)
@@ -689,6 +709,63 @@ final class TradeDetailViewModel {
         if accountSize == nil {
             accountSize = cache.accountSize(for: accountID)
         }
+    }
+
+    private func applyOwnerAccountMetadataSync(for trade: Trade) {
+        guard experience == .journal, let accountID = trade.accountID else { return }
+
+        if SessionAccountsStore.shared.cached(for: trade.ownerProfileID) != nil {
+            isOwner = true
+        }
+
+        if accountNumber == nil {
+            accountNumber = resolveOwnerAccountNumber(accountID: accountID, ownerProfileID: trade.ownerProfileID)
+        }
+        if accountName == nil,
+           let name = resolveOwnerAccountName(accountID: accountID, ownerProfileID: trade.ownerProfileID)
+        {
+            accountName = name
+        }
+        if accountMode == nil {
+            accountMode = resolveAccountMode(for: trade)
+        }
+        if accountSize == nil {
+            accountSize = cache.accountSize(for: accountID)
+                ?? SessionAccountsStore.shared.cached(for: trade.ownerProfileID)?
+                    .first(where: { $0.id == accountID })?.size?.amount
+        }
+    }
+
+    private func resolveOwnerAccountNumber(
+        accountID: TradingAccountID,
+        ownerProfileID: ProfileID
+    ) -> String? {
+        if let cached = cache.accountNumber(for: accountID, audience: .owner) {
+            return cached
+        }
+        if let sessionAccount = SessionAccountsStore.shared.cached(for: ownerProfileID)?
+            .first(where: { $0.id == accountID }),
+           let number = TradingAccountDisplay.normalizedAccountNumber(sessionAccount.accountNumber)
+        {
+            return number
+        }
+        if let row = cache.accounts(for: ownerProfileID)?.first(where: { $0.id == accountID }),
+           let number = TradingAccountDisplay.normalizedAccountNumber(row.accountNumber)
+        {
+            return number
+        }
+        return nil
+    }
+
+    private func resolveOwnerAccountName(
+        accountID: TradingAccountID,
+        ownerProfileID: ProfileID
+    ) -> String? {
+        if let cached = cache.accountName(for: accountID) {
+            return cached
+        }
+        return SessionAccountsStore.shared.cached(for: ownerProfileID)?
+            .first(where: { $0.id == accountID })?.name
     }
 
     /// Linked `accounts.mode` for the trade owner when cached; otherwise denormalized trade fields.

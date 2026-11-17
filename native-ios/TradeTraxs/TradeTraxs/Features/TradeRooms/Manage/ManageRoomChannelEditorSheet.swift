@@ -67,7 +67,7 @@ struct ManageRoomChannelEditorSheet: View {
                 Button("Keep Editing", role: .cancel) {}
             }
         }
-        .presentationDetents([.medium])
+        .experienceSheetChrome(detents: [.medium], interactiveDismiss: false)
         .experienceProtectedFormDismiss()
     }
 

@@ -104,8 +104,10 @@ struct DetailIdentityHeader: View {
                     }
                 }
 
-                Text(dateText)
-                    .experienceStyle(.caption, color: colors.tertiaryText)
+                if !dateText.isEmpty {
+                    Text(dateText)
+                        .experienceStyle(.caption, color: colors.tertiaryText)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

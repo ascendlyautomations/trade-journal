@@ -8,6 +8,8 @@ final class ExploreSessionStore {
     static let shared = ExploreSessionStore()
 
     private(set) var suggestedTraders: [ExploreTraderSuggestion] = []
+    /// Server-ranked avatar-qualified pool for Explore home rail (offset-0 bootstrap).
+    private(set) var homeSuggestedTraders: [ExploreTraderSuggestion] = []
     /// Public rooms from `rpc_v1_trade_room_discovery` (suggested mode) — not membership rows.
     private(set) var suggestedRooms: [ExploreRoomSuggestion] = []
     private(set) var popularRooms: [ExploreRoomSuggestion] = []
@@ -21,8 +23,24 @@ final class ExploreSessionStore {
 
     private init() {}
 
+    private func mergedDirectoryTraders(
+        home: [ExploreTraderSuggestion],
+        directory: [ExploreTraderSuggestion]
+    ) -> [ExploreTraderSuggestion] {
+        var seen = Set<ProfileID>()
+        var merged: [ExploreTraderSuggestion] = []
+        for trader in home where seen.insert(trader.id).inserted {
+            merged.append(trader)
+        }
+        for trader in directory where seen.insert(trader.id).inserted {
+            merged.append(trader)
+        }
+        return merged
+    }
+
     func applyBootstrap(
         traders: [ExploreTraderSuggestion],
+        homeSuggestedTraders: [ExploreTraderSuggestion]? = nil,
         rooms: [ExploreRoomSuggestion],
         suggestedRooms: [ExploreRoomSuggestion]? = nil,
         following: Set<ProfileID>,
@@ -30,6 +48,13 @@ final class ExploreSessionStore {
         clearFailures: Bool = true
     ) {
         suggestedTraders = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(traders)
+        if let homeSuggestedTraders {
+            self.homeSuggestedTraders = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(homeSuggestedTraders)
+            suggestedTraders = mergedDirectoryTraders(
+                home: self.homeSuggestedTraders,
+                directory: suggestedTraders
+            )
+        }
         popularRooms = rooms
         if let suggestedRooms {
             self.suggestedRooms = suggestedRooms
@@ -57,7 +82,11 @@ final class ExploreSessionStore {
     }
 
     func replaceTraders(_ traders: [ExploreTraderSuggestion]) {
-        suggestedTraders = traders
+        let directory = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(traders)
+        suggestedTraders = mergedDirectoryTraders(
+            home: homeSuggestedTraders,
+            directory: directory
+        )
     }
 
     func replaceRooms(_ rooms: [ExploreRoomSuggestion]) {
@@ -115,8 +144,13 @@ final class ExploreSessionStore {
         }
     }
 
+    func replaceHomeSuggestedTraders(_ traders: [ExploreTraderSuggestion]) {
+        homeSuggestedTraders = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(traders)
+    }
+
     func invalidate() {
         suggestedTraders = []
+        homeSuggestedTraders = []
         suggestedRooms = []
         popularRooms = []
         viewerFollowingIDs = []

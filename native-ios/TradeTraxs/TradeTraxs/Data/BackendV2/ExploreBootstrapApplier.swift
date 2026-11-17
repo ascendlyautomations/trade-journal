@@ -3,6 +3,7 @@ import Foundation
 nonisolated enum ExploreBootstrapApplier {
     struct Applied: Sendable {
         var traders: [ExploreTraderSuggestion]
+        var homeSuggestedTraders: [ExploreTraderSuggestion]
         var rooms: [ExploreRoomSuggestion]
         var followingIDs: Set<ProfileID>
         var tradersNextCursor: String?
@@ -45,12 +46,26 @@ nonisolated enum ExploreBootstrapApplier {
             minScore: 1
         )
 
+        let suggestedProfiles = (bootstrap.data.suggested_traders ?? []).compactMap { mapProfile($0) }
+        for profile in suggestedProfiles {
+            detailCache.seed(profile)
+        }
+        let homeRanked = ExploreTraderRanking.rank(
+            profiles: suggestedProfiles,
+            tradeSummaries: tradeSummaries,
+            followerCounts: followerCounts,
+            excluding: exclude,
+            limit: max(12, suggestedProfiles.count),
+            minScore: 1
+        )
+
         let rooms = bootstrap.data.rooms.map { mapRoom($0) }
         let following = Set(bootstrap.data.following_ids.map { ProfileID($0) })
         detailCache.seedViewerFollowingIDs(following)
 
         return Applied(
             traders: ranked,
+            homeSuggestedTraders: homeRanked,
             rooms: rooms,
             followingIDs: following,
             tradersNextCursor: bootstrap.data.traders_next_cursor

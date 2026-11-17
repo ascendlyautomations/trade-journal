@@ -5,6 +5,7 @@ nonisolated enum ProfileTradesJournalMapping {
     static func journalRichness(_ item: TradeOwnerJournalSummary) -> Int {
         var score = 0
         if item.accountID != nil { score += 1 }
+        if item.maxRrReached != nil { score += 1 }
         if item.copyTrade != nil { score += 2 }
         return score
     }
@@ -43,6 +44,7 @@ nonisolated enum ProfileTradesJournalMapping {
                 existing.summary = summary
                 if existing.entryPrice == nil { existing.entryPrice = summary.entryPrice }
                 if existing.exitPrice == nil { existing.exitPrice = summary.exitPrice }
+                if existing.maxRrReached == nil { existing.maxRrReached = incoming.maxRrReached }
                 return existing
             }
             return journalItem(from: summary)

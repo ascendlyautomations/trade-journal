@@ -41,19 +41,7 @@ export type MobileWebNavChrome = {
   showExplore: boolean
 }
 
-/** Same-origin in-app back. Deep links and refresh fall through to `backHref`. */
-export function shouldUseMobileWebHistoryBack(
-  referrer: string,
-  origin: string,
-  historyLength: number
-): boolean {
-  if (historyLength <= 1 || !referrer) return false
-  try {
-    return new URL(referrer).origin === origin
-  } catch {
-    return false
-  }
-}
+export { shouldUseMobileWebHistoryBack } from "./mobileWebInAppHistory.ts"
 
 /**
  * Phone-only 44px navigation chrome. Tab roots get a title (no back).

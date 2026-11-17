@@ -41,6 +41,7 @@ nonisolated enum TradingYearlyReportGenerator {
         let daily = computeDailyPnl(scopedTrades, calendar: calendar)
         let bestDay = pickExtremeDay(daily, mode: .best, calendar: calendar)
         let worstDay = pickExtremeDay(daily, mode: .worst, calendar: calendar)
+        let sameDay = bestDay.label != nil && bestDay.label == worstDay.label
         let winningDays = daily.values.filter { $0 > 0 }.count
         let losingDays = daily.values.filter { $0 < 0 }.count
 
@@ -55,10 +56,10 @@ nonisolated enum TradingYearlyReportGenerator {
             expectancy: summary.expectancy,
             bestTrade: summary.bestTrade,
             worstTrade: summary.biggestLoss,
-            bestDayLabel: bestDay.label,
-            bestDayPnl: bestDay.pnl,
-            worstDayLabel: worstDay.label,
-            worstDayPnl: worstDay.pnl,
+            bestDayLabel: sameDay ? nil : bestDay.label,
+            bestDayPnl: sameDay ? nil : bestDay.pnl,
+            worstDayLabel: sameDay ? nil : worstDay.label,
+            worstDayPnl: sameDay ? nil : worstDay.pnl,
             maxDrawdown: summary.maxDrawdown,
             winningDays: winningDays,
             losingDays: losingDays
@@ -167,8 +168,8 @@ nonisolated enum TradingYearlyReportGenerator {
         now: Date,
         calendar: Calendar
     ) -> [TradingYearlyMonthRow] {
-        let currentYear = calendar.component(.year, from: now)
-        let currentMonth = calendar.component(.month, from: now)
+        let currentYear = TradingReportPeriods.eastern.component(.year, from: now)
+        let currentMonth = TradingReportPeriods.eastern.component(.month, from: now)
         let inputs = trades.map { DashboardChartMetrics.Input(trade: $0, accountType: nil) }
 
         return (1...12).map { month in
@@ -221,13 +222,16 @@ nonisolated enum TradingYearlyReportGenerator {
         year: Int
     ) -> String {
         if metrics.tradeCount == 0 {
-            return "No trades matched your filters during \(year). Adjust filters or log trades to unlock yearly insights."
+            return "No trades matched your filters during \(year)."
+        }
+        guard metrics.winRate != nil else {
+            return "\(year) has \(NumberDisplay.integer(metrics.tradeCount)) trades, but none have a P&L yet."
         }
 
         let tone: String = {
             if metrics.netPnl > 0 { return "positive" }
-            if metrics.netPnl < 0 { return "challenging" }
-            return "mixed"
+            if metrics.netPnl < 0 { return "negative" }
+            return "flat"
         }()
 
         let winRateText: String = {
@@ -247,20 +251,26 @@ nonisolated enum TradingYearlyReportGenerator {
         if metrics.tradesTaken == 0 {
             return "No trades matched your filters during \(label) \(ref.year)."
         }
-        return "\(label) \(ref.year): \(NumberDisplay.integer(metrics.tradesTaken)) trades and \(formatPnl(metrics.netPnl)) net P&L with \(NumberDisplay.percent(metrics.winRate, minimumFractionDigits: 1, maximumFractionDigits: 1)) win rate."
+        if metrics.knownResultCount == 0 {
+            return "\(label) \(ref.year): \(NumberDisplay.integer(metrics.tradesTaken)) trades, but none have a P&L yet."
+        }
+        return "\(label) \(ref.year): \(formatPnl(metrics.netPnl)) across \(NumberDisplay.integer(metrics.knownResultCount)) priced trades."
     }
 
     private static func buildMonthKeyTakeaway(metrics: TradingReportMetrics) -> String {
         if metrics.tradesTaken == 0 {
             return "This month had no matching trades for your active filters."
         }
+        if metrics.knownResultCount == 0 {
+            return "P&L is missing on these trades, so this month does not estimate a result."
+        }
         if metrics.netPnl > 0 {
-            return "Net positive month — review what worked and carry those habits forward."
+            return "The month finished net positive."
         }
         if metrics.netPnl < 0 {
-            return "Review session timing and risk per trade to tighten execution next month."
+            return "The month finished net negative."
         }
-        return "Stay process-focused — small adjustments compound across the year."
+        return "The month finished flat."
     }
 
     // MARK: - Helpers
@@ -270,8 +280,9 @@ nonisolated enum TradingYearlyReportGenerator {
     private static func computeDailyPnl(_ trades: [Trade], calendar: Calendar) -> [String: Decimal] {
         var map: [String: Decimal] = [:]
         for trade in trades {
-            guard let key = TradingCalendarDay.key(for: trade) else { continue }
-            map[key, default: 0] += trade.realizedPnL?.amount ?? 0
+            let key = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: trade)
+            guard !key.isEmpty, let amount = trade.realizedPnL?.amount else { continue }
+            map[key, default: 0] += amount
         }
         return map
     }
@@ -281,16 +292,21 @@ nonisolated enum TradingYearlyReportGenerator {
         mode: ExtremeMode,
         calendar: Calendar
     ) -> (label: String?, pnl: Decimal?) {
-        guard !daily.isEmpty else { return (nil, nil) }
+        _ = calendar
+        guard daily.count >= 2 else { return (nil, nil) }
+        let eligible = daily.filter { mode == .best ? $0.value > 0 : $0.value < 0 }
         let picked: (key: String, pnl: Decimal)? = {
             switch mode {
-            case .best: return daily.max(by: { $0.value < $1.value }).map { ($0.key, $0.value) }
-            case .worst: return daily.min(by: { $0.value < $1.value }).map { ($0.key, $0.value) }
+            case .best: return eligible.max(by: { $0.value < $1.value }).map { ($0.key, $0.value) }
+            case .worst: return eligible.min(by: { $0.value < $1.value }).map { ($0.key, $0.value) }
             }
         }()
         guard let picked else { return (nil, nil) }
+        let opposite = daily.values.contains { mode == .best ? $0 < picked.pnl : $0 > picked.pnl }
+        guard opposite else { return (nil, nil) }
         let formatter = DateFormatter()
         formatter.locale = .current
+        formatter.timeZone = TradingReportPeriods.eastern.timeZone
         formatter.setLocalizedDateFormatFromTemplate("EEEMMMd")
         if let date = dayKeyDate(picked.key) {
             return (formatter.string(from: date), picked.pnl)
@@ -300,9 +316,16 @@ nonisolated enum TradingYearlyReportGenerator {
 
     private static func findBestTradeID(_ trades: [Trade]) -> String? {
         trades.max(by: {
-            NSDecimalNumber(decimal: $0.realizedPnL?.amount ?? 0).doubleValue
-                < NSDecimalNumber(decimal: $1.realizedPnL?.amount ?? 0).doubleValue
-        })?.id.rawValue
+            (knownAmount($0) ?? -.greatestFiniteMagnitude) < (knownAmount($1) ?? -.greatestFiniteMagnitude)
+        }).flatMap { trade in
+            guard let amount = knownAmount(trade), amount > 0 else { return nil }
+            return trade.id.rawValue
+        }
+    }
+
+    private static func knownAmount(_ trade: Trade) -> Double? {
+        guard let amount = trade.realizedPnL?.amount else { return nil }
+        return NSDecimalNumber(decimal: amount).doubleValue
     }
 
     private static func monthLabel(_ month: Int, calendar: Calendar) -> String {
@@ -328,7 +351,7 @@ nonisolated enum TradingYearlyReportGenerator {
     private static func dayKeyDate(_ key: String) -> Date? {
         let parts = key.split(separator: "-").compactMap { Int($0) }
         guard parts.count == 3 else { return nil }
-        return Calendar.current.date(from: DateComponents(
+        return TradingReportPeriods.eastern.date(from: DateComponents(
             year: parts[0],
             month: parts[1],
             day: parts[2],
@@ -353,23 +376,26 @@ nonisolated enum TradingYearlyReportGenerator {
 nonisolated enum TradingReportGeneratorMetricsBridge {
     static func buildMetrics(from trades: [Trade], calendar: Calendar = .current) -> TradingReportMetrics {
         let totalTrades = trades.count
-        let wins = trades.filter { pnl($0) > 0 }.count
-        let winRate = totalTrades > 0 ? (Double(wins) / Double(totalTrades)) * 100 : 0
-        let totalPnL = trades.reduce(0.0) { $0 + pnl($1) }
+        let priced = trades.compactMap { $0.realizedPnL?.amount }
+        let wins = priced.filter { $0 > 0 }.count
+        let winRate = priced.isEmpty ? 0 : (Double(wins) / Double(priced.count)) * 100
+        let totalPnL = priced.reduce(Decimal(0), +)
         let daily = computeDailyPnl(trades)
         let bestDay = pickExtremeDay(daily, mode: .best, calendar: calendar)
         let worstDay = pickExtremeDay(daily, mode: .worst, calendar: calendar)
+        let sameDay = bestDay.label != nil && bestDay.label == worstDay.label
 
         return TradingReportMetrics(
-            netPnl: totalPnL,
+            netPnl: NSDecimalNumber(decimal: totalPnL).doubleValue,
             winRate: winRate,
+            knownResultCount: trades.compactMap { $0.realizedPnL?.amount }.count,
             averageRr: averageRr(trades),
             profitFactor: computeProfitFactor(trades),
             tradesTaken: totalTrades,
-            bestDayLabel: bestDay.label,
-            bestDayPnl: bestDay.pnl.map { NSDecimalNumber(decimal: $0).doubleValue },
-            worstDayLabel: worstDay.label,
-            worstDayPnl: worstDay.pnl.map { NSDecimalNumber(decimal: $0).doubleValue },
+            bestDayLabel: sameDay ? nil : bestDay.label,
+            bestDayPnl: sameDay ? nil : bestDay.pnl.map { NSDecimalNumber(decimal: $0).doubleValue },
+            worstDayLabel: sameDay ? nil : worstDay.label,
+            worstDayPnl: sameDay ? nil : worstDay.pnl.map { NSDecimalNumber(decimal: $0).doubleValue },
             bestSessionLabel: nil,
             bestSessionPnl: nil,
             worstSessionLabel: nil,
@@ -377,10 +403,6 @@ nonisolated enum TradingReportGeneratorMetricsBridge {
             mostTradedSymbol: mostTradedTicker(trades),
             averageHoldTimeSeconds: averageHoldSeconds(trades)
         )
-    }
-
-    private static func pnl(_ trade: Trade) -> Double {
-        NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
     }
 
     private static func averageRr(_ trades: [Trade]) -> Double? {
@@ -393,17 +415,19 @@ nonisolated enum TradingReportGeneratorMetricsBridge {
     }
 
     private static func computeProfitFactor(_ trades: [Trade]) -> Double? {
-        let grossProfit = trades.filter { pnl($0) > 0 }.reduce(0.0) { $0 + pnl($1) }
-        let grossLoss = trades.filter { pnl($0) < 0 }.reduce(0.0) { $0 + abs(pnl($1)) }
+        let values = trades.compactMap { $0.realizedPnL?.amount }
+        let grossProfit = values.filter { $0 > 0 }.reduce(Decimal(0), +)
+        let grossLoss = values.filter { $0 < 0 }.reduce(Decimal(0)) { $0 + abs($1) }
         guard grossLoss > 0 else { return nil }
-        return grossProfit / grossLoss
+        return NSDecimalNumber(decimal: grossProfit / grossLoss).doubleValue
     }
 
     private static func computeDailyPnl(_ trades: [Trade]) -> [String: Decimal] {
         var map: [String: Decimal] = [:]
         for trade in trades {
-            guard let key = TradingCalendarDay.key(for: trade) else { continue }
-            map[key, default: 0] += trade.realizedPnL?.amount ?? 0
+            let key = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: trade)
+            guard !key.isEmpty, let amount = trade.realizedPnL?.amount else { continue }
+            map[key, default: 0] += amount
         }
         return map
     }
@@ -415,16 +439,21 @@ nonisolated enum TradingReportGeneratorMetricsBridge {
         mode: ExtremeMode,
         calendar: Calendar
     ) -> (label: String?, pnl: Decimal?) {
-        guard !daily.isEmpty else { return (nil, nil) }
+        guard daily.count >= 2 else { return (nil, nil) }
+        let eligible = daily.filter { mode == .best ? $0.value > 0 : $0.value < 0 }
         let picked: (key: String, pnl: Decimal)? = {
             switch mode {
-            case .best: return daily.max(by: { $0.value < $1.value }).map { ($0.key, $0.value) }
-            case .worst: return daily.min(by: { $0.value < $1.value }).map { ($0.key, $0.value) }
+            case .best: return eligible.max(by: { $0.value < $1.value }).map { ($0.key, $0.value) }
+            case .worst: return eligible.min(by: { $0.value < $1.value }).map { ($0.key, $0.value) }
             }
         }()
         guard let picked else { return (nil, nil) }
+        let opposite = daily.values.contains { mode == .best ? $0 < picked.pnl : $0 > picked.pnl }
+        guard opposite else { return (nil, nil) }
+        let calendar = TradingReportPeriods.eastern
         let formatter = DateFormatter()
         formatter.locale = .current
+        formatter.timeZone = calendar.timeZone
         formatter.setLocalizedDateFormatFromTemplate("EEEMMMd")
         if let parts = picked.key.split(separator: "-").compactMap({ Int($0) }) as [Int]?,
            parts.count == 3,

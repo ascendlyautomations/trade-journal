@@ -34,7 +34,7 @@ export type PsychologyAnalyticsOverviewCounts = {
   unlock: PsychologyInsightsUnlockProgress
   checkInPsychDays: number
   scopedTradeCount: number
-  matchedTradeCount: number
+  matchedDayCount: number
 }
 
 export function psychologyAnalyticsOverviewCounts(
@@ -47,6 +47,6 @@ export function psychologyAnalyticsOverviewCounts(
     unlock,
     checkInPsychDays: unlock.tradingDayCheckInCount,
     scopedTradeCount: report.baseline.tradeCount,
-    matchedTradeCount: report.checkInMatchedTradeCount,
+    matchedDayCount: report.matchedDayCount,
   }
 }

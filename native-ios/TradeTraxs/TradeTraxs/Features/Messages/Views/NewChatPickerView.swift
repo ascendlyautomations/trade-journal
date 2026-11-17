@@ -46,6 +46,12 @@ struct NewChatPickerView: View {
             .task {
                 await viewModel.prepare()
             }
+            .onChange(of: FollowMutationCoordinator.shared.revision) { _, _ in
+                Task { await viewModel.handleFollowRelationshipChange() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .userBlockListDidChange)) { _ in
+                viewModel.handleBlockListChange()
+            }
         }
     }
 
@@ -203,12 +209,23 @@ struct NewChatPickerView: View {
         }
     }
 
+    private var showsPeoplePickerEmptyState: Bool {
+        if viewModel.isSearching {
+            return viewModel.visibleResults.isEmpty
+        }
+        return viewModel.followingProfiles.isEmpty
+            && viewModel.suggestedProfiles.isEmpty
+    }
+
     @ViewBuilder
     private func peopleResultsContent(isGroup: Bool, emptyMessage: String) -> some View {
         if viewModel.phase == .searching, viewModel.isSearching, viewModel.mode == .chooser {
             ExperienceLoadingSpinner(label: "Searching people")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if viewModel.visibleResults.isEmpty {
+        } else if viewModel.isLoadingSuggestions, !viewModel.isSearching {
+            ExperienceLoadingSpinner(label: "Loading people")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if showsPeoplePickerEmptyState {
             ExperienceEmptyState(
                 icon: .search,
                 title: viewModel.prompt,
@@ -218,15 +235,53 @@ struct NewChatPickerView: View {
             .padding(.top, ExperienceSpacing.md)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         } else {
-            List(viewModel.visibleResults) { profile in
-                if isGroup {
-                    groupRow(profile)
+            List {
+                if viewModel.isSearching {
+                    ForEach(viewModel.visibleResults) { profile in
+                        peopleRow(profile, isGroup: isGroup)
+                    }
                 } else {
-                    personalRow(profile)
+                    if viewModel.showsFollowingSection {
+                        Section("Following") {
+                            ForEach(viewModel.followingProfiles) { profile in
+                                peopleRow(profile, isGroup: isGroup)
+                            }
+                        }
+                    }
+                    if viewModel.showsSuggestedSection {
+                        Section("Suggested") {
+                            ForEach(viewModel.suggestedProfiles) { profile in
+                                peopleRow(profile, isGroup: isGroup)
+                            }
+                            if viewModel.showsSuggestedSeeMore {
+                                Button {
+                                    Task { await viewModel.loadMoreSuggested() }
+                                } label: {
+                                    Text(viewModel.isLoadingMoreSuggested ? "Loading…" : "See More")
+                                        .experienceStyle(.body, color: colors.accent)
+                                        .fontWeight(.semibold)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, ExperienceSpacing.sm)
+                                }
+                                .buttonStyle(.experiencePlain)
+                                .disabled(viewModel.isLoadingMoreSuggested)
+                                .listRowBackground(colors.backgroundPrimary)
+                                .accessibilityIdentifier("newChat.suggested.seeMore")
+                            }
+                        }
+                    }
                 }
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
+            .experiencePlainListStyle()
+        }
+    }
+
+    @ViewBuilder
+    private func peopleRow(_ profile: Profile, isGroup: Bool) -> some View {
+        if isGroup {
+            groupRow(profile)
+        } else {
+            personalRow(profile)
         }
     }
 

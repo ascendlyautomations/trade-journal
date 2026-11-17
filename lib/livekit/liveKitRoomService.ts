@@ -8,6 +8,7 @@ import {
   liveKitBroadcastRoomName,
   liveKitRoomName,
 } from "./liveKitRoomName.ts"
+import { generalVoiceMuteAllowsPublish } from "./mobileWebLivePolicy.ts"
 import { summarizeGeneralVoicePresence } from "./tradeRoomGeneralVoicePresence.ts"
 
 let cachedClient: RoomServiceClient | null = null
@@ -96,16 +97,25 @@ export async function muteLiveKitGeneralVoiceParticipantMicrophone(
     throw new Error("LiveKit is not configured on the server.")
   }
   const lkRoom = liveKitRoomName(roomId)
-  if (muted) {
-    const participants = await client.listParticipants(lkRoom)
-    const target = participants.find((p) => p.identity === targetUserId)
-    for (const track of target?.tracks ?? []) {
-      if (track.sid && track.source === TrackSource.MICROPHONE) {
-        try {
-          await client.mutePublishedTrack(lkRoom, targetUserId, track.sid, true)
-        } catch {
-          // Participant may have disconnected.
-        }
+  const canPublish = generalVoiceMuteAllowsPublish(muted)
+  await client.updateParticipant(lkRoom, targetUserId, {
+    permission: {
+      canPublish,
+      canSubscribe: true,
+      canPublishData: true,
+      canPublishSources: canPublish ? [TrackSource.MICROPHONE] : [],
+    },
+  })
+  if (!muted) return
+
+  const participants = await client.listParticipants(lkRoom)
+  const target = participants.find((p) => p.identity === targetUserId)
+  for (const track of target?.tracks ?? []) {
+    if (track.sid && track.source === TrackSource.MICROPHONE) {
+      try {
+        await client.mutePublishedTrack(lkRoom, targetUserId, track.sid, true)
+      } catch {
+        // Participant may have disconnected.
       }
     }
   }

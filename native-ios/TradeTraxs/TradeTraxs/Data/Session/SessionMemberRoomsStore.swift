@@ -145,6 +145,28 @@ final class SessionMemberRoomsStore {
         roomsByViewer[viewerID] = rooms
     }
 
+    func upsertMemberRoom(_ room: TradeRoom, for viewerID: ProfileID) {
+        var rooms = roomsByViewer[viewerID] ?? []
+        if let index = rooms.firstIndex(where: { $0.id == room.id }) {
+            rooms[index] = room
+        } else {
+            rooms.append(room)
+        }
+        rooms.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        roomsByViewer[viewerID] = rooms
+        loadedAt[viewerID] = Date()
+        SocialPersistedCacheCoordinator.persistMemberRooms(viewerID: viewerID, from: self)
+    }
+
+    func removeMemberRoom(_ roomID: RoomID, for viewerID: ProfileID) {
+        guard var rooms = roomsByViewer[viewerID] else { return }
+        let before = rooms.count
+        rooms.removeAll { $0.id == roomID }
+        guard rooms.count != before else { return }
+        roomsByViewer[viewerID] = rooms
+        SocialPersistedCacheCoordinator.persistMemberRooms(viewerID: viewerID, from: self)
+    }
+
     func invalidate(viewerID: ProfileID? = nil) {
         if let viewerID {
             roomsByViewer[viewerID] = nil

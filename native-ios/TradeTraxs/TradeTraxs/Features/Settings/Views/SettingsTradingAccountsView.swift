@@ -108,19 +108,6 @@ struct SettingsTradingAccountsView: View {
 
             if viewModel.showsFilteredEmptyState {
                 Section {
-                    Text("Choose which accounts appear in account selectors throughout TradeTraxs.")
-                        .experienceStyle(.footnote, color: colors.secondaryText)
-                        .lineLimit(3)
-                        .listRowInsets(
-                            EdgeInsets(
-                                top: 0,
-                                leading: ExperienceSpacing.md,
-                                bottom: ExperienceSpacing.xxs,
-                                trailing: ExperienceSpacing.md
-                            )
-                        )
-                        .accessibilityIdentifier("manageAccounts.dropdownIntro")
-
                     SettingsIntroBlock(
                         title: "No matching accounts",
                         message: "Try changing your Prop Firm or Account Type filter."
@@ -130,7 +117,7 @@ struct SettingsTradingAccountsView: View {
                     }
                     .accessibilityIdentifier("manageAccounts.clearFilters")
                 } header: {
-                    Text("Your Accounts")
+                    ManageAccountsYourAccountsSectionHeader()
                 }
             } else if viewModel.accounts.isEmpty, !viewModel.isLoading {
                 Section {
@@ -142,20 +129,17 @@ struct SettingsTradingAccountsView: View {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                 } header: {
-                    Text("Your Accounts")
+                    ManageAccountsYourAccountsSectionHeader()
                 }
             } else if showsFreePlanAccountGroups {
                 freePlanGroupedAccountSections
             } else {
                 Section {
-                    accountListIntro
                     ForEach(viewModel.filteredAccounts) { account in
                         accountRow(account, tradeEntryBadge: nil)
                     }
                 } header: {
-                    Text("Your Accounts")
-                } footer: {
-                    accountListFooter
+                    ManageAccountsYourAccountsSectionHeader()
                 }
             }
             }
@@ -217,30 +201,16 @@ struct SettingsTradingAccountsView: View {
         case readOnly
     }
 
-    private var accountListIntro: some View {
-        Text("Choose which accounts appear in account selectors throughout TradeTraxs.")
-            .experienceStyle(.footnote, color: colors.secondaryText)
-            .lineLimit(3)
-            .listRowInsets(
-                EdgeInsets(
-                    top: 0,
-                    leading: ExperienceSpacing.md,
-                    bottom: ExperienceSpacing.xxs,
-                    trailing: ExperienceSpacing.md
-                )
-            )
-            .accessibilityIdentifier("manageAccounts.dropdownIntro")
-    }
-
     @ViewBuilder
     private var freePlanGroupedAccountSections: some View {
-        Section {
-            accountListIntro
-            if showsFreePlanTradeEntryReconfigure {
+        if showsFreePlanTradeEntryReconfigure {
+            Section {
                 Button("Choose accounts for new trades") {
                     FreePlanAccountSlotRequestStore.shared.requestManualOpen()
                 }
                 .accessibilityIdentifier("manageAccounts.chooseTradeEntrySlots")
+            } header: {
+                ManageAccountsYourAccountsSectionHeader()
             }
         }
 
@@ -250,11 +220,7 @@ struct SettingsTradingAccountsView: View {
                     accountRow(account, tradeEntryBadge: .active)
                 }
             } header: {
-                Text("Active Accounts (\(freePlanActiveSlotCount)/\(FreeTierPolicy.maxTradeEntryAccounts))")
-            } footer: {
-                if freePlanReadOnlyAccounts.isEmpty {
-                    accountListFooter
-                }
+                freePlanActiveAccountsSectionHeader
             }
         }
 
@@ -264,15 +230,29 @@ struct SettingsTradingAccountsView: View {
                     accountRow(account, tradeEntryBadge: .readOnly)
                 }
             } header: {
-                Text("Read-Only Accounts")
-            } footer: {
-                accountListFooter
+                freePlanReadOnlyAccountsSectionHeader
             }
         }
     }
 
-    private var accountListFooter: some View {
-        Text("Swipe to activate or deactivate. Deactivated accounts stay in history but hide from trade pickers.")
+    @ViewBuilder
+    private var freePlanActiveAccountsSectionHeader: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            if !showsFreePlanTradeEntryReconfigure {
+                ManageAccountsYourAccountsSectionHeader()
+            }
+            Text("Active Accounts (\(freePlanActiveSlotCount)/\(FreeTierPolicy.maxTradeEntryAccounts))")
+        }
+    }
+
+    @ViewBuilder
+    private var freePlanReadOnlyAccountsSectionHeader: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            if !showsFreePlanTradeEntryReconfigure, freePlanActiveAccounts.isEmpty {
+                ManageAccountsYourAccountsSectionHeader()
+            }
+            Text("Read-Only Accounts")
+        }
     }
 
     private func accountRow(
@@ -418,5 +398,43 @@ struct SettingsTradingAccountsView: View {
         }
         .padding(.vertical, ExperienceSpacing.xxs)
         .contentShape(Rectangle())
+    }
+}
+
+private struct ManageAccountsYourAccountsSectionHeader: View {
+    private static let infoMessage =
+        "Choose which accounts appear in account selectors throughout TradeTraxs. Toggle to activate or deactivate."
+
+    @Environment(\.themeColors) private var colors
+    @State private var showsInfo = false
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
+            Text("Your Accounts")
+            Button {
+                showsInfo = true
+            } label: {
+                Image(systemName: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(colors.tertiaryText)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("About Your Accounts")
+            .accessibilityIdentifier("manageAccounts.dropdownIntro")
+        }
+        .popover(isPresented: $showsInfo) {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                Text("Your Accounts")
+                    .font(ExperienceTypography.subheadline.weight(.semibold))
+                    .foregroundStyle(colors.primaryText)
+                Text(Self.infoMessage)
+                    .font(ExperienceTypography.footnote)
+                    .foregroundStyle(colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(ExperienceSpacing.md)
+            .frame(width: 280, alignment: .leading)
+            .presentationCompactAdaptation(.popover)
+        }
     }
 }

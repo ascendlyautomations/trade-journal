@@ -34,4 +34,12 @@ extension View {
             viewportHeight.wrappedValue = height
         }
     }
+
+    /// Disables UIKit status-bar and navigation-bar scroll-to-top on the thread `ScrollView`.
+    ///
+    /// Chat timelines use ``defaultScrollAnchor(.bottom)``; system scroll-to-top jumps to the
+    /// oldest messages. Programmatic scroll-to-latest (open, send, bottom pin) is unchanged.
+    func conversationThreadDisablesSystemScrollToTop() -> some View {
+        experienceDisablesSystemScrollToTop()
+    }
 }

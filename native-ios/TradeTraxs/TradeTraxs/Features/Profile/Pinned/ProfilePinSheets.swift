@@ -49,7 +49,7 @@ struct ProfilePinReplaceSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .experienceSheetChrome()
         .accessibilityIdentifier("profile.pin.replace.sheet")
     }
 }
@@ -120,7 +120,7 @@ struct ProfileManagePinnedSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .experienceSheetChrome()
         .accessibilityIdentifier("profile.pin.manage.sheet")
     }
 }

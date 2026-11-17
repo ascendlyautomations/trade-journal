@@ -85,8 +85,9 @@ final class SuggestedTradersViewModel {
             base = store.suggestedTraders
         }
         let unblocked = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(base)
-        return ExploreFollowingSupport.orderingSuggestedTraders(
+        return ExploreSuggestedTradersSelection.discoverableAvatarFirst(
             unblocked,
+            viewerID: viewerID,
             followingIDs: store.viewerFollowingIDs,
             profile: { resolvedProfile(for: $0) }
         )
@@ -186,6 +187,8 @@ final class SuggestedTradersViewModel {
         guard let viewerID else { return true }
         return viewerID != trader.id
     }
+
+    var authenticatedProfileID: ProfileID? { viewerID }
 
     func searchChanged() {
         searchTask?.cancel()

@@ -313,7 +313,7 @@ private struct FreePlanAccountSlotSheet: View {
                 }
             }
             .experienceInsetGroupedListStyle(pageBackground: true)
-            .toolbarBackground(colors.groupedBackground, for: .navigationBar)
+            .toolbarBackground(colors.sheetBackground, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .navigationTitle("Choose Active Accounts")
             .navigationBarTitleDisplayMode(.inline)
@@ -333,8 +333,7 @@ private struct FreePlanAccountSlotSheet: View {
                 }
             }
         }
-        .presentationBackground(colors.groupedBackground)
-        .presentationDetents([.large])
+        .experienceSheetChrome(detents: [.large])
     }
 
     private var persistedSelectionSignature: String {

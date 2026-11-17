@@ -6,6 +6,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
   type UIEvent,
 } from "react"
@@ -24,6 +25,7 @@ import LinkedTradeBadge from "@/app/components/feed/LinkedTradeBadge"
 import type { FeedLikeMeta } from "@/app/components/feed/FeedPostCard"
 import {
   isTradeAttachedReel,
+  hasResolvableLinkedTrade,
   resolveReelCaption,
 } from "@/lib/reels"
 import { getReelPosterImageUrl } from "@/lib/reelVideo"
@@ -35,6 +37,43 @@ import {
   readMobileWebClipsPostId,
   writeMobileWebClipsPostId,
 } from "@/lib/mobileWebClips"
+import { clipPlaybackBlockedByLiveKit } from "@/lib/feed/clipLiveAudioPolicy"
+import { ConnectionState } from "livekit-client"
+import {
+  getTradeRoomLiveVoiceStableSnapshot,
+  subscribeTradeRoomLiveVoiceStable,
+} from "@/lib/livekit/client/tradeRoomLiveVoiceStore.ts"
+import {
+  getTradeRoomBroadcastSnapshot,
+  subscribeTradeRoomBroadcast,
+} from "@/lib/livekit/client/tradeRoomBroadcastStore.ts"
+
+function clipPlaybackBlockedSnapshot(): boolean {
+  const voice = getTradeRoomLiveVoiceStableSnapshot()
+  const broadcast = getTradeRoomBroadcastSnapshot()
+  return clipPlaybackBlockedByLiveKit({
+    liveVoiceActive:
+      voice.session != null &&
+      voice.connectionState !== ConnectionState.Disconnected,
+    broadcastActive:
+      broadcast.isWatching || broadcast.isPublishing || broadcast.isInConversation,
+  })
+}
+
+function useClipPlaybackBlocked(): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      const unsubscribeVoice = subscribeTradeRoomLiveVoiceStable(listener)
+      const unsubscribeBroadcast = subscribeTradeRoomBroadcast(listener)
+      return () => {
+        unsubscribeVoice()
+        unsubscribeBroadcast()
+      }
+    },
+    clipPlaybackBlockedSnapshot,
+    () => false
+  )
+}
 
 type MobileWebClipsPagerProps = {
   posts: any[]
@@ -47,7 +86,8 @@ type MobileWebClipsPagerProps = {
   onOpenComments: (post: any) => void
   onSharePost: (post: any) => void
   onOpenLinkedTrade?: (post: any) => void
-  onFollow?: (userId: string) => void
+  onFollow?: (userId: string, isPrivate: boolean) => void
+  followBusyUserId?: string | null
   onLoadMore?: () => void
   hasMore?: boolean
   loadingMore?: boolean
@@ -72,6 +112,7 @@ export default function MobileWebClipsPager({
   onSharePost,
   onOpenLinkedTrade,
   onFollow,
+  followBusyUserId = null,
   onLoadMore,
   hasMore = false,
   loadingMore = false,
@@ -162,6 +203,8 @@ export default function MobileWebClipsPager({
     }
   }
 
+  const playbackBlocked = useClipPlaybackBlocked()
+
   if (posts.length === 0) return null
 
   return (
@@ -180,7 +223,8 @@ export default function MobileWebClipsPager({
           user={user}
           active={index === activeIndex}
           nearActive={Math.abs(index - activeIndex) <= 1}
-          muted={muted}
+          muted={muted || playbackBlocked}
+          playbackBlocked={playbackBlocked}
           likeMeta={likesByPost[String(post.id)] ?? { count: 0, liked: false }}
           likeBusy={!!likeBusyByPost[String(post.id)]}
           commentCount={commentCountsByPost[String(post.id)] ?? 0}
@@ -190,7 +234,11 @@ export default function MobileWebClipsPager({
           onSharePost={onSharePost}
           onOpenLinkedTrade={onOpenLinkedTrade}
           onFollow={onFollow}
-          onToggleMute={() => setMuted((prev) => !prev)}
+          followBusy={followBusyUserId === String(post.user_id ?? "")}
+          onToggleMute={() => {
+            if (playbackBlocked) return
+            setMuted((prev) => !prev)
+          }}
           canManage={canManageReel?.(post) ?? false}
           menuOpen={openReelMenuId === String(post.id)}
           onMenuToggle={onReelMenuToggle}
@@ -217,6 +265,7 @@ function MobileWebClipPage({
   active,
   nearActive,
   muted,
+  playbackBlocked,
   likeMeta,
   likeBusy,
   commentCount,
@@ -226,6 +275,7 @@ function MobileWebClipPage({
   onSharePost,
   onOpenLinkedTrade,
   onFollow,
+  followBusy = false,
   onToggleMute,
   canManage,
   menuOpen,
@@ -239,6 +289,7 @@ function MobileWebClipPage({
   active: boolean
   nearActive: boolean
   muted: boolean
+  playbackBlocked: boolean
   likeMeta: FeedLikeMeta
   likeBusy: boolean
   commentCount: number
@@ -247,7 +298,8 @@ function MobileWebClipPage({
   onOpenComments: (post: any) => void
   onSharePost: (post: any) => void
   onOpenLinkedTrade?: (post: any) => void
-  onFollow?: (userId: string) => void
+  onFollow?: (userId: string, isPrivate: boolean) => void
+  followBusy?: boolean
   onToggleMute: () => void
   canManage: boolean
   menuOpen: boolean
@@ -268,15 +320,12 @@ function MobileWebClipPage({
   const isOwner = Boolean(user?.id && authorId && String(user.id) === authorId)
   const showFollow = Boolean(onFollow && user?.id && !isOwner && !isFollowing && authorId)
   const tradeAttached = isTradeAttachedReel(post)
+  const showLinkedTrade = hasResolvableLinkedTrade(post, user?.id ?? null)
 
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
-    if (!active) {
-      video.pause()
-      return
-    }
-    if (paused) {
+    if (!active || paused || playbackBlocked) {
       video.pause()
       return
     }
@@ -287,7 +336,7 @@ function MobileWebClipPage({
     return () => {
       video.pause()
     }
-  }, [active, paused, videoUrl])
+  }, [active, paused, playbackBlocked, videoUrl])
 
   useEffect(() => {
     if (active) setPaused(false)
@@ -317,7 +366,7 @@ function MobileWebClipPage({
           playsInline
           loop
           muted={muted}
-          preload="auto"
+          preload="metadata"
           disablePictureInPicture
           onError={() => setVideoFailed(true)}
           onClick={handleTapMedia}
@@ -383,9 +432,11 @@ function MobileWebClipPage({
             {showFollow ? (
               <button
                 type="button"
+                disabled={followBusy}
                 onClick={(event) => {
                   event.stopPropagation()
-                  onFollow?.(authorId)
+                  if (followBusy) return
+                  onFollow?.(authorId, post.profiles?.is_private === true)
                 }}
                 className="tt-mobile-web-hit-slop relative inline-flex h-7 min-w-11 items-center justify-center rounded-full border border-white/80 bg-white/20 px-2.5 text-[12px] font-bold text-white"
               >
@@ -398,7 +449,7 @@ function MobileWebClipPage({
               {caption}
             </p>
           ) : null}
-          {tradeAttached && onOpenLinkedTrade ? (
+          {showLinkedTrade && onOpenLinkedTrade ? (
             <div className="mt-2">
               <LinkedTradeBadge
                 onClick={(event) => {

@@ -42,6 +42,7 @@ enum DashboardAnalyticsV3Loader {
             return LoadResult(bootstrap: cached.payload, source: "disk", payloadBytes: nil)
         }
 
+        let cachedRevision = DashboardAnalyticsDiskCache.load(viewerID: viewerID)?.revision
         let started = CFAbsoluteTimeGetCurrent()
         let bootstrap = try await DashboardAnalyticsV3AuthoritativeFetch.fetchNetwork(
             viewerID: viewerID,
@@ -52,6 +53,27 @@ enum DashboardAnalyticsV3Loader {
             throw CancellationError()
         }
         let elapsedMs = Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
+        let newRevision = bootstrap.data.revisionInt
+        if let cachedRevision, cachedRevision == newRevision,
+           let cached = DashboardAnalyticsDiskCache.load(viewerID: viewerID)
+        {
+            #if DEBUG
+            DashboardAnalyticsV3Probe.log(
+                source: "network",
+                reason: "unchanged_revision",
+                range: nil,
+                account: nil,
+                mode: nil,
+                revision: newRevision,
+                payloadBytes: nil,
+                summaryCount: bootstrap.data.aggregatePresets.count,
+                dailyRows: 0,
+                equityPoints: nil,
+                elapsedMs: elapsedMs
+            )
+            #endif
+            return LoadResult(bootstrap: cached.payload, source: "network_unchanged", payloadBytes: nil)
+        }
         let encoded = try? JSONEncoder().encode(bootstrap)
         let bytes = encoded?.count
         #if DEBUG

@@ -221,10 +221,9 @@ struct TradeJournalCard: View {
                 if let rr = TradeDisplay.journalRRText(summary.riskReward) {
                     journalInlineMetric(title: "R:R", value: rr)
                 }
-                journalInlineMetric(
-                    title: "Max R:R",
-                    value: TradeDisplay.compactRRText(item.maxRrReached) ?? "—"
-                )
+                if let maxRr = TradeDisplay.compactRRText(item.maxRrReached) {
+                    journalInlineMetric(title: "Max R:R", value: maxRr)
+                }
             } else {
                 if let duration = TradeDisplay.journalCardDuration(for: item) {
                     journalInlineMetric(title: "Duration", value: duration, layoutPriority: 1)
@@ -237,7 +236,7 @@ struct TradeJournalCard: View {
                 }
             }
             Spacer(minLength: ExperienceSpacing.sm)
-            visibilityLabel
+            TradeJournalVisibilityLabel(visibility: summary.visibility)
                 .fixedSize(horizontal: true, vertical: false)
                 .lineLimit(1)
         }
@@ -293,33 +292,6 @@ struct TradeJournalCard: View {
         .accessibilityLabel("\(title) \(value)")
     }
 
-    private var visibilityLabel: some View {
-        HStack(spacing: 3) {
-            Image(systemName: visibilitySymbol)
-                .font(.caption2)
-            Text(visibilityTitle)
-                .experienceStyle(.caption2, color: colors.tertiaryText)
-        }
-        .foregroundStyle(colors.tertiaryText)
-        .accessibilityLabel(visibilityTitle)
-    }
-
-    private var visibilitySymbol: String {
-        switch summary.visibility {
-        case .public: return "globe"
-        case .private: return "lock.fill"
-        case .followersOnly: return "person.2.fill"
-        }
-    }
-
-    private var visibilityTitle: String {
-        switch summary.visibility {
-        case .public: return "Public"
-        case .private: return "Private"
-        case .followersOnly: return "Followers"
-        }
-    }
-
     private var accessibilitySummary: String {
         var parts = [
             summary.symbol.ticker,
@@ -332,8 +304,42 @@ struct TradeJournalCard: View {
             parts.append(resolvedAccountName)
         }
         parts.append(TradeDisplay.journalContextLine(accountName: nil, at: summary.entryAt))
-        parts.append(visibilityTitle)
+        parts.append(TradeJournalVisibilityLabel.title(for: summary.visibility))
         return parts.joined(separator: ", ")
+    }
+}
+
+/// Globe/lock + title — shared by journal trade cards and trade detail header.
+struct TradeJournalVisibilityLabel: View {
+    let visibility: ContentVisibility
+
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: Self.symbol(for: visibility))
+                .font(.caption2)
+            Text(Self.title(for: visibility))
+                .experienceStyle(.caption2, color: colors.tertiaryText)
+        }
+        .foregroundStyle(colors.tertiaryText)
+        .accessibilityLabel(Self.title(for: visibility))
+    }
+
+    static func symbol(for visibility: ContentVisibility) -> String {
+        switch visibility {
+        case .public: return "globe"
+        case .private: return "lock.fill"
+        case .followersOnly: return "person.2.fill"
+        }
+    }
+
+    static func title(for visibility: ContentVisibility) -> String {
+        switch visibility {
+        case .public: return "Public"
+        case .private: return "Private"
+        case .followersOnly: return "Followers"
+        }
     }
 }
 

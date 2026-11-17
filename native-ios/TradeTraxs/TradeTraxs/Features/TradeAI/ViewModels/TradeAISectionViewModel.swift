@@ -136,7 +136,9 @@ final class TradeAISectionViewModel {
                 guard !Task.isCancelled else { return }
                 let assistant = TradeAIMessage(role: .assistant, content: response.reply)
                 messages.append(assistant)
-                await persistCompletedTurn(user: userMessage, assistant: assistant)
+                if response.shouldPersist {
+                    await persistCompletedTurn(user: userMessage, assistant: assistant)
+                }
             } catch is ThirdPartyAIConsentError {
                 guard !Task.isCancelled else { return }
                 if messages.last?.id == userMessage.id {
@@ -145,10 +147,6 @@ final class TradeAISectionViewModel {
             } catch {
                 guard !Task.isCancelled else { return }
                 errorMessage = Self.userFacingMessage(for: error)
-                // Drop the optimistic user turn so reopen doesn't treat a failed ask as history.
-                if messages.last?.id == userMessage.id {
-                    messages.removeLast()
-                }
             }
         }
         await analyzeTask?.value
@@ -169,9 +167,6 @@ final class TradeAISectionViewModel {
             pendingPersistTurn = (user, assistant)
             persistErrorMessage =
                 "Analysis is on screen, but saving to your account failed. Tap Retry Save."
-            #if DEBUG
-            print("[TradeAITrace] persistence.failed surfacedToUser=true")
-            #endif
         }
     }
 

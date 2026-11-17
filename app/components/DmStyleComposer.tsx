@@ -178,7 +178,7 @@ export default function DmStyleComposer({
         id={fileInputId}
         type="file"
         accept="image/*"
-        className="hidden"
+        className="sr-only"
         disabled={imageDisabled}
         onChange={onImageChange}
       />

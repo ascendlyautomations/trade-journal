@@ -105,6 +105,9 @@ nonisolated struct PsychologyReportBehaviorSummary: Hashable, Sendable {
     var afterTwoLossesBaselineWinRate: Double?
     var earlyTradeAvgPnL: Double?
     var lateTradeAvgPnL: Double?
+    var afterLossLabel: String = "Win rate after 2+ losses"
+    var earlyLabel: String = "Trades 1–3 Avg"
+    var lateLabel: String = "Trade #5+ Avg"
 }
 
 nonisolated struct PsychologyReportComparison: Hashable, Sendable {

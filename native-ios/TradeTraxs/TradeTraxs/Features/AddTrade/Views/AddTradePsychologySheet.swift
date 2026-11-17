@@ -7,36 +7,14 @@ struct AddTradePsychologySheet: View {
 
     @Environment(\.themeColors) private var colors
 
-    private enum FollowedPlanPickerValue: Hashable {
-        case unset
-        case yes
-        case no
-    }
-
-    private var followedPlanBinding: Binding<FollowedPlanPickerValue> {
-        Binding(
-            get: {
-                switch viewModel.followedPlan {
-                case nil: return .unset
-                case true: return .yes
-                case false: return .no
-                }
-            },
-            set: { value in
-                switch value {
-                case .unset: viewModel.followedPlan = nil
-                case .yes: viewModel.followedPlan = true
-                case .no: viewModel.followedPlan = false
-                }
-            }
-        )
-    }
-
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    convictionSelector
+                    TradePsychologyFormComponents.convictionSelector(
+                        confidenceLevel: $viewModel.confidenceLevel,
+                        colors: colors
+                    )
                 } header: {
                     Text("Conviction")
                 } footer: {
@@ -44,39 +22,36 @@ struct AddTradePsychologySheet: View {
                         .experienceStyle(.caption, color: colors.tertiaryText)
                 }
 
-                Section("Before the trade") {
-                    Picker("Emotion before trade", selection: $viewModel.emotionSelection) {
-                        Text("Not set").tag("")
-                        ForEach(TradeReviewCatalog.emotions, id: \.self) { emotion in
-                            Text(emotion).tag(emotion)
-                        }
-                    }
-                    .accessibilityIdentifier("addTrade.psychology.emotion")
-                }
+                TradePsychologyFormComponents.emotionPickerSection(
+                    header: "Before the trade",
+                    pickerLabel: "Emotion before trade",
+                    selection: $viewModel.emotionPickerSelection,
+                    customText: $viewModel.emotionCustomText,
+                    accessibilityPrefix: "addTrade.psychology"
+                )
 
-                Section("Execution") {
-                    Picker("Followed plan", selection: followedPlanBinding) {
-                        Text("Not set").tag(FollowedPlanPickerValue.unset)
-                        Text("Yes").tag(FollowedPlanPickerValue.yes)
-                        Text("No").tag(FollowedPlanPickerValue.no)
-                    }
-                    .accessibilityIdentifier("addTrade.psychology.followedPlan")
-                }
+                TradePsychologyFormComponents.emotionPickerSection(
+                    header: "After the trade",
+                    pickerLabel: "Emotion after trade",
+                    selection: $viewModel.exitEmotionPickerSelection,
+                    customText: $viewModel.exitEmotionCustomText,
+                    accessibilityPrefix: "addTrade.psychology.exit"
+                )
 
-                Section("Market") {
-                    Picker("Market condition", selection: $viewModel.marketConditionSelection) {
-                        Text("Not set").tag("")
-                        ForEach(TradeReviewCatalog.marketConditions, id: \.self) { condition in
-                            Text(condition).tag(condition)
-                        }
-                    }
-                    .accessibilityIdentifier("addTrade.psychology.marketCondition")
-                }
+                TradePsychologyFormComponents.executionRatingSection(
+                    rating: $viewModel.executionRatingLevel,
+                    accessibilityIdentifier: "addTrade.psychology.executionRating"
+                )
 
-                Section("Psychology notes") {
-                    psychologyNotesEditor
-                }
+                TradePsychologyFormComponents.psychologyNotesSection(
+                    text: $viewModel.psychologyNotesText,
+                    colors: colors,
+                    accessibilityIdentifier: "addTrade.psychology.notes",
+                    textInputScreen: "addTradePsychology"
+                )
             }
+            .listSectionSpacing(TradePsychologyFormComponents.sectionSpacing)
+            .scrollDismissesKeyboard(.interactively)
             .experienceTradeTraxsFormStyle(pageBackground: true)
             .experienceNavigationTitle("Trade Psychology")
             .toolbar {
@@ -93,76 +68,5 @@ struct AddTradePsychologySheet: View {
             }
         }
         .accessibilityIdentifier("addTrade.psychologySheet")
-    }
-
-    private var convictionSelector: some View {
-        HStack(spacing: ExperienceSpacing.xs) {
-            ForEach(1...5, id: \.self) { level in
-                Button {
-                    if viewModel.confidenceLevel == level {
-                        viewModel.confidenceLevel = 0
-                    } else {
-                        viewModel.confidenceLevel = level
-                    }
-                } label: {
-                    Text("\(level)")
-                        .font(ExperienceTypography.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, ExperienceSpacing.sm)
-                        .background(
-                            RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-                                .fill(
-                                    viewModel.confidenceLevel == level
-                                        ? colors.accent.opacity(0.18)
-                                        : colors.fillSecondary
-                                )
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-                                .strokeBorder(
-                                    viewModel.confidenceLevel == level
-                                        ? colors.accent
-                                        : colors.separator,
-                                    lineWidth: viewModel.confidenceLevel == level ? 1.5 : 1
-                                )
-                        )
-                        .foregroundStyle(
-                            viewModel.confidenceLevel == level
-                                ? colors.accent
-                                : colors.primaryText
-                        )
-                }
-                .buttonStyle(.experiencePlain)
-                .accessibilityLabel("Conviction \(level) of 5")
-                .accessibilityAddTraits(viewModel.confidenceLevel == level ? .isSelected : [])
-                .accessibilityIdentifier("addTrade.psychology.conviction.\(level)")
-            }
-        }
-        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-    }
-
-    private var psychologyNotesEditor: some View {
-        ZStack(alignment: .topLeading) {
-            if viewModel.psychologyNotesText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text("Thought process before, during, and after…")
-                    .experienceStyle(.body, color: colors.tertiaryText)
-                    .padding(.top, 8)
-                    .padding(.leading, 5)
-                    .allowsHitTesting(false)
-            }
-            TextEditor(text: $viewModel.psychologyNotesText)
-                .font(ExperienceTypography.body)
-                .foregroundStyle(colors.primaryText)
-                .frame(minHeight: 96, alignment: .top)
-                .scrollContentBackground(.hidden)
-                .background(Color.clear)
-                .experienceTextInputProbe(
-                    screen: "addTradePsychology",
-                    field: "addTrade.psychology.notes",
-                    text: viewModel.psychologyNotesText,
-                    isFocused: false
-                )
-                .accessibilityIdentifier("addTrade.psychology.notes")
-        }
     }
 }

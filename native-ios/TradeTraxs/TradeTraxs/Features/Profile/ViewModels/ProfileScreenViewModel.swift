@@ -882,11 +882,30 @@ final class ProfileScreenViewModel {
         shellViewModel?.apply(state: next)
     }
 
+    func applyReelLinkMutation(_ reel: Reel) {
+        guard isOwnerTarget else { return }
+        guard matchesOwner(reel.authorProfileID) else { return }
+        data.detailCache.seed(reel)
+        syncShellIfNeeded()
+        shellViewModel?.trades?.applyReelLinkMutation(reel)
+        shellViewModel?.clips?.applyReelLinkMutation(reel)
+        guard let index = state.clips.firstIndex(where: { $0.id == reel.id }) else { return }
+        var next = state
+        next.clips[index] = reel
+        applyLocalState(next, skipClipsBootstrap: true)
+        if let visible = shellViewModel?.clips?.items {
+            syncClipsFromSection(visible)
+        }
+    }
+
     func applyOptimisticReel(_ reel: Reel) {
         guard isOwnerTarget else { return }
         guard matchesOwner(reel.authorProfileID) else { return }
         guard OwnerProfileOptimisticStore.isListedOnOwnerProfile(reel) else { return }
         data.detailCache.seed(reel)
+        if reel.linkedTradeID != nil {
+            shellViewModel?.trades?.applyReelLinkMutation(reel)
+        }
         Task { await persistMutationPatch { viewerID in
             ProfilePersistedCacheCoordinator.patchReel(reel, viewerID: viewerID)
         } }
@@ -988,7 +1007,10 @@ final class ProfileScreenViewModel {
 
     func applyOptimisticReelRemoval(id: ReelID) {
         guard isOwnerTarget else { return }
-        data.detailCache.removeReel(id: id)
+        shellViewModel?.trades?.applyLinkedReelDeleted(id)
+        if shellViewModel?.trades == nil {
+            data.detailCache.removeReel(id: id)
+        }
         Task { await persistMutationPatch { viewerID in
             if let owner = state.profileID {
                 ProfilePersistedCacheCoordinator.removeReel(id: id, owner: owner, viewerID: viewerID)

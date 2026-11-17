@@ -101,4 +101,22 @@ enum ReportDetailBootstrap: ScreenBootstrap {
             loadedAt: Date()
         )
     }
+
+    struct WeekContext {
+        var mondayKey: String
+        var tradingReports: any TradingReportRepository
+        var forceNetwork: Bool = false
+    }
+
+    static func loadWeek(_ context: WeekContext) async throws -> Result {
+        let report = try await context.tradingReports.weekReport(
+            mondayKey: context.mondayKey,
+            forceNetwork: context.forceNetwork
+        )
+        return Result(
+            report: report,
+            blocks: TradingReportDetailBlock.blocks(from: report),
+            loadedAt: Date()
+        )
+    }
 }

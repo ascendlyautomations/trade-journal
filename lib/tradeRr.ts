@@ -52,11 +52,13 @@ export function averageMaxRrReachedFromTrades(
   return count > 0 ? sum / count : null
 }
 
-/** Persist max R:R for non-positive P&L; optional finite value when P&L is positive. */
+/** Persist max R:R for early exits and non-positive P&L; optional on other winners. */
 export function maxRrReachedForTradeSave(
   pnl: number,
-  parsed: number | null
+  parsed: number | null,
+  opts?: { earlyExit?: boolean }
 ): number | null | undefined {
+  if (opts?.earlyExit) return parsed ?? null
   if (!Number.isFinite(pnl)) return parsed ?? undefined
   if (pnl > 0) {
     if (parsed == null) return undefined

@@ -84,6 +84,13 @@ describe("averageMaxRrReachedFromTrades", () => {
   })
 })
 
+describe("maxRrReachedForTradeSave early exit", () => {
+  it("persists max rr for early exit winners", () => {
+    assert.equal(maxRrReachedForTradeSave(100, 1.5, { earlyExit: true }), 1.5)
+    assert.equal(maxRrReachedForTradeSave(100, null, { earlyExit: true }), null)
+  })
+})
+
 describe("maxRrReachedForTradeSave", () => {
   it("allows optional max R:R when P&L is positive", () => {
     assert.equal(maxRrReachedForTradeSave(100, 2), 2)

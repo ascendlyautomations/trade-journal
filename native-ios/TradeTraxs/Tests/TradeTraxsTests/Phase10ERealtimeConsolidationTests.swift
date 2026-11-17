@@ -93,8 +93,12 @@ private final class StubNotificationRepository: NotificationRepository, @uncheck
         return _notificationFetchCount
     }
 
-    func notifications(page: PageRequest) async throws -> CursorPage<ActivityNotification> {
-        CursorPage(items: [], nextCursor: nil)
+    func notifications(
+        page: PageRequest,
+        filter: ActivityNotificationListFilter
+    ) async throws -> CursorPage<ActivityNotification> {
+        _ = filter
+        return CursorPage(items: [], nextCursor: nil)
     }
 
     func notification(id: NotificationID) async throws -> ActivityNotification? {
