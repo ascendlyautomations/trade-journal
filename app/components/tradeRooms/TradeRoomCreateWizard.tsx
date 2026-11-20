@@ -353,13 +353,6 @@ export default function TradeRoomCreateWizard({
                         </button>
                       ))}
                     </div>
-                    <p className="mt-2 text-xs text-gray-500">
-                      {
-                        TRADE_ROOM_ACCESS_OPTIONS.find(
-                          (opt) => opt.value === tradeRoomAccessMode(config),
-                        )?.summary
-                      }
-                    </p>
                   </div>
 
                   <label className="flex items-start gap-2 text-sm text-gray-300">

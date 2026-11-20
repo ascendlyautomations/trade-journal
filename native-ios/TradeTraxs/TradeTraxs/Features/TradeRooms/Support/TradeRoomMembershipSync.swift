@@ -73,6 +73,7 @@ enum TradeRoomMembershipSync {
         inboxStore: MessagesInboxStore
     ) {
         TradeRoomMembershipStore.shared.setJoined(roomID, joined: false)
+        TradeRoomConfirmedMembershipCache.clear(for: roomID)
         TradeRoomJoinActionCoordinator.shared.clearMutation(for: roomID)
         inboxStore.removeRoom(id: roomID)
         SessionMemberRoomsStore.shared.removeMemberRoom(roomID, for: viewerID)

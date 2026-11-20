@@ -92,6 +92,7 @@ struct MainTabShellView: View {
             onClose: { broadcastCoordinator.acknowledgeStreamConnectionLostNotice() }
         )
         .broadcastSpeakInviteOverlay(coordinator: broadcastCoordinator)
+        .broadcastFloatingMiniPlayerOverlay(coordinator: broadcastCoordinator)
         .saveSuccessToastOverlay()
         .onChange(of: store.selectedTab) { _, tab in
             MainThreadOperationTracker.push("tab.select.\(tab.rawValue)")
@@ -115,6 +116,9 @@ struct MainTabShellView: View {
         }
         .onAppear {
             syncFeedScopedBarChrome(isFeedTab: store.selectedTab == .feed)
+            broadcastCoordinator.bindOpenProfile { profileID in
+                coordinator.openExternal(.feed(.profile(profileID)))
+            }
             FirstTradeDetailCoachmarkStore.shared.configure(
                 viewerID: currentUserProfile.profile?.id,
                 navigationCoordinator: coordinator
@@ -284,6 +288,12 @@ struct HomeNavigationStack: View {
             )
         case .propFirm(let accountID):
             PropFirmHomeRouteView(
+                accountID: accountID,
+                data: appEnvironment.data,
+                navigationCoordinator: coordinator
+            )
+        case .propFirmPayouts(let accountID):
+            PropFirmPayoutsHomeRouteView(
                 accountID: accountID,
                 data: appEnvironment.data,
                 navigationCoordinator: coordinator
@@ -471,7 +481,8 @@ struct HomeNavigationStack: View {
         case .calendar: return "Calendar"
         case .tradingDay: return "Trading Day"
         case .tools: return "Tools"
-        case .propFirm: return "Prop Firm"
+        case .propFirm: return ""
+        case .propFirmPayouts: return "Payouts"
         case .analyst: return "Analyst"
         case .backtest: return "Backtest"
         case .achievements: return "Achievements"
@@ -1387,6 +1398,62 @@ private struct PropFirmHomeRouteView: View {
                     .experienceScreenBackground()
             } else {
                 PropFirmDetailView(
+                    accountID: accountID,
+                    data: data,
+                    navigationCoordinator: navigationCoordinator
+                )
+            }
+        }
+        .onAppear { presentUpgradeGateIfNeeded() }
+        .onChange(of: restrictsPropFirmMode) { _, restricted in
+            if restricted {
+                presentUpgradeGateIfNeeded()
+            } else {
+                didPresentUpgradeGate = false
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { _ in
+            entitlementGateRevision += 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .monetizationConfigurationDidChange)) { _ in
+            entitlementGateRevision += 1
+        }
+    }
+
+    private func presentUpgradeGateIfNeeded() {
+        guard restrictsPropFirmMode else { return }
+        guard !didPresentUpgradeGate else { return }
+        didPresentUpgradeGate = true
+        ProUpgradeCoordinator.shared.present(reason: .feature(.propFirm))
+    }
+}
+
+/// Gates `HomeRoute.propFirmPayouts` — same Pro gate as Prop Firm detail.
+private struct PropFirmPayoutsHomeRouteView: View {
+    let accountID: TradingAccountID
+    let data: DataEnvironment
+    let navigationCoordinator: NavigationCoordinator
+
+    @State private var entitlementGateRevision = 0
+    @State private var didPresentUpgradeGate = false
+
+    private var restrictsPropFirmMode: Bool {
+        _ = entitlementGateRevision
+        let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+        return ProMonetizationPolicy.shouldRestrictPropFirmMode(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        )
+    }
+
+    var body: some View {
+        Group {
+            if restrictsPropFirmMode {
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .experienceScreenBackground()
+            } else {
+                PropFirmAccountPayoutsView(
                     accountID: accountID,
                     data: data,
                     navigationCoordinator: navigationCoordinator

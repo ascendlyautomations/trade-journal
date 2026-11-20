@@ -12,6 +12,7 @@ enum HomeRoute: Hashable, Codable, Sendable {
     case tradingDay(String)
     case tools
     case propFirm(TradingAccountID)
+    case propFirmPayouts(TradingAccountID)
     case analyst
     case backtest
     case achievements

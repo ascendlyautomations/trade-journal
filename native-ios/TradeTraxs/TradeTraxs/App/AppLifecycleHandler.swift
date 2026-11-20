@@ -35,8 +35,8 @@ final class AppLifecycleHandler {
                 voice.refreshLiveActivityAfterForeground()
             }
             let broadcast = RoomBroadcastCoordinator.shared
-            if let roomID = broadcast.watchSession?.roomID {
-                await broadcast.refreshStatus(roomID: roomID)
+            if broadcast.watchSession != nil {
+                broadcast.refreshBroadcastSessionAfterForeground()
                 broadcast.refreshBroadcastLiveActivityAfterForeground()
             }
             await pushNotifications?.refreshAuthorizationStatus()

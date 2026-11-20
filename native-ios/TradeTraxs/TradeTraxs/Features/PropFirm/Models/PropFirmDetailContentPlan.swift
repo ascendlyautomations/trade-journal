@@ -266,8 +266,133 @@ nonisolated struct PropFirmDetailContentPlan: Sendable {
         return rules
     }
 
+    func dashboardMetricChips() -> [DashboardMetricChip] {
+        var chips: [DashboardMetricChip] = []
+
+        chips.append(
+            DashboardMetricChip(
+                id: "cyclePnL",
+                label: "Cycle P&L",
+                value: NumberDisplay.money(snapshot.cyclePnL),
+                tone: snapshot.cyclePnL >= 0 ? .positive : .negative
+            )
+        )
+        if showsDrawdownSection, snapshot.drawdownFloor > 0 {
+            chips.append(
+                DashboardMetricChip(
+                    id: "ddFloor",
+                    label: "Drawdown floor",
+                    value: NumberDisplay.money(snapshot.drawdownFloor),
+                    tone: snapshot.isFailed ? .negative : .neutral
+                )
+            )
+        }
+        chips.append(
+            DashboardMetricChip(
+                id: "toFloor",
+                label: "To floor",
+                value: NumberDisplay.money(snapshot.distanceToDD),
+                tone: snapshot.distanceDanger || snapshot.distanceToDD < 0 ? .negative : .positive
+            )
+        )
+
+        if let daily = snapshot.dailyLossLimit, daily > 0 {
+            chips.append(
+                DashboardMetricChip(
+                    id: "dailyLoss",
+                    label: "Worst day",
+                    value: NumberDisplay.money(snapshot.dailyLossUsed),
+                    tone: snapshot.dailyDrawdownBreached ? .negative : .neutral
+                )
+            )
+        } else if let required = snapshot.winningDaysRequired, required > 0 {
+            chips.append(
+                DashboardMetricChip(
+                    id: "winningDays",
+                    label: "Win days",
+                    value: "\(snapshot.winningDays)/\(required)",
+                    tone: snapshot.winningDaysTargetMet ? .positive : .neutral
+                )
+            )
+        }
+
+        return chips
+    }
+
+    var showsProgressSection: Bool {
+        if let target = snapshot.profitTarget, target > 0 { return true }
+        if let required = snapshot.winningDaysRequired, required > 0 { return true }
+        return false
+    }
+
+    func drawdownInfoBody() -> String {
+        var parts: [String] = []
+        if let type = snapshot.drawdownType {
+            parts.append(PropFirmDetailPresentation.drawdownTypeLabel(type))
+            if let footnote = PropFirmDetailPresentation.drawdownTypeFootnote(type) {
+                parts.append(footnote)
+            }
+            if type.usesTrailingCycleFloor {
+                parts.append("The floor rises when balance makes a new peak, staying max drawdown below the peak.")
+            }
+        } else if !includes(.trailingDrawdownGuide) {
+            parts.append("Your firm sets the maximum drawdown limit and methodology on this account.")
+        }
+        if snapshot.isFailed {
+            parts.append(PropFirmDetailPresentation.drawdownBreachMessage(type: snapshot.drawdownType))
+        }
+        return parts.joined(separator: " ")
+    }
+
+    func consistencyInfoBody() -> String? {
+        guard snapshot.consistencyRequired, let pct = snapshot.consistencyPercent else { return nil }
+        return "Your largest winning trade must stay at or below \(NumberDisplay.decimal(pct, maximumFractionDigits: 0))% of total profit from winning trades this cycle."
+    }
+
+    func winningDayThresholdInfoBody() -> String? {
+        if let threshold = snapshot.winningDayThreshold, threshold > 0 {
+            return "A futures day counts as a winning day when net P&L is at least \(NumberDisplay.money(threshold))."
+        }
+        if (snapshot.winningDaysRequired ?? 0) > 0 {
+            return "A futures day counts as a winning day when net P&L is positive."
+        }
+        return nil
+    }
+
+    func payoutBehaviorInfoBody() -> String? {
+        guard let raw = snapshot.payoutDrawdownBehaviorRaw,
+              let title = PropFirmDetailPresentation.payoutDrawdownBehaviorTitle(raw),
+              let detail = PropFirmDetailPresentation.payoutDrawdownBehaviorDetail(raw)
+        else { return nil }
+        return "\(title). \(detail)"
+    }
+
+    func accountNoteInfoBody() -> String? {
+        let note = snapshot.accountNote?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return note.isEmpty ? nil : note
+    }
+
     func tradingRuleRows() -> [PropFirmRuleRow] {
         var rows: [PropFirmRuleRow] = []
+
+        if snapshot.consistencyRequired {
+            let status: PropFirmRuleRow.Status = snapshot.consistencyMet ? .met : .violation
+            let value: String = {
+                if let pct = snapshot.consistencyPercent {
+                    return "\(NumberDisplay.decimal(pct, maximumFractionDigits: 0))% max"
+                }
+                return "Required"
+            }()
+            rows.append(
+                PropFirmRuleRow(
+                    topic: .consistencyRule,
+                    icon: "chart.pie",
+                    label: "Consistency",
+                    value: value,
+                    status: status
+                )
+            )
+        }
 
         if !includes(.winningDaysRequirement), let required = snapshot.winningDaysRequired, required > 0 {
             rows.append(

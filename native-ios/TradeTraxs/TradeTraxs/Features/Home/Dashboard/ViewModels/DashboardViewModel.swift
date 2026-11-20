@@ -3066,6 +3066,26 @@ final class DashboardViewModel {
         }
     }
 
+    /// V3 may omit per-account preset rows (e.g. zero-trade accounts). Keep dashboard chrome stable via client scope metrics.
+    private func applyClientFallbackSummaryForMissingV3Metrics() {
+        let scope = clientScopeFilter()
+        let inputs = tradeInputsForScopeFiltering()
+        let computed = DashboardChartMetrics.compute(
+            from: inputs,
+            scope: scope,
+            payoutTotal: payoutTotal
+        )
+        let next = assigningAccountLevelPayouts(to: computed)
+        summary = next
+        if case .account = accountFilter {
+            lastAccountScopedSummary = next
+            lastAccountScopedFilter = accountFilter
+        } else {
+            lastAccountScopedSummary = nil
+            lastAccountScopedFilter = nil
+        }
+    }
+
     private func recomputeFromAnalyticsV3(bootstrap: AnalyticsDashboardBootstrapV3) {
         defer { overlayClientRrJournalMetrics() }
         let resolution = DashboardAnalyticsMapper.resolve(
@@ -3091,11 +3111,7 @@ final class DashboardViewModel {
             lastAccountScopedSummary = next
             lastAccountScopedFilter = accountFilter
         case .accountMetricsMissing:
-            if accountFilter == lastAccountScopedFilter, let lastAccountScopedSummary {
-                summary = assigningAccountLevelPayouts(to: lastAccountScopedSummary)
-            } else {
-                summary = nil
-            }
+            applyClientFallbackSummaryForMissingV3Metrics()
         }
 
         refreshEquityChartPresentation(bootstrap: bootstrap)

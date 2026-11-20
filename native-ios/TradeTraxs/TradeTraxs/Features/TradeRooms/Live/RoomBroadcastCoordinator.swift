@@ -105,6 +105,11 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private(set) var isBusy = false
     private(set) var lastError: String?
     private(set) var chatMessages: [BroadcastChatMessageItem] = []
+    /// Scroll + highlight when tapping a reply preview in livestream chat.
+    private(set) var broadcastChatScrollRequest: BroadcastChatScrollRequest?
+    private(set) var highlightedBroadcastChatMessageID: String?
+    private(set) var broadcastChatNavigationNotice: String?
+    private var broadcastChatScrollRequestToken: UInt64 = 0
     private(set) var videoTrack: VideoTrack?
     /// Bumped when the program video track or publication changes so ``VideoView`` rebinds after replaceTrack / program switches.
     private(set) var programVideoTrackRevision: UInt = 0
@@ -116,8 +121,9 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     /// Stable sheet anchor — survives ``clearObsHostBarSession()`` during private OBS prep (see ``syncObsHostBarSession()``).
     private(set) var obsManageStreamPresentation: ObsHostBarSession?
     private(set) var isObsManageStreamPresented = false
-    private(set) var isViewerPresented = false
-    private(set) var isVideoRenderingEnabled = true
+    private(set) var viewerPresentation: BroadcastViewerPresentation = .off
+    private(set) var miniPlayerCorner: BroadcastMiniPlayerCorner = .bottomTrailing
+    private static let miniPlayerCornerDefaultsKey = "tradetraxs_broadcast_mini_player_corner_v1"
     private(set) var isStreamPlaybackMuted = false
     /// 0–1 playback gain. Mute does not change this. Hardware volume stays separate.
     private(set) var streamPlaybackGain: Double = 1
@@ -150,9 +156,28 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private var obsHostPreviewConnectSessionId: String?
     private var obsHostPreviewConnectFlightId: UUID?
 
-    /// Video for UI — nil while minimized so SwiftUI detaches the renderer without disconnecting.
+    var isViewerPresented: Bool {
+        viewerPresentation == .expanded
+    }
+
+    var showsFloatingMiniPlayer: Bool {
+        viewerPresentation == .mini && watchSession != nil && (isWatching || isBusy)
+    }
+
+    /// Full viewer sheet + OBS manage program surface — never attached while mini player holds the track.
+    var videoTrackForExpandedViewer: VideoTrack? {
+        guard viewerPresentation == .expanded || isObsManageStreamPresented else { return nil }
+        return videoTrack
+    }
+
+    /// Floating in-app mini-player — single renderer while minimized.
+    var videoTrackForMiniPlayer: VideoTrack? {
+        viewerPresentation == .mini ? videoTrack : nil
+    }
+
+    /// Legacy alias — use ``videoTrackForExpandedViewer`` or ``videoTrackForMiniPlayer``.
     var videoTrackForDisplay: VideoTrack? {
-        isVideoRenderingEnabled ? videoTrack : nil
+        videoTrackForExpandedViewer
     }
 
     var isObsHostBroadcastBarActive: Bool {
@@ -165,12 +190,30 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
 
     var showsBroadcastChrome: Bool {
         if isObsHostBroadcastBarActive { return true }
+        if isWatching || showsFloatingMiniPlayer { return false }
         return BroadcastChromeVisibility.shouldShowBar(
             isWatching: isWatching,
             connectionState: connectionState,
             isBusy: isBusy,
             hasWatchSession: watchSession != nil
         )
+    }
+
+    func setMiniPlayerCorner(_ corner: BroadcastMiniPlayerCorner) {
+        guard miniPlayerCorner != corner else { return }
+        miniPlayerCorner = corner
+        UserDefaults.standard.set(corner.rawValue, forKey: Self.miniPlayerCornerDefaultsKey)
+    }
+
+    private func restoreMiniPlayerCorner() {
+        guard
+            let raw = UserDefaults.standard.string(forKey: Self.miniPlayerCornerDefaultsKey),
+            let corner = BroadcastMiniPlayerCorner(rawValue: raw)
+        else {
+            miniPlayerCorner = .bottomTrailing
+            return
+        }
+        miniPlayerCorner = corner
     }
 
     func setObsHostBarSession(roomID: RoomID, roomTitle: String) {
@@ -253,8 +296,15 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private var client: LiveKitBroadcastClient?
     private var room: Room?
     private var roomDiscoveryRefreshTask: Task<Void, Never>?
-    private var interactivePollTask: Task<Void, Never>?
+    private var broadcastSyncTask: Task<Void, Never>?
+    private var broadcastRealtimeTask: Task<Void, Never>?
+    private var broadcastRefreshDebounceTask: Task<Void, Never>?
+    private var broadcastRealtimeConsumer: RealtimeRouteConsumerHandle?
+    private var broadcastRealtimeSessionID: String?
+    private var broadcastRealtimeLastSignalAt: Date?
     private var interactivePollRoomID: RoomID?
+    private var realtimeHub: RealtimeHub?
+    private var accessTokenProvider: (@Sendable () async -> String?)?
     /// Dedupes concurrent GET /api/livekit/broadcast/status (foreground + room open, etc.).
     private var isStatusFetchInFlight = false
     private var interactiveViewerProfileID: ProfileID?
@@ -437,21 +487,65 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             isMicrophoneEnabledInStream = false
             dismissedSpeakInviteSessionIds.insert(notice.sessionId)
             speakInviteNotice = nil
-            if !isViewerPresented {
-                isVideoRenderingEnabled = true
+            if viewerPresentation == .off {
+                viewerPresentation = .mini
             }
         } catch {
             speakInviteActionError = error.localizedDescription
         }
     }
 
+    private var openProfileHandler: (@MainActor (ProfileID) -> Void)?
+
     func configure(
         transport: SupabaseTransport,
+        realtimeHub: RealtimeHub? = nil,
+        accessTokenProvider: (@Sendable () async -> String?)? = nil,
         profileLookup: (@Sendable ([ProfileID]) async throws -> [Profile])? = nil
     ) {
         client = LiveKitBroadcastClient(transport: transport)
+        self.realtimeHub = realtimeHub
+        self.accessTokenProvider = accessTokenProvider
         if let profileLookup {
             chatProfileCache.configure(profileLookup: profileLookup)
+        }
+        restoreMiniPlayerCorner()
+    }
+
+    func refreshBroadcastSessionAfterForeground() {
+        realtimeHub?.resumeIfNeeded()
+        guard let roomID = watchSession?.roomID ?? statusPollRoomID ?? pollRoomID else { return }
+        Task {
+            await refreshStatus(roomID: roomID)
+            await refreshInteractiveState(roomID: roomID)
+        }
+    }
+
+    /// Wired from ``MainTabShellView`` — uses ``NavigationCoordinator/openExternal`` so broadcast stays connected.
+    func bindOpenProfile(_ handler: @escaping @MainActor (ProfileID) -> Void) {
+        openProfileHandler = handler
+    }
+
+    @discardableResult
+    func openParticipantProfile(userId: String) -> Bool {
+        let trimmed = userId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let profileID = ProfileID(trimmed)
+        guard ProfileIDQueryPolicy.isQueryable(profileID) else { return false }
+        guard let openProfileHandler else { return false }
+        ExperienceHaptics.play(.selection)
+        collapseLivestreamChromeForExternalNavigation()
+        openProfileHandler(profileID)
+        return true
+    }
+
+    /// Viewer minimize + host OBS manage dismiss — playback session stays on tab-shell chrome.
+    private func collapseLivestreamChromeForExternalNavigation() {
+        if viewerPresentation == .expanded {
+            minimizeViewer()
+        }
+        if isObsManageStreamPresented {
+            setObsManageStreamPresented(false)
         }
     }
 
@@ -686,7 +780,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         statusPollRoomID = nil
     }
 
-    func refreshStatus(roomID: RoomID) async {
+    func refreshStatus(roomID: RoomID, lite: Bool = false) async {
         guard let client else {
             #if DEBUG
             print("[TradeTraxs Broadcast] status skipped — LiveKitBroadcastClient not configured")
@@ -697,7 +791,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         isStatusFetchInFlight = true
         defer { isStatusFetchInFlight = false }
         do {
-            let res = try await client.fetchStatus(roomID: roomID)
+            let res = try await client.fetchStatus(roomID: roomID, lite: lite)
             let vis = res.visibility?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             let discoverableLive =
                 res.publicLive
@@ -729,6 +823,9 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             if pollRoomID == roomID {
                 if let sid = next.broadcastSessionId, sid != currentSessionId, !isWatching {
                     chatMessages = []
+        broadcastChatScrollRequest = nil
+        highlightedBroadcastChatMessageID = nil
+        broadcastChatNavigationNotice = nil
                 }
                 polledStatus = next
                 statusPollRoomID = roomID
@@ -842,20 +939,17 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     }
 
     func presentViewer() {
-        isViewerPresented = true
-        isVideoRenderingEnabled = true
+        viewerPresentation = .expanded
     }
 
     func minimizeViewer() {
-        isViewerPresented = false
-        isVideoRenderingEnabled = false
+        viewerPresentation = .mini
     }
 
     func leaveWatch() async {
         isEndingWatchVoluntarily = true
         defer { isEndingWatchVoluntarily = false }
-        isViewerPresented = false
-        isVideoRenderingEnabled = true
+        viewerPresentation = .off
         consecutiveSuccessfulNotLivePolls = 0
         await teardown()
     }
@@ -966,16 +1060,27 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         }
     }
 
-    func sendChat(userId: String, displayName: String, avatarUrl: String?, text: String) async {
+    func sendChat(
+        userId: String,
+        displayName: String,
+        avatarUrl: String?,
+        text: String,
+        replyTo: BroadcastChatReplyReference? = nil
+    ) async {
         guard let room else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        if let replyTo, !BroadcastChatPayload.isValidReplyReference(replyTo) {
+            return
+        }
         do {
+            let sentAtMs = Int(Date().timeIntervalSince1970 * 1000)
             let data = try BroadcastChatPayload.encodeOutgoing(
                 userId: userId,
                 displayName: displayName,
                 avatarUrl: avatarUrl,
-                text: trimmed
+                text: trimmed,
+                replyTo: replyTo
             )
             try await room.localParticipant.publish(
                 data: data,
@@ -986,11 +1091,12 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             )
             appendChat(
                 BroadcastChatMessageItem(
-                    id: "\(userId)-\(Int(Date().timeIntervalSince1970 * 1000))",
+                    id: "\(userId)-\(sentAtMs)",
                     userId: userId,
                     displayName: displayName,
                     text: trimmed,
-                    sentAt: Date()
+                    sentAt: Date(timeIntervalSince1970: Double(sentAtMs) / 1000),
+                    replyTo: replyTo
                 )
             )
         } catch {
@@ -998,52 +1104,188 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         }
     }
 
-    private func ensureInteractivePolling(for roomID: RoomID) {
-        guard polledStatus.isLive else {
-            stopInteractivePolling()
+    func scrollToBroadcastChatMessage(id messageID: String) {
+        let trimmed = messageID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard chatMessages.contains(where: { $0.id == trimmed }) else {
+            broadcastChatNavigationNotice = "Original message unavailable."
             return
         }
-        guard isWatching, watchSession?.roomID == roomID else {
-            guard pollRoomID == roomID else { return }
-            startInteractivePolling(roomID: roomID)
-            return
+        broadcastChatScrollRequestToken &+= 1
+        broadcastChatScrollRequest = BroadcastChatScrollRequest(
+            messageID: trimmed,
+            token: broadcastChatScrollRequestToken
+        )
+        highlightedBroadcastChatMessageID = trimmed
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(1_800))
+            if highlightedBroadcastChatMessageID == trimmed {
+                highlightedBroadcastChatMessageID = nil
+            }
         }
-        startInteractivePolling(roomID: roomID)
     }
 
-    private func startInteractivePolling(roomID: RoomID) {
-        if let existing = interactivePollTask, !existing.isCancelled,
-           interactivePollRoomID == roomID
+    func acknowledgeBroadcastChatNavigationNotice() {
+        broadcastChatNavigationNotice = nil
+    }
+
+    private func ensureInteractivePolling(for roomID: RoomID) {
+        guard polledStatus.isLive else {
+            stopBroadcastSessionSync()
+            return
+        }
+        let trackingPassive = pollRoomID == roomID
+        let trackingWatch = isWatching && watchSession?.roomID == roomID
+        guard trackingPassive || trackingWatch else { return }
+        guard let sessionID = resolvedBroadcastSessionId() else { return }
+        startBroadcastSessionSync(roomID: roomID, sessionID: sessionID)
+    }
+
+    private func resolvedBroadcastSessionId() -> String? {
+        let fromWatch = currentSessionId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let fromWatch, !fromWatch.isEmpty { return fromWatch }
+        let fromStatus = polledStatus.broadcastSessionId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let fromStatus, !fromStatus.isEmpty { return fromStatus }
+        return nil
+    }
+
+    private func startBroadcastSessionSync(roomID: RoomID, sessionID: String) {
+        if let existing = broadcastSyncTask, !existing.isCancelled,
+           interactivePollRoomID == roomID,
+           broadcastRealtimeSessionID == sessionID
         {
             return
         }
         interactivePollRoomID = roomID
-        interactivePollTask?.cancel()
-        interactivePollTask = Task { [weak self] in
-            guard let self else { return }
-            var statusPollTick = 0
-            await self.refreshInteractiveState(roomID: roomID)
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(3))
-                guard !Task.isCancelled else { break }
-                let stillTracking =
-                    (self.pollRoomID == roomID)
-                    || (self.isWatching && self.watchSession?.roomID == roomID)
-                guard stillTracking else { break }
-                await self.refreshInteractiveState(roomID: roomID)
-                statusPollTick += 1
-                if self.isWatching, self.watchSession?.roomID == roomID, statusPollTick.isMultiple(of: 5) {
-                    await self.refreshStatus(roomID: roomID)
+        broadcastSyncTask?.cancel()
+        broadcastSyncTask = Task { [weak self] in
+            await self?.runBroadcastSessionSync(roomID: roomID, sessionID: sessionID)
+        }
+    }
+
+    private func runBroadcastSessionSync(roomID: RoomID, sessionID: String) async {
+        await startBroadcastRealtimeWatch(roomID: roomID, sessionID: sessionID)
+        await refreshInteractiveState(roomID: roomID)
+        var lastStatusRefresh = Date.distantPast
+        while !Task.isCancelled {
+            let stillTracking =
+                (pollRoomID == roomID)
+                || (isWatching && watchSession?.roomID == roomID)
+            guard stillTracking, polledStatus.isLive else { break }
+            if broadcastRealtimeSessionID != sessionID,
+               let nextSession = resolvedBroadcastSessionId()
+            {
+                await stopBroadcastRealtimeWatch()
+                await startBroadcastRealtimeWatch(roomID: roomID, sessionID: nextSession)
+            }
+            let healthy = isBroadcastRealtimeHealthy
+            let interactiveInterval = BroadcastSessionSyncPolicy.fallbackInteractiveInterval(healthy: healthy)
+            try? await Task.sleep(for: .seconds(interactiveInterval))
+            guard !Task.isCancelled else { break }
+            await refreshInteractiveState(roomID: roomID)
+            if isWatching, watchSession?.roomID == roomID {
+                let statusInterval = BroadcastSessionSyncPolicy.fallbackStatusInterval(healthy: healthy)
+                let now = Date()
+                if now.timeIntervalSince(lastStatusRefresh) >= statusInterval {
+                    lastStatusRefresh = now
+                    await refreshStatus(roomID: roomID, lite: healthy)
                 }
             }
         }
     }
 
-    private func stopInteractivePolling() {
-        interactivePollTask?.cancel()
-        interactivePollTask = nil
+    private var isBroadcastRealtimeHealthy: Bool {
+        realtimeHub != nil
+            && BroadcastSessionSyncPolicy.isRealtimeHealthy(lastSignalAt: broadcastRealtimeLastSignalAt)
+    }
+
+    private func startBroadcastRealtimeWatch(roomID: RoomID, sessionID: String) async {
+        broadcastRealtimeSessionID = sessionID
+        guard let hub = realtimeHub else {
+            broadcastRealtimeLastSignalAt = nil
+            return
+        }
+        let token = await accessTokenProvider?()
+        guard let token, !token.isEmpty else {
+            broadcastRealtimeLastSignalAt = nil
+            return
+        }
+        broadcastRealtimeTask?.cancel()
+        if let previous = broadcastRealtimeConsumer {
+            await hub.releaseWatch(previous)
+            broadcastRealtimeConsumer = nil
+        }
+        let channel = RealtimeChannelID(kind: .broadcast, topic: sessionID)
+        try? await hub.subscriptions.subscribe(channel)
+        let watch = hub.watchBroadcastInteractiveSession(
+            roomID: roomID,
+            sessionID: sessionID,
+            accessToken: token,
+            debugOwner: "RoomBroadcastCoordinator"
+        )
+        broadcastRealtimeConsumer = watch.consumer
+        broadcastRealtimeTask = Task { [weak self] in
+            guard let self else { return }
+            for await signal in watch.events {
+                guard !Task.isCancelled else { break }
+                await self.handleBroadcastRealtimeSignal(signal, roomID: roomID)
+            }
+        }
+    }
+
+    private func handleBroadcastRealtimeSignal(_ signal: MessageRealtimeSignal, roomID: RoomID) async {
+        broadcastRealtimeLastSignalAt = Date()
+        if signal.postgresTable == "room_live_broadcasts", signal.kind != .delete {
+            if let payload = signal.recordPayload,
+               let ended = BroadcastRealtimeSessionRow.endedAt(from: payload),
+               !ended.isEmpty
+            {
+                await refreshStatus(roomID: roomID)
+                return
+            }
+        }
+        scheduleDebouncedInteractiveRefresh(roomID: roomID)
+    }
+
+    private func scheduleDebouncedInteractiveRefresh(roomID: RoomID) {
+        broadcastRefreshDebounceTask?.cancel()
+        broadcastRefreshDebounceTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: BroadcastSessionSyncPolicy.realtimeEventDebounceNanoseconds)
+            guard !Task.isCancelled else { return }
+            await self?.refreshInteractiveState(roomID: roomID)
+        }
+    }
+
+    private func stopBroadcastRealtimeWatch() async {
+        broadcastRealtimeTask?.cancel()
+        broadcastRealtimeTask = nil
+        broadcastRefreshDebounceTask?.cancel()
+        broadcastRefreshDebounceTask = nil
+        let consumer = broadcastRealtimeConsumer
+        let sessionID = broadcastRealtimeSessionID
+        broadcastRealtimeConsumer = nil
+        broadcastRealtimeSessionID = nil
+        broadcastRealtimeLastSignalAt = nil
+        if let hub = realtimeHub, let consumer {
+            if let sessionID {
+                let channel = RealtimeChannelID(kind: .broadcast, topic: sessionID)
+                try? await hub.subscriptions.unsubscribe(channel)
+            }
+            await hub.releaseWatch(consumer)
+        }
+    }
+
+    private func stopBroadcastSessionSync() {
+        broadcastSyncTask?.cancel()
+        broadcastSyncTask = nil
         interactivePollRoomID = nil
         lastInteractiveSnapshotFingerprint = nil
+        Task { await stopBroadcastRealtimeWatch() }
+    }
+
+    /// Legacy name — ends interactive HTTP sync + Realtime watch.
+    private func stopInteractivePolling() {
+        stopBroadcastSessionSync()
     }
 
     private func refreshInteractiveState(roomID: RoomID) async {
@@ -1223,6 +1465,9 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         )
         if chatMessages.isEmpty {
             chatMessages = []
+        broadcastChatScrollRequest = nil
+        highlightedBroadcastChatMessageID = nil
+        broadcastChatNavigationNotice = nil
         }
 
         // LiveKit needs AVAudioSession in playAndRecord when we may publish mic audio
@@ -1370,8 +1615,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         guard let sessionId = currentSessionId else { return }
 
         streamFullscreenDismissSignal &+= 1
-        isViewerPresented = false
-        isVideoRenderingEnabled = true
+        viewerPresentation = .off
 
         let roomTitle = watchSession?.roomTitle ?? "Trade Room"
         await teardown()
@@ -1458,6 +1702,9 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         programVideoTrackRevision &+= 1
         preferredVideoSource = "screen"
         chatMessages = []
+        broadcastChatScrollRequest = nil
+        highlightedBroadcastChatMessageID = nil
+        broadcastChatNavigationNotice = nil
         chatProfileCache.clear()
         isWatching = false
         isInConversation = false
@@ -1471,6 +1718,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         programPublisherIdentity = nil
         broadcastSourceIsObs = false
         watchSession = nil
+        viewerPresentation = .off
         isStreamPlaybackMuted = false
         streamPlaybackGain = 1
         speakInviteNotice = nil

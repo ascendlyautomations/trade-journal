@@ -13,28 +13,50 @@ struct RoomBroadcastWatchView: View {
     @State private var chatDraft = ""
     @State private var showsParticipants = false
     @State private var isFullscreen = false
+    @State private var isChatComposerFocused = false
+
+    private let chatTypingMiniPlayerClearance: CGFloat = 148
+
     var body: some View {
         VStack(spacing: 0) {
             streamHeader
-            RoomBroadcastStudioVideoSection(
-                coordinator: coordinator,
-                isFullscreen: $isFullscreen
-            )
+            if !isChatComposerFocused {
+                RoomBroadcastStudioVideoSection(
+                    coordinator: coordinator,
+                    isFullscreen: $isFullscreen
+                )
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
             if let error = coordinator.lastError {
                 Text(error)
                     .experienceStyle(.caption, color: colors.error)
                     .padding(.horizontal, ExperienceSpacing.md)
                     .padding(.vertical, ExperienceSpacing.xxs)
             }
-            RoomBroadcastStudioChatPane(
-                coordinator: coordinator,
-                imagePipeline: imagePipeline,
-                userId: userId,
-                displayName: displayName,
-                chatDraft: $chatDraft
-            )
+            ZStack(alignment: .topTrailing) {
+                RoomBroadcastStudioChatPane(
+                    coordinator: coordinator,
+                    imagePipeline: imagePipeline,
+                    userId: userId,
+                    displayName: displayName,
+                    chatDraft: $chatDraft,
+                    useViewerKeyboardChrome: true,
+                    composerFocusedBinding: $isChatComposerFocused
+                )
+                .frame(maxHeight: .infinity)
+                .padding(.trailing, isChatComposerFocused ? chatTypingMiniPlayerClearance : 0)
+
+                if isChatComposerFocused {
+                    RoomBroadcastChatTypingMiniPlayer(coordinator: coordinator)
+                        .padding(.top, ExperienceSpacing.xs)
+                        .padding(.trailing, ExperienceSpacing.sm)
+                        .transition(.scale(scale: 0.92, anchor: .topTrailing).combined(with: .opacity))
+                }
+            }
+            .frame(maxHeight: .infinity)
             streamToolbar
         }
+        .animation(.snappy(duration: 0.28), value: isChatComposerFocused)
         .background(colors.primaryBackground)
         .fullScreenCover(isPresented: $isFullscreen) {
             fullscreenPlayer
@@ -210,7 +232,7 @@ struct RoomBroadcastWatchView: View {
         ZStack(alignment: .topTrailing) {
             Color.black.ignoresSafeArea()
             BroadcastStreamZoomableVideoView(
-                track: coordinator.videoTrackForDisplay,
+                track: coordinator.videoTrackForExpandedViewer,
                 isFullscreen: true
             )
             .id(coordinator.programVideoTrackRevision)

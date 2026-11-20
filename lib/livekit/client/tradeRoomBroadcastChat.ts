@@ -6,6 +6,13 @@ export const BROADCAST_CHAT_MAX_LENGTH = 500
 export const BROADCAST_CHAT_MAX_MESSAGES = 200
 export const BROADCAST_CHAT_MIN_INTERVAL_MS = 400
 
+export type BroadcastChatReplyReference = {
+  messageId: string
+  userId: string
+  displayName: string
+  textPreview: string
+}
+
 export type BroadcastChatMessage = {
   id: string
   userId: string
@@ -13,6 +20,7 @@ export type BroadcastChatMessage = {
   avatarUrl: string | null
   text: string
   sentAt: number
+  replyTo?: BroadcastChatReplyReference | null
 }
 
 type ChatPayload = {
@@ -22,6 +30,29 @@ type ChatPayload = {
   avatarUrl: string | null
   text: string
   sentAt: number
+  replyToMessageId?: string
+  replyToUserId?: string
+  replyToDisplayName?: string
+  replyToTextPreview?: string
+}
+
+const REPLY_PREVIEW_MAX_LENGTH = 100
+
+function previewReplyText(text: string): string {
+  const trimmed = text.trim()
+  if (trimmed.length <= REPLY_PREVIEW_MAX_LENGTH) return trimmed
+  return `${trimmed.slice(0, REPLY_PREVIEW_MAX_LENGTH)}…`
+}
+
+function decodeReplyReference(raw: ChatPayload): BroadcastChatReplyReference | null {
+  const messageId = raw.replyToMessageId?.trim()
+  if (!messageId) return null
+  const userId = raw.replyToUserId?.trim()
+  const displayName = raw.replyToDisplayName?.trim()
+  const textPreview = raw.replyToTextPreview?.trim()
+  if (!userId || !displayName || !textPreview) return null
+  if (textPreview.length > REPLY_PREVIEW_MAX_LENGTH + 4) return null
+  return { messageId, userId, displayName, textPreview }
 }
 
 let lastSentAt = 0
@@ -41,6 +72,7 @@ export function parseBroadcastChatPayload(
     if (raw.userId !== senderIdentity) return null
     const text = raw.text?.trim()
     if (!text || text.length > BROADCAST_CHAT_MAX_LENGTH) return null
+    const replyTo = decodeReplyReference(raw)
     return {
       id: `${raw.userId}-${raw.sentAt}`,
       userId: raw.userId,
@@ -48,6 +80,7 @@ export function parseBroadcastChatPayload(
       avatarUrl: normalizeBroadcastChatAvatarUrl(raw.avatarUrl ?? null),
       text,
       sentAt: raw.sentAt,
+      replyTo,
     }
   } catch {
     return null
@@ -61,6 +94,7 @@ export async function publishBroadcastChatMessage(
     displayName: string
     avatarUrl: string | null
     text: string
+    replyTo?: BroadcastChatReplyReference | null
   }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const trimmed = options.text.trim()
@@ -81,6 +115,14 @@ export async function publishBroadcastChatMessage(
     avatarUrl: options.avatarUrl,
     text: trimmed,
     sentAt: now,
+    ...(options.replyTo
+      ? {
+          replyToMessageId: options.replyTo.messageId,
+          replyToUserId: options.replyTo.userId,
+          replyToDisplayName: options.replyTo.displayName,
+          replyToTextPreview: previewReplyText(options.replyTo.textPreview),
+        }
+      : {}),
   }
 
   const data = new TextEncoder().encode(JSON.stringify(payload))

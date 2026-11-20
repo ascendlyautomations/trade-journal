@@ -35,6 +35,8 @@ enum DashboardWithdrawalsTotalProbe {
     }
 }
 #else
+import Foundation
+
 @MainActor
 enum DashboardWithdrawalsTotalProbe {
     static func log(

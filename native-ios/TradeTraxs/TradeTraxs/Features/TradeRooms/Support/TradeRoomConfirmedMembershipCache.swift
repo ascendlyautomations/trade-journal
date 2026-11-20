@@ -9,7 +9,15 @@ enum TradeRoomConfirmedMembershipCache {
         byRoom[roomID] = membership
     }
 
+    static func membership(for roomID: RoomID) -> RoomMembership? {
+        byRoom[roomID]
+    }
+
     static func take(for roomID: RoomID) -> RoomMembership? {
+        byRoom.removeValue(forKey: roomID)
+    }
+
+    static func clear(for roomID: RoomID) {
         byRoom.removeValue(forKey: roomID)
     }
 

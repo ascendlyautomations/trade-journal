@@ -129,9 +129,13 @@ struct ManageAccountEditorView: View {
                 if draft.category == .propFirm,
                    draft.mode == .evaluation || draft.mode == .funded {
                     accountField("Account Purchase Cost") {
-                        TextField("Optional", text: $draft.purchaseCostDigits.numericInput(.unsignedCurrency))
-                            .keyboardType(.decimalPad)
-                            .accessibilityIdentifier("manageAccounts.purchaseCost")
+                        NumericAdornedTextField(
+                            placeholder: "Optional",
+                            text: $draft.purchaseCostDigits,
+                            style: .unsignedCurrency,
+                            adornment: .currencyPrefix
+                        )
+                        .accessibilityIdentifier("manageAccounts.purchaseCost")
                     }
                     .manageAccountFormRow()
                     DatePicker(
@@ -157,12 +161,18 @@ struct ManageAccountEditorView: View {
                 Section {
                     HStack(alignment: .top, spacing: ExperienceSpacing.md) {
                         accountField("Max Drawdown") {
-                            TextField("0", text: bindingDecimal(\.maxDrawdown))
-                                .keyboardType(.decimalPad)
+                            NumericAdornedTextField(
+                                placeholder: "0",
+                                text: bindingDecimal(\.maxDrawdown),
+                                adornment: .currencyPrefix
+                            )
                         }
                         accountField("Daily Drawdown") {
-                            TextField("0", text: bindingDecimal(\.dailyDrawdown))
-                                .keyboardType(.decimalPad)
+                            NumericAdornedTextField(
+                                placeholder: "0",
+                                text: bindingDecimal(\.dailyDrawdown),
+                                adornment: .currencyPrefix
+                            )
                         }
                     }
                     .manageAccountFormRow()
@@ -177,12 +187,18 @@ struct ManageAccountEditorView: View {
 
                     HStack(alignment: .top, spacing: ExperienceSpacing.md) {
                         accountField("Profit Target") {
-                            TextField("0", text: bindingDecimal(\.profitTarget))
-                                .keyboardType(.decimalPad)
+                            NumericAdornedTextField(
+                                placeholder: "0",
+                                text: bindingDecimal(\.profitTarget),
+                                adornment: .currencyPrefix
+                            )
                         }
-                        accountField("Consistency") {
-                            TextField("0", text: bindingDecimal(\.consistencyPercent))
-                                .keyboardType(.decimalPad)
+                        accountField("Consistency (%)") {
+                            NumericAdornedTextField(
+                                placeholder: "0",
+                                text: bindingDecimal(\.consistencyPercent),
+                                adornment: .percentSuffix
+                            )
                         }
                     }
                     .manageAccountFormRow()
@@ -193,10 +209,13 @@ struct ManageAccountEditorView: View {
                                 .keyboardType(.numberPad)
                                 .accessibilityLabel("Winning days required")
                         }
-                        accountField("Day Threshold") {
-                            TextField("0", text: bindingDecimal(\.winningDayThreshold))
-                                .keyboardType(.decimalPad)
-                                .accessibilityLabel("Winning day threshold")
+                        accountField("Day Threshold ($)") {
+                            NumericAdornedTextField(
+                                placeholder: "0",
+                                text: bindingDecimal(\.winningDayThreshold),
+                                adornment: .currencyPrefix
+                            )
+                            .accessibilityLabel("Winning day threshold")
                         }
                     }
                     .manageAccountFormRow()

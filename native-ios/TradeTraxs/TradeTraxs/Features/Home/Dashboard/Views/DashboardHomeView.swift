@@ -77,11 +77,7 @@ struct DashboardHomeView: View {
                 }
             case .failed(let message):
                 if viewModel.summary == nil {
-                    ExperienceErrorState(
-                        title: "Couldn't load dashboard",
-                        message: message,
-                        onRetry: { Task { await viewModel.refresh() } }
-                    )
+                    dashboardFailedContent(message: message)
                 } else {
                     scrollContent
                 }
@@ -272,22 +268,47 @@ struct DashboardHomeView: View {
         }
     }
 
+    @ViewBuilder
+    private var dashboardScrollFilterBar: some View {
+        if showsDashboardFilterBar {
+            dashboardFilterBarChrome
+        }
+    }
+
+    private var showsDashboardFilterBar: Bool {
+        switch viewModel.phase {
+        case .idle:
+            return viewModel.hasLoaded || !viewModel.accounts.isEmpty
+        case .loading, .loaded, .failed:
+            return true
+        }
+    }
+
     private var dashboardFilterBarChrome: some View {
         DashboardFilterBar(viewModel: viewModel)
             .padding(.horizontal, ExperienceSpacing.sm)
             .padding(.top, ExperienceSpacing.xs)
             .padding(.bottom, ExperienceSpacing.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                colors.backgroundPrimary
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
             .accessibilityIdentifier("dashboard.filters")
-            .opacity(contentRevealed || reduceMotion ? 1 : 0.001)
-            .animation(
-                ExperienceMotion.preferred(ExperienceMotion.navigation, reduceMotion: reduceMotion),
-                value: contentRevealed
-            )
+    }
+
+    private func dashboardFailedContent(message: String) -> some View {
+        ScrollView(.vertical) {
+            VStack(spacing: ExperienceSpacing.lg) {
+                dashboardScrollFilterBar
+                ExperienceErrorState(
+                    title: "Couldn't load dashboard",
+                    message: message,
+                    onRetry: { Task { await viewModel.refresh() } }
+                )
+            }
+            .padding(.top, ExperienceSpacing.sm)
+            .experienceDisablesSystemScrollToTop()
+        }
+        .dashboardHorizontalLock()
+        .scrollPosition(scrollAnchor.binding)
+        .scrollBounceBehavior(.basedOnSize)
     }
 
     /// Opaque nav bar on the Dashboard root so header chrome stays visually stable.
@@ -380,6 +401,7 @@ struct DashboardHomeView: View {
     private var emptyDashboardContent: some View {
         ScrollView(.vertical) {
             VStack(spacing: ExperienceSpacing.lg) {
+                dashboardScrollFilterBar
                 if gettingStartedStore.shouldShowDashboardCard {
                     GettingStartedCard(
                         store: gettingStartedStore,
@@ -414,8 +436,7 @@ struct DashboardHomeView: View {
         ScrollViewReader { proxy in
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 0) {
-                dashboardFilterBarChrome
-
+                dashboardScrollFilterBar
                 if let summary = viewModel.summary {
                     if gettingStartedStore.shouldShowDashboardCard {
                         GettingStartedCard(
@@ -641,9 +662,11 @@ struct DashboardHomeView: View {
     }
 
     private var skeleton: some View {
+        ScrollView(.vertical) {
         VStack(spacing: ExperienceSpacing.md) {
+            dashboardScrollFilterBar
             ExperienceSkeleton(height: 36, cornerRadius: ExperienceRadius.sm)
-                .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.horizontal, ExperienceSpacing.md)
             ExperienceSkeleton(height: 60, cornerRadius: ExperienceRadius.sm)
                 .padding(.horizontal, ExperienceSpacing.md)
             ExperienceSkeleton(height: 60, cornerRadius: ExperienceRadius.sm)
@@ -657,9 +680,13 @@ struct DashboardHomeView: View {
                 ExperienceSkeleton(height: 64, cornerRadius: ExperienceRadius.sm)
             }
             .padding(.horizontal, ExperienceSpacing.md)
-            Spacer()
         }
-        .padding(.top, ExperienceSpacing.md)
+        .padding(.top, ExperienceSpacing.sm)
+        .experienceDisablesSystemScrollToTop()
+        }
+        .dashboardHorizontalLock()
+        .scrollPosition(scrollAnchor.binding)
+        .scrollBounceBehavior(.basedOnSize)
         .accessibilityIdentifier("dashboard.skeleton")
         .transition(.opacity)
     }

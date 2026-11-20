@@ -109,11 +109,15 @@ enum RoomMessageSendProbe {
 #else
 enum RoomMessageSendProbe {
     struct Context: Sendable {
-        var roomID: String = ""
+        var roomID: String
         var channelID: String?
         var senderID: String?
-        var messageType: String = ""
-        var hasReply: Bool = false
+        var messageType: String
+        var hasReply: Bool
+        var serverMembershipConfirmed: Bool = false
+        var channelAllowsMemberPost: Bool = true
+        var isOwner: Bool = false
+        var viewerHasModeratorTag: Bool = false
     }
 
     nonisolated static func logInsertAttempt(_ context: Context) {}

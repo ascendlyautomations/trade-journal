@@ -173,24 +173,17 @@ struct RoomBroadcastStudioHostSidebar: View {
         surface: RoomBroadcastHostModerationControls.Surface
     ) -> some View {
         HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
-            if let profile = coordinator.chatProfileCache.profile(forUserId: participant.identity) {
-                ExploreProfileAvatarView(
-                    profile: profile,
-                    imagePipeline: imagePipeline,
-                    diameter: 36
-                )
-            } else {
-                ExperienceAvatar(
-                    initials: ProfileDisplay.initials(
-                        displayName: participant.displayName,
-                        username: participant.identity
-                    ),
-                    size: 36
-                )
-            }
+            RoomBroadcastProfileIdentityControl(
+                userId: participant.identity,
+                displayName: participant.displayName,
+                username: coordinator.chatProfileCache.profile(forUserId: participant.identity)?.username
+                    ?? participant.identity,
+                avatarDiameter: 36,
+                coordinator: coordinator,
+                imagePipeline: imagePipeline,
+                profile: coordinator.chatProfileCache.profile(forUserId: participant.identity)
+            )
             VStack(alignment: .leading, spacing: 2) {
-                Text(participant.displayName)
-                    .experienceStyle(.body, color: colors.primaryText)
                 HStack(spacing: 6) {
                     Text(participant.roleLabel + (participant.isLocal ? " · you" : ""))
                         .experienceStyle(.caption, color: colors.secondaryText)
@@ -200,7 +193,7 @@ struct RoomBroadcastStudioHostSidebar: View {
                     )
                 }
             }
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity, alignment: .leading)
             if surface == .raisedHand {
                 Image(systemName: "hand.raised.fill")
                     .font(.caption)

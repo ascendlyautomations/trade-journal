@@ -1,118 +1,96 @@
 import SwiftUI
 
-// MARK: - Layout primitives
+// MARK: - Section chrome
 
-struct PropFirmDetailSection<Content: View>: View {
+struct PropFirmDetailSectionHeader: View {
     let title: String
-    @ViewBuilder var content: () -> Content
+    var infoTitle: String?
+    var infoBody: String?
+    var infoAccessibilityID: String?
+
+    var body: some View {
+        AnalyticsSectionHeader(
+            title: title,
+            infoTitle: infoTitle,
+            infoBody: infoBody,
+            infoAccessibilityID: infoAccessibilityID
+        )
+        .padding(.horizontal, ExperienceSpacing.md)
+    }
+}
+
+// MARK: - Summary
+
+struct PropFirmDetailSummaryView: View {
+    let snapshot: PropFirmStatusSnapshot
+    let glanceLines: [PropFirmDetailPresentation.GlanceLine]
+    var fundedPayoutActionTitle: String?
+    var onFundedPayoutAction: (() -> Void)?
 
     @Environment(\.themeColors) private var colors
 
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text(title)
-                .experienceStyle(.footnote, color: colors.tertiaryText)
-                .textCase(.uppercase)
-                .tracking(0.5)
-            content()
-        }
-    }
-}
-
-struct PropFirmDetailCard<Content: View>: View {
-    @ViewBuilder var content: () -> Content
-
-    @Environment(\.themeColors) private var colors
-
-    var body: some View {
-        content()
-            .padding(ExperienceSpacing.md)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(colors.fillSecondary.opacity(0.5), in: RoundedRectangle(
-                cornerRadius: ExperienceRadius.md,
-                style: .continuous
-            ))
-    }
-}
-
-struct PropFirmDetailMetricTile: View {
-    let title: String
-    let primaryValue: String
-    var secondaryValue: String?
-    var tone: DashboardMetricTone = .neutral
-
-    @Environment(\.themeColors) private var colors
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-            Text(title)
-                .experienceStyle(.caption2, color: colors.secondaryText)
-                .lineLimit(2)
-                .minimumScaleFactor(0.85)
-            Text(primaryValue)
-                .font(.system(.title3, design: .rounded).weight(.semibold).monospacedDigit())
-                .foregroundStyle(toneColor)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            if let secondaryValue {
-                Text(secondaryValue)
-                    .experienceStyle(.caption, color: colors.tertiaryText)
-            }
-        }
-        .padding(ExperienceSpacing.sm)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.fillSecondary.opacity(0.65), in: RoundedRectangle(
-            cornerRadius: ExperienceRadius.sm,
-            style: .continuous
-        ))
-    }
-
-    private var toneColor: Color {
-        switch tone {
-        case .neutral: return colors.primaryText
-        case .positive: return colors.profit
-        case .negative: return colors.loss
-        }
-    }
-}
-
-// MARK: - Hero
-
-struct PropFirmDetailHeroView: View {
-    let snapshot: PropFirmStatusSnapshot
-    let contentPlan: PropFirmDetailContentPlan
-
-    @Environment(\.themeColors) private var colors
-
-    var body: some View {
-        PropFirmDetailCard {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        if !snapshot.firmName.isEmpty, snapshot.firmName != snapshot.accountName {
-                            Text(snapshot.firmName)
-                                .experienceStyle(.headline, color: colors.primaryText)
-                        }
-                        Text(snapshot.accountName)
-                            .experienceStyle(.subheadline, color: colors.secondaryText)
-                    }
-                    Spacer(minLength: 0)
-                    statusBadge
+            HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
+                VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+                    Text(primaryTitle)
+                        .experienceStyle(.headline, color: colors.primaryText)
+                    Text(subtitleLine)
+                        .experienceStyle(.subheadline, color: colors.secondaryText)
+                        .lineLimit(2)
                 }
+                Spacer(minLength: ExperienceSpacing.sm)
+                statusBadge
+            }
 
-                HStack(spacing: ExperienceSpacing.md) {
-                    liveMetric("Balance", DashboardViewModel.money(snapshot.currentBalance))
-                    liveMetric("Cycle P&L", DashboardViewModel.money(snapshot.cyclePnL), tone: snapshot.cyclePnL >= 0 ? .positive : .negative)
-                    liveMetric(
-                        "To floor",
-                        DashboardViewModel.money(snapshot.distanceToDD),
-                        tone: snapshot.distanceDanger || snapshot.distanceToDD < 0 ? .negative : .positive
+            Text(DashboardViewModel.money(snapshot.currentBalance))
+                .font(.system(.largeTitle, design: .rounded).weight(.bold).monospacedDigit())
+                .foregroundStyle(colors.primaryText)
+                .accessibilityIdentifier("propFirm.summary.balance")
+
+            HStack(alignment: .center, spacing: ExperienceSpacing.xs) {
+                ExperienceTag(title: snapshot.phaseLabel, tone: .info)
+                if snapshot.configuredAccountSize > 0 {
+                    ExperienceTag(
+                        title: NumberDisplay.money(snapshot.configuredAccountSize),
+                        tone: .info
                     )
                 }
+                Spacer(minLength: ExperienceSpacing.sm)
+                if let fundedPayoutActionTitle, let onFundedPayoutAction, snapshot.isFunded {
+                    Button(action: onFundedPayoutAction) {
+                        Text(fundedPayoutActionTitle)
+                            .experienceStyle(.footnote, color: colors.accent)
+                            .fontWeight(.semibold)
+                    }
+                    .buttonStyle(.experiencePlain)
+                    .accessibilityIdentifier("propFirm.summary.payouts")
+                }
+            }
 
-                FlowLayoutTags(tags: summaryTags)
+            if !glanceLines.isEmpty {
+                PropFirmDetailGlanceBanners(lines: glanceLines)
             }
         }
+        .padding(ExperienceSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .experienceDashboardCard(prominence: .featured)
+        .padding(.horizontal, ExperienceSpacing.md)
+        .accessibilityIdentifier("propFirm.summary")
+    }
+
+    private var primaryTitle: String {
+        let firm = snapshot.firmName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !firm.isEmpty { return firm }
+        return snapshot.accountName
+    }
+
+    private var subtitleLine: String {
+        let firm = snapshot.firmName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !firm.isEmpty, firm != snapshot.accountName {
+            return snapshot.accountName
+        }
+        return snapshot.statusLabel
     }
 
     private var statusBadge: some View {
@@ -122,6 +100,8 @@ struct PropFirmDetailHeroView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(badgeColor.opacity(0.14), in: Capsule())
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
     }
 
     private var badgeColor: Color {
@@ -131,103 +111,28 @@ struct PropFirmDetailHeroView: View {
         case .neutral: return colors.accent
         }
     }
-
-    private var summaryTags: [(String, BannerTone)] {
-        contentPlan.heroSummaryTags()
-    }
-
-    private func liveMetric(_ label: String, _ value: String, tone: DashboardMetricTone = .neutral) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .experienceStyle(.caption2, color: colors.secondaryText)
-            Text(value)
-                .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
-                .foregroundStyle(tone == .positive ? colors.profit : tone == .negative ? colors.loss : colors.primaryText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
 }
 
-private struct FlowLayoutTags: View {
-    let tags: [(String, BannerTone)]
-
-    @Environment(\.themeColors) private var colors
-
-    var body: some View {
-        FlowLayout(spacing: ExperienceSpacing.xs) {
-            ForEach(Array(tags.enumerated()), id: \.offset) { _, tag in
-                ExperienceTag(title: tag.0, tone: tag.1)
-            }
-        }
-    }
-}
-
-/// Simple wrapping horizontal stack for chips.
-private struct FlowLayout: Layout {
-    var spacing: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let result = arrange(proposal: proposal, subviews: subviews)
-        return result.size
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let result = arrange(proposal: proposal, subviews: subviews)
-        for (index, frame) in result.frames.enumerated() {
-            subviews[index].place(
-                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
-                proposal: ProposedViewSize(frame.size)
-            )
-        }
-    }
-
-    private func arrange(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, frames: [CGRect]) {
-        let maxWidth = proposal.width ?? .infinity
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var frames: [CGRect] = []
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > maxWidth, x > 0 {
-                x = 0
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            frames.append(CGRect(origin: CGPoint(x: x, y: y), size: size))
-            rowHeight = max(rowHeight, size.height)
-            x += size.width + spacing
-        }
-
-        return (CGSize(width: maxWidth, height: y + rowHeight), frames)
-    }
-}
-
-// MARK: - At a glance
-
-struct PropFirmAtAGlanceView: View {
+private struct PropFirmDetailGlanceBanners: View {
     let lines: [PropFirmDetailPresentation.GlanceLine]
 
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        PropFirmDetailSection(title: "At a glance") {
-            PropFirmDetailCard {
-                VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-                    ForEach(lines) { line in
-                        HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
-                            Image(systemName: icon(for: line.tone))
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(iconColor(for: line.tone))
-                                .frame(width: 18, alignment: .center)
-                            Text(line.text)
-                                .experienceStyle(.subheadline, color: colors.primaryText)
-                        }
-                    }
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            ForEach(lines) { line in
+                HStack(spacing: ExperienceSpacing.xs) {
+                    Image(systemName: icon(for: line.tone))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(iconColor(for: line.tone))
+                    Text(line.text)
+                        .experienceStyle(.footnote, color: colors.primaryText)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .padding(.horizontal, ExperienceSpacing.sm)
+                .padding(.vertical, ExperienceSpacing.xs)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(colors.fillSecondary.opacity(0.55), in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
             }
         }
     }
@@ -249,51 +154,146 @@ struct PropFirmAtAGlanceView: View {
     }
 }
 
-// MARK: - Drawdown
+// MARK: - Progress & targets
 
-struct PropFirmDrawdownVisualView: View {
+struct PropFirmDetailProgressPanel: View {
     let snapshot: PropFirmStatusSnapshot
+    let contentPlan: PropFirmDetailContentPlan
 
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        PropFirmDetailSection(title: "Drawdown") {
-            PropFirmDetailCard {
-                VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-                    if let limit = snapshot.maxDrawdownLimit, limit > 0 {
-                        labelValue("Maximum Drawdown", DashboardViewModel.money(limit))
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            PropFirmDetailSectionHeader(title: snapshot.isFunded ? "Cycle targets" : "Evaluation")
+
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                if let target = snapshot.profitTarget, target > 0 {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Profit target")
+                            .experienceStyle(.subheadline, color: colors.secondaryText)
+                        Spacer(minLength: 8)
+                        Text(DashboardViewModel.money(target))
+                            .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
+                        if let pct = PropFirmDetailPresentation.formattedPercentOfAccount(
+                            amount: target,
+                            accountSize: snapshot.configuredAccountSize
+                        ) {
+                            Text(pct)
+                                .experienceStyle(.caption, color: colors.tertiaryText)
+                        }
                     }
-                    labelValue(
-                        "Drawdown Type",
-                        PropFirmDetailPresentation.drawdownTypeLabel(snapshot.drawdownType)
-                    )
-
-                    if let footnote = PropFirmDetailPresentation.drawdownTypeFootnote(snapshot.drawdownType) {
-                        Text(footnote)
-                            .experienceStyle(.footnote, color: colors.secondaryText)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Progress")
+                                .experienceStyle(.caption2, color: colors.tertiaryText)
+                            Spacer()
+                            Text("\(Int(snapshot.profitTargetProgress.rounded()))%")
+                                .font(.system(.caption2, design: .rounded).weight(.semibold).monospacedDigit())
+                        }
+                        ProgressView(value: min(max(snapshot.profitTargetProgress / 100, 0), 1))
+                            .tint(snapshot.isPassed ? colors.profit : colors.accent)
                     }
+                }
 
-                    drawdownBar
-
-                    VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-                        balanceRow("Cycle start", snapshot.cycleStartBalance)
-                        balanceRow("Peak balance", snapshot.peakBalance)
-                        balanceRow("Drawdown floor", snapshot.drawdownFloor, emphasis: true)
-                        balanceRow("Current balance", snapshot.currentBalance)
-                    }
-
-                    if snapshot.drawdownType?.usesTrailingCycleFloor == true {
-                        Text("The floor rises when balance makes a new peak, staying max drawdown below the peak.")
-                            .experienceStyle(.footnote, color: colors.secondaryText)
-                    }
-
-                    if snapshot.isFailed {
-                        Text(PropFirmDetailPresentation.drawdownBreachMessage(type: snapshot.drawdownType))
-                            .experienceStyle(.footnote, color: colors.loss)
+                if let required = snapshot.winningDaysRequired, required > 0 {
+                    HStack {
+                        Text("Winning days")
+                            .experienceStyle(.subheadline, color: colors.secondaryText)
+                        Spacer()
+                        Text("\(snapshot.winningDays)/\(required)")
+                            .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
+                        Image(systemName: snapshot.winningDaysTargetMet ? "checkmark.circle.fill" : "clock")
+                            .foregroundStyle(snapshot.winningDaysTargetMet ? colors.profit : colors.secondaryText)
                     }
                 }
             }
+            .padding(ExperienceSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .experienceDashboardCard(prominence: .standard)
+            .padding(.horizontal, ExperienceSpacing.md)
         }
+        .accessibilityIdentifier("propFirm.progress")
+    }
+}
+
+// MARK: - Drawdown
+
+struct PropFirmDetailDrawdownPanel: View {
+    let snapshot: PropFirmStatusSnapshot
+    let contentPlan: PropFirmDetailContentPlan
+
+    @Environment(\.themeColors) private var colors
+    @State private var showsBalanceDetails = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            PropFirmDetailSectionHeader(
+                title: "Drawdown",
+                infoTitle: "Drawdown",
+                infoBody: contentPlan.drawdownInfoBody(),
+                infoAccessibilityID: "propFirm.drawdown.info"
+            )
+
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Distance to floor")
+                            .experienceStyle(.caption2, color: colors.tertiaryText)
+                        Text(DashboardViewModel.money(snapshot.distanceToDD))
+                            .font(.system(.title3, design: .rounded).weight(.bold).monospacedDigit())
+                            .foregroundStyle(cushionTone)
+                    }
+                    Spacer(minLength: ExperienceSpacing.md)
+                    if let limit = snapshot.maxDrawdownLimit, limit > 0 {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("DD used")
+                                .experienceStyle(.caption2, color: colors.tertiaryText)
+                            Text(DashboardViewModel.money(snapshot.maxDrawdownUsed))
+                                .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
+                        }
+                    }
+                }
+
+                if let type = snapshot.drawdownType {
+                    Text(PropFirmDetailPresentation.drawdownTypeLabel(type))
+                        .experienceStyle(.caption, color: colors.secondaryText)
+                }
+
+                drawdownBar
+
+                Button {
+                    withAnimation(ExperienceMotion.navigation) {
+                        showsBalanceDetails.toggle()
+                    }
+                } label: {
+                    HStack {
+                        Text(showsBalanceDetails ? "Hide balance details" : "Balance details")
+                            .experienceStyle(.footnote, color: colors.accent)
+                            .fontWeight(.semibold)
+                        Spacer()
+                        Image(systemName: showsBalanceDetails ? "chevron.up" : "chevron.down")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(colors.tertiaryText)
+                    }
+                }
+                .buttonStyle(.experiencePlain)
+
+                if showsBalanceDetails {
+                    balanceDetailRows
+                }
+            }
+            .padding(ExperienceSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .experienceDashboardCard(prominence: .standard)
+            .padding(.horizontal, ExperienceSpacing.md)
+        }
+        .accessibilityIdentifier("propFirm.drawdown")
+    }
+
+    private var cushionTone: Color {
+        if snapshot.isFailed || snapshot.distanceToDD < 0 { return colors.loss }
+        if snapshot.distanceDanger { return colors.warning }
+        return colors.profit
     }
 
     @ViewBuilder
@@ -320,7 +320,7 @@ struct PropFirmDrawdownVisualView: View {
                         .offset(x: geo.size.width * floorClamped - 1)
                 }
             }
-            .frame(height: 10)
+            .frame(height: 8)
             HStack {
                 Text("Floor")
                     .experienceStyle(.caption2, color: colors.tertiaryText)
@@ -331,14 +331,17 @@ struct PropFirmDrawdownVisualView: View {
         }
     }
 
-    private func labelValue(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .experienceStyle(.caption2, color: colors.secondaryText)
-            Text(value)
-                .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
-                .foregroundStyle(colors.primaryText)
+    private var balanceDetailRows: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            balanceRow("Cycle start", snapshot.cycleStartBalance)
+            balanceRow("Peak", snapshot.peakBalance)
+            balanceRow("Floor", snapshot.drawdownFloor, emphasis: true)
+            balanceRow("Current", snapshot.currentBalance)
+            if let limit = snapshot.maxDrawdownLimit, limit > 0 {
+                balanceRow("Max limit", limit)
+            }
         }
+        .padding(.top, ExperienceSpacing.xs)
     }
 
     private func balanceRow(_ label: String, _ amount: Decimal, emphasis: Bool = false) -> some View {
@@ -353,97 +356,7 @@ struct PropFirmDrawdownVisualView: View {
     }
 }
 
-// MARK: - Consistency
-
-struct PropFirmConsistencyVisualView: View {
-    let snapshot: PropFirmStatusSnapshot
-
-    @Environment(\.themeColors) private var colors
-
-    var body: some View {
-        PropFirmDetailSection(title: "Consistency") {
-            PropFirmDetailCard {
-                if snapshot.consistencyRequired, let pct = snapshot.consistencyPercent {
-                    HStack(spacing: ExperienceSpacing.lg) {
-                        consistencyRing(percentCap: pct)
-                        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-                            Text("\(NumberDisplay.decimal(pct, maximumFractionDigits: 0))%")
-                                .font(.system(.title2, design: .rounded).weight(.bold).monospacedDigit())
-                                .foregroundStyle(colors.primaryText)
-                            Text("Max single winning trade share of total win profits")
-                                .experienceStyle(.footnote, color: colors.secondaryText)
-                            HStack(spacing: ExperienceSpacing.sm) {
-                                ExperienceTag(
-                                    title: snapshot.consistencyMet ? "Passing" : "Failing",
-                                    tone: snapshot.consistencyMet ? .success : .warning
-                                )
-                                if snapshot.consistencyTotalProfit > 0 {
-                                    Text("Largest win \(DashboardViewModel.money(snapshot.consistencyBiggestWin))")
-                                        .experienceStyle(.caption, color: colors.tertiaryText)
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    HStack(spacing: ExperienceSpacing.sm) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(colors.profit)
-                        Text("No consistency rule")
-                            .experienceStyle(.body, color: colors.primaryText)
-                    }
-                }
-            }
-        }
-    }
-
-    private func consistencyRing(percentCap: Decimal) -> some View {
-        let usage: Double = {
-            guard snapshot.consistencyAllowedMax > 0 else { return 0 }
-            let ratio = NSDecimalNumber(decimal: snapshot.consistencyBiggestWin / snapshot.consistencyAllowedMax).doubleValue
-            return min(max(ratio, 0), 1)
-        }()
-        let tint = snapshot.consistencyMet ? colors.profit : colors.warning
-
-        return ZStack {
-            Circle()
-                .stroke(colors.fillSecondary, lineWidth: 8)
-            Circle()
-                .trim(from: 0, to: usage)
-                .stroke(tint, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-        }
-        .frame(width: 72, height: 72)
-        .accessibilityLabel("Consistency usage")
-    }
-}
-
 // MARK: - Rule rows
-
-struct PropFirmTradingRulesView: View {
-    let snapshot: PropFirmStatusSnapshot
-    let contentPlan: PropFirmDetailContentPlan
-
-    @Environment(\.themeColors) private var colors
-
-    var body: some View {
-        let rows = contentPlan.tradingRuleRows()
-        if !rows.isEmpty {
-            PropFirmDetailSection(title: "Trading rules") {
-                PropFirmDetailCard {
-                    VStack(spacing: 0) {
-                        ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
-                            PropFirmRuleRowView(row: row)
-                            if index < rows.count - 1 {
-                                Divider().opacity(0.35)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-}
 
 struct PropFirmRuleRow: Hashable {
     enum Status: Hashable {
@@ -462,8 +375,10 @@ struct PropFirmRuleRow: Hashable {
 
 struct PropFirmRuleRowView: View {
     let row: PropFirmRuleRow
+    var infoBody: String?
 
     @Environment(\.themeColors) private var colors
+    @State private var showsInfo = false
 
     var body: some View {
         HStack(spacing: ExperienceSpacing.sm) {
@@ -473,13 +388,36 @@ struct PropFirmRuleRowView: View {
                 .frame(width: 22)
             Text(row.label)
                 .experienceStyle(.callout, color: colors.secondaryText)
+            if let infoBody {
+                Button {
+                    showsInfo = true
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(colors.tertiaryText)
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $showsInfo) {
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                        Text(row.label)
+                            .font(ExperienceTypography.subheadline.weight(.semibold))
+                        Text(infoBody)
+                            .font(ExperienceTypography.footnote)
+                            .foregroundStyle(colors.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(ExperienceSpacing.md)
+                    .frame(width: 280, alignment: .leading)
+                    .experienceAnalyticsPopoverChrome()
+                }
+            }
             Spacer(minLength: 8)
             Text(row.value)
                 .font(.system(.callout, design: .rounded).weight(.semibold).monospacedDigit())
                 .foregroundStyle(colors.primaryText)
             statusIcon
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
     }
 
     @ViewBuilder
@@ -500,9 +438,132 @@ struct PropFirmRuleRowView: View {
     }
 }
 
-// MARK: - Payouts
+struct PropFirmDetailTradingRulesPanel: View {
+    let snapshot: PropFirmStatusSnapshot
+    let contentPlan: PropFirmDetailContentPlan
 
-struct PropFirmDetailPayoutsView: View {
+    @Environment(\.themeColors) private var colors
+
+    var body: some View {
+        let rows = contentPlan.tradingRuleRows()
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                PropFirmDetailSectionHeader(title: "Trading rules")
+
+                VStack(spacing: 0) {
+                    ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                        PropFirmRuleRowView(
+                            row: row,
+                            infoBody: infoBody(for: row.topic)
+                        )
+                        if index < rows.count - 1 {
+                            Divider().opacity(0.35)
+                        }
+                    }
+                }
+                .padding(ExperienceSpacing.md)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .experienceDashboardCard(prominence: .standard)
+                .padding(.horizontal, ExperienceSpacing.md)
+            }
+            .accessibilityIdentifier("propFirm.rules")
+        }
+    }
+
+    private func infoBody(for topic: PropFirmDetailRuleTopic) -> String? {
+        switch topic {
+        case .consistencyRule:
+            return contentPlan.consistencyInfoBody()
+        case .winningDayThreshold, .winningDayThresholdExplanation:
+            return contentPlan.winningDayThresholdInfoBody()
+        default:
+            return nil
+        }
+    }
+}
+
+// MARK: - Payouts (dedicated page)
+
+struct PropFirmAccountPayoutsView: View {
+    @State private var viewModel: PropFirmDetailViewModel
+    @State private var showsRecordPayout = false
+
+    private let data: DataEnvironment
+    private let navigationCoordinator: NavigationCoordinator
+
+    @Environment(\.themeColors) private var colors
+
+    init(
+        accountID: TradingAccountID,
+        data: DataEnvironment,
+        navigationCoordinator: NavigationCoordinator
+    ) {
+        self.data = data
+        self.navigationCoordinator = navigationCoordinator
+        _viewModel = State(
+            initialValue: PropFirmDetailViewModel(
+                accountID: accountID,
+                trades: data.trades,
+                session: data.session,
+                detailCache: data.detailCache,
+                rpc: data.rpc,
+                realtimeHub: data.realtimeHub,
+                navigationCoordinator: navigationCoordinator
+            )
+        )
+    }
+
+    var body: some View {
+        Group {
+            if let snapshot = viewModel.snapshot, snapshot.isFunded {
+                let contentPlan = PropFirmDetailContentPlan(snapshot: snapshot)
+                ScrollView {
+                    PropFirmDetailPayoutsPanel(
+                        snapshot: snapshot,
+                        contentPlan: contentPlan,
+                        onRecordPayout: { showsRecordPayout = true },
+                        recordPayoutEnabled: true
+                    )
+                    .padding(.vertical, ExperienceSpacing.md)
+                }
+            } else if viewModel.isLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ExperienceEmptyState(
+                    icon: .chart,
+                    title: "Payouts unavailable",
+                    message: viewModel.errorMessage ?? "This account is not in funded mode."
+                )
+            }
+        }
+        .experienceScreenBackground()
+        .experienceNavigationTitle("Payouts")
+        .task { await viewModel.loadIfNeeded() }
+        .refreshable { await viewModel.refresh() }
+        .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
+            Task { await viewModel.refresh() }
+        }
+        .onChange(of: AccountMutationStore.shared.revision) { _, _ in
+            Task { await viewModel.refresh() }
+        }
+        .sheet(isPresented: $showsRecordPayout, onDismiss: {
+            Task { await viewModel.refresh() }
+        }) {
+            RecordPayoutFlowView(
+                accountID: viewModel.accountID,
+                data: data,
+                navigationCoordinator: navigationCoordinator,
+                onWithdrawalFlowComplete: {
+                    Task { await viewModel.refresh() }
+                }
+            )
+        }
+        .accessibilityIdentifier("propFirm.payoutsPage")
+    }
+}
+
+struct PropFirmDetailPayoutsPanel: View {
     let snapshot: PropFirmStatusSnapshot
     let contentPlan: PropFirmDetailContentPlan
     var onRecordPayout: () -> Void
@@ -511,272 +572,49 @@ struct PropFirmDetailPayoutsView: View {
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        PropFirmDetailSection(title: "Payouts") {
-            PropFirmDetailCard {
-                VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-                    if snapshot.isFunded {
-                        eligibilityHeader
-                        if !payoutRequirementRows.isEmpty {
-                            requirementsGrid
-                        }
-                        if snapshot.supportsRecordPayout {
-                            Button(action: onRecordPayout) {
-                                Label("Record Payout", systemImage: "dollarsign.circle")
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .disabled(!recordPayoutEnabled)
-                            .accessibilityIdentifier("propFirm.recordPayout")
-                        }
-                        FundedPayoutCycleHistoryContent(cycles: snapshot.completedPayoutHistory)
-                    } else {
-                        Text("Payout recording applies after the account is set to Funded mode.")
-                            .experienceStyle(.footnote, color: colors.secondaryText)
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            PropFirmDetailSectionHeader(
+                title: "Payouts",
+                infoTitle: "Payout drawdown",
+                infoBody: contentPlan.payoutBehaviorInfoBody(),
+                infoAccessibilityID: "propFirm.payouts.info"
+            )
+
+            VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Eligibility")
+                            .experienceStyle(.caption2, color: colors.tertiaryText)
+                        Text(snapshot.payoutReady ? "Ready" : "Not yet")
+                            .font(.system(.title2, design: .rounded).weight(.bold))
+                            .foregroundStyle(snapshot.payoutReady ? colors.profit : colors.primaryText)
                     }
-                }
-            }
-        }
-    }
-
-    private var eligibilityHeader: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Eligibility")
-                    .experienceStyle(.caption2, color: colors.secondaryText)
-                Text(snapshot.payoutReady ? "Ready" : "Not yet")
-                    .font(.system(.title3, design: .rounded).weight(.bold))
-                    .foregroundStyle(snapshot.payoutReady ? colors.profit : colors.primaryText)
-            }
-            Spacer()
-            if let behavior = PropFirmDetailPresentation.payoutDrawdownBehaviorTitle(snapshot.payoutDrawdownBehaviorRaw) {
-                ExperienceTag(title: behavior, tone: .info)
-            }
-        }
-    }
-
-    private var payoutRequirementRows: [PropFirmDetailPresentation.PayoutRequirementRow] {
-        contentPlan.payoutRequirementRows()
-    }
-
-    private var requirementsGrid: some View {
-        VStack(spacing: ExperienceSpacing.xs) {
-            ForEach(payoutRequirementRows) { row in
-                HStack {
-                    Image(systemName: row.met ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(row.met ? colors.profit : colors.secondaryText)
-                    Text(row.title)
-                        .experienceStyle(.subheadline, color: colors.primaryText)
                     Spacer()
-                    if let detail = row.detail {
-                        Text(detail)
-                            .experienceStyle(.caption, color: colors.tertiaryText)
+                    if let behavior = PropFirmDetailPresentation.payoutDrawdownBehaviorTitle(
+                        snapshot.payoutDrawdownBehaviorRaw
+                    ) {
+                        ExperienceTag(title: behavior, tone: .info)
                     }
                 }
-            }
-        }
-    }
-}
 
-// MARK: - Journey
-
-struct PropFirmJourneyStepperView: View {
-    let title: String
-    let steps: [PropFirmDetailPresentation.JourneyStep]
-
-    @Environment(\.themeColors) private var colors
-
-    var body: some View {
-        PropFirmDetailSection(title: title) {
-            PropFirmDetailCard {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
-                        HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-                            VStack(spacing: 0) {
-                                Circle()
-                                    .fill(step.isComplete ? colors.profit : step.isCurrent ? colors.accent : colors.fillSecondary)
-                                    .frame(width: 10, height: 10)
-                                if index < steps.count - 1 {
-                                    Rectangle()
-                                        .fill(colors.border.opacity(0.5))
-                                        .frame(width: 2)
-                                        .frame(maxHeight: .infinity)
-                                        .padding(.vertical, 2)
-                                }
-                            }
-                            .frame(width: 14)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(step.title)
-                                    .experienceStyle(.subheadline, color: colors.primaryText)
-                                    .fontWeight(step.isCurrent ? .semibold : .regular)
-                                if let subtitle = step.subtitle {
-                                    Text(subtitle)
-                                        .experienceStyle(.caption, color: colors.secondaryText)
-                                }
-                            }
-                            .padding(.bottom, index < steps.count - 1 ? ExperienceSpacing.sm : 0)
-                        }
+                if snapshot.supportsRecordPayout {
+                    Button(action: onRecordPayout) {
+                        Label("Record Payout", systemImage: "dollarsign.circle")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!recordPayoutEnabled)
+                    .accessibilityIdentifier("propFirm.recordPayout")
                 }
+
+                FundedPayoutCycleHistoryContent(cycles: snapshot.completedPayoutHistory)
             }
+            .padding(ExperienceSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .experienceDashboardCard(prominence: .featured)
+            .padding(.horizontal, ExperienceSpacing.md)
         }
-    }
-}
-
-// MARK: - Expandable rules
-
-struct PropFirmExpandableRulesView: View {
-    let rules: [PropFirmDetailPresentation.ExpandableRule]
-
-    @Environment(\.themeColors) private var colors
-    @State private var expandedIDs: Set<String> = []
-
-    var body: some View {
-        PropFirmDetailSection(title: "Important rules") {
-            PropFirmDetailCard {
-                VStack(spacing: 0) {
-                    ForEach(Array(rules.enumerated()), id: \.element.id) { index, rule in
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                if expandedIDs.contains(rule.id) {
-                                    expandedIDs.remove(rule.id)
-                                } else {
-                                    expandedIDs.insert(rule.id)
-                                }
-                            }
-                        } label: {
-                            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-                                HStack {
-                                    Text(rule.title)
-                                        .experienceStyle(.subheadline, color: colors.primaryText)
-                                        .fontWeight(.medium)
-                                    Spacer()
-                                    Image(systemName: expandedIDs.contains(rule.id) ? "chevron.up" : "chevron.down")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(colors.tertiaryText)
-                                }
-                                if expandedIDs.contains(rule.id) {
-                                    Text(rule.body)
-                                        .experienceStyle(.footnote, color: colors.secondaryText)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                            }
-                            .padding(.vertical, 8)
-                        }
-                        .buttonStyle(.experiencePlain)
-                        if index < rules.count - 1 {
-                            Divider().opacity(0.35)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Evaluation metrics grid
-
-struct PropFirmEvaluationMetricsView: View {
-    let snapshot: PropFirmStatusSnapshot
-
-    private let columns = [
-        GridItem(.flexible(), spacing: ExperienceSpacing.sm),
-        GridItem(.flexible(), spacing: ExperienceSpacing.sm),
-    ]
-
-    var body: some View {
-        PropFirmDetailSection(title: snapshot.isFunded ? "Cycle targets" : "Evaluation") {
-            LazyVGrid(columns: columns, spacing: ExperienceSpacing.sm) {
-                if let target = snapshot.profitTarget, target > 0 {
-                    PropFirmDetailMetricTile(
-                        title: "Profit target",
-                        primaryValue: DashboardViewModel.money(target),
-                        secondaryValue: PropFirmDetailPresentation.formattedPercentOfAccount(
-                            amount: target,
-                            accountSize: snapshot.configuredAccountSize
-                        ),
-                        tone: snapshot.isPassed ? .positive : .neutral
-                    )
-                }
-                if let maxDD = snapshot.maxDrawdownLimit, maxDD > 0 {
-                    PropFirmDetailMetricTile(
-                        title: "Max drawdown",
-                        primaryValue: DashboardViewModel.money(maxDD),
-                        secondaryValue: PropFirmDetailPresentation.formattedPercentOfAccount(
-                            amount: maxDD,
-                            accountSize: snapshot.configuredAccountSize
-                        ),
-                        tone: snapshot.isFailed ? .negative : .neutral
-                    )
-                }
-                if let daily = snapshot.dailyLossLimit, daily > 0 {
-                    PropFirmDetailMetricTile(
-                        title: "Daily loss",
-                        primaryValue: DashboardViewModel.money(daily),
-                        secondaryValue: PropFirmDetailPresentation.formattedPercentOfAccount(
-                            amount: daily,
-                            accountSize: snapshot.configuredAccountSize
-                        ),
-                        tone: snapshot.dailyDrawdownBreached ? .negative : .neutral
-                    )
-                }
-                if let required = snapshot.winningDaysRequired, required > 0 {
-                    PropFirmDetailMetricTile(
-                        title: "Winning days",
-                        primaryValue: "\(snapshot.winningDays)/\(required)",
-                        secondaryValue: snapshot.winningDaysTargetMet ? "Requirement met" : "In progress",
-                        tone: snapshot.winningDaysTargetMet ? .positive : .neutral
-                    )
-                }
-            }
-
-            if let target = snapshot.profitTarget, target > 0 {
-                PropFirmDetailCard {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("Progress to target")
-                                .experienceStyle(.caption2, color: colorsCaption)
-                            Spacer()
-                            Text("\(Int(snapshot.profitTargetProgress.rounded()))%")
-                                .font(.system(.caption2, design: .rounded).weight(.semibold).monospacedDigit())
-                        }
-                        ProgressView(value: min(max(snapshot.profitTargetProgress / 100, 0), 1))
-                            .tint(snapshot.isPassed ? colors.profit : colors.accent)
-                    }
-                }
-            }
-        }
-    }
-
-    @Environment(\.themeColors) private var colors
-    private var colorsCaption: Color { colors.secondaryText }
-}
-
-struct PropFirmFundedLiveView: View {
-    let snapshot: PropFirmStatusSnapshot
-
-    @Environment(\.themeColors) private var colors
-
-    var body: some View {
-        PropFirmDetailSection(title: "Funded account") {
-            PropFirmDetailCard {
-                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                    HStack {
-                        label("Cycle start", DashboardViewModel.money(snapshot.cycleStartBalance))
-                        Spacer()
-                        label("Status", snapshot.statusLabel)
-                    }
-                    label("Cycle P&L", DashboardViewModel.money(snapshot.cyclePnL), tone: snapshot.cyclePnL >= 0 ? .positive : .negative)
-                }
-            }
-        }
-    }
-
-    private func label(_ title: String, _ value: String, tone: DashboardMetricTone = .neutral) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .experienceStyle(.caption2, color: colors.secondaryText)
-            Text(value)
-                .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
-                .foregroundStyle(tone == .positive ? colors.profit : tone == .negative ? colors.loss : colors.primaryText)
-        }
+        .accessibilityIdentifier("propFirm.payouts")
     }
 }

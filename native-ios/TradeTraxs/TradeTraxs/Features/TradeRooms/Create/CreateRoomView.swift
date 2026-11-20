@@ -226,6 +226,7 @@ struct CreateRoomView: View {
             TradeRoomAccessModeSection(
                 accessMode: $viewModel.configuration.accessMode,
                 preservesLegacyPrivate: false,
+                showsModeSummaries: false,
                 accessibilityRootID: "createRoom"
             )
 

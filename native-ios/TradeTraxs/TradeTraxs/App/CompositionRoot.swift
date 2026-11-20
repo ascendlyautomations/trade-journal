@@ -426,6 +426,8 @@ enum CompositionRoot {
         RoomLiveVoiceCoordinator.shared.configure(transport: transport)
         RoomBroadcastCoordinator.shared.configure(
             transport: transport,
+            realtimeHub: data.realtimeHub,
+            accessTokenProvider: { await data.session.accessToken },
             profileLookup: { ids in
                 try await data.profiles.profiles(ids: ids)
             }

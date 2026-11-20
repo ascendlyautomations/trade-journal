@@ -159,6 +159,8 @@ enum ExternalDestinationIdentity {
             return "screen:tools"
         case .propFirm(let id):
             return "prop-firm:\(id.rawValue)"
+        case .propFirmPayouts(let id):
+            return "prop-firm-payouts:\(id.rawValue)"
         case .analyst:
             return "screen:analyst"
         case .backtest:

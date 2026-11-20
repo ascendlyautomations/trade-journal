@@ -67,6 +67,7 @@ nonisolated enum NumericInputFieldSupport {
         display
             .replacingOccurrences(of: ",", with: "")
             .replacingOccurrences(of: "$", with: "")
+            .replacingOccurrences(of: "%", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -104,6 +105,7 @@ nonisolated enum NumericInputFieldSupport {
     private static func sanitizeForEditing(_ raw: String, style: NumericInputStyle) -> String {
         var work = raw
             .replacingOccurrences(of: "$", with: "")
+            .replacingOccurrences(of: "%", with: "")
             .replacingOccurrences(of: ",", with: "")
             .replacingOccurrences(of: " ", with: "")
 

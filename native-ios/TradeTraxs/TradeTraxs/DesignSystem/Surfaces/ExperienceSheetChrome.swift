@@ -25,6 +25,8 @@ struct ExperienceSheetChrome: ViewModifier {
     var detents: Set<PresentationDetent> = [.medium, .large]
     var dragIndicator: Visibility = .visible
     var interactiveDismiss: Bool = true
+    /// When false, omits the shared keyboard **Done** accessory (e.g. chat sheets that use Return = Send).
+    var keyboardDoneToolbar: Bool = true
 
     func body(content: Content) -> some View {
         content
@@ -34,7 +36,20 @@ struct ExperienceSheetChrome: ViewModifier {
             .presentationCornerRadius(ExperienceRadius.sheet)
             .interactiveDismissDisabled(!interactiveDismiss)
             .experienceKeyboardDismissOnTapOutside()
-            .experienceKeyboardDoneToolbar()
+            .modifier(ConditionalKeyboardDoneToolbar(enabled: keyboardDoneToolbar))
+    }
+}
+
+private struct ConditionalKeyboardDoneToolbar: ViewModifier {
+    let enabled: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if enabled {
+            content.experienceKeyboardDoneToolbar()
+        } else {
+            content
+        }
     }
 }
 
@@ -50,13 +65,15 @@ extension View {
     func experienceSheetChrome(
         detents: Set<PresentationDetent> = [.medium, .large],
         dragIndicator: Visibility = .visible,
-        interactiveDismiss: Bool = true
+        interactiveDismiss: Bool = true,
+        keyboardDoneToolbar: Bool = true
     ) -> some View {
         modifier(
             ExperienceSheetChrome(
                 detents: detents,
                 dragIndicator: dragIndicator,
-                interactiveDismiss: interactiveDismiss
+                interactiveDismiss: interactiveDismiss,
+                keyboardDoneToolbar: keyboardDoneToolbar
             )
         )
     }

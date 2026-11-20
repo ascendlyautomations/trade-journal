@@ -38,43 +38,58 @@ final class TradeRoomJoinActionCoordinator {
         onDirectJoinSucceeded: (() async -> Void)? = nil
     ) async -> TradeRoomDiscoveryJoinState {
         let store = inboxStore ?? MessagesInboxStore.shared
+        if (try? await rooms.membership(roomID: room.id, profileID: viewerID)) != nil {
+            mutationStates[room.id] = .joined
+            return .joined
+        }
+        _ = await TradeRoomStaleMembershipReconciler.reconcileOptimisticJoinState(
+            roomID: room.id,
+            viewerID: viewerID,
+            rooms: rooms,
+            inboxStore: store
+        )
         let joined = isJoined(roomID: room.id, inboxStore: store)
         let current = effectiveState(for: room, isJoined: joined)
         guard TradeRoomJoinPresentation.isInteractive(current) else { return current }
 
-        if room.joinPolicy == .approval {
-            return await performRequest(
-                room: room,
-                viewerID: viewerID,
-                rooms: rooms,
-                inboxStore: store
-            )
-        }
-
-        mutationStates[room.id] = .joining
+        mutationStates[room.id] = TradeRoomJoinPresentation.mutationPhase(
+            for: TradeRoomJoinPresentation.action(for: room.joinPolicy)
+        )
         lastErrorMessage = nil
 
-        if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) || room.id.rawValue.hasPrefix("dev-") {
-            mutationStates[room.id] = .joined
-            ExperienceHaptics.play(.success)
-            return .joined
-        }
+        let outcome = await TradeRoomJoinFlow.attemptJoin(room: room, viewerID: viewerID, rooms: rooms)
 
-        do {
-            let confirmed = try await rooms.join(roomID: room.id, profileID: viewerID)
+        switch outcome {
+        case .joined(let membership, _):
             mutationStates[room.id] = .joined
             TradeRoomMembershipSync.applyJoined(
                 suggestion: room,
                 viewerID: viewerID,
                 inboxStore: store,
-                confirmedMembership: confirmed
+                confirmedMembership: membership
             )
             await onDirectJoinSucceeded?()
             ExperienceHaptics.play(.success)
             return .joined
-        } catch {
+        case .requested:
+            mutationStates[room.id] = .requested
+            ExperienceHaptics.play(.success)
+            return .requested
+        case .pending:
+            mutationStates[room.id] = .requested
+            return .requested
+        case .banned:
             mutationStates.removeValue(forKey: room.id)
-            lastErrorMessage = ProfileSectionSupport.message(for: error)
+            lastErrorMessage = "You cannot join this room."
+            ExperienceHaptics.play(.warning)
+            return .idle
+        case .error(let message):
+            if isAlreadyPendingError(message: message) {
+                mutationStates[room.id] = .requested
+                return .requested
+            }
+            mutationStates.removeValue(forKey: room.id)
+            lastErrorMessage = message
             ExperienceHaptics.play(.warning)
             return .idle
         }
@@ -87,39 +102,12 @@ final class TradeRoomJoinActionCoordinator {
         rooms: any RoomRepository,
         inboxStore: MessagesInboxStore? = nil
     ) async -> TradeRoomDiscoveryJoinState {
-        let store = inboxStore ?? MessagesInboxStore.shared
-        let joined = isJoined(roomID: room.id, inboxStore: store)
-        let current = effectiveState(for: room, isJoined: joined)
-        guard current == .idle else { return current }
-
-        mutationStates[room.id] = .requesting
-        lastErrorMessage = nil
-
-        if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) || room.id.rawValue.hasPrefix("dev-") {
-            mutationStates[room.id] = .requested
-            ExperienceHaptics.play(.success)
-            return .requested
-        }
-
-        do {
-            let status = try await rooms.requestJoin(roomID: room.id)
-            if status == .pending || status == .approved {
-                mutationStates[room.id] = .requested
-                ExperienceHaptics.play(.success)
-                return .requested
-            }
-            mutationStates.removeValue(forKey: room.id)
-            return .idle
-        } catch {
-            if isAlreadyPendingError(error) {
-                mutationStates[room.id] = .requested
-                return .requested
-            }
-            mutationStates.removeValue(forKey: room.id)
-            lastErrorMessage = ProfileSectionSupport.message(for: error)
-            ExperienceHaptics.play(.warning)
-            return .idle
-        }
+        await performJoinAction(
+            room: room,
+            viewerID: viewerID,
+            rooms: rooms,
+            inboxStore: inboxStore
+        )
     }
 
     func patchJoined(_ roomID: RoomID) {
@@ -134,8 +122,9 @@ final class TradeRoomJoinActionCoordinator {
         mutationStates.removeValue(forKey: roomID)
     }
 
-    private func isAlreadyPendingError(_ error: Error) -> Bool {
-        let message = ProfileSectionSupport.message(for: error).lowercased()
-        return message.contains("pending") || message.contains("already")
+    private func isAlreadyPendingError(message: String) -> Bool {
+        let lowered = message.lowercased()
+        return lowered.contains("pending") || lowered.contains("already")
     }
+
 }

@@ -578,10 +578,14 @@ final class MessagesInboxStore {
     }
 
     func toggleMute(roomID: RoomID) {
-        if mutedRoomIDs.contains(roomID) {
-            mutedRoomIDs.remove(roomID)
-        } else {
+        setRoomMuted(roomID: roomID, muted: !isRoomMuted(roomID))
+    }
+
+    func setRoomMuted(roomID: RoomID, muted: Bool) {
+        if muted {
             mutedRoomIDs.insert(roomID)
+        } else {
+            mutedRoomIDs.remove(roomID)
         }
     }
 

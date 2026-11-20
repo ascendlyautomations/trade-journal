@@ -111,7 +111,7 @@ struct TradeRoomObsLiveManageStreamView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             BroadcastStreamZoomableVideoView(
-                track: broadcastCoordinator.videoTrackForDisplay,
+                track: broadcastCoordinator.videoTrackForExpandedViewer,
                 isFullscreen: true
             )
             .id(broadcastCoordinator.programVideoTrackRevision)

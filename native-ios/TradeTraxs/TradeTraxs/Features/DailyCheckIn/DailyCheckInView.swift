@@ -60,7 +60,7 @@ struct DailyCheckInView: View {
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, ExperienceSpacing.md)
+                    .frame(height: 49)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(colors.accent)

@@ -4,6 +4,7 @@ import SwiftUI
 struct TradeRoomAccessModeSection: View {
     @Binding var accessMode: TradeRoomAccessMode
     var preservesLegacyPrivate: Bool
+    var showsModeSummaries: Bool = true
     var accessibilityRootID: String
 
     @Environment(\.themeColors) private var colors
@@ -16,9 +17,11 @@ struct TradeRoomAccessModeSection: View {
         }
         .accessibilityIdentifier("\(accessibilityRootID).accessMode")
 
-        Text(accessMode.summary)
-            .font(.footnote)
-            .foregroundStyle(colors.secondaryText)
+        if showsModeSummaries {
+            Text(accessMode.summary)
+                .font(.footnote)
+                .foregroundStyle(colors.secondaryText)
+        }
 
         if preservesLegacyPrivate, accessMode == .requestToJoin {
             Text(

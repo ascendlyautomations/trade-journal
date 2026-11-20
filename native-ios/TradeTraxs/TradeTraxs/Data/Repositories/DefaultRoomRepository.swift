@@ -237,6 +237,21 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
         return counts
     }
 
+    func isViewerBanned(from roomID: RoomID, profileID: ProfileID) async throws -> Bool {
+        struct BanRow: Decodable { var id: String? }
+        let rows: [BanRow] = try await supabase.database.select(
+            BanRow.self,
+            from: "room_bans",
+            query: [
+                SupabaseQuery.select("id"),
+                SupabaseQuery.eq("room_id", roomID.rawValue),
+                SupabaseQuery.eq("user_id", profileID.rawValue),
+                URLQueryItem(name: "limit", value: "1"),
+            ]
+        )
+        return rows.first?.id != nil
+    }
+
     func membership(roomID: RoomID, profileID: ProfileID) async throws -> RoomMembership? {
         let rows: [RoomDTO.Membership] = try await supabase.database.select(
             RoomDTO.Membership.self,
@@ -245,6 +260,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 SupabaseQuery.select("*"),
                 SupabaseQuery.eq("room_id", roomID.rawValue),
                 SupabaseQuery.eq("user_id", profileID.rawValue),
+                URLQueryItem(name: "left_at", value: "is.null"),
                 URLQueryItem(name: "limit", value: "1"),
             ]
         )
@@ -844,6 +860,10 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
         )
     }
 
+    private struct ChannelPreferenceEcho: Decodable, Sendable {
+        var user_id: String?
+    }
+
     private func mapMembership(_ dto: RoomDTO.Membership) -> RoomMembership? {
         guard let roomID = dto.room_id, let userID = dto.user_id else { return nil }
         return RoomMembership(
@@ -851,7 +871,79 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
             profileID: ProfileID(userID),
             role: RoomMemberRole(rawValue: dto.role ?? "") ?? .member,
             joinedAt: ISO8601.date(from: dto.joined_at) ?? Date(),
-            notificationsEnabled: true
+            notificationsEnabled: dto.notification_enabled != false
+        )
+    }
+
+    func updateMembershipNotificationEnabled(
+        roomID: RoomID,
+        profileID: ProfileID,
+        enabled: Bool
+    ) async throws {
+        struct Body: Encodable { var notification_enabled: Bool }
+        _ = try await supabase.database.update(
+            Body(notification_enabled: enabled),
+            table: "room_members",
+            query: [
+                SupabaseQuery.eq("room_id", roomID.rawValue),
+                SupabaseQuery.eq("user_id", profileID.rawValue),
+                URLQueryItem(name: "left_at", value: "is.null"),
+            ],
+            returning: RoomDTO.Membership.self
+        )
+    }
+
+    func channelNotificationPreferences(
+        roomID: RoomID,
+        profileID: ProfileID,
+        channelIDs: [RoomChannelID]
+    ) async throws -> [RoomChannelID: Bool] {
+        guard !channelIDs.isEmpty else { return [:] }
+        struct Row: Decodable {
+            var section_id: String?
+            var notifications_enabled: Bool?
+        }
+        let rows: [Row] = try await supabase.database.select(
+            Row.self,
+            from: "room_member_channel_preferences",
+            query: [
+                SupabaseQuery.select("section_id, notifications_enabled"),
+                SupabaseQuery.eq("room_id", roomID.rawValue),
+                SupabaseQuery.eq("user_id", profileID.rawValue),
+            ]
+        )
+        var allowed = Set(channelIDs.map(\.rawValue))
+        var result: [RoomChannelID: Bool] = [:]
+        for row in rows {
+            guard let sectionID = row.section_id, allowed.contains(sectionID) else { continue }
+            result[RoomChannelID(sectionID)] = row.notifications_enabled != false
+        }
+        return result
+    }
+
+    func setChannelNotificationEnabled(
+        roomID: RoomID,
+        profileID: ProfileID,
+        channelID: RoomChannelID,
+        enabled: Bool
+    ) async throws {
+        struct Body: Encodable {
+            var user_id: String
+            var room_id: String
+            var section_id: String
+            var notifications_enabled: Bool
+        }
+        _ = try await supabase.database.upsert(
+            Body(
+                user_id: profileID.rawValue,
+                room_id: roomID.rawValue,
+                section_id: channelID.rawValue,
+                notifications_enabled: enabled
+            ),
+            into: "room_member_channel_preferences",
+            onConflict: "user_id,room_id,section_id",
+            returning: ChannelPreferenceEcho.self,
+            select: "user_id"
         )
     }
 

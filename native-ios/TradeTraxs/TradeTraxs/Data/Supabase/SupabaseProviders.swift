@@ -1258,6 +1258,59 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         )
     }
 
+    /// Livestream session interactive state — filtered per session; RLS scopes row visibility per viewer.
+    func watchBroadcastInteractiveSession(
+        roomID: String,
+        sessionID: String,
+        accessToken: String?,
+        debugOwner: String? = nil
+    ) -> RealtimeMessageWatch {
+        let safeRoom = roomID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let safeSession = sessionID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sessionFilter = "broadcast_session_id=eq.\(safeSession)"
+        let sessionRowFilter = "id=eq.\(safeSession)"
+        return watch(
+            WatchSpec(
+                topic: "realtime:broadcast-\(safeSession)",
+                routeKey: "broadcast:\(safeSession)",
+                bindings: [
+                    PostgresChangeBinding(
+                        table: "room_live_broadcasts",
+                        filter: sessionRowFilter,
+                        routeColumn: "id",
+                        emitsReactionEvents: false
+                    ),
+                    PostgresChangeBinding(
+                        table: "room_live_broadcast_hands",
+                        filter: sessionFilter,
+                        routeColumn: "broadcast_session_id",
+                        emitsReactionEvents: false
+                    ),
+                    PostgresChangeBinding(
+                        table: "room_live_broadcast_speaker_grants",
+                        filter: sessionFilter,
+                        routeColumn: "broadcast_session_id",
+                        emitsReactionEvents: false
+                    ),
+                    PostgresChangeBinding(
+                        table: "room_live_broadcast_session_blocks",
+                        filter: sessionFilter,
+                        routeColumn: "broadcast_session_id",
+                        emitsReactionEvents: false
+                    ),
+                    PostgresChangeBinding(
+                        table: "room_live_broadcast_invitations",
+                        filter: sessionFilter,
+                        routeColumn: "broadcast_session_id",
+                        emitsReactionEvents: false
+                    ),
+                ]
+            ),
+            accessToken: accessToken,
+            debugOwner: debugOwner ?? "BroadcastSession"
+        )
+    }
+
 
 
 
@@ -1951,6 +2004,9 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
             let scopedMatch: Bool
             if spec.routeKey.hasPrefix("profile-table:") {
                 scopedMatch = scope.map { spec.routeKey.hasSuffix(":\($0)") } ?? false
+            } else if spec.routeKey.hasPrefix("broadcast:") {
+                let expected = String(spec.routeKey.dropFirst("broadcast:".count))
+                scopedMatch = scope == expected
             } else if spec.routeKey.hasPrefix("dm-read:")
                 || spec.routeKey.hasPrefix("room-read:")
                 || spec.routeKey.hasPrefix("notifications:")
@@ -1989,7 +2045,8 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
                     messageID: messageID,
                     conversationID: scope,
                     deletedForEveryone: Self.parseDeletedForEveryone(from: record),
-                    recordPayload: (record ?? oldRecord).flatMap { PostgresChangeRecordCodec.encode($0) }
+                    recordPayload: (record ?? oldRecord).flatMap { PostgresChangeRecordCodec.encode($0) },
+                    postgresTable: table.isEmpty ? nil : table
                 )
             }
             for continuation in allContinuations[spec.routeKey] ?? [] {
@@ -2343,6 +2400,8 @@ nonisolated struct MessageRealtimeSignal: Sendable {
     var analyticsUpdatedAt: String? = nil
     /// Raw postgres `record` JSON when available (notifications, messages, followers, …).
     var recordPayload: Data? = nil
+    /// Source table for postgres_changes (broadcast interactive tables, notifications, …).
+    var postgresTable: String? = nil
 }
 
 typealias RoomRealtimeSignal = MessageRealtimeSignal

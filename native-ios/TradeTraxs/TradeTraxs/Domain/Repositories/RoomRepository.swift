@@ -63,6 +63,32 @@ nonisolated protocol RoomRepository: Sendable {
     func setRoomFavorited(roomID: RoomID, profileID: ProfileID, favorited: Bool) async throws
     /// Active memberships the viewer has favorited.
     func favoritedRoomIDs(for profileID: ProfileID) async throws -> Set<RoomID>
+    /// `room_bans` — web `isUserBannedFromRoom`.
+    func isViewerBanned(from roomID: RoomID, profileID: ProfileID) async throws -> Bool
+    /// `room_members.notification_enabled` for the active membership row.
+    func updateMembershipNotificationEnabled(
+        roomID: RoomID,
+        profileID: ProfileID,
+        enabled: Bool
+    ) async throws
+    /// `room_member_channel_preferences` — missing row means enabled.
+    func channelNotificationPreferences(
+        roomID: RoomID,
+        profileID: ProfileID,
+        channelIDs: [RoomChannelID]
+    ) async throws -> [RoomChannelID: Bool]
+    func setChannelNotificationEnabled(
+        roomID: RoomID,
+        profileID: ProfileID,
+        channelID: RoomChannelID,
+        enabled: Bool
+    ) async throws
+}
+
+extension RoomRepository {
+    func isViewerBanned(from roomID: RoomID, profileID: ProfileID) async throws -> Bool {
+        false
+    }
 }
 
 extension RoomRepository {
@@ -104,4 +130,25 @@ extension RoomRepository {
     func setRoomFavorited(roomID: RoomID, profileID: ProfileID, favorited: Bool) async throws {}
 
     func favoritedRoomIDs(for profileID: ProfileID) async throws -> Set<RoomID> { [] }
+
+    func updateMembershipNotificationEnabled(
+        roomID: RoomID,
+        profileID: ProfileID,
+        enabled: Bool
+    ) async throws {}
+
+    func channelNotificationPreferences(
+        roomID: RoomID,
+        profileID: ProfileID,
+        channelIDs: [RoomChannelID]
+    ) async throws -> [RoomChannelID: Bool] {
+        Dictionary(uniqueKeysWithValues: channelIDs.map { ($0, true) })
+    }
+
+    func setChannelNotificationEnabled(
+        roomID: RoomID,
+        profileID: ProfileID,
+        channelID: RoomChannelID,
+        enabled: Bool
+    ) async throws {}
 }

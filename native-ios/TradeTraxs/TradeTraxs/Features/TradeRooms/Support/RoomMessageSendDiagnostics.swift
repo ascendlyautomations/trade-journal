@@ -7,7 +7,7 @@ enum RoomMessageSendDiagnostics: Sendable {
     case serverRejectedRLS
     case other
 
-    var logLabel: String {
+    nonisolated var logLabel: String {
         switch self {
         case .membershipNotConfirmed:
             return "membership_not_confirmed"

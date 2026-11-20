@@ -38,6 +38,7 @@ import {
   registerBroadcastChatHandlers,
   trimBroadcastChatMessages,
   type BroadcastChatMessage,
+  type BroadcastChatReplyReference,
 } from "./tradeRoomBroadcastChat.ts"
 import {
   publishBroadcastHandState,
@@ -2014,6 +2015,7 @@ export async function sendTradeRoomBroadcastChatMessage(options: {
   displayName: string
   avatarUrl: string | null
   text: string
+  replyTo?: BroadcastChatReplyReference | null
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!broadcastRoom) {
     return { ok: false, error: "Not connected to the stream." }
@@ -2031,6 +2033,7 @@ export async function sendTradeRoomBroadcastChatMessage(options: {
       avatarUrl: normalized.avatarUrl,
       text: options.text.trim(),
       sentAt: Date.now(),
+      replyTo: options.replyTo ?? null,
     }
     chatMessages = trimBroadcastChatMessages([...chatMessages, selfMsg])
     emit()

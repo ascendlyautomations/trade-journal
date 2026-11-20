@@ -79,4 +79,24 @@ describe("Trade Room broadcast — live chat", () => {
     assert.ok(msg)
     assert.equal(msg.text, "hi")
   })
+
+  it("parses optional reply snapshot fields", () => {
+    const payload = new TextEncoder().encode(
+      JSON.stringify({
+        type: "chat",
+        userId: "u1",
+        displayName: "User",
+        text: "reply body",
+        sentAt: 2,
+        replyToMessageId: "host-1",
+        replyToUserId: "host",
+        replyToDisplayName: "Host",
+        replyToTextPreview: "hello there",
+      })
+    )
+    const msg = parseBroadcastChatPayload(payload, "u1")
+    assert.ok(msg)
+    assert.equal(msg?.replyTo?.messageId, "host-1")
+    assert.equal(msg?.replyTo?.displayName, "Host")
+  })
 })

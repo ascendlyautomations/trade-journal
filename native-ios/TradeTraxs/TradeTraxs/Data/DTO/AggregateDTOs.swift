@@ -940,6 +940,7 @@ nonisolated enum RoomDTO {
         var role: String?
         var joined_at: String?
         var is_favorited: Bool?
+        var notification_enabled: Bool?
     }
 
     /// Web Community `loadMemberRooms` row (`room_members` + rooms embed).

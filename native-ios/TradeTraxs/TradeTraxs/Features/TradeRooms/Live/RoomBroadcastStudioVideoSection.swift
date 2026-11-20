@@ -5,35 +5,47 @@ import SwiftUI
 struct RoomBroadcastStudioVideoSection: View {
     @Bindable var coordinator: RoomBroadcastCoordinator
     @Binding var isFullscreen: Bool
+    /// Viewer sheet while typing: short live strip; does not recreate the video renderer.
+    var isCompactForChatComposer: Bool = false
     @Environment(\.themeColors) private var colors
+
+    private var compactVideoHeight: CGFloat { 56 }
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             Color.black
             BroadcastStreamZoomableVideoView(
-                track: coordinator.videoTrackForDisplay,
+                track: coordinator.videoTrackForExpandedViewer,
                 isFullscreen: false
             )
             .id(coordinator.programVideoTrackRevision)
             HStack(spacing: ExperienceSpacing.xs) {
                 RoomBroadcastStreamPlaybackMuteButton(coordinator: coordinator)
-                Button {
-                    isFullscreen = true
-                } label: {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(8)
-                        .background(Circle().fill(Color.black.opacity(0.55)))
+                if !isCompactForChatComposer {
+                    Button {
+                        isFullscreen = true
+                    } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(8)
+                            .background(Circle().fill(Color.black.opacity(0.55)))
+                    }
+                    .buttonStyle(.experiencePlain)
+                    .accessibilityLabel("Fullscreen")
                 }
-                .buttonStyle(.experiencePlain)
-                .accessibilityLabel("Fullscreen")
             }
-            .padding(ExperienceSpacing.sm)
+            .padding(isCompactForChatComposer ? ExperienceSpacing.xs : ExperienceSpacing.sm)
         }
-        .aspectRatio(16 / 9, contentMode: .fit)
         .frame(maxWidth: .infinity)
+        .frame(height: isCompactForChatComposer ? compactVideoHeight : nil)
+        .aspectRatio(isCompactForChatComposer ? nil : 16 / 9, contentMode: .fit)
         .clipped()
+        .accessibilityIdentifier(
+            isCompactForChatComposer
+                ? "tradeRooms.broadcast.video.compact"
+                : "tradeRooms.broadcast.video.expanded"
+        )
     }
 }
 

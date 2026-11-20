@@ -77,7 +77,7 @@ extension View {
     /// Tab-shell overlay when the broadcast viewer sheet is minimized (sheet is not presented).
     func broadcastSpeakInviteOverlay(coordinator: RoomBroadcastCoordinator) -> some View {
         overlay {
-            if let notice = coordinator.speakInviteNotice, !coordinator.isViewerPresented {
+            if let notice = coordinator.speakInviteNotice, coordinator.viewerPresentation != .expanded {
                 BroadcastSpeakInviteOverlay(notice: notice, coordinator: coordinator)
                     .zIndex(100_000)
             }

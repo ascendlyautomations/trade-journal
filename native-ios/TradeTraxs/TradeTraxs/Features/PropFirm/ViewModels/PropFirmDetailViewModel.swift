@@ -4,16 +4,19 @@ import Observation
 @Observable
 @MainActor
 final class PropFirmDetailViewModel {
-    let accountID: TradingAccountID
+    private(set) var accountID: TradingAccountID
     private(set) var snapshot: PropFirmStatusSnapshot?
     private(set) var isLoading = false
     private(set) var errorMessage: String?
+    private(set) var propFirmAccounts: [TradingAccount] = []
+    private(set) var ownerProfileID: ProfileID?
 
     private let trades: any TradeRepository
     private let rpc: (any RPCClient)?
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
     private let realtimeHub: RealtimeHub?
+    private let navigationCoordinator: NavigationCoordinator?
 
     private var hasLoaded = false
 
@@ -23,7 +26,8 @@ final class PropFirmDetailViewModel {
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
         rpc: (any RPCClient)? = nil,
-        realtimeHub: RealtimeHub? = nil
+        realtimeHub: RealtimeHub? = nil,
+        navigationCoordinator: NavigationCoordinator? = nil
     ) {
         self.accountID = accountID
         self.trades = trades
@@ -31,11 +35,51 @@ final class PropFirmDetailViewModel {
         self.session = session
         self.detailCache = detailCache
         self.realtimeHub = realtimeHub
+        self.navigationCoordinator = navigationCoordinator
     }
 
     func loadIfNeeded() async {
         guard !hasLoaded else { return }
         await refresh()
+    }
+
+    var accountsForMenu: [TradingAccount] {
+        let selected = accountID
+        return OwnerAccountDropdownSupport.menuAccounts(
+            profileID: ownerProfileID,
+            fallback: propFirmAccounts,
+            preservingSelection: selected
+        ).filter(\.isPropFirmAccount)
+    }
+
+    func accountMenuTitle(for account: TradingAccount) -> String {
+        TradingAccountDisplay.ownerDropdownLine(for: account)
+    }
+
+    var selectedAccountMenuTitle: String {
+        if let account = propFirmAccounts.first(where: { $0.id == accountID }) {
+            return accountMenuTitle(for: account)
+        }
+        return snapshot?.accountName ?? "Prop account"
+    }
+
+    func selectAccount(_ id: TradingAccountID) async {
+        guard id != accountID else { return }
+        guard propFirmAccounts.contains(where: { $0.id == id && $0.isPropFirmAccount }) else { return }
+        accountID = id
+        await refresh()
+    }
+
+    func openManageAccounts() {
+        navigationCoordinator?.open(.settingsStack([.home, .tradingAccounts]))
+    }
+
+    func openPayoutsPage() {
+        navigationCoordinator?.pushHome(.propFirmPayouts(accountID))
+    }
+
+    static func payoutEntryTitle(hasRecordedPayouts: Bool) -> String {
+        hasRecordedPayouts ? "Payouts" : "Record Payout"
     }
 
     func refresh() async {
@@ -55,6 +99,27 @@ final class PropFirmDetailViewModel {
         }
 
         do {
+            if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+                let latestUserID = await session.currentUserID
+                guard SessionViewerIdentity.shouldCommit(
+                    resolved: profileID,
+                    userID: latestUserID,
+                    demoExperienceActive: AppLaunchController.shared.isDemoExperienceActive
+                ) else {
+                    if let latestUserID, ProfileID(latestUserID.rawValue) != profileID {
+                        await refresh()
+                    } else if snapshot == nil {
+                        errorMessage = SessionViewerIdentity.sessionUnavailableMessage
+                    }
+                    isLoading = false
+                    return
+                }
+            }
+
+            ownerProfileID = profileID
+            let accounts = try await loadTradingAccounts(profileID: profileID)
+            propFirmAccounts = accounts.filter(\.isPropFirmAccount)
+
             if let rpc, !ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
                 do {
                     let result = try await PropFirmBootstrapLoader.load(
@@ -78,32 +143,6 @@ final class PropFirmDetailViewModel {
                 } catch {
                     // Fall through to legacy REST path.
                 }
-            }
-
-            let accounts: [TradingAccount]
-            if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
-                let latestUserID = await session.currentUserID
-                guard SessionViewerIdentity.shouldCommit(
-                    resolved: profileID,
-                    userID: latestUserID,
-                    demoExperienceActive: AppLaunchController.shared.isDemoExperienceActive
-                ) else {
-                    if let latestUserID, ProfileID(latestUserID.rawValue) != profileID {
-                        await refresh()
-                    } else if snapshot == nil {
-                        errorMessage = SessionViewerIdentity.sessionUnavailableMessage
-                    }
-                    isLoading = false
-                    return
-                }
-                accounts = PropFirmFixtures.accounts(owner: profileID)
-                SessionAccountsStore.shared.seed(accounts, for: profileID, detailCache: detailCache)
-            } else {
-                accounts = try await SessionAccountsStore.shared.accounts(
-                    for: profileID,
-                    detailCache: detailCache,
-                    repository: trades
-                )
             }
 
             guard let account = accounts.first(where: { $0.id == accountID }),
@@ -164,4 +203,17 @@ final class PropFirmDetailViewModel {
     }
 
     func onDisappear() {}
+
+    private func loadTradingAccounts(profileID: ProfileID) async throws -> [TradingAccount] {
+        if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+            let accounts = PropFirmFixtures.accounts(owner: profileID)
+            SessionAccountsStore.shared.seed(accounts, for: profileID, detailCache: detailCache)
+            return accounts
+        }
+        return try await SessionAccountsStore.shared.accounts(
+            for: profileID,
+            detailCache: detailCache,
+            repository: trades
+        )
+    }
 }

@@ -7,11 +7,11 @@ extension View {
         imagePipeline: any ImagePipeline
     ) -> some View {
         sheet(isPresented: Binding(
-            get: { coordinator.isViewerPresented },
+            get: { coordinator.viewerPresentation == .expanded },
             set: { presented in
                 if presented {
                     coordinator.presentViewer()
-                } else {
+                } else if coordinator.viewerPresentation == .expanded {
                     coordinator.minimizeViewer()
                 }
             }
@@ -28,7 +28,8 @@ extension View {
                 .experienceSheetChrome(
                     detents: [.large],
                     dragIndicator: .hidden,
-                    interactiveDismiss: false
+                    interactiveDismiss: false,
+                    keyboardDoneToolbar: false
                 )
             }
         }

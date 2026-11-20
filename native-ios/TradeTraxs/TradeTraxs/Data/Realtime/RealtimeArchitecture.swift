@@ -6,6 +6,7 @@ nonisolated enum RealtimeChannelKind: String, Sendable {
     case conversation
     case room
     case profile
+    case broadcast
 }
 
 nonisolated struct RealtimeChannelID: Hashable, Sendable {
@@ -374,6 +375,24 @@ nonisolated final class RealtimeHub: @unchecked Sendable {
             return Self.emptyMessageWatch(routeKey: "notifications:\(userID)")
         }
         return live.watchNotifications(userID: userID, accessToken: accessToken, debugOwner: debugOwner)
+    }
+
+    /// Trade Room livestream — session-scoped interactive tables (hands, invites, grants, blocks, session row).
+    func watchBroadcastInteractiveSession(
+        roomID: RoomID,
+        sessionID: String,
+        accessToken: String?,
+        debugOwner: String? = nil
+    ) -> RealtimeMessageWatch {
+        guard let live = realtime as? LiveSupabaseRealtimeProvider else {
+            return Self.emptyMessageWatch(routeKey: "broadcast:\(sessionID)")
+        }
+        return live.watchBroadcastInteractiveSession(
+            roomID: roomID.rawValue,
+            sessionID: sessionID,
+            accessToken: accessToken,
+            debugOwner: debugOwner
+        )
     }
 
 }

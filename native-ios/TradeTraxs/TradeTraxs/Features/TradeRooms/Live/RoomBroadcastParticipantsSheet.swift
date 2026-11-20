@@ -20,21 +20,7 @@ struct RoomBroadcastParticipantsSheet: View {
                             .foregroundStyle(colors.secondaryText)
                     } else {
                         ForEach(coordinator.rosterParticipants) { participant in
-                            HStack(spacing: ExperienceSpacing.sm) {
-                                rosterAvatar(for: participant)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(participant.displayName)
-                                        .experienceStyle(.body, color: colors.primaryText)
-                                    Text(participant.roleLabel + (participant.isLocal ? " · you" : ""))
-                                        .experienceStyle(.caption, color: colors.secondaryText)
-                                }
-                                Spacer(minLength: 0)
-                                if participant.isHandRaised {
-                                    Image(systemName: "hand.raised.fill")
-                                        .foregroundStyle(colors.accent)
-                                }
-                            }
-                            .experienceDashboardListRow()
+                            participantRow(participant)
                         }
                     }
                 }
@@ -67,22 +53,28 @@ struct RoomBroadcastParticipantsSheet: View {
         }
     }
 
-    @ViewBuilder
-    private func rosterAvatar(for participant: BroadcastRosterParticipant) -> some View {
-        if let profile = coordinator.chatProfileCache.profile(forUserId: participant.identity) {
-            ExploreProfileAvatarView(
-                profile: profile,
+    private func participantRow(_ participant: BroadcastRosterParticipant) -> some View {
+        HStack(spacing: ExperienceSpacing.sm) {
+            RoomBroadcastProfileIdentityControl(
+                userId: participant.identity,
+                displayName: participant.displayName,
+                username: coordinator.chatProfileCache.profile(forUserId: participant.identity)?.username
+                    ?? participant.identity,
+                avatarDiameter: 36,
+                coordinator: coordinator,
                 imagePipeline: imagePipeline,
-                diameter: 36
+                profile: coordinator.chatProfileCache.profile(forUserId: participant.identity)
             )
-        } else {
-            ExperienceAvatar(
-                initials: ProfileDisplay.initials(
-                    displayName: participant.displayName,
-                    username: participant.identity
-                ),
-                size: 36
-            )
+            VStack(alignment: .leading, spacing: 2) {
+                Text(participant.roleLabel + (participant.isLocal ? " · you" : ""))
+                    .experienceStyle(.caption, color: colors.secondaryText)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if participant.isHandRaised {
+                Image(systemName: "hand.raised.fill")
+                    .foregroundStyle(colors.accent)
+            }
         }
+        .experienceDashboardListRow()
     }
 }

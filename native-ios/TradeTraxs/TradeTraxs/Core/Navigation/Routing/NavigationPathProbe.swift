@@ -52,6 +52,7 @@ nonisolated enum NavigationPathProbeFormatter {
         case .tradingDay: return "tradingDay"
         case .tools: return "tools"
         case .propFirm: return "propFirm"
+        case .propFirmPayouts: return "propFirmPayouts"
         case .analyst: return "analyst"
         case .backtest: return "backtest"
         case .achievements: return "achievements"

@@ -229,9 +229,13 @@ final class TradeRoomsHomeViewModel {
         filteredDiscoverable(from: popularItems, section: "popular")
     }
 
-    /// All tab — server `popular` keyset (member count desc), excluding joined rooms.
+    /// All tab — server `popular` keyset (member count desc), excluding joined and viewer-owned rooms.
     var allScopeDiscoverableRooms: [ExploreRoomSuggestion] {
-        popularDiscoverableRooms
+        filteredDiscoverable(
+            from: popularItems,
+            section: "popular_all",
+            excludeViewerOwnedRoom: true
+        )
     }
 
     var allScopeDisplayedDiscoverableRooms: [ExploreRoomSuggestion] {
@@ -281,9 +285,9 @@ final class TradeRoomsHomeViewModel {
         return filtered
     }
 
-    /// Authoritative Your Rooms rows from home bootstrap RPC (`is_owner` / `is_member`).
+    /// Joined tab — viewer-owned room pinned first; includes cached ownership before bootstrap catches up.
     var yourRooms: [ExploreRoomSuggestion] {
-        yourRoomsItems
+        joinedDiscoveryRoomsOrdered()
     }
 
     var favoriteRooms: [ExploreRoomSuggestion] {
@@ -613,6 +617,13 @@ final class TradeRoomsHomeViewModel {
         }
     }
 
+    /// Keeps All/Popular payloads aligned after create — filtering also hides owned rows client-side.
+    private func stripViewerOwnedRoomFromDiscoverablePayloads(roomID: RoomID) {
+        suggestedItems.removeAll { $0.id == roomID }
+        popularItems.removeAll { $0.id == roomID }
+        searchDiscoveryRooms.removeAll { $0.id == roomID }
+    }
+
     private func insertJoinedYourRoomIfNeeded(_ room: ExploreRoomSuggestion) {
         var row = TradeRoomMembershipSync.patchExploreRoomSuggestion(room)
         row.isMember = true
@@ -776,6 +787,7 @@ final class TradeRoomsHomeViewModel {
             TradeRoomCreationIntent.shared.noteCreatedRoom(room)
             upsertOwnedRoomInYourRooms(room)
             syncOwnedTradeRoomPresentationFromLocalStores()
+            stripViewerOwnedRoomFromDiscoverablePayloads(roomID: room.id)
         }
         Task {
             if let viewerID {
@@ -955,18 +967,45 @@ final class TradeRoomsHomeViewModel {
 
     private func filteredDiscoverable(
         from source: [ExploreRoomSuggestion],
-        section: String
+        section: String,
+        excludeViewerOwnedRoom: Bool = false
     ) -> [ExploreRoomSuggestion] {
-        let filtered = source.filter { !joinedRoomIDs.contains($0.id) }
+        let filtered = source.filter { room in
+            guard !joinedRoomIDs.contains(room.id) else { return false }
+            if excludeViewerOwnedRoom, isViewerOwnedDiscoveryRoom(room) { return false }
+            return true
+        }
         #if DEBUG
         RoomDiscoveryProbe.logClientFilter(
             section: section,
             before: source.count,
             after: filtered.count,
-            reason: "alreadyJoinedInInbox"
+            reason: excludeViewerOwnedRoom
+                ? "alreadyJoinedOrViewerOwned"
+                : "alreadyJoinedInInbox"
         )
         #endif
         return filtered
+    }
+
+    /// Joined list presentation — owned room always first (member-count order from RPC ignored).
+    private func joinedDiscoveryRoomsOrdered() -> [ExploreRoomSuggestion] {
+        let pinnedOwned = viewerOwnedRoom
+            ?? yourRoomsItems.first(where: isViewerOwnedDiscoveryRoom)
+        guard let pinnedOwned else { return yourRoomsItems }
+        var remainder = yourRoomsItems.filter { $0.id != pinnedOwned.id }
+        remainder.sort { lhs, rhs in
+            if lhs.viewerIsOwner != rhs.viewerIsOwner { return lhs.viewerIsOwner }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+        return [pinnedOwned] + remainder
+    }
+
+    private func isViewerOwnedDiscoveryRoom(_ room: ExploreRoomSuggestion) -> Bool {
+        if room.viewerIsOwner { return true }
+        if let viewerID, room.ownerProfileID == viewerID { return true }
+        if let ownedID = viewerOwnedRoom?.id, room.id == ownedID { return true }
+        return false
     }
 
     private func loadHomeBootstrap(forceNetwork: Bool) async {
