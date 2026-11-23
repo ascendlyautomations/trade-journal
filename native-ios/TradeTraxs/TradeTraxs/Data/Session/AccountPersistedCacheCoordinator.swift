@@ -11,6 +11,7 @@ nonisolated enum AccountPersistedCacheCoordinator {
 
     static func noteAccountPatched(_ account: TradingAccount, viewerID: ProfileID) {
         BackendV2BootstrapDiskCache.patchAccount(account, viewerID: viewerID.rawValue)
+        DashboardAnalyticsDiskCache.patchAccount(account, viewerID: viewerID)
         Task { @MainActor in
             ViewerSyncStateRuntime.noteLocalMutation(viewerID: viewerID)
         }

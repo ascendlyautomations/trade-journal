@@ -12,22 +12,78 @@ final class ReportsScreenViewModel: ScreenLifecycle {
     var availableYears: [Int] = []
     var showsPeriodPicker = false
     var showsYearPicker = false
+    var showsCustomRangeSheet = false
+    var draftCustomRangeStart: Date?
+    var draftCustomRangeEnd: Date?
+    var draftCustomMonth: Int = 1
+    var draftCustomYear: Int = 2_026
+    private(set) var filters = TradingReportSessionStore.shared.filters
+    private(set) var accounts: [TradingAccount] = []
+    private(set) var profileID: ProfileID?
 
     private let tradingReports: any TradingReportRepository
     private let psychologyReports: any PsychologyReportRepository
     private let navigationCoordinator: NavigationCoordinator
+    private let trades: (any TradeRepository)?
+    private let session: (any SessionProviding)?
+    private let detailCache: DetailPresentationCache?
     private var bootstrapTask: Task<Void, Never>?
 
     init(
         tradingReports: any TradingReportRepository,
         psychologyReports: any PsychologyReportRepository,
-        navigationCoordinator: NavigationCoordinator
+        navigationCoordinator: NavigationCoordinator,
+        trades: (any TradeRepository)? = nil,
+        session: (any SessionProviding)? = nil,
+        detailCache: DetailPresentationCache? = nil
     ) {
         self.tradingReports = tradingReports
         self.psychologyReports = psychologyReports
         self.navigationCoordinator = navigationCoordinator
+        self.trades = trades
+        self.session = session
+        self.detailCache = detailCache
         state.cards = Self.placeholderPerformanceCards()
         state.psychologyCards = Self.placeholderPsychologyCards()
+    }
+
+    var accountsForMenu: [TradingAccount] {
+        let selectedID: TradingAccountID? = {
+            if case .account(let id) = filters.accountFilter { return id }
+            return nil
+        }()
+        return OwnerAccountDropdownSupport.menuAccounts(
+            profileID: profileID,
+            fallback: accounts,
+            preservingSelection: selectedID,
+            detailCache: detailCache
+        )
+    }
+
+    var accountFilterTitle: String {
+        switch filters.accountFilter {
+        case .all: return "All Accounts"
+        case .account(let id):
+            if let account = accounts.first(where: { $0.id == id }) {
+                return TradingAccountDisplay.ownerDropdownLine(for: account)
+            }
+            return "Account"
+        }
+    }
+
+    func setAccountFilter(_ filter: DashboardAccountFilter) {
+        ExperienceHaptics.play(.selection)
+        filters.accountFilter = filter
+        TradingReportSessionStore.shared.filters.accountFilter = filter
+        Task { await refresh() }
+    }
+
+    func openManageAccounts() {
+        navigationCoordinator.pushHome(.settings(.tradingAccounts))
+    }
+
+    func syncFiltersFromSession() {
+        filters = TradingReportSessionStore.shared.filters
     }
 
     var phase: ReportsState.Phase { state.phase }
@@ -76,6 +132,56 @@ final class ReportsScreenViewModel: ScreenLifecycle {
     func openYearlyReport(year: Int) {
         showsYearPicker = false
         ReportsNavigation.openYearlyDetail(year: year, using: navigationCoordinator)
+    }
+
+    func openCustomRangeSheet() {
+        ExperienceHaptics.play(.selection)
+        let defaults = TradingReportCustomRangeSupport.defaultMonthSelection()
+        draftCustomYear = defaults.year
+        draftCustomMonth = defaults.month
+        draftCustomRangeStart = defaults.start
+        draftCustomRangeEnd = defaults.end
+        showsCustomRangeSheet = true
+    }
+
+    var customRangeValidationMessage: String? {
+        TradingReportCustomRangeSupport.validationMessage(
+            start: draftCustomRangeStart,
+            end: draftCustomRangeEnd
+        )
+    }
+
+    var canGenerateCustomReport: Bool {
+        TradingReportCustomRangeSupport.canGenerate(
+            start: draftCustomRangeStart,
+            end: draftCustomRangeEnd
+        )
+    }
+
+    func applyQuickMonthSelection() {
+        let range = TradingReportCustomRangeSupport.monthRange(
+            year: draftCustomYear,
+            month: draftCustomMonth
+        )
+        draftCustomRangeStart = range.start
+        draftCustomRangeEnd = range.end
+    }
+
+    func generateCustomReport() {
+        guard canGenerateCustomReport,
+              let start = draftCustomRangeStart,
+              let end = draftCustomRangeEnd
+        else { return }
+        ExperienceHaptics.play(.selection)
+        let calendar = TradingReportPeriods.eastern
+        let interval = DashboardScopeFilterSupport.normalizedCustomInterval(
+            start: start,
+            end: end,
+            calendar: calendar
+        )
+        let ref = TradingReportCustomRangeRef.from(interval: interval)
+        showsCustomRangeSheet = false
+        ReportsNavigation.openDetail(ref.reportID, using: navigationCoordinator)
     }
 
     func primaryAction(for card: PsychologyReportCardModel) {
@@ -139,6 +245,10 @@ final class ReportsScreenViewModel: ScreenLifecycle {
             state = loading
         }
 
+        syncFiltersFromSession()
+        await loadAccountsIfNeeded()
+        sanitizeAccountFilter()
+
         do {
             async let performance = ReportsBootstrap.load(
                 ReportsBootstrap.Context(tradingReports: tradingReports, forceNetwork: forceNetwork)
@@ -170,6 +280,35 @@ final class ReportsScreenViewModel: ScreenLifecycle {
             next.generatingPeriod = nil
             state = next
         }
+    }
+
+    private func loadAccountsIfNeeded() async {
+        if let userID = await session?.currentUserID {
+            profileID = ProfileID(userID.rawValue)
+        }
+        guard let profileID else { return }
+        if TraxsProPreviewSupport.isReportsPreviewActive
+            || JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID) {
+            accounts = DemoCanonicalDataset.accounts().filter(\.isActive)
+            return
+        }
+        guard accounts.isEmpty, let trades else { return }
+        do {
+            let loaded = try await trades.accounts(for: profileID)
+            accounts = loaded.filter(\.isActive)
+        } catch {
+            // Account menu falls back to all accounts only.
+        }
+    }
+
+    private func sanitizeAccountFilter() {
+        let sanitized = DashboardAccountScopePolicy.sanitizedFilter(
+            filters.accountFilter,
+            accounts: accounts
+        )
+        guard sanitized != filters.accountFilter else { return }
+        filters.accountFilter = sanitized
+        TradingReportSessionStore.shared.filters.accountFilter = sanitized
     }
 
     private static func placeholderPerformanceCards() -> [ReportTypeCardModel] {

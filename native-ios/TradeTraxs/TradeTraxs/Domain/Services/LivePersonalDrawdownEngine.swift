@@ -7,42 +7,107 @@ nonisolated enum LivePersonalDrawdownEngine {
 
     // MARK: - Account config (web parse / gear read)
 
+    /// Opening equity from `accounts.account_size` — never inferred from trade P&L history.
+    static func resolvedStartingBalance(for account: TradingAccount) -> Decimal? {
+        TradingAccountStartingBalancePolicy.resolvedStartingBalance(for: account)
+    }
+
     static func config(from account: TradingAccount) -> LivePersonalDrawdownConfig? {
         guard PropFirmPayoutPolicy.supportsLiveWithdrawal(for: account) else { return nil }
         guard let stored = account.livePersonalDrawdown,
               let limit = stored.limitAmount,
               limit > 0
         else { return nil }
-        return LivePersonalDrawdownConfig(limitAmount: limit, limitType: stored.limitType)
+        return LivePersonalDrawdownConfig(
+            limitAmount: limit,
+            limitType: stored.limitType,
+            floorCap: stored.floorCap
+        )
     }
 
-    static func stored(maxDrawdown: Decimal?, drawdownTypeRaw: String?) -> LivePersonalDrawdownStored {
+    static func stored(
+        maxDrawdown: Decimal?,
+        drawdownTypeRaw: String?,
+        floorCap: Decimal? = nil
+    ) -> LivePersonalDrawdownStored {
         let limitType = mapDrawdownType(drawdownTypeRaw) ?? .fixed
         let limit: Decimal? = {
             guard let maxDrawdown, maxDrawdown > 0 else { return nil }
             return maxDrawdown
         }()
-        return LivePersonalDrawdownStored(limitAmount: limit, limitType: limitType)
+        let cap: Decimal? = {
+            guard let floorCap, floorCap > 0 else { return nil }
+            return floorCap
+        }()
+        return LivePersonalDrawdownStored(limitAmount: limit, limitType: limitType, floorCap: cap)
     }
 
-    static func gearDraft(from account: TradingAccount) -> (limitDigits: String, limitType: LivePersonalDrawdownType) {
+    static func gearDraft(
+        from account: TradingAccount
+    ) -> (limitDigits: String, limitType: LivePersonalDrawdownType, floorCapDigits: String) {
         guard PropFirmPayoutPolicy.supportsLiveWithdrawal(for: account) else {
-            return ("", .fixed)
+            return ("", .fixed, "")
         }
         let stored = account.livePersonalDrawdown ?? LivePersonalDrawdownStored(limitAmount: nil, limitType: .fixed)
         let digits: String = {
             guard let limit = stored.limitAmount, limit > 0 else { return "" }
             return NSDecimalNumber(decimal: limit).stringValue
         }()
-        return (digits, stored.limitType)
+        let capDigits: String = {
+            guard let cap = stored.floorCap, cap > 0 else { return "" }
+            return NSDecimalNumber(decimal: cap).stringValue
+        }()
+        return (digits, stored.limitType, capDigits)
     }
 
-    static func buildAccountUpdate(config: LivePersonalDrawdownConfig?) -> (maxDrawdown: Double?, drawdownType: String?) {
+    static func buildAccountUpdate(
+        config: LivePersonalDrawdownConfig?
+    ) -> (maxDrawdown: Double?, drawdownType: String?, floorCap: Double?) {
         guard let config, config.limitAmount > 0 else {
-            return (nil, nil)
+            return (nil, nil, nil)
         }
-        let typeRaw = config.limitType == .fixed ? "static" : "end_of_day_trailing"
-        return (NSDecimalNumber(decimal: config.limitAmount).doubleValue, typeRaw)
+        let typeRaw = wireDrawdownTypeRaw(for: config.limitType)
+        let cap: Double? = {
+            guard let cap = config.floorCap, cap > 0 else { return nil }
+            return NSDecimalNumber(decimal: cap).doubleValue
+        }()
+        return (
+            NSDecimalNumber(decimal: config.limitAmount).doubleValue,
+            typeRaw,
+            cap
+        )
+    }
+
+    static func wireDrawdownTypeRaw(for limitType: LivePersonalDrawdownType) -> String {
+        limitType == .fixed ? "static" : "end_of_day_trailing"
+    }
+
+    /// Dashboard bootstrap wire fields for live/broker/personal manual-ledger accounts.
+    /// PostgREST patch body — always emits JSON null when clearing drawdown columns.
+    static func makeAccountDrawdownPatchBody(
+        config: LivePersonalDrawdownConfig?
+    ) -> LivePersonalDrawdownAccountPatchBody {
+        let patch = buildAccountUpdate(config: config)
+        return LivePersonalDrawdownAccountPatchBody(
+            max_drawdown: patch.maxDrawdown,
+            drawdown_type: patch.drawdownType,
+            drawdown_floor_cap: patch.floorCap
+        )
+    }
+
+    static func wireDrawdownFields(
+        from account: TradingAccount
+    ) -> (maxDrawdown: Decimal?, drawdownTypeRaw: String?, floorCap: Decimal?) {
+        guard PropFirmPayoutPolicy.supportsLiveWithdrawal(for: account) else {
+            return (nil, nil, nil)
+        }
+        guard let stored = account.livePersonalDrawdown,
+              let limit = stored.limitAmount,
+              limit > 0
+        else {
+            return (nil, nil, nil)
+        }
+        return (limit, wireDrawdownTypeRaw(for: stored.limitType), stored.floorCap)
     }
 
     // MARK: - Equity series
@@ -60,7 +125,9 @@ nonisolated enum LivePersonalDrawdownEngine {
         ledgerEntries: [AccountPayoutEntry],
         period: PeriodContext
     ) -> [LivePersonalDrawdownEquitySample] {
-        let startingBalance = PropFirmMetrics.parseAccountSize(account.size)
+        guard let startingBalance = resolvedStartingBalance(for: account) else {
+            return []
+        }
         let accountID = account.id
         let allEvents = buildLifetimeTimeline(
             accountID: accountID,
@@ -272,15 +339,35 @@ nonisolated enum LivePersonalDrawdownEngine {
     }
 
     private static func initialState(startingBalance: Decimal, config: LivePersonalDrawdownConfig) -> DrawdownState {
-        DrawdownState(
+        let candidate = startingBalance - config.limitAmount
+        return DrawdownState(
             baseline: startingBalance,
             highWaterMark: startingBalance,
-            trailingFloor: startingBalance - config.limitAmount
+            trailingFloor: applyTrailingFloorCap(candidate: candidate, priorFloor: candidate, config: config)
         )
     }
 
+    private static func applyTrailingFloorCap(
+        candidate: Decimal,
+        priorFloor: Decimal,
+        config: LivePersonalDrawdownConfig
+    ) -> Decimal {
+        let raised = max(priorFloor, candidate)
+        guard config.limitType == .trailing, let cap = config.floorCap, cap > 0 else { return raised }
+        return min(raised, cap)
+    }
+
     private static func floorForState(_ state: DrawdownState, config: LivePersonalDrawdownConfig) -> Decimal {
-        config.limitType == .fixed ? state.baseline - config.limitAmount : state.trailingFloor
+        let raw = config.limitType == .fixed ? state.baseline - config.limitAmount : state.trailingFloor
+        return applyDisplayedFloorCap(to: raw, config: config)
+    }
+
+    private static func applyDisplayedFloorCap(
+        to raw: Decimal,
+        config: LivePersonalDrawdownConfig
+    ) -> Decimal {
+        guard let cap = config.floorCap, cap > 0 else { return raw }
+        return min(raw, cap)
     }
 
     private static func applyEventToDrawdownState(
@@ -303,7 +390,11 @@ nonisolated enum LivePersonalDrawdownEngine {
         return DrawdownState(
             baseline: state.baseline,
             highWaterMark: highWaterMark,
-            trailingFloor: max(state.trailingFloor, candidate)
+            trailingFloor: applyTrailingFloorCap(
+                candidate: candidate,
+                priorFloor: state.trailingFloor,
+                config: config
+            )
         )
     }
 
@@ -314,10 +405,15 @@ nonisolated enum LivePersonalDrawdownEngine {
         behavior: LiveWithdrawalDrawdownBehavior
     ) -> DrawdownState {
         guard behavior == .resetToAccount else { return state }
+        let candidate = equityAfterWithdrawal - config.limitAmount
         return DrawdownState(
             baseline: equityAfterWithdrawal,
             highWaterMark: equityAfterWithdrawal,
-            trailingFloor: equityAfterWithdrawal - config.limitAmount
+            trailingFloor: applyTrailingFloorCap(
+                candidate: candidate,
+                priorFloor: candidate,
+                config: config
+            )
         )
     }
 

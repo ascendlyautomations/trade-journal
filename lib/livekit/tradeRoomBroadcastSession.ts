@@ -8,6 +8,12 @@ import {
 } from "./tradeRoomBroadcastVoiceMode.ts"
 import { isBroadcasterConnectedInBroadcastRoom } from "./liveKitRoomService.ts"
 import { deleteLiveKitIngress } from "./liveKitIngressService.ts"
+import {
+  computeBroadcastExpiresAt,
+  isBroadcastPastExpiresAt,
+} from "./tradeRoomBroadcastDurationLimit.ts"
+import { assertBroadcasterMayStartVideoBroadcast } from "./tradeRoomBroadcastBroadcasterCooldown.ts"
+import { endBroadcastIfPastExpiresAt } from "./tradeRoomBroadcastDurationExpiry.ts"
 
 export type TradeRoomBroadcastSource = "browser" | "obs"
 
@@ -31,10 +37,11 @@ export type ActiveTradeRoomBroadcast = {
   /** When push fan-out for go-live ran (at most once per session). */
   goLiveNotifiedAt: string | null
   streamTitle: string | null
+  expiresAt: string | null
 }
 
 const ACTIVE_BROADCAST_SELECT =
-  "id, room_id, broadcaster_user_id, started_at, voice_mode, video_source, broadcast_source, primary_media_publisher_identity, livekit_ingress_id, ingress_status_snapshot, visibility, go_live_notified_at, stream_title"
+  "id, room_id, broadcaster_user_id, started_at, voice_mode, video_source, broadcast_source, primary_media_publisher_identity, livekit_ingress_id, ingress_status_snapshot, visibility, go_live_notified_at, stream_title, expires_at"
 
 function normalizeBroadcastSource(
   raw: string | null | undefined
@@ -86,6 +93,7 @@ function rowToActive(
     goLiveNotifiedAt:
       (row.go_live_notified_at as string | null)?.trim() || null,
     streamTitle: (row.stream_title as string | null)?.trim() || null,
+    expiresAt: (row.expires_at as string | null)?.trim() || null,
   }
 }
 
@@ -181,6 +189,20 @@ export async function getActiveTradeRoomBroadcast(
   const row = data
   if (!row) return null
 
+  if (
+    isBroadcastPastExpiresAt(
+      (row as { expires_at?: string | null }).expires_at ?? null
+    )
+  ) {
+    await endBroadcastIfPastExpiresAt(admin, {
+      id: row.id as string,
+      roomId: row.room_id as string,
+      broadcasterUserId: row.broadcaster_user_id as string,
+      expiresAt: (row as { expires_at?: string | null }).expires_at ?? null,
+    })
+    return null
+  }
+
   if (activeScope === "public_or_viewer") {
     const vis = normalizeVisibilityFromRow(row as Record<string, unknown>)
     if (vis === "preparing") {
@@ -222,6 +244,18 @@ export async function claimTradeRoomBroadcastSession(
 > {
   const { roomId, broadcasterUserId } = options
   await recoverStaleTradeRoomBroadcast(admin, roomId)
+
+  const cooldown = await assertBroadcasterMayStartVideoBroadcast(
+    admin,
+    broadcasterUserId
+  )
+  if (!cooldown.ok) {
+    return {
+      ok: false,
+      status: cooldown.status,
+      error: cooldown.error,
+    }
+  }
 
   const existing = await getActiveTradeRoomBroadcast(admin, roomId, {
     activeScope: "any",
@@ -303,6 +337,7 @@ export async function claimTradeRoomBroadcastSession(
   }
 
   const isObsSession = options.videoSource === "obs"
+  const expiresAt = isObsSession ? null : computeBroadcastExpiresAt()
 
   const { data, error } = await broadcastsTable(admin)
     .insert({
@@ -314,6 +349,7 @@ export async function claimTradeRoomBroadcastSession(
       /** OBS encoder sessions use ingress; keep in sync with UI and status API from row one. */
       broadcast_source: isObsSession ? "obs" : "browser",
       visibility: isObsSession ? "preparing" : "public",
+      expires_at: expiresAt,
     })
     .select(ACTIVE_BROADCAST_SELECT)
     .single()

@@ -4,6 +4,40 @@ import XCTest
 
 @MainActor
 final class CalendarExperienceTests: XCTestCase {
+    func testMonthlyPnLYAxisScaleTightensAboveTenKPeak() {
+        let scale = CalendarMonthlyPnLYAxisScale.resolve(monthlyValues: [
+            2_400, 10_400, 5_000, 1_800, 0, 0, 0, 0, 0, 0, 0, 0,
+        ])
+        XCTAssertEqual(scale.upperBound, 15_000, accuracy: 1)
+        XCTAssertEqual(scale.tickValues, [0, 5_000, 10_000, 15_000])
+        XCTAssertLessThan(scale.upperBound, 20_000)
+        XCTAssertEqual(scale.lowerBound, 0)
+    }
+
+    func testMonthlyPnLYAxisTickLabelsAbbreviate() {
+        XCTAssertEqual(CalendarMonthlyPnLYAxisScale.formatTickLabel(1_000), "$1K")
+        XCTAssertEqual(CalendarMonthlyPnLYAxisScale.formatTickLabel(14_000), "$14K")
+        XCTAssertEqual(CalendarMonthlyPnLYAxisScale.formatTickLabel(100_000), "$100K")
+        XCTAssertEqual(CalendarMonthlyPnLYAxisScale.formatTickLabel(1_250_000), "$1.25M")
+        XCTAssertEqual(CalendarMonthlyPnLYAxisScale.formatTickLabel(-5_000), "-$5K")
+        XCTAssertEqual(CalendarMonthlyPnLYAxisScale.formatTickLabel(250), "$250")
+        XCTAssertEqual(CalendarMonthlyPnLYAxisScale.formatTickLabel(0), "$0")
+    }
+
+    func testMonthlyPnLYAxisScaleHandlesAllNegative() {
+        let scale = CalendarMonthlyPnLYAxisScale.resolve(monthlyValues: [-400, -3_200, -900])
+        XCTAssertEqual(scale.upperBound, 0)
+        XCTAssertLessThan(scale.lowerBound, -3_200)
+        XCTAssertTrue(scale.tickValues.contains(0))
+    }
+
+    func testMonthlyPnLYAxisScaleUsesFinerStepsForSmallValues() {
+        let scale = CalendarMonthlyPnLYAxisScale.resolve(monthlyValues: [40, 120, 85])
+        XCTAssertEqual(scale.lowerBound, 0)
+        XCTAssertLessThanOrEqual(scale.upperBound, 200)
+        XCTAssertGreaterThanOrEqual(scale.upperBound, 120)
+    }
+
     func testCalendarOutsideMonthOpacityMutesOnlyInDark() {
         XCTAssertEqual(CalendarCellAppearance.outsideMonthCellOpacity(colorScheme: .dark), 0.35)
         XCTAssertEqual(CalendarCellAppearance.outsideMonthCellOpacity(colorScheme: .light), 1)
@@ -112,6 +146,37 @@ final class CalendarExperienceTests: XCTestCase {
         XCTAssertGreaterThan(month.monthSummary.tradeCount, 0)
         XCTAssertGreaterThan(month.monthSummary.tradingDayCount, 0)
         XCTAssertFalse(month.weekSummaries.isEmpty)
+    }
+
+    func testYearOverviewWinRateMatchesTradeWinCounts() {
+        let owner = CalendarFixtures.viewerID
+        let trades = CalendarFixtures.trades(owner: owner)
+        let year = 2026
+        let overview = TradingCalendarAggregator.buildYearOverview(
+            year: year,
+            trades: trades,
+            accountFilter: .all,
+            now: Calendar.current.date(from: DateComponents(year: 2026, month: 12, day: 31))!
+        )
+        var wins = 0
+        var tradeCount = 0
+        for card in overview.months where !card.isFutureMonth {
+            let month = TradingCalendarAggregator.buildMonth(
+                year: year,
+                month: card.month,
+                trades: trades,
+                accountFilter: .all,
+                todayKey: nil
+            )
+            tradeCount += month.monthSummary.tradeCount
+            wins += month.days.values.reduce(0) { $0 + $1.winCount }
+        }
+        guard tradeCount > 0, let rate = overview.tradeWinRate else {
+            XCTFail("Expected year win rate")
+            return
+        }
+        XCTAssertEqual(rate, Decimal(wins) / Decimal(tradeCount), accuracy: 0.0001)
+        XCTAssertLessThanOrEqual(NSDecimalNumber(decimal: rate * 100).doubleValue, 100)
     }
 
     func testYearOverviewMonthTotalsMatchBuildMonth() {

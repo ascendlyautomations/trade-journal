@@ -104,6 +104,9 @@ final class ManageRoomViewModel {
         room = loaded
         editConfiguration = TradeRoomConfiguration(room: loaded, channels: channels)
         savedImageReference = loaded.image
+        #if DEBUG
+        TradeRoomCategoryRuntimeProbe.logManageRoomLoad(room: loaded, source: "applyRoomSnapshot")
+        #endif
     }
 
     private let rooms: any RoomManagementRepository

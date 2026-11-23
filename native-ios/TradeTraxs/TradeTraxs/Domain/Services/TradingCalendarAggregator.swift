@@ -279,8 +279,8 @@ nonisolated enum TradingCalendarAggregator {
         var cards: [TradingYearMonthCard] = []
         var totalNet: Decimal = 0
         var totalTradingDays = 0
-        var winWeighted: Decimal = 0
-        var tradeCountTotal: Decimal = 0
+        var totalWins = 0
+        var totalTrades = 0
         var bestAbbrev: String?
         var bestPnL: Decimal?
 
@@ -298,9 +298,9 @@ nonisolated enum TradingCalendarAggregator {
             if !isFuture {
                 totalNet += summary.netPnL
                 totalTradingDays += summary.tradingDayCount
-                if summary.tradeCount > 0, let rate = summary.tradeWinRate {
-                    winWeighted += rate * Decimal(summary.tradeCount)
-                    tradeCountTotal += Decimal(summary.tradeCount)
+                if summary.tradeCount > 0 {
+                    totalTrades += summary.tradeCount
+                    totalWins += built.days.values.reduce(0) { $0 + $1.winCount }
                 }
                 if summary.tradingDayCount > 0 {
                     if bestPnL == nil || summary.netPnL > (bestPnL ?? 0) {
@@ -337,7 +337,7 @@ nonisolated enum TradingCalendarAggregator {
             )
         }
 
-        let winRate: Decimal? = tradeCountTotal > 0 ? winWeighted / tradeCountTotal : nil
+        let winRate: Decimal? = totalTrades > 0 ? Decimal(totalWins) / Decimal(totalTrades) : nil
 
         return TradingYearOverview(
             year: year,

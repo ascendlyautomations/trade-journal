@@ -38,6 +38,7 @@ import { tradeRoomBroadcastMiniPanelPosition } from "@/lib/livekit/client/tradeR
 import { presentTradeRoomBroadcastStudio } from "@/lib/livekit/client/tradeRoomBroadcastStudioNavigation.ts"
 import { useIsNativeIos } from "@/lib/useIsNativeIos"
 import { useMaxMdViewport } from "@/lib/useMaxMdViewport"
+import TradeRoomBroadcastDurationChrome from "./TradeRoomBroadcastDurationChrome.tsx"
 
 type Props = {
   accessToken: string | null
@@ -237,6 +238,10 @@ export default function TradeRoomBroadcastGlobalChrome({
 
   const streamControls = (
     <div className="mb-2 flex flex-col gap-2">
+      <TradeRoomBroadcastDurationChrome
+        expiresAt={broadcast.status.expiresAt}
+        visible={broadcast.isPublishing}
+      />
       <TradeRoomBroadcastShareScreenControls />
       <TradeRoomBroadcastScreenOverlayControls />
       {statusBanner ? (

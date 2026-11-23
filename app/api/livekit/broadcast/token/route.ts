@@ -70,7 +70,8 @@ export async function POST(req: Request) {
   const session = await mintLiveKitBroadcastViewerToken(
     user.id,
     parsed.roomId,
-    access.displayName
+    access.displayName,
+    active.expiresAt
   )
 
   if (!session) {
@@ -92,5 +93,6 @@ export async function POST(req: Request) {
     primaryMediaPublisherIdentity: active.primaryMediaPublisherIdentity,
     visibility: active.visibility,
     publicLive: active.visibility === "public",
+    expiresAt: active.expiresAt,
   })
 }

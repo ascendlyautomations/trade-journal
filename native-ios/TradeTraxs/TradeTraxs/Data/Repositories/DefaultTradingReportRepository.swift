@@ -14,6 +14,7 @@ actor DefaultTradingReportRepository: TradingReportRepository {
     private var tradeFingerprint: String?
     private var cachedEligibleTrades: [Trade] = []
     private var yearlyCache: [String: TradingYearlyReport] = [:]
+    private var customReportCache: [String: TradingReport] = [:]
     init(
         trades: any TradeRepository,
         session: any SessionProviding,
@@ -28,8 +29,17 @@ actor DefaultTradingReportRepository: TradingReportRepository {
 
     func ensureSnapshot(forceNetwork: Bool) async throws -> TradingReportsSnapshot {
         let eligible = try await loadEligibleTrades(forceNetwork: forceNetwork)
+        let accounts = try await loadAccounts(forceNetwork: forceNetwork)
+        let filters = await ReportsTradeScope.filtersFromSession()
         let preferences = await loadPreferences()
-        let fingerprint = Self.fingerprint(eligible) + ":" + PreferenceComplianceEngine.fingerprint(preferences)
+        let scoped = ReportsTradeScope.scopedTrades(
+            from: eligible,
+            accounts: accounts,
+            filters: filters
+        )
+        let fingerprint = Self.fingerprint(eligible)
+            + ":" + PreferenceComplianceEngine.fingerprint(preferences)
+            + ":" + ReportsTradeScope.filtersFingerprint(filters)
 
         if !forceNetwork,
            let snapshot,
@@ -37,7 +47,7 @@ actor DefaultTradingReportRepository: TradingReportRepository {
             return snapshot
         }
 
-        let reports = TradingReportGenerator.generateAll(trades: eligible, preferences: preferences)
+        let reports = TradingReportGenerator.generateAll(trades: scoped, preferences: preferences)
         let next = TradingReportsSnapshot(
             reports: reports,
             computedAt: Date().timeIntervalSince1970 * 1000
@@ -45,6 +55,7 @@ actor DefaultTradingReportRepository: TradingReportRepository {
         snapshot = next
         tradeFingerprint = fingerprint
         yearlyCache = [:]
+        customReportCache = [:]
 
         return next
     }
@@ -62,7 +73,14 @@ actor DefaultTradingReportRepository: TradingReportRepository {
 
     func availableYears(forceNetwork: Bool) async throws -> [Int] {
         let eligible = try await loadEligibleTrades(forceNetwork: forceNetwork)
-        return TradingYearlyReportGenerator.availableYears(from: eligible)
+        let accounts = try await loadAccounts(forceNetwork: forceNetwork)
+        let filters = await ReportsTradeScope.filtersFromSession()
+        let scoped = ReportsTradeScope.scopedTrades(
+            from: eligible,
+            accounts: accounts,
+            filters: filters
+        )
+        return TradingYearlyReportGenerator.availableYears(from: scoped)
     }
 
     func yearlyReport(
@@ -98,17 +116,52 @@ actor DefaultTradingReportRepository: TradingReportRepository {
         )
     }
 
-    func weekReport(mondayKey: String, forceNetwork: Bool) async throws -> TradingReport {
+    func weekReport(
+        mondayKey: String,
+        filters: TradingReportFilters,
+        forceNetwork: Bool
+    ) async throws -> TradingReport {
         let eligible = try await loadEligibleTrades(forceNetwork: forceNetwork)
+        let accounts = try await loadAccounts(forceNetwork: forceNetwork)
+        let scoped = ReportsTradeScope.scopedTrades(
+            from: eligible,
+            accounts: accounts,
+            filters: filters
+        )
         let preferences = await loadPreferences()
         guard let week = TradingReportWeekRef.parse(reportID: ReportID("week:\(mondayKey)")) else {
             throw AppError.unknown(message: "Report unavailable for week \(mondayKey).")
         }
         return TradingReportGenerator.generate(
-            trades: eligible,
+            trades: scoped,
             week: week,
             preferences: preferences
         )
+    }
+
+    func customReport(
+        for ref: TradingReportCustomRangeRef,
+        filters: TradingReportFilters,
+        forceNetwork: Bool
+    ) async throws -> TradingReport {
+        guard let interval = ref.interval else {
+            throw AppError.unknown(message: "Invalid custom date range.")
+        }
+        let eligible = try await loadEligibleTrades(forceNetwork: forceNetwork)
+        let fingerprint = Self.fingerprint(eligible)
+        let cacheKey = Self.customCacheKey(ref: ref, filters: filters, fingerprint: fingerprint)
+        if !forceNetwork, let cached = customReportCache[cacheKey] {
+            return cached
+        }
+        let preferences = await loadPreferences()
+        let report = TradingReportGenerator.generateCustomRange(
+            trades: eligible,
+            interval: interval,
+            filters: filters,
+            preferences: preferences
+        )
+        customReportCache[cacheKey] = report
+        return report
     }
 
     private func loadPreferences() async -> PreferenceRuleContext? {
@@ -151,7 +204,7 @@ actor DefaultTradingReportRepository: TradingReportRepository {
         }
 
         let loaded: [Trade]
-        if profileID == DemoExperienceSupport.profileID {
+        if JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID) {
             loaded = DemoCanonicalDataset.trades()
         } else if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
             loaded = ProfileTradeFixtures.samples(owner: profileID)
@@ -167,6 +220,24 @@ actor DefaultTradingReportRepository: TradingReportRepository {
         let eligible = loaded.filter { $0.mode != .backtest }
         cachedEligibleTrades = eligible
         return eligible
+    }
+
+    private func loadAccounts(forceNetwork: Bool) async throws -> [TradingAccount] {
+        let userID = await session.currentUserID
+        let demoActive = await AppLaunchController.shared.isDemoExperienceActive
+        guard case .viewer(let profileID) = SessionViewerIdentity.resolve(
+            userID: userID,
+            demoExperienceActive: demoActive
+        ) else {
+            return []
+        }
+        if JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID) {
+            return DemoCanonicalDataset.accounts()
+        }
+        if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+            return []
+        }
+        return try await trades.accounts(for: profileID)
     }
 
     private static func fingerprint(_ trades: [Trade]) -> String {
@@ -188,5 +259,19 @@ actor DefaultTradingReportRepository: TradingReportRepository {
             }
         }()
         return "\(fingerprint):year:\(year):account:\(account):mode:\(filters.accountMode.rawValue)"
+    }
+
+    private static func customCacheKey(
+        ref: TradingReportCustomRangeRef,
+        filters: TradingReportFilters,
+        fingerprint: String
+    ) -> String {
+        let account: String = {
+            switch filters.accountFilter {
+            case .all: return "all"
+            case .account(let id): return id.rawValue
+            }
+        }()
+        return "\(fingerprint):custom:\(ref.startKey):\(ref.endKey):account:\(account):mode:\(filters.accountMode.rawValue)"
     }
 }

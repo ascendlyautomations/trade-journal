@@ -48,6 +48,14 @@ nonisolated protocol SupabaseDatabaseExecuting: Sendable {
         returning type: T.Type
     ) async throws -> T
 
+    /// PostgREST patch with JSON array response — exposes updated row count.
+    func updateReturningRows<Body: Encodable, T: Decodable>(
+        _ body: Body,
+        table: String,
+        query: [URLQueryItem],
+        returning type: T.Type
+    ) async throws -> [T]
+
     /// Bulk-safe PostgREST patch — `return=minimal` (no single-row Accept header).
     func update<Body: Encodable>(
         _ body: Body,
@@ -271,7 +279,20 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
         query: [URLQueryItem],
         returning type: T.Type
     ) async throws -> T {
-        DatabaseRequestDebugLog.write(operation: "UPDATE", target: table, reason: "update-returning")
+        let rows = try await updateReturningRows(body, table: table, query: query, returning: type)
+        guard let first = rows.first else {
+            throw AppError.domain(.notFound(entity: table, id: "update"))
+        }
+        return first
+    }
+
+    func updateReturningRows<Body: Encodable, T: Decodable>(
+        _ body: Body,
+        table: String,
+        query: [URLQueryItem],
+        returning type: T.Type
+    ) async throws -> [T] {
+        DatabaseRequestDebugLog.write(operation: "UPDATE", target: table, reason: "update-returning-rows")
         let data = try transport.encodeJSON(body)
         let response = try await transport.send(
             host: .supabase,
@@ -280,19 +301,14 @@ nonisolated struct SupabaseDatabaseClient: SupabaseDatabaseExecuting {
             queryItems: query,
             headers: [
                 "Prefer": "return=representation",
-                "Accept": "application/vnd.pgrst.object+json",
+                "Accept": "application/json",
             ],
             body: data
         )
-        do {
-            return try transport.decoder.decode(type, from: response)
-        } catch {
-            let rows = try transport.decoder.decode([T].self, from: response)
-            guard let first = rows.first else {
-                throw AppError.domain(.notFound(entity: table, id: "update"))
-            }
-            return first
+        if response.data.isEmpty {
+            return []
         }
+        return try transport.decoder.decode([T].self, from: response)
     }
 
     func update<Body: Encodable>(
@@ -488,6 +504,16 @@ nonisolated struct UnconfiguredSupabaseDatabaseClient: SupabaseDatabaseExecuting
         query: [URLQueryItem],
         returning type: T.Type
     ) async throws -> T {
+        _ = (body, table, query, type)
+        throw AppError.authentication(.notConfigured)
+    }
+
+    func updateReturningRows<Body: Encodable, T: Decodable>(
+        _ body: Body,
+        table: String,
+        query: [URLQueryItem],
+        returning type: T.Type
+    ) async throws -> [T] {
         _ = (body, table, query, type)
         throw AppError.authentication(.notConfigured)
     }

@@ -76,9 +76,15 @@ struct TradeTraxsApp: App {
             .onChange(of: launchController.isDemoExperienceActive) { _, _ in
                 bindAppDelegate(with: launchController.environment)
             }
-            .onChange(of: scenePhase) { _, newPhase in
-                launchController.environment.lifecycle.handle(scenePhase: newPhase)
-                if newPhase == .background {
+            .onChange(of: scenePhase) {
+                launchController.environment.lifecycle.handle(scenePhase: scenePhase)
+                if scenePhase == .background {
+                    if !launchController.environment.isDeferredBootstrapPending {
+                        let supabase = launchController.environment.data.supabase
+                        Task {
+                            await ProductAnalyticsIngestQueue.shared.flush(supabase: supabase)
+                        }
+                    }
                     launchController.environment.navigation.persistState()
                     #if DEBUG
                     if ProcessInfo.processInfo.arguments.contains("-networkDiagnosticAutoEnd") {

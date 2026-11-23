@@ -10,7 +10,7 @@ struct TradingRulesPersonalInsightsSection: View {
 
     private static let infoTitle = "Personal insights"
     private static let infoBody =
-        "These come from the same dashboard engine as Personal Insights: your saved trading rules, loss-streak behavior, and discipline patterns for the current account filter and trade sample."
+        "Same engine as Dashboard Personal Insights: your saved trading rules, loss-streak behavior, and discipline patterns for the current account filter and trade sample."
 
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {

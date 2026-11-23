@@ -215,6 +215,204 @@ final class DashboardExperienceTests: XCTestCase {
         )
     }
 
+    func testAccountEquityChartOpensAtStartingBalanceBeforeFirstTrade() {
+        let profileID = ProfileID("dev.equity.balance")
+        let accountID = TradingAccountID("eq-account")
+        let entry = Date(timeIntervalSince1970: 1_700_000_000)
+        let account = TradingAccount(
+            id: accountID,
+            ownerProfileID: profileID,
+            name: "Funded",
+            category: .propFirm,
+            mode: .funded,
+            size: Money(amount: 50_000),
+            isActive: true,
+            canAddTrades: true
+        )
+        let trade = Trade(
+            id: TradeID("t1"),
+            ownerProfileID: profileID,
+            accountID: accountID,
+            symbol: Symbol(ticker: "NQ"),
+            side: .long,
+            mode: .live,
+            quantity: 1,
+            entryAt: entry,
+            exitAt: entry,
+            realizedPnL: Money(amount: 1_000),
+            visibility: .private,
+            createdAt: entry,
+            updatedAt: entry
+        )
+        let series = DashboardAccountEquityChartEngine.computeEquitySeries(
+            account: account,
+            lifetimeTrades: [trade],
+            ledgerEntries: [],
+            payoutCycles: [],
+            period: DashboardAccountEquityChartEngine.PeriodContext(dateRange: .all, customInterval: nil)
+        )
+        XCTAssertEqual(series.count, 2)
+        XCTAssertEqual(series[0].equity, Decimal(50_000))
+        XCTAssertEqual(series[1].equity, Decimal(51_000))
+    }
+
+    func testAccountEquityChartCarriesBalanceBeforeFilteredPeriod() {
+        let profileID = ProfileID("dev.equity.carry")
+        let accountID = TradingAccountID("eq-carry")
+        let now = Date()
+        let old = now.addingTimeInterval(-60 * 86_400)
+        let recent = now.addingTimeInterval(-3 * 86_400)
+        let account = TradingAccount(
+            id: accountID,
+            ownerProfileID: profileID,
+            name: "Live",
+            category: .personal,
+            mode: .live,
+            size: Money(amount: 50_000),
+            isActive: true,
+            canAddTrades: true
+        )
+        let trades = [
+            Trade(
+                id: TradeID("old"),
+                ownerProfileID: profileID,
+                accountID: accountID,
+                symbol: Symbol(ticker: "ES"),
+                side: .long,
+                mode: .live,
+                quantity: 1,
+                entryAt: old,
+                exitAt: old,
+                realizedPnL: Money(amount: 500),
+                visibility: .private,
+                createdAt: old,
+                updatedAt: old
+            ),
+            Trade(
+                id: TradeID("new"),
+                ownerProfileID: profileID,
+                accountID: accountID,
+                symbol: Symbol(ticker: "ES"),
+                side: .long,
+                mode: .live,
+                quantity: 1,
+                entryAt: recent,
+                exitAt: recent,
+                realizedPnL: Money(amount: 200),
+                visibility: .private,
+                createdAt: recent,
+                updatedAt: recent
+            ),
+        ]
+        let series = DashboardAccountEquityChartEngine.computeEquitySeries(
+            account: account,
+            lifetimeTrades: trades,
+            ledgerEntries: [],
+            payoutCycles: [],
+            period: DashboardAccountEquityChartEngine.PeriodContext(
+                dateRange: .thirtyDays,
+                customInterval: nil,
+                now: now
+            )
+        )
+        XCTAssertGreaterThanOrEqual(series.count, 2)
+        XCTAssertEqual(series[0].equity, Decimal(50_500))
+        XCTAssertEqual(series.last?.equity, Decimal(50_700))
+    }
+
+    func testMaxDrawdownFromEquityCurveIncludesStartingBalancePeak() {
+        let profileID = ProfileID("dev.equity.maxdd")
+        let accountID = TradingAccountID("maxdd-account")
+        let now = Date()
+        let day0 = now.addingTimeInterval(-4 * 86_400)
+        let day1 = now.addingTimeInterval(-3 * 86_400)
+        let day2 = now.addingTimeInterval(-2 * 86_400)
+        let account = TradingAccount(
+            id: accountID,
+            ownerProfileID: profileID,
+            name: "Eval",
+            category: .propFirm,
+            mode: .evaluation,
+            size: Money(amount: 50_000),
+            isActive: true,
+            canAddTrades: true
+        )
+        let trades = [
+            Trade(
+                id: TradeID("w"),
+                ownerProfileID: profileID,
+                accountID: accountID,
+                symbol: Symbol(ticker: "NQ"),
+                side: .long,
+                mode: .live,
+                quantity: 1,
+                entryAt: day0,
+                exitAt: day0,
+                realizedPnL: Money(amount: 1_000),
+                visibility: .private,
+                createdAt: day0,
+                updatedAt: day0
+            ),
+            Trade(
+                id: TradeID("l"),
+                ownerProfileID: profileID,
+                accountID: accountID,
+                symbol: Symbol(ticker: "NQ"),
+                side: .long,
+                mode: .live,
+                quantity: 1,
+                entryAt: day1,
+                exitAt: day1,
+                realizedPnL: Money(amount: -625),
+                visibility: .private,
+                createdAt: day1,
+                updatedAt: day1
+            ),
+            Trade(
+                id: TradeID("r"),
+                ownerProfileID: profileID,
+                accountID: accountID,
+                symbol: Symbol(ticker: "NQ"),
+                side: .long,
+                mode: .live,
+                quantity: 1,
+                entryAt: day2,
+                exitAt: day2,
+                realizedPnL: Money(amount: 100),
+                visibility: .private,
+                createdAt: day2,
+                updatedAt: day2
+            ),
+        ]
+        let series = DashboardAccountEquityChartEngine.computeTradeLevelEquityForMaxDrawdown(
+            accountFilter: .account(accountID),
+            accounts: [account],
+            lifetimeTrades: trades,
+            ledgerEntries: [],
+            payoutCycles: [],
+            period: DashboardAccountEquityChartEngine.PeriodContext(dateRange: .all, customInterval: nil, now: now)
+        )
+        XCTAssertEqual(DashboardAccountEquityChartEngine.peakToTroughDecline(from: series), Decimal(625))
+    }
+
+    func testAccountEquityChartGranularityPreservesIntradayOnSevenDayPreset() {
+        XCTAssertEqual(
+            DashboardAccountEquityChartEngine.granularity(dateRange: .sevenDays, customInterval: nil),
+            .tradeLevel
+        )
+        XCTAssertEqual(
+            DashboardAccountEquityChartEngine.granularity(dateRange: .thirtyDays, customInterval: nil),
+            .dailyClose
+        )
+        XCTAssertEqual(
+            DashboardAccountEquityChartEngine.granularity(
+                dateRange: .thirtyDays,
+                customInterval: DateInterval(start: .distantPast, end: .distantFuture)
+            ),
+            .tradeLevel
+        )
+    }
+
     func testEquityChartRangeResolverWidenOrderMatchesSupportedPresets() {
         XCTAssertEqual(
             DashboardEquityChartRangeResolver.widenOrder(from: .thirtyDays),
@@ -1017,6 +1215,22 @@ final class DashboardExperienceTests: XCTestCase {
             DashboardEquityHeroPresentation.chartPoints(points, propStartingBalance: liveBalance).map(\.equity),
             [25_500, 25_800, 25_650]
         )
+
+        let balanceLevel = [
+            ProfileStatisticsMetrics.EquityPoint(index: 0, equity: 64_000, date: nil, drawdownFloor: 63_000),
+            ProfileStatisticsMetrics.EquityPoint(index: 1, equity: 68_000, date: nil, drawdownFloor: 66_000),
+        ]
+        let preserved = DashboardEquityHeroPresentation.chartPoints(balanceLevel, propStartingBalance: 65_000)
+        XCTAssertEqual(preserved.map(\.equity), [64_000, 68_000])
+        XCTAssertEqual(preserved.map(\.drawdownFloor), [63_000, 66_000])
+
+        let v3Cumulative = [
+            ProfileStatisticsMetrics.EquityPoint(index: 0, equity: 500, date: nil, drawdownFloor: nil),
+            ProfileStatisticsMetrics.EquityPoint(index: 1, equity: 2_500, date: nil, drawdownFloor: nil),
+        ]
+        let v3Balance = DashboardEquityHeroPresentation.chartPoints(v3Cumulative, propStartingBalance: 50_000)
+        XCTAssertEqual(v3Balance.map(\.equity), [50_500, 52_500])
+        XCTAssertNil(v3Balance[0].drawdownFloor)
 
         XCTAssertFalse(DashboardEquityHeroPresentation.showsAccountValue(forSelectedAccount: nil))
         XCTAssertEqual(

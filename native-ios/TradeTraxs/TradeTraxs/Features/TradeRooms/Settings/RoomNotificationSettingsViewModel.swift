@@ -33,7 +33,7 @@ final class RoomNotificationSettingsViewModel {
         channels: [RoomChannel],
         viewerID: ProfileID,
         rooms: any RoomRepository,
-        inboxStore: MessagesInboxStore = .shared,
+        inboxStore: MessagesInboxStore,
         membership: RoomMembership?
     ) {
         self.roomID = roomID

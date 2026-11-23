@@ -155,6 +155,14 @@ struct ManageAccountEditorView: View {
                 .manageAccountFormRow()
             } header: {
                 sectionHeader("Account")
+            } footer: {
+                if draft.category == .personal || draft.category == .broker {
+                    Text(
+                        "Account Value is the starting balance for equity and drawdown tracking. "
+                            + "Use the amount you began trading with — not current equity or imported P&L."
+                    )
+                    .experienceStyle(.footnote, color: colors.tertiaryText)
+                }
             }
 
             if draft.category == .propFirm {

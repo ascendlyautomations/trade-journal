@@ -1,4 +1,6 @@
+import PhotosUI
 import SwiftUI
+import UIKit
 
 /// Livestream chat list + composer (viewer sheet + OBS manage stream).
 struct RoomBroadcastStudioChatPane: View {
@@ -26,7 +28,7 @@ struct RoomBroadcastStudioChatPane: View {
             }
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
                         ForEach(coordinator.chatMessages) { msg in
                             RoomBroadcastChatRow(
                                 message: msg,
@@ -38,13 +40,23 @@ struct RoomBroadcastStudioChatPane: View {
                             .id(msg.id)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, ExperienceSpacing.md)
                     .padding(.vertical, ExperienceSpacing.sm)
                 }
-                .frame(maxHeight: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .scrollDismissesKeyboard(useViewerKeyboardChrome ? .interactively : .automatic)
+                .onAppear {
+                    scrollToLatestMessage(using: proxy, animated: false)
+                }
                 .onChange(of: coordinator.chatMessages.count) { _, _ in
                     scrollToLatestMessage(using: proxy)
+                }
+                .onChange(of: coordinator.chatMessages.last?.id) { _, _ in
+                    scrollToLatestMessage(using: proxy)
+                }
+                .onChange(of: coordinator.chatSharedTrades.count) { _, _ in
+                    scrollToLatestMessage(using: proxy, animated: false)
                 }
                 .onChange(of: composerFocused) { _, focused in
                     composerFocusedBinding?.wrappedValue = focused
@@ -59,6 +71,7 @@ struct RoomBroadcastStudioChatPane: View {
                     }
                 }
             }
+            .frame(maxHeight: .infinity)
             if let target = replyTarget.wrappedValue {
                 replyComposerBanner(for: target)
             }
@@ -66,6 +79,7 @@ struct RoomBroadcastStudioChatPane: View {
                 coordinator: coordinator,
                 userId: userId,
                 displayName: displayName,
+                imagePipeline: imagePipeline,
                 chatDraft: $chatDraft,
                 replyTarget: replyTarget,
                 useViewerKeyboardChrome: useViewerKeyboardChrome,
@@ -145,9 +159,13 @@ struct RoomBroadcastStudioChatPane: View {
         replyTarget.wrappedValue = nil
     }
 
-    private func scrollToLatestMessage(using proxy: ScrollViewProxy) {
+    private func scrollToLatestMessage(using proxy: ScrollViewProxy, animated: Bool = true) {
         guard let last = coordinator.chatMessages.last?.id else { return }
-        withAnimation(.easeOut(duration: 0.2)) {
+        if animated {
+            withAnimation(.easeOut(duration: 0.2)) {
+                proxy.scrollTo(last, anchor: .bottom)
+            }
+        } else {
             proxy.scrollTo(last, anchor: .bottom)
         }
     }
@@ -158,36 +176,103 @@ struct RoomBroadcastChatComposer: View {
     @Bindable var coordinator: RoomBroadcastCoordinator
     let userId: String?
     let displayName: String
+    let imagePipeline: any ImagePipeline
     @Binding var chatDraft: String
     @Binding var replyTarget: BroadcastChatMessageItem?
     var useViewerKeyboardChrome: Bool = false
     @FocusState.Binding var composerFocus: Bool
 
     @Environment(\.themeColors) private var colors
+    @Environment(\.appEnvironment) private var appEnvironment
     @State private var keyboardSendScheduled = false
     @State private var isSendingChat = false
+    @State private var photoItem: PhotosPickerItem?
+    @State private var showsPhotoPicker = false
+    @State private var showsTradePicker = false
+    @State private var tradePickerTrades: [Trade] = []
+    @State private var isLoadingTradePicker = false
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: ExperienceSpacing.xxs) {
-            composerTextField
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            if canSendChat {
-                Button(action: sendChat) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 30))
-                        .foregroundStyle(colors.accent)
-                        .experienceTouchTarget()
+        VStack(spacing: ExperienceSpacing.xxs) {
+            if let error = coordinator.broadcastChatComposerError {
+                composerErrorBanner(error)
+            }
+            HStack(alignment: .bottom, spacing: ExperienceSpacing.xxs) {
+                if userId != nil {
+                    attachmentLauncher
                 }
-                .buttonStyle(.experiencePlain)
-                .disabled(isSendingChat)
-                .accessibilityLabel("Send")
+
+                composerTextField
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if canSendChat {
+                    sendButton
+                }
             }
         }
         .padding(.horizontal, ExperienceSpacing.xs)
         .padding(.vertical, ExperienceSpacing.xs)
         .background(colors.navigationBackground.opacity(0.96))
+        .photosPicker(
+            isPresented: $showsPhotoPicker,
+            selection: $photoItem,
+            matching: MediaPickerPolicy.imageOnly.matching
+        )
+        .onChange(of: photoItem) { _, item in
+            guard let item else { return }
+            Task { await sendPickedPhoto(item) }
+            photoItem = nil
+        }
+        .sheet(isPresented: $showsTradePicker) {
+            TradeSharePickerSheet(
+                trades: tradePickerTrades,
+                imagePipeline: imagePipeline,
+                isLoading: isLoadingTradePicker,
+                onSelect: { trade in
+                    showsTradePicker = false
+                    Task { await sendTrade(trade) }
+                },
+                onClose: { showsTradePicker = false }
+            )
+            .task { await loadTradePickerIfNeeded() }
+        }
         .experienceFormFocusSync($composerFocus)
+    }
+
+    private var attachmentLauncher: some View {
+        Menu {
+            Button {
+                presentPhotoPicker()
+            } label: {
+                Label("Photo", systemImage: "photo")
+            }
+            .accessibilityIdentifier("tradeRooms.broadcast.chat.photo")
+
+            Button {
+                presentTradePicker()
+            } label: {
+                Label("Send Trade", systemImage: "chart.line.uptrend.xyaxis")
+            }
+            .accessibilityIdentifier("tradeRooms.broadcast.chat.trade")
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(colors.accent)
+                .frame(width: 28, height: 28)
+                .background(colors.fillSecondary, in: Circle())
+                .frame(
+                    width: ExperienceAccessibility.minTouchTarget,
+                    height: ExperienceAccessibility.minTouchTarget
+                )
+                .contentShape(Rectangle())
+                .experienceControlHitTarget()
+        }
+        .menuStyle(.button)
+        .buttonStyle(.experiencePlain)
+        .fixedSize(horizontal: true, vertical: true)
+        .disabled(isSendingChat)
+        .accessibilityLabel("Add attachment")
+        .accessibilityIdentifier("tradeRooms.broadcast.chat.add")
     }
 
     private var composerTextField: some View {
@@ -196,7 +281,7 @@ struct RoomBroadcastChatComposer: View {
             .textFieldStyle(.plain)
             .textInputAutocapitalization(.sentences)
             .focused($composerFocus)
-            .disabled(userId == nil || isSendingChat)
+            .disabled(userId == nil)
             .submitLabel(useViewerKeyboardChrome ? .send : .return)
             .onSubmit {
                 if useViewerKeyboardChrome {
@@ -221,9 +306,151 @@ struct RoomBroadcastChatComposer: View {
             )
     }
 
+    private var sendButton: some View {
+        Button(action: sendChat) {
+            Group {
+                if isSendingChat {
+                    ProgressView()
+                        .frame(width: 28, height: 28)
+                } else {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundStyle(colors.accent)
+                }
+            }
+            .experienceTouchTarget()
+        }
+        .buttonStyle(.experiencePlain)
+        .disabled(isSendingChat)
+        .accessibilityLabel("Send")
+        .accessibilityIdentifier("tradeRooms.broadcast.chat.send")
+    }
+
     private var canSendChat: Bool {
-        guard userId != nil, !isSendingChat else { return false }
+        guard userId != nil else { return false }
         return !chatDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func presentPhotoPicker() {
+        ExperienceHaptics.play(.selection)
+        showsPhotoPicker = true
+    }
+
+    private func presentTradePicker() {
+        ExperienceHaptics.play(.selection)
+        showsTradePicker = true
+    }
+
+    private func loadTradePickerIfNeeded() async {
+        guard tradePickerTrades.isEmpty, !isLoadingTradePicker else { return }
+        guard let userId else { return }
+        let viewerID = ProfileID(userId)
+        isLoadingTradePicker = true
+        defer { isLoadingTradePicker = false }
+        if MessagesInboxSupport.isLocalDevelopmentProfile(viewerID) {
+            tradePickerTrades = BroadcastChatAttachmentPolicy.eligibleTradesForSharing(
+                TradeShareFixtures.sampleTrades(ownerID: viewerID)
+            )
+            return
+        }
+        do {
+            let page = try await appEnvironment.data.trades.trades(
+                ownedBy: viewerID,
+                accountID: nil,
+                page: PageRequest(limit: 40),
+                publicOnly: true
+            )
+            tradePickerTrades = BroadcastChatAttachmentPolicy.eligibleTradesForSharing(page.items)
+        } catch {
+            tradePickerTrades = []
+        }
+    }
+
+    private func sendPickedPhoto(_ item: PhotosPickerItem) async {
+        guard let userId else { return }
+        guard !isSendingChat else { return }
+        isSendingChat = true
+        defer { isSendingChat = false }
+        guard let data = try? await item.loadTransferable(type: Data.self) else {
+            coordinator.setBroadcastChatComposerError("Couldn't read that photo.")
+            return
+        }
+        guard let image = UIImage(data: data) else {
+            coordinator.setBroadcastChatComposerError("Couldn't use that photo.")
+            return
+        }
+        guard let jpeg = MediaImagePreparation.chatJPEGData(from: image) else {
+            coordinator.setBroadcastChatComposerError("Couldn't prepare that photo for chat.")
+            return
+        }
+        do {
+            let path = StorageOptimizedMedia.objectPath(prefix: userId, fileExtension: "jpg")
+            let rawURL = try await OptimisticOutboundImageSendSupport.uploadJPEG(
+                localImageData: jpeg,
+                storagePath: path,
+                uploadService: appEnvironment.data.uploadService,
+                objectStorage: appEnvironment.data.objectStorage
+            )
+            guard let imageURL = BroadcastChatAttachmentPolicy.resolvedAllowedBroadcastImageURL(
+                rawURL,
+                objectStorage: appEnvironment.data.objectStorage
+            ) else {
+                coordinator.setBroadcastChatComposerError(
+                    "Photo uploaded but couldn't get a valid HTTPS link for livestream chat."
+                )
+                return
+            }
+            let caption = chatDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+            let reply = replyTarget.map(replyReference(for:))
+            let result = await coordinator.sendChat(
+                userId: userId,
+                displayName: displayName,
+                avatarUrl: nil,
+                text: caption,
+                imageURL: imageURL,
+                replyTo: reply
+            )
+            switch result {
+            case .sent:
+                chatDraft = ""
+                replyTarget = nil
+                retainComposerFocusAfterSend()
+            case .failed(let message):
+                coordinator.setBroadcastChatComposerError(message)
+            }
+        } catch {
+            coordinator.setBroadcastChatComposerError("Could not upload photo.")
+        }
+    }
+
+    private func sendTrade(_ trade: Trade) async {
+        guard let userId else { return }
+        guard trade.visibility == .public else {
+            coordinator.setBroadcastChatComposerError("Only public trades can be shared in livestream chat.")
+            return
+        }
+        guard !isSendingChat else { return }
+        isSendingChat = true
+        defer { isSendingChat = false }
+        coordinator.stageSharedTradeForChat(trade)
+        let caption = chatDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let reply = replyTarget.map(replyReference(for:))
+        let result = await coordinator.sendChat(
+            userId: userId,
+            displayName: displayName,
+            avatarUrl: nil,
+            text: caption,
+            tradeID: trade.id,
+            replyTo: reply
+        )
+        switch result {
+        case .sent:
+            chatDraft = ""
+            replyTarget = nil
+            retainComposerFocusAfterSend()
+        case .failed(let message):
+            coordinator.setBroadcastChatComposerError(message)
+        }
     }
 
     private func replyReference(for message: BroadcastChatMessageItem) -> BroadcastChatReplyReference {
@@ -253,7 +480,7 @@ struct RoomBroadcastChatComposer: View {
         replyTarget = nil
         isSendingChat = true
         Task {
-            await coordinator.sendChat(
+            let result = await coordinator.sendChat(
                 userId: userId,
                 displayName: displayName,
                 avatarUrl: nil,
@@ -261,6 +488,33 @@ struct RoomBroadcastChatComposer: View {
                 replyTo: reply
             )
             isSendingChat = false
+            switch result {
+            case .sent:
+                retainComposerFocusAfterSend()
+            case .failed(let message):
+                coordinator.setBroadcastChatComposerError(message)
+            }
         }
+    }
+
+    private func composerErrorBanner(_ message: String) -> some View {
+        HStack(spacing: ExperienceSpacing.xs) {
+            Text(message)
+                .font(.system(.caption, design: .rounded))
+                .foregroundStyle(colors.error)
+                .lineLimit(3)
+            Spacer(minLength: 0)
+            Button("OK") {
+                coordinator.acknowledgeBroadcastChatComposerError()
+            }
+            .font(.system(.caption, design: .rounded).weight(.semibold))
+        }
+        .padding(.horizontal, ExperienceSpacing.xxs)
+        .accessibilityIdentifier("tradeRooms.broadcast.chat.composerError")
+    }
+
+    private func retainComposerFocusAfterSend() {
+        guard useViewerKeyboardChrome else { return }
+        composerFocus = true
     }
 }

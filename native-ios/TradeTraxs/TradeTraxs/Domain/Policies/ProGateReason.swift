@@ -25,12 +25,21 @@ enum ProGateReason: Sendable {
     case limit(ProLimitKind)
     case feature(ProFeatureKind)
 
+    var analyticsLabel: String {
+        switch self {
+        case .limit(let kind):
+            return "limit:\(kind.rawValue)"
+        case .feature(let feature):
+            return "feature:\(feature.rawValue)"
+        }
+    }
+
     var sheetTitle: String {
         switch self {
         case .limit:
             return "Free Plan Limit Reached"
         case .feature:
-            return "TraxPro Required"
+            return "\(MonetizationPlanCopy.proPlanName) Required"
         }
     }
 
@@ -55,26 +64,25 @@ enum ProGateReason: Sendable {
             switch feature {
             case .copyTrading:
                 return "Copy Trading lets you record one trade across multiple linked accounts."
-            case .aiAnalyst:
-                return "AI Trade Analyst is available with TraxPro."
-            case .backtestLab:
-                return "Backtest Lab is available with TraxPro."
-            case .propFirm:
-                return "Advanced Prop Firm Analytics are available with TraxPro."
-            case .premiumAnalytics:
-                return "Advanced performance analytics are available with TraxPro."
-            case .tradingReports:
-                return "Trading reports are available with TraxPro."
-            case .performanceExports:
-                return "Performance exports are available with TraxPro."
-            case .generic:
-                return "This feature is available with TraxPro."
+            case .aiAnalyst, .backtestLab, .propFirm, .premiumAnalytics, .tradingReports, .performanceExports, .generic:
+                return TraxProFeatureMessaging.featureRequired
             }
         }
     }
 
+    /// Extra paywall context for feature gates — avoids repeating benefit marketing copy.
+    var paywallFeatureContext: String? {
+        guard case .feature(let feature) = self else { return nil }
+        switch feature {
+        case .copyTrading:
+            return "Copy Trading lets you record one trade across multiple linked accounts."
+        default:
+            return nil
+        }
+    }
+
     var upsellFooter: String {
-        "Upgrade to TraxPro for unlimited active accounts, unlimited Clips, and professional tools."
+        "Upgrade to \(MonetizationPlanCopy.proPlanName) for unlimited active accounts, unlimited Clips, and professional tools."
     }
 
     /// Legacy subtitle — prefer ``detailMessage`` in new UI.

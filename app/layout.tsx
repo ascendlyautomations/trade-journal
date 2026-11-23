@@ -55,6 +55,7 @@ import { DEFAULT_WEB_THEME } from "@/lib/webTheme"
 import { webAppearanceBootScript } from "@/lib/webAppearance"
 import WebAppearanceController from "./components/WebAppearanceController"
 import ContextualTourRoot from "./components/contextualTour/ContextualTourRoot"
+import ProductAnalyticsBridge from "./components/ProductAnalyticsBridge"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -188,6 +189,7 @@ export default async function RootLayout({
               <NativeSessionPersistence />
             </Suspense>
             <SentryIdentifyUser />
+            <ProductAnalyticsBridge />
             <BannedAccountShell>
               <OnboardingGateShell>
                 <ContextualTourRoot>

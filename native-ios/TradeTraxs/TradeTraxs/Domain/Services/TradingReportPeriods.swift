@@ -166,6 +166,30 @@ nonisolated enum TradingReportPeriods {
     }
 
     /// Single calendar month — full month for past years; current month ends today.
+    static func customBounds(interval: DateInterval) -> Bounds {
+        let calendar = eastern
+        let normalized = DashboardScopeFilterSupport.normalizedCustomInterval(
+            start: interval.start,
+            end: interval.end,
+            calendar: calendar
+        )
+        return Bounds(
+            key: .monthlyThis,
+            kind: .custom,
+            start: normalized.start,
+            end: normalized.end
+        )
+    }
+
+    /// Bounds for the Quick Select month — ends today when the month is in progress.
+    static func selectedMonthBounds(
+        year: Int,
+        month: Int,
+        now: Date = Date()
+    ) -> Bounds {
+        monthBounds(year: year, month: month, now: now)
+    }
+
     static func monthBounds(
         year: Int,
         month: Int,
@@ -245,6 +269,10 @@ nonisolated enum TradingReportPeriods {
         case .monthly:
             let key = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: bounds.start)
             return "month:\(key.prefix(7))"
+        case .custom:
+            let start = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: bounds.start)
+            let end = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: bounds.end)
+            return "custom:\(start):\(end)"
         }
     }
 

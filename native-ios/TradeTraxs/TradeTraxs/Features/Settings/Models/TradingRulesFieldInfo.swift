@@ -67,25 +67,25 @@ enum TradingRulesFieldInfo: String, CaseIterable, Identifiable {
     var body: String {
         switch self {
         case .targetRr:
-            return "The reward multiple you plan to aim for on a trade. When enough trades have max R data, Performance and your scorecard can compare max R reached to this target."
+            return "The reward multiple you plan to aim for. Performance and your scorecard can compare max R reached to this target when enough trades have max R data."
         case .maxTradesPerDay:
-            return "Your personal daily trade cap. Dashboard, reports, and Psychology Insights can flag days and trades beyond this count when it is set."
+            return "Your personal daily trade cap. Dashboard, reports, and Psychology Insights can flag days and trades above this count when it is set."
         case .dailyLossLimit:
-            return "The dollar loss that counts as your daily stop. Compliance checks are event-based: the day is marked when cumulative losses cross the limit, and later trades that day can flag as post-limit. Trades before the breach are not scored as \"followed\" — only post-breach checks appear."
+            return "The dollar loss that counts as your daily stop. When cumulative losses cross the limit, the day is marked and later entries can flag as post-limit. Trades before the breach are not scored as followed; only post-breach checks appear."
         case .consecutiveLossPause:
-            return "How many priced losses in a row before you plan to pause. Compliance flags each new entry while the priced loss streak on that account is still at or above this count. A priced win resets the streak; breakeven and unpriced trades do not change it. There is no timed auto-reset in settings — only streak history."
+            return "How many priced losses in a row before you plan to pause. Compliance flags new entries while the priced loss streak stays at or above this count. A priced win resets the streak; breakeven and unpriced trades do not. Settings do not auto-reset the streak over time."
         case .breakevenTolerance:
             return "A dollar band around zero for labeling breakeven trades. TradeTraxs stores this for you but does not use it in performance or psychology analytics today."
         case .minAcceptableRr:
-            return "The lowest planned R:R you still consider acceptable at entry. Performance and reports compare this to each trade's planned R:R when that value is recorded."
+            return "The lowest planned R:R you still consider acceptable at entry. Performance and reports compare this to each trade's planned R:R when recorded."
         case .maxRiskPerTrade:
-            return "Your personal dollar risk cap at entry. Analytics can only check this when trades record dollar risk at entry; P&L is not used as a substitute."
+            return "Your personal dollar risk cap at entry. Analytics checks this only when trades record dollar risk at entry; P&L is not used as a substitute."
         case .maxContractsPerTrade:
-            return "The largest contract or share size you allow on one trade. Analytics checks recorded size on each trade when this is set."
+            return "The largest contract or share size you allow on one trade. Analytics checks recorded size when this is set."
         case .ruleTemplate:
-            return "Starter drafts for scalping, day trading, or prop-firm style limits. Applying fills the form only — nothing saves until you tap Save."
+            return "Starter drafts for scalping, day trading, or prop-firm style limits. Applying fills the form only; nothing saves until you tap Save."
         case .tradingStyle:
-            return "How you usually trade (scalper, day, or swing). This is saved on your profile for reference and is not used in analytics comparisons."
+            return "How you usually trade (scalper, day, or swing). Saved on your profile for reference; not used in analytics comparisons."
         case .preferredSessions:
             return "Sessions you plan to trade. Performance and weekly or monthly reports can compare results inside those sessions versus outside them."
         case .primaryInstruments:
@@ -93,15 +93,15 @@ enum TradingRulesFieldInfo: String, CaseIterable, Identifiable {
         case .allowedTradingDays:
             return "Weekdays you plan to trade in Eastern time. Leave empty to keep this rule off. Trades on other weekdays can be flagged in reports."
         case .dailyProfitTarget:
-            return "A personal dollar goal for the day. When set, analytics can also measure trades taken after the target is reached if you turn on stop-after-target."
+            return "A personal dollar goal for the day. When set, analytics can measure trades taken after the target is reached if stop-after-target is on."
         case .stopAfterDailyProfitTarget:
-            return "When on, compliance flags trades after your daily profit target is reached. Checks are event-based (post-target entries only) — not a followed/violated check on every trade before the target."
+            return "When on, compliance flags trades after your daily profit target is reached. Checks apply to post-target entries only, not every trade before the target."
         case .maxDrawdownGoal:
             return "A personal drawdown goal in dollars. TradeTraxs saves it but does not use it in performance or psychology analytics today."
         case .maxWeeklyLoss:
-            return "A dollar loss cap for an Eastern Monday-start week. Compliance marks the week when losses cross the cap; later trades may flag as post-limit. There is no per-trade \"followed\" check before the breach."
+            return "A dollar loss cap for an Eastern Monday-start week. Compliance marks the week when losses cross the cap; later trades may flag as post-limit. There is no per-trade followed check before the breach."
         case .waitAfterLossMinutes:
-            return "Minimum minutes after a priced loss before your next entry on the same account. Compliance measures from that loss's exit time to your next entry. Missing exit times or overlapping timestamps stay unevaluated — never counted as violations."
+            return "Minimum minutes after a priced loss before your next entry on the same account. Compliance measures from that loss's exit time to your next entry. Missing exit times or overlapping timestamps stay unevaluated and are never counted as violations."
         case .plannedStart, .plannedEnd:
             return "Your planned trading window in U.S. Eastern time. Performance and reports can compare trades inside this window versus outside it when both times are set."
         case .tradingRuleScope:
@@ -115,9 +115,9 @@ enum TradingRulesFieldInfo: String, CaseIterable, Identifiable {
         case .accountMaxDrawdownGoal:
             return "A custom drawdown goal for this account only. TradeTraxs saves it but does not use it in analytics calculations today."
         case .personalComplianceGoal:
-            return "Target adherence percent for Discipline Progress on Trading Rules Analytics. Informational only — does not change how rules are scored."
+            return "Target adherence percent for Discipline Progress on Trading Rules Analytics. Informational only; it does not change how rules are scored."
         case .applyRulesToPastTrades:
-            return "Analyze your previous trades using your current trading rules. When off, only trades made after your rules were configured count toward compliance."
+            return "Analyze previous trades using your current trading rules. When off, only trades made after your rules were configured count toward compliance."
         }
     }
 }

@@ -17,6 +17,7 @@ struct TradeDetailView: View {
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.traxsProPreviewReadOnly) private var traxsProPreviewReadOnly
 
     private static let commentsAnchorID = "trade.detail.comments"
     private static let sectionSpacing = ExperienceSpacing.md
@@ -231,8 +232,8 @@ struct TradeDetailView: View {
             shareText: shareText(for: trade),
             editTitle: "Edit Trade",
             deleteTitle: "Delete Trade",
-            onEdit: viewModel.isOwner ? { viewModel.editTrade() } : nil,
-            onDelete: viewModel.isOwner ? {
+            onEdit: (viewModel.isOwner && !traxsProPreviewReadOnly) ? { viewModel.editTrade() } : nil,
+            onDelete: (viewModel.isOwner && !traxsProPreviewReadOnly) ? {
                 ExperienceHaptics.play(.warning)
                 showsDeleteConfirm = true
             } : nil,
@@ -263,12 +264,12 @@ struct TradeDetailView: View {
             onCopyLink: viewModel.trade.map { trade in
                 { DetailOverflowActions.copyLink(.trade(trade.id)) }
             },
-            onAddToVault: isTradeVaulted ? nil : { openVaultSheet() },
-            onManageInVault: isTradeVaulted ? { openVaultSheet() } : nil,
+            onAddToVault: traxsProPreviewReadOnly ? nil : (isTradeVaulted ? nil : { openVaultSheet() }),
+            onManageInVault: traxsProPreviewReadOnly ? nil : (isTradeVaulted ? { openVaultSheet() } : nil),
             editTitle: "Edit Trade",
             deleteTitle: "Delete Trade",
-            onEdit: { viewModel.editTrade() },
-            onDelete: {
+            onEdit: traxsProPreviewReadOnly ? nil : { viewModel.editTrade() },
+            onDelete: traxsProPreviewReadOnly ? nil : {
                 ExperienceHaptics.play(.warning)
                 showsDeleteConfirm = true
             },

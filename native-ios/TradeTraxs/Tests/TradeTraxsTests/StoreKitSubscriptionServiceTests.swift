@@ -66,4 +66,9 @@ private struct RecordingAppleSyncClient: AppleSubscriptionSyncClienting {
         """.utf8)
         return try JSONDecoder().decode(IosMonetizationConfigResponse.self, from: data)
     }
+
+    func redeemCreatorAccessCode(_ normalizedCode: String) async throws -> CreatorAccessRedeemResponse {
+        _ = normalizedCode
+        return CreatorAccessRedeemResponse(ok: true, alreadyGranted: false, message: nil, error: nil)
+    }
 }

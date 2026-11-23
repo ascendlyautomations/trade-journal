@@ -9,7 +9,7 @@ struct ReportDetailBlocksView: View {
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+        LazyVStack(alignment: .leading, spacing: ReportDetailLayout.sectionSpacing) {
             ForEach(blocks) { block in
                 blockView(block)
                     .padding(.horizontal, ExperienceSpacing.md)
@@ -36,6 +36,9 @@ struct ReportDetailBlocksView: View {
         case .opportunities(let items):
             bulletSection(title: block.title, items: items, tone: colors.warning)
 
+        case .strengthsAndWeaknesses(let strengths, let weaknesses):
+            strengthsAndWeaknessesSection(strengths: strengths, weaknesses: weaknesses)
+
         case .recommendations(let items):
             bulletSection(title: block.title, items: items, tone: colors.info)
 
@@ -59,6 +62,49 @@ struct ReportDetailBlocksView: View {
         case .unavailable: return .unavailable
         case .none: return .loading
         }
+    }
+
+    private func strengthsAndWeaknessesSection(strengths: [String], weaknesses: [String]) -> some View {
+        sectionCard(title: "Strengths & Weaknesses", accent: colors.primaryText) {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+                if !strengths.isEmpty {
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+                        Text("Strengths")
+                            .experienceStyle(.footnote, color: colors.profit)
+                            .fontWeight(.semibold)
+                        ForEach(strengths, id: \.self) { item in
+                            strengthWeaknessRow(item, tone: colors.profit)
+                        }
+                    }
+                }
+                if !weaknesses.isEmpty {
+                    VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+                        Text("Weaknesses")
+                            .experienceStyle(.footnote, color: colors.warning)
+                            .fontWeight(.semibold)
+                        ForEach(weaknesses, id: \.self) { item in
+                            strengthWeaknessRow(item, tone: colors.warning)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func strengthWeaknessRow(_ item: String, tone: Color) -> some View {
+        HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+            Circle()
+                .fill(tone)
+                .frame(width: 6, height: 6)
+                .padding(.top, 6)
+            markdownText(item)
+        }
+        .padding(ExperienceSpacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tone.opacity(0.08), in: RoundedRectangle(
+            cornerRadius: ExperienceRadius.sm,
+            style: .continuous
+        ))
     }
 
     private func bulletSection(title: String, items: [String], tone: Color) -> some View {
@@ -134,16 +180,26 @@ struct ReportDetailBlocksView: View {
                 metrics.profitFactor.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "—"
             )
             metricCell("Trades Taken", NumberDisplay.integer(metrics.tradesTaken))
-            metricCell(
+            labelAndPnLMetricCell(
                 "Best Day",
-                bestWorstLabel(metrics.bestDayLabel, metrics.bestDayPnl)
+                dayLabel: metrics.bestDayLabel,
+                pnl: metrics.bestDayPnl
             )
-            metricCell(
+            labelAndPnLMetricCell(
                 "Worst Day",
-                bestWorstLabel(metrics.worstDayLabel, metrics.worstDayPnl)
+                dayLabel: metrics.worstDayLabel,
+                pnl: metrics.worstDayPnl
             )
-            metricCell("Best Session", metrics.bestSessionLabel ?? "—")
-            metricCell("Worst Session", metrics.worstSessionLabel ?? "—")
+            labelAndPnLMetricCell(
+                "Best Session",
+                dayLabel: metrics.bestSessionLabel,
+                pnl: metrics.bestSessionPnl
+            )
+            labelAndPnLMetricCell(
+                "Worst Session",
+                dayLabel: metrics.worstSessionLabel,
+                pnl: metrics.worstSessionPnl
+            )
             metricCell("Most Traded", metrics.mostTradedSymbol ?? "—")
             metricCell(
                 "Avg Hold Time",
@@ -152,9 +208,42 @@ struct ReportDetailBlocksView: View {
         }
     }
 
-    private func bestWorstLabel(_ label: String?, _ pnl: Double?) -> String {
-        guard let label, let pnl else { return "—" }
-        return "\(label) (\(formatPnl(pnl)))"
+    private func labelAndPnLMetricCell(_ title: String, dayLabel: String?, pnl: Double?) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title.uppercased())
+                .experienceStyle(.caption2, color: colors.tertiaryText)
+                .tracking(0.4)
+            if let dayLabel, let pnl {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(dayLabel)
+                        .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                        .foregroundStyle(colors.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    Text(formatPnl(pnl))
+                        .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
+                        .foregroundStyle(metricPnLTone(pnl))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+            } else {
+                Text("—")
+                    .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
+                    .foregroundStyle(colors.primaryText)
+            }
+        }
+        .padding(ExperienceSpacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(colors.backgroundSecondary.opacity(0.65), in: RoundedRectangle(
+            cornerRadius: ExperienceRadius.sm,
+            style: .continuous
+        ))
+    }
+
+    private func metricPnLTone(_ pnl: Double) -> Color {
+        if pnl > 0.01 { return colors.profit }
+        if pnl < -0.01 { return colors.loss }
+        return colors.primaryText
     }
 
     private func metricCell(_ label: String, _ value: String) -> some View {

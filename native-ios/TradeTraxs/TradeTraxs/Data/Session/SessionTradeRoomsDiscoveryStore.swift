@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Session-scoped Trade Rooms home bootstrap — viewer + scope keyed, survives tab switches.
+/// Session-scoped Trade Rooms home bootstrap — viewer + scope + category keyed, survives tab switches.
 @Observable
 @MainActor
 final class SessionTradeRoomsDiscoveryStore {
@@ -12,36 +12,56 @@ final class SessionTradeRoomsDiscoveryStore {
         var loadedAt: Date
     }
 
-    private var entries: [ProfileID: [TradeRoomDiscoveryScope: Entry]] = [:]
+    private var entries: [ProfileID: [String: Entry]] = [:]
     private var inFlight: [String: Task<TradeRoomsHomeBootstrap, Error>] = [:]
     private let freshTTL: TimeInterval = 5 * 60
 
     private init() {}
 
-    func cached(for viewerID: ProfileID, scope: TradeRoomDiscoveryScope, now: Date = Date()) -> TradeRoomsHomeBootstrap? {
-        guard let entry = entries[viewerID]?[scope],
+    private func cacheKey(scope: TradeRoomDiscoveryScope, category: TradeRoomCategory?) -> String {
+        "\(scope.rawValue)|\(category?.rawValue ?? "")"
+    }
+
+    private func inFlightKey(viewerID: ProfileID, scope: TradeRoomDiscoveryScope, category: TradeRoomCategory?) -> String {
+        "\(viewerID.rawValue):\(cacheKey(scope: scope, category: category))"
+    }
+
+    func cached(
+        for viewerID: ProfileID,
+        scope: TradeRoomDiscoveryScope,
+        category: TradeRoomCategory?,
+        now: Date = Date()
+    ) -> TradeRoomsHomeBootstrap? {
+        let key = cacheKey(scope: scope, category: category)
+        guard let entry = entries[viewerID]?[key],
               now.timeIntervalSince(entry.loadedAt) < freshTTL
         else { return nil }
         return entry.bootstrap
     }
 
-    func seed(_ bootstrap: TradeRoomsHomeBootstrap, for viewerID: ProfileID) {
+    func seed(
+        _ bootstrap: TradeRoomsHomeBootstrap,
+        for viewerID: ProfileID,
+        category: TradeRoomCategory?
+    ) {
+        let key = cacheKey(scope: bootstrap.scope, category: category)
         var scoped = entries[viewerID] ?? [:]
-        scoped[bootstrap.scope] = Entry(bootstrap: bootstrap, loadedAt: Date())
+        scoped[key] = Entry(bootstrap: bootstrap, loadedAt: Date())
         entries[viewerID] = scoped
     }
 
     func coalesce(
         viewerID: ProfileID,
         scope: TradeRoomDiscoveryScope,
+        category: TradeRoomCategory?,
         forceNetwork: Bool,
         fetch: @escaping () async throws -> TradeRoomsHomeBootstrap
     ) async throws -> TradeRoomsHomeBootstrap {
-        if !forceNetwork, let cached = cached(for: viewerID, scope: scope) {
+        if !forceNetwork, let cached = cached(for: viewerID, scope: scope, category: category) {
             return cached
         }
 
-        let key = "\(viewerID.rawValue):\(scope.rawValue)"
+        let key = inFlightKey(viewerID: viewerID, scope: scope, category: category)
         if let existing = inFlight[key] {
             return try await existing.value
         }
@@ -51,14 +71,15 @@ final class SessionTradeRoomsDiscoveryStore {
         defer { inFlight[key] = nil }
 
         let bootstrap = try await task.value
-        seed(bootstrap, for: viewerID)
+        seed(bootstrap, for: viewerID, category: category)
         return bootstrap
     }
 
     func invalidate(viewerID: ProfileID? = nil) {
         if let viewerID {
             entries[viewerID] = nil
-            inFlight.keys.filter { $0.hasPrefix("\(viewerID.rawValue):") }.forEach { inFlight[$0]?.cancel(); inFlight[$0] = nil }
+            let prefix = "\(viewerID.rawValue):"
+            inFlight.keys.filter { $0.hasPrefix(prefix) }.forEach { inFlight[$0]?.cancel(); inFlight[$0] = nil }
         } else {
             entries = [:]
             inFlight.values.forEach { $0.cancel() }

@@ -17,6 +17,7 @@ struct RoomBroadcastStatus: Hashable, Sendable {
     var hostConnected: Bool?
     var primaryMediaPublisherConnected: Bool?
     var viewerCount: Int?
+    var expiresAt: String?
 }
 
 struct BroadcastWatchSession: Hashable, Sendable {
@@ -37,6 +38,16 @@ struct BroadcastRosterParticipant: Identifiable, Hashable, Sendable {
     var roleLabel: String
     var isHandRaised: Bool
     var isLocal: Bool
+
+    /// Trailing roster chrome — omit generic viewers; local row is always **You**.
+    var rosterRoleDisplay: String? {
+        if isLocal { return "You" }
+        switch roleLabel {
+        case "Broadcaster": return "Broadcaster"
+        case "Speaker": return "Speaker"
+        default: return nil
+        }
+    }
 }
 
 @Observable
@@ -56,8 +67,11 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         primaryMediaPublisherIdentity: nil,
         hostConnected: nil,
         primaryMediaPublisherConnected: nil,
-        viewerCount: nil
+        viewerCount: nil,
+        expiresAt: nil
     )
+    /// Server-authoritative end time when hosting / polling as broadcaster.
+    private(set) var broadcastExpiresAt: String?
     private(set) var statusPollError: String?
     private(set) var statusPollRoomID: RoomID?
     var isStreamLive: Bool {
@@ -66,6 +80,10 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
 
     func isStreamLive(for roomID: RoomID) -> Bool {
         statusPollRoomID == roomID && polledStatus.isLive
+    }
+
+    func noteBroadcastExpiresAt(_ expiresAt: String?) {
+        broadcastExpiresAt = expiresAt?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Viewer count from broadcast status poll when the poll targets ``roomID``.
@@ -113,6 +131,10 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private(set) var videoTrack: VideoTrack?
     /// Bumped when the program video track or publication changes so ``VideoView`` rebinds after replaceTrack / program switches.
     private(set) var programVideoTrackRevision: UInt = 0
+    /// First decoded frame received for the current program publication.
+    private(set) var programVideoHasRenderedFrame = false
+    /// Used to distinguish startup prep from mid-stream video loss (screen share cancel / track drop).
+    private var programVideoWasDisplayedBefore = false
     private(set) var localViewerCount = 0
     private(set) var isInConversation = false
     private(set) var isMicrophoneEnabledInStream = false
@@ -132,6 +154,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private(set) var broadcastRaisedHandIdentities: Set<String> = []
     private(set) var streamEndedNotice: BroadcastStreamEndedNotice?
     private(set) var streamRemovalNotice: BroadcastStreamRemovalNotice?
+    private(set) var viewerSessionAccessDenied: BroadcastViewerSessionAccessDenied?
     private(set) var streamConnectionLostNotice: BroadcastStreamConnectionLostNotice?
     private(set) var speakInviteNotice: BroadcastSpeakInviteNotice?
     private(set) var speakInviteActionError: String?
@@ -178,6 +201,34 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     /// Legacy alias — use ``videoTrackForExpandedViewer`` or ``videoTrackForMiniPlayer``.
     var videoTrackForDisplay: VideoTrack? {
         videoTrackForExpandedViewer
+    }
+
+    var hasDisplayableProgramVideo: Bool {
+        videoTrack != nil && programVideoHasRenderedFrame
+    }
+
+    var showsProgramVideoSurface: Bool {
+        isWatching || isObsManageStreamPresented || showsFloatingMiniPlayer
+    }
+
+    var programVideoPlaceholder: BroadcastProgramVideoPlaceholderPresentation? {
+        BroadcastProgramVideoPresentation.resolvePlaceholder(
+            showsProgramVideoSurface: showsProgramVideoSurface,
+            isLive: polledStatus.isLive || isWatching,
+            hasDisplayableVideo: hasDisplayableProgramVideo,
+            connection: BroadcastProgramVideoPresentation.connectionPhase(from: connectionState),
+            isJoining: isBusy,
+            hostConnected: polledStatus.hostConnected,
+            primaryMediaPublisherConnected: polledStatus.primaryMediaPublisherConnected,
+            broadcastSourceIsObs: broadcastSourceIsObs,
+            videoWasDisplayedBefore: programVideoWasDisplayedBefore
+        )
+    }
+
+    func markProgramVideoFrameRendered() {
+        guard videoTrack != nil, !programVideoHasRenderedFrame else { return }
+        programVideoHasRenderedFrame = true
+        programVideoWasDisplayedBefore = true
     }
 
     var isObsHostBroadcastBarActive: Bool {
@@ -333,6 +384,8 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private var broadcastLiveActivityEpoch: UInt64 = 0
     private var lastInteractiveSnapshotFingerprint: String?
     let chatProfileCache = BroadcastChatProfileCache()
+    private var tradesRepository: (any TradeRepository)?
+    private var detailPresentationCache: DetailPresentationCache?
 
     private init() {}
 
@@ -342,6 +395,15 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
 
     func acknowledgeStreamRemovalNotice() {
         streamRemovalNotice = nil
+    }
+
+    func closeViewerSessionAccessDenied() {
+        viewerSessionAccessDenied = nil
+        viewerPresentation = .off
+    }
+
+    func canPresentViewer(for roomID: RoomID) -> Bool {
+        isWatchingRoom(roomID) || viewerSessionAccessDenied?.roomID == roomID
     }
 
     func acknowledgeStreamConnectionLostNotice() {
@@ -414,7 +476,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                let hostUserId,
                !chatAnnouncement.isEmpty
             {
-                await sendChat(
+                _ = await sendChat(
                     userId: hostUserId,
                     displayName: hostDisplayName,
                     avatarUrl: nil,
@@ -496,16 +558,24 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     }
 
     private var openProfileHandler: (@MainActor (ProfileID) -> Void)?
+    private var openTradeHandler: (@MainActor (TradeID) -> Void)?
+    private(set) var chatSharedTrades: [TradeID: Trade] = [:]
+    private(set) var chatSharedTradeLoadFailures: Set<TradeID> = []
+    private(set) var broadcastChatComposerError: String?
 
     func configure(
         transport: SupabaseTransport,
         realtimeHub: RealtimeHub? = nil,
         accessTokenProvider: (@Sendable () async -> String?)? = nil,
-        profileLookup: (@Sendable ([ProfileID]) async throws -> [Profile])? = nil
+        profileLookup: (@Sendable ([ProfileID]) async throws -> [Profile])? = nil,
+        tradesRepository: (any TradeRepository)? = nil,
+        detailCache: DetailPresentationCache? = nil
     ) {
         client = LiveKitBroadcastClient(transport: transport)
         self.realtimeHub = realtimeHub
         self.accessTokenProvider = accessTokenProvider
+        self.tradesRepository = tradesRepository
+        detailPresentationCache = detailCache
         if let profileLookup {
             chatProfileCache.configure(profileLookup: profileLookup)
         }
@@ -524,6 +594,10 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     /// Wired from ``MainTabShellView`` — uses ``NavigationCoordinator/openExternal`` so broadcast stays connected.
     func bindOpenProfile(_ handler: @escaping @MainActor (ProfileID) -> Void) {
         openProfileHandler = handler
+    }
+
+    func bindOpenTrade(_ handler: @escaping @MainActor (TradeID) -> Void) {
+        openTradeHandler = handler
     }
 
     @discardableResult
@@ -738,7 +812,13 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         #endif
         selectedProgramVideoPublicationSid = nextPubSid
         videoTrack = track
+        programVideoHasRenderedFrame = false
         programVideoTrackRevision &+= 1
+    }
+
+    private func resetProgramVideoDisplayState() {
+        programVideoHasRenderedFrame = false
+        programVideoWasDisplayedBefore = false
     }
 
     func isWatchingRoom(_ roomID: RoomID) -> Bool {
@@ -808,7 +888,8 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                 primaryMediaPublisherIdentity: res.primaryMediaPublisherIdentity,
                 hostConnected: res.hostConnected,
                 primaryMediaPublisherConnected: res.primaryMediaPublisherConnected,
-                viewerCount: res.viewerCount
+                viewerCount: res.viewerCount,
+                expiresAt: res.expiresAt
             )
             #if DEBUG
             print(
@@ -823,13 +904,17 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             if pollRoomID == roomID {
                 if let sid = next.broadcastSessionId, sid != currentSessionId, !isWatching {
                     chatMessages = []
-        broadcastChatScrollRequest = nil
-        highlightedBroadcastChatMessageID = nil
-        broadcastChatNavigationNotice = nil
+                    chatSharedTrades = [:]
+                    chatSharedTradeLoadFailures = []
+                    broadcastChatComposerError = nil
+                    broadcastChatScrollRequest = nil
+                    highlightedBroadcastChatMessageID = nil
+                    broadcastChatNavigationNotice = nil
                 }
                 polledStatus = next
                 statusPollRoomID = roomID
                 statusPollError = nil
+                broadcastExpiresAt = next.expiresAt
                 if next.isLive {
                     ensureInteractivePolling(for: roomID)
                 } else {
@@ -890,6 +975,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             await RoomLiveVoiceCoordinator.shared.leave(reason: .replaced, clearError: true)
         }
         streamRemovalNotice = nil
+        viewerSessionAccessDenied = nil
         if isWatching, watchSession?.roomID == roomID, connectionState == .connected {
             syncBroadcastLiveActivity()
             return
@@ -897,6 +983,19 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
 
         if isWatching, watchSession?.roomID != roomID {
             await leaveWatch()
+        }
+
+        if polledStatus.broadcastSessionId == nil || pollRoomID != roomID {
+            await refreshStatus(roomID: roomID)
+        }
+
+        if let deniedSessionId = await resolveViewerSessionJoinDenial(roomID: roomID) {
+            presentViewerSessionAccessDenied(
+                roomID: roomID,
+                roomTitle: roomTitle,
+                sessionId: deniedSessionId
+            )
+            return
         }
 
         broadcastLiveActivityEpoch &+= 1
@@ -920,8 +1019,18 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
             raisedHandIdentities = []
             syncBroadcastLiveActivity()
         } catch {
-            lastError = error.localizedDescription
-            await teardown()
+            if Self.isViewerRemovedFromSessionError(error) {
+                let sessionId = polledStatus.broadcastSessionId ?? currentSessionId ?? ""
+                presentViewerSessionAccessDenied(
+                    roomID: roomID,
+                    roomTitle: roomTitle,
+                    sessionId: sessionId
+                )
+                await teardown(preserveViewerPresentation: true)
+            } else {
+                lastError = error.localizedDescription
+                await teardown()
+            }
         }
     }
 
@@ -1065,13 +1174,48 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         displayName: String,
         avatarUrl: String?,
         text: String,
+        imageURL: String? = nil,
+        tradeID: TradeID? = nil,
         replyTo: BroadcastChatReplyReference? = nil
-    ) async {
-        guard let room else { return }
+    ) async -> BroadcastChatSendResult {
+        guard let room else {
+            return .failed("Not connected to chat.")
+        }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        let hasImageIntent = imageURL.map {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        } ?? false
+        let sanitizedImage: String?
+        if hasImageIntent {
+            guard let raw = imageURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !raw.isEmpty,
+                  BroadcastChatAttachmentPolicy.isAllowedBroadcastImageURL(raw)
+            else {
+                return .failed("Photo URL isn't valid for livestream chat.")
+            }
+            sanitizedImage = raw
+        } else {
+            sanitizedImage = nil
+        }
+
+        let sanitizedTrade: TradeID?
+        if let tradeID {
+            guard BroadcastChatAttachmentPolicy.sanitizedTradeID(tradeID.rawValue) != nil else {
+                return .failed("That trade can't be shared in livestream chat.")
+            }
+            sanitizedTrade = tradeID
+        } else {
+            sanitizedTrade = nil
+        }
+
+        guard !trimmed.isEmpty || sanitizedImage != nil || sanitizedTrade != nil else {
+            return .failed("Message is empty.")
+        }
+        if !trimmed.isEmpty, trimmed.count > TradeRoomBroadcastChatConstants.maxLength {
+            return .failed("Message is too long.")
+        }
         if let replyTo, !BroadcastChatPayload.isValidReplyReference(replyTo) {
-            return
+            return .failed("Reply is invalid.")
         }
         do {
             let sentAtMs = Int(Date().timeIntervalSince1970 * 1000)
@@ -1080,6 +1224,8 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                 displayName: displayName,
                 avatarUrl: avatarUrl,
                 text: trimmed,
+                imageURL: sanitizedImage,
+                tradeID: sanitizedTrade,
                 replyTo: replyTo
             )
             try await room.localParticipant.publish(
@@ -1089,19 +1235,101 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                     reliable: true
                 )
             )
-            appendChat(
-                BroadcastChatMessageItem(
-                    id: "\(userId)-\(sentAtMs)",
-                    userId: userId,
-                    displayName: displayName,
-                    text: trimmed,
-                    sentAt: Date(timeIntervalSince1970: Double(sentAtMs) / 1000),
-                    replyTo: replyTo
-                )
+            broadcastChatComposerError = nil
+            let local = BroadcastChatMessageItem(
+                id: "\(userId)-\(sentAtMs)",
+                userId: userId,
+                displayName: displayName,
+                text: trimmed,
+                sentAt: Date(timeIntervalSince1970: Double(sentAtMs) / 1000),
+                imageURL: sanitizedImage,
+                tradeID: sanitizedTrade,
+                replyTo: replyTo
             )
+            appendChat(local)
+            if let sanitizedTrade {
+                await hydrateBroadcastChatTrade(id: sanitizedTrade)
+            }
+            return .sent
         } catch {
-            lastError = "Could not send chat message."
+            let message = "Could not publish chat message."
+            broadcastChatComposerError = message
+            return .failed(message)
         }
+    }
+
+    func isBroadcastChatTradeLoadFailed(_ tradeID: TradeID) -> Bool {
+        chatSharedTradeLoadFailures.contains(tradeID)
+    }
+
+    @discardableResult
+    func openSharedTrade(_ tradeID: TradeID) -> Bool {
+        guard let openTradeHandler else { return false }
+        ExperienceHaptics.play(.selection)
+        collapseLivestreamChromeForExternalNavigation()
+        openTradeHandler(tradeID)
+        return true
+    }
+
+    func hydrateBroadcastChatTradesIfNeeded() async {
+        let ids = Set(chatMessages.compactMap(\.tradeID)).filter { chatSharedTrades[$0] == nil }
+        guard !ids.isEmpty else { return }
+        guard let tradesRepository, let detailPresentationCache else {
+            ids.forEach { markBroadcastChatTradeLoadFailed($0) }
+            return
+        }
+        do {
+            let trades = try await SessionTradeEntityStore.shared.trades(
+                ids: Array(ids),
+                detailCache: detailPresentationCache,
+                repository: tradesRepository
+            )
+            var loaded = Set<TradeID>()
+            for trade in trades {
+                chatSharedTrades[trade.id] = trade
+                clearBroadcastChatTradeLoadFailure(trade.id)
+                loaded.insert(trade.id)
+            }
+            for id in ids where !loaded.contains(id) {
+                markBroadcastChatTradeLoadFailed(id)
+            }
+        } catch {
+            ids.forEach { markBroadcastChatTradeLoadFailed($0) }
+        }
+    }
+
+    private func hydrateBroadcastChatTrade(id: TradeID) async {
+        guard chatSharedTrades[id] == nil else {
+            clearBroadcastChatTradeLoadFailure(id)
+            return
+        }
+        guard let tradesRepository, let detailPresentationCache else {
+            markBroadcastChatTradeLoadFailed(id)
+            return
+        }
+        do {
+            let trades = try await SessionTradeEntityStore.shared.trades(
+                ids: [id],
+                detailCache: detailPresentationCache,
+                repository: tradesRepository
+            )
+            if let trade = trades.first {
+                chatSharedTrades[id] = trade
+                clearBroadcastChatTradeLoadFailure(id)
+            } else {
+                markBroadcastChatTradeLoadFailed(id)
+            }
+        } catch {
+            markBroadcastChatTradeLoadFailed(id)
+        }
+    }
+
+    private func markBroadcastChatTradeLoadFailed(_ id: TradeID) {
+        chatSharedTradeLoadFailures.insert(id)
+    }
+
+    private func clearBroadcastChatTradeLoadFailure(_ id: TradeID) {
+        chatSharedTradeLoadFailures.remove(id)
     }
 
     func scrollToBroadcastChatMessage(id messageID: String) {
@@ -1127,6 +1355,19 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
 
     func acknowledgeBroadcastChatNavigationNotice() {
         broadcastChatNavigationNotice = nil
+    }
+
+    func setBroadcastChatComposerError(_ message: String) {
+        broadcastChatComposerError = message
+    }
+
+    func acknowledgeBroadcastChatComposerError() {
+        broadcastChatComposerError = nil
+    }
+
+    func stageSharedTradeForChat(_ trade: Trade) {
+        chatSharedTrades[trade.id] = trade
+        clearBroadcastChatTradeLoadFailure(trade.id)
     }
 
     private func ensureInteractivePolling(for roomID: RoomID) {
@@ -1465,9 +1706,12 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         )
         if chatMessages.isEmpty {
             chatMessages = []
-        broadcastChatScrollRequest = nil
-        highlightedBroadcastChatMessageID = nil
-        broadcastChatNavigationNotice = nil
+            chatSharedTrades = [:]
+            chatSharedTradeLoadFailures = []
+            broadcastChatComposerError = nil
+            broadcastChatScrollRequest = nil
+            highlightedBroadcastChatMessageID = nil
+            broadcastChatNavigationNotice = nil
         }
 
         // LiveKit needs AVAudioSession in playAndRecord when we may publish mic audio
@@ -1586,6 +1830,63 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         )
     }
 
+    private func presentViewerSessionAccessDenied(roomID: RoomID, roomTitle: String, sessionId: String) {
+        let resolvedSessionId = sessionId.trimmingCharacters(in: .whitespacesAndNewlines)
+        viewerSessionAccessDenied = BroadcastViewerSessionAccessDenied(
+            roomID: roomID,
+            roomTitle: roomTitle,
+            sessionId: resolvedSessionId.isEmpty ? "session" : resolvedSessionId
+        )
+        lastError = nil
+        isBusy = false
+    }
+
+    private func resolveViewerSessionJoinDenial(roomID: RoomID) async -> String? {
+        guard let client else { return nil }
+        if let viewerId = interactiveViewerProfileID?.rawValue,
+           broadcastSessionBlockUserIds.contains(viewerId),
+           polledStatus.isLive,
+           (pollRoomID == roomID || statusPollRoomID == roomID)
+        {
+            return polledStatus.broadcastSessionId
+        }
+
+        guard polledStatus.isLive else { return nil }
+
+        do {
+            let response = try await client.fetchInteractiveState(roomID: roomID)
+            guard let snapshot = response.snapshot else { return nil }
+            applyInteractiveModerationSnapshot(snapshot, profiles: response.profiles)
+            guard BroadcastViewerJoinAccessGate.isJoinDenied(
+                snapshot: snapshot,
+                activeSessionId: polledStatus.broadcastSessionId,
+                viewerUserId: interactiveViewerProfileID?.rawValue
+            ) else {
+                return nil
+            }
+            let sessionId = snapshot.sessionId ?? polledStatus.broadcastSessionId ?? ""
+            return sessionId.isEmpty ? polledStatus.broadcastSessionId : sessionId
+        } catch {
+            return nil
+        }
+    }
+
+    private static func isViewerRemovedFromSessionError(_ error: Error) -> Bool {
+        if error is LiveKitBroadcastAccessError {
+            return true
+        }
+        if case AppError.unknown(let message) = error {
+            let normalized = message.lowercased()
+            if normalized.contains("removed_from_stream") {
+                return true
+            }
+            if normalized.contains("you have been removed from this livestream") {
+                return true
+            }
+        }
+        return false
+    }
+
     private func presentStreamRemovalNotice(sessionId: String, roomTitle: String, blocked: Bool) {
         guard BroadcastStreamEndPolicy.shouldPresentStreamEndedPopup(
             isVoluntaryLeave: false,
@@ -1627,7 +1928,14 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         ) else { return }
 
         streamEndedPopupPresentedSessionId = sessionId
-        streamEndedNotice = BroadcastStreamEndedNotice(sessionId: sessionId, roomTitle: roomTitle)
+        let durationEnded =
+            polledStatus.expiresAt != nil
+            && BroadcastDurationLimitSupport.isPastExpiry(polledStatus.expiresAt)
+        streamEndedNotice = BroadcastStreamEndedNotice(
+            sessionId: sessionId,
+            roomTitle: roomTitle,
+            detailMessage: durationEnded ? BroadcastDurationLimitSupport.viewerEndedMessage : nil
+        )
         consecutiveSuccessfulNotLivePolls = 0
     }
 
@@ -1670,6 +1978,7 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
     private func suspendLiveKitWatchForReconnect() async {
         videoTrack = nil
         selectedProgramVideoPublicationSid = nil
+        resetProgramVideoDisplayState()
         programVideoTrackRevision &+= 1
         await teardownRoomOnly()
         connectionState = .disconnected
@@ -1694,14 +2003,18 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         lastError = "Connection to the livestream was lost."
     }
 
-    private func teardown() async {
+    private func teardown(preserveViewerPresentation: Bool = false) async {
         let endingEpoch = broadcastLiveActivityEpoch
         TradeTraxsLiveBroadcastLiveActivityManager.shared.end(sessionEpoch: endingEpoch)
         videoTrack = nil
         selectedProgramVideoPublicationSid = nil
+        resetProgramVideoDisplayState()
         programVideoTrackRevision &+= 1
         preferredVideoSource = "screen"
         chatMessages = []
+        chatSharedTrades = [:]
+        chatSharedTradeLoadFailures = []
+        broadcastChatComposerError = nil
         broadcastChatScrollRequest = nil
         highlightedBroadcastChatMessageID = nil
         broadcastChatNavigationNotice = nil
@@ -1718,7 +2031,9 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
         programPublisherIdentity = nil
         broadcastSourceIsObs = false
         watchSession = nil
-        viewerPresentation = .off
+        if !preserveViewerPresentation {
+            viewerPresentation = .off
+        }
         isStreamPlaybackMuted = false
         streamPlaybackGain = 1
         speakInviteNotice = nil
@@ -1912,6 +2227,9 @@ final class RoomBroadcastCoordinator: RoomDelegate, ParticipantDelegate {
                 return
             }
             appendChat(msg)
+            if let tradeID = msg.tradeID {
+                await hydrateBroadcastChatTrade(id: tradeID)
+            }
             let ids = chatMessages.map(\.userId)
             await chatProfileCache.hydrate(userIds: ids)
         }

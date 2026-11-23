@@ -83,12 +83,79 @@ nonisolated struct TradingReportWeekRef: Hashable, Sendable {
 nonisolated enum TradingReportKind: String, Hashable, Codable, Sendable {
     case weekly
     case monthly
+    case custom
 
     var title: String {
         switch self {
         case .weekly: return "Weekly Trading Report"
         case .monthly: return "Monthly Trading Report"
+        case .custom: return "Custom Trading Report"
         }
+    }
+}
+
+/// Arbitrary eastern calendar range — `custom:YYYY-MM-DD:YYYY-MM-DD`.
+nonisolated struct TradingReportCustomRangeRef: Hashable, Sendable {
+    var startKey: String
+    var endKey: String
+
+    var reportID: ReportID { ReportID("custom:\(startKey):\(endKey)") }
+
+  var interval: DateInterval? {
+        guard let start = Self.dayKeyDate(startKey),
+              let end = Self.dayKeyDate(endKey)
+        else { return nil }
+        return DashboardScopeFilterSupport.normalizedCustomInterval(
+            start: start,
+            end: end,
+            calendar: TradingReportPeriods.eastern
+        )
+    }
+
+    static func from(interval: DateInterval) -> TradingReportCustomRangeRef {
+        let calendar = TradingReportPeriods.eastern
+        let normalized = DashboardScopeFilterSupport.normalizedCustomInterval(
+            start: interval.start,
+            end: interval.end,
+            calendar: calendar
+        )
+        return TradingReportCustomRangeRef(
+            startKey: TraderPsychologyAnalyticsFoundation.tradeDateKey(for: normalized.start),
+            endKey: TraderPsychologyAnalyticsFoundation.tradeDateKey(for: normalized.end)
+        )
+    }
+
+    static func parse(reportID: ReportID) -> TradingReportCustomRangeRef? {
+        let raw = reportID.rawValue
+        guard raw.hasPrefix("custom:") else { return nil }
+        let rest = String(raw.dropFirst("custom:".count))
+        let parts = rest.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2,
+              Self.isValidDayKey(parts[0]),
+              Self.isValidDayKey(parts[1])
+        else { return nil }
+        return TradingReportCustomRangeRef(startKey: parts[0], endKey: parts[1])
+    }
+
+    private static func isValidDayKey(_ key: String) -> Bool {
+        dayKeyDate(key) != nil
+    }
+
+    private static func dayKeyDate(_ key: String) -> Date? {
+        let parts = key.split(separator: "-")
+        guard parts.count == 3,
+              let year = Int(parts[0]),
+              let month = Int(parts[1]),
+              let day = Int(parts[2])
+        else { return nil }
+        let calendar = TradingReportPeriods.eastern
+        return calendar.date(from: DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: year,
+            month: month,
+            day: day
+        ))
     }
 }
 
@@ -148,6 +215,7 @@ enum TradingReportDetailBlock: Hashable, Identifiable, Sendable {
     case metrics(TradingReportMetrics)
     case strengths([String])
     case opportunities([String])
+    case strengthsAndWeaknesses(strengths: [String], weaknesses: [String])
     case recommendations([String])
     case bestTrade(TradeID)
     case keyTakeaway(String)
@@ -158,6 +226,7 @@ enum TradingReportDetailBlock: Hashable, Identifiable, Sendable {
         case .metrics: return "metrics"
         case .strengths: return "strengths"
         case .opportunities: return "opportunities"
+        case .strengthsAndWeaknesses: return "strengthsAndWeaknesses"
         case .recommendations: return "recommendations"
         case .bestTrade: return "bestTrade"
         case .keyTakeaway: return "keyTakeaway"
@@ -170,6 +239,7 @@ enum TradingReportDetailBlock: Hashable, Identifiable, Sendable {
         case .metrics: return "Key Metrics"
         case .strengths: return "Strengths"
         case .opportunities: return "Opportunities"
+        case .strengthsAndWeaknesses: return "Strengths & Weaknesses"
         case .recommendations: return "Recommendations"
         case .bestTrade: return "Best Trade"
         case .keyTakeaway: return "Key Takeaway"
@@ -179,15 +249,25 @@ enum TradingReportDetailBlock: Hashable, Identifiable, Sendable {
     static func blocks(from report: TradingReport) -> [TradingReportDetailBlock] {
         var result: [TradingReportDetailBlock] = [
             .summary(report.executiveSummary),
-            .metrics(report.metrics),
         ]
-        if !report.strengths.isEmpty { result.append(.strengths(report.strengths)) }
-        if !report.opportunities.isEmpty { result.append(.opportunities(report.opportunities)) }
+
+        if !report.strengths.isEmpty || !report.opportunities.isEmpty {
+            result.append(
+                .strengthsAndWeaknesses(
+                    strengths: report.strengths,
+                    weaknesses: report.opportunities
+                )
+            )
+        }
+
         if !report.recommendations.isEmpty { result.append(.recommendations(report.recommendations)) }
+        if !report.keyTakeaway.isEmpty { result.append(.keyTakeaway(report.keyTakeaway)) }
+
+        result.append(.metrics(report.metrics))
+
         if let raw = report.bestTradeId, !raw.isEmpty {
             result.append(.bestTrade(TradeID(raw)))
         }
-        if !report.keyTakeaway.isEmpty { result.append(.keyTakeaway(report.keyTakeaway)) }
         return result
     }
 }

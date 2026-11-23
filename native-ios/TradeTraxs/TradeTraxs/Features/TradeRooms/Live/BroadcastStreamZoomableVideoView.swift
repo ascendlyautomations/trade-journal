@@ -6,9 +6,10 @@ import UIKit
 struct BroadcastStreamZoomableVideoView: UIViewRepresentable {
     var track: VideoTrack?
     var isFullscreen: Bool
+    var onFirstFrame: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
-        Coordinator()
+        Coordinator(onFirstFrame: onFirstFrame)
     }
 
     func makeUIView(context: Context) -> ZoomableBroadcastVideoContainer {
@@ -18,6 +19,8 @@ struct BroadcastStreamZoomableVideoView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: ZoomableBroadcastVideoContainer, context: Context) {
+        context.coordinator.onFirstFrame = onFirstFrame
+        context.coordinator.bindFrameObserver(to: track)
         if uiView.videoView.track !== track {
             uiView.videoView.track = nil
             uiView.videoView.track = track
@@ -29,6 +32,33 @@ struct BroadcastStreamZoomableVideoView: UIViewRepresentable {
 
     final class Coordinator {
         weak var container: ZoomableBroadcastVideoContainer?
+        var onFirstFrame: (() -> Void)?
+        private let frameObserver = BroadcastProgramVideoFirstFrameObserver()
+        private weak var observedTrack: VideoTrack?
+
+        init(onFirstFrame: (() -> Void)?) {
+            self.onFirstFrame = onFirstFrame
+            frameObserver.onFirstFrame = { [weak self] in
+                self?.onFirstFrame?()
+            }
+        }
+
+        func bindFrameObserver(to track: VideoTrack?) {
+            if let observedTrack, observedTrack !== track {
+                observedTrack.remove(videoRenderer: frameObserver)
+                self.observedTrack = nil
+            }
+            guard let track, track !== observedTrack else { return }
+            frameObserver.reset()
+            track.add(videoRenderer: frameObserver)
+            observedTrack = track
+        }
+
+        deinit {
+            if let observedTrack {
+                observedTrack.remove(videoRenderer: frameObserver)
+            }
+        }
     }
 }
 

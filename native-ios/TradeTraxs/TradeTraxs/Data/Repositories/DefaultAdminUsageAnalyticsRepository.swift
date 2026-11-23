@@ -35,4 +35,76 @@ nonisolated struct DefaultAdminUsageAnalyticsRepository: AdminUsageAnalyticsRepo
             throw error
         }
     }
+
+    func fetchProductBundle(seriesDays: Int) async throws -> AdminProductAnalyticsBundle {
+        let days = max(1, min(seriesDays, 90))
+        let body = try JSONSerialization.data(withJSONObject: ["p_series_days": days], options: [])
+        do {
+            let data = try await supabase.database.rpcData(
+                functionName: "admin_product_analytics_bundle",
+                parametersJSON: body
+            )
+            var bundle = try AdminProductAnalyticsParsing.parseBundle(from: data)
+            bundle = AdminProductAnalyticsParsing.normalizeProductSeries(bundle)
+            return bundle
+        } catch {
+            let message = error.localizedDescription.lowercased()
+            if message.contains("not authorized") {
+                throw AdminUsageAnalyticsError.notAuthorized
+            }
+            throw error
+        }
+    }
+
+    func fetchHistoricalBundle(query: AdminHistoricalEngagementQuery) async throws -> AdminHistoricalEngagementBundle {
+        var params: [String: Any] = ["p_activity_filter": query.activityFilter.rawValue]
+        if query.preset == .custom {
+            params["p_series_days"] = NSNull()
+            params["p_start_date"] = query.customStartDate ?? NSNull()
+            params["p_end_date"] = query.customEndDate ?? NSNull()
+        } else if let days = query.preset.seriesDays {
+            params["p_series_days"] = max(1, min(days, AdminHistoricalEngagementDefinition.maxSeriesDays))
+            params["p_start_date"] = NSNull()
+            params["p_end_date"] = NSNull()
+        } else {
+            params["p_series_days"] = 90
+        }
+        let body = try JSONSerialization.data(withJSONObject: params, options: [])
+        do {
+            let data = try await supabase.database.rpcData(
+                functionName: "admin_historical_engagement_bundle",
+                parametersJSON: body
+            )
+            var bundle = try AdminHistoricalEngagementParsing.parseBundle(from: data)
+            bundle = AdminHistoricalEngagementParsing.normalizeSeries(bundle)
+            return bundle
+        } catch {
+            let message = error.localizedDescription.lowercased()
+            if message.contains("not authorized") {
+                throw AdminUsageAnalyticsError.notAuthorized
+            }
+            throw error
+        }
+    }
+
+    func fetchLifecycleBundle(query: AdminLifecycleAnalyticsQuery) async throws -> AdminLifecycleAnalyticsBundle {
+        var params: [String: Any] = [:]
+        if query.preset == .custom {
+            params["p_series_days"] = NSNull()
+            params["p_start_date"] = query.customStartDate ?? NSNull()
+            params["p_end_date"] = query.customEndDate ?? NSNull()
+        } else if let days = query.preset.seriesDays {
+            params["p_series_days"] = days
+            params["p_start_date"] = NSNull()
+            params["p_end_date"] = NSNull()
+        } else {
+            params["p_series_days"] = 90
+        }
+        let body = try JSONSerialization.data(withJSONObject: params, options: [])
+        let data = try await supabase.database.rpcData(
+            functionName: "admin_lifecycle_analytics_bundle",
+            parametersJSON: body
+        )
+        return try AdminLifecycleAnalyticsParsing.parseBundle(from: data)
+    }
 }

@@ -132,15 +132,164 @@ final class AdminChartsTests: XCTestCase {
             )
         )
     }
+
+    func testParseHistoricalBundleMapsOverview() throws {
+        let json = """
+        {
+          "seriesDays": 30,
+          "meta": { "notes": ["Content only"], "isContentActivityNotSessions": true, "maxSeriesDays": 365 },
+          "overview": {
+            "engagedDau": 3,
+            "engagedWau": 8,
+            "engagedMau": 12,
+            "activeTradersDau": 2,
+            "activeCreatorsDau": 1,
+            "activeMessengersDau": 4,
+            "newSignupsInPeriod": 5,
+            "accountsCreatedInPeriod": 2
+          },
+          "growth": { "signupsPerDay": [], "accountsCreatedPerDay": [] },
+          "trading": {
+            "tradesLoggedPerDay": [],
+            "organicTradesLoggedPerDay": [],
+            "bulkImportTradesPerDay": [],
+            "tradesByExecutionDatePerDay": [],
+            "activeTradersPerDay": [],
+            "returningTradersPerDay": [],
+            "importQuality": {
+              "manualEntered": 1,
+              "unsetImportSource": 0,
+              "csv": 0,
+              "broker": 0,
+              "other": 0,
+              "bulkInitialImportRows": 0,
+              "organicTradesLogged": 1,
+              "tradeDateBeforeCreatedDayRows": 0,
+              "nullTradeDateRows": 0
+            }
+          },
+          "social": {
+            "postsPerDay": [],
+            "profilePostsPerDay": [],
+            "reelsPerDay": [],
+            "commentsPerDay": [],
+            "likesPerDay": [],
+            "followsPerDay": [],
+            "messagesPerDay": [],
+            "activeCreatorsPerDay": [],
+            "activeMessengersPerDay": []
+          },
+          "engagement": {
+            "engagedUsersPerDay": [],
+            "returningEngagedUsersPerDay": [],
+            "returningCreatorsPerDay": []
+          },
+          "retention": {
+            "d1Rate": 10,
+            "d7Rate": null,
+            "d30Rate": null,
+            "cohortSignupsTotal": 20,
+            "d1MatureCohortSize": 5,
+            "d7MatureCohortSize": 0,
+            "d30MatureCohortSize": 0,
+            "insufficientData": false,
+            "definition": "content action"
+          }
+        }
+        """.data(using: .utf8)!
+        let bundle = try AdminHistoricalEngagementParsing.parseBundle(from: json)
+        XCTAssertEqual(bundle.overview.engagedDau, 3)
+        XCTAssertEqual(bundle.retentionD1MatureCohortSize, 5)
+    }
+
+    func testParseProductBundleMapsOverview() throws {
+        let json = """
+        {
+          "seriesDays": 7,
+          "meta": {
+            "productTrackingStartDate": "2026-11-22",
+            "productEngagementAvailable": true,
+            "retentionMetricsAvailable": true,
+            "previewFunnelAvailable": true,
+            "notes": ["Test note"]
+          },
+          "overview": {
+            "totalUsers": 100,
+            "newSignupsToday": 2,
+            "productDau": 10,
+            "productWau": 20,
+            "productMau": 30,
+            "dauMauRatio": 0.33
+          },
+          "growth": { "signupsPerDay": [], "productActiveUsersPerDay": [] },
+          "retention": {
+            "d1Rate": 50,
+            "d7Rate": 40,
+            "d30Rate": null,
+            "returningUsersPerDay": [],
+            "cohortSampleSignups": 5,
+            "d1MatureCohortSize": 3,
+            "d7MatureCohortSize": 0,
+            "d30MatureCohortSize": 0,
+            "insufficientData": false
+          },
+            "trading": {
+            "tradesCreatedPerDay": [],
+            "activeTradersPerDay": [],
+            "tradesPerActiveTraderLatestDay": 1.5,
+            "importTotalsInPeriod": {
+              "manualEntered": 1,
+              "unsetImportSource": 2,
+              "csv": 2,
+              "broker": 3,
+              "other": 0
+            }
+          },
+          "social": {
+            "profileViewsPerDay": [],
+            "uniqueProfileViewersPerDay": [],
+            "postsPerDay": [],
+            "featureEngagementPerDay": []
+          },
+          "features": { "topFeatures": [] },
+          "traxsProPreview": {
+            "available": true,
+            "startsPerDay": [],
+            "exitsPerDay": [],
+            "upgradeTapsPerDay": [],
+            "funnelTotals": { "starts": 1, "exits": 1, "upgradeTaps": 0, "startToUpgradeRate": null }
+          }
+        }
+        """.data(using: .utf8)!
+        let bundle = try AdminProductAnalyticsParsing.parseBundle(from: json)
+        XCTAssertEqual(bundle.overview.productDau, 10)
+        XCTAssertEqual(bundle.meta.notes.first, "Test note")
+        XCTAssertNil(bundle.retentionD30Rate)
+    }
 }
 
 private final class MockAdminUsageAnalyticsRepository: AdminUsageAnalyticsRepository, @unchecked Sendable {
     var bundles: [Int: AdminUsageAnalyticsBundle] = [:]
+    var productBundles: [Int: AdminProductAnalyticsBundle] = [:]
     var fetchCount = 0
 
     func fetchBundle(seriesDays: Int) async throws -> AdminUsageAnalyticsBundle {
         fetchCount += 1
         if let bundle = bundles[seriesDays] { return bundle }
+        throw AdminUsageAnalyticsError.invalidResponse
+    }
+
+    func fetchProductBundle(seriesDays: Int) async throws -> AdminProductAnalyticsBundle {
+        if let bundle = productBundles[seriesDays] { return bundle }
+        throw AdminUsageAnalyticsError.invalidResponse
+    }
+
+    func fetchHistoricalBundle(query: AdminHistoricalEngagementQuery) async throws -> AdminHistoricalEngagementBundle {
+        throw AdminUsageAnalyticsError.invalidResponse
+    }
+
+    func fetchLifecycleBundle(query: AdminLifecycleAnalyticsQuery) async throws -> AdminLifecycleAnalyticsBundle {
+        _ = query
         throw AdminUsageAnalyticsError.invalidResponse
     }
 }

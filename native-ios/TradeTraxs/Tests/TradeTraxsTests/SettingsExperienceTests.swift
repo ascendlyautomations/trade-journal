@@ -230,7 +230,7 @@ final class SettingsExperienceTests: XCTestCase {
         )
         viewModel.loadIfNeeded()
         await waitFor { viewModel.status != nil }
-        XCTAssertEqual(viewModel.planTitle, "TraxPro")
+        XCTAssertEqual(viewModel.planTitle, MonetizationPlanCopy.proPlanName)
     }
 
     func testAboutUsesBundleVersionMetadata() {
@@ -440,6 +440,10 @@ private struct SettingsStubBillingRepository: BillingRepository {
 
     func refreshEntitlements(for profileID: ProfileID) async throws -> BillingStatus {
         try await status(for: profileID)
+    }
+
+    func redeemCreatorAccessCode(_ code: String) async throws {
+        _ = code
     }
 }
 

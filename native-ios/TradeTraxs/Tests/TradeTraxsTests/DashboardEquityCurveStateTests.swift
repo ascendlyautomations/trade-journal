@@ -46,6 +46,88 @@ final class DashboardEquityCurveStateTests: XCTestCase {
         )
     }
 
+    func testHoldHistogramRendersVisibleBarPixelsOnLoad() {
+        let root = holdHistogram
+            .frame(width: 390)
+            .padding()
+            .applyThemeEnvironment(.fallback)
+            .preferredColorScheme(.dark)
+
+        let size = CGSize(width: 390, height: 240)
+        let host = UIHostingController(rootView: root)
+        host.view.bounds = CGRect(origin: .zero, size: size)
+        host.view.backgroundColor = UIColor(red: 11 / 255, green: 18 / 255, blue: 24 / 255, alpha: 1)
+
+        let window = UIWindow(frame: CGRect(origin: .zero, size: size))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.35))
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 2
+        format.opaque = true
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        let image = renderer.image { _ in
+            host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+        }
+        let plotRect = CGRect(x: 40, y: 20, width: 330, height: 140)
+        let accentPixelCount = countAccentBarPixels(in: image, within: plotRect)
+        XCTAssertGreaterThan(
+            accentPixelCount,
+            120,
+            "Expected solid hold-time bar pixels in plot area, found \(accentPixelCount)"
+        )
+        window.isHidden = true
+    }
+
+    private func countAccentBarPixels(in image: UIImage, within rect: CGRect) -> Int {
+        guard let cgImage = image.cgImage else { return 0 }
+        let pixelWidth = cgImage.width
+        let pixelHeight = cgImage.height
+        let scaleX = CGFloat(pixelWidth) / 390
+        let scaleY = CGFloat(pixelHeight) / 240
+
+        let x0 = Int(rect.minX * scaleX)
+        let x1 = Int(rect.maxX * scaleX)
+        let y0 = Int(rect.minY * scaleY)
+        let y1 = Int(rect.maxY * scaleY)
+
+        var pixels = [UInt8](repeating: 0, count: pixelWidth * pixelHeight * 4)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        var count = 0
+        pixels.withUnsafeMutableBytes { buffer in
+            guard let base = buffer.baseAddress else { return }
+            guard let context = CGContext(
+                data: base,
+                width: pixelWidth,
+                height: pixelHeight,
+                bitsPerComponent: 8,
+                bytesPerRow: pixelWidth * 4,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return }
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight))
+            let bytes = base.assumingMemoryBound(to: UInt8.self)
+            for y in y0..<min(y1, pixelHeight) {
+                for x in x0..<min(x1, pixelWidth) {
+                    let offset = (y * pixelWidth + x) * 4
+                    let r = CGFloat(bytes[offset])
+                    let g = CGFloat(bytes[offset + 1])
+                    let b = CGFloat(bytes[offset + 2])
+                    let a = CGFloat(bytes[offset + 3])
+                    guard a > 180 else { continue }
+                    let chroma = max(g, b) - min(r, min(g, b))
+                    if g > 110, b > 120, chroma > 45, g + b > r * 2 {
+                        count += 1
+                    }
+                }
+            }
+        }
+        return count
+    }
+
     func testDashboardSectionsFitProposedWidth() {
         // Screen widths, plus the width a chart actually receives inside the
         // dashboard card (screen minus section and card padding).
@@ -173,9 +255,13 @@ final class DashboardEquityCurveStateTests: XCTestCase {
     }
 
     private var holdHistogramBuckets: [DashboardHistogramBucket] {
-        ["<1m", "1-5m", "5-15m", "15-60m", "1-4h", "4h+"].map {
-            DashboardHistogramBucket(label: $0, count: 4)
-        }
+        [
+            DashboardHistogramBucket(label: "<5m", count: 4, totalNetPnL: 1_280),
+            DashboardHistogramBucket(label: "5–15m", count: 4, totalNetPnL: -720),
+            DashboardHistogramBucket(label: "15–60m", count: 4, totalNetPnL: 2_560),
+            DashboardHistogramBucket(label: "1–4h", count: 4, totalNetPnL: -360),
+            DashboardHistogramBucket(label: "4h+", count: 4, totalNetPnL: 4_800),
+        ]
     }
 
     private func fittedWidth<V: View>(_ view: V, proposed: CGFloat) -> CGFloat {

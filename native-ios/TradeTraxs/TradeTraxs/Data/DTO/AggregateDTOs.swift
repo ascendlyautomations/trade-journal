@@ -132,6 +132,7 @@ nonisolated enum TradeDTO {
         var consistency: FlexibleNumber?
         var max_drawdown: FlexibleNumber?
         var drawdown_type: String?
+        var drawdown_floor_cap: FlexibleNumber?
         var daily_drawdown: FlexibleNumber?
         var profit_target: FlexibleNumber?
         var winning_days: FlexibleNumber?
@@ -429,6 +430,7 @@ nonisolated enum ProfileDTO {
         var avatar_url: String?
         var trader_type: String?
         var trading_style: String?
+        var trading_model: String?
         var primary_market: String?
         var started_trading: String?
         var is_private: Bool?
@@ -447,6 +449,7 @@ nonisolated enum ProfileDTO {
         var avatar_url: String?
         var trader_type: String?
         var trading_style: String?
+        var trading_model: String?
         var primary_market: String?
         var started_trading: String?
         var is_private: Bool?
@@ -468,6 +471,7 @@ nonisolated enum ProfileDTO {
         var onboarding_completed: Bool?
         var trader_type: String?
         var trading_style: String?
+        var trading_model: String?
         var primary_market: String?
         var started_trading: String?
         var bio: String?

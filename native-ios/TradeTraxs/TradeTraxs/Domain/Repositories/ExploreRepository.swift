@@ -5,6 +5,12 @@ nonisolated protocol ExploreRepository: Sendable {
     /// Public discoverable profiles for ranking (offset via `page.cursor` as Int string).
     func discoverableProfiles(page: PageRequest) async throws -> CursorPage<Profile>
 
+    /// Filtered discoverable profiles — category (`trader_type`) and strategy (`trading_style` / `trading_model`).
+    func discoverableProfiles(
+        page: PageRequest,
+        filter: ExploreDiscoverableProfileFilter
+    ) async throws -> CursorPage<Profile>
+
     /// Discoverable profiles with a non-empty avatar (Explore home rail fallback).
     func discoverableProfilesWithAvatars(limit: Int) async throws -> [Profile]
 
@@ -29,7 +35,8 @@ nonisolated protocol ExploreRepository: Sendable {
         scope: TradeRoomDiscoveryScope,
         limit: Int,
         suggestedCursor: String?,
-        popularCursor: String?
+        popularCursor: String?,
+        category: TradeRoomCategory?
     ) async throws -> TradeRoomsHomeBootstrap
 
     /// Public room name/slug search via `search_public_trade_rooms`.
@@ -40,6 +47,18 @@ nonisolated protocol ExploreRepository: Sendable {
 }
 
 extension ExploreRepository {
+    func discoverableProfiles(
+        page: PageRequest,
+        filter: ExploreDiscoverableProfileFilter
+    ) async throws -> CursorPage<Profile> {
+        let result = try await discoverableProfiles(page: page)
+        guard filter.traderType != nil || filter.normalizedStrategyQuery != nil else {
+            return result
+        }
+        let items = result.items.filter { ExploreDiscoverableProfileFilter.matches($0, filter: filter) }
+        return CursorPage(items: items, nextCursor: result.nextCursor)
+    }
+
     func discoverableProfilesWithAvatars(limit: Int) async throws -> [Profile] {
         let capped = max(1, min(limit, 24))
         let page = try await discoverableProfiles(page: PageRequest(limit: capped))
@@ -62,9 +81,11 @@ extension ExploreRepository {
         scope: TradeRoomDiscoveryScope,
         limit: Int,
         suggestedCursor: String? = nil,
-        popularCursor: String? = nil
+        popularCursor: String? = nil,
+        category: TradeRoomCategory? = nil
     ) async throws -> TradeRoomsHomeBootstrap {
-        TradeRoomsHomeBootstrap(
+        _ = category
+        return TradeRoomsHomeBootstrap(
             viewerID: nil,
             scope: scope,
             yourRooms: [],

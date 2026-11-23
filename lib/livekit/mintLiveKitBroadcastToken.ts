@@ -1,6 +1,10 @@
 import { AccessToken, TrackSource } from "livekit-server-sdk"
 import { readLiveKitServerConfig } from "./config.ts"
 import { liveKitBroadcastRoomName } from "./liveKitRoomName.ts"
+import {
+  isBroadcastPastExpiresAt,
+  liveKitTokenTtlCapSeconds,
+} from "./tradeRoomBroadcastDurationLimit.ts"
 
 export type MintedLiveKitBroadcastSession = {
   token: string
@@ -16,16 +20,19 @@ export type MintedLiveKitBroadcastSession = {
 export async function mintLiveKitBroadcastViewerToken(
   userId: string,
   roomId: string,
-  displayName: string | null
+  displayName: string | null,
+  sessionExpiresAt?: string | null
 ): Promise<MintedLiveKitBroadcastSession | null> {
   const config = readLiveKitServerConfig()
   if (!config) return null
+  if (isBroadcastPastExpiresAt(sessionExpiresAt)) return null
 
+  const ttl = liveKitTokenTtlCapSeconds(sessionExpiresAt, config.tokenTtlSeconds)
   const roomName = liveKitBroadcastRoomName(roomId)
   const at = new AccessToken(config.apiKey, config.apiSecret, {
     identity: userId,
     name: displayName ?? undefined,
-    ttl: config.tokenTtlSeconds,
+    ttl,
   })
 
   at.addGrant({
@@ -47,23 +54,26 @@ export async function mintLiveKitBroadcastViewerToken(
     canPublish: false,
     canSubscribe: true,
     canPublishData: true,
-    expiresInSeconds: config.tokenTtlSeconds,
+    expiresInSeconds: ttl,
   }
 }
 
 export async function mintLiveKitBroadcastConversationToken(
   userId: string,
   roomId: string,
-  displayName: string | null
+  displayName: string | null,
+  sessionExpiresAt?: string | null
 ): Promise<MintedLiveKitBroadcastSession | null> {
   const config = readLiveKitServerConfig()
   if (!config) return null
+  if (isBroadcastPastExpiresAt(sessionExpiresAt)) return null
 
+  const ttl = liveKitTokenTtlCapSeconds(sessionExpiresAt, config.tokenTtlSeconds)
   const roomName = liveKitBroadcastRoomName(roomId)
   const at = new AccessToken(config.apiKey, config.apiSecret, {
     identity: userId,
     name: displayName ?? undefined,
-    ttl: config.tokenTtlSeconds,
+    ttl,
   })
 
   at.addGrant({
@@ -85,23 +95,26 @@ export async function mintLiveKitBroadcastConversationToken(
     canPublish: true,
     canSubscribe: true,
     canPublishData: true,
-    expiresInSeconds: config.tokenTtlSeconds,
+    expiresInSeconds: ttl,
   }
 }
 
 export async function mintLiveKitBroadcastPublisherToken(
   userId: string,
   roomId: string,
-  displayName: string | null
+  displayName: string | null,
+  sessionExpiresAt?: string | null
 ): Promise<MintedLiveKitBroadcastSession | null> {
   const config = readLiveKitServerConfig()
   if (!config) return null
+  if (isBroadcastPastExpiresAt(sessionExpiresAt)) return null
 
+  const ttl = liveKitTokenTtlCapSeconds(sessionExpiresAt, config.tokenTtlSeconds)
   const roomName = liveKitBroadcastRoomName(roomId)
   const at = new AccessToken(config.apiKey, config.apiSecret, {
     identity: userId,
     name: displayName ?? undefined,
-    ttl: config.tokenTtlSeconds,
+    ttl,
   })
 
   at.addGrant({
@@ -128,7 +141,7 @@ export async function mintLiveKitBroadcastPublisherToken(
     canPublish: true,
     canSubscribe: true,
     canPublishData: true,
-    expiresInSeconds: config.tokenTtlSeconds,
+    expiresInSeconds: ttl,
   }
 }
 
@@ -138,16 +151,19 @@ export async function mintLiveKitBroadcastPublisherToken(
 export async function mintLiveKitBroadcastObsHostToken(
   userId: string,
   roomId: string,
-  displayName: string | null
+  displayName: string | null,
+  sessionExpiresAt?: string | null
 ): Promise<MintedLiveKitBroadcastSession | null> {
   const config = readLiveKitServerConfig()
   if (!config) return null
+  if (isBroadcastPastExpiresAt(sessionExpiresAt)) return null
 
+  const ttl = liveKitTokenTtlCapSeconds(sessionExpiresAt, config.tokenTtlSeconds)
   const roomName = liveKitBroadcastRoomName(roomId)
   const at = new AccessToken(config.apiKey, config.apiSecret, {
     identity: userId,
     name: displayName ?? undefined,
-    ttl: config.tokenTtlSeconds,
+    ttl,
   })
 
   at.addGrant({
@@ -169,6 +185,6 @@ export async function mintLiveKitBroadcastObsHostToken(
     canPublish: true,
     canSubscribe: true,
     canPublishData: true,
-    expiresInSeconds: config.tokenTtlSeconds,
+    expiresInSeconds: ttl,
   }
 }

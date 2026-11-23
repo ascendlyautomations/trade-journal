@@ -285,19 +285,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
         )
 
         if let row = existing.first, row.left_at != nil {
-            struct ReactivateBody: Encodable {
-                var left_at: String? = nil
-                var notification_enabled: Bool = true
-            }
-            _ = try await supabase.database.update(
-                ReactivateBody(),
-                table: "room_members",
-                query: [
-                    SupabaseQuery.eq("room_id", roomID.rawValue),
-                    SupabaseQuery.eq("user_id", profileID.rawValue),
-                ],
-                returning: RoomDTO.Membership.self
-            )
+            try await reactivateSoftLeftMembership(roomID: roomID, profileID: profileID)
         } else if existing.isEmpty {
             struct Body: Encodable {
                 var room_id: String
@@ -312,35 +300,88 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 )
             } catch {
                 if Self.isUniqueViolation(error) {
-                    struct ReactivateBody: Encodable {
-                        var left_at: String? = nil
-                        var notification_enabled: Bool = true
-                    }
-                    _ = try await supabase.database.update(
-                        ReactivateBody(),
-                        table: "room_members",
-                        query: [
-                            SupabaseQuery.eq("room_id", roomID.rawValue),
-                            SupabaseQuery.eq("user_id", profileID.rawValue),
-                        ],
-                        returning: RoomDTO.Membership.self
-                    )
+                    try await reactivateSoftLeftMembership(roomID: roomID, profileID: profileID)
                 } else {
                     throw error
                 }
             }
         }
 
-        if let membership = try await membership(roomID: roomID, profileID: profileID) {
-            return membership
+        guard let confirmed = try await membership(roomID: roomID, profileID: profileID) else {
+            TradeRoomMembershipRejoinTrace.logJoinConfirmFailed(roomID: roomID.rawValue)
+            throw AppError.network(
+                .validation(
+                    statusCode: nil,
+                    message: "Could not confirm room membership. You may not be allowed to join this room."
+                )
+            )
         }
-        return RoomMembership(
-            roomID: roomID,
-            profileID: profileID,
-            role: .member,
-            joinedAt: Date(),
-            notificationsEnabled: true
+        #if DEBUG
+        TradeRoomMembershipRejoinTrace.debugPrint(
+            "active_membership_confirmed room=\(roomID.rawValue)"
         )
+        #endif
+        return confirmed
+    }
+
+    private struct RoomMemberReactivatePatchRow: Decodable {
+        var left_at: String?
+    }
+
+    /// Web `reactivateRoomMembership` — PATCH must include JSON `null` for `left_at`.
+    private func reactivateSoftLeftMembership(roomID: RoomID, profileID: ProfileID) async throws {
+        let query = [
+            SupabaseQuery.eq("room_id", roomID.rawValue),
+            SupabaseQuery.eq("user_id", profileID.rawValue),
+        ]
+        let rows = try await supabase.database.updateReturningRows(
+            TradeRoomMembershipRejoinPatchBody(),
+            table: "room_members",
+            query: query,
+            returning: RoomMemberReactivatePatchRow.self
+        )
+        let leftAtCleared = rows.first.map { row in
+            guard let leftAt = row.left_at?.trimmingCharacters(in: .whitespacesAndNewlines) else {
+                return true
+            }
+            return leftAt.isEmpty
+        }
+        var activeConfirmed = false
+        if leftAtCleared == true {
+            activeConfirmed = (try? await membership(roomID: roomID, profileID: profileID)) != nil
+        }
+        TradeRoomMembershipRejoinTrace.logReactivate(
+            TradeRoomMembershipRejoinTrace.ReactivateOutcome(
+                roomID: roomID.rawValue,
+                returnedRowCount: rows.count,
+                leftAtClearedInResponse: leftAtCleared,
+                activeMembershipConfirmed: activeConfirmed
+            )
+        )
+        if rows.isEmpty {
+            throw AppError.network(
+                .validation(
+                    statusCode: nil,
+                    message: "Rejoin did not update membership. The room may require approval."
+                )
+            )
+        }
+        if leftAtCleared != true {
+            throw AppError.network(
+                .validation(
+                    statusCode: nil,
+                    message: "Could not clear room leave state. You may not be allowed to rejoin."
+                )
+            )
+        }
+        if !activeConfirmed {
+            throw AppError.network(
+                .validation(
+                    statusCode: nil,
+                    message: "Could not confirm room membership. You may not be allowed to join this room."
+                )
+            )
+        }
     }
 
     func leave(roomID: RoomID, profileID: ProfileID) async throws {
@@ -388,7 +429,12 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
             parametersJSON: try JSONEncoder().encode(Params(p_room_id: roomID.rawValue))
         )
         let response = try JSONDecoder().decode(Response.self, from: data)
-        return TradeRoomJoinRequestState.parse(response.status)
+        let status = TradeRoomJoinRequestState.parse(response.status)
+        TradeRoomMembershipRejoinTrace.logJoinRequestProbe(
+            roomID: roomID.rawValue,
+            status: response.status
+        )
+        return status
     }
 
     func channels(roomID: RoomID) async throws -> [RoomChannel] {
@@ -770,7 +816,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
         } else {
             throw MappingError.missingField("owner_user_id")
         }
-        let category = dto.category.flatMap { TradeRoomCategory(rawValue: $0) }
+        let category = TradeRoomCategory.parseStored(dto.category)
         let joinPolicy = TradeRoomJoinPolicy(rawValue: dto.join_policy ?? "") ?? .open
         return TradeRoom(
             id: RoomID(id),
@@ -912,7 +958,7 @@ nonisolated struct DefaultRoomRepository: RoomRepository, RoomManagementReposito
                 SupabaseQuery.eq("user_id", profileID.rawValue),
             ]
         )
-        var allowed = Set(channelIDs.map(\.rawValue))
+        let allowed = Set(channelIDs.map(\.rawValue))
         var result: [RoomChannelID: Bool] = [:]
         for row in rows {
             guard let sectionID = row.section_id, allowed.contains(sectionID) else { continue }

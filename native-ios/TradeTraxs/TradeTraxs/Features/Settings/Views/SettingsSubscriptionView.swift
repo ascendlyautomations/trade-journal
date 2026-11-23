@@ -81,7 +81,8 @@ struct SettingsSubscriptionView: View {
             HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
                 VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
                     Text(viewModel.planTitle)
-                        .experienceStyle(.headline, color: colors.primaryText)
+                        .experienceStyle(.title3, color: colors.primaryText)
+                        .fontWeight(.semibold)
                     if viewModel.isRefreshingEntitlements {
                         HStack(spacing: ExperienceSpacing.xs) {
                             ProgressView()
@@ -93,13 +94,18 @@ struct SettingsSubscriptionView: View {
                         Text(renewal)
                             .experienceStyle(.caption, color: colors.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
+                    } else if viewModel.showsFreePlanDetails {
+                        Text("Core journaling and community features at no cost.")
+                            .experienceStyle(.caption, color: colors.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 Spacer(minLength: ExperienceSpacing.sm)
                 currentPlanTrailingColumn
             }
-            .padding(.vertical, ExperienceSpacing.xxs)
+            .padding(.vertical, ExperienceSpacing.xs)
             .accessibilityElement(children: .combine)
+            .listRowBackground(colors.fillSecondary.opacity(0.28))
         } header: {
             sectionHeading("Your Current Plan")
         }
@@ -107,7 +113,7 @@ struct SettingsSubscriptionView: View {
 
     @ViewBuilder
     private var currentPlanTrailingColumn: some View {
-        if viewModel.planTitle == "Free" {
+        if viewModel.planTitle == MonetizationPlanCopy.freePlanName {
             Text("$0")
                 .experienceStyle(.headline, color: colors.primaryText)
         } else if viewModel.showsReleaseIncludedPlanDetails {
@@ -154,10 +160,10 @@ struct SettingsSubscriptionView: View {
 
     private var includedDisclosureTitle: String {
         if viewModel.showsProMembership {
-            return "What's Included in TraxPro"
+            return "What's Included in \(MonetizationPlanCopy.proPlanName)"
         }
-        if viewModel.planTitle == "Free" {
-            return "What's Included in Free"
+        if viewModel.planTitle == MonetizationPlanCopy.freePlanName {
+            return "What's Included in \(MonetizationPlanCopy.freePlanName)"
         }
         return "What's Included"
     }
@@ -178,7 +184,7 @@ struct SettingsSubscriptionView: View {
 
                 if viewModel.showsFreePlanDetails {
                     disclosureRow(
-                        title: "With TraxPro",
+                        title: MonetizationPlanCopy.proEverythingInFreeHeading,
                         isExpanded: showsTraxProBenefits,
                         accessibilityID: "settings.subscription.traxproBenefits"
                     ) {
@@ -220,6 +226,7 @@ struct SettingsSubscriptionView: View {
 
             if isExpanded {
                 content()
+                    .padding(.top, ExperienceSpacing.xxs)
             }
         }
         .padding(.vertical, ExperienceSpacing.xxs)
@@ -229,8 +236,8 @@ struct SettingsSubscriptionView: View {
     private var includedDetails: some View {
         if viewModel.showsProMembership {
             proBenefitList
-        } else if viewModel.showsFreePlanDetails, let status = viewModel.status {
-            freeLimitList(status)
+        } else if viewModel.showsFreePlanDetails {
+            freePlanFeatureList
         } else if viewModel.showsReleaseIncludedPlanDetails {
             Text("This release includes Trade AI, analytics, and journal features at no additional cost.")
                 .experienceStyle(.footnote, color: colors.secondaryText)
@@ -239,20 +246,18 @@ struct SettingsSubscriptionView: View {
     }
 
     private var proBenefitList: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            ForEach(ProUpgradeMarketing.benefitLines, id: \.self) { line in
-                benefitRow(title: line, detail: "")
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+            ForEach(MonetizationPlanCopy.proPlanFeatures, id: \.self) { line in
+                MonetizationPlanPresentation.BenefitRow(text: line)
             }
         }
     }
 
-    private func freeLimitList(_ status: BillingStatus) -> some View {
+    private var freePlanFeatureList: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            featureRow(title: "Manual trades", detail: "Unlimited")
-            featureRow(title: "CSV imports", detail: "Unlimited")
-            featureRow(title: "Posts & DMs", detail: "Unlimited")
-            featureRow(title: "Clips", detail: "\(FreeTierPolicy.dailyClipLimit) per UTC day")
-            featureRow(title: "Active accounts", detail: "\(activeAccounts(status)) max")
+            ForEach(MonetizationPlanCopy.freePlanFeatures, id: \.self) { line in
+                MonetizationPlanPresentation.BenefitRow(text: line)
+            }
         }
     }
 
@@ -369,17 +374,13 @@ struct SettingsSubscriptionView: View {
             }
 
             if viewModel.showsRedeemOfferCode {
-                Button {
+                MonetizationPlanPresentation.AppleOfferCodeRedemptionButton(
+                    style: .settingsList,
+                    isDisabled: subscriptionFooterActionsDisabled,
+                    accessibilityIdentifier: "settings.subscription.redeemOfferCode"
+                ) {
                     Task { await viewModel.redeemOfferCode() }
-                } label: {
-                    SettingsPrimaryActionLabel(
-                        title: "Redeem Offer Code",
-                        systemImage: "giftcard"
-                    )
                 }
-                .buttonStyle(.experiencePlain)
-                .disabled(subscriptionFooterActionsDisabled)
-                .accessibilityIdentifier("settings.subscription.redeemOfferCode")
             }
 
             compactLegalLinksRow
@@ -425,43 +426,6 @@ struct SettingsSubscriptionView: View {
         Text(title)
             .experienceStyle(.footnote, color: colors.secondaryText)
             .textCase(nil)
-    }
-
-    private func featureRow(title: String, detail: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.sm) {
-            Image(systemName: "checkmark")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(colors.accent)
-                .frame(width: 14, alignment: .center)
-            Text(title)
-                .experienceStyle(.subheadline, color: colors.primaryText)
-            Spacer(minLength: ExperienceSpacing.xs)
-            Text(detail)
-                .experienceStyle(.caption, color: colors.secondaryText)
-        }
-    }
-
-    private func benefitRow(title: String, detail: String) -> some View {
-        HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-            Image(systemName: "checkmark")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(colors.accent)
-                .frame(width: 14, alignment: .center)
-                .padding(.top, 2)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .experienceStyle(.subheadline, color: colors.primaryText)
-                if !detail.isEmpty {
-                    Text(detail)
-                        .experienceStyle(.caption, color: colors.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-    }
-
-    private func activeAccounts(_ status: BillingStatus) -> Int {
-        status.maxTradeEntryAccounts ?? FreeTierPolicy.maxTradeEntryAccounts
     }
 
     private func planDuration(_ product: StoreKitTraxProProduct) -> String {

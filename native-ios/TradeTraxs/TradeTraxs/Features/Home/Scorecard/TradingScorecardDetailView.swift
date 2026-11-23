@@ -7,6 +7,7 @@ struct TradingScorecardDetailView: View {
 
     @Environment(\.themeColors) private var colors
     @State private var restrictsPremiumPsychology = false
+    @State private var entitlementGateRevision = 0
 
     var body: some View {
         ScrollView {
@@ -16,6 +17,9 @@ struct TradingScorecardDetailView: View {
                     adherencePanel(result: result)
                     if !result.insights.isEmpty {
                         insightsPanel(result: result)
+                    }
+                    if showsTradingRulesUpgradePrompt {
+                        tradingRulesUpgradePrompt
                     }
                     if !restrictsPremiumPsychology {
                         Button {
@@ -40,6 +44,52 @@ struct TradingScorecardDetailView: View {
         .background(colors.appBackground)
         .experienceNavigationTitle("Scorecard")
         .onAppear { refreshEntitlementGate() }
+        .onReceive(NotificationCenter.default.publisher(for: .billingEntitlementsDidRefresh)) { _ in
+            entitlementGateRevision += 1
+            refreshEntitlementGate()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .monetizationConfigurationDidChange)) { _ in
+            entitlementGateRevision += 1
+            refreshEntitlementGate()
+        }
+    }
+
+    private var showsTradingRulesUpgradePrompt: Bool {
+        _ = entitlementGateRevision
+        let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+        return ProMonetizationPolicy.shouldRestrictTradingRulesComplianceAnalytics(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        )
+    }
+
+    private var tradingRulesUpgradePrompt: some View {
+        Group {
+            if ProMonetizationPolicy.canPresentProPaywall(
+                demoModeActive: ExploreModeSupport.isActive,
+                enforcement: IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled,
+                paywallEnabled: IosSubscriptionReleaseConfiguration.iosPaywallEnabled
+            ) {
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    ProUpgradeCoordinator.shared.present(reason: .feature(.premiumAnalytics))
+                } label: {
+                    Text("Upgrade to TraxsPro to track your trading rules and stay accountable.")
+                        .experienceStyle(.footnote, color: colors.accent)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("scorecard.tradingRules.upgrade")
+            } else if IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled {
+                Text("TraxsPro upgrades aren't available in this build yet.")
+                    .experienceStyle(.footnote, color: colors.tertiaryText)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, ExperienceSpacing.md)
+            }
+        }
+        .padding(.top, ExperienceSpacing.xs)
     }
 
     private func heroPanel(result: ScorecardResult) -> some View {

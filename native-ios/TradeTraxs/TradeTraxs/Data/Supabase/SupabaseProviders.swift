@@ -1265,7 +1265,6 @@ nonisolated final class LiveSupabaseRealtimeProvider: SupabaseRealtimeProviding,
         accessToken: String?,
         debugOwner: String? = nil
     ) -> RealtimeMessageWatch {
-        let safeRoom = roomID.trimmingCharacters(in: .whitespacesAndNewlines)
         let safeSession = sessionID.trimmingCharacters(in: .whitespacesAndNewlines)
         let sessionFilter = "broadcast_session_id=eq.\(safeSession)"
         let sessionRowFilter = "id=eq.\(safeSession)"

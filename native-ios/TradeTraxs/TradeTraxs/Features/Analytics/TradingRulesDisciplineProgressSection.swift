@@ -14,7 +14,7 @@ struct TradingRulesDisciplineProgressSection: View {
                 infoTitle: "Discipline progress",
                 infoBody: """
                 Compares current dashboard scope to the prior period of equal length. \
-                Streaks count only evaluated Eastern trading days with enough checks — missing days are skipped. \
+                Streaks count only evaluated Eastern trading days with enough checks; missing days are skipped. \
                 Your compliance goal is informational and does not change rule scoring.
                 """,
                 infoAccessibilityID: "tradingRulesAnalytics.discipline.info"

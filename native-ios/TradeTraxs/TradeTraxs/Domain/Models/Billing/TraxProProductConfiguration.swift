@@ -1,12 +1,12 @@
 import Foundation
 
-/// App Store Connect product identifiers for TraxPro auto-renewable subscriptions.
+/// App Store Connect product identifiers for TraxsPro auto-renewable subscriptions.
 ///
 /// Override via Info.plist keys (see ``TraxProProductConfiguration/infoPlistKey``) for
 /// sandbox vs production without rebuilding. Defaults are placeholders until products
 /// exist in App Store Connect.
 ///
-/// All products must share one TraxPro subscription group (monthly / 6-month / yearly).
+/// All products must share one TraxsPro subscription group (monthly / 6-month / yearly).
 nonisolated enum TraxProProductConfiguration {
     static let monthlyInfoPlistKey = "TRAXPRO_IAP_PRODUCT_ID_MONTHLY"
     static let sixMonthInfoPlistKey = "TRAXPRO_IAP_PRODUCT_ID_SIX_MONTH"

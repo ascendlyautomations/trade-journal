@@ -235,12 +235,13 @@ struct ManageRoomView: View {
             }
 
             Section("Discovery") {
-                Picker("Category", selection: Binding(
-                    get: { viewModel.editConfiguration.category ?? .general },
-                    set: { viewModel.editConfiguration.category = $0 }
-                )) {
+                Picker(
+                    "Category",
+                    selection: $viewModel.editConfiguration.category
+                ) {
+                    Text("Uncategorized").tag(nil as TradeRoomCategory?)
                     ForEach(TradeRoomCategory.allCases, id: \.self) { category in
-                        Text(category.displayName).tag(category)
+                        Text(category.displayName).tag(Optional(category))
                     }
                 }
                 NavigationLink("Tags") {

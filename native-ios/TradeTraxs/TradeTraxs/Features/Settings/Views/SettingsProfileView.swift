@@ -70,6 +70,11 @@ struct SettingsProfileView: View {
                         .textInputAutocapitalization(.words)
                 }
                 .accessibilityIdentifier("settings.profile.tradingStyle")
+                SettingsLabeledField(title: ProfileTradingModelField.label) {
+                    TextField(ProfileTradingModelField.placeholder, text: $viewModel.draftTradingModel)
+                        .textInputAutocapitalization(.words)
+                }
+                .accessibilityIdentifier("settings.profile.tradingModel")
                 SettingsLabeledField(title: ProfilePrimaryMarketField.label) {
                     TextField(ProfilePrimaryMarketField.placeholder, text: $viewModel.draftPrimaryMarket)
                         .textInputAutocapitalization(.words)

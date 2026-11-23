@@ -45,6 +45,7 @@ struct MainTabShellView: View {
         .experienceAppChrome(usesFeedOpaqueChrome: store.selectedTab == .feed)
         .globalUploadQueueSheet(coordinator: globalUploadCoordinator)
         .proUpgradeSheet()
+        .traxsProPreviewCover(data: appEnvironment.data)
         .freePlanAccountSlotOverlay()
         .sheet(isPresented: Binding(
             get: { postTradeReflectionGate.pendingTrade != nil },
@@ -97,6 +98,8 @@ struct MainTabShellView: View {
         .onChange(of: store.selectedTab) { _, tab in
             MainThreadOperationTracker.push("tab.select.\(tab.rawValue)")
             defer { MainThreadOperationTracker.pop("tab.select.\(tab.rawValue)") }
+            ProductAnalyticsCoordinator.shared.bind(repository: appEnvironment.data.analytics)
+            ProductAnalyticsCoordinator.shared.noteScreen(ProductAnalyticsCoordinator.shared.mapTabToScreen(tab))
             AuthenticatedLaunchPhasing.noteActiveTab(tab)
             OwnerAccountFilterDropdownController.shared.dismiss()
             syncFeedScopedBarChrome(isFeedTab: tab == .feed)
@@ -115,9 +118,16 @@ struct MainTabShellView: View {
             viewerStoryStore.reconcileExpired()
         }
         .onAppear {
+            ProductAnalyticsCoordinator.shared.bind(repository: appEnvironment.data.analytics)
+            ProductAnalyticsCoordinator.shared.noteScreen(
+                ProductAnalyticsCoordinator.shared.mapTabToScreen(store.selectedTab)
+            )
             syncFeedScopedBarChrome(isFeedTab: store.selectedTab == .feed)
             broadcastCoordinator.bindOpenProfile { profileID in
                 coordinator.openExternal(.feed(.profile(profileID)))
+            }
+            broadcastCoordinator.bindOpenTrade { tradeID in
+                coordinator.openExternal(.feed(.trade(tradeID)))
             }
             FirstTradeDetailCoachmarkStore.shared.configure(
                 viewerID: currentUserProfile.profile?.id,
@@ -1485,7 +1495,7 @@ private struct PropFirmPayoutsHomeRouteView: View {
 }
 
 /// Gates `HomeRoute.psychologyAnalytics` for confirmed Free users.
-private struct PsychologyAnalyticsHomeRouteView: View {
+struct PsychologyAnalyticsHomeRouteView: View {
     let navigationCoordinator: NavigationCoordinator
     let data: DataEnvironment
 
@@ -1500,6 +1510,15 @@ private struct PsychologyAnalyticsHomeRouteView: View {
         _ = entitlementGateRevision
         let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
         return ProMonetizationPolicy.shouldRestrictPremiumPsychologyAndAI(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        )
+    }
+
+    private var showsEntitlementVerification: Bool {
+        _ = entitlementGateRevision
+        let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+        return ProMonetizationPolicy.shouldShowEntitlementVerification(
             demoModeActive: ExploreModeSupport.isActive,
             profileID: profileID
         )
@@ -1521,7 +1540,11 @@ private struct PsychologyAnalyticsHomeRouteView: View {
 
     var body: some View {
         Group {
-            if restrictsPremiumPsychologyAndAI {
+            if showsEntitlementVerification {
+                TraxProEntitlementVerificationView(profileID: activeProfileID) {
+                    Task { await TraxProEntitlementRefreshAction.refresh(data: data) }
+                }
+            } else if restrictsPremiumPsychologyAndAI {
                 Color.clear
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .experienceScreenBackground()
@@ -1570,8 +1593,13 @@ private struct PsychologyAnalyticsHomeRouteView: View {
             }
         }
         .task(id: activeProfileID?.rawValue) {
-            guard !restrictsPremiumPsychologyAndAI else { return }
+            guard !restrictsPremiumPsychologyAndAI, !showsEntitlementVerification else { return }
             await refreshAnalytics(forceReveal: true)
+        }
+        .task(id: showsEntitlementVerification) {
+            if showsEntitlementVerification {
+                await TraxProEntitlementRefreshAction.refresh(data: data)
+            }
         }
         .onAppear { presentUpgradeGateIfNeeded() }
         .onChange(of: restrictsPremiumPsychologyAndAI) { _, restricted in
@@ -1632,7 +1660,10 @@ private struct PsychologyAnalyticsHomeRouteView: View {
         guard restrictsPremiumPsychologyAndAI else { return }
         guard !didPresentUpgradeGate else { return }
         didPresentUpgradeGate = true
-        ProUpgradeCoordinator.shared.present(reason: .feature(.premiumAnalytics))
+        ProUpgradeCoordinator.shared.present(
+            reason: .feature(.premiumAnalytics),
+            suppressPreview: true
+        )
     }
 }
 
@@ -1688,7 +1719,10 @@ private struct PsychologyCoachHomeRouteView: View {
         guard restrictsPremiumPsychologyAndAI else { return }
         guard !didPresentUpgradeGate else { return }
         didPresentUpgradeGate = true
-        ProUpgradeCoordinator.shared.present(reason: .feature(.premiumAnalytics))
+        ProUpgradeCoordinator.shared.present(
+            reason: .feature(.premiumAnalytics),
+            suppressPreview: true
+        )
     }
 }
 
@@ -1710,9 +1744,24 @@ private struct ReportDetailHomeRouteView: View {
         )
     }
 
+    private var showsEntitlementVerification: Bool {
+        _ = entitlementGateRevision
+        let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+        return ProMonetizationPolicy.shouldShowEntitlementVerification(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        )
+    }
+
     var body: some View {
         Group {
-            if restrictsTradingReportsCatalog {
+            if showsEntitlementVerification {
+                TraxProEntitlementVerificationView(profileID: SessionBootstrapStore.shared.last.map {
+                    ProfileID($0.data.viewer.id)
+                }) {
+                    Task { await TraxProEntitlementRefreshAction.refresh(data: data) }
+                }
+            } else if restrictsTradingReportsCatalog {
                 Color.clear
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .experienceScreenBackground()

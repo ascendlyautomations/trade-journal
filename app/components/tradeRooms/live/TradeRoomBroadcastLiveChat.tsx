@@ -1,8 +1,12 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient.ts"
 import { SafeProfileAvatar } from "@/app/components/SafeProfileAvatar.tsx"
+import SharedTradeMessageCard from "@/app/components/SharedTradeMessageCard.tsx"
+import ImageLightbox from "@/app/components/ui/ImageLightbox"
+import { getSharedTradeViewHref } from "@/lib/sharedContentNavigation"
 import {
   getTradeRoomBroadcastRoom,
   sendTradeRoomBroadcastChatMessage,
@@ -85,6 +89,63 @@ function ChatAvatar({
   )
 }
 
+function BroadcastChatMessageBody({
+  message,
+  viewerUserId,
+  onExpandImage,
+  onViewTrade,
+}: {
+  message: BroadcastChatMessage
+  viewerUserId: string | null
+  onExpandImage: (url: string) => void
+  onViewTrade: (tradeId: string) => void
+}) {
+  return (
+    <div className="mt-0.5 space-y-1.5">
+      {message.replyTo ? (
+        <div className="border-l-2 border-violet-400/70 pl-2 text-[10px] text-gray-500">
+          <span className="font-semibold text-violet-300/90">
+            {message.replyTo.displayName}
+          </span>
+          <span className="ml-1">{message.replyTo.textPreview}</span>
+        </div>
+      ) : null}
+      {message.imageUrl ? (
+        <button
+          type="button"
+          className="block max-w-[160px] overflow-hidden rounded-lg border border-white/10 bg-black/20"
+          onClick={() => onExpandImage(message.imageUrl!)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={message.imageUrl}
+            alt="Chat attachment"
+            className="max-h-[120px] w-full object-contain"
+          />
+        </button>
+      ) : null}
+      {message.tradeId ? (
+        <SharedTradeMessageCard
+          tradeId={message.tradeId}
+          viewerUserId={viewerUserId}
+          onViewTrade={(trade) => {
+            const id = trade?.id != null ? String(trade.id).trim() : ""
+            if (id) onViewTrade(id)
+          }}
+          showSocialLayer={false}
+          hideViewTradeAction
+          optimizeMessagePreview
+          deferUntilVisible={false}
+          className="max-w-[200px]"
+        />
+      ) : null}
+      {message.text ? (
+        <p className="break-words text-gray-300">{message.text}</p>
+      ) : null}
+    </div>
+  )
+}
+
 export default function TradeRoomBroadcastLiveChat({
   messages,
   userId,
@@ -95,8 +156,10 @@ export default function TradeRoomBroadcastLiveChat({
   authLoading,
   className,
 }: Props) {
+  const router = useRouter()
   const [draft, setDraft] = useState("")
   const [sendError, setSendError] = useState<string | null>(null)
+  const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null)
   const [profiles, setProfiles] = useState<Map<string, BroadcastChatProfile>>(
     () => new Map()
   )
@@ -149,11 +212,19 @@ export default function TradeRoomBroadcastLiveChat({
     return map
   }, [messages, profiles, interactiveProfiles])
 
+  const scrollSignature = useMemo(
+    () =>
+      messages
+        .map((m) => `${m.id}:${m.imageUrl ?? ""}:${m.tradeId ?? ""}:${m.text.length}`)
+        .join("|"),
+    [messages]
+  )
+
   useEffect(() => {
     const el = listRef.current
     if (!el) return
     el.scrollTop = el.scrollHeight
-  }, [messages.length])
+  }, [scrollSignature])
 
   const onSend = useCallback(async () => {
     if (!userId || !draft.trim() || disabled) return
@@ -176,6 +247,14 @@ export default function TradeRoomBroadcastLiveChat({
       setSendError(result.error)
     }
   }, [userId, draft, displayName, disabled, avatarUrl])
+
+  const viewSharedTrade = useCallback(
+    (tradeId: string) => {
+      router.push(getSharedTradeViewHref(tradeId))
+    },
+    [router]
+  )
+
   return (
     <div
       className={`flex min-h-0 flex-1 flex-col rounded-lg border border-white/10 bg-black/30 ${className ?? ""}`}
@@ -214,7 +293,12 @@ export default function TradeRoomBroadcastLiveChat({
                         })}
                       </span>
                     </div>
-                    <p className="mt-0.5 break-words text-gray-300">{m.text}</p>
+                    <BroadcastChatMessageBody
+                      message={m}
+                      viewerUserId={userId}
+                      onExpandImage={setLightboxImageUrl}
+                      onViewTrade={viewSharedTrade}
+                    />
                   </div>
                 </li>
               )
@@ -258,6 +342,12 @@ export default function TradeRoomBroadcastLiveChat({
           </button>
         </div>
       </div>
+      {lightboxImageUrl ? (
+        <ImageLightbox
+          imageUrl={lightboxImageUrl}
+          onClose={() => setLightboxImageUrl(null)}
+        />
+      ) : null}
     </div>
   )
 }

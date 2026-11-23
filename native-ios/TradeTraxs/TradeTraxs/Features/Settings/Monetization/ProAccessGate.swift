@@ -10,7 +10,7 @@ enum ProAccessGate {
             paywallEnabled: IosSubscriptionReleaseConfiguration.iosPaywallEnabled
         ) else { return false }
         guard let profileID else { return false }
-        return !TradeEntryEntitlementGate.viewerHasTraxProAccess(profileID: profileID)
+        return !TraxProEffectiveEntitlement.hasVerifiedTraxProAccess(profileID: profileID)
     }
 
     /// Returns `true` when the paywall was shown (caller should abort the action).

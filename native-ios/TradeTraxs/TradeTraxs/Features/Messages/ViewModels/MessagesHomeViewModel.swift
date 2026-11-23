@@ -378,7 +378,11 @@ final class MessagesHomeViewModel {
         }
         do {
             try await rooms.leave(roomID: id, profileID: viewerID)
-            inboxStore.removeRoom(id: id)
+            TradeRoomMembershipSync.applyLeft(
+                roomID: id,
+                viewerID: viewerID,
+                inboxStore: inboxStore
+            )
             ExperienceHaptics.play(.success)
         } catch {
             ExperienceHaptics.play(.warning)

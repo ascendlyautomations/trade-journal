@@ -798,7 +798,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
 
     /// Mirror web `ACCOUNTS_SELECT` column order/meanings + owner insight columns + `user_id`.
     private static let accountsSelect =
-        "id,account_number,name,account_size,mode,category,is_active,can_add_trades,note,consistency,max_drawdown,drawdown_type,daily_drawdown,profit_target,winning_days,winning_day_threshold,show_in_account_dropdowns,custom_public_status,payout_drawdown_behavior,user_id"
+        "id,account_number,name,account_size,mode,category,is_active,can_add_trades,note,consistency,max_drawdown,drawdown_type,drawdown_floor_cap,daily_drawdown,profit_target,winning_days,winning_day_threshold,show_in_account_dropdowns,custom_public_status,payout_drawdown_behavior,user_id"
 
     func accounts(for profileID: ProfileID) async throws -> [TradingAccount] {
         // Mirror web `loadTradingAccounts` / `ACCOUNTS_SELECT` — `trades.account_id` → `accounts.id`.
@@ -852,9 +852,13 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
     }
 
     func createAccount(ownerID: ProfileID, draft: TradingAccountDraft) async throws -> TradingAccount {
-        let size = NumericInputFieldSupport.plainNumericString(from: draft.sizeDigits)
-        guard !size.isEmpty else {
-            throw AppError.unknown(message: "Account Value is required.")
+        if TradingAccountStartingBalancePolicy.requiresStartingBalanceOnCreate(draft),
+           let message = TradingAccountStartingBalancePolicy.validationMessage(
+               for: draft.sizeDigits,
+               context: .standard
+           )
+        {
+            throw AppError.unknown(message: message)
         }
         let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
@@ -895,6 +899,14 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
             throw AppError.unknown(message: "Account name is required.")
+        }
+        if TradingAccountStartingBalancePolicy.requiresStartingBalanceOnSave(draft),
+           let message = TradingAccountStartingBalancePolicy.validationMessage(
+               for: draft.sizeDigits,
+               context: draft.category == .personal || draft.category == .broker ? .liveLedger : .standard
+           )
+        {
+            throw AppError.unknown(message: message)
         }
         let body = TradingAccountMapper.writeBody(ownerID: nil, draft: draft)
         do {
@@ -981,24 +993,60 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
         )
     }
 
+    private static let drawdownVerifySelect =
+        "id,max_drawdown,drawdown_type,drawdown_floor_cap,mode,category"
+
+    private func fetchAccountDrawdownColumns(
+        id: TradingAccountID,
+        ownerID: ProfileID
+    ) async throws -> TradeDTO.Account {
+        let rows: [TradeDTO.Account] = try await supabase.database.select(
+            TradeDTO.Account.self,
+            from: "accounts",
+            query: [
+                SupabaseQuery.select(Self.drawdownVerifySelect),
+                SupabaseQuery.eq("id", id.rawValue),
+                SupabaseQuery.eq("user_id", ownerID.rawValue),
+            ]
+        )
+        guard let first = rows.first else {
+            throw AppError.domain(.notFound(entity: "accounts", id: id.rawValue))
+        }
+        return first
+    }
+
     func updateLivePersonalDrawdownConfig(
         id: TradingAccountID,
         ownerID: ProfileID,
         config: LivePersonalDrawdownConfig?
     ) async throws -> TradingAccount {
-        let patch = LivePersonalDrawdownEngine.buildAccountUpdate(config: config)
-        struct Body: Encodable {
-            var max_drawdown: Double?
-            var drawdown_type: String?
-        }
-        let row: TradeDTO.Account = try await supabase.database.update(
-            Body(max_drawdown: patch.maxDrawdown, drawdown_type: patch.drawdownType),
+        let beforeRow = try await fetchAccountDrawdownColumns(id: id, ownerID: ownerID)
+        let before = LivePersonalDrawdownPersistenceAudit.ColumnSnapshot.from(beforeRow)
+
+        let body = LivePersonalDrawdownEngine.makeAccountDrawdownPatchBody(config: config)
+        let rows: [TradeDTO.Account] = try await supabase.database.updateReturningRows(
+            body,
             table: "accounts",
             query: [
                 SupabaseQuery.eq("id", id.rawValue),
                 SupabaseQuery.eq("user_id", ownerID.rawValue),
             ],
             returning: TradeDTO.Account.self
+        )
+        guard let row = rows.first else {
+            throw AppError.domain(.notFound(entity: "accounts", id: id.rawValue))
+        }
+
+        let verifyRow = try await fetchAccountDrawdownColumns(id: id, ownerID: ownerID)
+        LivePersonalDrawdownPersistenceAudit.logSavePipeline(
+            accountID: id,
+            ownerID: ownerID,
+            config: config,
+            patchBody: body,
+            beforeSelect: before,
+            updateRowCount: rows.count,
+            patchResponse: .from(row),
+            verifySelect: .from(verifyRow)
         )
         return try TradingAccountMapper.mapToDomain(row)
     }
@@ -1206,7 +1254,7 @@ nonisolated struct DefaultTradeRepository: TradeRepository {
             || text.localizedCaseInsensitiveContains("can_add_trades")
         {
             return AppError.unknown(
-                message: "Free plan allows up to \(FreeTierPolicy.maxTradeEntryAccounts) trading accounts total. TraxPro is required for unlimited accounts."
+                message: "Free plan allows up to \(FreeTierPolicy.maxTradeEntryAccounts) trading accounts total. TraxsPro is required for unlimited accounts."
             )
         }
         if let app = error as? AppError { return app }

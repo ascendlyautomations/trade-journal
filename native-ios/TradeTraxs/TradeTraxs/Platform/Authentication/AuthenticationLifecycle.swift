@@ -9,7 +9,7 @@ final class AuthenticationLifecycle {
     private let authenticationCoordinator: AuthenticationCoordinator
     private(set) var initialRestoreCompleted = false
 
-    /// Bound by ``CompositionRoot`` — coalesced TraxPro entitlement refresh on foreground.
+    /// Bound by ``CompositionRoot`` — coalesced TraxsPro entitlement refresh on foreground.
     /// Not part of SwiftUI observation (closure isolation is incompatible with `@Observable` synthesis).
     @ObservationIgnored
     var refreshBillingEntitlementsOnForeground: (@MainActor () async -> Void)?

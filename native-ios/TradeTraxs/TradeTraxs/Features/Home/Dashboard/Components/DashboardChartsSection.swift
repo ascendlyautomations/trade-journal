@@ -2,7 +2,8 @@ import SwiftUI
 
 /// Full-width analytics charts — Phase 2 visuals + Phase 3 interactions.
 ///
-/// Flow: Win/Loss, sessions, weekdays, direction, hours, R:R, symbols, setups, hold, drawdown.
+/// Flow: Win/Loss … Symbol Performance (Free) → Hold / Hours / R:R / setup / drawdown (TraxsPro subscribers only).
+/// Free users see standard charts here; premium charts are summarized in ``DashboardTraxProUpsellSection``.
 struct DashboardChartsSection: View {
     let summary: DashboardChartMetrics.Summary
     var onBrowseWins: (() -> Void)?
@@ -13,102 +14,146 @@ struct DashboardChartsSection: View {
     var onBrowseLong: (() -> Void)?
     var onBrowseShort: (() -> Void)?
     var onBrowseHoldBucket: ((String) -> Void)?
-    /// When true, hides Drawdown, Hold Time, and Setup Performance only (confirmed Free + monetization gates).
-    var hidesPremiumDashboardCharts: Bool = false
+    /// TraxsPro chart blocks — Hold, Hours, R:R, Setup, Drawdown when enforcement is on.
+    var premiumChartsPresentation: ProPremiumFeaturePresentation = .unrestricted
+    /// When false, only TraxsPro chart blocks render (TraxsPro Dashboard preview).
+    var showsStandardCharts: Bool = true
+    var onRetryEntitlementVerification: (() -> Void)?
+    var entitlementProfileID: ProfileID?
 
     @Environment(\.themeColors) private var colors
 
+    private var showsTraxsProChartAnalytics: Bool {
+        premiumChartsPresentation == .unrestricted
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xl) {
-            chartBlock(title: "Win / Loss", info: DashboardChartInfo.winLoss) {
-                DashboardWinLossRingView(
-                    winCount: summary.winCount,
-                    lossCount: summary.lossCount,
-                    onSelectWins: onBrowseWins,
-                    onSelectLosses: onBrowseLosses
+            if showsStandardCharts {
+                standardChartsContent
+            }
+            traxsProExclusiveChartsBlock
+            premiumAdvancedChartsBlock(strategies: summary.strategyHighlights)
+        }
+        .padding(.horizontal, ExperienceSpacing.md)
+        .accessibilityIdentifier("dashboard.charts")
+    }
+
+    @ViewBuilder
+    private var standardChartsContent: some View {
+        chartBlock(title: "Win / Loss", info: DashboardChartInfo.winLoss) {
+            DashboardWinLossRingView(
+                winCount: summary.winCount,
+                lossCount: summary.lossCount,
+                onSelectWins: onBrowseWins,
+                onSelectLosses: onBrowseLosses
+            )
+        }
+        chartBlock(title: "Trading Sessions", info: DashboardChartInfo.tradingSessions) {
+            DashboardSessionBarsView(
+                performance: summary.sessionPerformance,
+                sessions: summary.sessions,
+                onSelect: onBrowseSession
+            )
+        }
+        chartBlock(title: "Weekdays", info: DashboardChartInfo.weekdays) {
+            DashboardWeekdayHeatmapView(
+                points: summary.weekdayHeatmap,
+                onSelect: onBrowseWeekday
+            )
+        }
+        chartBlock(title: "Long vs Short", info: DashboardChartInfo.longVsShort) {
+            if let comparison = summary.longShortComparison,
+               comparison.long != nil || comparison.short != nil {
+                DashboardLongShortComparisonView(
+                    comparison: comparison,
+                    onSelectLong: onBrowseLong,
+                    onSelectShort: onBrowseShort
+                )
+            } else {
+                DashboardLongShortDonutView(
+                    longCount: summary.longTradeCount,
+                    shortCount: summary.shortTradeCount,
+                    longPnL: summary.longShort.first(where: { $0.label == "Long" })?.value ?? 0,
+                    shortPnL: summary.longShort.first(where: { $0.label == "Short" })?.value ?? 0,
+                    onSelectLong: onBrowseLong,
+                    onSelectShort: onBrowseShort
                 )
             }
-            chartBlock(title: "Trading Sessions", info: DashboardChartInfo.tradingSessions) {
-                DashboardSessionBarsView(
-                    performance: summary.sessionPerformance,
-                    sessions: summary.sessions,
-                    onSelect: onBrowseSession
+        }
+        if !summary.symbolPerformance.isEmpty {
+            chartBlock(title: "Symbol Performance", info: DashboardChartInfo.symbolPerformance) {
+                DashboardSymbolRankedBarsView(rows: summary.symbolPerformance)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var traxsProExclusiveChartsBlock: some View {
+        if showsTraxsProChartAnalytics {
+            holdTimeBlock
+            tradingHoursBlock
+            rrTargetingBlock
+        }
+    }
+
+    @ViewBuilder
+    private var holdTimeBlock: some View {
+        chartBlock(title: "Hold Time", info: DashboardChartInfo.holdTime) {
+            if summary.holdTimeHistogram.isEmpty {
+                DashboardChartEmptyCopy(
+                    message: "Your hold time distribution will appear after more completed trades."
+                )
+            } else {
+                DashboardHoldHistogramView(
+                    buckets: summary.holdTimeHistogram,
+                    averages: summary.holdTime,
+                    holdExtremes: summary.holdExtremes,
+                    onSelectBucket: onBrowseHoldBucket
                 )
             }
-            chartBlock(title: "Weekdays", info: DashboardChartInfo.weekdays) {
-                DashboardWeekdayHeatmapView(
-                    points: summary.weekdayHeatmap,
-                    onSelect: onBrowseWeekday
+        }
+    }
+
+    @ViewBuilder
+    private var tradingHoursBlock: some View {
+        let hasHourData = summary.hourHeatmap.contains(where: { abs($0.value) > 0.01 })
+        if hasHourData {
+            chartBlock(title: "Trading Hours", info: DashboardChartInfo.tradingHours) {
+                DashboardHourTimelineView(
+                    points: summary.hourHeatmap,
+                    highlights: summary.hourHighlights,
+                    onSelect: onBrowseHour
                 )
             }
-            chartBlock(title: "Long vs Short", info: DashboardChartInfo.longVsShort) {
-                if let comparison = summary.longShortComparison,
-                   comparison.long != nil || comparison.short != nil {
-                    DashboardLongShortComparisonView(
-                        comparison: comparison,
-                        onSelectLong: onBrowseLong,
-                        onSelectShort: onBrowseShort
-                    )
-                } else {
-                    DashboardLongShortDonutView(
-                        longCount: summary.longTradeCount,
-                        shortCount: summary.shortTradeCount,
-                        longPnL: summary.longShort.first(where: { $0.label == "Long" })?.value ?? 0,
-                        shortPnL: summary.longShort.first(where: { $0.label == "Short" })?.value ?? 0,
-                        onSelectLong: onBrowseLong,
-                        onSelectShort: onBrowseShort
-                    )
-                }
-            }
-            if summary.hourHeatmap.contains(where: { abs($0.value) > 0.01 }) {
-                chartBlock(title: "Trading Hours", info: DashboardChartInfo.tradingHours) {
-                    DashboardHourTimelineView(
-                        points: summary.hourHeatmap,
-                        highlights: summary.hourHighlights,
-                        onSelect: onBrowseHour
-                    )
-                }
-            }
-            chartBlock(title: "R:R Targeting", info: DashboardChartInfo.rrTargeting) {
-                DashboardRrTargetAnalysisView(analysis: summary.rrTargetAnalysis)
-            }
-            if !summary.symbolPerformance.isEmpty {
-                chartBlock(title: "Symbol Performance", info: DashboardChartInfo.symbolPerformance) {
-                    DashboardSymbolRankedBarsView(rows: summary.symbolPerformance)
-                }
-            }
-            if !hidesPremiumDashboardCharts,
-               let strategies = summary.strategyHighlights,
+        }
+    }
+
+    @ViewBuilder
+    private var rrTargetingBlock: some View {
+        chartBlock(title: "R:R Targeting", info: DashboardChartInfo.rrTargeting) {
+            DashboardRrTargetAnalysisView(analysis: summary.rrTargetAnalysis)
+        }
+    }
+
+    @ViewBuilder
+    private func premiumAdvancedChartsBlock(
+        strategies: DashboardStrategyHighlights?
+    ) -> some View {
+        if premiumChartsPresentation == .unrestricted {
+            if let strategies,
                strategies.best != nil || strategies.worst != nil {
                 chartBlock(title: "Setup Performance", info: DashboardChartInfo.setupPerformance) {
                     DashboardStrategyHighlightsView(highlights: strategies)
                 }
             }
-            if !hidesPremiumDashboardCharts {
-                chartBlock(title: "Hold Time", info: DashboardChartInfo.holdTime) {
-                    if summary.holdTimeHistogram.isEmpty {
-                        DashboardChartEmptyCopy(
-                            message: "Your hold time distribution will appear after more completed trades."
-                        )
-                    } else {
-                        DashboardHoldHistogramView(
-                            buckets: summary.holdTimeHistogram,
-                            averages: summary.holdTime,
-                            holdExtremes: summary.holdExtremes,
-                            onSelectBucket: onBrowseHoldBucket
-                        )
-                    }
-                }
-                chartBlock(title: "Drawdown", info: DashboardChartInfo.drawdown) {
-                    DashboardUnderwaterDrawdownView(
-                        series: summary.drawdownSeries,
-                        maxDrawdown: summary.maxDrawdown
-                    )
-                }
+            chartBlock(title: "Drawdown", info: DashboardChartInfo.drawdown) {
+                DashboardUnderwaterDrawdownView(
+                    series: summary.drawdownSeries,
+                    maxDrawdown: summary.maxDrawdown
+                )
             }
         }
-        .padding(.horizontal, ExperienceSpacing.md)
-        .accessibilityIdentifier("dashboard.charts")
     }
 
     private func chartBlock<Content: View>(
@@ -147,7 +192,7 @@ enum DashboardChartInfo {
     static let rrTargeting = "Only trades with both a target R:R and a max R:R reached. Compares the average target with the average max reached. Attainment above 100% means price passed the target before exit. This is not realized P&L."
     static let symbolPerformance = "Net realized P&L by ticker for trades with a price, ranked from strongest to weakest. Bar length is the size of that net."
     static let setupPerformance = "Strongest and weakest named setups by net realized P&L. A setup needs at least 5 priced trades, and at least two setups must qualify."
-    static let holdTime = "Hold is exit minus entry for closed trades. Bars count trades under 5 minutes, 5–15 minutes, 15–60 minutes, 1–4 hours, and over 4 hours. Averages are the mean hold for all closes, winners, and losers. The four extremes are the shortest and longest winning and losing holds, with that trade’s realized P&L."
+    static let holdTime = "Hold is exit minus entry for closed trades. Each bucket shows trade count (accent) and average net P&L per trade (green when positive, red when negative; bar height uses dollar magnitude). Ranges: under 5m, 5 to 15m, 15 to 60m, 1 to 4h, and 4h+. Below are mean hold for all closes, winners, and losers, plus fastest and slowest win/loss extremes."
     static let drawdown = "How far equity fell from its running peak, in closed-trade order. The curve is peak minus equity, drawn below zero. Max drawdown is the deepest drop. Drag to read the depth at one trade."
 
     static func identifier(for title: String) -> String {

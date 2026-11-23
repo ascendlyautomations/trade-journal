@@ -5,19 +5,19 @@ nonisolated enum SubscriptionPresentationPolicy {
     static func activeSummary(for status: BillingStatus) -> String {
         switch status.entitlementSource {
         case .apple:
-            return "Your TraxPro subscription is active through the App Store."
+            return "Your \(MonetizationPlanCopy.proPlanName) subscription is active through the App Store."
         case .stripe:
-            return "Your TraxPro subscription is active. Billing is managed outside the App Store."
+            return "Your \(MonetizationPlanCopy.proPlanName) subscription is active. Billing is managed outside the App Store."
         case .creator, .earlyAccess, .manual, .launchAccess:
-            return "Your account has access to TraxPro features."
+            return "Your account has access to \(MonetizationPlanCopy.proPlanName) features."
         case .none:
             if status.hasTraxProAccess {
-                return "Your account has access to TraxPro features."
+                return "Your account has access to \(MonetizationPlanCopy.proPlanName) features."
             }
             if !IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled {
                 return "TradeTraxs includes all features at no additional cost in this release."
             }
-            return "Your account is currently on the Free plan."
+            return "Your account is currently on the \(MonetizationPlanCopy.freePlanName) plan."
         }
     }
 

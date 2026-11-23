@@ -25,6 +25,37 @@ enum StoryTextColor: String, CaseIterable, Identifiable, Equatable {
     var swiftUIColor: Color { Color(uiColor) }
 }
 
+/// Text plate behind story captions — cycles none → black → white in the editor.
+enum StoryTextBackgroundStyle: String, Equatable, Sendable {
+    case none
+    case black
+    case white
+
+    mutating func cycle() {
+        switch self {
+        case .none: self = .black
+        case .black: self = .white
+        case .white: self = .none
+        }
+    }
+
+    var swiftUIFill: Color {
+        switch self {
+        case .none: return .clear
+        case .black: return Color.black.opacity(0.45)
+        case .white: return Color.white.opacity(0.88)
+        }
+    }
+
+    var uiKitFill: UIColor {
+        switch self {
+        case .none: return .clear
+        case .black: return UIColor.black.withAlphaComponent(0.45)
+        case .white: return UIColor.white.withAlphaComponent(0.88)
+        }
+    }
+}
+
 /// Canonical RGBA for a Story text element — presets and custom picker colors.
 struct StoryTextFill: Equatable, Sendable {
     var red: Double
@@ -93,6 +124,16 @@ struct StoryTextFill: Equatable, Sendable {
     }
 }
 
+extension TextAlignment {
+    var storyFrameAlignment: Alignment {
+        switch self {
+        case .leading: return .leading
+        case .center: return .center
+        case .trailing: return .trailing
+        }
+    }
+}
+
 struct StoryTextOverlay: Identifiable, Equatable {
     var id: UUID
     var text: String
@@ -102,7 +143,9 @@ struct StoryTextOverlay: Identifiable, Equatable {
     var rotationRadians: CGFloat
     var textFill: StoryTextFill
     var alignment: TextAlignment
-    var showsBackground: Bool
+    var backgroundStyle: StoryTextBackgroundStyle
+
+    var showsBackground: Bool { backgroundStyle != .none }
 
     init(
         id: UUID = UUID(),
@@ -111,8 +154,9 @@ struct StoryTextOverlay: Identifiable, Equatable {
         scale: CGFloat = 1,
         rotationRadians: CGFloat = 0,
         textFill: StoryTextFill = .fromPreset(.white),
-        alignment: TextAlignment = .center,
-        showsBackground: Bool = false
+        alignment: TextAlignment = .leading,
+        backgroundStyle: StoryTextBackgroundStyle = .none,
+        showsBackground: Bool? = nil
     ) {
         self.id = id
         self.text = text
@@ -121,7 +165,11 @@ struct StoryTextOverlay: Identifiable, Equatable {
         self.rotationRadians = rotationRadians
         self.textFill = textFill
         self.alignment = alignment
-        self.showsBackground = showsBackground
+        if let legacy = showsBackground {
+            self.backgroundStyle = legacy ? .black : .none
+        } else {
+            self.backgroundStyle = backgroundStyle
+        }
     }
 }
 
@@ -156,12 +204,19 @@ extension StoryTextOverlayRecord {
             blue: overlay.textFill.blue,
             alpha: overlay.textFill.alpha,
             alignment: Self.wireAlignment(overlay.alignment),
-            background: overlay.showsBackground
+            background: overlay.showsBackground,
+            background_style: overlay.backgroundStyle.rawValue
         )
     }
 
     func storyTextOverlay() -> StoryTextOverlay {
-        StoryTextOverlay(
+        let style: StoryTextBackgroundStyle
+        if let raw = background_style, let parsed = StoryTextBackgroundStyle(rawValue: raw) {
+            style = parsed
+        } else {
+            style = background ? .black : .none
+        }
+        return StoryTextOverlay(
             id: id,
             text: text,
             normalizedCenter: CGPoint(x: x, y: y),
@@ -169,7 +224,7 @@ extension StoryTextOverlayRecord {
             rotationRadians: CGFloat(rotation),
             textFill: StoryTextFill(red: red, green: green, blue: blue, alpha: alpha),
             alignment: Self.textAlignment(alignment),
-            showsBackground: background
+            backgroundStyle: style
         )
     }
 

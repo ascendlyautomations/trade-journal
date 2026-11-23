@@ -403,38 +403,16 @@ struct SettingsTradingAccountsView: View {
 
 private struct ManageAccountsYourAccountsSectionHeader: View {
     private static let infoMessage =
-        "Choose which accounts appear in account selectors throughout TradeTraxs. Toggle to activate or deactivate."
-
-    @Environment(\.themeColors) private var colors
-    @State private var showsInfo = false
+        "Choose which accounts appear in selectors across TradeTraxs. Toggle each account on or off."
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
             Text("Your Accounts")
-            Button {
-                showsInfo = true
-            } label: {
-                Image(systemName: "info.circle")
-                    .font(.caption)
-                    .foregroundStyle(colors.tertiaryText)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("About Your Accounts")
-            .accessibilityIdentifier("manageAccounts.dropdownIntro")
-        }
-        .popover(isPresented: $showsInfo) {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                Text("Your Accounts")
-                    .font(ExperienceTypography.subheadline.weight(.semibold))
-                    .foregroundStyle(colors.primaryText)
-                Text(Self.infoMessage)
-                    .font(ExperienceTypography.footnote)
-                    .foregroundStyle(colors.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(ExperienceSpacing.md)
-            .frame(width: 280, alignment: .leading)
-            .presentationCompactAdaptation(.popover)
+            AnalyticsMetricInfoButton(
+                title: "Your Accounts",
+                bodyText: Self.infoMessage,
+                accessibilityID: "manageAccounts.dropdownIntro"
+            )
         }
     }
 }

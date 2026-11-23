@@ -15,8 +15,8 @@ nonisolated enum PsychologyReportTemplate: String, Hashable, Codable, Sendable, 
 
     var catalogTitle: String {
         switch self {
-        case .weekly: return "Weekly Psychology Report"
-        case .monthly: return "Monthly Psychology Report"
+        case .weekly: return "Weekly Psych Report"
+        case .monthly: return "Monthly Psych Report"
         case .sleepPerformance: return "Sleep & Performance"
         case .discipline: return "Discipline Report"
         case .emotions: return "Emotional Trading"
@@ -129,6 +129,13 @@ nonisolated struct PsychologyReportMetricRow: Hashable, Sendable {
     var value: String
 }
 
+/// Per-emotion performance rollup for psychology report charts.
+nonisolated struct PsychologyReportEmotionRow: Identifiable, Hashable, Sendable {
+    var id: String { label }
+    var label: String
+    var metrics: PsychologyGroupMetrics
+}
+
 /// Deterministic psychology report — reproducible from trades + check-ins.
 nonisolated struct PsychologyReport: Hashable, Sendable, Identifiable {
     var periodRef: PsychologyReportPeriodRef
@@ -146,6 +153,13 @@ nonisolated struct PsychologyReport: Hashable, Sendable, Identifiable {
     var doingWell: [String]
     var watchItems: [String]
     var sections: [PsychologyReportSection]
+    /// Structured comparison metrics from the analytics engine (same thresholds as Psychology Analytics).
+    var analyticsSections: [PsychologyAnalyticsSection]
+    var insightCards: [PsychologyInsightCard]
+    var emotionBreakdown: [PsychologyReportEmotionRow]
+    var matchedDayCount: Int
+    var checkInMatchedTradeCount: Int
+    var planTaggedTradeCount: Int
 
     var id: ReportID { periodRef.reportID }
 }

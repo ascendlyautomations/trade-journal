@@ -53,9 +53,11 @@ final class SettingsSubscriptionViewModel {
     var planTitle: String {
         guard let status else { return "—" }
         if !IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled {
-            return status.hasTraxProAccess ? "TraxPro" : "TradeTraxs"
+            return status.hasTraxProAccess ? MonetizationPlanCopy.proPlanName : "TradeTraxs"
         }
-        return status.hasTraxProAccess ? "TraxPro" : "Free"
+        return status.hasTraxProAccess
+            ? MonetizationPlanCopy.proPlanName
+            : MonetizationPlanCopy.freePlanName
     }
 
     var showsReleaseIncludedPlanDetails: Bool {
@@ -155,17 +157,17 @@ final class SettingsSubscriptionViewModel {
 
     var upgradeHeroTitle: String {
         if selectedProduct?.hasEligibleIntroductoryOffer == true {
-            return "Try TradeTraxs Pro Free for 14 Days"
+            return "Try \(MonetizationPlanCopy.proPlanName) free for 14 days"
         }
-        return "TradeTraxs Pro"
+        return MonetizationPlanCopy.proPlanName
     }
 
     var upgradePrimaryButtonTitle: String {
-        guard let product = selectedProduct else { return "Upgrade to Pro" }
+        guard let product = selectedProduct else { return "Upgrade to \(MonetizationPlanCopy.proPlanName)" }
         if product.hasEligibleIntroductoryOffer {
             return "Start 14-Day Free Trial"
         }
-        return "Upgrade to Pro"
+        return "Upgrade to \(MonetizationPlanCopy.proPlanName)"
     }
 
     var upgradePostTrialFootnote: String? {
@@ -225,7 +227,7 @@ final class SettingsSubscriptionViewModel {
         guard IosSubscriptionReleaseConfiguration.iosPaidSubscriptionsEnabled else { return }
         guard !purchaseInFlight else { return }
         guard let product = selectedProduct else {
-            errorMessage = "Choose a TraxPro plan to continue."
+            errorMessage = "Choose a \(MonetizationPlanCopy.proPlanName) plan to continue."
             return
         }
 
@@ -240,14 +242,14 @@ final class SettingsSubscriptionViewModel {
         switch outcome {
         case .success:
             actionState = .synchronizing
-            actionMessage = "Confirming your TraxPro access…"
+            actionMessage = "Confirming your \(MonetizationPlanCopy.proPlanName) access…"
             await reconcileEntitlements()
             if status?.hasTraxProAccess == true {
-                actionMessage = "TraxPro is now active on your account."
+                actionMessage = "\(MonetizationPlanCopy.proPlanName) is now active on your account."
                 errorMessage = nil
                 ProUpgradeCoordinator.shared.completePurchaseIfPro(active: true)
             } else {
-                errorMessage = "Purchase received. TraxPro will unlock once verification completes."
+                errorMessage = "Purchase received. \(MonetizationPlanCopy.proPlanName) will unlock once verification completes."
             }
         case .userCancelled:
             actionMessage = nil
@@ -255,7 +257,7 @@ final class SettingsSubscriptionViewModel {
             actionState = .pendingApproval
             actionMessage = "Your purchase is pending approval."
         case .unverified:
-            errorMessage = "We couldn't verify that purchase. TraxPro was not unlocked."
+            errorMessage = "We couldn't verify that purchase. \(MonetizationPlanCopy.proPlanName) was not unlocked."
         case .failed(let message):
             errorMessage = ProEntitlementResponseSanitizer.sanitizedOrNeutral(message)
         }
@@ -276,10 +278,10 @@ final class SettingsSubscriptionViewModel {
             actionState = .synchronizing
             await reconcileEntitlements()
             if status?.hasTraxProAccess == true {
-                actionMessage = "TraxPro access restored."
+                actionMessage = "\(MonetizationPlanCopy.proPlanName) access restored."
                 ProUpgradeCoordinator.shared.completePurchaseIfPro(active: true)
             } else if restored {
-                actionMessage = "Purchase found. TraxPro will unlock once verification completes."
+                actionMessage = "Purchase found. \(MonetizationPlanCopy.proPlanName) will unlock once verification completes."
             } else {
                 actionMessage = "No App Store subscription was found for this Apple ID."
             }
@@ -288,6 +290,31 @@ final class SettingsSubscriptionViewModel {
             actionMessage = nil
         }
 
+        actionState = .idle
+    }
+
+    func redeemCreatorAccessCode(_ rawCode: String) async {
+        guard IosSubscriptionReleaseConfiguration.iosCreatorPromoRedemptionEnabled else { return }
+        guard actionState == .idle else { return }
+        errorMessage = nil
+        actionMessage = nil
+        actionState = .synchronizing
+        actionMessage = "Redeeming creator access…"
+        do {
+            try await billing.redeemCreatorAccessCode(rawCode)
+            await reconcileEntitlements()
+            if status?.hasTraxProAccess == true {
+                actionMessage = "Complimentary Pro access is now active on your account."
+                ProUpgradeCoordinator.shared.completePurchaseIfPro(active: true)
+            } else {
+                errorMessage = "Redemption succeeded but \(MonetizationPlanCopy.proPlanName) is not active yet. Try again in a moment."
+            }
+        } catch {
+            errorMessage = ProEntitlementResponseSanitizer.sanitizedOrNeutral(
+                UserFacingError.message(for: error)
+            )
+            actionMessage = nil
+        }
         actionState = .idle
     }
 
@@ -309,11 +336,11 @@ final class SettingsSubscriptionViewModel {
         let hadProBefore = status?.hasTraxProAccess == true
         actionState = .synchronizing
         if !hadProBefore {
-            actionMessage = "Confirming your TraxPro access…"
+            actionMessage = "Confirming your \(MonetizationPlanCopy.proPlanName) access…"
         }
         await reconcileEntitlements()
         if status?.hasTraxProAccess == true, !hadProBefore {
-            actionMessage = "TraxPro is now active on your account."
+            actionMessage = "\(MonetizationPlanCopy.proPlanName) is now active on your account."
         } else if !hadProBefore {
             actionMessage = nil
         }

@@ -5,6 +5,14 @@ protocol AppleSubscriptionSyncClienting: Sendable {
     func sync(transactionID: String, signedTransactionInfo: String) async throws -> AppleSubscriptionSyncResponse
     func fetchEntitlement() async throws -> BillingEntitlementResponse
     func fetchMonetizationConfig() async throws -> IosMonetizationConfigResponse
+    func redeemCreatorAccessCode(_ normalizedCode: String) async throws -> CreatorAccessRedeemResponse
+}
+
+struct CreatorAccessRedeemResponse: Decodable, Sendable {
+    var ok: Bool?
+    var alreadyGranted: Bool?
+    var message: String?
+    var error: String?
 }
 
 struct IosMonetizationConfigResponse: Decodable, Sendable {
@@ -160,5 +168,25 @@ struct AppleSubscriptionSyncClient: AppleSubscriptionSyncClienting {
         } catch {
             throw AppError.unknown(message: "Monetization config response was malformed")
         }
+    }
+
+    func redeemCreatorAccessCode(_ normalizedCode: String) async throws -> CreatorAccessRedeemResponse {
+        struct Body: Encodable { var code: String }
+        let data = try transport.encodeJSON(Body(code: normalizedCode))
+        let response = try await transport.send(
+            host: .bff,
+            path: "/api/creator/redeem",
+            method: .post,
+            body: data,
+            requiresAuthentication: true
+        )
+        if (200 ... 299).contains(response.statusCode) {
+            return try transport.decoder.decode(CreatorAccessRedeemResponse.self, from: response)
+        }
+        if let decoded = try? transport.decoder.decode(CreatorAccessRedeemResponse.self, from: response),
+           let message = decoded.message, !message.isEmpty {
+            throw AppError.unknown(message: message)
+        }
+        throw AppError.unknown(message: "Could not redeem that code (\(response.statusCode)).")
     }
 }

@@ -359,18 +359,56 @@ nonisolated enum TradingRulesComplianceAnalytics {
 
     private static func unevaluatedChecks(
         for input: PreferenceComplianceEngine.Input,
-        rules: ResolvedTradingPreferences
+        rules: ResolvedTradingPreferences,
+        allowedRuleIDs: Set<RuleID>? = nil
     ) -> Int {
         var unevaluated = 0
-        if !rules.preferredSessions.isEmpty, input.session == nil { unevaluated += 1 }
-        if !rules.primaryInstruments.isEmpty, input.symbol == nil { unevaluated += 1 }
-        if rules.plannedHours != nil, input.easternMinute < 0 { unevaluated += 1 }
-        if !rules.allowedTradingDays.isEmpty, input.weekday == nil { unevaluated += 1 }
-        if rules.minAcceptableRr != nil, input.plannedRr == nil { unevaluated += 1 }
-        if rules.maxContractsPerTrade != nil, input.contracts == nil { unevaluated += 1 }
-        if rules.maxRiskPerTrade != nil, input.dollarRisk == nil { unevaluated += 1 }
-        if rules.targetRr != nil, input.maxRr == nil { unevaluated += 1 }
+        if allows(rule: .preferredSession, in: allowedRuleIDs),
+           !rules.preferredSessions.isEmpty, input.session == nil
+        {
+            unevaluated += 1
+        }
+        if allows(rule: .primaryInstrument, in: allowedRuleIDs),
+           !rules.primaryInstruments.isEmpty, input.symbol == nil
+        {
+            unevaluated += 1
+        }
+        if allows(rule: .plannedHours, in: allowedRuleIDs),
+           rules.plannedHours != nil, input.easternMinute < 0
+        {
+            unevaluated += 1
+        }
+        if allows(rule: .allowedTradingDay, in: allowedRuleIDs),
+           !rules.allowedTradingDays.isEmpty, input.weekday == nil
+        {
+            unevaluated += 1
+        }
+        if allows(rule: .minPlannedRr, in: allowedRuleIDs),
+           rules.minAcceptableRr != nil, input.plannedRr == nil
+        {
+            unevaluated += 1
+        }
+        if allows(rule: .maxContracts, in: allowedRuleIDs),
+           rules.maxContractsPerTrade != nil, input.contracts == nil
+        {
+            unevaluated += 1
+        }
+        if allows(rule: .maxRiskPerTrade, in: allowedRuleIDs),
+           rules.maxRiskPerTrade != nil, input.dollarRisk == nil
+        {
+            unevaluated += 1
+        }
+        if allows(rule: .targetRrMax, in: allowedRuleIDs),
+           rules.targetRr != nil, input.maxRr == nil
+        {
+            unevaluated += 1
+        }
         return unevaluated
+    }
+
+    private static func allows(rule: RuleID, in allowedRuleIDs: Set<RuleID>?) -> Bool {
+        guard let allowedRuleIDs else { return true }
+        return allowedRuleIDs.contains(rule)
     }
 
     private static func evaluateTradeLevelRules(
@@ -700,10 +738,15 @@ nonisolated enum TradingRulesComplianceAnalytics {
 
     private static func countUnevaluated(
         inputs: [PreferenceComplianceEngine.Input],
-        rulesCache: TradingRulesResolvedRulesCache
+        rulesCache: TradingRulesResolvedRulesCache,
+        allowedRuleIDs: Set<RuleID>? = nil
     ) -> Int {
         inputs.reduce(0) { partial, input in
-            partial + unevaluatedChecks(for: input, rules: rulesCache.rules(for: input))
+            partial + unevaluatedChecks(
+                for: input,
+                rules: rulesCache.rules(for: input),
+                allowedRuleIDs: allowedRuleIDs
+            )
         }
     }
 
@@ -825,7 +868,8 @@ nonisolated enum TradingRulesComplianceAnalytics {
     static func buildDisciplinePriorMetrics(
         trades: [Trade],
         context: PreferenceRuleContext?,
-        psychologyContextTrades: [Trade]
+        psychologyContextTrades: [Trade],
+        allowedRuleIDs: Set<RuleID>? = nil
     ) -> TradingRulesDisciplineProgress.PriorMetrics? {
         guard !trades.isEmpty else { return nil }
         let inputs = complianceInputs(from: trades)
@@ -837,11 +881,12 @@ nonisolated enum TradingRulesComplianceAnalytics {
             trades: trades,
             psychologyContextTrades: psychologyContextTrades
         )
-        let score = makeScore(
-            from: evaluation.checks,
-            unevaluatedFieldGaps: evaluation.unevaluatedFieldGaps
-        )
-        return TradingRulesDisciplineProgress.PriorMetrics(score: score, checks: evaluation.checks)
+        let activeChecks = TradingRulesPlanTier.filterChecks(evaluation.checks, allowedRuleIDs: allowedRuleIDs)
+        let gaps = allowedRuleIDs == nil
+            ? evaluation.unevaluatedFieldGaps
+            : countUnevaluated(inputs: inputs, rulesCache: rulesCache, allowedRuleIDs: allowedRuleIDs)
+        let score = makeScore(from: activeChecks, unevaluatedFieldGaps: gaps)
+        return TradingRulesDisciplineProgress.PriorMetrics(score: score, checks: activeChecks)
     }
 
     static func build(
@@ -849,7 +894,8 @@ nonisolated enum TradingRulesComplianceAnalytics {
         context: PreferenceRuleContext?,
         psychologyContextTrades: [Trade] = [],
         priorDisciplineMetrics: TradingRulesDisciplineProgress.PriorMetrics? = nil,
-        complianceGoalPercent: Double = TradingRulesDisciplineProgress.defaultGoalPercent
+        complianceGoalPercent: Double = TradingRulesDisciplineProgress.defaultGoalPercent,
+        allowedRuleIDs: Set<RuleID>? = nil
     ) -> Result {
         let inputs = complianceInputs(from: trades)
         let rulesCache = TradingRulesResolvedRulesCache(context: context, inputs: inputs)
@@ -860,7 +906,8 @@ nonisolated enum TradingRulesComplianceAnalytics {
             trades: trades,
             psychologyContextTrades: psychologyContextTrades,
             priorDisciplineMetrics: priorDisciplineMetrics,
-            complianceGoalPercent: complianceGoalPercent
+            complianceGoalPercent: complianceGoalPercent,
+            allowedRuleIDs: allowedRuleIDs
         )
     }
 
@@ -871,7 +918,8 @@ nonisolated enum TradingRulesComplianceAnalytics {
         trades: [Trade] = [],
         psychologyContextTrades: [Trade] = [],
         priorDisciplineMetrics: TradingRulesDisciplineProgress.PriorMetrics? = nil,
-        complianceGoalPercent: Double = TradingRulesDisciplineProgress.defaultGoalPercent
+        complianceGoalPercent: Double = TradingRulesDisciplineProgress.defaultGoalPercent,
+        allowedRuleIDs: Set<RuleID>? = nil
     ) -> Result {
         let evaluation = evaluateChecks(
             inputs: inputs,
@@ -880,20 +928,28 @@ nonisolated enum TradingRulesComplianceAnalytics {
             trades: trades,
             psychologyContextTrades: psychologyContextTrades
         )
+        let activeChecks = TradingRulesPlanTier.filterChecks(evaluation.checks, allowedRuleIDs: allowedRuleIDs)
+        let unevaluatedGaps = allowedRuleIDs == nil
+            ? evaluation.unevaluatedFieldGaps
+            : countUnevaluated(
+                inputs: inputs,
+                rulesCache: rulesCache,
+                allowedRuleIDs: allowedRuleIDs!
+            )
         let score = makeScore(
-            from: evaluation.checks,
-            unevaluatedFieldGaps: evaluation.unevaluatedFieldGaps
+            from: activeChecks,
+            unevaluatedFieldGaps: unevaluatedGaps
         )
         let tradesByID = Dictionary(uniqueKeysWithValues: trades.map { ($0.id.rawValue, $0) })
         let impactRows = TradingRulesRuleImpact.buildImpactRows(
-            checks: evaluation.checks,
+            checks: activeChecks,
             tradesByID: tradesByID
         )
         let impactHighlights = TradingRulesRuleImpact.comparisonHighlights(from: impactRows)
-        let violationEvents = makeViolationEvents(from: evaluation.checks)
+        let violationEvents = makeViolationEvents(from: activeChecks)
 
         let weeklyTrend = buildTrend(
-            checks: evaluation.checks,
+            checks: activeChecks,
             keyFn: { check in check.weekKey ?? check.dayKey },
             inputKeyFn: { input in input.weekKey ?? input.dayKey },
             labelFn: { key in "Week of \(key)" },
@@ -901,7 +957,7 @@ nonisolated enum TradingRulesComplianceAnalytics {
             ordered: inputs
         )
         let monthlyTrend = buildTrend(
-            checks: evaluation.checks,
+            checks: activeChecks,
             keyFn: { check in check.monthKey },
             inputKeyFn: { input in monthKey(input.dayKey) },
             labelFn: { key in key },
@@ -920,13 +976,13 @@ nonisolated enum TradingRulesComplianceAnalytics {
             }
         }
         let violationPatterns = TradingRulesViolationPatterns.build(
-            checks: evaluation.checks,
+            checks: activeChecks,
             inputs: inputs,
             rulesCache: rulesCache
         )
         let disciplineProgress = TradingRulesDisciplineProgress.build(
             currentScore: score,
-            currentChecks: evaluation.checks,
+            currentChecks: activeChecks,
             currentWeekly: weeklyTrend,
             prior: priorDisciplineMetrics,
             goalPercent: complianceGoalPercent
@@ -940,7 +996,7 @@ nonisolated enum TradingRulesComplianceAnalytics {
             usesHistoricalRevisions: usesHistoricalRevisions,
             retrospectivelyEvaluatedTrades: retrospectivelyEvaluatedTrades,
             violationPatterns: violationPatterns,
-            complianceChecks: evaluation.checks,
+            complianceChecks: activeChecks,
             impactHighlights: impactHighlights,
             disciplineProgress: disciplineProgress
         )

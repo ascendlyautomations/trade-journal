@@ -89,12 +89,12 @@ final class SubscriptionComplianceTests: XCTestCase {
         viewModel.loadIfNeeded()
         await waitFor { viewModel.status != nil }
 
-        XCTAssertEqual(viewModel.planTitle, "TraxPro")
+        XCTAssertEqual(viewModel.planTitle, MonetizationPlanCopy.proPlanName)
         XCTAssertTrue(viewModel.showsProMembership)
         XCTAssertFalse(viewModel.showsFreePlanDetails)
         XCTAssertEqual(
             viewModel.membershipSummaryFooter,
-            "Your account has access to TraxPro features."
+            "Your account has access to \(MonetizationPlanCopy.proPlanName) features."
         )
     }
 
@@ -161,7 +161,7 @@ final class SubscriptionComplianceTests: XCTestCase {
         XCTAssertFalse(TraxProFeatureMessaging.featureRequired.localizedCaseInsensitiveContains("website"))
         XCTAssertFalse(TraxProFeatureMessaging.featureRequired.localizedCaseInsensitiveContains("pricing"))
         XCTAssertFalse(TraxProFeatureMessaging.featureRequired.localizedCaseInsensitiveContains("upgrade"))
-        XCTAssertEqual(TraxProFeatureMessaging.featureRequired, "This feature requires TraxPro.")
+        XCTAssertEqual(TraxProFeatureMessaging.featureRequired, "This feature requires TraxsPro.")
     }
 
     private func waitFor(
@@ -192,6 +192,10 @@ private struct SubscriptionComplianceStubBilling: BillingRepository {
 
     func refreshEntitlements(for profileID: ProfileID) async throws -> BillingStatus {
         try await status(for: profileID)
+    }
+
+    func redeemCreatorAccessCode(_ code: String) async throws {
+        _ = code
     }
 }
 

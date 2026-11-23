@@ -66,6 +66,9 @@ struct TradeRoomObsLiveManageStreamView: View {
                     .zIndex(100_000)
             }
         }
+        .task(id: broadcastCoordinator.chatMessages.compactMap { $0.tradeID?.rawValue }.sorted().joined(separator: ",")) {
+            await broadcastCoordinator.hydrateBroadcastChatTradesIfNeeded()
+        }
     }
 
     private var statusBannerMessage: String? {
@@ -112,10 +115,17 @@ struct TradeRoomObsLiveManageStreamView: View {
             Color.black.ignoresSafeArea()
             BroadcastStreamZoomableVideoView(
                 track: broadcastCoordinator.videoTrackForExpandedViewer,
-                isFullscreen: true
+                isFullscreen: true,
+                onFirstFrame: { broadcastCoordinator.markProgramVideoFrameRendered() }
             )
             .id(broadcastCoordinator.programVideoTrackRevision)
+            .opacity(broadcastCoordinator.hasDisplayableProgramVideo ? 1 : 0)
             .ignoresSafeArea()
+
+            if let placeholder = broadcastCoordinator.programVideoPlaceholder {
+                BroadcastProgramVideoPlaceholderOverlay(presentation: placeholder)
+                    .ignoresSafeArea()
+            }
 
             VStack {
                 HStack {

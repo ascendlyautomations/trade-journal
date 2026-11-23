@@ -54,7 +54,7 @@ struct RoomBroadcastParticipantsSheet: View {
     }
 
     private func participantRow(_ participant: BroadcastRosterParticipant) -> some View {
-        HStack(spacing: ExperienceSpacing.sm) {
+        HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
             RoomBroadcastProfileIdentityControl(
                 userId: participant.identity,
                 displayName: participant.displayName,
@@ -65,14 +65,18 @@ struct RoomBroadcastParticipantsSheet: View {
                 imagePipeline: imagePipeline,
                 profile: coordinator.chatProfileCache.profile(forUserId: participant.identity)
             )
-            VStack(alignment: .leading, spacing: 2) {
-                Text(participant.roleLabel + (participant.isLocal ? " · you" : ""))
-                    .experienceStyle(.caption, color: colors.secondaryText)
-            }
             .frame(maxWidth: .infinity, alignment: .leading)
+
             if participant.isHandRaised {
                 Image(systemName: "hand.raised.fill")
                     .foregroundStyle(colors.accent)
+            }
+
+            if let role = participant.rosterRoleDisplay {
+                Text(role)
+                    .experienceStyle(.caption, color: colors.secondaryText)
+                    .lineLimit(1)
+                    .multilineTextAlignment(.trailing)
             }
         }
         .experienceDashboardListRow()

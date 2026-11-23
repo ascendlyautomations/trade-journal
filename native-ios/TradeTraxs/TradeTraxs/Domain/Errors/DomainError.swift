@@ -91,7 +91,7 @@ extension AppError {
             case .proRequired:
                 return .unknown(message: TraxProFeatureMessaging.featureRequired)
             case .trialExpired:
-                return .unknown(message: "Your TraxPro trial has ended.")
+                return .unknown(message: "Your TraxsPro trial has ended.")
             case .paymentRequired:
                 return .unknown(message: "There’s a billing issue with your subscription.")
             case .planInactive:

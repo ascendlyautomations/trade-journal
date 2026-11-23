@@ -60,7 +60,8 @@ export async function POST(req: Request) {
   const session = await mintLiveKitBroadcastViewerToken(
     user.id,
     parsed.roomId,
-    access.displayName
+    access.displayName,
+    active.expiresAt
   )
 
   return Response.json({

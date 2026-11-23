@@ -29,6 +29,7 @@ final class TradingAnalyticsPreferencesViewModel {
     private let session: any SessionProviding
     private let detailCache: DetailPresentationCache
     private let loadAccounts: (ProfileID) async throws -> [TradingAccount]
+    let loadsTraxsProPreviewSample: Bool
 
     private var savedPreferences = TradingPreferenceGlobal.empty(userID: ProfileID(""))
     private var savedOverrides: [TradingPreferenceAccountOverride] = []
@@ -96,12 +97,14 @@ final class TradingAnalyticsPreferencesViewModel {
         repository: any TradingPreferencesRepository,
         session: any SessionProviding,
         detailCache: DetailPresentationCache,
-        loadAccounts: @escaping (ProfileID) async throws -> [TradingAccount]
+        loadAccounts: @escaping (ProfileID) async throws -> [TradingAccount],
+        loadsTraxsProPreviewSample: Bool = false
     ) {
         self.repository = repository
         self.session = session
         self.detailCache = detailCache
         self.loadAccounts = loadAccounts
+        self.loadsTraxsProPreviewSample = loadsTraxsProPreviewSample
     }
 
     var hasUnsavedChanges: Bool {
@@ -132,6 +135,10 @@ final class TradingAnalyticsPreferencesViewModel {
             return
         }
         let userID = ProfileID(signedIn.rawValue)
+        if loadsTraxsProPreviewSample {
+            applyTraxsProPreviewSample(for: userID)
+            return
+        }
         do {
             async let prefs = repository.globalPreferences(for: userID)
             async let loadedOverrides = repository.accountOverrides(for: userID)
@@ -160,6 +167,7 @@ final class TradingAnalyticsPreferencesViewModel {
     }
 
     func saveAll() async -> Bool {
+        if loadsTraxsProPreviewSample { return false }
         guard !isSaving, !isLoading, !preferences.userID.rawValue.isEmpty else { return false }
         guard applyNumbers() else { return false }
         guard applyPlannedHours() else { return false }
@@ -254,23 +262,56 @@ final class TradingAnalyticsPreferencesViewModel {
         pendingTemplate = template
     }
 
-  func applyStagedTemplate() {
+    private var restrictsPremiumRuleFields: Bool {
+        if loadsTraxsProPreviewSample { return false }
+        let profileID = preferences.userID.rawValue.isEmpty ? nil : preferences.userID
+        return ProMonetizationPolicy.shouldRestrictTradingRulesComplianceAnalytics(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        )
+    }
+
+    private func applyTraxsProPreviewSample(for userID: ProfileID) {
+        let context = DemoCanonicalDataset.previewPreferenceContext(for: userID)
+        guard let global = context.global else {
+            message = "Sample trading rules are unavailable."
+            return
+        }
+        preferences = global
+        savedPreferences = global
+        overrides = context.overrides
+        savedOverrides = context.overrides
+        accounts = DemoCanonicalDataset.accounts()
+        if selectedAccountID == nil {
+            selectedAccountID = accounts.first?.id
+        }
+        message = nil
+        seedDrafts()
+        refreshInstrumentSnapshot()
+    }
+
+    func applyStagedTemplate() {
         guard let template = pendingTemplate else { return }
         defer { pendingTemplate = nil }
         guard template != .custom, let suggested = TradingRuleTemplates.suggestedGlobal(for: template) else { return }
         if let style = suggested.tradingStyle { preferences.tradingStyle = style }
         if !suggested.preferredSessions.isEmpty { preferences.preferredSessions = suggested.preferredSessions }
         if !suggested.primaryInstruments.isEmpty { preferences.primaryInstruments = suggested.primaryInstruments }
-        if let targetRr = suggested.targetRr { preferences.targetRr = targetRr }
         if let maxTradesPerDay = suggested.maxTradesPerDay { preferences.maxTradesPerDay = maxTradesPerDay }
+        if let maxContractsPerTrade = suggested.maxContractsPerTrade { preferences.maxContractsPerTrade = maxContractsPerTrade }
+        if !suggested.allowedTradingDays.isEmpty { preferences.allowedTradingDays = suggested.allowedTradingDays }
+        guard !restrictsPremiumRuleFields else {
+            seedDrafts()
+            refreshInstrumentSnapshot()
+            return
+        }
+        if let maxRiskPerTrade = suggested.maxRiskPerTrade { preferences.maxRiskPerTrade = maxRiskPerTrade }
+        if let minAcceptableRr = suggested.minAcceptableRr { preferences.minAcceptableRr = minAcceptableRr }
+        if let targetRr = suggested.targetRr { preferences.targetRr = targetRr }
         if let dailyLossLimit = suggested.dailyLossLimit { preferences.dailyLossLimit = dailyLossLimit }
         if let dailyProfitTarget = suggested.dailyProfitTarget { preferences.dailyProfitTarget = dailyProfitTarget }
         preferences.stopAfterDailyProfitTarget = suggested.stopAfterDailyProfitTarget
         if let maxWeeklyLoss = suggested.maxWeeklyLoss { preferences.maxWeeklyLoss = maxWeeklyLoss }
-        if let maxRiskPerTrade = suggested.maxRiskPerTrade { preferences.maxRiskPerTrade = maxRiskPerTrade }
-        if let minAcceptableRr = suggested.minAcceptableRr { preferences.minAcceptableRr = minAcceptableRr }
-        if let maxContractsPerTrade = suggested.maxContractsPerTrade { preferences.maxContractsPerTrade = maxContractsPerTrade }
-        if !suggested.allowedTradingDays.isEmpty { preferences.allowedTradingDays = suggested.allowedTradingDays }
         if let start = suggested.plannedStartMinute { preferences.plannedStartMinute = start }
         if let end = suggested.plannedEndMinute { preferences.plannedEndMinute = end }
         preferences.maxTradesPerDayScope = suggested.maxTradesPerDayScope

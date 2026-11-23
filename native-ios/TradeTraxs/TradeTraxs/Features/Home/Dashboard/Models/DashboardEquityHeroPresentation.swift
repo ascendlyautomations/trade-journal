@@ -9,7 +9,7 @@ nonisolated enum DashboardEquityHeroPresentation {
     /// `nil` for All Accounts; non-`nil` (including `0`) for any single account.
     static func accountStartingBalance(forSelectedAccount account: TradingAccount?) -> Decimal? {
         guard let account else { return nil }
-        return PropFirmMetrics.parseAccountSize(account.size)
+        return TradingAccountStartingBalancePolicy.resolvedStartingBalance(for: account)
     }
 
     @available(*, deprecated, renamed: "accountStartingBalance(forSelectedAccount:)")
@@ -70,18 +70,25 @@ nonisolated enum DashboardEquityHeroPresentation {
         )
     }
 
+    /// Offsets cumulative realized P&L into account balance for V3 analytics equity.
+    ///
+    /// Drawdown floors from ``LivePersonalDrawdownEngine`` are already absolute balance
+    /// levels — never add `propStartingBalance` to them (would push the red line above equity).
     static func chartPoints(
         _ points: [ProfileStatisticsMetrics.EquityPoint],
         propStartingBalance: Decimal?
     ) -> [ProfileStatisticsMetrics.EquityPoint] {
         let ordered = ProfileStatisticsMetrics.chartOrderedEquityPoints(points)
         guard let balance = propStartingBalance else { return ordered }
+        if ordered.contains(where: { $0.drawdownFloor != nil }) {
+            return ordered
+        }
         return ordered.map {
             ProfileStatisticsMetrics.EquityPoint(
                 index: $0.index,
                 equity: $0.equity + balance,
                 date: $0.date,
-                drawdownFloor: $0.drawdownFloor.map { $0 + balance }
+                drawdownFloor: nil
             )
         }
     }

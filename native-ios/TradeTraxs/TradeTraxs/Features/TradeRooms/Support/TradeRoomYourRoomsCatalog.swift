@@ -23,7 +23,8 @@ enum TradeRoomYourRoomsCatalog {
     private static func unorderedRooms(viewerID: ProfileID) -> [ExploreRoomSuggestion] {
         if let bootstrap = SessionTradeRoomsDiscoveryStore.shared.cached(
             for: viewerID,
-            scope: .all
+            scope: .all,
+            category: nil
         ), !bootstrap.yourRooms.isEmpty {
             return bootstrap.yourRooms
         }
@@ -62,9 +63,10 @@ enum TradeRoomYourRoomsCatalog {
         _ = try? await SessionTradeRoomsDiscoveryStore.shared.coalesce(
             viewerID: viewerID,
             scope: .all,
+            category: nil,
             forceNetwork: false
         ) {
-            try await explore.tradeRoomsHomeBootstrap(scope: .all, limit: 40)
+            try await explore.tradeRoomsHomeBootstrap(scope: .all, limit: 40, suggestedCursor: nil, popularCursor: nil, category: nil)
         }
     }
 }

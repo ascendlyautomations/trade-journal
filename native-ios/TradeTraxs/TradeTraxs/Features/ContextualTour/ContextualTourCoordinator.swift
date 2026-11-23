@@ -543,6 +543,7 @@ final class ContextualTourCoordinator {
 
     private func acknowledge() {
         let persistDismissal = !replayArmed
+        let completedUserID = persistDismissal ? userID : nil
         if let userID, persistDismissal {
             progress.dismiss(definition.id, version: definition.version, userID: userID)
             ContextualTourDebug.logAppTour("completed")
@@ -550,6 +551,13 @@ final class ContextualTourCoordinator {
         replayArmed = false
         suppressedUntilGatesDrop = true
         hideWithoutDismiss(resetStep: true)
+        if let completedUserID {
+            NotificationCenter.default.post(
+                name: .contextualTourDidComplete,
+                object: completedUserID
+            )
+            PostOnboardingPlanSelectionCoordinator.shared.handleTourCompleted(userID: completedUserID)
+        }
     }
 
     private func finishWithoutDismiss() {

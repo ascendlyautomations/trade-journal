@@ -88,8 +88,13 @@ struct CopyTradingAccountsView: View {
         .experienceNavigationTitle("Copy Trading Accounts")
         .proUpgradeSheet()
         .task {
+            let profileID = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
             let isPro = billing?.hasTraxProAccess == true
-            _ = ProUpgradeCoordinator.shared.presentIfNeeded(isPro: isPro, feature: .copyTrading)
+            _ = ProUpgradeCoordinator.shared.presentIfNeeded(
+                isPro: isPro,
+                feature: .copyTrading,
+                profileID: profileID
+            )
         }
         .overlay {
             if viewModel.isLoading {

@@ -193,6 +193,14 @@ final class ManageAccountsViewModel {
         }
         return await mutate {
             guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
+            if TradingAccountStartingBalancePolicy.requiresStartingBalanceOnCreate(draft),
+               let message = TradingAccountStartingBalancePolicy.validationMessage(
+                   for: draft.sizeDigits,
+                   context: draft.category == .personal || draft.category == .broker ? .liveLedger : .standard
+               )
+            {
+                throw AppError.unknown(message: message)
+            }
             let created = try await trades.createAccount(ownerID: viewerID, draft: draft)
             accounts = Self.sorted(accounts + [created])
             SessionAccountsStore.shared.seed(accounts, for: viewerID, detailCache: detailCache)
@@ -204,6 +212,14 @@ final class ManageAccountsViewModel {
     func update(id: TradingAccountID, draft: TradingAccountDraft) async -> Bool {
         await mutate {
             guard let viewerID else { throw AppError.domain(.permission(.notAuthenticated)) }
+            if TradingAccountStartingBalancePolicy.requiresStartingBalanceOnSave(draft),
+               let message = TradingAccountStartingBalancePolicy.validationMessage(
+                   for: draft.sizeDigits,
+                   context: draft.category == .personal || draft.category == .broker ? .liveLedger : .standard
+               )
+            {
+                throw AppError.unknown(message: message)
+            }
             let previous = accounts.first(where: { $0.id == id })
             let updated = try await trades.updateAccount(id: id, ownerID: viewerID, draft: draft)
             accounts = Self.sorted(accounts.map { $0.id == id ? updated : $0 })

@@ -20,6 +20,7 @@ import {
 import { liveKitBroadcastRoomName } from "./liveKitRoomName.ts"
 import { mintLiveKitBroadcastConversationToken } from "./mintLiveKitBroadcastToken.ts"
 import type { TradeRoomBroadcastVideoSource } from "./tradeRoomBroadcastVoiceMode.ts"
+import { getActiveTradeRoomBroadcast } from "./tradeRoomBroadcastSession.ts"
 import {
   broadcastModerationActionAllowed,
   resolveBroadcastModerationActorAccess,
@@ -344,10 +345,16 @@ export async function acceptBroadcastSpeakInvitation(
     skippedAbsentParticipant: micUpdate.skippedAbsent,
   })
 
+  const activeSession = await getActiveTradeRoomBroadcast(admin, responded.roomId, {
+    activeScope: "any",
+    skipRecoverStale: true,
+  })
+
   const token = await mintLiveKitBroadcastConversationToken(
     options.userId,
     responded.roomId,
-    options.displayName
+    options.displayName,
+    activeSession?.expiresAt
   )
   if (!token) {
     console.error("[livekit/broadcast/invite-respond] accept token mint failed", {

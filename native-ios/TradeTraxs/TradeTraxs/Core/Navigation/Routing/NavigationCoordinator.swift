@@ -306,6 +306,7 @@ final class NavigationCoordinator {
             pathAfter: store.paths.home.count
         )
         emit(.pushed(tab: .home, description: String(describing: route)))
+        ProductAnalyticsScreenTracking.trackHome(route)
     }
 
     func postDetailLoadSource(for postID: PostID) -> PostDetailLoadSource {
@@ -332,6 +333,7 @@ final class NavigationCoordinator {
             pathAfter: store.paths.feed.count
         )
         emit(.pushed(tab: .feed, description: String(describing: route)))
+        ProductAnalyticsScreenTracking.trackFeed(route)
     }
 
     func pushMessages(_ route: MessagesRoute) {
@@ -363,6 +365,7 @@ final class NavigationCoordinator {
             pathAfter: store.paths.messages.count
         )
         emit(.pushed(tab: .messages, description: String(describing: route)))
+        ProductAnalyticsScreenTracking.trackMessages(route)
     }
 
     func pushProfile(_ route: ProfileRoute) {
@@ -396,6 +399,7 @@ final class NavigationCoordinator {
             pathAfter: store.paths.profile.count
         )
         emit(.pushed(tab: .profile, description: String(describing: route)))
+        ProductAnalyticsScreenTracking.trackProfile(route)
     }
 
     func pushAdmin(_ route: AdminRoute) {
@@ -583,6 +587,12 @@ final class NavigationCoordinator {
 
     func pushOtherProfile(_ profileID: ProfileID) {
         ExperienceHaptics.play(.selection)
+        Task { @MainActor in
+            ProductAnalyticsCoordinator.shared.noteProfileViewed(
+                profileID: profileID,
+                viewerOwnsProfile: false
+            )
+        }
         switch store.selectedTab {
         case .home:
             pushHome(.otherProfile(profileID))

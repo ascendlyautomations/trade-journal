@@ -7,7 +7,7 @@ struct DashboardFilterBar: View {
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        HStack(spacing: ExperienceSpacing.xs) {
+        HStack(alignment: .center, spacing: ExperienceSpacing.xs) {
             HStack(spacing: ExperienceSpacing.xs) {
                 accountMenu
                     .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
@@ -16,9 +16,11 @@ struct DashboardFilterBar: View {
                     .layoutPriority(2)
                     .fixedSize(horizontal: true, vertical: false)
             }
-            .layoutPriority(2)
+            .layoutPriority(1)
             .contextualTourTarget(.dashboardAccountAndDates)
+
             Spacer(minLength: ExperienceSpacing.xxs)
+
             dashboardToolButtons
                 .fixedSize(horizontal: true, vertical: false)
                 .layoutPriority(2)

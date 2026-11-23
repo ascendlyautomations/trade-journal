@@ -23,6 +23,11 @@ struct RoomBroadcastStudioHostSidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if isHostBroadcaster {
+                BroadcastDurationCountdownView(expiresAt: coordinator.broadcastExpiresAt)
+                    .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.top, ExperienceSpacing.xs)
+            }
             if let modErr = coordinator.broadcastModerationError, !modErr.isEmpty {
                 HStack {
                     Text(modErr)
@@ -183,21 +188,20 @@ struct RoomBroadcastStudioHostSidebar: View {
                 imagePipeline: imagePipeline,
                 profile: coordinator.chatProfileCache.profile(forUserId: participant.identity)
             )
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(participant.roleLabel + (participant.isLocal ? " · you" : ""))
-                        .experienceStyle(.caption, color: colors.secondaryText)
-                    RoomBroadcastParticipantStatusBadges(
-                        userId: participant.identity,
-                        coordinator: coordinator
-                    )
-                }
-            }
+            RoomBroadcastParticipantStatusBadges(
+                userId: participant.identity,
+                coordinator: coordinator
+            )
             .frame(maxWidth: .infinity, alignment: .leading)
             if surface == .raisedHand {
                 Image(systemName: "hand.raised.fill")
                     .font(.caption)
                     .foregroundStyle(colors.accent)
+            }
+            if let role = participant.rosterRoleDisplay {
+                Text(role)
+                    .experienceStyle(.caption, color: colors.secondaryText)
+                    .lineLimit(1)
             }
             if isHostBroadcaster, isModerationTarget(participant) {
                 RoomBroadcastHostModerationControls(

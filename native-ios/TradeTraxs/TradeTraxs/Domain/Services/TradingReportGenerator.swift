@@ -41,6 +41,26 @@ nonisolated enum TradingReportGenerator {
         return generate(trades: trades, bounds: bounds, now: now, preferences: preferences)
     }
 
+    /// Custom performance report — same narrative engine, filtered by active report filters.
+    static func generateCustomRange(
+        trades: [Trade],
+        interval: DateInterval,
+        filters: TradingReportFilters,
+        now: Date = Date(),
+        preferences: PreferenceRuleContext? = nil
+    ) -> TradingReport {
+        let inputs = trades.map { DashboardChartMetrics.Input(trade: $0, accountType: nil) }
+        let scoped = DashboardChartMetrics.filteredTrades(
+            from: inputs,
+            accountFilter: filters.accountFilter,
+            accountMode: filters.accountMode,
+            interval: interval,
+            now: now
+        )
+        let bounds = TradingReportPeriods.customBounds(interval: interval)
+        return generate(trades: scoped, bounds: bounds, now: now, preferences: preferences)
+    }
+
     private static func generate(
         trades: [Trade],
         bounds: TradingReportPeriods.Bounds,
@@ -53,7 +73,7 @@ nonisolated enum TradingReportGenerator {
         let metrics = buildMetrics(periodTrades)
 
         let comparisonTrades = comparablePriorTrades(trades, periodKey: periodKey, bounds: bounds)
-        let partial = !partialSuffix(for: periodKey, bounds: bounds).isEmpty
+        let partial = bounds.kind != .custom && !partialSuffix(for: periodKey, bounds: bounds).isEmpty
 
         let strengths = buildStrengths(periodTrades, metrics: metrics, comparisonTrades: comparisonTrades)
         let adjustment = ruleAdjustment(periodTrades, preferences: preferences)
@@ -155,6 +175,7 @@ nonisolated enum TradingReportGenerator {
         for key: TradingReportPeriodKey,
         bounds: TradingReportPeriods.Bounds
     ) -> String {
+        if bounds.kind == .custom { return "" }
         let calendar = TradingReportPeriods.eastern
         switch key {
         case .weeklyThis:
@@ -174,6 +195,7 @@ nonisolated enum TradingReportGenerator {
         periodKey: TradingReportPeriodKey,
         bounds: TradingReportPeriods.Bounds
     ) -> [Trade]? {
+        if bounds.kind == .custom { return nil }
         let calendar = TradingReportPeriods.eastern
         let prior: (Date, Date)?
         switch periodKey {
@@ -261,7 +283,7 @@ nonisolated enum TradingReportGenerator {
     private static func computeSessionPnl(_ trades: [Trade]) -> [String: PricedBucket] {
         var map: [String: PricedBucket] = [:]
         for trade in trades {
-            guard let bucket = normalizeSessionBucket(trade.sessionLabel) else { continue }
+            guard let bucket = macroSessionBucket(for: trade) else { continue }
             guard let value = knownPnl(trade) else { continue }
             var row = map[bucket] ?? PricedBucket()
             row.pnl += value
@@ -275,15 +297,50 @@ nonisolated enum TradingReportGenerator {
         _ sessions: [String: PricedBucket],
         mode: ExtremeMode
     ) -> (label: String?, pnl: Double?) {
-        let rows = sessions.filter { $0.value.count >= comparativeMinimum }
-        guard rows.count >= 2 else { return (nil, nil) }
+        let rows = sessions.filter { $0.value.count >= 1 }
+        guard !rows.isEmpty else { return (nil, nil) }
+
+        if rows.count == 1 {
+            guard mode == .best, let only = rows.first else { return (nil, nil) }
+            return (macroSessionDisplayTitle(only.key), only.value.pnl)
+        }
+
         guard let picked = (mode == .best
             ? rows.max(by: { $0.value.pnl < $1.value.pnl })
             : rows.min(by: { $0.value.pnl < $1.value.pnl }))
         else { return (nil, nil) }
-        if mode == .best, picked.value.pnl <= 0 { return (nil, nil) }
-        if mode == .worst, picked.value.pnl >= 0 { return (nil, nil) }
-        return (TradingSessionCatalog.displayTitle(for: picked.key), picked.value.pnl)
+
+        if mode == .worst {
+            let bestKey = rows.max(by: { $0.value.pnl < $1.value.pnl })?.key
+            if bestKey == picked.key { return (nil, nil) }
+        }
+
+        return (macroSessionDisplayTitle(picked.key), picked.value.pnl)
+    }
+
+    private static func macroSessionBucket(for trade: Trade) -> String? {
+        let fine = normalizeSessionBucket(trade.sessionLabel)
+            ?? TradingSessionLabel.session(from: resolveTimeSource(trade))
+        guard let fine else { return nil }
+        return rollupMacroSessionKey(fine)
+    }
+
+    private static func rollupMacroSessionKey(_ fine: String) -> String {
+        switch fine {
+        case "NY AM", "NY Lunch", "NY PM", "After":
+            return "NY"
+        default:
+            return fine
+        }
+    }
+
+    private static func macroSessionDisplayTitle(_ key: String) -> String {
+        switch key {
+        case "NY": return "New York"
+        case "London": return "London"
+        case "Asia": return "Asia"
+        default: return TradingSessionCatalog.displayTitle(for: key)
+        }
     }
 
     private static func normalizeSessionBucket(_ raw: String?) -> String? {
@@ -320,7 +377,7 @@ nonisolated enum TradingReportGenerator {
         comparisonNote: String?,
         changedNote: String? = nil
     ) -> String {
-        let periodLabel = kind == .weekly ? "week" : "month"
+        let periodLabel = periodNoun(for: kind)
         let partialLabel = partial ? "partial " : ""
         if metrics.tradesTaken == 0 {
             return "No trades were logged during this \(partialLabel)\(periodLabel)."
@@ -453,7 +510,7 @@ nonisolated enum TradingReportGenerator {
         adjustment: String?,
         kind: TradingReportKind
     ) -> String {
-        let periodLabel = kind == .weekly ? "week" : "month"
+        let periodLabel = periodNoun(for: kind)
         if metrics.tradesTaken == 0 {
             return "No trades were logged this \(periodLabel)."
         }
@@ -552,6 +609,14 @@ nonisolated enum TradingReportGenerator {
 
     private static func formatRR(_ value: Double) -> String {
         NumberDisplay.decimal(value, minimumFractionDigits: 0, maximumFractionDigits: 2)
+    }
+
+    private static func periodNoun(for kind: TradingReportKind) -> String {
+        switch kind {
+        case .weekly: return "week"
+        case .monthly: return "month"
+        case .custom: return "period"
+        }
     }
 
     private static func isoString(_ date: Date) -> String {

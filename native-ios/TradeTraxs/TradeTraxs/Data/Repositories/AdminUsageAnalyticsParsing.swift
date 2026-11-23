@@ -35,6 +35,11 @@ nonisolated enum AdminUsageAnalyticsParsing {
         )
     }
 
+    static func clampedInt(_ raw: Int, default defaultValue: Int, min: Int, max: Int) -> Int {
+        let value = raw == 0 ? defaultValue : raw
+        return Swift.max(min, Swift.min(max, value))
+    }
+
     static func parseSeries(_ raw: Any?) -> [AdminUsageDailyCount] {
         guard let rows = raw as? [[String: Any]] else { return [] }
         return rows.compactMap { row in

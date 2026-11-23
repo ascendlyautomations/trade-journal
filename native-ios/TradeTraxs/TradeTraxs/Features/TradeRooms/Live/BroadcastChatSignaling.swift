@@ -1,5 +1,10 @@
 import Foundation
 
+enum BroadcastChatSendResult: Equatable, Sendable {
+    case sent
+    case failed(String)
+}
+
 enum TradeRoomBroadcastChatConstants {
     static let topic = "tt_broadcast_chat"
     /// Raise-hand signals for livestream viewers — separate from General Voice (`tt_general_voice_hand`).
@@ -23,6 +28,8 @@ struct BroadcastChatMessageItem: Identifiable, Hashable, Sendable {
     var displayName: String
     var text: String
     var sentAt: Date
+    var imageURL: String?
+    var tradeID: TradeID?
     var replyTo: BroadcastChatReplyReference?
 }
 
@@ -45,13 +52,26 @@ enum BroadcastChatReplyFormatting {
     }
 
     static func reference(for message: BroadcastChatMessageItem, displayName: String) -> BroadcastChatReplyReference {
-        BroadcastChatReplyReference(
+        let preview: String = {
+            let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return previewText(trimmed)
+            }
+            if message.imageURL != nil {
+                return "Photo"
+            }
+            if message.tradeID != nil {
+                return "Shared a trade"
+            }
+            return "Message"
+        }()
+        return BroadcastChatReplyReference(
             messageId: message.id,
             userId: message.userId,
             displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? message.displayName
                 : displayName,
-            textPreview: previewText(message.text)
+            textPreview: preview
         )
     }
 }
@@ -63,6 +83,8 @@ enum BroadcastChatPayload: Codable, Sendable {
         avatarUrl: String?,
         text: String,
         sentAt: Double,
+        imageURL: String?,
+        tradeID: String?,
         replyTo: BroadcastChatReplyReference?
     )
 
@@ -73,6 +95,8 @@ enum BroadcastChatPayload: Codable, Sendable {
         case avatarUrl
         case text
         case sentAt
+        case imageUrl
+        case tradeId
         case replyToMessageId
         case replyToUserId
         case replyToDisplayName
@@ -86,12 +110,16 @@ enum BroadcastChatPayload: Codable, Sendable {
             throw DecodingError.dataCorruptedError(forKey: .type, in: c, debugDescription: "unknown")
         }
         let replyTo = Self.decodeReplyReference(from: c)
+        let imageURL = try c.decodeIfPresent(String.self, forKey: .imageUrl)
+        let tradeID = try c.decodeIfPresent(String.self, forKey: .tradeId)
         self = .chat(
             userId: try c.decode(String.self, forKey: .userId),
             displayName: try c.decode(String.self, forKey: .displayName),
             avatarUrl: try c.decodeIfPresent(String.self, forKey: .avatarUrl),
             text: try c.decode(String.self, forKey: .text),
             sentAt: try c.decode(Double.self, forKey: .sentAt),
+            imageURL: imageURL,
+            tradeID: tradeID,
             replyTo: replyTo
         )
     }
@@ -99,13 +127,22 @@ enum BroadcastChatPayload: Codable, Sendable {
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         switch self {
-        case let .chat(userId, displayName, avatarUrl, text, sentAt, replyTo):
+        case let .chat(userId, displayName, avatarUrl, text, sentAt, imageURL, tradeID, replyTo):
             try c.encode("chat", forKey: .type)
             try c.encode(userId, forKey: .userId)
             try c.encode(displayName, forKey: .displayName)
             try c.encodeIfPresent(avatarUrl, forKey: .avatarUrl)
             try c.encode(text, forKey: .text)
             try c.encode(sentAt, forKey: .sentAt)
+            if let imageURL, BroadcastChatAttachmentPolicy.isAllowedBroadcastImageURL(imageURL) {
+                try c.encode(imageURL, forKey: .imageUrl)
+            }
+            if let tradeID {
+                let trimmed = tradeID.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    try c.encode(trimmed, forKey: .tradeId)
+                }
+            }
             if let replyTo {
                 try c.encode(replyTo.messageId, forKey: .replyToMessageId)
                 try c.encode(replyTo.userId, forKey: .replyToUserId)
@@ -120,6 +157,8 @@ enum BroadcastChatPayload: Codable, Sendable {
         displayName: String,
         avatarUrl: String?,
         text: String,
+        imageURL: String? = nil,
+        tradeID: TradeID? = nil,
         replyTo: BroadcastChatReplyReference? = nil
     ) throws -> Data {
         try JSONEncoder().encode(
@@ -129,6 +168,8 @@ enum BroadcastChatPayload: Codable, Sendable {
                 avatarUrl: avatarUrl,
                 text: text,
                 sentAt: Date().timeIntervalSince1970 * 1000,
+                imageURL: imageURL,
+                tradeID: tradeID?.rawValue,
                 replyTo: replyTo
             )
         )
@@ -138,10 +179,17 @@ enum BroadcastChatPayload: Codable, Sendable {
         guard let payload = try? JSONDecoder().decode(BroadcastChatPayload.self, from: data) else {
             return nil
         }
-        guard case let .chat(userId, displayName, _, text, sentAt, replyTo) = payload else { return nil }
+        guard case let .chat(userId, displayName, _, text, sentAt, imageURL, tradeIDRaw, replyTo) = payload else {
+            return nil
+        }
         guard userId == senderIdentity else { return nil }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed.count <= TradeRoomBroadcastChatConstants.maxLength else {
+        let sanitizedImage = imageURL.flatMap { url -> String? in
+            BroadcastChatAttachmentPolicy.isAllowedBroadcastImageURL(url) ? url : nil
+        }
+        let sanitizedTrade = BroadcastChatAttachmentPolicy.sanitizedTradeID(tradeIDRaw)
+        guard !trimmed.isEmpty || sanitizedImage != nil || sanitizedTrade != nil else { return nil }
+        if !trimmed.isEmpty, trimmed.count > TradeRoomBroadcastChatConstants.maxLength {
             return nil
         }
         let sanitizedReply: BroadcastChatReplyReference? = {
@@ -156,6 +204,8 @@ enum BroadcastChatPayload: Codable, Sendable {
                 : displayName,
             text: trimmed,
             sentAt: Date(timeIntervalSince1970: sentAt / 1000),
+            imageURL: sanitizedImage,
+            tradeID: sanitizedTrade,
             replyTo: sanitizedReply
         )
     }

@@ -42,6 +42,69 @@ final class PropFirmExperienceTests: XCTestCase {
         XCTAssertFalse(result.breachedTrailingDD)
     }
 
+    func testDrawdownEquityEngineEmitsTrailingFloorSeries() {
+        let profileID = ProfileID("dev.propfirm.dd")
+        guard let account = PropFirmFixtures.accounts(owner: profileID).first(where: \.isPropFirmAccount) else {
+            XCTFail("missing prop fixture")
+            return
+        }
+        let accountID = account.id
+        let trades = [
+            propFirmTrade(
+                id: "dd-1",
+                profileID: profileID,
+                accountID: accountID,
+                pnl: 500,
+                at: date("2024-01-01T10:00:00Z")
+            ),
+            propFirmTrade(
+                id: "dd-2",
+                profileID: profileID,
+                accountID: accountID,
+                pnl: 300,
+                at: date("2024-01-02T10:00:00Z")
+            ),
+        ]
+        let samples = PropFirmDrawdownEquityEngine.computeEquitySeries(
+            account: account,
+            lifetimeTrades: trades,
+            payoutCycles: [],
+            period: LivePersonalDrawdownEngine.PeriodContext(dateRange: .all, customInterval: nil)
+        )
+        XCTAssertNotNil(samples)
+        XCTAssertEqual(samples?.last?.drawdownFloor, 48_800)
+        XCTAssertEqual(samples?.last?.equity, 50_800)
+        let points = PropFirmDrawdownEquityEngine.mapToEquityPoints(samples!)
+        XCTAssertTrue(points.contains { $0.drawdownFloor != nil })
+    }
+
+    func testDrawdownEquityEngineStaticFloorDoesNotTrail() {
+        let profileID = ProfileID("dev.propfirm.static")
+        guard var account = PropFirmFixtures.accounts(owner: profileID).first(where: \.isPropFirmAccount) else {
+            XCTFail("missing prop fixture")
+            return
+        }
+        account.propFirmRules?.drawdownType = .staticThreshold
+        let accountID = account.id
+        let trades = [
+            propFirmTrade(
+                id: "st-1",
+                profileID: profileID,
+                accountID: accountID,
+                pnl: 2_000,
+                at: date("2024-01-01T10:00:00Z")
+            ),
+        ]
+        let samples = PropFirmDrawdownEquityEngine.computeEquitySeries(
+            account: account,
+            lifetimeTrades: trades,
+            payoutCycles: [],
+            period: LivePersonalDrawdownEngine.PeriodContext(dateRange: .all, customInterval: nil)
+        )
+        XCTAssertEqual(samples?.last?.drawdownFloor, 48_000)
+        XCTAssertEqual(samples?.last?.equity, 52_000)
+    }
+
     func testConsistencyFailsWhenBiggestWinExceedsPercent() {
         let trades = [
             PropFirmMetrics.TradeInput(id: "1", pnl: 1_000, createdAt: Date()),
@@ -319,6 +382,30 @@ final class PropFirmExperienceTests: XCTestCase {
         XCTAssertNil(viewModel.snapshot)
         XCTAssertEqual(viewModel.errorMessage, SessionViewerIdentity.sessionUnavailableMessage)
         XCTAssertFalse(viewModel.isLoading)
+    }
+
+    private func propFirmTrade(
+        id: String,
+        profileID: ProfileID,
+        accountID: TradingAccountID,
+        pnl: Decimal,
+        at: Date
+    ) -> Trade {
+        Trade(
+            id: TradeID(id),
+            ownerProfileID: profileID,
+            accountID: accountID,
+            symbol: Symbol(ticker: "NQ"),
+            side: .long,
+            mode: .live,
+            quantity: 1,
+            entryAt: at,
+            exitAt: at,
+            realizedPnL: Money(amount: pnl),
+            visibility: .private,
+            createdAt: at,
+            updatedAt: at
+        )
     }
 
     private func date(_ iso: String) -> Date {

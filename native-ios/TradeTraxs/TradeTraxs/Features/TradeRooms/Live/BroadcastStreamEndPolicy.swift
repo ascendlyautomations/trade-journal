@@ -94,6 +94,7 @@ struct BroadcastStreamEndedNotice: Identifiable, Equatable, Sendable {
     var id: String { sessionId }
     let sessionId: String
     let roomTitle: String
+    var detailMessage: String?
 }
 
 /// LiveKit dropped while the broadcast may still be live (network); viewer can retry watch.
@@ -102,6 +103,14 @@ struct BroadcastStreamConnectionLostNotice: Identifiable, Equatable, Sendable {
     let roomID: RoomID
     let sessionId: String
     let roomTitle: String
+}
+
+/// In-sheet state when the viewer cannot join the current broadcast session (session block / removed).
+struct BroadcastViewerSessionAccessDenied: Identifiable, Equatable, Sendable {
+    var id: String { "\(roomID.rawValue)-\(sessionId)" }
+    let roomID: RoomID
+    let roomTitle: String
+    let sessionId: String
 }
 
 /// Shown when the viewer is kicked from the live stream (still live for others).

@@ -72,7 +72,22 @@ nonisolated enum DashboardAnalyticsV3Applier {
     ) -> [TradingAccount] {
         rows.compactMap { row -> TradingAccount? in
             let dto = row.asAccountDTO(ownerID: ownerID.rawValue)
-            return try? TradingAccountMapper.mapToDomain(dto)
+            guard let account = try? TradingAccountMapper.mapToDomain(dto) else { return nil }
+            if PropFirmPayoutPolicy.supportsLiveWithdrawal(for: account) {
+                LivePersonalDrawdownPersistenceAudit.logBootstrapAccountWire(
+                    accountID: row.id,
+                    wire: LivePersonalDrawdownPersistenceAudit.ColumnSnapshot(
+                        maxDrawdown: DecimalParser.parseFlexible(dto.max_drawdown),
+                        drawdownType: dto.drawdown_type,
+                        floorCap: DecimalParser.parseFlexible(dto.drawdown_floor_cap),
+                        mode: dto.mode,
+                        category: dto.category ?? dto.account_type
+                    ),
+                    mappedLimit: account.livePersonalDrawdown?.limitAmount,
+                    mappedType: account.livePersonalDrawdown?.limitType
+                )
+            }
+            return account
         }
     }
 }

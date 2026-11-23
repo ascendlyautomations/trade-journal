@@ -118,13 +118,15 @@ nonisolated struct GuestPublicExploreRepository: ExploreRepository, @unchecked S
         scope: TradeRoomDiscoveryScope,
         limit: Int,
         suggestedCursor: String?,
-        popularCursor: String?
+        popularCursor: String?,
+        category: TradeRoomCategory?
     ) async throws -> TradeRoomsHomeBootstrap {
         try await live.tradeRoomsHomeBootstrap(
             scope: scope,
             limit: limit,
             suggestedCursor: suggestedCursor,
-            popularCursor: popularCursor
+            popularCursor: popularCursor,
+            category: category
         )
     }
 }

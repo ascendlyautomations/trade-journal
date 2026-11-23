@@ -24,7 +24,9 @@ enum LiveBroadcastDeepLinkHandler {
                         coordinator.presentViewer()
                     } else {
                         await coordinator.watch(roomID: roomID, roomTitle: title)
-                        coordinator.presentViewer()
+                        if coordinator.canPresentViewer(for: roomID) {
+                            coordinator.presentViewer()
+                        }
                     }
                 } else if coordinator.isWatching {
                     coordinator.presentViewer()

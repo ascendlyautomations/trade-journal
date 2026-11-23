@@ -61,6 +61,47 @@ struct CalendarAnalyticsV2Tests {
         #expect(day?.tradeCount == 3)
         #expect(day?.netPnL == Decimal(140))
         #expect(month.monthSummary.tradeCount == 3)
+        #expect(month.monthSummary.tradeWinRate == Decimal(2) / Decimal(3))
+    }
+
+    @Test("Year win rate counts trades only in scoped months, not entire row set")
+    func yearWinRateUsesMonthScopedWins() {
+        let rows = [
+            AnalyticsDailyStatRowV1(
+                calendar_day: "2026-01-15",
+                account_id: "a1",
+                mode_effective: "live",
+                trade_count: 4,
+                win_count: 2,
+                loss_count: 2,
+                breakeven_count: 0,
+                net_pnl: PostgresFlexibleDouble(50),
+                gross_profit: PostgresFlexibleDouble(80),
+                gross_loss: PostgresFlexibleDouble(-30)
+            ),
+            AnalyticsDailyStatRowV1(
+                calendar_day: "2026-02-10",
+                account_id: "a1",
+                mode_effective: "live",
+                trade_count: 6,
+                win_count: 3,
+                loss_count: 3,
+                breakeven_count: 0,
+                net_pnl: PostgresFlexibleDouble(20),
+                gross_profit: PostgresFlexibleDouble(60),
+                gross_loss: PostgresFlexibleDouble(-40)
+            ),
+        ]
+        let yearEnd = Calendar.current.date(from: DateComponents(year: 2026, month: 12, day: 31))!
+        let overview = CalendarAnalyticsAggregator.buildYearOverview(
+            year: 2026,
+            rows: rows,
+            accountFilter: .all,
+            now: yearEnd
+        )
+        #expect(overview.tradeWinRate == Decimal(5) / Decimal(10))
+        let january = overview.months.first { $0.month == 1 }
+        #expect(january?.summary.tradeWinRate == Decimal(2) / Decimal(4))
     }
 
     @Test("Account filter sums one account bucket")

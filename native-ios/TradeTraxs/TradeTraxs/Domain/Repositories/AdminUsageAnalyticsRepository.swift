@@ -64,7 +64,7 @@ enum AdminUsageAnalyticsDefinition {
         "Distinct users in the last 24 hours (UTC) who created a trade, feed post, profile wall post, story, feedback submission, or support ticket."
 }
 
-nonisolated protocol AdminUsageAnalyticsRepository: Sendable {
+nonisolated protocol AdminUsageAnalyticsRepository: AdminProductAnalyticsRepository, AdminHistoricalEngagementRepository, AdminLifecycleAnalyticsRepository, Sendable {
     func fetchBundle(seriesDays: Int) async throws -> AdminUsageAnalyticsBundle
 }
 

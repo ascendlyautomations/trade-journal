@@ -507,6 +507,7 @@ nonisolated enum ProfileMapper: DTOMapper {
             },
             traderType: TraderType.parse(dto.trader_type),
             tradingStyle: dto.trading_style,
+            tradingModel: dto.trading_model,
             primaryMarket: dto.primary_market,
             startedTradingAt: ISO8601.date(from: dto.started_trading),
             isPrivate: dto.is_private ?? false,
@@ -526,6 +527,7 @@ nonisolated enum ProfileMapper: DTOMapper {
             avatar_url: domain.avatar?.id,
             trader_type: domain.traderType?.rawValue,
             trading_style: domain.tradingStyle,
+            trading_model: domain.tradingModel,
             primary_market: domain.primaryMarket,
             started_trading: domain.startedTradingAt.map(ISO8601.string(from:)),
             is_private: domain.isPrivate,
@@ -835,7 +837,8 @@ nonisolated enum TradingAccountMapper {
         if PropFirmPayoutPolicy.supportsLiveWithdrawal(for: account) {
             account.livePersonalDrawdown = LivePersonalDrawdownEngine.stored(
                 maxDrawdown: DecimalParser.parseFlexible(dto.max_drawdown),
-                drawdownTypeRaw: dto.drawdown_type
+                drawdownTypeRaw: dto.drawdown_type,
+                floorCap: DecimalParser.parseFlexible(dto.drawdown_floor_cap)
             )
         }
         return account

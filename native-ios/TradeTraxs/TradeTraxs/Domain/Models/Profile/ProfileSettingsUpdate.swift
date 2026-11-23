@@ -6,6 +6,7 @@ nonisolated struct ProfileSettingsUpdate: Sendable, Equatable {
     var displayName: String
     var bio: String?
     var tradingStyle: String?
+    var tradingModel: String?
     var primaryMarket: String?
     var isPrivate: Bool
     var username: String

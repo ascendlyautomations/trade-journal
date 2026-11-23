@@ -67,22 +67,32 @@ struct StoryEditorView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            topBar
-                .padding(.horizontal, ExperienceSpacing.md)
-                .padding(.top, ExperienceSpacing.sm)
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 0) {
+                topBar
+                    .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.top, ExperienceSpacing.sm)
 
-            Spacer(minLength: ExperienceSpacing.sm)
+                storyCanvas
+                    .padding(.leading, ExperienceSpacing.xs)
+                    .padding(
+                        .trailing,
+                        viewModel.isEditingText
+                            ? StoryEditorTextControlsMetrics.railWidth + ExperienceSpacing.xs
+                            : ExperienceSpacing.xs
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .layoutPriority(1)
 
-            storyCanvas
-                .padding(.horizontal, ExperienceSpacing.md)
-
-            Spacer(minLength: ExperienceSpacing.sm)
+                if viewModel.isEditingText {
+                    textEditingChrome
+                } else {
+                    bottomBar
+                }
+            }
 
             if viewModel.isEditingText {
-                textEditingChrome
-            } else {
-                bottomBar
+                textEditingTopControls
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -118,17 +128,86 @@ struct StoryEditorView: View {
                 .accessibilityIdentifier("composer.saveDraft")
             }
 
+            if !viewModel.isEditingText {
+                Button {
+                    viewModel.beginAddingText()
+                    textFieldFocused = true
+                } label: {
+                    Text("Aa")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(colors.accent)
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityIdentifier("storyEditor.addText")
+            }
+        }
+    }
+
+    private var textEditingTopControls: some View {
+        VStack(alignment: .trailing, spacing: StoryEditorTextControlsMetrics.controlSpacing) {
             Button {
-                viewModel.beginAddingText()
                 textFieldFocused = true
             } label: {
                 Text("Aa")
                     .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(colors.accent)
-                    .frame(width: 44, height: 44)
+                    .frame(width: StoryEditorTextControlsMetrics.controlSize, height: StoryEditorTextControlsMetrics.controlSize)
             }
             .accessibilityIdentifier("storyEditor.addText")
+
+            ColorPicker(
+                selection: Binding(
+                    get: { viewModel.selectedTextFill.swiftUIColor },
+                    set: { viewModel.setCustomTextColor($0) }
+                ),
+                supportsOpacity: true
+            ) {
+                ZStack {
+                    Circle()
+                        .fill(viewModel.selectedTextFill.swiftUIColor)
+                        .frame(width: StoryEditorTextControlsMetrics.controlSize, height: StoryEditorTextControlsMetrics.controlSize)
+                    Image(systemName: "paintpalette.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(colors.textInverse)
+                }
+                .overlay {
+                    Circle()
+                        .stroke(colors.border.opacity(0.6), lineWidth: ExperienceBorder.hairline)
+                }
+            }
+            .labelsHidden()
+            .accessibilityLabel("Custom text color")
+            .accessibilityIdentifier("storyEditor.customTextColor")
+
+            alignmentPicker
+
+            Button {
+                viewModel.cycleTextBackgroundStyle()
+            } label: {
+                Image(systemName: "square.fill.on.square.fill")
+                    .font(.body.weight(.semibold))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(
+                        viewModel.selectedBackgroundStyle == .black ? Color.white : colors.primaryText,
+                        backgroundControlAccent
+                    )
+                    .frame(width: StoryEditorTextControlsMetrics.controlSize, height: StoryEditorTextControlsMetrics.controlSize)
+            }
+            .accessibilityLabel("Text background")
+            .accessibilityValue(textBackgroundAccessibilityValue)
+
+            Button(role: .destructive) {
+                viewModel.deleteSelectedText()
+            } label: {
+                Image(systemName: "trash")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(colors.loss)
+                    .frame(width: StoryEditorTextControlsMetrics.controlSize, height: StoryEditorTextControlsMetrics.controlSize)
+            }
+            .accessibilityLabel("Delete text")
         }
+        .padding(.trailing, ExperienceSpacing.md)
+        .padding(.top, ExperienceSpacing.sm + 44)
     }
 
     private var storyTrashDeleteTarget: some View {
@@ -255,7 +334,7 @@ struct StoryEditorView: View {
             }
         }
         .aspectRatio(StoryCanvasState.canvasAspectRatio, contentMode: .fit)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
@@ -315,85 +394,24 @@ struct StoryEditorView: View {
 
     private var textEditingChrome: some View {
         VStack(spacing: ExperienceSpacing.sm) {
-            HStack(spacing: ExperienceSpacing.sm) {
-                ForEach(StoryTextColor.allCases) { color in
-                    Circle()
-                        .fill(color.swiftUIColor)
-                        .frame(width: 28, height: 28)
-                        .overlay(
-                            Circle()
-                                .stroke(
-                                    colors.accent,
-                                    lineWidth: viewModel.selectedTextFill.matchesPreset(color) ? 2 : 0
-                                )
-                        )
-                        .onTapGesture { viewModel.setSelectedColor(color) }
-                }
+            HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+                TextField("Type something…", text: Binding(
+                    get: { viewModel.draftText },
+                    set: { viewModel.updateDraftText($0) }
+                ), axis: .vertical)
+                .focused($textFieldFocused)
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(1...4)
 
-                ColorPicker(
-                    selection: Binding(
-                        get: { viewModel.selectedTextFill.swiftUIColor },
-                        set: { viewModel.setCustomTextColor($0) }
-                    ),
-                    supportsOpacity: true
-                ) {
-                    ZStack {
-                        Circle()
-                            .fill(viewModel.selectedTextFill.swiftUIColor)
-                            .frame(width: 28, height: 28)
-                        Image(systemName: "paintpalette.fill")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(colors.textInverse)
-                    }
-                    .overlay(
-                        Circle()
-                            .stroke(
-                                colors.accent,
-                                lineWidth: viewModel.selectedTextFill.isCustomColor ? 2 : 0
-                            )
-                    )
+                Button("Done") {
+                    viewModel.finishEditingText()
+                    textFieldFocused = false
                 }
-                .labelsHidden()
-                .accessibilityLabel("Custom text color")
-                .accessibilityIdentifier("storyEditor.customTextColor")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(colors.accent)
+                .layoutPriority(1)
             }
-
-            HStack(spacing: ExperienceSpacing.md) {
-                alignmentButton(.leading, symbol: "text.alignleft")
-                alignmentButton(.center, symbol: "text.aligncenter")
-                alignmentButton(.trailing, symbol: "text.alignright")
-
-                Toggle(isOn: Binding(
-                    get: { viewModel.showsTextBackground },
-                    set: { viewModel.setShowsTextBackground($0) }
-                )) {
-                    Image(systemName: "square.fill.on.square.fill")
-                }
-                .toggleStyle(.button)
-                .tint(colors.accent)
-
-                Button(role: .destructive) {
-                    viewModel.deleteSelectedText()
-                } label: {
-                    Image(systemName: "trash")
-                }
-            }
-            .foregroundStyle(colors.primaryText)
-
-            TextField("Type something…", text: Binding(
-                get: { viewModel.draftText },
-                set: { viewModel.updateDraftText($0) }
-            ), axis: .vertical)
-            .focused($textFieldFocused)
-            .textFieldStyle(.roundedBorder)
             .padding(.horizontal, ExperienceSpacing.md)
-
-            Button("Done") {
-                viewModel.finishEditingText()
-                textFieldFocused = false
-            }
-            .font(.body.weight(.semibold))
-            .foregroundStyle(colors.accent)
             .padding(.bottom, ExperienceSpacing.md)
         }
         .padding(.top, ExperienceSpacing.sm)
@@ -403,15 +421,56 @@ struct StoryEditorView: View {
         }
     }
 
-    private func alignmentButton(_ alignment: TextAlignment, symbol: String) -> some View {
-        Button {
-            viewModel.setSelectedAlignment(alignment)
+    private var alignmentPicker: some View {
+        Menu {
+            Button {
+                viewModel.setSelectedAlignment(.leading)
+            } label: {
+                Label("Left", systemImage: "text.alignleft")
+            }
+            Button {
+                viewModel.setSelectedAlignment(.center)
+            } label: {
+                Label("Center", systemImage: "text.aligncenter")
+            }
+            Button {
+                viewModel.setSelectedAlignment(.trailing)
+            } label: {
+                Label("Right", systemImage: "text.alignright")
+            }
         } label: {
-            Image(systemName: symbol)
-                .font(.body.weight(viewModel.selectedAlignment == alignment ? .bold : .regular))
-                .foregroundStyle(
-                    viewModel.selectedAlignment == alignment ? colors.accent : colors.secondaryText
+            Image(systemName: alignmentMenuSymbol)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(colors.primaryText)
+                .frame(
+                    width: StoryEditorTextControlsMetrics.controlSize,
+                    height: StoryEditorTextControlsMetrics.controlSize
                 )
+        }
+        .accessibilityLabel("Text alignment")
+    }
+
+    private var alignmentMenuSymbol: String {
+        switch viewModel.selectedAlignment {
+        case .leading: return "text.alignleft"
+        case .trailing: return "text.alignright"
+        default: return "text.aligncenter"
+        }
+    }
+
+    private var backgroundControlAccent: Color {
+        switch viewModel.selectedBackgroundStyle {
+        case .none: return colors.secondaryText.opacity(0.35)
+        case .black: return Color.black.opacity(0.9)
+        case .white: return Color.white.opacity(0.95)
+        }
+    }
+
+    private var textBackgroundAccessibilityValue: String {
+        switch viewModel.selectedBackgroundStyle {
+        case .none: return "None"
+        case .black: return "Black"
+        case .white: return "White"
         }
     }
 
@@ -425,6 +484,13 @@ struct StoryEditorView: View {
         }
         isOverStoryTrashZone = overTrash
     }
+}
+
+private enum StoryEditorTextControlsMetrics {
+    static let controlSize: CGFloat = 44
+    static let controlSpacing: CGFloat = 10
+    /// Rail width = control + outer padding so the canvas can inset without overlapping the stack.
+    static let railWidth: CGFloat = controlSize + ExperienceSpacing.md
 }
 
 private enum StoryTextTransformMetrics {
@@ -488,7 +554,15 @@ struct StoryTextOverlayView: View {
             x: overlay.normalizedCenter.x * canvasSize.width,
             y: overlay.normalizedCenter.y * canvasSize.height
         )
-        let baseFontSize = max(18, canvasSize.width * 0.065) * overlay.scale
+        let baseFontSize = StoryTextOverlayLayout.fontSize(
+            canvasWidth: canvasSize.width,
+            scale: overlay.scale
+        )
+        let maxTextWidth = StoryTextOverlayLayout.maxTextWidth(canvasWidth: canvasSize.width)
+        let measured = StoryTextOverlayLayout.measuredBlock(
+            for: overlay,
+            canvasWidth: canvasSize.width
+        )
         let hitSize = manipulationHitSize
 
         ZStack {
@@ -496,11 +570,28 @@ struct StoryTextOverlayView: View {
                 .font(.system(size: baseFontSize, weight: .semibold))
                 .foregroundStyle(overlay.textFill.swiftUIColor)
                 .multilineTextAlignment(overlay.alignment)
-                .padding(overlay.showsBackground ? 8 : 0)
+                .frame(
+                    width: min(measured.textSize.width, maxTextWidth),
+                    height: measured.textSize.height,
+                    alignment: overlay.alignment.storyFrameAlignment
+                )
+                .padding(
+                    overlay.showsBackground
+                        ? EdgeInsets(
+                            top: StoryTextOverlayLayout.backgroundPaddingVertical,
+                            leading: StoryTextOverlayLayout.backgroundPaddingHorizontal,
+                            bottom: StoryTextOverlayLayout.backgroundPaddingVertical,
+                            trailing: StoryTextOverlayLayout.backgroundPaddingHorizontal
+                        )
+                        : EdgeInsets()
+                )
                 .background {
-                    if overlay.showsBackground {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.black.opacity(0.45))
+                    if overlay.backgroundStyle != .none {
+                        RoundedRectangle(
+                            cornerRadius: StoryTextOverlayLayout.backgroundCornerRadius,
+                            style: .continuous
+                        )
+                        .fill(overlay.backgroundStyle.swiftUIFill)
                     }
                 }
                 .background {
@@ -522,7 +613,7 @@ struct StoryTextOverlayView: View {
         .frame(width: hitSize.width, height: hitSize.height)
         .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
-            if isSelected, transformsEnabled {
+            if isSelected {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(colors.accent, lineWidth: ExperienceBorder.thin)
             }
@@ -530,7 +621,7 @@ struct StoryTextOverlayView: View {
         .rotationEffect(.radians(Double(overlay.rotationRadians)))
         .position(center)
         .highPriorityGesture(transformsEnabled ? dragGesture : nil)
-        .simultaneousGesture(transformsEnabled && isSelected ? pinchGesture : nil)
+        .simultaneousGesture(isSelected ? pinchGesture : nil)
         .simultaneousGesture(transformsEnabled && isSelected ? rotationGesture : nil)
         .simultaneousGesture(
             transformsEnabled

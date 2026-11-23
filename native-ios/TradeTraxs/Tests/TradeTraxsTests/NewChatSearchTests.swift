@@ -509,7 +509,8 @@ private final class RecordingNewChatExploreRepository: ExploreRepository, @unche
         scope: TradeRoomDiscoveryScope,
         limit: Int,
         suggestedCursor: String?,
-        popularCursor: String?
+        popularCursor: String?,
+        category: TradeRoomCategory?
     ) async throws -> TradeRoomsHomeBootstrap {
         throw AppError.notImplemented(feature: "tradeRoomsHomeBootstrap")
     }

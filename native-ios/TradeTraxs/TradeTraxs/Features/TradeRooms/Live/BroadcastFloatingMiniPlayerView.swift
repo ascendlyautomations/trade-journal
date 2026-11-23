@@ -38,8 +38,17 @@ struct BroadcastFloatingMiniPlayerOverlay: View {
     private func miniPlayer(layout: BroadcastMiniPlayerLayoutMetrics) -> some View {
         ZStack(alignment: .topLeading) {
             Color.black
-            LiveKitBroadcastVideoView(track: coordinator.videoTrackForMiniPlayer)
-                .id(coordinator.programVideoTrackRevision)
+            LiveKitBroadcastVideoView(
+                track: coordinator.videoTrackForMiniPlayer,
+                onFirstFrame: { coordinator.markProgramVideoFrameRendered() }
+            )
+            .id(coordinator.programVideoTrackRevision)
+            .opacity(coordinator.hasDisplayableProgramVideo ? 1 : 0)
+
+            if let placeholder = coordinator.programVideoPlaceholder {
+                BroadcastProgramVideoPlaceholderOverlay(presentation: placeholder, compact: true)
+            }
+
             liveBadge
         }
         .frame(width: layout.playerSize.width, height: layout.playerSize.height)

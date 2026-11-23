@@ -95,7 +95,15 @@ enum TradingRulesComplianceSnapshotBuilder {
             scope: scope.filter
         )
 
-        let hasRules = TradingRulesComplianceSupport.hasConfiguredRules(context: preferences)
+        let allowedRuleIDs = ProMonetizationPolicy.tradingRulesComplianceRuleFilter(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        )
+        let isFreeTier = allowedRuleIDs != nil
+        let hasRules = TradingRulesPlanTier.hasConfiguredRules(
+            context: preferences,
+            isFreeTier: isFreeTier
+        )
 
         if preferencesError != nil {
             return Output(
@@ -182,7 +190,8 @@ enum TradingRulesComplianceSnapshotBuilder {
             context: preferences,
             dashboardInsights: dashboardInsights,
             preferDashboardInsightsCache: dashboardInsights != nil,
-            discipline: discipline
+            discipline: discipline,
+            allowedRuleIDs: allowedRuleIDs
         )
         TradingRulesComplianceDiagnostics.logTimings(payload.timings, source: "cold_analytics")
 
@@ -206,9 +215,14 @@ enum TradingRulesComplianceSnapshotBuilder {
         accounts: [TradingAccount] = [],
         ownerTrades: [Trade]? = nil,
         historyComplete: Bool = false,
-        dashboardInsights: DashboardInsightsPresentation? = nil
+        dashboardInsights: DashboardInsightsPresentation? = nil,
+        allowedRuleIDs: Set<TradingRulesComplianceAnalytics.RuleID>? = nil
     ) async -> Output {
-        let hasRules = TradingRulesComplianceSupport.hasConfiguredRules(context: preferences)
+        let isFreeTier = allowedRuleIDs != nil
+        let hasRules = TradingRulesPlanTier.hasConfiguredRules(
+            context: preferences,
+            isFreeTier: isFreeTier
+        )
 
         if hasRules, trades.isEmpty {
             return Output(
@@ -268,7 +282,8 @@ enum TradingRulesComplianceSnapshotBuilder {
             context: preferences,
             dashboardInsights: dashboardInsights,
             preferDashboardInsightsCache: dashboardInsights != nil,
-            discipline: prepared.discipline
+            discipline: prepared.discipline,
+            allowedRuleIDs: allowedRuleIDs
         )
         TradingRulesComplianceDiagnostics.logTimings(payload.timings, source: "dashboard")
 

@@ -24,11 +24,11 @@ struct RoomConversationView: View {
     @Environment(\.appEnvironment) private var appEnvironment
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.tabIsActive) private var tabIsActive
-    @Bindable private var liveVoiceCoordinator = RoomLiveVoiceCoordinator.shared
-    @Bindable private var broadcastCoordinator = RoomBroadcastCoordinator.shared
-    @Bindable private var roomMemberTagStore = SessionRoomMemberTagsStore.shared
-    @Bindable private var favoritesStore = TradeRoomFavoritesStore.shared
-    @Bindable private var membershipStore = TradeRoomMembershipStore.shared
+    @Bindable private var liveVoiceCoordinator: RoomLiveVoiceCoordinator
+    @Bindable private var broadcastCoordinator: RoomBroadcastCoordinator
+    @Bindable private var roomMemberTagStore: SessionRoomMemberTagsStore
+    @Bindable private var favoritesStore: TradeRoomFavoritesStore
+    @Bindable private var membershipStore: TradeRoomMembershipStore
     @State private var broadcastChatUserId: String?
     @State private var broadcastChatDisplayName = "You"
     @State private var liveDeepLinkEndedNotice: String?
@@ -39,8 +39,9 @@ struct RoomConversationView: View {
     @State private var showsRoomSwitcher = false
     @State private var isRoomHeaderExpanded = true
     @State private var obsOwnerSheetStep: ObsOwnerSheetStep?
-    @Bindable private var obsBroadcastController = TradeRoomObsBroadcastController.shared
+    @Bindable private var obsBroadcastController: TradeRoomObsBroadcastController
 
+    @MainActor
     init(
         roomID: RoomID,
         data: DataEnvironment,
@@ -48,6 +49,12 @@ struct RoomConversationView: View {
         navigationHost: TradeRoomNavigationHost = .messages,
         externalPresentationIdentity: String = ""
     ) {
+        _liveVoiceCoordinator = Bindable(wrappedValue: RoomLiveVoiceCoordinator.shared)
+        _broadcastCoordinator = Bindable(wrappedValue: RoomBroadcastCoordinator.shared)
+        _roomMemberTagStore = Bindable(wrappedValue: SessionRoomMemberTagsStore.shared)
+        _favoritesStore = Bindable(wrappedValue: TradeRoomFavoritesStore.shared)
+        _membershipStore = Bindable(wrappedValue: TradeRoomMembershipStore.shared)
+        _obsBroadcastController = Bindable(wrappedValue: TradeRoomObsBroadcastController.shared)
         self.externalPresentationIdentity = externalPresentationIdentity
         _viewModel = State(
             initialValue: RoomConversationViewModel(
@@ -75,7 +82,14 @@ struct RoomConversationView: View {
         self.navigationHost = navigationHost
     }
 
+    @MainActor
     init(viewModel: RoomConversationViewModel, imagePipeline: any ImagePipeline) {
+        _liveVoiceCoordinator = Bindable(wrappedValue: RoomLiveVoiceCoordinator.shared)
+        _broadcastCoordinator = Bindable(wrappedValue: RoomBroadcastCoordinator.shared)
+        _roomMemberTagStore = Bindable(wrappedValue: SessionRoomMemberTagsStore.shared)
+        _favoritesStore = Bindable(wrappedValue: TradeRoomFavoritesStore.shared)
+        _membershipStore = Bindable(wrappedValue: TradeRoomMembershipStore.shared)
+        _obsBroadcastController = Bindable(wrappedValue: TradeRoomObsBroadcastController.shared)
         _viewModel = State(initialValue: viewModel)
         self.imagePipeline = imagePipeline
         self.data = nil
@@ -194,6 +208,7 @@ struct RoomConversationView: View {
                     channels: viewModel.channels,
                     viewerID: viewerID,
                     rooms: rooms,
+                    inboxStore: MessagesInboxStore.shared,
                     membership: viewModel.membership
                 )
             )
@@ -218,6 +233,13 @@ struct RoomConversationView: View {
         Binding(
             get: { viewModel.memberModerationErrorMessage != nil },
             set: { if !$0 { viewModel.memberModerationErrorMessage = nil } }
+        )
+    }
+
+    private var membershipMutationErrorPresented: Binding<Bool> {
+        Binding(
+            get: { viewModel.membershipMutationErrorMessage != nil },
+            set: { if !$0 { viewModel.membershipMutationErrorMessage = nil } }
         )
     }
 
@@ -255,6 +277,16 @@ struct RoomConversationView: View {
                 }
             } message: {
                 Text(viewModel.memberModerationErrorMessage ?? "")
+            }
+            .alert(
+                "Couldn't join room",
+                isPresented: membershipMutationErrorPresented
+            ) {
+                Button("OK", role: .cancel) {
+                    viewModel.membershipMutationErrorMessage = nil
+                }
+            } message: {
+                Text(viewModel.membershipMutationErrorMessage ?? "")
             }
             .confirmationDialog(
                 "Leave this Trade Room?",
@@ -457,7 +489,9 @@ struct RoomConversationView: View {
             onJoinStream: {
                 Task {
                     await broadcastCoordinator.watch(roomID: room.id, roomTitle: room.name)
-                    broadcastCoordinator.presentViewer()
+                    if broadcastCoordinator.canPresentViewer(for: room.id) {
+                        broadcastCoordinator.presentViewer()
+                    }
                 }
             },
             onManageStream: {
@@ -1223,7 +1257,7 @@ struct RoomConversationView: View {
             return false
         }
         await broadcastCoordinator.watch(roomID: roomID, roomTitle: roomTitle)
-        guard broadcastCoordinator.isWatchingRoom(roomID) else {
+        guard broadcastCoordinator.canPresentViewer(for: roomID) else {
             return false
         }
         broadcastCoordinator.presentViewer()
@@ -1334,7 +1368,7 @@ struct RoomConversationView: View {
                 Button {
                     showsRoomNotificationSettings = true
                 } label: {
-                    Label("Manage Notifications", systemImage: "bell.badge")
+                    Label("Notifications", systemImage: "bell.badge")
                 }
                 if !viewModel.isOwner {
                     Button(role: .destructive) {

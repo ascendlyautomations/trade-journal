@@ -161,54 +161,61 @@ struct FeedStoryViewerView: View {
 
     @ViewBuilder
     private func storyContent(_ story: Story) -> some View {
-        ZStack {
-            StoryPlaybackMediaView(
-                reference: story.media,
-                imagePipeline: imagePipeline,
-                objectStorage: data.objectStorage,
-                player: viewModel.playback.player,
-                isVideo: viewModel.isVideoStory
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .id(story.id)
-            .storyHoldToPause(isEnabled: !isReplyFocused) { holding in
-                viewModel.setHoldPaused(holding)
-            }
+        GeometryReader { proxy in
+            let storyCanvas = StoryComposerGeometry.aspectFitStoryCanvas(in: proxy.size)
 
-            if viewModel.isVideoStory, !viewModel.videoTextOverlays.isEmpty {
-                StoryVideoTextPlaybackOverlay(
-                    overlays: viewModel.videoTextOverlays,
-                    videoPixelSize: viewModel.videoPixelSize
+            ZStack {
+                StoryPlaybackMediaView(
+                    reference: story.media,
+                    imagePipeline: imagePipeline,
+                    objectStorage: data.objectStorage,
+                    player: viewModel.playback.player,
+                    isVideo: viewModel.isVideoStory
                 )
-                .allowsHitTesting(false)
-                .accessibilityIdentifier("storyViewer.textOverlays")
-            }
+                .frame(width: storyCanvas.width, height: storyCanvas.height)
+                .position(x: storyCanvas.midX, y: storyCanvas.midY)
+                .clipped()
+                .id(story.id)
+                .storyHoldToPause(isEnabled: !isReplyFocused) { holding in
+                    viewModel.setHoldPaused(holding)
+                }
 
-            storyTapNavigationOverlay
+                if viewModel.isVideoStory, !viewModel.videoTextOverlays.isEmpty {
+                    StoryVideoTextPlaybackOverlay(
+                        overlays: viewModel.videoTextOverlays,
+                        canvasSize: storyCanvas.size
+                    )
+                    .position(x: storyCanvas.midX, y: storyCanvas.midY)
+                    .allowsHitTesting(false)
+                    .accessibilityIdentifier("storyViewer.textOverlays")
+                }
 
-            VStack(spacing: 0) {
-                storyTopChrome(for: story)
-                Spacer(minLength: 0)
-                if viewModel.showReplyComposer {
-                    StoryReplyInputView(
-                        text: $replyText,
-                        isFocused: $isReplyFocused,
-                        isSending: viewModel.isSendingReply,
-                        onSend: {
-                            Task {
-                                let draft = replyText
-                                let sent = await viewModel.sendStoryReply(text: draft)
-                                if sent {
-                                    replyText = ""
-                                    isReplyFocused = false
+                storyTapNavigationOverlay
+
+                VStack(spacing: 0) {
+                    storyTopChrome(for: story)
+                    Spacer(minLength: 0)
+                    if viewModel.showReplyComposer {
+                        StoryReplyInputView(
+                            text: $replyText,
+                            isFocused: $isReplyFocused,
+                            isSending: viewModel.isSendingReply,
+                            onSend: {
+                                Task {
+                                    let draft = replyText
+                                    let sent = await viewModel.sendStoryReply(text: draft)
+                                    if sent {
+                                        replyText = ""
+                                        isReplyFocused = false
+                                    }
                                 }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
+                .safeAreaPadding(.top, StoryViewerChromeMetrics.topBreathingRoom)
+                .safeAreaPadding(.bottom)
             }
-            .safeAreaPadding(.top, StoryViewerChromeMetrics.topBreathingRoom)
-            .safeAreaPadding(.bottom)
         }
         .simultaneousGesture(storyHorizontalDragGesture)
     }

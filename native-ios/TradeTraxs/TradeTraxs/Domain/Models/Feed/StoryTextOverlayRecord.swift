@@ -16,6 +16,7 @@ nonisolated struct StoryTextOverlayRecord: Codable, Hashable, Sendable, Equatabl
     var alpha: Double
     var alignment: String
     var background: Bool
+    var background_style: String?
 }
 
 /// Maps composer-canvas points onto a viewer that aspect-fills the same video.

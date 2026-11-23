@@ -47,6 +47,8 @@ nonisolated struct Profile: Hashable, Codable, Sendable, Identifiable {
     var avatar: MediaReference?
     var traderType: TraderType?
     var tradingStyle: String?
+    /// `profiles.trading_model` — additional strategy labels (ICT, SMC, etc.).
+    var tradingModel: String? = nil
     var primaryMarket: String?
     var startedTradingAt: Date?
     var isPrivate: Bool
@@ -73,6 +75,7 @@ extension Profile {
         merged.bio = incoming.bio ?? merged.bio
         merged.traderType = incoming.traderType ?? merged.traderType
         merged.tradingStyle = incoming.tradingStyle ?? merged.tradingStyle
+        merged.tradingModel = incoming.tradingModel ?? merged.tradingModel
         merged.primaryMarket = incoming.primaryMarket ?? merged.primaryMarket
         merged.startedTradingAt = incoming.startedTradingAt ?? merged.startedTradingAt
         merged.isPrivate = incoming.isPrivate
@@ -89,6 +92,7 @@ extension Profile {
         merged.bio = confirmed.bio
         merged.traderType = confirmed.traderType
         merged.tradingStyle = confirmed.tradingStyle
+        merged.tradingModel = confirmed.tradingModel
         merged.primaryMarket = confirmed.primaryMarket
         merged.startedTradingAt = confirmed.startedTradingAt
         merged.isPrivate = confirmed.isPrivate
@@ -109,6 +113,7 @@ enum OwnerProfileMutationEquivalence {
             && lhs.displayName == rhs.displayName
             && lhs.bio == rhs.bio
             && lhs.tradingStyle == rhs.tradingStyle
+            && lhs.tradingModel == rhs.tradingModel
             && lhs.primaryMarket == rhs.primaryMarket
             && lhs.traderType == rhs.traderType
             && lhs.isPrivate == rhs.isPrivate

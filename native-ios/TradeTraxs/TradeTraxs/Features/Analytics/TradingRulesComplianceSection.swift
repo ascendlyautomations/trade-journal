@@ -13,6 +13,8 @@ struct TradingRulesComplianceSection: View {
     enum Presentation {
         /// Legacy collapsible blocks (settings previews).
         case compactCollapsible
+        /// Free tier — adherence summary for the current scope.
+        case freeOverview
         /// Dedicated analytics page — score, timeline, trends, and impact always visible.
         case expandedAnalyticsPage
     }
@@ -45,15 +47,15 @@ struct TradingRulesComplianceSection: View {
     private enum MetricCopy {
         static let complianceScore = (
             title: "Compliance score",
-            body: "Adherence % = rules followed ÷ (followed + violations) among checks we could evaluate. Unevaluated checks are excluded — never counted as compliant."
+            body: "Adherence % = rules followed ÷ (followed + violations) among checks we could evaluate. Unevaluated checks are excluded and never counted as compliant."
         )
         static let unevaluated = (
             title: "Unevaluated",
-            body: "Checks we could not run with reliable data — missing session, symbol, R:R, contracts, risk, or psychology timing (e.g. loss exit time). They are excluded from adherence and never counted as followed or violated."
+            body: "Checks we could not run with reliable data, such as missing session, symbol, R:R, contracts, risk, or psychology timing (for example loss exit time). They are excluded from adherence and never counted as followed or violated."
         )
         static let violations = (
             title: "Violations",
-            body: "Each violation is a failed rule check at trade, day, or week level using the rules effective for that moment (including retrospective scoring when enabled)."
+            body: "Each violation is a failed rule check at trade, day, or week level using the rules effective for that moment, including retrospective scoring when enabled."
         )
         static let trends = (
             title: "Compliance trends",
@@ -61,7 +63,7 @@ struct TradingRulesComplianceSection: View {
         )
         static let impact = (
             title: "Rule impact",
-            body: "Realized P&L per trade (`realizedPnL`) grouped by whether each trade-level rule check was followed or violated. Commissions/fees are not always in `realizedPnL`. Day/week aggregate checks are excluded. Each side needs at least 5 priced trades to show comparisons — a display threshold, not statistical significance. Correlation only."
+            body: "Realized P&L per trade grouped by whether each trade-level rule check was followed or violated. Commissions and fees are not always included. Day and week aggregate checks are excluded. Each side needs at least 5 priced trades to show comparisons (a display threshold, not statistical proof). Correlation only."
         )
     }
 
@@ -70,6 +72,10 @@ struct TradingRulesComplianceSection: View {
             switch presentation {
             case .compactCollapsible:
                 compactBody
+            case .freeOverview:
+                if let analytics {
+                    complianceOverviewBlock(analytics, showsDisciplineExtras: false)
+                }
             case .expandedAnalyticsPage:
                 if let analytics {
                     expandedAnalyticsContent(analytics)
@@ -100,7 +106,7 @@ struct TradingRulesComplianceSection: View {
     @ViewBuilder
     private func expandedAnalyticsContent(_ analytics: TradingRulesComplianceAnalytics.Result) -> some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xl) {
-            complianceOverviewBlock(analytics)
+            complianceOverviewBlock(analytics, showsDisciplineExtras: true)
             actionableInsightsBlock(analytics)
             complianceTrendsBlock(analytics)
             violationPatternsSection(analytics)
@@ -121,7 +127,10 @@ struct TradingRulesComplianceSection: View {
     // MARK: - Redesigned analytics sections
 
     @ViewBuilder
-    private func complianceOverviewBlock(_ analytics: TradingRulesComplianceAnalytics.Result) -> some View {
+    private func complianceOverviewBlock(
+        _ analytics: TradingRulesComplianceAnalytics.Result,
+        showsDisciplineExtras: Bool = true
+    ) -> some View {
         let score = analytics.score
         let progress = analytics.disciplineProgress
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
@@ -154,7 +163,7 @@ struct TradingRulesComplianceSection: View {
                     )
                 }
 
-                if !progress.insufficientData {
+                if showsDisciplineExtras, !progress.insufficientData {
                     HStack(spacing: ExperienceSpacing.md) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Discipline goal \(Int(progress.goalPercent))%")
@@ -172,7 +181,9 @@ struct TradingRulesComplianceSection: View {
                     }
                 }
 
-                retrospectiveStatusLine(analytics)
+                if showsDisciplineExtras {
+                    retrospectiveStatusLine(analytics)
+                }
 
                 if score.evaluated == 0, let hint = zeroEvalHint, !hint.isEmpty {
                     Text(hint)

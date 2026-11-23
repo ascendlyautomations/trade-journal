@@ -45,6 +45,57 @@ final class PsychologyReportExpansionTests: XCTestCase {
         XCTAssertTrue(report.sections.contains { $0.id == "performance" })
     }
 
+    func testPsychologyReportPersistsAnalyticsEnginePayload() {
+        var trades: [Trade] = []
+        for index in 0..<24 {
+            var trade = makeTrade(
+                id: "t\(index)",
+                pnl: index.isMultiple(of: 2) ? 80 : -20,
+                offsetHours: index
+            )
+            trade.followedPlan = index.isMultiple(of: 3)
+            trade.emotion = index.isMultiple(of: 4) ? "Calm" : "FOMO"
+            trades.append(trade)
+        }
+        let checkIns = (0..<8).map { makeCheckIn(date: "2026-09-0\($0 + 1)", sleep: 7.5, focus: 5, stress: 1) }
+        let ref = PsychologyReportPeriodRef(template: .discipline, periodID: "rolling:90d")
+        let bounds = PsychologyReportPeriods.bounds(for: ref, now: baseDate)
+        let periodTrades = trades.filter { $0.entryAt >= bounds.start && $0.entryAt <= bounds.end }
+        let periodCheckIns = checkIns.filter {
+            let startKey = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: bounds.start)
+            let endKey = TraderPsychologyAnalyticsFoundation.tradeDateKey(for: bounds.end)
+            return $0.checkInDate >= startKey && $0.checkInDate <= endKey
+        }
+        let analytics = TraderPsychologyAnalyticsEngine.buildReport(
+            trades: periodTrades,
+            checkIns: periodCheckIns,
+            now: baseDate
+        )
+        let report = PsychologyReportGenerator.generate(
+            periodRef: ref,
+            trades: trades,
+            checkIns: checkIns,
+            now: baseDate
+        )
+        XCTAssertEqual(report.analyticsSections, analytics.sections)
+        XCTAssertEqual(report.insightCards, analytics.dashboardCards)
+        XCTAssertGreaterThanOrEqual(report.emotionBreakdown.count, 2)
+        XCTAssertGreaterThan(report.planTaggedTradeCount, 0)
+    }
+
+    func testPsychologyReportRollingBoundsSevenDays() {
+        let ref = PsychologyReportPeriodRef(template: .discipline, periodID: "rolling:7d")
+        let now = ISO8601.date(from: "2026-09-02T14:00:00.000Z")!
+        let bounds = PsychologyReportPeriods.bounds(for: ref, now: now)
+        XCTAssertEqual(bounds.dateRangeLabel, "Last 7 days")
+        let calendar = TradingReportPeriods.eastern
+        let expectedStart = calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: now))
+        XCTAssertEqual(
+            TraderPsychologyAnalyticsFoundation.tradeDateKey(for: bounds.start),
+            TraderPsychologyAnalyticsFoundation.tradeDateKey(for: expectedStart ?? now)
+        )
+    }
+
     func testPsychologyReportPeriodRefParsing() {
         let id = ReportID("psych_weekly:week:2026-08-31")
         let ref = PsychologyReportPeriodRef.parse(reportID: id)

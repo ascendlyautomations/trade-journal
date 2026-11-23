@@ -1,11 +1,18 @@
 import SwiftUI
 
 struct TradingRulesComplianceDetailView: View {
+    enum AnalyticsPresentation {
+        case fullAnalytics
+        case freeTierBasic
+    }
+
     @Bindable private var session = TradingRulesComplianceSessionStore.shared
     @Bindable var scopeController: TradingRulesAnalyticsScopeController
+    var scrollAnchor: FeedListScrollAnchor
     let navigationCoordinator: NavigationCoordinator
     let detailCache: DetailPresentationCache
     let loadDependencies: TradingRulesComplianceLoadDependencies
+    var presentation: AnalyticsPresentation = .fullAnalytics
     let onRetry: () -> Void
 
     @Environment(\.themeColors) private var colors
@@ -72,21 +79,21 @@ struct TradingRulesComplianceDetailView: View {
     private func scrollContent(result: TradingRulesComplianceAnalytics.Result) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
-                TradingRulesAnalyticsFilterBar(
-                    scope: scopeController,
-                    onManageAccounts: { navigationCoordinator.pushHome(.settings(.tradingAccounts)) },
-                    onFiltersTap: {
-                        scopeController.prepareDraftScopeFilters()
-                        scopeController.showsFiltersSheet = true
-                    }
-                )
-                .padding(ExperienceSpacing.sm)
-                .experienceTradingRulesCard(prominence: .standard)
-
-                if !session.scopeLabel.isEmpty {
+                if presentation == .fullAnalytics {
+                    TradingRulesAnalyticsFilterBar(
+                        scope: scopeController,
+                        onManageAccounts: { navigationCoordinator.pushHome(.settings(.tradingAccounts)) },
+                        onFiltersTap: {
+                            scopeController.prepareDraftScopeFilters()
+                            scopeController.showsFiltersSheet = true
+                        }
+                    )
+                    .padding(ExperienceSpacing.sm)
+                    .experienceTradingRulesCard(prominence: .standard)
+                } else if !session.scopeLabel.isEmpty {
                     Text(session.scopeLabel)
                         .experienceStyle(.caption, color: colors.secondaryText)
-                        .lineLimit(2)
+                        .padding(.horizontal, ExperienceSpacing.xs)
                 }
 
                 if session.isProvisionalCompliance {
@@ -100,24 +107,42 @@ struct TradingRulesComplianceDetailView: View {
 
                 TradingRulesComplianceSection(
                     analytics: result,
-                    presentation: .expandedAnalyticsPage,
+                    presentation: presentation == .freeTierBasic ? .freeOverview : .expandedAnalyticsPage,
                     zeroEvalHint: zeroEvalHint(for: result),
                     personalInsights: session.personalInsights,
                     activeDateRange: scopeController.dateRange,
                     usesCustomDateRange: scopeController.customDateInterval != nil,
-                    onOpenTrade: { tradeID in
+                    onOpenTrade: presentation == .fullAnalytics ? { tradeID in
+                        preserveScrollOffset()
                         navigationCoordinator.pushTradeDetail(tradeID, cache: detailCache)
-                    },
-                    onOpenRule: { rule in
+                    } : nil,
+                    onOpenRule: presentation == .fullAnalytics ? { rule in
+                        preserveScrollOffset()
                         navigationCoordinator.pushTradingRulesRuleDetail(rule.rawValue)
-                    },
-                    onOpenDay: { dayKey in
+                    } : nil,
+                    onOpenDay: presentation == .fullAnalytics ? { dayKey in
+                        preserveScrollOffset()
                         navigationCoordinator.pushTradingRulesDayDetail(dayKey)
-                    }
+                    } : nil
                 )
+
+                if presentation == .freeTierBasic {
+                    TradingRulesPremiumAnalyticsLockedSection()
+                }
             }
             .padding(ExperienceSpacing.md)
         }
+        .id(TradingRulesAnalyticsScrollSurfaceIdentity.analyticsList)
+        .scrollPosition(scrollAnchor.binding)
+        .onScrollGeometryChange(for: CGFloat.self) { geometry in
+            geometry.contentOffset.y
+        } action: { _, offsetY in
+            scrollAnchor.noteMeasuredContentOffset(offsetY)
+        }
+    }
+
+    private func preserveScrollOffset() {
+        TradingRulesAnalyticsScrollStore.remember(scrollAnchor.offset)
     }
 
     private func zeroEvalHint(for result: TradingRulesComplianceAnalytics.Result) -> String? {
@@ -152,11 +177,6 @@ struct TradingRulesComplianceDetailView: View {
                 You have trading rules configured, but none of your trades match the current filter. Widen the date range or account selection — compliance is not 0%.
                 """
             )
-            if !session.scopeLabel.isEmpty {
-                Text(session.scopeLabel)
-                    .experienceStyle(.caption, color: colors.secondaryText)
-                    .padding(.horizontal, ExperienceSpacing.lg)
-            }
         }
     }
 

@@ -6,6 +6,7 @@ struct BacktestLabView: View {
     @State private var entitlementGateRevision = 0
 
     private let imagePipeline: any ImagePipeline
+    private let data: DataEnvironment
 
     @Environment(\.themeColors) private var colors
     @Environment(\.experienceTheme) private var theme
@@ -24,11 +25,16 @@ struct BacktestLabView: View {
             )
         )
         self.imagePipeline = data.imagePipeline
+        self.data = data
     }
 
     var body: some View {
         Group {
-            if restrictsBacktestLab {
+            if showsEntitlementVerification {
+                TraxProEntitlementVerificationView(profileID: viewerProfileID) {
+                    Task { await TraxProEntitlementRefreshAction.refresh(data: data) }
+                }
+            } else if restrictsBacktestLab {
                 gatedContent
             } else {
                 labContent
@@ -42,8 +48,13 @@ struct BacktestLabView: View {
             await viewModel.refresh()
         }
         .task(id: restrictsBacktestLab) {
-            guard !restrictsBacktestLab else { return }
+            guard !restrictsBacktestLab, !showsEntitlementVerification else { return }
             viewModel.loadIfNeeded()
+        }
+        .task(id: showsEntitlementVerification) {
+            if showsEntitlementVerification {
+                await TraxProEntitlementRefreshAction.refresh(data: data)
+            }
         }
         .onChange(of: TradeJournalMutationStore.shared.revision) { _, _ in
             guard !restrictsBacktestLab else { return }
@@ -81,6 +92,14 @@ struct BacktestLabView: View {
             entitlementGateRevision += 1
         }
         .accessibilityIdentifier("backtest.lab.root")
+    }
+
+    private var showsEntitlementVerification: Bool {
+        _ = entitlementGateRevision
+        return ProMonetizationPolicy.shouldShowEntitlementVerification(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: viewerProfileID
+        )
     }
 
     private var restrictsBacktestLab: Bool {
@@ -158,16 +177,16 @@ struct BacktestLabView: View {
 
     private var upgradeBlock: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("TraxPro Backtest Lab")
+            Text("TraxsPro Backtest Lab")
                 .experienceStyle(.headline, color: colors.primaryText)
-            Text("Review backtest performance, calendars, and strategy breakdowns with TraxPro.")
+            Text("Review backtest performance, calendars, and strategy breakdowns with TraxsPro.")
                 .experienceStyle(.footnote, color: colors.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
             Button {
                 ExperienceHaptics.play(.selection)
                 ProUpgradeCoordinator.shared.present(reason: .feature(.backtestLab))
             } label: {
-                Text("Upgrade to TraxPro")
+                Text("Upgrade to TraxsPro")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)

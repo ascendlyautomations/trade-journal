@@ -2,34 +2,13 @@ import SwiftUI
 
 struct TradingRulesFieldInfoButton: View {
     let info: TradingRulesFieldInfo
-    @State private var showsInfo = false
-    @Environment(\.themeColors) private var colors
 
     var body: some View {
-        Button {
-            showsInfo = true
-        } label: {
-            Image(systemName: "info.circle")
-                .font(.caption)
-                .foregroundStyle(colors.tertiaryText)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("About \(info.title)")
-        .accessibilityIdentifier("settings.tradingRules.info.\(info.rawValue)")
-        .popover(isPresented: $showsInfo) {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                Text(info.title)
-                    .font(ExperienceTypography.subheadline.weight(.semibold))
-                    .foregroundStyle(colors.primaryText)
-                Text(info.body)
-                    .font(ExperienceTypography.footnote)
-                    .foregroundStyle(colors.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(ExperienceSpacing.md)
-            .frame(width: 280, alignment: .leading)
-            .presentationCompactAdaptation(.popover)
-        }
+        AnalyticsMetricInfoButton(
+            title: info.title,
+            bodyText: info.body,
+            accessibilityID: "settings.tradingRules.info.\(info.rawValue)"
+        )
     }
 }
 

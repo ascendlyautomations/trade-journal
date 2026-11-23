@@ -720,6 +720,21 @@ private struct LoginShellAdminUsageAnalyticsRepository: AdminUsageAnalyticsRepos
         _ = seriesDays
         throw AppError.authentication(.sessionMissing)
     }
+
+    func fetchProductBundle(seriesDays: Int) async throws -> AdminProductAnalyticsBundle {
+        _ = seriesDays
+        throw AppError.authentication(.sessionMissing)
+    }
+
+    func fetchHistoricalBundle(query: AdminHistoricalEngagementQuery) async throws -> AdminHistoricalEngagementBundle {
+        _ = query
+        throw AppError.authentication(.sessionMissing)
+    }
+
+    func fetchLifecycleBundle(query: AdminLifecycleAnalyticsQuery) async throws -> AdminLifecycleAnalyticsBundle {
+        _ = query
+        throw AppError.authentication(.sessionMissing)
+    }
 }
 
 private struct LoginShellAdminSupportTicketsRepository: AdminSupportTicketsRepository {
@@ -1121,5 +1136,10 @@ private struct LoginShellAppleSubscriptionSyncClient: AppleSubscriptionSyncClien
 
     func fetchMonetizationConfig() async throws -> IosMonetizationConfigResponse {
         throw AppError.unknown(message: "Monetization config is unavailable")
+    }
+
+    func redeemCreatorAccessCode(_ normalizedCode: String) async throws -> CreatorAccessRedeemResponse {
+        _ = normalizedCode
+        throw AppError.unknown(message: "Sign in to redeem creator access.")
     }
 }

@@ -53,6 +53,8 @@ import { clientCheckoutBlockReason } from "@/lib/billingEntitlement"
 import { loadBillingEntitlement } from "@/lib/billingEntitlementClient"
 import { pickUserProfileFields } from "@/lib/UserProfileProvider"
 import { logMonetizationFunnel } from "@/lib/monetizationTelemetry"
+import { trackProductAnalytics } from "@/lib/productAnalytics/tracker"
+import { PRODUCT_ANALYTICS_EVENTS } from "@/lib/productAnalytics/constants"
 import { startTraxProCheckout } from "@/lib/startTraxProCheckout"
 import { profileHasUsedCheckoutTrial } from "@/lib/checkoutTrial"
 import { useTraxProPurchaseCopy } from "@/lib/traxProPriceCatalogClient"
@@ -176,6 +178,12 @@ export function ProUpgradeProvider({ children }: { children: ReactNode }) {
         reason: input.reason,
         trialEligible: !profileHasUsedCheckoutTrial(profile),
       })
+      trackProductAnalytics(PRODUCT_ANALYTICS_EVENTS.paywallViewed, {
+        gate_reason:
+          input.reason.type === "limit"
+            ? `limit:${input.reason.limit}`
+            : `feature:${input.reason.feature}`,
+      })
       if (!profileHasUsedCheckoutTrial(profile)) {
         logMonetizationFunnel({
           event: "trial_eligible",
@@ -223,6 +231,15 @@ export function ProUpgradeProvider({ children }: { children: ReactNode }) {
       platform: "web",
       reason: reason ?? undefined,
       trialEligible,
+    })
+    trackProductAnalytics(PRODUCT_ANALYTICS_EVENTS.monetizationUpgradeClicked, {
+      gate_reason:
+        reason == null
+          ? "unknown"
+          : reason.type === "limit"
+            ? `limit:${reason.limit}`
+            : `feature:${reason.feature}`,
+      billing_provider: "stripe",
     })
     try {
       if (user?.id) {

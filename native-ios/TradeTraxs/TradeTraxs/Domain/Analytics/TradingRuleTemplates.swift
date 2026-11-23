@@ -1,6 +1,6 @@
 import Foundation
 
-enum TradingRuleTemplateID: String, CaseIterable, Identifiable, Sendable {
+nonisolated enum TradingRuleTemplateID: String, CaseIterable, Identifiable, Sendable {
     case scalper
     case dayTrader = "day_trader"
     case propFirm = "prop_firm"
@@ -31,7 +31,7 @@ enum TradingRuleTemplateID: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-enum TradingRuleTemplates {
+nonisolated enum TradingRuleTemplates {
     static func suggestedGlobal(for template: TradingRuleTemplateID) -> TradingPreferenceGlobal? {
         guard template != .custom else { return nil }
         var base = TradingPreferenceGlobal.empty(userID: ProfileID("template"))

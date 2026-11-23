@@ -13,7 +13,7 @@ nonisolated enum PsychologyReportPeriods {
         if ref.template.isPeriodic {
             return periodicBounds(for: ref, now: now)
         }
-        return rollingBounds(for: ref.template, now: now)
+        return rollingBounds(for: ref, now: now)
     }
 
     static func availableCatalog(
@@ -128,16 +128,58 @@ nonisolated enum PsychologyReportPeriods {
             return Bounds(ref: ref, start: start, end: end, dateRangeLabel: label)
         }
 
-        return rollingBounds(for: ref.template, now: now)
+        return rollingBounds(for: ref, now: now)
     }
 
-    private static func rollingBounds(for template: PsychologyReportTemplate, now: Date) -> Bounds {
+    private static func rollingBounds(for ref: PsychologyReportPeriodRef, now: Date) -> Bounds {
         let calendar = TradingReportPeriods.eastern
         let end = endOfDay(now, calendar: calendar)
-        let start = calendar.date(byAdding: .day, value: -89, to: calendar.startOfDay(for: now)) ?? now
-        let ref = PsychologyReportPeriodRef(template: template, periodID: "rolling:90d")
-        let label = "Last 90 days"
+
+        if ref.periodID.hasPrefix("custom:") {
+            let rest = String(ref.periodID.dropFirst("custom:".count))
+            let parts = rest.split(separator: ":", maxSplits: 1).map(String.init)
+            if parts.count == 2,
+               let start = dayKeyDate(parts[0], calendar: calendar),
+               let endDay = dayKeyDate(parts[1], calendar: calendar) {
+                let startDay = calendar.startOfDay(for: start)
+                let rangeEnd = min(endOfDay(endDay, calendar: calendar), end)
+                let label = TradingReportPeriods.dateRangeLabel(
+                    start: startDay,
+                    end: rangeEnd,
+                    kind: .weekly
+                )
+                return Bounds(ref: ref, start: startDay, end: rangeEnd, dateRangeLabel: label)
+            }
+        }
+
+        let preset = PsychologyReportTimePreset.from(periodID: ref.periodID) ?? .ninetyDays
+        let start: Date
+        let label: String
+        switch preset {
+        case .sevenDays:
+            start = calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: now)) ?? now
+            label = "Last 7 days"
+        case .thirtyDays:
+            start = calendar.date(byAdding: .day, value: -29, to: calendar.startOfDay(for: now)) ?? now
+            label = "Last 30 days"
+        case .ninetyDays:
+            start = calendar.date(byAdding: .day, value: -89, to: calendar.startOfDay(for: now)) ?? now
+            label = "Last 90 days"
+        case .sixMonths:
+            start = calendar.date(byAdding: .day, value: -179, to: calendar.startOfDay(for: now)) ?? now
+            label = "Last 6 months"
+        case .all:
+            start = calendar.date(byAdding: .year, value: -30, to: calendar.startOfDay(for: now)) ?? now
+            label = "All time"
+        }
         return Bounds(ref: ref, start: start, end: end, dateRangeLabel: label)
+    }
+
+    private static func dayKeyDate(_ key: String, calendar: Calendar) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withFullDate]
+        formatter.timeZone = calendar.timeZone
+        return formatter.date(from: key)
     }
 
     private static func earliestTradeDate(_ trades: [Trade]) -> Date? {

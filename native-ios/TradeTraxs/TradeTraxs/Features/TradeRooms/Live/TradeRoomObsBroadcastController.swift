@@ -307,6 +307,7 @@ final class TradeRoomObsBroadcastController {
         )
         streamTitle = start.streamTitle ?? title
         pendingStreamTitle = nil
+        broadcastCoordinator.noteBroadcastExpiresAt(start.expiresAt)
         rememberObsHostStartResponse(start, sessionId: sessionId)
         return start
     }
@@ -539,6 +540,7 @@ final class TradeRoomObsBroadcastController {
 
         visibility = status.visibility
         publicDiscoverableLive = status.publicLive ?? false
+        broadcastCoordinator.noteBroadcastExpiresAt(status.expiresAt)
         broadcasterUserId = status.broadcasterUserId
         if let fromServer = TradeRoomBroadcastStreamTitle.normalize(status.streamTitle ?? "") {
             streamTitle = fromServer

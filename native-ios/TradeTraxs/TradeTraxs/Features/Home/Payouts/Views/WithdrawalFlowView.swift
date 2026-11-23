@@ -106,13 +106,7 @@ struct WithdrawalFlowView: View {
     private var accountPicker: some View {
         List {
             Section {
-                Text(
-                    "Record money taken out of a Live account or a funded prop-firm payout."
-                )
-                .experienceStyle(.footnote, color: colors.secondaryText)
-                .experienceDashboardListRow()
                 payoutHistoryLink
-                    .padding(.top, ExperienceSpacing.xxs)
                     .experienceDashboardListRow()
             }
 
@@ -129,7 +123,7 @@ struct WithdrawalFlowView: View {
                 Section {
                     SettingsIntroBlock(
                         title: "No eligible accounts",
-                        message: "Add a Live or Funded prop-firm account under Settings → Manage Accounts."
+                        message: "Add a live or funded prop firm account under Settings → Manage Accounts, or your account's payout rules have not yet been met."
                     )
                     .experienceDashboardListRow()
                 }

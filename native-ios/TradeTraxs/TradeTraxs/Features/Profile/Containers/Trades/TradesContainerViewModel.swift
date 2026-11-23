@@ -1267,6 +1267,24 @@ nonisolated enum TradeDisplay {
         return formatter
     }()
 
+    /// Clock only — `1:05PM` (shared message cards).
+    private static let compactClockFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "h:mma"
+        formatter.amSymbol = "AM"
+        formatter.pmSymbol = "PM"
+        return formatter
+    }()
+
+    /// Trade day on message cards — `11/20/26`.
+    private static let compactShortDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "M/d/yy"
+        return formatter
+    }()
+
     static func pnlText(_ money: Money?) -> String {
         NumberDisplay.pnlWholeDollars(money)
     }
@@ -1476,6 +1494,90 @@ nonisolated enum TradeDisplay {
 
     static func dateTimeText(_ date: Date) -> String {
         compactDateTimeFormatter.string(from: date)
+    }
+
+    /// Messages shared-trade card — `1:05PM - 2:00PM 11/20/26 (55m)` from execution timestamps.
+    static func sharedMessageExecutionStamp(for trade: Trade) -> String {
+        sharedMessageExecutionStamp(
+            entryAt: trade.entryAt,
+            exitAt: trade.exitAt,
+            durationSeconds: trade.durationSeconds,
+            durationText: trade.durationText
+        )
+    }
+
+    static func sharedMessageExecutionStamp(
+        entryAt: Date,
+        exitAt: Date?,
+        durationSeconds: Int?,
+        durationText: String?
+    ) -> String {
+        let entryClock = compactClockFormatter.string(from: entryAt)
+        let entryDay = compactShortDateFormatter.string(from: entryAt)
+
+        guard let exitAt else {
+            return dateTimeText(entryAt)
+        }
+
+        let exitClock = compactClockFormatter.string(from: exitAt)
+        let calendar = Calendar.current
+        let body: String
+        if calendar.isDate(entryAt, inSameDayAs: exitAt) {
+            body = "\(entryClock) - \(exitClock) \(entryDay)"
+        } else {
+            let exitDay = compactShortDateFormatter.string(from: exitAt)
+            body = "\(entryClock) \(entryDay) - \(exitClock) \(exitDay)"
+        }
+
+        guard let duration = sharedMessageDurationLabel(
+            entryAt: entryAt,
+            exitAt: exitAt,
+            durationSeconds: durationSeconds,
+            durationText: durationText
+        ) else {
+            return body
+        }
+        return "\(body) (\(duration))"
+    }
+
+    private static func sharedMessageDurationLabel(
+        entryAt: Date,
+        exitAt: Date?,
+        durationSeconds: Int?,
+        durationText: String?
+    ) -> String? {
+        if let exitAt, exitAt > entryAt {
+            let seconds = Int(exitAt.timeIntervalSince(entryAt).rounded(.down))
+            if let compact = messageCardCompactDuration(seconds: seconds) {
+                return compact
+            }
+        }
+        if let durationSeconds, durationSeconds > 0,
+           let compact = messageCardCompactDuration(seconds: durationSeconds)
+        {
+            return compact
+        }
+        let trimmed = durationText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// `55m`, `1h 25m`, `2h` — no leading word “Duration”.
+    private static func messageCardCompactDuration(seconds: Int) -> String? {
+        guard seconds > 0 else { return nil }
+        if seconds >= 86_400 {
+            return TradeHoldDuration.formatSeconds(seconds, allowSubMinuteSeconds: false)
+        }
+        let hours = seconds / 3_600
+        let minutes = (seconds % 3_600) / 60
+        let secs = seconds % 60
+        if hours > 0 {
+            if minutes > 0 { return "\(hours)h \(minutes)m" }
+            return "\(hours)h"
+        }
+        if minutes > 0 {
+            return secs > 0 ? "\(minutes)m \(secs)s" : "\(minutes)m"
+        }
+        return "\(secs)s"
     }
 
     /// Entry/exit time in quick stats — time-only when paired timestamps share a day.

@@ -93,6 +93,25 @@ nonisolated struct DefaultBillingRepository: BillingRepository, MonetizationConf
         return try await loadServerEntitlement(for: profileID, syncStoreKit: true)
     }
 
+    func redeemCreatorAccessCode(_ code: String) async throws {
+        guard IosSubscriptionReleaseConfiguration.iosCreatorPromoRedemptionEnabled else {
+            throw AppError.unknown(message: "Creator code redemption is not available in this build.")
+        }
+        guard let entitlementClient else {
+            throw AppError.unknown(message: "Billing is unavailable.")
+        }
+        let normalized = code
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+        guard !normalized.isEmpty else {
+            throw AppError.unknown(message: "Enter a creator access code.")
+        }
+        let response = try await entitlementClient.redeemCreatorAccessCode(normalized)
+        guard response.ok == true else {
+            throw AppError.unknown(message: response.message ?? "Could not redeem that code.")
+        }
+    }
+
     private func loadServerEntitlement(
         for profileID: ProfileID,
         syncStoreKit: Bool

@@ -146,6 +146,16 @@ private final class StubAchievementPostDatabase: SupabaseDatabaseExecuting, @unc
         throw AppError.unknown(message: "not implemented")
     }
 
+    func updateReturningRows<Body, T>(
+        _ body: Body,
+        table: String,
+        query: [URLQueryItem],
+        returning type: T.Type
+    ) async throws -> [T] where Body: Encodable, T: Decodable {
+        _ = (body, table, query, type)
+        return []
+    }
+
     func update<Body>(_ body: Body, table: String, query: [URLQueryItem]) async throws where Body: Encodable {}
 
     func upsert<Body, T>(

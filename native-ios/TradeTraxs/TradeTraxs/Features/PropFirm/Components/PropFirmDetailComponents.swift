@@ -340,6 +340,9 @@ struct PropFirmDetailDrawdownPanel: View {
             if let limit = snapshot.maxDrawdownLimit, limit > 0 {
                 balanceRow("Max limit", limit)
             }
+            if let daily = snapshot.dailyLossLimit, daily > 0 {
+                balanceRow("Worst day", snapshot.dailyLossUsed)
+            }
         }
         .padding(.top, ExperienceSpacing.xs)
     }
@@ -378,7 +381,6 @@ struct PropFirmRuleRowView: View {
     var infoBody: String?
 
     @Environment(\.themeColors) private var colors
-    @State private var showsInfo = false
 
     var body: some View {
         HStack(spacing: ExperienceSpacing.sm) {
@@ -389,27 +391,11 @@ struct PropFirmRuleRowView: View {
             Text(row.label)
                 .experienceStyle(.callout, color: colors.secondaryText)
             if let infoBody {
-                Button {
-                    showsInfo = true
-                } label: {
-                    Image(systemName: "info.circle")
-                        .font(.caption)
-                        .foregroundStyle(colors.tertiaryText)
-                }
-                .buttonStyle(.plain)
-                .popover(isPresented: $showsInfo) {
-                    VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                        Text(row.label)
-                            .font(ExperienceTypography.subheadline.weight(.semibold))
-                        Text(infoBody)
-                            .font(ExperienceTypography.footnote)
-                            .foregroundStyle(colors.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(ExperienceSpacing.md)
-                    .frame(width: 280, alignment: .leading)
-                    .experienceAnalyticsPopoverChrome()
-                }
+                AnalyticsMetricInfoButton(
+                    title: row.label,
+                    bodyText: infoBody,
+                    accessibilityID: "propFirm.ruleInfo.\(row.topic)"
+                )
             }
             Spacer(minLength: 8)
             Text(row.value)

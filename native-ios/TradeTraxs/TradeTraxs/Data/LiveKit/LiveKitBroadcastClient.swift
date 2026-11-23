@@ -1,5 +1,18 @@
 import Foundation
 
+nonisolated enum LiveKitBroadcastAccessError: Error, Sendable, Equatable {
+    case removedFromStream(message: String)
+}
+
+extension LiveKitBroadcastAccessError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .removedFromStream(let message):
+            return message
+        }
+    }
+}
+
 nonisolated struct LiveKitBroadcastStatusResponse: Decodable, Sendable {
     /// Session row may exist while OBS is only preparing; check `publicLive` for discoverable live.
     var live: Bool
@@ -10,6 +23,7 @@ nonisolated struct LiveKitBroadcastStatusResponse: Decodable, Sendable {
     var broadcasterUserId: String?
     var broadcasterDisplayName: String?
     var startedAt: String?
+    var expiresAt: String?
     var voiceMode: String?
     var videoSource: String?
     /// "browser" or "obs" — Phase 2 uses primaryMediaPublisherIdentity when obs.
@@ -30,6 +44,7 @@ nonisolated struct LiveKitBroadcastStatusResponse: Decodable, Sendable {
         case broadcasterUserId
         case broadcasterDisplayName
         case startedAt
+        case expiresAt
         case voiceMode
         case videoSource
         case broadcastSource
@@ -54,6 +69,7 @@ nonisolated struct LiveKitBroadcastStatusResponse: Decodable, Sendable {
             forKey: .broadcasterDisplayName
         )
         startedAt = try container.decodeIfPresent(String.self, forKey: .startedAt)
+        expiresAt = try container.decodeIfPresent(String.self, forKey: .expiresAt)
         voiceMode = try container.decodeIfPresent(String.self, forKey: .voiceMode)
         videoSource = try container.decodeIfPresent(String.self, forKey: .videoSource)
         broadcastSource = try container.decodeIfPresent(String.self, forKey: .broadcastSource)
@@ -86,6 +102,7 @@ nonisolated struct LiveKitBroadcastStartResponse: Decodable, Sendable {
     var broadcasterUserId: String?
     var broadcasterDisplayName: String?
     var startedAt: String?
+    var expiresAt: String?
     var voiceMode: String?
     var videoSource: String?
     var broadcastSource: String?
@@ -148,6 +165,7 @@ nonisolated struct LiveKitBroadcastTokenResponse: Decodable, Sendable {
     var broadcasterUserId: String?
     var broadcasterDisplayName: String?
     var startedAt: String?
+    var expiresAt: String?
     var voiceMode: String?
     var videoSource: String?
     var broadcastSource: String?
@@ -564,9 +582,30 @@ nonisolated struct LiveKitBroadcastClient: Sendable {
             requiresAuthentication: true
         )
         guard (200 ... 299).contains(response.statusCode) else {
+            let envelope = decodeAPIErrorEnvelope(response)
+            if response.statusCode == 403, envelope.code == "removed_from_stream" {
+                let message = envelope.error?.trimmingCharacters(in: .whitespacesAndNewlines)
+                throw LiveKitBroadcastAccessError.removedFromStream(
+                    message: (message?.isEmpty == false)
+                        ? message!
+                        : "You have been removed from this livestream."
+                )
+            }
             throw AppError.unknown(message: decodeError(response))
         }
         return try transport.decoder.decode(LiveKitBroadcastTokenResponse.self, from: response)
+    }
+
+    private struct APIErrorEnvelope: Decodable {
+        var error: String?
+        var code: String?
+    }
+
+    private func decodeAPIErrorEnvelope(_ response: HTTPResponse) -> APIErrorEnvelope {
+        if let parsed = try? transport.decoder.decode(APIErrorEnvelope.self, from: response) {
+            return parsed
+        }
+        return APIErrorEnvelope()
     }
 
     private func decodeSuccessBody<T: Decodable>(

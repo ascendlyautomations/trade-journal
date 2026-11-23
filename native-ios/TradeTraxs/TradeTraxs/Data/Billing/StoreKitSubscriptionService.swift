@@ -3,7 +3,7 @@ import OSLog
 import StoreKit
 import UIKit
 
-/// StoreKit 2 TraxPro subscription foundation — purchase, restore, and server sync.
+/// StoreKit 2 TraxsPro subscription foundation — purchase, restore, and server sync.
 protocol StoreKitEntitlementSyncing: Sendable {
     func syncVerifiedTransactionsToServer() async throws
     func startTransactionListenerIfNeeded() async
@@ -97,7 +97,7 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
         do {
             let products = try await Product.products(for: [productID])
             guard let product = products.first else {
-                return .failed("TraxPro product unavailable")
+                return .failed("TraxsPro product unavailable")
             }
 
             logStoreKitPurchaseProductPricingDetails(product)
@@ -335,7 +335,7 @@ actor StoreKitSubscriptionService: StoreKitSubscriptionServicing {
         switch environment {
         case .xcode:
             return """
-            This purchase came from Xcode StoreKit Testing, which cannot unlock TraxPro on the server. \
+            This purchase came from Xcode StoreKit Testing, which cannot unlock TraxsPro on the server. \
             Remove the StoreKit Configuration from your Run scheme (or disable StoreKit Testing) and purchase with a Sandbox Apple ID on device, or use TestFlight.
             """
         default:

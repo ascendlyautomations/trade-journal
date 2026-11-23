@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// TraxPro gate surface — routes to in-app subscription purchase, never web checkout.
+/// TraxsPro gate surface — routes to in-app subscription purchase, never web checkout.
 struct TraxProMembershipInfoView: View {
     let onClose: () -> Void
     var onViewSubscription: (() -> Void)?
@@ -27,7 +27,7 @@ struct TraxProMembershipInfoView: View {
                 }
             } footer: {
                 if isPaidCommerceEnabled {
-                    Text("TraxPro unlocks Trade AI, higher limits, and advanced analytics.")
+                    Text("TraxsPro unlocks Trade AI, higher limits, and advanced analytics.")
                 }
             }
 
@@ -35,7 +35,7 @@ struct TraxProMembershipInfoView: View {
                 Section {
                     Button(action: onViewSubscription) {
                         SettingsPrimaryActionLabel(
-                            title: "View TraxPro Plans",
+                            title: "View TraxsPro Plans",
                             systemImage: "creditcard"
                         )
                     }
@@ -45,7 +45,7 @@ struct TraxProMembershipInfoView: View {
             }
         }
         .experienceInsetGroupedListStyle(pageBackground: true)
-        .experienceNavigationTitle("TraxPro")
+        .experienceNavigationTitle("TraxsPro")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Close", action: onClose)

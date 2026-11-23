@@ -6,6 +6,7 @@ struct ProUpgradeGateSheet: View {
     @Bindable var coordinator: ProUpgradeCoordinator
     @State private var viewModel: SettingsSubscriptionViewModel
     @State private var showsAllPlans = false
+    @State private var showsAllBenefits = false
 
     @Environment(\.themeColors) private var colors
     @Environment(\.dismiss) private var dismiss
@@ -32,24 +33,60 @@ struct ProUpgradeGateSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
-                    headerBlock
-                    benefitList
+                VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
+                    heroHeader
+                    limitContextBlock
+                    statusFeedback
+                    highlightBenefits
+                    allBenefitsDisclosure
+                    MonetizationPlanPresentation.SelectedSubscriptionPriceCard(
+                        product: viewModel.selectedProduct
+                    )
+                    if let footnote = viewModel.upgradePostTrialFootnote,
+                       viewModel.selectedProduct?.hasEligibleIntroductoryOffer == true
+                    {
+                        Text(footnote)
+                            .experienceStyle(.caption, color: colors.secondaryText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                     primaryActions
                     if showsAllPlans {
                         plansBlock
                     }
+                    legalDisclosure
                 }
                 .padding(.horizontal, ExperienceSpacing.md)
-                .padding(.vertical, ExperienceSpacing.lg)
+                .padding(.vertical, ExperienceSpacing.md)
             }
             .background(colors.appBackground.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Not Now") {
+                    Button {
                         coordinator.dismiss()
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(colors.secondaryText)
+                    }
+                    .accessibilityLabel("Close")
+                    .accessibilityIdentifier("proUpgrade.close")
+                }
+                if coordinator.showsPreviewProAction(for: reason),
+                   let previewFeature = coordinator.resolvedPreviewFeature(for: reason)
+                {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        MonetizationPlanPresentation.ProUpgradePreviewProToolbarButton(
+                            accessibilityIdentifier: "proUpgrade.previewPro"
+                        ) {
+                            ExperienceHaptics.play(.selection)
+                            TraxsProPreviewCoordinator.shared.schedulePreviewAfterPaywallDismiss(
+                                feature: previewFeature,
+                                entryPoint: .proUpgradeSheet
+                            )
+                            dismiss()
+                        }
                     }
                 }
             }
@@ -67,57 +104,78 @@ struct ProUpgradeGateSheet: View {
         }
     }
 
-    private var headerBlock: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text(reason.sheetTitle)
-                .experienceStyle(.title2, color: colors.primaryText)
-                .fontWeight(.bold)
-            Text(reason.detailMessage)
-                .experienceStyle(.body, color: colors.primaryText)
-                .fixedSize(horizontal: false, vertical: true)
-            if case .limit = reason {
+    private var heroHeader: some View {
+        Text(MonetizationPlanCopy.paywallUnlockTitle)
+            .experienceStyle(.title2, color: colors.primaryText)
+            .fontWeight(.bold)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var limitContextBlock: some View {
+        if case .limit = reason {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+                Text(reason.sheetTitle)
+                    .experienceStyle(.caption, color: colors.tertiaryText)
+                    .fontWeight(.semibold)
+                Text(reason.detailMessage)
+                    .experienceStyle(.body, color: colors.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(reason.upsellFooter)
-                    .experienceStyle(.subheadline, color: colors.secondaryText)
+                    .experienceStyle(.footnote, color: colors.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if let footnote = viewModel.upgradePostTrialFootnote, viewModel.selectedProduct?.hasEligibleIntroductoryOffer == true {
-                Text(footnote)
-                    .experienceStyle(.caption, color: colors.secondaryText)
-            }
-            if let error = viewModel.errorMessage {
-                SettingsInlineError(message: error) {
-                    Task { await viewModel.refresh() }
-                }
-            }
-            if let actionMessage = viewModel.actionMessage {
-                Text(actionMessage)
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-            }
+            .padding(ExperienceSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(colors.fillSecondary.opacity(0.22), in: RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
         }
     }
 
-    private var benefitList: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            Text("TraxPro")
-                .experienceStyle(.headline, color: colors.primaryText)
-            Text("Powerful tools for serious traders.")
-                .experienceStyle(.subheadline, color: colors.secondaryText)
-            ForEach(ProUpgradeMarketing.benefitLines, id: \.self) { line in
-                HStack(alignment: .top, spacing: ExperienceSpacing.xs) {
-                    Text("✓")
-                        .experienceStyle(.body, color: colors.accent)
-                    Text(line)
-                        .experienceStyle(.subheadline, color: colors.primaryText)
+    @ViewBuilder
+    private var statusFeedback: some View {
+        if viewModel.errorMessage != nil || viewModel.actionMessage != nil {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+                if let error = viewModel.errorMessage {
+                    SettingsInlineError(message: error) {
+                        Task { await viewModel.refresh() }
+                    }
+                }
+                if let actionMessage = viewModel.actionMessage {
+                    Text(actionMessage)
+                        .experienceStyle(.footnote, color: colors.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
     }
 
+    private var highlightBenefits: some View {
+        MonetizationPlanPresentation.ProMarketingFeatureList(compact: true, showsDividers: false)
+    }
+
+    private var allBenefitsDisclosure: some View {
+        MonetizationPlanPresentation.DisclosureToggle(
+            title: "View All Benefits",
+            isExpanded: showsAllBenefits,
+            accessibilityID: "proUpgrade.allBenefits"
+        ) {
+            showsAllBenefits.toggle()
+        } content: {
+            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                Text(MonetizationPlanCopy.proEverythingInFreeHeading)
+                    .experienceStyle(.caption, color: colors.secondaryText)
+                VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
+                    ForEach(MonetizationPlanCopy.proPlanFeatures, id: \.self) { line in
+                        MonetizationPlanPresentation.BenefitRow(text: line)
+                    }
+                }
+            }
+            .padding(.top, ExperienceSpacing.xxs)
+        }
+    }
+
     private var primaryActions: some View {
         VStack(spacing: ExperienceSpacing.sm) {
-            purchaseDisclosure
-
             Button {
                 Task { await viewModel.purchaseSelectedPlan() }
             } label: {
@@ -131,11 +189,22 @@ struct ProUpgradeGateSheet: View {
                         .fontWeight(.semibold)
                     Spacer()
                 }
-                .padding(.vertical, ExperienceSpacing.sm)
+                .padding(.vertical, ExperienceSpacing.xs)
             }
             .buttonStyle(.borderedProminent)
+            .controlSize(.regular)
             .disabled(viewModel.isPrimaryActionDisabled)
             .accessibilityIdentifier("proUpgrade.primaryPurchase")
+
+            if viewModel.showsRedeemOfferCode {
+                MonetizationPlanPresentation.AppleOfferCodeRedemptionButton(
+                    style: .paywall,
+                    isDisabled: viewModel.actionState != .idle,
+                    accessibilityIdentifier: "proUpgrade.redeemOfferCode"
+                ) {
+                    Task { await viewModel.redeemOfferCode() }
+                }
+            }
 
             Button {
                 withAnimation(ExperienceMotion.navigation) {
@@ -145,28 +214,15 @@ struct ProUpgradeGateSheet: View {
                     viewModel.retryLoadProducts()
                 }
             } label: {
-                Text(showsAllPlans ? "Hide Plans" : "View Pro Plans")
+                Text(showsAllPlans ? "Hide Plans" : "View Plans")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
         }
     }
 
-    /// Visible before the purchase button. Same copy and links as Settings → Plan.
-    private var purchaseDisclosure: some View {
+    private var legalDisclosure: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            if let product = viewModel.selectedProduct {
-                Text(product.displayName)
-                    .experienceStyle(.headline, color: colors.primaryText)
-                    .accessibilityIdentifier("proUpgrade.selectedTitle")
-                Text(product.subscriptionPeriodLabel)
-                    .experienceStyle(.subheadline, color: colors.secondaryText)
-                    .accessibilityIdentifier("proUpgrade.selectedDuration")
-                Text(product.displayPrice)
-                    .experienceStyle(.headline, color: colors.primaryText)
-                    .accessibilityIdentifier("proUpgrade.selectedPrice")
-            }
-
             Text(SubscriptionPresentationPolicy.autoRenewDisclosure(selectedProduct: viewModel.selectedProduct))
                 .experienceStyle(.caption, color: colors.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -197,8 +253,8 @@ struct ProUpgradeGateSheet: View {
 
                 Spacer(minLength: 0)
             }
-            .padding(.vertical, ExperienceSpacing.xxs)
         }
+        .padding(.top, ExperienceSpacing.xxs)
     }
 
     @ViewBuilder
@@ -240,21 +296,12 @@ struct ProUpgradeGateSheet: View {
                     .foregroundStyle(isSelected ? colors.accent : colors.tertiaryText)
             }
             .padding(ExperienceSpacing.sm)
-            .background(colors.backgroundSecondary.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
+            .background(colors.fillSecondary.opacity(isSelected ? 0.45 : 0.22), in: RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous))
         }
         .buttonStyle(.experiencePlain)
     }
 }
 
 enum ProUpgradeMarketing {
-    static let benefitLines: [String] = [
-        "Unlimited trading accounts",
-        "Advanced Prop Firm Analytics",
-        "Advanced performance analytics",
-        "AI Trade Analyst & Psychology Coach",
-        "Trading reports",
-        "Backtest Lab",
-        "Copy Trading",
-        "Unlimited Clips",
-    ]
+    static var benefitLines: [String] { MonetizationPlanCopy.proPlanFeatures }
 }

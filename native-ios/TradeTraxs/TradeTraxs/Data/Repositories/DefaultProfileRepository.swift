@@ -9,7 +9,7 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
     /// Exact web Profile select from `app/profile/[id]/page.tsx` (`PUBLIC_PROFILE_SELECT`).
     /// Do not add columns the web does not request.
     private static let publicProfileSelect =
-        "id,username,name,bio,avatar_url,trading_style,trader_type,primary_market,started_trading,is_private,created_at"
+        "id,username,name,bio,avatar_url,trading_style,trading_model,trader_type,primary_market,started_trading,is_private,created_at"
 
     private static let ownerSettingsProfileSelect =
         "\(publicProfileSelect),username_change_count"
@@ -317,6 +317,7 @@ nonisolated struct DefaultProfileRepository: ProfileRepository {
             avatar_url: nil,
             trader_type: update.traderType?.rawValue,
             trading_style: update.tradingStyle,
+            trading_model: update.tradingModel,
             primary_market: update.primaryMarket,
             is_private: update.isPrivate,
             username_change_count: usernameChanged ? update.usernameChangeCount + 1 : nil

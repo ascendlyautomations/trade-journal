@@ -296,26 +296,6 @@ nonisolated struct PropFirmDetailContentPlan: Sendable {
             )
         )
 
-        if let daily = snapshot.dailyLossLimit, daily > 0 {
-            chips.append(
-                DashboardMetricChip(
-                    id: "dailyLoss",
-                    label: "Worst day",
-                    value: NumberDisplay.money(snapshot.dailyLossUsed),
-                    tone: snapshot.dailyDrawdownBreached ? .negative : .neutral
-                )
-            )
-        } else if let required = snapshot.winningDaysRequired, required > 0 {
-            chips.append(
-                DashboardMetricChip(
-                    id: "winningDays",
-                    label: "Win days",
-                    value: "\(snapshot.winningDays)/\(required)",
-                    tone: snapshot.winningDaysTargetMet ? .positive : .neutral
-                )
-            )
-        }
-
         return chips
     }
 
@@ -345,8 +325,33 @@ nonisolated struct PropFirmDetailContentPlan: Sendable {
     }
 
     func consistencyInfoBody() -> String? {
-        guard snapshot.consistencyRequired, let pct = snapshot.consistencyPercent else { return nil }
-        return "Your largest winning trade must stay at or below \(NumberDisplay.decimal(pct, maximumFractionDigits: 0))% of total profit from winning trades this cycle."
+        guard snapshot.consistencyRequired, let firmLimit = snapshot.consistencyPercent else { return nil }
+
+        let biggest = NumberDisplay.money(snapshot.consistencyBiggestWin)
+        let totalProfits = NumberDisplay.money(snapshot.consistencyTotalProfit)
+        let firmLimitText = "\(NumberDisplay.decimal(firmLimit, maximumFractionDigits: 0))%"
+
+        var lines: [String] = [
+            "Consistency = (Biggest Profitable Day ÷ Total Profits Since Last Payout) × 100",
+            "",
+            "Biggest Day: \(biggest)",
+            "Total Profits Since Last Payout: \(totalProfits)",
+        ]
+
+        if snapshot.consistencyTotalProfit > 0 {
+            let actualPercent = (snapshot.consistencyBiggestWin / snapshot.consistencyTotalProfit) * 100
+            let actualText = NumberDisplay.decimal(actualPercent, maximumFractionDigits: 1)
+            lines.append("Calculation: (\(biggest) ÷ \(totalProfits)) × 100 = \(actualText)%")
+        } else if snapshot.consistencyTotalProfit < 0 {
+            lines.append("Calculation: not available.")
+            lines.append("Total profits in this payout cycle are negative, so a consistency percentage does not apply.")
+        } else {
+            lines.append("Calculation: not available.")
+            lines.append("No profitable trades in this payout cycle yet, so a consistency percentage does not apply.")
+        }
+
+        lines.append("Firm Limit: \(firmLimitText)")
+        return lines.joined(separator: "\n")
     }
 
     func winningDayThresholdInfoBody() -> String? {

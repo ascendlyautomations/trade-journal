@@ -22,6 +22,8 @@ final class TradeRoomsHomeViewModel {
 
     private(set) var discoveryMode: TradeRoomDiscoveryMode = .yourRooms
     private(set) var discoveryScope: TradeRoomDiscoveryScope = .all
+    /// `nil` — all categories; preserved when switching All / Starred / Joined / Popular.
+    private(set) var discoveryCategoryFilter: TradeRoomCategory?
     /// Set when the user taps a scope chip. Later loads must not move the chip.
     private var didUserSelectDiscoveryScope = false
     /// Set once membership cache or the first home load can choose the opening chip.
@@ -64,6 +66,7 @@ final class TradeRoomsHomeViewModel {
 
     private var loadTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
+    private var categoryFilterPrefetchTask: Task<Void, Never>?
     private var searchGeneration: UInt64 = 0
     /// Hosting tab selected (Home / Feed / Profile). Narrow guard for home discovery RPC only.
     private var isHostingTabActive = true
@@ -76,6 +79,7 @@ final class TradeRoomsHomeViewModel {
         var your: [RoomID]
         var suggested: [RoomID]
         var popular: [RoomID]
+        var discoveryCategory: String?
     }
 
     private struct DisplayedSnapshot: Equatable {
@@ -177,13 +181,18 @@ final class TradeRoomsHomeViewModel {
 
     var filteredItems: [TradeRoomInboxItem] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return items }
-        return items.filter {
-            $0.room.name.localizedCaseInsensitiveContains(query)
-                || ($0.ownerName?.localizedCaseInsensitiveContains(query) ?? false)
-                || $0.preview.localizedCaseInsensitiveContains(query)
-                || $0.room.slug.localizedCaseInsensitiveContains(query)
+        let textMatched: [TradeRoomInboxItem]
+        if query.isEmpty {
+            textMatched = items
+        } else {
+            textMatched = items.filter {
+                $0.room.name.localizedCaseInsensitiveContains(query)
+                    || ($0.ownerName?.localizedCaseInsensitiveContains(query) ?? false)
+                    || $0.preview.localizedCaseInsensitiveContains(query)
+                    || $0.room.slug.localizedCaseInsensitiveContains(query)
+            }
         }
+        return textMatched.filter { passesDiscoveryCategoryFilter(inboxItem: $0) }
     }
 
     var showsEmpty: Bool {
@@ -201,7 +210,87 @@ final class TradeRoomsHomeViewModel {
     /// Public discovery hits while searching — excludes joined rooms already shown as inbox cards.
     var searchDiscoveryDisplayRooms: [ExploreRoomSuggestion] {
         let inboxIDs = Set(filteredItems.map(\.id))
-        return searchDiscoveryRooms.filter { !inboxIDs.contains($0.id) }
+        return searchDiscoveryRooms
+            .filter { !inboxIDs.contains($0.id) }
+            .filter { passesDiscoveryCategoryFilter(room: $0) }
+    }
+
+    var hasActiveDiscoveryCategoryFilter: Bool {
+        activeDiscoveryScope.showsDiscoveryCategoryFilter && discoveryCategoryFilter != nil
+    }
+
+    func discoveryCategoryEmptyTitle(for scope: TradeRoomDiscoveryScope) -> String {
+        "No matching rooms"
+    }
+
+    func discoveryCategoryEmptyMessage(for scope: TradeRoomDiscoveryScope) -> String? {
+        guard let filter = discoveryCategoryFilter else { return nil }
+        switch scope {
+        case .all, .popular, .official, .community:
+            return "No \(filter.displayName) Trade Rooms in this list yet. Try another category or show more."
+        case .yourRooms:
+            return "None of your joined rooms are in \(filter.displayName) yet."
+        case .favorites:
+            return "None of your favorite rooms are in \(filter.displayName) yet."
+        }
+    }
+
+    func selectDiscoveryCategoryFilter(_ category: TradeRoomCategory?) {
+        guard discoveryCategoryFilter != category else { return }
+        ExperienceHaptics.play(.selection)
+        discoveryCategoryFilter = category
+        if activeDiscoveryScope == .all {
+            allScopeVisibleCount = Self.allScopeDiscoveryPageSize
+        }
+        suggestedNextCursor = nil
+        popularNextCursor = nil
+        lastAppliedBootstrapFingerprint = nil
+        categoryFilterPrefetchTask?.cancel()
+        guard activeDiscoveryScope.showsDiscoveryCategoryFilter else { return }
+        categoryFilterPrefetchTask = Task { [weak self] in
+            await self?.reloadDiscoveryBootstrapForCategoryFilter()
+        }
+        logCategoryFilterTrace(trigger: "selectCategoryFilter")
+    }
+
+    /// Refetches home bootstrap with `p_category` (or unfiltered when category cleared).
+    private func reloadDiscoveryBootstrapForCategoryFilter() async {
+        guard isHostingTabActive else { return }
+        await loadHomeBootstrap(forceNetwork: true)
+    }
+
+    /// Category sent to `rpc_v1_trade_rooms_home_bootstrap` — server filters popular/suggested.
+    private func activeDiscoveryCategoryForRPC() -> TradeRoomCategory? {
+        guard activeDiscoveryScope.showsDiscoveryCategoryFilter else { return nil }
+        return discoveryCategoryFilter
+    }
+
+    /// Logs which collection drives the visible list vs the category filter (DEBUG).
+    func logCategoryFilterTrace(trigger: String) {
+        #if DEBUG
+        let collection: String
+        let displayed: [ExploreRoomSuggestion]
+        switch activeDiscoveryScope {
+        case .all:
+            collection = "allScopeDisplayedDiscoverableRooms←popularItems"
+            displayed = allScopeDisplayedDiscoverableRooms
+        case .popular:
+            collection = "unifiedDiscoverableRooms←popularItems"
+            displayed = unifiedDiscoverableRooms
+        default:
+            collection = "n/a(scope=\(activeDiscoveryScope.rawValue))"
+            displayed = []
+        }
+        print("[TRADE_ROOM_CATEGORY] trace trigger=\(trigger)")
+        TradeRoomCategoryRuntimeProbe.logCategoryFilter(
+            scope: activeDiscoveryScope,
+            filter: discoveryCategoryFilter,
+            displayedCollection: collection,
+            displayed: displayed,
+            popularSource: popularItems,
+            effectiveFor: { [weak self] in self?.effectiveDiscoveryCategory(for: $0) }
+        )
+        #endif
     }
 
     /// Chip on screen. Members open on Your Rooms from cache before the user picks a chip.
@@ -291,9 +380,10 @@ final class TradeRoomsHomeViewModel {
     }
 
     var favoriteRooms: [ExploreRoomSuggestion] {
-        yourRoomsItems.filter {
-            TradeRoomFavoritesStore.shared.isFavorited($0.id) || $0.viewerIsFavorited
-        }
+        yourRoomsItems
+            .filter {
+                TradeRoomFavoritesStore.shared.isFavorited($0.id) || $0.viewerIsFavorited
+            }
     }
 
     var displayedDiscoveryRooms: [ExploreRoomSuggestion] {
@@ -392,6 +482,10 @@ final class TradeRoomsHomeViewModel {
         discoveryScope = scope
         suggestedNextCursor = nil
         popularNextCursor = nil
+        if scope == .favorites || scope == .yourRooms {
+            categoryFilterPrefetchTask?.cancel()
+            discoveryCategoryFilter = nil
+        }
         if scope == .all {
             allScopeVisibleCount = Self.allScopeDiscoveryPageSize
         }
@@ -442,7 +536,8 @@ final class TradeRoomsHomeViewModel {
                 scope: discoveryScope.bootstrapCacheScope,
                 limit: discoveryPageFetchLimit,
                 suggestedCursor: section == .suggested ? suggestedNextCursor : nil,
-                popularCursor: section == .popular ? popularNextCursor : nil
+                popularCursor: section == .popular ? popularNextCursor : nil,
+                category: activeDiscoveryCategoryForRPC()
             )
             if section == .suggested {
                 suggestedItems = mergeDiscoveryRows(existing: suggestedItems, incoming: bootstrap.suggested)
@@ -471,7 +566,9 @@ final class TradeRoomsHomeViewModel {
         }
         for row in incoming {
             if let index = merged.firstIndex(where: { $0.id == row.id }) {
-                merged[index] = row
+                var combined = row
+                combined.category = row.category ?? merged[index].category
+                merged[index] = combined
             }
         }
         return merged
@@ -985,7 +1082,67 @@ final class TradeRoomsHomeViewModel {
                 : "alreadyJoinedInInbox"
         )
         #endif
-        return filtered
+        let categoryFiltered = filtered.filter { passesDiscoveryCategoryFilter(room: $0) }
+        #if DEBUG
+        if hasActiveDiscoveryCategoryFilter, section.hasPrefix("popular") {
+            TradeRoomCategoryRuntimeProbe.logCategoryFilter(
+                scope: activeDiscoveryScope,
+                filter: discoveryCategoryFilter,
+                displayedCollection: "filteredDiscoverable(\(section))",
+                displayed: categoryFiltered,
+                popularSource: source,
+                effectiveFor: { [weak self] in self?.effectiveDiscoveryCategory(for: $0) }
+            )
+        }
+        #endif
+        return categoryFiltered
+    }
+
+    /// Authoritative stored category when present; optional official slug inference — never maps NULL to `.general`.
+    func effectiveDiscoveryCategory(for room: ExploreRoomSuggestion) -> TradeRoomCategory? {
+        if let category = room.category { return category }
+        if let item = items.first(where: { $0.id == room.id }) {
+            return TradeRoomCategory.effectiveForDiscovery(
+                stored: item.room.category,
+                slug: item.room.slug,
+                roomKind: item.room.roomKind
+            )
+        }
+        return TradeRoomCategory.effectiveForDiscovery(
+            stored: nil,
+            slug: room.slug,
+            roomKind: room.roomKind
+        )
+    }
+
+    private func passesDiscoveryCategoryFilter(room: ExploreRoomSuggestion) -> Bool {
+        guard hasActiveDiscoveryCategoryFilter, let filter = discoveryCategoryFilter else { return true }
+        return room.category == filter
+    }
+
+    private func passesDiscoveryCategoryFilter(inboxItem: TradeRoomInboxItem) -> Bool {
+        guard hasActiveDiscoveryCategoryFilter, let filter = discoveryCategoryFilter else { return true }
+        return inboxItem.room.category == filter
+    }
+
+    /// Patches inbox / cached member rooms when bootstrap RPC includes `category` the embed lacked.
+    private func syncDiscoveryCategoriesFromBootstrap(_ bootstrap: TradeRoomsHomeBootstrap) {
+        let rows = bootstrap.yourRooms + bootstrap.suggested + bootstrap.popular
+        for suggestion in rows {
+            guard let category = suggestion.category else { continue }
+            patchDiscoverableCollections(roomID: suggestion.id) { row in
+                var copy = row
+                if copy.category == nil { copy.category = category }
+                return copy
+            }
+            if let index = inboxStore.rooms.firstIndex(where: { $0.id == suggestion.id }) {
+                var room = inboxStore.rooms[index]
+                if room.category == nil {
+                    room.category = category
+                    inboxStore.applyRoomMetadata(room)
+                }
+            }
+        }
     }
 
     /// Joined list presentation — owned room always first (member-count order from RPC ignored).
@@ -1057,7 +1214,7 @@ final class TradeRoomsHomeViewModel {
                     scope: bootstrapScope
                 )
             }
-            SessionTradeRoomsDiscoveryStore.shared.seed(bootstrap, for: sessionViewer)
+            SessionTradeRoomsDiscoveryStore.shared.seed(bootstrap, for: sessionViewer, category: nil)
             applyHomeBootstrap(bootstrap, viewerID: sessionViewer, source: .cache)
             discoveryPhase = .loaded
             #if DEBUG
@@ -1073,8 +1230,13 @@ final class TradeRoomsHomeViewModel {
 
         do {
             let cacheScope = discoveryScope.bootstrapCacheScope
+            let serverCategory = activeDiscoveryCategoryForRPC()
             let hadFreshCache = !forceNetwork
-                && SessionTradeRoomsDiscoveryStore.shared.cached(for: sessionViewer, scope: cacheScope) != nil
+                && SessionTradeRoomsDiscoveryStore.shared.cached(
+                    for: sessionViewer,
+                    scope: cacheScope,
+                    category: serverCategory
+                ) != nil
             let bootstrapSource: RoomDiscoveryProbe.DisplayedSource = forceNetwork
                 ? .refresh
                 : (hadFreshCache ? .cache : .network)
@@ -1082,11 +1244,15 @@ final class TradeRoomsHomeViewModel {
             let bootstrap = try await SessionTradeRoomsDiscoveryStore.shared.coalesce(
                 viewerID: sessionViewer,
                 scope: cacheScope,
+                category: serverCategory,
                 forceNetwork: forceNetwork
-            ) { [explore, cacheScope, fetchLimit] in
+            ) { [explore, cacheScope, fetchLimit, serverCategory] in
                 try await explore.tradeRoomsHomeBootstrap(
                     scope: cacheScope,
-                    limit: fetchLimit
+                    limit: fetchLimit,
+                    suggestedCursor: nil,
+                    popularCursor: nil,
+                    category: serverCategory
                 )
             }
             guard isHostingTabActive else {
@@ -1133,7 +1299,8 @@ final class TradeRoomsHomeViewModel {
         let fingerprint = BootstrapFingerprint(
             your: bootstrap.yourRooms.map(\.id),
             suggested: bootstrap.suggested.map(\.id),
-            popular: bootstrap.popular.map(\.id)
+            popular: bootstrap.popular.map(\.id),
+            discoveryCategory: discoveryCategoryFilter?.rawValue
         )
         let bootstrapChanged = fingerprint != lastAppliedBootstrapFingerprint
         if bootstrapChanged {
@@ -1147,14 +1314,31 @@ final class TradeRoomsHomeViewModel {
                     .map(\.id)
             )
             TradeRoomMembershipStore.shared.mergeServerMembership(serverJoined)
-            suggestedItems = TradeRoomMembershipSync.applyMembershipFlags(to: suggestedItems)
-            popularItems = TradeRoomMembershipSync.applyMembershipFlags(to: popularItems)
-            yourRoomsItems = TradeRoomMembershipSync.applyMembershipFlags(to: yourRoomsItems)
             applyDiscoveryPagination(from: bootstrap)
             if discoveryScope == .all {
                 allScopeVisibleCount = Self.allScopeDiscoveryPageSize
             }
+        } else {
+            suggestedItems = mergeDiscoveryRows(existing: suggestedItems, incoming: bootstrap.suggested)
+            popularItems = mergeDiscoveryRows(existing: popularItems, incoming: bootstrap.popular)
+            yourRoomsItems = TradeRoomFavoriteSync.applyFavoritedFlag(
+                to: mergeDiscoveryRows(existing: yourRoomsItems, incoming: bootstrap.yourRooms)
+            )
         }
+        suggestedItems = TradeRoomMembershipSync.applyMembershipFlags(to: suggestedItems)
+        popularItems = TradeRoomMembershipSync.applyMembershipFlags(to: popularItems)
+        yourRoomsItems = TradeRoomMembershipSync.applyMembershipFlags(to: yourRoomsItems)
+        syncDiscoveryCategoriesFromBootstrap(bootstrap)
+
+        #if DEBUG
+        TradeRoomCategoryRuntimeProbe.logApplyBootstrap(
+            source: source,
+            fingerprintChanged: bootstrapChanged,
+            bootstrap: bootstrap,
+            popularItems: popularItems,
+            inboxRooms: inboxStore.rooms
+        )
+        #endif
 
         _ = reconcileYourRoomsWithMembership()
         syncFavoritePresentation()
@@ -1206,7 +1390,7 @@ final class TradeRoomsHomeViewModel {
     private func restoreCachedHomeBootstrap() {
         guard let viewerID else { return }
         guard yourRoomsItems.isEmpty, suggestedItems.isEmpty, popularItems.isEmpty else { return }
-        guard let bootstrap = SessionTradeRoomsDiscoveryStore.shared.cached(for: viewerID, scope: .all) else {
+        guard let bootstrap = SessionTradeRoomsDiscoveryStore.shared.cached(for: viewerID, scope: .all, category: nil) else {
             return
         }
         applyHomeBootstrap(bootstrap, viewerID: viewerID, source: .cache)
@@ -1240,7 +1424,7 @@ final class TradeRoomsHomeViewModel {
         if let cached = SessionMemberRoomsStore.shared.cached(for: viewer), !cached.0.isEmpty {
             return true
         }
-        if let bootstrap = SessionTradeRoomsDiscoveryStore.shared.cached(for: viewer, scope: .all),
+        if let bootstrap = SessionTradeRoomsDiscoveryStore.shared.cached(for: viewer, scope: .all, category: nil),
            !bootstrap.yourRooms.isEmpty {
             return true
         }
@@ -1344,6 +1528,13 @@ final class TradeRoomsHomeViewModel {
             return lhs.room.name.localizedCaseInsensitiveCompare(rhs.room.name) == .orderedAscending
         }
     }
+
+    #if DEBUG
+    /// Regression: bootstrap room IDs unchanged but `category` arrives on a later fetch.
+    func testing_applyHomeBootstrap(_ bootstrap: TradeRoomsHomeBootstrap, viewerID: ProfileID) {
+        applyHomeBootstrap(bootstrap, viewerID: viewerID, source: .network)
+    }
+    #endif
 }
 
 /// Canonical screen name for Trade Rooms home.

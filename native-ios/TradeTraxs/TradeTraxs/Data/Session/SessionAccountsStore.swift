@@ -213,7 +213,7 @@ final class SessionAccountsStore {
             }
         case (.dashboard, .rest):
             return incoming
-        case (.dashboard, .dashboard):
+        case (.dashboard, .dashboard), (.rest, .rest):
             let existingByID = Dictionary(uniqueKeysWithValues: existing.map { ($0.id, $0) })
             return incoming.map { account in
                 guard let prior = existingByID[account.id] else { return account }
@@ -223,6 +223,7 @@ final class SessionAccountsStore {
                 merged.showInAccountDropdowns = prior.showInAccountDropdowns
                 merged.customPublicStatus = prior.customPublicStatus
                 if merged.propFirmRules == nil { merged.propFirmRules = prior.propFirmRules }
+                merged.mergeLivePersonalDrawdownPreservingNewer(from: prior)
                 return merged
             }
         default:

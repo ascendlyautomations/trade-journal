@@ -4,13 +4,34 @@ struct DashboardEquityDrawdownSettingsSheet: View {
     let accountName: String
     @Binding var limitDigits: String
     @Binding var limitType: LivePersonalDrawdownType
+    @Binding var floorCapDigits: String
     var isSaving: Bool
     var errorMessage: String?
     var onSave: () -> Void
     var onCancel: () -> Void
 
     @Environment(\.themeColors) private var colors
-    @FocusState private var limitFocused: Bool
+    @Environment(\.colorScheme) private var colorScheme
+    @FocusState private var focusedField: Field?
+
+    private let currencyFieldHeight: CGFloat = 44
+    private let currencyLabelRowHeight: CGFloat = 28
+
+    private enum Field {
+        case limit
+        case floorCap
+    }
+
+    private var floorCapInfo: String {
+        switch limitType {
+        case .trailing:
+            return
+                "The highest balance your trailing drawdown floor can reach. Once it hits this amount, the floor stops moving upward."
+        case .fixed:
+            return
+                "The highest balance shown for your fixed drawdown floor on the chart. Your account baseline stays fixed; this only caps the informational floor line."
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -56,15 +77,28 @@ struct DashboardEquityDrawdownSettingsSheet: View {
                         }
                     }
 
-                    VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
-                        Text("Max drawdown limit")
-                            .experienceStyle(.caption, color: colors.secondaryText)
-                        TextField("$0", text: $limitDigits)
-                            .keyboardType(.decimalPad)
-                            .focused($limitFocused)
-                            .padding(ExperienceSpacing.sm)
-                            .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
-                            .disabled(isSaving)
+                    HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
+                        currencyField(
+                            title: "Max drawdown limit",
+                            text: $limitDigits,
+                            field: .limit,
+                            accessibilityID: "dashboard.equityDrawdownSettings.limit",
+                            showsInfoPlaceholder: true
+                        )
+
+                        currencyField(
+                            title: "Drawdown floor cap",
+                            text: $floorCapDigits,
+                            field: .floorCap,
+                            accessibilityID: "dashboard.equityDrawdownSettings.floorCap",
+                            titleAccessory: {
+                                AnalyticsMetricInfoButton(
+                                    title: "Drawdown floor cap",
+                                    bodyText: floorCapInfo,
+                                    accessibilityID: "dashboard.equityDrawdownSettings.floorCapInfo"
+                                )
+                            }
+                        )
                     }
 
                     if let errorMessage {
@@ -95,5 +129,62 @@ struct DashboardEquityDrawdownSettingsSheet: View {
         }
         .experienceSheetChrome()
         .accessibilityIdentifier("dashboard.equityDrawdownSettings")
+    }
+
+    @ViewBuilder
+    private func currencyField(
+        title: String,
+        text: Binding<String>,
+        field: Field,
+        accessibilityID: String,
+        showsInfoPlaceholder: Bool = false,
+        @ViewBuilder titleAccessory: () -> some View = { EmptyView() }
+    ) -> some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            HStack(alignment: .center, spacing: ExperienceSpacing.xxs) {
+                Text(title)
+                    .experienceStyle(.caption, color: colors.secondaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if showsInfoPlaceholder {
+                    Color.clear
+                        .frame(width: 28, height: 28)
+                        .accessibilityHidden(true)
+                }
+                titleAccessory()
+            }
+            .frame(height: currencyLabelRowHeight, alignment: .topLeading)
+
+            TextField("$0", text: text)
+                .keyboardType(.decimalPad)
+                .focused($focusedField, equals: field)
+                .padding(.horizontal, ExperienceSpacing.sm)
+                .frame(maxWidth: .infinity)
+                .frame(height: currencyFieldHeight)
+                .background(currencyFieldBackground, in: currencyFieldShape)
+                .overlay(currencyFieldShape.stroke(currencyFieldBorder, lineWidth: 1))
+                .disabled(isSaving)
+                .accessibilityIdentifier(accessibilityID)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private var currencyFieldShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+    }
+
+    private var currencyFieldBackground: Color {
+        if colorScheme == .light {
+            return colors.fillSecondary.opacity(0.55)
+        }
+        return colors.fillSecondary.opacity(0.35)
+    }
+
+    private var currencyFieldBorder: Color {
+        if colorScheme == .light {
+            return colors.border.opacity(0.65)
+        }
+        return colors.border.opacity(0.35)
     }
 }

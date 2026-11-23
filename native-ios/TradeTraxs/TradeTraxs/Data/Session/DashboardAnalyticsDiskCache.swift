@@ -52,4 +52,16 @@ nonisolated enum DashboardAnalyticsDiskCache {
             try? FileManager.default.removeItem(at: url)
         }
     }
+
+    /// Patch one account row inside the cached Dashboard V3 analytics blob.
+    static func patchAccount(_ account: TradingAccount, viewerID: ProfileID) {
+        guard var blob = load(viewerID: viewerID) else { return }
+        let accountID = account.id.rawValue
+        if let index = blob.payload.data.accounts.firstIndex(where: { $0.id == accountID }) {
+            blob.payload.data.accounts[index].mergeFields(from: account)
+        } else {
+            blob.payload.data.accounts.append(account.asDashboardWireV1())
+        }
+        save(blob)
+    }
 }

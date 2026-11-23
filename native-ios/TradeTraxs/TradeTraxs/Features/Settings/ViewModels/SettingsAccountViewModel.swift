@@ -347,11 +347,11 @@ final class SettingsAccountViewModel {
 
         let planLabel: String = {
             switch billingStatus.lifecycle {
-            case .trialing: return "TraxPro trial"
-            case .active where billingStatus.plan == .pro: return "TraxPro subscription"
-            case .pastDue: return "TraxPro subscription (past due)"
+            case .trialing: return "TraxsPro trial"
+            case .active where billingStatus.plan == .pro: return "TraxsPro subscription"
+            case .pastDue: return "TraxsPro subscription (past due)"
             default:
-                return billingStatus.plan == .pro ? "TraxPro membership" : "membership"
+                return billingStatus.plan == .pro ? "TraxsPro membership" : "membership"
             }
         }()
 

@@ -44,8 +44,9 @@ struct RoomNotificationSettingsView: View {
                 if !viewModel.channels.isEmpty {
                     Section {
                         ForEach(viewModel.channels) { channel in
-                            RoomChannelNotificationToggleRow(
-                                channelName: channel.name,
+                            SettingsToggleRow(
+                                title: channel.name,
+                                subtitle: nil,
                                 isOn: Binding(
                                     get: { viewModel.effectiveChannelNotificationsEnabled(channel.id) },
                                     set: { viewModel.setChannelNotificationsEnabled(channel.id, enabled: $0) }
@@ -57,7 +58,7 @@ struct RoomNotificationSettingsView: View {
                             .accessibilityIdentifier("tradeRooms.notifications.channel.\(channel.id.rawValue)")
                         }
                     } header: {
-                        Text("Individual Sub-Rooms")
+                        IndividualSubRoomsNotificationSectionHeader()
                     }
                 } else {
                     Section {
@@ -68,7 +69,7 @@ struct RoomNotificationSettingsView: View {
             }
             .experienceInsetGroupedListStyle(pageBackground: true)
             .listSectionSpacing(ExperienceSpacing.sm)
-            .navigationTitle("Manage Notifications")
+            .navigationTitle("Notifications")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -87,64 +88,23 @@ struct RoomNotificationSettingsView: View {
     }
 }
 
-// MARK: - Sub-room row
+// MARK: - Section header
 
-private struct RoomChannelNotificationToggleRow: View {
-    let channelName: String
-    @Binding var isOn: Bool
-    var isEnabled: Bool = true
+private struct IndividualSubRoomsNotificationSectionHeader: View {
+    private static let infoBody =
+        "Each switch controls push alerts for that sub-room when room notifications are on. Turn off sub-rooms you do not want. If room notifications are off, change these after you turn the room back on."
 
-    @State private var showsInfo = false
-    @Environment(\.themeColors) private var colors
-
-    private var infoBody: String {
-        """
-        Controls push alerts for new messages in \(channelName). Turn this off to stop \
-        notifications from this sub-room while room notifications stay on. When room \
-        notifications are off, sub-room settings apply after you turn the room back on.
-        """
-    }
+    private let title = "Individual Sub-Rooms"
 
     var body: some View {
-        HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
-            HStack(alignment: .center, spacing: ExperienceSpacing.xxs) {
-                Text(channelName)
-                    .experienceStyle(.body, color: colors.primaryText)
-                    .lineLimit(2)
-                Button {
-                    showsInfo = true
-                } label: {
-                    Image(systemName: "info.circle")
-                        .font(.caption)
-                        .foregroundStyle(colors.tertiaryText)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("About \(channelName) notifications")
-                .accessibilityIdentifier("tradeRooms.notifications.channelInfo.\(channelName)")
-                .popover(isPresented: $showsInfo) {
-                    VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                        Text(channelName)
-                            .font(ExperienceTypography.subheadline.weight(.semibold))
-                            .foregroundStyle(colors.primaryText)
-                        Text(infoBody)
-                            .font(ExperienceTypography.footnote)
-                            .foregroundStyle(colors.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(ExperienceSpacing.md)
-                    .frame(width: 280, alignment: .leading)
-                    .presentationCompactAdaptation(.popover)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Toggle("", isOn: $isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .disabled(!isEnabled)
+        HStack(alignment: .firstTextBaseline, spacing: ExperienceSpacing.xxs) {
+            Text(title)
+            AnalyticsMetricInfoButton(
+                title: title,
+                bodyText: Self.infoBody,
+                accessibilityID: "tradeRooms.notifications.subRoomsSectionInfo"
+            )
         }
-        .padding(.vertical, ExperienceSpacing.xxs)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("settings.toggle.\(channelName)")
+        .textCase(nil)
     }
 }

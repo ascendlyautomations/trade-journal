@@ -206,6 +206,11 @@ nonisolated extension DashboardAccountWireV1 {
                 PostgresFlexibleDouble(NSDecimalNumber(decimal: $0).doubleValue)
             }
             payout_drawdown_behavior = rules.payoutDrawdownBehavior
+        } else {
+            let live = LivePersonalDrawdownEngine.wireDrawdownFields(from: account)
+            max_drawdown = live.maxDrawdown.map { PostgresFlexibleDouble(NSDecimalNumber(decimal: $0).doubleValue) }
+            drawdown_type = live.drawdownTypeRaw
+            drawdown_floor_cap = live.floorCap.map { PostgresFlexibleDouble(NSDecimalNumber(decimal: $0).doubleValue) }
         }
     }
 }
@@ -231,6 +236,7 @@ nonisolated struct DashboardAccountWireV1: Codable, Sendable, Equatable {
     var consistency: PostgresFlexibleDouble?
     var max_drawdown: PostgresFlexibleDouble?
     var drawdown_type: String?
+    var drawdown_floor_cap: PostgresFlexibleDouble?
     var daily_drawdown: PostgresFlexibleDouble?
     var profit_target: PostgresFlexibleDouble?
     var winning_days: PostgresFlexibleDouble?
@@ -262,6 +268,7 @@ nonisolated struct DashboardAccountWireV1: Codable, Sendable, Equatable {
             consistency: consistency.map { FlexibleNumber($0.decimal) },
             max_drawdown: max_drawdown.map { FlexibleNumber($0.decimal) },
             drawdown_type: drawdown_type,
+            drawdown_floor_cap: drawdown_floor_cap.map { FlexibleNumber($0.decimal) },
             daily_drawdown: daily_drawdown.map { FlexibleNumber($0.decimal) },
             profit_target: profit_target.map { FlexibleNumber($0.decimal) },
             winning_days: winning_days.map { FlexibleNumber($0.decimal) },

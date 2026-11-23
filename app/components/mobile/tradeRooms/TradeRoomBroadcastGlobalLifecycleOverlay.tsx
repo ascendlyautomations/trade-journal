@@ -164,7 +164,8 @@ export default function TradeRoomBroadcastGlobalLifecycleOverlay({
             Stream ended
           </h2>
           <p className="mt-2 text-sm text-white/70">
-            The livestream in {title} has ended.
+            {streamEnded.message ??
+              `The livestream in ${title} has ended.`}
           </p>
           <button
             type="button"

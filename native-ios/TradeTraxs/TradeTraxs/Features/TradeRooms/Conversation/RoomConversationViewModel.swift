@@ -67,6 +67,7 @@ final class RoomConversationViewModel {
     var showsBanMemberConfirmation = false
     var memberModerationErrorMessage: String?
     var showsLeaveRoomConfirmation = false
+    var membershipMutationErrorMessage: String?
 
     /// Prefer resolved UUID after slug deep-link lookup.
     private var resolvedRoomID: RoomID { room?.id ?? roomID }
@@ -117,6 +118,8 @@ final class RoomConversationViewModel {
     private var sharedContentHydrationBacklog: [Message] = []
     private let messagesRepo: (any MessageRepository)?
     @ObservationIgnored private nonisolated(unsafe) var blockObserver: NSObjectProtocol?
+    private var authoritativeMembershipCheckedAt: Date?
+    private static let authoritativeMembershipTTL: TimeInterval = 30
 
     init(
         roomID: RoomID,
@@ -656,28 +659,25 @@ final class RoomConversationViewModel {
     func noteMembershipStoreDidChange(for changedRoomID: RoomID?) {
         guard let changedRoomID, changedRoomID == resolvedRoomID else { return }
         if TradeRoomMembershipStore.shared.isJoined(resolvedRoomID) {
-            if let cached = TradeRoomConfirmedMembershipCache.membership(for: resolvedRoomID) {
-                membership = cached
-            } else {
-                Task {
-                    if await refreshAuthoritativeMembershipFromServer() {
+            Task {
+                if await refreshAuthoritativeMembershipFromServer() {
+                    upsertJoinedRoomInInbox()
+                    if canViewMessages, messages.isEmpty, phase == .loaded {
                         try? await reloadMessagesAfterMembershipGranted()
                     }
                 }
             }
-            upsertJoinedRoomInInbox()
-            if canViewMessages, messages.isEmpty, phase == .loaded, membership != nil {
-                Task { try? await reloadMessagesAfterMembershipGranted() }
-            }
         } else {
             membership = nil
             joinRequestState = nil
+            authoritativeMembershipCheckedAt = nil
         }
     }
 
     @discardableResult
     func refreshAuthoritativeMembershipFromServer() async -> Bool {
         guard let viewerID, !isOwner else { return isOwner }
+        authoritativeMembershipCheckedAt = Date()
         if let loaded = try? await rooms.membership(roomID: resolvedRoomID, profileID: viewerID) {
             membership = loaded
             TradeRoomConfirmedMembershipCache.store(loaded, for: resolvedRoomID)
@@ -689,32 +689,35 @@ final class RoomConversationViewModel {
         if TradeRoomMembershipStore.shared.isJoined(resolvedRoomID) {
             TradeRoomMembershipStore.shared.setJoined(resolvedRoomID, joined: false)
         }
+        SocialPersistedCacheCoordinator.invalidateRoomSnapshot(viewerID: viewerID, roomID: resolvedRoomID)
         return false
     }
 
     private func reconcileLocalMembershipWithServer() async {
-        if hasServerConfirmedMembership { return }
         guard let viewerID else { return }
-        let expectsMembership = TradeRoomMembershipStore.shared.isJoined(resolvedRoomID)
+        if isOwner { return }
+
+        let expectsMembership = membership != nil
+            || TradeRoomMembershipStore.shared.isJoined(resolvedRoomID)
             || inboxStore.rooms.contains { $0.id == resolvedRoomID }
-        guard expectsMembership else {
-            if joinRequestState == .approved {
+
+        if expectsMembership {
+            if await refreshAuthoritativeMembershipFromServer() { return }
+            _ = await TradeRoomStaleMembershipReconciler.reconcileOptimisticJoinState(
+                roomID: resolvedRoomID,
+                viewerID: viewerID,
+                rooms: rooms,
+                inboxStore: inboxStore
+            )
+            if joinRequestState == .approved, membership == nil {
                 await completeApprovedJoinRequest(viewerID: viewerID)
             }
             return
         }
-        if let cached = TradeRoomConfirmedMembershipCache.membership(for: resolvedRoomID) {
-            membership = cached
-            return
+
+        if joinRequestState == .approved {
+            await completeApprovedJoinRequest(viewerID: viewerID)
         }
-        if await refreshAuthoritativeMembershipFromServer() { return }
-        _ = await TradeRoomStaleMembershipReconciler.reconcileOptimisticJoinState(
-            roomID: resolvedRoomID,
-            viewerID: viewerID,
-            rooms: rooms,
-            inboxStore: inboxStore
-        )
-        await completeApprovedJoinRequest(viewerID: viewerID)
     }
 
     private func completeApprovedJoinRequest(viewerID: ProfileID) async {
@@ -1558,6 +1561,7 @@ final class RoomConversationViewModel {
         do {
             try await rooms.leave(roomID: targetID, profileID: viewerID)
             membership = nil
+            authoritativeMembershipCheckedAt = nil
             joinRequestState = nil
             TradeRoomMembershipSync.applyLeft(
                 roomID: targetID,
@@ -1617,7 +1621,9 @@ final class RoomConversationViewModel {
                 )
                 switch outcome {
                 case .joined(let joined, _):
+                    membershipMutationErrorMessage = nil
                     membership = joined
+                    authoritativeMembershipCheckedAt = Date()
                     TradeRoomConfirmedMembershipCache.store(joined, for: resolvedRoomID)
                     TradeRoomMembershipSync.applyJoined(
                         tradeRoom: room,
@@ -1640,8 +1646,10 @@ final class RoomConversationViewModel {
                     TradeRoomJoinActionCoordinator.shared.patchRequested(resolvedRoomID)
                     ExperienceHaptics.play(.success)
                 case .banned:
+                    membershipMutationErrorMessage = "You cannot join this room."
                     ExperienceHaptics.play(.error)
-                case .error:
+                case .error(let message):
+                    membershipMutationErrorMessage = message
                     if let status = try? await rooms.viewerJoinRequest(roomID: roomID), status == .pending {
                         joinRequestState = .pending
                         TradeRoomJoinActionCoordinator.shared.patchRequested(resolvedRoomID)
@@ -1655,6 +1663,7 @@ final class RoomConversationViewModel {
             } else {
                 try await rooms.leave(roomID: roomID, profileID: viewerID)
                 membership = nil
+                authoritativeMembershipCheckedAt = nil
                 joinRequestState = nil
                 TradeRoomMembershipSync.applyLeft(
                     roomID: resolvedRoomID,
@@ -2733,7 +2742,6 @@ final class RoomConversationViewModel {
 
     private func applyDiskSnapshot(_ disk: SocialDiskCache.RoomSnapshotBlob) {
         room = disk.room
-        membership = disk.membership
         channels = disk.channels
         channelMetadataCached = true
         var restoredCaches: [RoomChannelID: ChannelThreadCache] = [:]
@@ -2780,7 +2788,7 @@ final class RoomConversationViewModel {
             viewerID: viewerID,
             roomID: roomID,
             room: room,
-            membership: membership,
+            membership: nil,
             channels: channels,
             selectedChannelID: selectedChannelID,
             channelThreads: channelThreads
@@ -3586,14 +3594,18 @@ final class RoomConversationViewModel {
         #if DEBUG
         RoomMessageSendProbe.logFailed(probe, error: error)
         #endif
-        if RoomMessageSendDiagnostics.classify(
+        let failure = RoomMessageSendDiagnostics.classify(
             error: error,
             hasServerMembership: hasServerConfirmedMembership,
             canPostInChannel: canPostInSelectedChannel,
             isOwner: isOwner,
             viewerHasModeratorTag: viewerHasModeratorTag
-        ) == .membershipNotConfirmed {
-            await refreshAuthoritativeMembershipFromServer()
+        )
+        switch failure {
+        case .membershipNotConfirmed, .serverRejectedRLS:
+            _ = await refreshAuthoritativeMembershipFromServer()
+        case .channelPostingRestricted, .other:
+            break
         }
         sendStates[tempID] = .failed
         ExperienceHaptics.play(.error)
@@ -3617,7 +3629,13 @@ final class RoomConversationViewModel {
     }
 
     private func ensureAuthoritativeMembershipBeforeSend() async -> Bool {
-        if hasServerConfirmedMembership { return true }
+        if isOwner { return true }
+        if let checkedAt = authoritativeMembershipCheckedAt,
+           Date().timeIntervalSince(checkedAt) < Self.authoritativeMembershipTTL,
+           membership != nil
+        {
+            return true
+        }
         return await refreshAuthoritativeMembershipFromServer()
     }
 

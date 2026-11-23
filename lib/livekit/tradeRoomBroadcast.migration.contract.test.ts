@@ -26,6 +26,10 @@ const streamTitleSql = readFileSync(
   "supabase/migrations/20261113230000_room_live_broadcast_stream_title.sql",
   "utf8"
 )
+const durationLimitSql = readFileSync(
+  "supabase/migrations/20261123194500_trade_room_broadcast_duration_limit.sql",
+  "utf8"
+)
 
 describe("Trade Room live broadcast migration contract", () => {
   it("defines room_live_broadcasts with one active row per room", () => {
@@ -63,5 +67,11 @@ describe("Trade Room live broadcast migration contract", () => {
   it("adds stream_title with length check", () => {
     assert.match(streamTitleSql, /stream_title/)
     assert.match(streamTitleSql, /<= 100/)
+  })
+
+  it("adds video broadcast expires_at and cross-room broadcaster cooldown", () => {
+    assert.match(durationLimitSql, /expires_at/)
+    assert.match(durationLimitSql, /room_live_broadcast_broadcaster_cooldowns/)
+    assert.match(durationLimitSql, /room_live_broadcasts_duration_expired_due_idx/)
   })
 })

@@ -113,7 +113,7 @@ struct SettingsDestinationView: View {
             case .payouts:
                 PayoutsScreenView(data: data, navigationCoordinator: navigationCoordinator)
             case .propFirmExpenses:
-                PropFirmExpensesView(data: data)
+                PropFirmExpensesHomeRouteView(data: data)
             case .withdrawalDetail:
                 if let historyItemID = WithdrawalDetailSelection.historyItemID {
                     WithdrawalDetailView(

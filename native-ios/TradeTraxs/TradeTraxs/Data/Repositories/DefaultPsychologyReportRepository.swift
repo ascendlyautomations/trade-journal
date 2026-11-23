@@ -25,17 +25,31 @@ actor DefaultPsychologyReportRepository: PsychologyReportRepository {
     }
 
     func ensureSnapshot(forceNetwork: Bool) async throws -> PsychologyReportsSnapshot {
-        let (eligibleTrades, checkIns, loadedFingerprint) = try await loadInputs(forceNetwork: forceNetwork)
+        let (eligibleTrades, checkIns, loadedFingerprint, profileID) = try await loadInputs(forceNetwork: forceNetwork)
+        let accounts = try await loadAccounts(for: profileID)
+        let filters = await ReportsTradeScope.filtersFromSession()
+        let scopedTrades = ReportsTradeScope.scopedTrades(
+            from: eligibleTrades,
+            accounts: accounts,
+            filters: filters
+        )
+        let scopedCheckIns = ReportsTradeScope.scopedCheckIns(
+            checkIns,
+            scopedTrades: scopedTrades,
+            filters: filters
+        )
         let preferences = await loadPreferences()
-        let fp = loadedFingerprint + ":" + PreferenceComplianceEngine.fingerprint(preferences)
+        let fp = loadedFingerprint
+            + ":" + PreferenceComplianceEngine.fingerprint(preferences)
+            + ":" + ReportsTradeScope.filtersFingerprint(filters)
 
         if !forceNetwork, let snapshot, fingerprint == fp {
             return snapshot
         }
 
         let next = PsychologyReportGenerator.generateAll(
-            trades: eligibleTrades,
-            checkIns: checkIns,
+            trades: scopedTrades,
+            checkIns: scopedCheckIns,
             preferences: preferences
         )
         snapshot = next
@@ -54,7 +68,33 @@ actor DefaultPsychologyReportRepository: PsychologyReportRepository {
         return report
     }
 
-    private func loadInputs(forceNetwork: Bool) async throws -> ([Trade], [TraderDailyCheckIn], String) {
+    func generateReport(
+        periodRef: PsychologyReportPeriodRef,
+        forceNetwork: Bool
+    ) async throws -> PsychologyReport {
+        let (eligibleTrades, checkIns, _, profileID) = try await loadInputs(forceNetwork: forceNetwork)
+        let accounts = try await loadAccounts(for: profileID)
+        let filters = await ReportsTradeScope.filtersFromSession()
+        let scopedTrades = ReportsTradeScope.scopedTrades(
+            from: eligibleTrades,
+            accounts: accounts,
+            filters: filters
+        )
+        let scopedCheckIns = ReportsTradeScope.scopedCheckIns(
+            checkIns,
+            scopedTrades: scopedTrades,
+            filters: filters
+        )
+        let preferences = await loadPreferences()
+        return PsychologyReportGenerator.generate(
+            periodRef: periodRef,
+            trades: scopedTrades,
+            checkIns: scopedCheckIns,
+            preferences: preferences
+        )
+    }
+
+    private func loadInputs(forceNetwork: Bool) async throws -> ([Trade], [TraderDailyCheckIn], String, ProfileID) {
         let userID = await session.currentUserID
         let demoActive = await AppLaunchController.shared.isDemoExperienceActive
         guard case .viewer(let profileID) = SessionViewerIdentity.resolve(
@@ -73,7 +113,7 @@ actor DefaultPsychologyReportRepository: PsychologyReportRepository {
         }
 
         let loaded: [Trade]
-        if profileID == DemoExperienceSupport.profileID {
+        if JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID) {
             loaded = DemoCanonicalDataset.trades()
         } else if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
             loaded = ProfileTradeFixtures.samples(owner: profileID)
@@ -90,7 +130,7 @@ actor DefaultPsychologyReportRepository: PsychologyReportRepository {
         let startKey = CheckInHistoryAggregator.startDateKey()
         let endKey = TraderPsychologyAnalyticsFoundation.todayCheckInDateKey()
         let checkIns: [TraderDailyCheckIn]
-        if profileID == DemoExperienceSupport.profileID {
+        if JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID) {
             checkIns = DemoCanonicalDataset.checkIns()
         } else if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
             checkIns = []
@@ -103,7 +143,17 @@ actor DefaultPsychologyReportRepository: PsychologyReportRepository {
         }
 
         let fp = Self.fingerprint(trades: eligible, checkIns: checkIns)
-        return (eligible, checkIns, fp)
+        return (eligible, checkIns, fp, profileID)
+    }
+
+    private func loadAccounts(for profileID: ProfileID) async throws -> [TradingAccount] {
+        if JournalSampleDataPolicy.usesCanonicalJournalData(for: profileID) {
+            return DemoCanonicalDataset.accounts()
+        }
+        if ProfileSectionSupport.isLocalDevelopmentProfile(profileID) {
+            return []
+        }
+        return try await trades.accounts(for: profileID)
     }
 
     private func loadPreferences() async -> PreferenceRuleContext? {

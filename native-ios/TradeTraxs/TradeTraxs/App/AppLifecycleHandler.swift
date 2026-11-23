@@ -22,6 +22,7 @@ final class AppLifecycleHandler {
 
     func applicationDidBecomeActive() {
         AppLog.application.info("Lifecycle: foreground / active")
+        ProductAnalyticsCoordinator.shared.handleBecameActive()
         #if DEBUG
         MediaEgressTracker.startPeriodicSummaries()
         #endif
@@ -51,16 +52,16 @@ final class AppLifecycleHandler {
 
     func applicationWillResignActive() {
         AppLog.application.info("Lifecycle: inactive")
-        // Future: pause non-critical work.
+        ProductAnalyticsCoordinator.shared.handleEnterBackground()
     }
 
     func applicationDidEnterBackground() {
         AppLog.application.info("Lifecycle: background")
+        ProductAnalyticsCoordinator.shared.handleEnterBackground()
         #if DEBUG
         MediaEgressTracker.stopPeriodicSummaries()
         MediaEgressTracker.printSummary()
         #endif
-        // Future: flush analytics breadcrumbs, suspend channels.
     }
 
     func applicationWillTerminate() {

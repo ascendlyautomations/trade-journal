@@ -12,6 +12,7 @@ final class ReportDetailViewModel: ScreenLifecycle {
     private let periodKey: TradingReportPeriodKey
     private let monthRef: TradingReportMonthRef?
     private let weekRef: TradingReportWeekRef?
+    private let customRangeRef: TradingReportCustomRangeRef?
     private let tradingReports: any TradingReportRepository
     private let trades: any TradeRepository
     private let session: any SessionProviding
@@ -30,14 +31,22 @@ final class ReportDetailViewModel: ScreenLifecycle {
         if let weekRef = TradingReportWeekRef.parse(reportID: reportID) {
             self.weekRef = weekRef
             self.monthRef = nil
+            self.customRangeRef = nil
             self.periodKey = .weeklyThis
         } else if let monthRef = TradingReportMonthRef.parse(reportID: reportID) {
             self.monthRef = monthRef
+            self.weekRef = nil
+            self.customRangeRef = nil
+            self.periodKey = .monthlyThis
+        } else if let customRef = TradingReportCustomRangeRef.parse(reportID: reportID) {
+            self.customRangeRef = customRef
+            self.monthRef = nil
             self.weekRef = nil
             self.periodKey = .monthlyThis
         } else {
             self.monthRef = nil
             self.weekRef = nil
+            self.customRangeRef = nil
             self.periodKey = TradingReportPeriodKey(rawValue: reportID.rawValue) ?? .weeklyThis
         }
         self.tradingReports = tradingReports
@@ -58,6 +67,7 @@ final class ReportDetailViewModel: ScreenLifecycle {
     ) {
         self.monthRef = nil
         self.weekRef = nil
+        self.customRangeRef = nil
         self.periodKey = periodKey
         self.tradingReports = tradingReports
         self.trades = trades
@@ -75,6 +85,10 @@ final class ReportDetailViewModel: ScreenLifecycle {
     var bestTrade: ReportDetailState.BestTradeReference? { state.bestTrade }
     var title: String { state.report?.title ?? periodKey.kind.title }
     var dateRangeLabel: String? { state.report?.dateRangeLabel }
+
+    var isWeekly: Bool {
+        weekRef != nil || periodKey.kind == .weekly || state.report?.kind == .weekly
+    }
     var errorMessage: String? { state.screenErrorMessage }
 
     // MARK: - Lifecycle
@@ -108,6 +122,7 @@ final class ReportDetailViewModel: ScreenLifecycle {
 
     func openBestTrade() {
         guard case .available(let trade) = state.bestTrade else { return }
+        guard TraxsProPreviewSupport.allowsJournalTradeNavigation(tradeID: trade.id) else { return }
         ExperienceHaptics.play(.selection)
         detailCache.seed(trade)
         navigationCoordinator.open(.home(.tradeDetail(trade.id)))
@@ -129,6 +144,7 @@ final class ReportDetailViewModel: ScreenLifecycle {
                 result = try await ReportDetailBootstrap.loadWeek(
                     ReportDetailBootstrap.WeekContext(
                         mondayKey: weekRef.mondayKey,
+                        filters: TradingReportSessionStore.shared.filters,
                         tradingReports: tradingReports,
                         forceNetwork: forceNetwork
                     )
@@ -137,6 +153,15 @@ final class ReportDetailViewModel: ScreenLifecycle {
                 result = try await ReportDetailBootstrap.loadMonth(
                     ReportDetailBootstrap.MonthContext(
                         monthRef: monthRef,
+                        filters: TradingReportSessionStore.shared.filters,
+                        tradingReports: tradingReports,
+                        forceNetwork: forceNetwork
+                    )
+                )
+            } else if let customRangeRef {
+                result = try await ReportDetailBootstrap.loadCustom(
+                    ReportDetailBootstrap.CustomContext(
+                        ref: customRangeRef,
                         filters: TradingReportSessionStore.shared.filters,
                         tradingReports: tradingReports,
                         forceNetwork: forceNetwork
@@ -185,7 +210,22 @@ final class ReportDetailViewModel: ScreenLifecycle {
         state = loading
 
         if let cached = detailCache.trade(id: tradeID) {
+            if TraxsProPreviewSupport.isReportsPreviewActive,
+               !JournalSampleDataPolicy.isCanonicalTrade(id: cached.id) {
+                applyBestTrade(.unavailable)
+                return
+            }
             applyBestTrade(.available(cached))
+            return
+        }
+
+        if TraxsProPreviewSupport.isReportsPreviewActive {
+            if let sample = DemoCanonicalDataset.trades().first(where: { $0.id == tradeID }) {
+                detailCache.seed(sample)
+                applyBestTrade(.available(sample))
+            } else {
+                applyBestTrade(.unavailable)
+            }
             return
         }
 

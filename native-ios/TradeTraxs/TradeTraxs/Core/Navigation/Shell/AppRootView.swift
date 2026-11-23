@@ -24,6 +24,7 @@ struct AppRootView: View {
     @Bindable private var launchController = AppLaunchController.shared
     @Bindable private var gettingStartedStore = GettingStartedStore.shared
     @Bindable private var passwordRecovery = PasswordRecoveryModel.shared
+    @Bindable private var planSelectionCoordinator = PostOnboardingPlanSelectionCoordinator.shared
     @State private var isLaunchBootstrapping = true
 
     var body: some View {
@@ -414,7 +415,13 @@ struct AppRootView: View {
             authenticationCoordinator: authenticationCoordinator,
             currentUserProfile: currentUserProfile
         )
-        .onAppear { DeepLinkLaunchTrace.event("shell.ready", detail: "main") }
+        .onAppear {
+            DeepLinkLaunchTrace.event("shell.ready", detail: "main")
+            planSelectionCoordinator.noteAccountContext(
+                userID: currentUserProfile.profile?.id.rawValue,
+                accountCreatedAt: currentUserProfile.profile?.createdAt
+            )
+        }
         .id(authenticationManager.state.session?.userID.rawValue ?? "signed-out")
         .ownerAccountFilterDropdownOverlay()
         .contextualTourHost(
@@ -450,9 +457,53 @@ struct AppRootView: View {
         }
         .onChange(of: ContextualTourCoordinator.shared.phase) { _, phase in
             guard phase == .idle else { return }
+            planSelectionCoordinator.handleShellGatesChanged(
+                tourPhase: phase,
+                tourOverlayVisible: ContextualTourCoordinator.shared.showsOverlay,
+                blockingModalPresented: navigation.store.presentedSheet != nil
+                    || navigation.store.presentedFullScreen != nil
+                    || planSelectionCoordinator.isPresented
+            )
+            guard !planSelectionCoordinator.defersPostTourNavigation(
+                userID: currentUserProfile.profile?.id.rawValue
+            ) else { return }
             guard ContextualTourCoordinator.shared.consumeOpenTradingRulesAfterCompletion() else { return }
             navigation.coordinator.selectTab(.profile)
             navigation.store.paths.profile = [.settings(.home), .settings(.tradingAnalytics)]
+        }
+        .onChange(of: currentUserProfile.profile?.id) { _, _ in
+            planSelectionCoordinator.noteAccountContext(
+                userID: currentUserProfile.profile?.id.rawValue,
+                accountCreatedAt: currentUserProfile.profile?.createdAt
+            )
+        }
+        .onChange(of: navigation.store.presentedSheet) { _, _ in
+            planSelectionCoordinator.handleShellGatesChanged(
+                tourPhase: ContextualTourCoordinator.shared.phase,
+                tourOverlayVisible: ContextualTourCoordinator.shared.showsOverlay,
+                blockingModalPresented: navigation.store.presentedSheet != nil
+                    || navigation.store.presentedFullScreen != nil
+                    || planSelectionCoordinator.isPresented
+            )
+        }
+        .fullScreenCover(isPresented: $planSelectionCoordinator.isPresented) {
+            PostOnboardingPlanSelectionView(
+                data: appEnvironment.data,
+                navigationCoordinator: navigation.coordinator,
+                onContinueFree: {
+                    planSelectionCoordinator.markCompletedAndDismiss()
+                    if ContextualTourCoordinator.shared.consumeOpenTradingRulesAfterCompletion() {
+                        navigation.coordinator.selectTab(.profile)
+                        navigation.store.paths.profile = [.settings(.home), .settings(.tradingAnalytics)]
+                    }
+                }
+            )
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .postOnboardingPlanSelectionDidDismiss)) { _ in
+            if ContextualTourCoordinator.shared.consumeOpenTradingRulesAfterCompletion() {
+                navigation.coordinator.selectTab(.profile)
+                navigation.store.paths.profile = [.settings(.home), .settings(.tradingAnalytics)]
+            }
         }
         .onChange(of: navigation.store.selectedTab) { _, _ in
             OwnerAccountFilterDropdownController.shared.dismiss()
@@ -828,7 +879,7 @@ struct AppRootView: View {
         case .newReel: return "New Clip"
         case .newStory: return "New Story"
         case .withdrawal: return "Withdrawal"
-        case .upgrade: return "TraxPro"
+        case .upgrade: return "TraxsPro"
         case .mediaViewer: return "Media"
         case .storyViewer: return "Story"
         }

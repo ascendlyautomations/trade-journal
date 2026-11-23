@@ -2025,7 +2025,7 @@ final class AddTradeViewModel {
         }
         let text = String(describing: error).lowercased()
         if text.contains("free_plan_account_limit") {
-            return "Free plan allows up to \(FreeTierPolicy.maxTradeEntryAccounts) trading accounts total. TraxPro unlocks unlimited accounts."
+            return "Free plan allows up to \(FreeTierPolicy.maxTradeEntryAccounts) trading accounts total. TraxsPro unlocks unlimited accounts."
         }
         if text.contains("can_add_trades") || text.contains("read_only") || text.contains("accountreadonly") {
             return "This account can't accept new trades."

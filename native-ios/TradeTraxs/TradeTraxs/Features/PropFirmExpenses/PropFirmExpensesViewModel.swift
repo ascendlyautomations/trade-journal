@@ -22,9 +22,11 @@ final class PropFirmExpensesViewModel {
 
     private let data: DataEnvironment
     private var loadedProfileID: ProfileID?
+    let loadsTraxsProPreviewSampleOnly: Bool
 
-    init(data: DataEnvironment) {
+    init(data: DataEnvironment, loadsTraxsProPreviewSampleOnly: Bool = false) {
         self.data = data
+        self.loadsTraxsProPreviewSampleOnly = loadsTraxsProPreviewSampleOnly
         self.selectedYear = Calendar.current.component(.year, from: .now)
     }
 
@@ -67,6 +69,17 @@ final class PropFirmExpensesViewModel {
     }
 
     func load(force: Bool = false) async {
+        if loadsTraxsProPreviewSampleOnly {
+            guard force || expenses.isEmpty else { return }
+            isLoading = expenses.isEmpty
+            errorMessage = nil
+            defer { isLoading = false }
+            applyTraxsProPreviewExpenseSample()
+            if let userID = await data.session.currentUserID {
+                loadedProfileID = ProfileID(userID.rawValue)
+            }
+            return
+        }
         guard let userID = await data.session.currentUserID else {
             errorMessage = "Sign in to track prop firm expenses."
             return
@@ -115,6 +128,7 @@ final class PropFirmExpensesViewModel {
     }
 
     func save(draft: PropFirmExpenseDraft, existing: PropFirmExpense?) async -> Bool {
+        guard !loadsTraxsProPreviewSampleOnly else { return false }
         guard let userID = await data.session.currentUserID else { return false }
         let today = PropFirmExpenseMoney.dayString(from: .now)
         if let message = PropFirmExpenseAnalyticsBuilder.validate(draft, today: today) {
@@ -157,6 +171,7 @@ final class PropFirmExpensesViewModel {
     }
 
     func delete(_ expense: PropFirmExpense) async -> Bool {
+        guard !loadsTraxsProPreviewSampleOnly else { return false }
         guard let userID = await data.session.currentUserID else { return false }
         isSaving = true
         formError = nil
@@ -175,6 +190,7 @@ final class PropFirmExpensesViewModel {
     }
 
     func saveIncome(draft: TrackerIncomeDraft, existing: TrackerIncome?) async -> Bool {
+        guard !loadsTraxsProPreviewSampleOnly else { return false }
         guard let userID = await data.session.currentUserID else { return false }
         let today = PropFirmExpenseMoney.dayString(from: .now)
         if let message = TrackerIncomeDraft.validate(draft, today: today) {
@@ -207,6 +223,7 @@ final class PropFirmExpensesViewModel {
     }
 
     func deleteIncome(_ incomeRow: TrackerIncome) async -> Bool {
+        guard !loadsTraxsProPreviewSampleOnly else { return false }
         guard let userID = await data.session.currentUserID else { return false }
         isSaving = true
         formError = nil
@@ -311,6 +328,11 @@ final class PropFirmExpensesViewModel {
         kinds: Set<ExpenseTrackerKind> = [.propFirm],
         projectKey: String = "all"
     ) throws -> URL {
+        guard !loadsTraxsProPreviewSampleOnly else {
+            throw NSError(domain: "PropFirmExpensesPreview", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Export is unavailable while previewing sample data.",
+            ])
+        }
         let payoutRows = trackerPayouts.map { item in
             PropFirmExpenseTaxExport.Payout(
                 payoutDate: PropFirmExpenseMoney.utcDayString(from: item.date),
@@ -336,6 +358,10 @@ final class PropFirmExpensesViewModel {
     func setReservePercent(_ percent: Decimal) async {
         guard let percent = PropFirmYearOverviewBuilder.normalized(percent) else { return }
         reservePercent = percent
+        guard !loadsTraxsProPreviewSampleOnly else {
+            reserveError = nil
+            return
+        }
         guard let userID = await data.session.currentUserID else { return }
         do {
             try await PropFirmExpenseRepository(supabase: data.supabase).saveTaxReservePercent(
@@ -360,6 +386,22 @@ final class PropFirmExpensesViewModel {
             if !name.isEmpty { rows.append(item) }
         }
         return rows
+    }
+
+    private func applyTraxsProPreviewExpenseSample() {
+        let viewer = SessionBootstrapStore.shared.last.map { ProfileID($0.data.viewer.id) }
+            ?? DemoCanonicalDataset.profileID
+        let sample = DemoExpenseTrackerDataset.bundle(now: .now, viewer: viewer)
+        expenses = sample.expenses
+        income = sample.income
+        accounts = sample.accounts
+        propPayoutItems = sample.payoutItems
+        withdrawalItems = sample.payoutItems
+        payouts = sample.payoutItems.reduce(Decimal.zero) { $0 + $1.amount }
+        payoutFirmNames = sample.payoutFirmNames
+        savedCategories = sample.savedCategories
+        reservePercent = 25
+        errorMessage = nil
     }
 
     private func firmName(for item: PayoutHistoryItem) -> String {

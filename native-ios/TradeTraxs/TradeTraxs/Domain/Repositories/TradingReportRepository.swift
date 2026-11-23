@@ -29,5 +29,16 @@ nonisolated protocol TradingReportRepository: Sendable {
     ) async throws -> TradingReport
 
     /// Eastern week identified by `week:YYYY-MM-DD`, including weeks that are no longer last week.
-    func weekReport(mondayKey: String, forceNetwork: Bool) async throws -> TradingReport
+    func weekReport(
+        mondayKey: String,
+        filters: TradingReportFilters,
+        forceNetwork: Bool
+    ) async throws -> TradingReport
+
+    /// User-selected calendar range (`custom:YYYY-MM-DD:YYYY-MM-DD`).
+    func customReport(
+        for ref: TradingReportCustomRangeRef,
+        filters: TradingReportFilters,
+        forceNetwork: Bool
+    ) async throws -> TradingReport
 }

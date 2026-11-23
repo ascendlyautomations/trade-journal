@@ -413,6 +413,14 @@ nonisolated struct DashboardHistogramBucket: Identifiable, Hashable, Sendable {
     var id: String { label }
     var label: String
     var count: Int
+    /// Sum of realized net P&L for closed trades in this hold-time bucket (filtered scope).
+    var totalNetPnL: Double = 0
+
+    /// Average net P&L per trade in the bucket; zero when empty.
+    var averageNetPnL: Double {
+        guard count > 0 else { return 0 }
+        return totalNetPnL / Double(count)
+    }
 }
 
 nonisolated struct DashboardDrawdownPoint: Identifiable, Hashable, Sendable {

@@ -42,6 +42,7 @@ final class DashboardViewModel {
     var draftScopeFilters = DashboardScopeFilterDraft.defaults
     var showsEquityDrawdownSettings = false
     var equityDrawdownLimitDraft = ""
+    var equityDrawdownFloorCapDraft = ""
     var equityDrawdownTypeDraft: LivePersonalDrawdownType = .fixed
     private(set) var isSavingEquityDrawdownSettings = false
     var equityDrawdownSettingsError: String?
@@ -125,6 +126,8 @@ final class DashboardViewModel {
     private var tradingRulesRecomputeSequence: UInt64 = 0
     private var tradingRulesColdPresentationBootstrapped = false
     private var prioritizedOwnerTradesForRulesTask: Task<Void, Never>?
+    /// TraxsPro Dashboard interactive preview — canonical trades only, no owner store hydration.
+    let loadsTraxsProPreviewSampleOnly: Bool
 
     private final class LiveBox {
         weak var model: DashboardViewModel?
@@ -152,9 +155,11 @@ final class DashboardViewModel {
         navigationCoordinator: NavigationCoordinator,
         realtimeHub: RealtimeHub? = nil,
         rpc: (any RPCClient)? = nil,
-        tradingPreferences: (any TradingPreferencesRepository)? = nil
+        tradingPreferences: (any TradingPreferencesRepository)? = nil,
+        loadsTraxsProPreviewSampleOnly: Bool = false
     ) {
         _ = home
+        self.loadsTraxsProPreviewSampleOnly = loadsTraxsProPreviewSampleOnly
         self.trades = trades
         self.achievements = achievements
         self.dailyCheckIns = dailyCheckIns
@@ -287,6 +292,15 @@ final class DashboardViewModel {
 
     func openTradingRulesAnalytics() {
         ExperienceHaptics.play(.selection)
+        let demo = ExploreModeSupport.isActive
+        let profileID = ownerAccountsProfileID
+        if ProMonetizationPolicy.shouldShowEntitlementVerification(
+            demoModeActive: demo,
+            profileID: profileID
+        ) {
+            navigationCoordinator.pushTradingRulesAnalytics()
+            return
+        }
         navigationCoordinator.pushTradingRulesAnalytics()
     }
 
@@ -439,24 +453,6 @@ final class DashboardViewModel {
                 }()
             ),
             DashboardMetricChip(
-                id: "rr",
-                label: "Avg RR",
-                value: summary.averageRR.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "—",
-                tone: .neutral
-            ),
-            DashboardMetricChip(
-                id: "maxRr",
-                label: "Avg Max R",
-                value: summary.averageMaxRrReached.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "—",
-                tone: .neutral
-            ),
-            DashboardMetricChip(
-                id: "trades",
-                label: "Trades",
-                value: "\(summary.tradeCount)",
-                tone: .neutral
-            ),
-            DashboardMetricChip(
                 id: "expectancy",
                 label: "Expectancy",
                 value: summary.expectancy.map(Self.money) ?? "—",
@@ -464,6 +460,12 @@ final class DashboardViewModel {
                     guard let e = summary.expectancy else { return .neutral }
                     return e >= 0 ? .positive : .negative
                 }()
+            ),
+            DashboardMetricChip(
+                id: "rr",
+                label: "Avg Targeted R:R",
+                value: summary.averageRR.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "—",
+                tone: .neutral
             ),
         ]
     }
@@ -554,15 +556,29 @@ final class DashboardViewModel {
         guard equityChartAccountFilter == accountFilter else {
             return lastDisplayedEquityHeroChartPoints
         }
-        if let personal = resolvedLivePersonalDrawdownHeroPoints(), !personal.isEmpty {
-            lastDisplayedEquityHeroChartPoints = personal
-            return personal
+        if let account = selectedAccount,
+           DashboardLivePersonalDrawdownHeroSeries.usesLivePersonalDrawdownSeries(for: account)
+        {
+            if let personal = resolvedLivePersonalDrawdownHeroPoints(), !personal.isEmpty {
+                lastDisplayedEquityHeroChartPoints = personal
+                return personal
+            }
+            return lastDisplayedEquityHeroChartPoints
+        }
+        if let accountEquity = resolvedAccountEquityHeroPoints(), !accountEquity.isEmpty {
+            lastDisplayedEquityHeroChartPoints = accountEquity
+            return accountEquity
         }
         if let points = resolvedEquityHeroChartPoints(), !points.isEmpty {
             lastDisplayedEquityHeroChartPoints = points
             return points
         }
         let chartSummary = equityChartSummary ?? summary
+        if let account = selectedAccount,
+           DashboardLivePersonalDrawdownHeroSeries.usesLivePersonalDrawdownSeries(for: account)
+        {
+            return lastDisplayedEquityHeroChartPoints
+        }
         if isEquityChartOverlayLoading {
             if !lastDisplayedEquityHeroChartPoints.isEmpty {
                 return lastDisplayedEquityHeroChartPoints
@@ -640,6 +656,7 @@ final class DashboardViewModel {
         else { return }
         let draft = LivePersonalDrawdownEngine.gearDraft(from: account)
         equityDrawdownLimitDraft = draft.limitDigits
+        equityDrawdownFloorCapDraft = draft.floorCapDigits
         equityDrawdownTypeDraft = draft.limitType
         equityDrawdownSettingsError = nil
         showsEquityDrawdownSettings = true
@@ -656,7 +673,14 @@ final class DashboardViewModel {
               PropFirmPayoutPolicy.supportsLiveWithdrawal(for: account)
         else { return }
 
+        guard LivePersonalDrawdownEngine.resolvedStartingBalance(for: account) != nil else {
+            equityDrawdownSettingsError =
+                TradingAccountStartingBalancePolicy.liveLedgerMessage
+            return
+        }
+
         let trimmed = equityDrawdownLimitDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let capTrimmed = equityDrawdownFloorCapDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         let config: LivePersonalDrawdownConfig?
         if trimmed.isEmpty {
             config = nil
@@ -664,7 +688,20 @@ final class DashboardViewModel {
             if limit == 0 {
                 config = nil
             } else {
-                config = LivePersonalDrawdownConfig(limitAmount: limit, limitType: equityDrawdownTypeDraft)
+                var floorCap: Decimal?
+                if !capTrimmed.isEmpty {
+                    guard let cap = Decimal(string: capTrimmed.replacingOccurrences(of: ",", with: "")), cap > 0 else {
+                        equityDrawdownSettingsError =
+                            "Enter a valid positive dollar amount for floor cap, or leave blank for no cap."
+                        return
+                    }
+                    floorCap = cap
+                }
+                config = LivePersonalDrawdownConfig(
+                    limitAmount: limit,
+                    limitType: equityDrawdownTypeDraft,
+                    floorCap: floorCap
+                )
             }
         } else {
             equityDrawdownSettingsError =
@@ -686,22 +723,24 @@ final class DashboardViewModel {
                 accounts[index] = updated
             }
             SessionAccountsStore.shared.seed(accounts, for: profileID)
+            detailCache.seed(accounts: accounts, for: profileID)
+            AccountPersistedCacheCoordinator.noteAccountPatched(updated, viewerID: profileID)
+            AccountMutationStore.shared.noteAccountUpdated(
+                updated,
+                allAccounts: accounts
+            )
             lastDisplayedEquityHeroChartPoints = []
+            recompute()
             showsEquityDrawdownSettings = false
         } catch {
             equityDrawdownSettingsError = UserFacingError.message(for: error)
         }
     }
 
-    private func resolvedLivePersonalDrawdownHeroPoints() -> [ProfileStatisticsMetrics.EquityPoint]? {
-        guard equityHeroShowsAccountValue,
-              let account = selectedAccount,
-              let config = LivePersonalDrawdownEngine.config(from: account)
-        else { return nil }
-
-        let samples = LivePersonalDrawdownEngine.computeEquitySeries(
+    private func buildLivePersonalDrawdownHeroPoints() -> [ProfileStatisticsMetrics.EquityPoint]? {
+        guard equityHeroShowsAccountValue, let account = selectedAccount else { return nil }
+        let input = DashboardLivePersonalDrawdownHeroSeries.Input(
             account: account,
-            config: config,
             lifetimeTrades: accountScopedTrades(for: account.id),
             ledgerEntries: manualPayoutEntries(for: account.id),
             period: LivePersonalDrawdownEngine.PeriodContext(
@@ -709,10 +748,62 @@ final class DashboardViewModel {
                 customInterval: customDateInterval
             )
         )
-        guard !samples.isEmpty else { return nil }
-        return ProfileStatisticsMetrics.chartOrderedEquityPoints(
-            LivePersonalDrawdownEngine.mapToEquityPoints(samples)
+        guard let points = DashboardLivePersonalDrawdownHeroSeries.resolve(input) else { return nil }
+        #if DEBUG
+        LivePersonalDrawdownChartAudit.logHeroSeries(account: account, points: points)
+        #endif
+        return points
+    }
+
+    private func resolvedLivePersonalDrawdownHeroPoints() -> [ProfileStatisticsMetrics.EquityPoint]? {
+        buildLivePersonalDrawdownHeroPoints()
+    }
+
+    /// Single-account hero — balance progression, daily closes on long presets, prop drawdown overlay when configured.
+    private func resolvedAccountEquityHeroPoints() -> [ProfileStatisticsMetrics.EquityPoint]? {
+        guard equityHeroShowsAccountValue, let account = selectedAccount else { return nil }
+        guard !DashboardLivePersonalDrawdownHeroSeries.usesLivePersonalDrawdownSeries(for: account) else {
+            return nil
+        }
+
+        let period = DashboardAccountEquityChartEngine.PeriodContext(
+            dateRange: effectiveEquityChartRange,
+            customInterval: customDateInterval
         )
+        let lifetimeTrades = accountScopedTrades(for: account.id)
+        var samples = DashboardAccountEquityChartEngine.computeEquitySeries(
+            account: account,
+            lifetimeTrades: lifetimeTrades,
+            ledgerEntries: manualPayoutEntries(for: account.id),
+            payoutCycles: resolvedPayoutCycles(for: account.id),
+            period: period
+        )
+        guard !samples.isEmpty else { return nil }
+
+        if account.isPropFirmAccount,
+           let maxDd = account.propFirmRules?.maxDrawdown,
+           maxDd > 0,
+           let floorSamples = PropFirmDrawdownEquityEngine.computeEquitySeries(
+               account: account,
+               lifetimeTrades: lifetimeTrades,
+               payoutCycles: resolvedPayoutCycles(for: account.id),
+               period: LivePersonalDrawdownEngine.PeriodContext(
+                   dateRange: .all,
+                   customInterval: nil
+               )
+           )
+        {
+            samples = DashboardAccountEquityChartEngine.attachPropFirmDrawdownFloors(
+                equitySamples: samples,
+                floorSamples: floorSamples
+            )
+        }
+
+        let points = DashboardAccountEquityChartEngine.mapToEquityPoints(samples)
+        guard points.count >= DashboardEquityChartRangeResolver.minimumTradeCountForEquityCurve else {
+            return nil
+        }
+        return points
     }
 
     private var equityHeroLifetimeRealizedPnL: Decimal {
@@ -867,7 +958,9 @@ final class DashboardViewModel {
             DashboardMetricChip(
                 id: "dd",
                 label: "Max Drawdown",
-                value: Self.money(summary.maxDrawdown),
+                value: summary.maxDrawdown > 0
+                    ? Self.signedMoney(-summary.maxDrawdown)
+                    : Self.money(0),
                 tone: summary.maxDrawdown > 0 ? .negative : .neutral
             ),
         ]
@@ -1001,6 +1094,9 @@ final class DashboardViewModel {
             resetForSessionBoundary()
         }
         if hasLoaded {
+            if loadsTraxsProPreviewSampleOnly {
+                return
+            }
             SessionNetworkProbe.record(.cacheHit, resource: "dashboard.navigationReturn")
             if let profileID {
                 Task { await startRealtime(profileID: profileID) }
@@ -1078,6 +1174,10 @@ final class DashboardViewModel {
     }
 
     func refresh() async {
+        if loadsTraxsProPreviewSampleOnly, let profileID {
+            applyTraxsProPreviewCanonicalSample(viewerProfileID: profileID)
+            return
+        }
         loadTask?.cancel()
         secondaryTask?.cancel()
         isRefreshing = true
@@ -1134,6 +1234,7 @@ final class DashboardViewModel {
 
     /// Mutation observer — patch when possible; never full refetch for a single insert/update/delete.
     func handleJournalMutation() {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
         switch TradeJournalMutationStore.shared.latest {
         case .created(let trade), .updated(let trade):
             if !includesTradeInDashboardScope(trade) {
@@ -1176,6 +1277,7 @@ final class DashboardViewModel {
     }
 
     func handleAccountMutation() {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
         switch AccountMutationStore.shared.latestKind {
         case .payoutRecorded(let accountID):
             if let cycles = WithdrawalsHistoryStore.shared.cyclesByAccount[accountID] {
@@ -1231,6 +1333,7 @@ final class DashboardViewModel {
         resetChartOverlayFetchSettlement()
         lastAccountScopedSummary = nil
         lastAccountScopedFilter = nil
+        lastDisplayedEquityHeroChartPoints = []
         accountFilter = filter
         if let profileID {
             persistScopeFilters(profileID: profileID)
@@ -1359,9 +1462,11 @@ final class DashboardViewModel {
     func complianceScopedTradesForRules() -> [Trade] {
         guard profileID != nil else { return [] }
         let pool: [Trade]
-        if let profileID,
-           let cached = SessionOwnerTradesStore.shared.cached(for: profileID),
-           !cached.isEmpty
+        if loadsTraxsProPreviewSampleOnly {
+            pool = DemoCanonicalDataset.trades()
+        } else if let profileID,
+                  let cached = SessionOwnerTradesStore.shared.cached(for: profileID),
+                  !cached.isEmpty
         {
             pool = cached
         } else if !tradeInputs.isEmpty {
@@ -1420,13 +1525,18 @@ final class DashboardViewModel {
     var insightsPresentation: DashboardInsightsPresentation {
         let trades = resolvedFilteredTradesForDashboard()
         let count = max(summary?.tradeCount ?? 0, trades.count)
+        let includesPremium = ProMonetizationPolicy.includesPremiumDashboardAnalytics(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: ownerAccountsProfileID
+        )
         return DashboardInsightsComposer.build(
             serverInsights: summary?.insights ?? [],
             trades: trades,
             strategyHighlights: summary?.strategyHighlights,
             isLoading: isDashboardInsightsLoading,
             tradeCount: count,
-            preferences: preferenceContext
+            preferences: preferenceContext,
+            includesPremiumAnalytics: includesPremium
         )
     }
 
@@ -1461,7 +1571,13 @@ final class DashboardViewModel {
 
     /// Trade rows for web-style dashboard filters — hydrates session cache when V3 cleared ``tradeInputs``.
     private func tradeInputsForScopeFiltering() -> [DashboardChartMetrics.Input] {
+        if loadsTraxsProPreviewSampleOnly, !tradeInputs.isEmpty {
+            return tradeInputs
+        }
         if !tradeInputs.isEmpty { return tradeInputs }
+        if loadsTraxsProPreviewSampleOnly {
+            return []
+        }
         if let profileID {
             promoteOwnerTradesFromSessionCache(profileID: profileID)
         }
@@ -1542,6 +1658,7 @@ final class DashboardViewModel {
         requireCompleteSnapshot: Bool = false,
         scopeSelectionToken: UInt64? = nil
     ) async {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
         await SessionNetworkGate.shared.awaitReady()
         if let scopeSelectionToken, scopeSelectionToken != scopeMetricsSelectionToken {
             return
@@ -1679,6 +1796,7 @@ final class DashboardViewModel {
         holdRange: TradeHistoryLaunchSeed.HoldSecondsRange? = nil,
         mutate: (inout TradeHistoryFilters) -> Void
     ) {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
         ExperienceHaptics.play(.selection)
         var filters = tradeHistoryFiltersPreservingDashboardContext()
         mutate(&filters)
@@ -1777,6 +1895,30 @@ final class DashboardViewModel {
         }
         self.profileID = profileID
         restoreScopeFiltersIfNeeded(profileID: profileID)
+
+        if loadsTraxsProPreviewSampleOnly {
+            var committed = false
+            await DashboardLoadProbe.measure(
+                "dashboard.traxspro.preview",
+                kind: .local,
+                blocksFirstUsefulRender: true
+            ) {
+                guard canCommit(profileID: profileID, generation: activeGeneration) else { return }
+                applyTraxsProPreviewCanonicalSample(viewerProfileID: profileID)
+                committed = true
+            }
+            guard committed, canCommit(profileID: profileID, generation: activeGeneration) else {
+                blockColdFinish = true
+                return
+            }
+            hasLoaded = true
+            phase = .loaded
+            DashboardLoadProbe.markFirstUsefulRender()
+            DashboardLoadProbe.markFullHydration()
+            loadTask = nil
+            return
+        }
+
         if demoActive {
             SessionViewerGate.shared.bind(profileID.rawValue)
         }
@@ -2401,33 +2543,89 @@ final class DashboardViewModel {
     }
 
     private func applyFixtures(profileID: ProfileID) {
-        let samples: [Trade]
-        let modes: [TradingAccountID: TradingAccountMode]
-        let seededAccounts: [TradingAccount]
         if profileID == DemoExperienceSupport.profileID {
-            samples = DemoCanonicalDataset.trades()
-            modes = DemoCanonicalDataset.accountModes()
-            seededAccounts = DemoCanonicalDataset.accounts()
+            applyDemoCanonicalDashboardFixtures(
+                viewerProfileID: profileID,
+                seedDetailCacheTrades: true
+            )
         } else {
-            samples = ProfileTradeFixtures.samples(owner: profileID)
-            modes = ProfileTradeFixtures.accountModes()
-            seededAccounts = PropFirmFixtures.accounts(owner: profileID)
+            let samples = ProfileTradeFixtures.samples(owner: profileID)
+            let modes = ProfileTradeFixtures.accountModes()
+            let seededAccounts = PropFirmFixtures.accounts(owner: profileID)
+            applyDashboardFixtureTrades(
+                samples: samples,
+                modes: modes,
+                seededAccounts: seededAccounts,
+                viewerProfileID: profileID,
+                payoutEntriesForAccount: { _ in [] },
+                seedDetailCacheTrades: true
+            )
         }
+    }
+
+    private func applyTraxsProPreviewCanonicalSample(viewerProfileID: ProfileID) {
+        applyTraxsProPreviewScopeDefaults()
+        analyticsV3Bootstrap = nil
+        preferenceContext = DemoCanonicalDataset.previewPreferenceContext(for: viewerProfileID)
+        psychologyUnlockMetricsReady = true
+        applyDemoCanonicalDashboardFixtures(
+            viewerProfileID: viewerProfileID,
+            seedDetailCacheTrades: false
+        )
+        reconcileDashboardAccountFilterIfNeeded()
+        scheduleTradingRulesComplianceRecompute()
+        recomputePsychology()
+    }
+
+    private func applyTraxsProPreviewScopeDefaults() {
+        accountFilter = .all
+        dateRange = .oneYear
+        customDateInterval = nil
+        accountTypeFilter = .all
+        showPublicOnly = false
+        hasUserSelectedDateRangeForCurrentFilter = false
+        pendingAutomaticDateRangeResolution = false
+        effectiveEquityChartRange = dateRange
+        isScopeFilteredMetricsLoading = false
+    }
+
+    private func applyDemoCanonicalDashboardFixtures(
+        viewerProfileID: ProfileID,
+        seedDetailCacheTrades: Bool
+    ) {
+        applyDashboardFixtureTrades(
+            samples: DemoCanonicalDataset.trades(),
+            modes: DemoCanonicalDataset.accountModes(),
+            seededAccounts: DemoCanonicalDataset.accounts(owner: viewerProfileID),
+            viewerProfileID: viewerProfileID,
+            payoutEntriesForAccount: { DemoCanonicalDataset.payoutEntries(for: $0) },
+            seedDetailCacheTrades: seedDetailCacheTrades
+        )
+    }
+
+    private func applyDashboardFixtureTrades(
+        samples: [Trade],
+        modes: [TradingAccountID: TradingAccountMode],
+        seededAccounts: [TradingAccount],
+        viewerProfileID: ProfileID,
+        payoutEntriesForAccount: (TradingAccountID) -> [AccountPayoutEntry],
+        seedDetailCacheTrades: Bool
+    ) {
         accounts = seededAccounts
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         accountNames = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.name) })
-        detailCache.seed(accounts: accounts, for: profileID)
+        if seedDetailCacheTrades {
+            detailCache.seed(accounts: accounts, for: viewerProfileID)
+        }
         var entriesByAccount: [TradingAccountID: [AccountPayoutEntry]] = [:]
         for account in seededAccounts {
-            let entries = profileID == DemoExperienceSupport.profileID
-                ? DemoCanonicalDataset.payoutEntries(for: account.id)
-                : []
+            let entries = payoutEntriesForAccount(account.id)
             if !entries.isEmpty {
                 entriesByAccount[account.id] = entries
             }
         }
-        primeWithdrawalsHistoryStore(for: profileID)
-        WithdrawalsHistoryStore.shared.applyLedgerSnapshot(entriesByAccount, profileID: profileID)
+        primeWithdrawalsHistoryStore(for: viewerProfileID)
+        WithdrawalsHistoryStore.shared.applyLedgerSnapshot(entriesByAccount, profileID: viewerProfileID)
         withdrawalRecordsHydrationComplete = true
         refreshAuthoritativePayoutTotal()
         tradeInputs = samples.map { trade in
@@ -2438,7 +2636,9 @@ final class DashboardViewModel {
                 }
             )
         }
-        detailCache.seed(trades: samples)
+        if seedDetailCacheTrades {
+            detailCache.seed(trades: samples)
+        }
         noteTradeHistoryApplied(
             totalTradeCount: samples.count,
             historyComplete: true
@@ -2528,6 +2728,7 @@ final class DashboardViewModel {
     }
 
     private func patchAccountsFromSessionStore() {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
         guard let profileID else { return }
         guard let cached = SessionAccountsStore.shared.cached(for: profileID)
             ?? detailCache.accounts(for: profileID)
@@ -2651,6 +2852,10 @@ final class DashboardViewModel {
             isScopeFilteredMetricsLoading = false
             return
         }
+        if loadsTraxsProPreviewSampleOnly {
+            recomputeTraxsProPreviewSample()
+            return
+        }
         resolveAutomaticDateRangeIfNeeded()
         refreshAuthoritativePayoutTotal()
         let scope = clientScopeFilter()
@@ -2717,6 +2922,32 @@ final class DashboardViewModel {
         refreshDashboardReadinessProbes()
     }
 
+    /// TraxsPro Dashboard preview — always derive premium KPIs from the isolated rolling sample; never V3 / owner stores.
+    private func recomputeTraxsProPreviewSample() {
+        isScopeFilteredMetricsLoading = false
+        refreshAuthoritativePayoutTotal()
+        let scope = clientScopeFilter()
+        var inputs = tradeInputsForScopeFiltering()
+        if inputs.isEmpty, let profileID {
+            applyTraxsProPreviewCanonicalSample(viewerProfileID: profileID)
+            inputs = tradeInputs
+        }
+        guard !inputs.isEmpty else {
+            summary = nil
+            refreshDashboardReadinessProbes()
+            return
+        }
+        let result = DashboardChartMetrics.compute(
+            from: inputs,
+            scope: scope,
+            payoutTotal: payoutTotal
+        )
+        summary = assigningAccountLevelPayouts(to: result)
+        recomputePsychology()
+        scheduleTradingRulesComplianceRecompute()
+        refreshDashboardReadinessProbes()
+    }
+
     /// Cached rows missing `mode` / `account_type` cannot satisfy Live/Funded/Eval filters (web uses row columns).
     private func ownerTradeInputsNeedWireRefresh(
         _ inputs: [DashboardChartMetrics.Input],
@@ -2738,13 +2969,67 @@ final class DashboardViewModel {
     ) -> DashboardChartMetrics.Summary {
         var next = summary
         next.payouts = payoutTotal
+        next.maxDrawdown = computeEquityAlignedMaxDrawdown()
         return next
     }
 
+    /// Peak-to-trough on trade-level balance equity (same family as hero chart); respects account + date scope.
+    private func computeEquityAlignedMaxDrawdown() -> Decimal {
+        let scope = clientScopeFilter()
+        let period = DashboardAccountEquityChartEngine.PeriodContext(
+            dateRange: scope.dateRange,
+            customInterval: scope.customInterval
+        )
+        let lifetimeTrades: [Trade] = {
+            switch accountFilter {
+            case .account(let id):
+                return accountScopedTrades(for: id)
+            case .all:
+                return tradeInputs
+                    .map(\.trade)
+                    .filter { $0.mode != .backtest }
+            }
+        }()
+        let ledgerEntries = ledgerEntriesForMaxDrawdown()
+        let payoutCycles = payoutCyclesForMaxDrawdown()
+        let samples = DashboardAccountEquityChartEngine.computeTradeLevelEquityForMaxDrawdown(
+            accountFilter: accountFilter,
+            accounts: accounts,
+            lifetimeTrades: lifetimeTrades,
+            ledgerEntries: ledgerEntries,
+            payoutCycles: payoutCycles,
+            period: period
+        )
+        return DashboardAccountEquityChartEngine.peakToTroughDecline(from: samples)
+    }
+
+    private func ledgerEntriesForMaxDrawdown() -> [AccountPayoutEntry] {
+        switch accountFilter {
+        case .account(let id):
+            return manualPayoutEntries(for: id)
+        case .all:
+            var seen = Set<AccountPayoutEntryID>()
+            return accounts.flatMap { account in
+                manualPayoutEntries(for: account.id).filter { seen.insert($0.id).inserted }
+            }
+        }
+    }
+
+    private func payoutCyclesForMaxDrawdown() -> [AccountPayoutCycle] {
+        switch accountFilter {
+        case .account(let id):
+            return resolvedPayoutCycles(for: id)
+        case .all:
+            var seen = Set<String>()
+            return accounts.flatMap { account in
+                resolvedPayoutCycles(for: account.id).filter { seen.insert($0.id).inserted }
+            }
+        }
+    }
+
     private func attachAccountLevelPayoutsToSummary() {
-        guard var current = summary else { return }
-        current.payouts = payoutTotal
-        summary = current
+        guard let current = summary else { return }
+        summary = assigningAccountLevelPayouts(to: current)
     }
 
     private func kickOwnerTradesHydrationIfTradeWindowEmpty() {
@@ -2759,6 +3044,7 @@ final class DashboardViewModel {
         forceNetwork: Bool = false,
         requireCompleteSnapshot: Bool = false
     ) {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
         promoteOwnerTradesFromSessionCache(profileID: profileID)
         if !requireCompleteSnapshot, !forceNetwork, !tradeInputsForScopeFiltering().isEmpty {
             isScopeFilteredMetricsLoading = false
@@ -3204,6 +3490,30 @@ final class DashboardViewModel {
         current.rrTargetAnalysis = clientMetrics.rrTargetAnalysis
         current.symbolPerformance = clientMetrics.symbolPerformance
         current.longShortComparison = clientMetrics.longShortComparison
+        let histogramEmpty = current.holdTimeHistogram.isEmpty
+            || current.holdTimeHistogram.allSatisfy { $0.count == 0 }
+        if histogramEmpty,
+           clientMetrics.holdTimeHistogram.contains(where: { $0.count > 0 })
+        {
+            current.holdTimeHistogram = clientMetrics.holdTimeHistogram
+        } else if !clientMetrics.holdTimeHistogram.isEmpty {
+            let pnlByLabel = Dictionary(
+                uniqueKeysWithValues: clientMetrics.holdTimeHistogram.map { ($0.label, $0.totalNetPnL) }
+            )
+            current.holdTimeHistogram = current.holdTimeHistogram.map { bucket in
+                var copy = bucket
+                if let total = pnlByLabel[bucket.label] {
+                    copy.totalNetPnL = total
+                }
+                return copy
+            }
+        }
+        if current.holdTime.isEmpty, !clientMetrics.holdTime.isEmpty {
+            current.holdTime = clientMetrics.holdTime
+        }
+        if current.holdExtremes.isEmpty, !clientMetrics.holdExtremes.isEmpty {
+            current.holdExtremes = clientMetrics.holdExtremes
+        }
         summary = current
     }
 
@@ -3735,6 +4045,7 @@ final class DashboardViewModel {
     }
 
     private func restoreScopeFiltersIfNeeded(profileID: ProfileID) {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
         guard let stored = DashboardScopeFilterPersistence.load(profileID: profileID) else { return }
         if let raw = stored.dateRangeRaw {
             if raw == DashboardDateRange.ytd.rawValue {
@@ -3765,6 +4076,7 @@ final class DashboardViewModel {
     }
 
     private func persistScopeFilters(profileID: ProfileID) {
+        guard !loadsTraxsProPreviewSampleOnly else { return }
         DashboardScopeFilterPersistence.save(
             profileID: profileID,
             stored: DashboardScopeFilterPersistence.Stored(
@@ -4462,7 +4774,12 @@ final class DashboardViewModel {
     }
 
     private func kickPrioritizedOwnerTradesForTradingRules(profileID: ProfileID) {
-        guard TradingRulesComplianceSupport.hasConfiguredRules(context: preferenceContext) else { return }
+        guard !loadsTraxsProPreviewSampleOnly else { return }
+        let isFreeTier = ProMonetizationPolicy.shouldRestrictTradingRulesComplianceAnalytics(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        )
+        guard TradingRulesPlanTier.hasConfiguredRules(context: preferenceContext, isFreeTier: isFreeTier) else { return }
         guard !SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID) else { return }
         guard prioritizedOwnerTradesForRulesTask == nil else { return }
         guard tradingRulesHydrationTask == nil else { return }
@@ -4513,7 +4830,14 @@ final class DashboardViewModel {
             profileID: profileID
         )
         let store = TradingRulesComplianceSessionStore.shared
-        let preferencesConfigured = TradingRulesComplianceSupport.hasConfiguredRules(context: preferenceContext)
+        let isFreeRulesTier = ProMonetizationPolicy.shouldRestrictTradingRulesComplianceAnalytics(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        )
+        let preferencesConfigured = TradingRulesPlanTier.hasConfiguredRules(
+            context: preferenceContext,
+            isFreeTier: isFreeRulesTier
+        )
         if TradingRulesCompliancePresentationBridge.revealCachedSnapshotIfPossible(
             profileID: profileID,
             detailCache: detailCache
@@ -4539,6 +4863,13 @@ final class DashboardViewModel {
             return
         }
 
+        guard ProMonetizationPolicy.shouldComputeTradingRulesCompliance(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        ) else {
+            return
+        }
+
         adoptCachedTradingRulesPreferencesIfNeeded()
 
         let scope = PsychologyAnalyticsScopeResolver.resolve(
@@ -4549,7 +4880,18 @@ final class DashboardViewModel {
 
         let scopedTrades = complianceScopedTradesForRules()
 
-        let hasRulesConfigured = TradingRulesComplianceSupport.hasConfiguredRules(context: preferenceContext)
+        let isFreeRulesTier = ProMonetizationPolicy.shouldRestrictTradingRulesComplianceAnalytics(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        )
+        let hasRulesConfigured = TradingRulesPlanTier.hasConfiguredRules(
+            context: preferenceContext,
+            isFreeTier: isFreeRulesTier
+        )
+        let complianceRuleFilter = ProMonetizationPolicy.tradingRulesComplianceRuleFilter(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        )
         let preferencesUnavailable = preferenceContext == nil
         if preferencesUnavailable, !hasRulesConfigured {
             if TradingRulesComplianceSessionStore.shared.retainsConfiguredRules(for: profileID) {
@@ -4590,7 +4932,9 @@ final class DashboardViewModel {
             return
         }
 
-        let historyComplete = SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
+        let historyComplete = loadsTraxsProPreviewSampleOnly
+            ? true
+            : SessionOwnerTradesStore.shared.isCompleteSnapshot(for: profileID)
         if hasRulesConfigured, scopedTrades.isEmpty {
             let fingerprint = tradingRulesInputFingerprint(
                 scope: scope,
@@ -4653,7 +4997,9 @@ final class DashboardViewModel {
             return
         }
 
-        let ownerTrades = SessionOwnerTradesStore.shared.cached(for: profileID) ?? scopedTrades
+        let ownerTrades = loadsTraxsProPreviewSampleOnly
+            ? DemoCanonicalDataset.trades()
+            : (SessionOwnerTradesStore.shared.cached(for: profileID) ?? scopedTrades)
         let prepared = TradingRulesComplianceDisciplineContextBuilder.prepare(
             ownerTrades: ownerTrades,
             accounts: accounts,
@@ -4688,7 +5034,8 @@ final class DashboardViewModel {
                 context: preferences,
                 dashboardInsights: insights,
                 preferDashboardInsightsCache: preferDashboardInsightsCache,
-                discipline: discipline
+                discipline: discipline,
+                allowedRuleIDs: complianceRuleFilter
             )
         } onComplete: { [weak self] payload in
             guard let self else { return }
@@ -4871,6 +5218,10 @@ final class DashboardViewModel {
 
     static func money(_ value: Decimal) -> String {
         ProfileDisplay.formatMoney(value)
+    }
+
+    static func signedMoney(_ value: Decimal) -> String {
+        NumberDisplay.signedMoney(value)
     }
 
     static func factor(_ value: Decimal?) -> String {

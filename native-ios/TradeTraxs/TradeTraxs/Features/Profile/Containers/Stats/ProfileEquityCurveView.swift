@@ -6,20 +6,22 @@ import SwiftUI
 /// Data shape matches web `ProfileEquityLineChart` via ``ProfileStatisticsMetrics/EquityPoint``.
 struct ProfileEquityCurveView: View {
     let points: [ProfileStatisticsMetrics.EquityPoint]
+    private let displaySeries: ProfileEquityCurveDisplaySeries
 
     @Environment(\.themeColors) private var colors
-    @State private var selectedIndex: Int?
+    @State private var selectedTradeIndex: Int?
+    @State private var selectedPlotDate: Date?
 
-    /// Canonical ascending index series — same ordering for path, axis, and scrubber.
-    private var orderedPoints: [ProfileStatisticsMetrics.EquityPoint] {
-        ProfileStatisticsMetrics.chartOrderedEquityPoints(points)
+    init(points: [ProfileStatisticsMetrics.EquityPoint]) {
+        self.points = points
+        self.displaySeries = ProfileEquityCurveDisplaySeries.build(from: points)
     }
 
     var body: some View {
         Group {
-            if orderedPoints.count >= 2 {
+            if displaySeries.renderPoints.count >= 2 {
                 chart
-            } else if let only = orderedPoints.first {
+            } else if let only = displaySeries.renderPoints.first {
                 Text(StatsContainerView.equityMoneyText(only.equity))
                     .experienceStyle(.callout, color: colors.secondaryText)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -31,96 +33,66 @@ struct ProfileEquityCurveView: View {
         }
     }
 
+    private var renderPoints: [ProfileEquityCurveChartModel.RenderPoint] {
+        displaySeries.renderPoints
+    }
+
+    private var usesTimelineAxis: Bool {
+        displaySeries.xAxisMode == .timeline
+    }
+
     private var showsPersonalDrawdownFloor: Bool {
-        chartPoints.contains { $0.drawdownFloorValue != nil }
+        renderPoints.contains { $0.drawdownFloorY != nil }
     }
 
     private var equityInterpolation: InterpolationMethod {
         showsPersonalDrawdownFloor ? .linear : .catmullRom
     }
 
+    private var tradeIndexDomain: ClosedRange<Int> {
+        ProfileEquityCurveChartModel.tradeIndexDomain(for: renderPoints)
+    }
+
+    private var timelineDomain: ClosedRange<Date>? {
+        ProfileEquityCurveChartModel.timelineDomain(for: renderPoints)
+    }
+
+    private var yDomain: ClosedRange<Double> {
+        ProfileEquityCurveChartModel.yDomain(for: renderPoints)
+    }
+
     private var chart: some View {
         Chart {
+            ForEach(renderPoints) { point in
+                equityMarks(for: point)
+            }
+
             if showsPersonalDrawdownFloor {
-                ForEach(chartPoints) { point in
-                    if let floor = point.drawdownFloorValue {
-                        LineMark(
-                            x: .value("Trade", point.index),
-                            y: .value("Drawdown floor", floor),
-                            series: .value("Series", "Drawdown floor")
-                        )
-                        .interpolationMethod(.linear)
-                        .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [6, 4]))
-                        .foregroundStyle(colors.loss.opacity(0.8))
+                ForEach(renderPoints) { point in
+                    if let floorY = point.drawdownFloorY {
+                        drawdownMark(for: point, floorY: floorY)
                     }
                 }
             }
 
-            ForEach(chartPoints) { point in
-                LineMark(
-                    x: .value("Trade", point.index),
-                    y: .value("Equity", point.equityValue),
-                    series: .value("Series", "Equity")
-                )
-                .interpolationMethod(equityInterpolation)
-                .lineStyle(StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [colors.accent, colors.profit],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-
-                AreaMark(
-                    x: .value("Trade", point.index),
-                    yStart: .value("Baseline", yDomain.lowerBound),
-                    yEnd: .value("Equity", point.equityValue),
-                    series: .value("Series", "Equity")
-                )
-                .interpolationMethod(equityInterpolation)
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [
-                            colors.accent.opacity(0.22),
-                            colors.accent.opacity(0.02),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-            }
-
-            if let selected, let selectedIndex {
-                RuleMark(x: .value("Selected", selectedIndex))
-                    .foregroundStyle(colors.tertiaryText.opacity(0.55))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
-
-                PointMark(
-                    x: .value("Selected", selectedIndex),
-                    y: .value("Equity", selected.equityValue)
-                )
-                .symbolSize(64)
-                .foregroundStyle(colors.accent)
+            if let selected {
+                selectionMarks(for: selected)
             }
         }
-        .chartXScale(domain: xDomain)
-        .chartYScale(domain: yDomain)
-        .chartXAxis {
-            AxisMarks(values: xAxisValues) { value in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                    .foregroundStyle(colors.border.opacity(0.35))
-                AxisTick(stroke: StrokeStyle(lineWidth: 0.5))
-                    .foregroundStyle(colors.border.opacity(0.45))
-                AxisValueLabel {
-                    if let index = value.as(Int.self) {
-                        Text(xLabel(for: index))
-                            .font(.system(.caption2, design: .rounded))
-                            .foregroundStyle(colors.tertiaryText)
-                    }
-                }
-            }
-        }
+        .chartYScale(domain: yDomain, type: .linear)
+        .modifier(EquityCurveXAxisModifier(
+            usesTimeline: usesTimelineAxis,
+            tradeIndexDomain: tradeIndexDomain,
+            timelineDomain: timelineDomain,
+            tradeAxisValues: tradeAxisValues,
+            timelineAxisValues: timelineAxisValues,
+            tradeLabel: xLabel(forTradeIndex:),
+            timelineLabel: timelineLabel(for:),
+            colors: colors,
+            selectedTradeIndex: $selectedTradeIndex,
+            selectedPlotDate: $selectedPlotDate,
+            snapTimeline: snapTimelineSelectionIfNeeded
+        ))
         .chartYAxis {
             AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
@@ -136,15 +108,13 @@ struct ProfileEquityCurveView: View {
                 }
             }
         }
-        .chartXSelection(value: $selectedIndex)
         .chartPlotStyle { plotArea in
-            // Clip Catmull–Rom overshoot so fill/line never leave the plot.
             plotArea.clipped()
         }
         .chartOverlay { proxy in
             GeometryReader { geo in
-                if let selected, let selectedIndex,
-                   let xPos = proxy.position(forX: selectedIndex),
+                if let selected,
+                   let xPos = selectionXPosition(proxy: proxy),
                    let anchor = proxy.plotFrame
                 {
                     let plotFrame = geo[anchor]
@@ -162,9 +132,137 @@ struct ProfileEquityCurveView: View {
         .padding(.top, ExperienceSpacing.xs)
     }
 
+    // MARK: - Chart marks
+
+    @ChartContentBuilder
+    private func equityMarks(for point: ProfileEquityCurveChartModel.RenderPoint) -> some ChartContent {
+        if usesTimelineAxis, let time = point.plotTime {
+            AreaMark(
+                x: .value(ProfileEquityCurveChartModel.timelineXPlottable, time),
+                yStart: .value(ProfileEquityCurveChartModel.balanceYPlottable, yDomain.lowerBound),
+                yEnd: .value(ProfileEquityCurveChartModel.balanceYPlottable, point.equityY),
+                series: .value("Series", "Equity")
+            )
+            .interpolationMethod(equityInterpolation)
+            .foregroundStyle(equityFillGradient)
+
+            LineMark(
+                x: .value(ProfileEquityCurveChartModel.timelineXPlottable, time),
+                y: .value(ProfileEquityCurveChartModel.balanceYPlottable, point.equityY),
+                series: .value("Series", "Equity")
+            )
+            .interpolationMethod(equityInterpolation)
+            .lineStyle(StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
+            .foregroundStyle(equityLineGradient)
+        } else {
+            AreaMark(
+                x: .value(ProfileEquityCurveChartModel.tradeXPlottable, point.tradeIndex),
+                yStart: .value(ProfileEquityCurveChartModel.balanceYPlottable, yDomain.lowerBound),
+                yEnd: .value(ProfileEquityCurveChartModel.balanceYPlottable, point.equityY),
+                series: .value("Series", "Equity")
+            )
+            .interpolationMethod(equityInterpolation)
+            .foregroundStyle(equityFillGradient)
+
+            LineMark(
+                x: .value(ProfileEquityCurveChartModel.tradeXPlottable, point.tradeIndex),
+                y: .value(ProfileEquityCurveChartModel.balanceYPlottable, point.equityY),
+                series: .value("Series", "Equity")
+            )
+            .interpolationMethod(equityInterpolation)
+            .lineStyle(StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
+            .foregroundStyle(equityLineGradient)
+        }
+    }
+
+    @ChartContentBuilder
+    private func drawdownMark(
+      for point: ProfileEquityCurveChartModel.RenderPoint,
+      floorY: Double
+    ) -> some ChartContent {
+        if usesTimelineAxis, let time = point.plotTime {
+            LineMark(
+                x: .value(ProfileEquityCurveChartModel.timelineXPlottable, time),
+                y: .value(ProfileEquityCurveChartModel.balanceYPlottable, floorY),
+                series: .value("Series", "Drawdown floor")
+            )
+            .interpolationMethod(.linear)
+            .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [6, 4]))
+            .foregroundStyle(colors.loss.opacity(0.8))
+        } else {
+            LineMark(
+                x: .value(ProfileEquityCurveChartModel.tradeXPlottable, point.tradeIndex),
+                y: .value(ProfileEquityCurveChartModel.balanceYPlottable, floorY),
+                series: .value("Series", "Drawdown floor")
+            )
+            .interpolationMethod(.linear)
+            .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [6, 4]))
+            .foregroundStyle(colors.loss.opacity(0.8))
+        }
+    }
+
+    @ChartContentBuilder
+    private func selectionMarks(for point: SelectionPoint) -> some ChartContent {
+        if usesTimelineAxis, let time = point.plotTime {
+            RuleMark(x: .value(ProfileEquityCurveChartModel.timelineXPlottable, time))
+                .foregroundStyle(colors.tertiaryText.opacity(0.55))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+
+            PointMark(
+                x: .value(ProfileEquityCurveChartModel.timelineXPlottable, time),
+                y: .value(ProfileEquityCurveChartModel.balanceYPlottable, point.equityY)
+            )
+            .symbolSize(64)
+            .foregroundStyle(colors.accent)
+        } else {
+            RuleMark(x: .value(ProfileEquityCurveChartModel.tradeXPlottable, point.tradeIndex))
+                .foregroundStyle(colors.tertiaryText.opacity(0.55))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+
+            PointMark(
+                x: .value(ProfileEquityCurveChartModel.tradeXPlottable, point.tradeIndex),
+                y: .value(ProfileEquityCurveChartModel.balanceYPlottable, point.equityY)
+            )
+            .symbolSize(64)
+            .foregroundStyle(colors.accent)
+        }
+    }
+
+    private var equityFillGradient: LinearGradient {
+        LinearGradient(
+            colors: [colors.accent.opacity(0.22), colors.accent.opacity(0.02)],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private var equityLineGradient: LinearGradient {
+        LinearGradient(
+            colors: [colors.accent, colors.profit],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    private func selectionXPosition(proxy: ChartProxy) -> CGFloat? {
+        guard let selected else { return nil }
+        if usesTimelineAxis, let time = selected.plotTime {
+            return proxy.position(forX: time)
+        }
+        return proxy.position(forX: selected.tradeIndex)
+    }
+
+    private func snapTimelineSelectionIfNeeded() {
+        guard usesTimelineAxis, let raw = selectedPlotDate else { return }
+        guard let snapped = ProfileEquityCurveChartModel.nearestPlotTime(to: raw, in: renderPoints) else { return }
+        if abs(snapped.timeIntervalSince(raw)) > 1 {
+            selectedPlotDate = snapped
+        }
+    }
+
     // MARK: - Selection overlay
 
-    private func overlayCard(for point: ChartPoint) -> some View {
+    private func overlayCard(for point: SelectionPoint) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(point.dateLabel)
                 .font(.system(.caption2, design: .rounded))
@@ -172,8 +270,13 @@ struct ProfileEquityCurveView: View {
             Text(StatsContainerView.equityMoneyText(point.equity))
                 .font(.system(.subheadline, design: .rounded).weight(.bold).monospacedDigit())
                 .foregroundStyle(point.equity >= 0 ? colors.profit : colors.loss)
-            if let floor = point.drawdownFloorValue {
-                Text("Floor \(StatsContainerView.equityMoneyText(Decimal(floor)))")
+            if let net = point.periodNetPnL, net != 0 {
+                Text("P&L \(NumberDisplay.signedMoney(net))")
+                    .font(.system(.caption2, design: .rounded).weight(.semibold).monospacedDigit())
+                    .foregroundStyle(net >= 0 ? colors.profit : colors.loss)
+            }
+            if let floorY = point.drawdownFloorY {
+                Text("Floor \(StatsContainerView.equityMoneyText(Decimal(floorY)))")
                     .font(.system(.caption2, design: .rounded).weight(.semibold).monospacedDigit())
                     .foregroundStyle(colors.loss.opacity(0.9))
             }
@@ -189,69 +292,79 @@ struct ProfileEquityCurveView: View {
 
     // MARK: - Chart model
 
-    private struct ChartPoint: Identifiable {
-        var id: Int { index }
-        var index: Int
+    private struct SelectionPoint {
+        var tradeIndex: Int
+        var plotTime: Date?
         var equity: Decimal
-        var equityValue: Double
-        var drawdownFloorValue: Double?
-        var date: Date?
+        var equityY: Double
+        var drawdownFloorY: Double?
+        var periodNetPnL: Decimal?
+        var scrubPoint: ProfileEquityCurveAggregation.ScrubPoint
 
         var dateLabel: String {
-            if let date {
-                let formatter = DateFormatter()
-                formatter.dateStyle = .medium
-                formatter.timeStyle = .none
-                return formatter.string(from: date)
-            }
-            return "Trade \(index + 1)"
+            ProfileEquityCurveAggregation.scrubDateLabel(for: scrubPoint)
         }
     }
 
-    private var chartPoints: [ChartPoint] {
-        orderedPoints.map {
-            ChartPoint(
-                index: $0.index,
-                equity: $0.equity,
-                equityValue: NSDecimalNumber(decimal: $0.equity).doubleValue,
-                drawdownFloorValue: $0.drawdownFloor.map { NSDecimalNumber(decimal: $0).doubleValue },
-                date: $0.date
-            )
+    private var selected: SelectionPoint? {
+        let point: ProfileEquityCurveChartModel.RenderPoint?
+        if usesTimelineAxis {
+            guard let date = selectedPlotDate,
+                  let match = renderPoints.min(by: { lhs, rhs in
+                      let left = lhs.plotTime ?? .distantPast
+                      let right = rhs.plotTime ?? .distantPast
+                      return abs(left.timeIntervalSince(date)) < abs(right.timeIntervalSince(date))
+                  })
+            else { return nil }
+            point = match
+        } else {
+            guard let tradeIndex = selectedTradeIndex else { return nil }
+            point = renderPoints.first { $0.tradeIndex == tradeIndex }
+                ?? renderPoints.first {
+                    $0.tradeIndex == ProfileEquityCurveChartModel.nearestTradeIndex(
+                        to: tradeIndex,
+                        in: renderPoints
+                    )
+                }
         }
+        guard let point else { return nil }
+        let scrub = ProfileEquityCurveAggregation.ScrubPoint(
+            equity: point.equity,
+            drawdownFloor: point.drawdownFloorY.map { Decimal($0) },
+            anchorDate: point.date,
+            periodStart: point.periodStart,
+            periodEnd: point.periodEnd,
+            periodNetPnL: point.periodNetPnL ?? 0,
+            detailLevel: point.detailLevel,
+            tradesInBucket: point.tradesInBucket
+        )
+        return SelectionPoint(
+            tradeIndex: point.tradeIndex,
+            plotTime: point.plotTime,
+            equity: point.equity,
+            equityY: point.equityY,
+            drawdownFloorY: point.drawdownFloorY,
+            periodNetPnL: point.periodNetPnL,
+            scrubPoint: scrub
+        )
     }
 
-    private var selected: ChartPoint? {
-        guard let selectedIndex else { return nil }
-        return chartPoints.first { $0.index == selectedIndex }
-    }
-
-    private var xDomain: ClosedRange<Int> {
-        let maxIndex = orderedPoints.map(\.index).max() ?? 1
-        return 0...max(1, maxIndex)
-    }
-
-    private var yDomain: ClosedRange<Double> {
-        var values = chartPoints.map(\.equityValue)
-        values.append(contentsOf: chartPoints.compactMap(\.drawdownFloorValue))
-        let minY = values.min() ?? 0
-        let maxY = values.max() ?? 0
-        if minY == maxY {
-            let pad = max(abs(minY) * 0.1, 10)
-            return (minY - pad)...(maxY + pad)
-        }
-        let pad = (maxY - minY) * 0.12
-        return (minY - pad)...(maxY + pad)
-    }
-
-    private var xAxisValues: [Int] {
-        guard let last = orderedPoints.map(\.index).max(), last > 0 else { return [0] }
+    private var tradeAxisValues: [Int] {
+        guard let last = renderPoints.map(\.tradeIndex).max(), last > 0 else { return [0] }
         if last < 3 { return Array(0...last) }
         let mid = last / 2
         return [0, mid, last]
     }
 
-    private func xLabel(for index: Int) -> String {
-        if let point = orderedPoints.first(where: { $0.index == index }), let date = point.date {
+    private var timelineAxisValues: [Date] {
+        let stamps = renderPoints.compactMap(\.plotTime).sorted()
+        guard let first = stamps.first, let last = stamps.last, first < last else { return stamps }
+        if stamps.count < 3 { return stamps }
+        return [first, stamps[stamps.count / 2], last]
+    }
+
+    private func xLabel(forTradeIndex index: Int) -> String {
+        if let point = renderPoints.first(where: { $0.tradeIndex == index }), let date = point.date {
             let formatter = DateFormatter()
             formatter.setLocalizedDateFormatFromTemplate("MMMd")
             return formatter.string(from: date)
@@ -259,7 +372,72 @@ struct ProfileEquityCurveView: View {
         return "\(index + 1)"
     }
 
+    private func timelineLabel(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("MMMyy")
+        return formatter.string(from: date)
+    }
+
     private func yLabel(_ value: Double) -> String {
         NumberDisplay.compactEquityAxis(value)
+    }
+}
+
+// MARK: - X axis + scrub selection
+
+private struct EquityCurveXAxisModifier: ViewModifier {
+    let usesTimeline: Bool
+    let tradeIndexDomain: ClosedRange<Int>
+    let timelineDomain: ClosedRange<Date>?
+    let tradeAxisValues: [Int]
+    let timelineAxisValues: [Date]
+    let tradeLabel: (Int) -> String
+    let timelineLabel: (Date) -> String
+    let colors: SemanticColorPalette
+    @Binding var selectedTradeIndex: Int?
+    @Binding var selectedPlotDate: Date?
+    let snapTimeline: () -> Void
+
+    func body(content: Content) -> some View {
+        if usesTimeline, let timelineDomain {
+            content
+                .chartXScale(domain: timelineDomain)
+                .chartXAxis {
+                    AxisMarks(values: timelineAxisValues) { value in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(colors.border.opacity(0.35))
+                        AxisTick(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(colors.border.opacity(0.45))
+                        AxisValueLabel {
+                            if let date = value.as(Date.self) {
+                                Text(timelineLabel(date))
+                                    .font(.system(.caption2, design: .rounded))
+                                    .foregroundStyle(colors.tertiaryText)
+                            }
+                        }
+                    }
+                }
+                .chartXSelection(value: $selectedPlotDate)
+                .onChange(of: selectedPlotDate) { _, _ in snapTimeline() }
+        } else {
+            content
+                .chartXScale(domain: tradeIndexDomain)
+                .chartXAxis {
+                    AxisMarks(values: tradeAxisValues) { value in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(colors.border.opacity(0.35))
+                        AxisTick(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(colors.border.opacity(0.45))
+                        AxisValueLabel {
+                            if let index = value.as(Int.self) {
+                                Text(tradeLabel(index))
+                                    .font(.system(.caption2, design: .rounded))
+                                    .foregroundStyle(colors.tertiaryText)
+                            }
+                        }
+                    }
+                }
+                .chartXSelection(value: $selectedTradeIndex)
+        }
     }
 }

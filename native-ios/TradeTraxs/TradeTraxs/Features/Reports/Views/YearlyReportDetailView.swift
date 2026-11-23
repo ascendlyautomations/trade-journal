@@ -45,7 +45,7 @@ struct YearlyReportDetailView: View {
 
     private var detailScroll: some View {
         ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+            VStack(alignment: .leading, spacing: 0) {
                 YearlyReportFilterBar(viewModel: viewModel)
                     .padding(.horizontal, ExperienceSpacing.md)
                     .padding(.top, ExperienceSpacing.xs)
@@ -56,18 +56,22 @@ struct YearlyReportDetailView: View {
 
                     YearlyReportSummaryMetricsView(metrics: report.metrics)
                         .padding(.horizontal, ExperienceSpacing.md)
+                        .padding(.top, ReportDetailLayout.headerToFirstSectionSpacing)
 
                     YearlyReportChartsSection(report: report)
                         .padding(.horizontal, ExperienceSpacing.md)
+                        .padding(.top, ReportDetailLayout.sectionSpacing)
 
                     YearlyReportMonthBreakdownView(
                         rows: report.monthRows,
                         onOpenMonth: { viewModel.openMonth($0) }
                     )
                     .padding(.horizontal, ExperienceSpacing.md)
+                    .padding(.top, ReportDetailLayout.sectionSpacing)
 
                     ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.performanceReport)
                         .padding(.horizontal, ExperienceSpacing.md)
+                        .padding(.top, ReportDetailLayout.sectionSpacing)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -218,13 +222,15 @@ struct YearlyReportSummaryMetricsView: View {
                 metricCell("Expectancy", formatOptionalMoney(metrics.expectancy))
                 metricCell("Best Trade", formatOptionalMoney(metrics.bestTrade))
                 metricCell("Worst Trade", formatOptionalMoney(metrics.worstTrade))
-                metricCell(
+                labelAndPnLMetricCell(
                     "Best Day",
-                    metrics.bestDayLabel.map { "\($0) (\(formatMoney(metrics.bestDayPnl ?? 0)))" } ?? "—"
+                    dayLabel: metrics.bestDayLabel,
+                    pnl: metrics.bestDayPnl
                 )
-                metricCell(
+                labelAndPnLMetricCell(
                     "Worst Day",
-                    metrics.worstDayLabel.map { "\($0) (\(formatMoney(metrics.worstDayPnl ?? 0)))" } ?? "—"
+                    dayLabel: metrics.worstDayLabel,
+                    pnl: metrics.worstDayPnl
                 )
                 metricCell("Max Drawdown", formatMoney(metrics.maxDrawdown))
                 metricCell("Winning Days", "\(metrics.winningDays)")
@@ -244,6 +250,38 @@ struct YearlyReportSummaryMetricsView: View {
                 RoundedRectangle(cornerRadius: ExperienceRadius.card, style: .continuous)
                     .stroke(colors.border.opacity(0.45), lineWidth: ExperienceBorder.thin)
             }
+    }
+
+    private func labelAndPnLMetricCell(_ title: String, dayLabel: String?, pnl: Decimal?) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title.uppercased())
+                .experienceStyle(.caption2, color: colors.tertiaryText)
+                .tracking(0.4)
+            if let dayLabel, let pnl {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(dayLabel)
+                        .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                        .foregroundStyle(colors.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    Text(formatMoney(pnl))
+                        .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
+                        .foregroundStyle(pnlTone(pnl))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+            } else {
+                Text("—")
+                    .font(.system(.subheadline, design: .rounded).weight(.semibold).monospacedDigit())
+                    .foregroundStyle(colors.primaryText)
+            }
+        }
+        .padding(ExperienceSpacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(colors.backgroundSecondary.opacity(0.65), in: RoundedRectangle(
+            cornerRadius: ExperienceRadius.sm,
+            style: .continuous
+        ))
     }
 
     private func metricCell(_ label: String, _ value: String, tone: Color? = nil) -> some View {
@@ -296,7 +334,7 @@ struct YearlyReportChartsSection: View {
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
+        VStack(alignment: .leading, spacing: ReportDetailLayout.sectionSpacing) {
             chartCard(title: "Cumulative P&L") {
                 if report.chartSummary.equityData.isEmpty {
                     DashboardChartEmptyCopy(message: "Log trades this year to unlock your equity curve.")

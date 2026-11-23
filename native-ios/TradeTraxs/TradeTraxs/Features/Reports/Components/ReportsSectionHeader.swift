@@ -26,7 +26,7 @@ struct ReportsSectionHeader: View {
                     .rotationEffect(.degrees(isExpanded ? 90 : 0))
             }
             .padding(.horizontal, ExperienceSpacing.md)
-            .padding(.vertical, ExperienceSpacing.sm)
+            .padding(.vertical, ExperienceSpacing.xs)
             .contentShape(Rectangle())
         }
         .buttonStyle(.experiencePlain)

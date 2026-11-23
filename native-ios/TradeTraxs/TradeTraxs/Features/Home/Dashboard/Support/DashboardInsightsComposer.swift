@@ -19,7 +19,8 @@ nonisolated enum DashboardInsightsComposer {
         strategyHighlights: DashboardStrategyHighlights?,
         isLoading: Bool,
         tradeCount: Int,
-        preferences: PreferenceRuleContext? = nil
+        preferences: PreferenceRuleContext? = nil,
+        includesPremiumAnalytics: Bool = true
     ) -> DashboardInsightsPresentation {
         var performance: [DashboardInsightItem] = []
         var advancedEdge: [DashboardInsightItem] = []
@@ -30,27 +31,33 @@ nonisolated enum DashboardInsightsComposer {
             performance.append(contentsOf: DashboardClientInsights.performanceNarratives(from: trades))
             markCoverage(performance, into: &coverage)
 
-            if let strategy = DashboardClientInsights.bestPerformingStrategyInsight(
-                from: trades,
-                highlights: strategyHighlights
-            ) {
-                advancedEdge.append(strategy)
-                coverage.bestStrategy = true
-            }
+            if includesPremiumAnalytics {
+                if let strategy = DashboardClientInsights.bestPerformingStrategyInsight(
+                    from: trades,
+                    highlights: strategyHighlights
+                ) {
+                    advancedEdge.append(strategy)
+                    coverage.bestStrategy = true
+                }
 
-            advancedEdge.append(contentsOf: DashboardClientInsights.advancedEdge(from: trades))
-            markCoverage(advancedEdge, into: &coverage)
+                advancedEdge.append(contentsOf: DashboardClientInsights.advancedEdge(from: trades))
+                markCoverage(advancedEdge, into: &coverage)
+            }
 
             if let worst = DashboardClientInsights.worstCombinedSetup(from: trades) {
                 riskBehavior.append(worst)
                 coverage.worstSetup = true
             }
-        riskBehavior.append(contentsOf: DashboardClientInsights.behaviorWarnings(from: trades, preferences: preferences))
+            let ruleContext = includesPremiumAnalytics ? preferences : nil
+            riskBehavior.append(
+                contentsOf: DashboardClientInsights.behaviorWarnings(from: trades, preferences: ruleContext)
+            )
             markCoverage(riskBehavior, into: &coverage)
         }
 
         for var insight in serverInsights {
             enrichServerInsight(&insight)
+            guard includesPremiumAnalytics || isFreeTierServerInsightAllowed(insight) else { continue }
             guard trades.isEmpty || shouldIncludeServerInsight(insight, coverage: coverage) else {
                 continue
             }
@@ -61,11 +68,14 @@ nonisolated enum DashboardInsightsComposer {
             }
         }
 
+        let riskItems = dedupe(riskBehavior).filter { item in
+            includesPremiumAnalytics || !item.id.hasPrefix("client.risk.preference.")
+        }
         let merged = DashboardInsightsPresentation(
             isLoading: false,
             performance: dedupe(performance),
-            advancedEdge: dedupe(advancedEdge),
-            riskBehavior: dedupe(riskBehavior)
+            advancedEdge: includesPremiumAnalytics ? dedupe(advancedEdge) : [],
+            riskBehavior: riskItems
         )
         if isLoading, merged.isEmpty, tradeCount > 0 {
             return DashboardInsightsPresentation(
@@ -106,6 +116,15 @@ nonisolated enum DashboardInsightsComposer {
     }
 
     /// Server cards only when client narratives (same filters/trades) did not already cover the topic.
+    private static func isFreeTierServerInsightAllowed(_ insight: DashboardInsightItem) -> Bool {
+        switch insight.id {
+        case "strategy_best", "strategy_worst":
+            return false
+        default:
+            return true
+        }
+    }
+
     private static func shouldIncludeServerInsight(
         _ insight: DashboardInsightItem,
         coverage: InsightTopicCoverage

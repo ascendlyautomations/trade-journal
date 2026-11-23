@@ -1,5 +1,12 @@
 import Foundation
 
+/// How premium surfaces render when monetization enforcement is on.
+enum ProPremiumFeaturePresentation: Equatable, Sendable {
+    case unrestricted
+    case lockedPreview
+    case verifyingEntitlement
+}
+
 enum ProMonetizationPolicy {
     static func entitlementGatingActive(enforcement: Bool) -> Bool {
         enforcement
@@ -30,60 +37,176 @@ enum ProMonetizationPolicy {
         !isPro && enforcement
     }
 
-    /// Premium dashboard chart blocks — hide only for a **confirmed** Free snapshot (`.deny`), not when entitlement is unknown.
+    // MARK: - Dashboard chart entitlements
+    //
+    // TraxsPro-exclusive charts (``premiumFeaturePresentation`` → ``unrestricted`` or preview):
+    // Hold Time, Trading Hours, R:R Targeting, Setup Performance, Drawdown.
+    // Free tier keeps equity hero, win rate / P&L KPIs, Avg Targeted R:R chip, and standard
+    // distribution charts (win-loss, sessions, weekdays, long/short, symbols). Trade journal
+    // Target R:R fields are unchanged.
+
+    /// Premium dashboard chart blocks — upgrade preview for verified Free; verification UI for unknown.
+    @MainActor
+    static func premiumFeaturePresentation(
+        demoModeActive: Bool,
+        profileID: ProfileID?
+    ) -> ProPremiumFeaturePresentation {
+        if TraxsProPreviewSession.shared.isDashboardPreviewActive {
+            return .unrestricted
+        }
+        if demoModeActive || !IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled {
+            return .unrestricted
+        }
+        switch TraxProEffectiveEntitlement.clientAccess(
+            profileID: profileID,
+            demoModeActive: demoModeActive
+        ) {
+        case .unrestricted, .pro:
+            return .unrestricted
+        case .free:
+            return .lockedPreview
+        case .unknown:
+            return .verifyingEntitlement
+        }
+    }
+
+    /// Premium dashboard chart blocks — locked preview for verified Free (use ``premiumFeaturePresentation`` in UI).
+    @MainActor
     static func shouldHidePremiumDashboardCharts(
         demoModeActive: Bool,
         profileID: ProfileID?
     ) -> Bool {
-        guard canPresentProPaywall(
+        premiumFeaturePresentation(demoModeActive: demoModeActive, profileID: profileID) == .lockedPreview
+    }
+
+    /// Trading Rules compliance analytics — verified Free users when enforcement is on.
+    @MainActor
+    static func shouldRestrictTradingRulesComplianceAnalytics(
+        demoModeActive: Bool,
+        profileID: ProfileID?
+    ) -> Bool {
+        if TraxsProPreviewSession.shared.isDashboardPreviewActive {
+            return false
+        }
+        return TraxProEffectiveEntitlement.shouldRestrictPremiumFeatures(
             demoModeActive: demoModeActive,
-            enforcement: IosSubscriptionReleaseConfiguration.entitlementEnforcementEnabled,
-            paywallEnabled: IosSubscriptionReleaseConfiguration.iosPaywallEnabled
-        ) else { return false }
-        guard let profileID else { return false }
-        let record = PersistedEntitlementSnapshotStore.load(userID: profileID.rawValue)
-        return EntitlementSnapshotPolicy.decision(record) == .deny
+            profileID: profileID
+        )
+    }
+
+    /// Whether to run trading-rules compliance math (basic Free or full TraxsPro).
+    @MainActor
+    static func shouldComputeTradingRulesCompliance(
+        demoModeActive: Bool,
+        profileID: ProfileID?
+    ) -> Bool {
+        switch TraxProEffectiveEntitlement.clientAccess(
+            profileID: profileID,
+            demoModeActive: demoModeActive
+        ) {
+        case .unrestricted, .pro, .free:
+            return true
+        case .unknown:
+            return false
+        }
+    }
+
+    /// Free tier evaluates a subset of rule families; TraxsPro uses all rules (`nil` filter).
+    @MainActor
+    static func tradingRulesComplianceRuleFilter(
+        demoModeActive: Bool,
+        profileID: ProfileID?
+    ) -> Set<TradingRulesComplianceAnalytics.RuleID>? {
+        let isFree = shouldRestrictTradingRulesComplianceAnalytics(
+            demoModeActive: demoModeActive,
+            profileID: profileID
+        )
+        return TradingRulesPlanTier.complianceRuleFilter(isFreeTier: isFree)
+    }
+
+    /// Prop Firm Expense Tracker — verified Free when enforcement is on.
+    @MainActor
+    static func shouldRestrictPropFirmExpenseTracker(
+        demoModeActive: Bool,
+        profileID: ProfileID?
+    ) -> Bool {
+        TraxProEffectiveEntitlement.shouldRestrictPremiumFeatures(
+            demoModeActive: demoModeActive,
+            profileID: profileID
+        )
+    }
+
+    @MainActor
+    static func includesPremiumDashboardAnalytics(
+        demoModeActive: Bool,
+        profileID: ProfileID?
+    ) -> Bool {
+        if TraxsProPreviewSession.shared.isDashboardPreviewActive {
+            return true
+        }
+        return premiumFeaturePresentation(demoModeActive: demoModeActive, profileID: profileID) == .unrestricted
+    }
+
+    @MainActor
+    static func shouldShowEntitlementVerification(
+        demoModeActive: Bool,
+        profileID: ProfileID?
+    ) -> Bool {
+        TraxProEffectiveEntitlement.shouldShowEntitlementVerification(
+            demoModeActive: demoModeActive,
+            profileID: profileID
+        )
     }
 
     /// Trading Reports catalog — same confirmed-Free semantics as premium dashboard charts (Phase 1).
+    @MainActor
     static func shouldRestrictTradingReportsCatalog(
         demoModeActive: Bool,
         profileID: ProfileID?
     ) -> Bool {
-        shouldHidePremiumDashboardCharts(
+        if TraxsProPreviewSession.shared.isReportsPreviewActive {
+            return false
+        }
+        return TraxProEffectiveEntitlement.shouldRestrictPremiumFeatures(
             demoModeActive: demoModeActive,
             profileID: profileID
         )
     }
 
-    /// Advanced Psychology Analytics, Coach, and Trade AI — same confirmed-Free semantics as Phase 1–2.
+    /// Advanced Psychology Analytics, Coach, and Trade AI — verified Free users when enforcement is on.
+    @MainActor
     static func shouldRestrictPremiumPsychologyAndAI(
         demoModeActive: Bool,
         profileID: ProfileID?
     ) -> Bool {
-        shouldHidePremiumDashboardCharts(
+        if TraxsProPreviewSession.shared.isDashboardPreviewActive {
+            return false
+        }
+        return TraxProEffectiveEntitlement.shouldRestrictPremiumFeatures(
             demoModeActive: demoModeActive,
             profileID: profileID
         )
     }
 
-    /// Advanced Prop Firm Mode (detail, rules engine, payout cycles UI) — confirmed-Free semantics match Phase 1–3.
+    /// Advanced Prop Firm Mode (detail, rules engine, payout cycles UI).
+    @MainActor
     static func shouldRestrictPropFirmMode(
         demoModeActive: Bool,
         profileID: ProfileID?
     ) -> Bool {
-        shouldHidePremiumDashboardCharts(
+        TraxProEffectiveEntitlement.shouldRestrictPremiumFeatures(
             demoModeActive: demoModeActive,
             profileID: profileID
         )
     }
 
-    /// Backtest Lab — confirmed-Free semantics match premium dashboard / reports gating.
+    /// Backtest Lab — verified Free users when enforcement is on.
+    @MainActor
     static func shouldRestrictBacktestLab(
         demoModeActive: Bool,
         profileID: ProfileID?
     ) -> Bool {
-        shouldHidePremiumDashboardCharts(
+        TraxProEffectiveEntitlement.shouldRestrictPremiumFeatures(
             demoModeActive: demoModeActive,
             profileID: profileID
         )

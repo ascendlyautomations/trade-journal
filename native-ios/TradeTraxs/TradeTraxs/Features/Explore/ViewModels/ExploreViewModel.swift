@@ -862,7 +862,7 @@ final class ExploreViewModel {
     }
 
     private func loadSuggestedTradeRooms(viewerID: ProfileID) async -> [ExploreRoomSuggestion] {
-        if let cached = SessionTradeRoomsDiscoveryStore.shared.cached(for: viewerID, scope: .all) {
+        if let cached = SessionTradeRoomsDiscoveryStore.shared.cached(for: viewerID, scope: .all, category: nil) {
             if !cached.suggested.isEmpty { return cached.suggested }
             if !cached.popular.isEmpty { return cached.popular }
         }

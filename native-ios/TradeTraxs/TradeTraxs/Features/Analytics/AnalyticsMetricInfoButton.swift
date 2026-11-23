@@ -1,39 +1,48 @@
 import SwiftUI
 
-/// Compact ⓘ control for analytics metric explanations (native popover).
+/// Compact ⓘ control for metric explanations (Dashboard Scorecard popover styling).
 struct AnalyticsMetricInfoButton: View {
     let title: String
     let bodyText: String
     var accessibilityID: String?
 
     @State private var showsInfo = false
+    @State private var popoverArrowEdge: Edge = .top
+    @State private var anchorInScreen: CGRect = .zero
     @Environment(\.themeColors) private var colors
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         Button {
-            showsInfo = true
+            presentInfoPopover()
         } label: {
             Image(systemName: "info.circle")
                 .font(.caption)
                 .foregroundStyle(colors.tertiaryText)
+                .frame(width: 28, height: 28, alignment: .center)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .experienceInfoPopoverAnchorTracking($anchorInScreen)
         .accessibilityLabel("About \(title)")
-        .accessibilityIdentifier(accessibilityID ?? "analytics.metricInfo")
-        .popover(isPresented: $showsInfo) {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                Text(title)
-                    .font(ExperienceTypography.subheadline.weight(.semibold))
-                    .foregroundStyle(colors.primaryText)
-                Text(bodyText)
-                    .font(ExperienceTypography.footnote)
-                    .foregroundStyle(colors.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(ExperienceSpacing.md)
-            .frame(width: 280, alignment: .leading)
-            .experienceAnalyticsPopoverChrome()
+        .accessibilityIdentifier(accessibilityID ?? "experience.infoPopover")
+        .popover(isPresented: $showsInfo, attachmentAnchor: .rect(.bounds), arrowEdge: popoverArrowEdge) {
+            ExperienceInfoPopoverContent(title: title, bodyText: bodyText)
         }
+    }
+
+    private func presentInfoPopover() {
+        let width = ExperienceInfoPopoverMetrics.resolvedWidth(horizontalSizeClass: horizontalSizeClass)
+        let height = ExperienceInfoPopoverMetrics.estimatedContentHeight(
+            title: title,
+            bodyText: bodyText,
+            contentWidth: width
+        )
+        popoverArrowEdge = ExperienceInfoPopoverPlacement.preferredArrowEdge(
+            anchorInScreen: anchorInScreen,
+            estimatedPopoverHeight: height
+        )
+        showsInfo = true
     }
 }
 

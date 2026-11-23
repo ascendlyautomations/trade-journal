@@ -13,8 +13,8 @@ final class StoryEditorViewModel {
     private(set) var isEditingText = false
     private(set) var draftText = ""
     private(set) var selectedTextFill: StoryTextFill = .fromPreset(.white)
-    private(set) var selectedAlignment: TextAlignment = .center
-    private(set) var showsTextBackground = false
+    private(set) var selectedAlignment: TextAlignment = .leading
+    private(set) var selectedBackgroundStyle: StoryTextBackgroundStyle = .none
 
     init(sourceImage: UIImage) {
         self.sourceImage = sourceImage
@@ -51,7 +51,7 @@ final class StoryEditorViewModel {
             draftText = overlay.text
             selectedTextFill = overlay.textFill
             selectedAlignment = overlay.alignment
-            showsTextBackground = overlay.showsBackground
+            selectedBackgroundStyle = overlay.backgroundStyle
         }
     }
 
@@ -61,8 +61,8 @@ final class StoryEditorViewModel {
         canvas.selectedTextID = overlay.id
         draftText = ""
         selectedTextFill = .fromPreset(.white)
-        selectedAlignment = .center
-        showsTextBackground = false
+        selectedAlignment = .leading
+        selectedBackgroundStyle = .none
         isEditingText = true
     }
 
@@ -91,8 +91,8 @@ final class StoryEditorViewModel {
         applyDraftToSelectedOverlay()
     }
 
-    func setShowsTextBackground(_ value: Bool) {
-        showsTextBackground = value
+    func cycleTextBackgroundStyle() {
+        selectedBackgroundStyle.cycle()
         applyDraftToSelectedOverlay()
     }
 
@@ -160,6 +160,6 @@ final class StoryEditorViewModel {
         canvas.textOverlays[index].text = draftText
         canvas.textOverlays[index].textFill = selectedTextFill
         canvas.textOverlays[index].alignment = selectedAlignment
-        canvas.textOverlays[index].showsBackground = showsTextBackground
+        canvas.textOverlays[index].backgroundStyle = selectedBackgroundStyle
     }
 }

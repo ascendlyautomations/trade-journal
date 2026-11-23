@@ -13,6 +13,7 @@ struct DashboardHomeView: View {
     @State private var entitlementGateRevision = 0
     private let navigationCoordinator: NavigationCoordinator
     private let data: DataEnvironment?
+    private let embeddedInTraxsProPreview: Bool
 
     @Environment(\.themeColors) private var colors
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -44,6 +45,34 @@ struct DashboardHomeView: View {
         _scrollAnchor = State(initialValue: anchor)
         self.navigationCoordinator = navigationCoordinator
         self.data = data
+        self.embeddedInTraxsProPreview = false
+    }
+
+    init(
+        data: DataEnvironment,
+        navigationCoordinator: NavigationCoordinator,
+        embeddedInTraxsProPreview: Bool
+    ) {
+        self.embeddedInTraxsProPreview = embeddedInTraxsProPreview
+        let model = DashboardViewModel(
+            home: data.home,
+            trades: data.trades,
+            achievements: data.achievements,
+            dailyCheckIns: data.dailyCheckIns,
+            session: data.session,
+            detailCache: data.detailCache,
+            navigationCoordinator: navigationCoordinator,
+            realtimeHub: data.realtimeHub,
+            rpc: data.rpc,
+            tradingPreferences: data.tradingPreferences,
+            loadsTraxsProPreviewSampleOnly: embeddedInTraxsProPreview
+        )
+        _viewModel = State(initialValue: model)
+        _contentRevealed = State(initialValue: model.summary != nil)
+        let anchor = DashboardTabModelStore.scrollAnchor(restoredOffset: model.retainedScrollOffset)
+        _scrollAnchor = State(initialValue: anchor)
+        self.navigationCoordinator = navigationCoordinator
+        self.data = data
     }
 
     /// Tests / previews.
@@ -57,6 +86,7 @@ struct DashboardHomeView: View {
         _scrollAnchor = State(initialValue: anchor)
         self.navigationCoordinator = navigationCoordinator
         self.data = nil
+        self.embeddedInTraxsProPreview = false
     }
 
     var body: some View {
@@ -99,6 +129,7 @@ struct DashboardHomeView: View {
                 accountName: viewModel.selectedAccount?.name ?? "Live account",
                 limitDigits: $viewModel.equityDrawdownLimitDraft,
                 limitType: $viewModel.equityDrawdownTypeDraft,
+                floorCapDigits: $viewModel.equityDrawdownFloorCapDraft,
                 isSaving: viewModel.isSavingEquityDrawdownSettings,
                 errorMessage: viewModel.equityDrawdownSettingsError,
                 onSave: {
@@ -109,6 +140,7 @@ struct DashboardHomeView: View {
         }
         .experienceNavigationTitle("Dashboard")
         .toolbar {
+            if !embeddedInTraxsProPreview {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
                     viewModel.openCalendar()
@@ -138,6 +170,7 @@ struct DashboardHomeView: View {
                     )
                 }
                 .accessibilityIdentifier("dashboard.activity")
+            }
             }
         }
         .modifier(
@@ -256,6 +289,11 @@ struct DashboardHomeView: View {
         .onReceive(NotificationCenter.default.publisher(for: .monetizationConfigurationDidChange)) { _ in
             entitlementGateRevision += 1
         }
+        .task(id: dashboardEntitlementVerificationActive) {
+            if dashboardEntitlementVerificationActive {
+                refreshDashboardEntitlementIfNeeded()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .tradingPreferencesDidChange)) { _ in
             if let profileID = viewModel.profileIDForTradingRulesCache {
                 TradingRulesCompliancePreferencesCache.invalidate(profileID: profileID)
@@ -276,6 +314,7 @@ struct DashboardHomeView: View {
     }
 
     private var showsDashboardFilterBar: Bool {
+        guard !embeddedInTraxsProPreview else { return false }
         switch viewModel.phase {
         case .idle:
             return viewModel.hasLoaded || !viewModel.accounts.isEmpty
@@ -319,20 +358,24 @@ struct DashboardHomeView: View {
             && viewModel.summary != nil
     }
 
-    private var hidesPremiumDashboardCharts: Bool {
+    private var premiumAnalyticsPresentation: ProPremiumFeaturePresentation {
+        if embeddedInTraxsProPreview {
+            return .unrestricted
+        }
         _ = entitlementGateRevision
-        return ProMonetizationPolicy.shouldHidePremiumDashboardCharts(
+        return ProMonetizationPolicy.premiumFeaturePresentation(
             demoModeActive: ExploreModeSupport.isActive,
             profileID: viewModel.ownerAccountsProfileID
         )
     }
 
-    private var restrictsPremiumPsychologyAndAI: Bool {
-        _ = entitlementGateRevision
-        return ProMonetizationPolicy.shouldRestrictPremiumPsychologyAndAI(
-            demoModeActive: ExploreModeSupport.isActive,
-            profileID: viewModel.ownerAccountsProfileID
-        )
+    private var dashboardEntitlementVerificationActive: Bool {
+        premiumAnalyticsPresentation == .verifyingEntitlement
+    }
+
+    private func refreshDashboardEntitlementIfNeeded() {
+        guard let data else { return }
+        Task { await TraxProEntitlementRefreshAction.refresh(data: data) }
     }
 
     private var restrictsPropFirmMode: Bool {
@@ -341,35 +384,6 @@ struct DashboardHomeView: View {
             demoModeActive: ExploreModeSupport.isActive,
             profileID: viewModel.ownerAccountsProfileID
         )
-    }
-
-    private var psychologyAnalyticsUpgradeSection: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            sectionHeader("Psychology Insights", info: Self.psychologyInsightsInfo)
-
-            VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-                Text("TraxPro psychology analytics")
-                    .experienceStyle(.headline, color: colors.primaryText)
-                Text("Advanced psychology analytics and coaching are included with TraxPro.")
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-                Button {
-                    ExperienceHaptics.play(.selection)
-                    ProUpgradeCoordinator.shared.present(reason: .feature(.premiumAnalytics))
-                } label: {
-                    Text("Upgrade to TraxPro")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .accessibilityIdentifier("dashboard.psychology.upgrade.traxpro")
-            }
-            .padding(ExperienceSpacing.md)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .experienceDashboardCard(prominence: .standard)
-            .padding(.horizontal, ExperienceSpacing.md)
-            .accessibilityIdentifier("dashboard.psychology.traxpro.gate")
-        }
-        .accessibilityIdentifier("dashboard.psychologyInsights")
     }
 
     /// Dashboard chrome that owns the tour anchors is on screen.
@@ -402,14 +416,7 @@ struct DashboardHomeView: View {
         ScrollView(.vertical) {
             VStack(spacing: ExperienceSpacing.lg) {
                 dashboardScrollFilterBar
-                if gettingStartedStore.shouldShowDashboardCard {
-                    GettingStartedCard(
-                        store: gettingStartedStore,
-                        navigationCoordinator: navigationCoordinator
-                    )
-                    .padding(.horizontal, ExperienceSpacing.md)
-                }
-                dashboardQuickActionsGroup(includeBrokerImport: true)
+                dashboardOnboardingQuickActionsSection(includeBrokerImport: true)
                 ExperienceEmptyState(
                     icon: .chart,
                     title: "No trades yet",
@@ -432,135 +439,146 @@ struct DashboardHomeView: View {
         .scrollBounceBehavior(.basedOnSize)
     }
 
+    @ViewBuilder
+    private func traxsProPreviewDashboardSections(summary: DashboardChartMetrics.Summary) -> some View {
+        DashboardTradingRulesComplianceSection(
+            compliancePresentation: premiumAnalyticsPresentation,
+            onOpenDetail: { viewModel.openTradingRulesAnalytics() },
+            onOpenSettings: { viewModel.openTradingRulesSettings() }
+        )
+        .padding(.top, ExperienceSpacing.sm)
+        .padding(.bottom, ExperienceSpacing.xl)
+
+        DashboardChartsSection(
+            summary: summary,
+            onBrowseHour: { viewModel.browseHour(label: $0) },
+            onBrowseHoldBucket: { viewModel.browseHoldBucket(label: $0) },
+            premiumChartsPresentation: premiumAnalyticsPresentation,
+            showsStandardCharts: false
+        )
+        .padding(.bottom, ExperienceSpacing.xxxl)
+    }
+
+    @ViewBuilder
+    private func productionDashboardSections(summary: DashboardChartMetrics.Summary) -> some View {
+        dashboardOnboardingQuickActionsSection(includeBrokerImport: true)
+
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            DashboardEquityHero(
+                summary: viewModel.equityHeroSummary ?? summary,
+                periodTitle: viewModel.dateRange.title,
+                title: viewModel.equityHeroTitle,
+                displayEquity: viewModel.equityHeroDisplayValue,
+                chartPoints: viewModel.equityHeroChartPoints,
+                isChartLoading: viewModel.isEquityChartOverlayLoading,
+                withdrawalSummary: accountValueWithdrawalSummary,
+                onWithdrawalSummaryTap: viewModel.openWithdrawalsHistory,
+                showsDrawdownSettings: viewModel.canConfigureEquityDrawdownSettings,
+                onDrawdownSettingsTap: viewModel.openEquityDrawdownSettings
+            )
+
+            DashboardMetricStrip(chips: viewModel.metricChips)
+
+            performanceCardsGrid
+        }
+        .padding(.bottom, ExperienceSpacing.lg)
+        .contextualTourTarget(.dashboardPerformance)
+
+        if let propStatus = viewModel.propFirmStatus, !restrictsPropFirmMode {
+            PropFirmStatusCard(
+                snapshot: propStatus,
+                onOpenDetails: { viewModel.openPropFirmDetails() }
+            )
+            .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.bottom, ExperienceSpacing.xl)
+        }
+
+        sectionHeader(
+            DashboardScorecardDisplayCopy.sectionTitle,
+            info: "The ring is the overall score for this filter once the sample is large enough. It blends consistency, risk, discipline, and psychology. The lines under it show how often tagged trades followed the plan, how often that held after a loss, and check-ins on trading days."
+        )
+        DashboardTradingScorecardSection(showsTitle: false) {
+            viewModel.openTradingScorecard()
+        }
+        .padding(.bottom, ExperienceSpacing.lg)
+
+        DashboardTradingRulesComplianceSection(
+            compliancePresentation: premiumAnalyticsPresentation,
+            onOpenDetail: { viewModel.openTradingRulesAnalytics() },
+            onOpenSettings: { viewModel.openTradingRulesSettings() }
+        )
+        .padding(.bottom, ExperienceSpacing.xl)
+
+        DashboardChartsSection(
+            summary: summary,
+            onBrowseWins: { viewModel.browseWins() },
+            onBrowseLosses: { viewModel.browseLosses() },
+            onBrowseSession: { viewModel.browseSession($0) },
+            onBrowseWeekday: { viewModel.browseWeekday(label: $0) },
+            onBrowseHour: { viewModel.browseHour(label: $0) },
+            onBrowseLong: { viewModel.browseLong() },
+            onBrowseShort: { viewModel.browseShort() },
+            onBrowseHoldBucket: { viewModel.browseHoldBucket(label: $0) },
+            premiumChartsPresentation: premiumAnalyticsPresentation
+        )
+        .padding(.bottom, ExperienceSpacing.xxl)
+
+        if !viewModel.psychologyGuardrailNotices.isEmpty {
+            VStack(spacing: ExperienceSpacing.sm) {
+                ForEach(viewModel.psychologyGuardrailNotices) { notice in
+                    PsychologyGuardrailBanner(notice: notice) {
+                        viewModel.dismissPsychologyGuardrail(notice)
+                    }
+                }
+            }
+            .padding(.horizontal, ExperienceSpacing.md)
+            .padding(.bottom, ExperienceSpacing.sm)
+        }
+
+        DashboardInsightsSection(presentation: viewModel.insightsPresentation)
+            .padding(.bottom, ExperienceSpacing.lg)
+
+        if premiumAnalyticsPresentation == .unrestricted {
+            PsychologyInsightsSection(
+                title: "Psychology Insights",
+                info: Self.psychologyInsightsInfo,
+                cards: viewModel.dashboardPsychologyInsightCards,
+                unlockProgress: viewModel.psychologyInsightsUnlockProgress,
+                insightsReady: viewModel.psychologyInsightsReady,
+                unlockMetricsReady: viewModel.psychologyUnlockMetricsReady,
+                hasMatchedCheckInDays: viewModel.psychologyHasMatchedCheckInDays,
+                postUnlockGapMessages: viewModel.psychologyPostUnlockGapMessages,
+                onSelect: { card in
+                    viewModel.openPsychologyAnalytics(
+                        highlightSection: viewModel.psychologySectionID(for: card.category)
+                    )
+                },
+                onViewAll: {
+                    viewModel.openPsychologyAnalytics()
+                }
+            )
+            .padding(.bottom, ExperienceSpacing.lg)
+        }
+
+        DashboardTraxProUpsellSection(
+            presentation: premiumAnalyticsPresentation,
+            profileID: viewModel.ownerAccountsProfileID,
+            onRetryEntitlementVerification: refreshDashboardEntitlementIfNeeded
+        )
+        .padding(.bottom, ExperienceSpacing.xxxl)
+    }
+
     private var scrollContent: some View {
         ScrollViewReader { proxy in
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 0) {
                 dashboardScrollFilterBar
                 if let summary = viewModel.summary {
-                    if gettingStartedStore.shouldShowDashboardCard {
-                        GettingStartedCard(
-                            store: gettingStartedStore,
-                            navigationCoordinator: navigationCoordinator
-                        )
-                        .padding(.horizontal, ExperienceSpacing.md)
-                        .padding(.bottom, ExperienceSpacing.sm)
-                    }
-
-                    TradingPreferenceDiscoverySlot(
-                        surface: .dashboard,
-                        userID: discoveryUserID,
-                        repository: data?.tradingPreferences,
-                        localHasTrade: (viewModel.summary?.tradeCount ?? 0) > 0,
-                        navigationCoordinator: navigationCoordinator
-                    )
-                    .padding(.horizontal, ExperienceSpacing.md)
-                    .padding(.bottom, ExperienceSpacing.sm)
-
-                    dashboardQuickActionsGroup(includeBrokerImport: true)
-
-                    VStack(alignment: .leading, spacing: 0) {
-                        DashboardEquityHero(
-                            summary: viewModel.equityHeroSummary ?? summary,
-                            periodTitle: viewModel.dateRange.title,
-                            title: viewModel.equityHeroTitle,
-                            displayEquity: viewModel.equityHeroDisplayValue,
-                            chartPoints: viewModel.equityHeroChartPoints,
-                            isChartLoading: viewModel.isEquityChartOverlayLoading,
-                            withdrawalSummary: accountValueWithdrawalSummary,
-                            onWithdrawalSummaryTap: viewModel.openWithdrawalsHistory,
-                            showsDrawdownSettings: viewModel.canConfigureEquityDrawdownSettings,
-                            onDrawdownSettingsTap: viewModel.openEquityDrawdownSettings
-                        )
-
-                        DashboardMetricStrip(chips: viewModel.metricChips)
-                            .padding(.bottom, ExperienceSpacing.lg)
-                    }
-                    .contextualTourTarget(.dashboardPerformance)
-
-                    if let propStatus = viewModel.propFirmStatus, !restrictsPropFirmMode {
-                        PropFirmStatusCard(
-                            snapshot: propStatus,
-                            onOpenDetails: { viewModel.openPropFirmDetails() }
-                        )
-                        .padding(.horizontal, ExperienceSpacing.md)
-                        .padding(.bottom, ExperienceSpacing.xl)
-                    }
-
-                    sectionHeader(
-                        "Performance",
-                        info: "Average win, average loss, best trade, biggest loss, and max drawdown use realized P&L in the current filter. Wins are above zero and losses are below zero. Max drawdown is the deepest drop from the equity peak. Payouts sum recorded withdrawals (live ledger and prop payouts) for the selected account and date range."
-                    )
-                    performanceCardsGrid
-                        .padding(.bottom, ExperienceSpacing.lg)
-
-                    sectionHeader(
-                        DashboardScorecardDisplayCopy.sectionTitle,
-                        info: "The ring is the overall score for this filter once the sample is large enough. It blends consistency, risk, discipline, and psychology. The lines under it show how often tagged trades followed the plan, how often that held after a loss, and check-ins on trading days."
-                    )
-                    DashboardTradingScorecardSection(showsTitle: false) {
-                        viewModel.openTradingScorecard()
-                    }
-                    .padding(.bottom, ExperienceSpacing.lg)
-
-                    DashboardTradingRulesComplianceSection(
-                        onOpenDetail: { viewModel.openTradingRulesAnalytics() },
-                        onOpenSettings: { viewModel.openTradingRulesSettings() }
-                    )
-                    .padding(.bottom, ExperienceSpacing.xl)
-
-                    DashboardChartsSection(
-                        summary: summary,
-                        onBrowseWins: { viewModel.browseWins() },
-                        onBrowseLosses: { viewModel.browseLosses() },
-                        onBrowseSession: { viewModel.browseSession($0) },
-                        onBrowseWeekday: { viewModel.browseWeekday(label: $0) },
-                        onBrowseHour: { viewModel.browseHour(label: $0) },
-                        onBrowseLong: { viewModel.browseLong() },
-                        onBrowseShort: { viewModel.browseShort() },
-                        onBrowseHoldBucket: { viewModel.browseHoldBucket(label: $0) },
-                        hidesPremiumDashboardCharts: hidesPremiumDashboardCharts
-                    )
-                    .padding(.bottom, ExperienceSpacing.xxl)
-
-                    if !viewModel.psychologyGuardrailNotices.isEmpty {
-                        VStack(spacing: ExperienceSpacing.sm) {
-                            ForEach(viewModel.psychologyGuardrailNotices) { notice in
-                                PsychologyGuardrailBanner(notice: notice) {
-                                    viewModel.dismissPsychologyGuardrail(notice)
-                                }
-                            }
-                        }
-                        .padding(.horizontal, ExperienceSpacing.md)
-                        .padding(.bottom, ExperienceSpacing.sm)
-                    }
-
-                    DashboardInsightsSection(presentation: viewModel.insightsPresentation)
-                        .padding(.bottom, ExperienceSpacing.lg)
-
-                    if restrictsPremiumPsychologyAndAI {
-                        psychologyAnalyticsUpgradeSection
-                            .padding(.bottom, ExperienceSpacing.xxxl)
+                    if embeddedInTraxsProPreview {
+                        traxsProPreviewDashboardSections(summary: summary)
+                            .padding(.top, ExperienceSpacing.sm)
                     } else {
-                        PsychologyInsightsSection(
-                            title: "Psychology Insights",
-                            info: Self.psychologyInsightsInfo,
-                            cards: viewModel.dashboardPsychologyInsightCards,
-                            unlockProgress: viewModel.psychologyInsightsUnlockProgress,
-                            insightsReady: viewModel.psychologyInsightsReady,
-                            unlockMetricsReady: viewModel.psychologyUnlockMetricsReady,
-                            hasMatchedCheckInDays: viewModel.psychologyHasMatchedCheckInDays,
-                            postUnlockGapMessages: viewModel.psychologyPostUnlockGapMessages,
-                            onSelect: { card in
-                                viewModel.openPsychologyAnalytics(
-                                    highlightSection: viewModel.psychologySectionID(for: card.category)
-                                )
-                            },
-                            onViewAll: {
-                                viewModel.openPsychologyAnalytics()
-                            }
-                        )
-                        .padding(.bottom, ExperienceSpacing.xxxl)
+                        productionDashboardSections(summary: summary)
                     }
                 }
             }
@@ -617,10 +635,10 @@ struct DashboardHomeView: View {
     private var performanceCardsGrid: some View {
         LazyVGrid(
             columns: [
-                GridItem(.flexible(), spacing: ExperienceSpacing.sm),
-                GridItem(.flexible(), spacing: ExperienceSpacing.sm),
+                GridItem(.flexible(), spacing: ExperienceSpacing.xs),
+                GridItem(.flexible(), spacing: ExperienceSpacing.xs),
             ],
-            spacing: ExperienceSpacing.sm
+            spacing: ExperienceSpacing.xs
         ) {
             ForEach(performanceCardsIncludingPayouts) { chip in
                 VStack(alignment: .leading, spacing: 4) {
@@ -691,6 +709,36 @@ struct DashboardHomeView: View {
         .transition(.opacity)
     }
 
+    private var dashboardPreferenceDiscoverySlot: some View {
+        TradingPreferenceDiscoverySlot(
+            surface: .dashboard,
+            userID: discoveryUserID,
+            repository: data?.tradingPreferences,
+            localHasTrade: (viewModel.summary?.tradeCount ?? 0) > 0,
+            navigationCoordinator: navigationCoordinator
+        )
+    }
+
+    @ViewBuilder
+    private func dashboardOnboardingQuickActionsSection(includeBrokerImport: Bool) -> some View {
+        VStack(spacing: ExperienceSpacing.xs) {
+            if gettingStartedStore.shouldShowDashboardCard {
+                GettingStartedCard(
+                    store: gettingStartedStore,
+                    navigationCoordinator: navigationCoordinator
+                )
+            }
+
+            if viewModel.summary != nil {
+                dashboardPreferenceDiscoverySlot
+            }
+
+            dashboardQuickActionsGroup(includeBrokerImport: includeBrokerImport)
+        }
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.bottom, ExperienceSpacing.sm)
+    }
+
     @ViewBuilder
     private func dashboardQuickActionsGroup(includeBrokerImport: Bool) -> some View {
         VStack(spacing: ExperienceSpacing.xs) {
@@ -707,8 +755,6 @@ struct DashboardHomeView: View {
                 )
             }
         }
-        .padding(.horizontal, ExperienceSpacing.md)
-        .padding(.bottom, ExperienceSpacing.sm)
     }
 
     private func toneColor(_ tone: DashboardMetricTone) -> Color {

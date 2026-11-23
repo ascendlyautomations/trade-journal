@@ -5,6 +5,8 @@ struct PsychologyReportDetailView: View {
 
     @Environment(\.themeColors) private var colors
 
+    private let condensedBulletLimit = 3
+
     init(reportID: ReportID, data: DataEnvironment) {
         _viewModel = State(
             initialValue: PsychologyReportDetailViewModel(
@@ -30,121 +32,84 @@ struct PsychologyReportDetailView: View {
             }
         }
         .experienceScreenBackground()
-        .experienceNavigationTitle(viewModel.title)
+        .modifier(PsychologyReportNavigationChrome(viewModel: viewModel))
         .toolbar(.hidden, for: .tabBar)
         .task {
             await viewModel.bootstrapIfNeeded()
+        }
+        .sheet(isPresented: $viewModel.showsCustomDateSheet) {
+            PsychologyReportCustomDateRangeSheet(viewModel: viewModel)
         }
         .accessibilityIdentifier("psychologyReport.detail")
     }
 
     private func reportScroll(_ report: PsychologyReport) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.lg) {
-                header(report)
-
-                if !report.doingWell.isEmpty {
-                    bulletSection(title: "What Went Well", items: report.doingWell, tint: colors.success)
+            VStack(alignment: .leading, spacing: ReportDetailLayout.sectionSpacing) {
+                if viewModel.supportsDateScope {
+                    PsychologyReportDateScopeBar(viewModel: viewModel)
                 }
 
-                ForEach(report.sections) { section in
-                    sectionCard(section)
+                PsychologyReportCoverageCard(report: report)
+                    .padding(
+                        .top,
+                        viewModel.supportsDateScope ? 0 : ReportDetailLayout.headerToFirstSectionSpacing
+                    )
+
+                if let insight = PsychologyReportChartPlanner.primaryInsight(for: report) {
+                    PsychologyReportPrimaryInsightCard(card: insight)
                 }
 
-                if !report.watchItems.isEmpty {
-                    bulletSection(title: "What to Watch", items: report.watchItems, tint: colors.warning)
+                PsychologyReportChartsSection(report: report)
+
+                let strengths = Array(report.doingWell.prefix(condensedBulletLimit))
+                if !strengths.isEmpty {
+                    PsychologyReportBulletStrip(
+                        title: "What Went Well",
+                        items: strengths,
+                        tint: colors.success
+                    )
                 }
 
-                if !report.comparisons.isEmpty {
-                    comparisonsSection(report.comparisons)
+                let watch = Array(report.watchItems.prefix(condensedBulletLimit))
+                if !watch.isEmpty {
+                    PsychologyReportBulletStrip(
+                        title: "What to Watch",
+                        items: watch,
+                        tint: colors.warning
+                    )
                 }
+
+                PsychologyReportPerformanceMetricsCard(report: report)
+
+                ComplianceDisclaimerFootnote(text: ComplianceDisclaimerCopy.performanceReport)
             }
             .padding(.horizontal, ExperienceSpacing.md)
             .padding(.bottom, ExperienceSpacing.xxxl)
         }
+        .scrollBounceBehavior(.basedOnSize, axes: .vertical)
     }
+}
 
-    private func header(_ report: PsychologyReport) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            Text("Psychology Report")
-                .experienceStyle(.caption2, color: colors.accent)
-                .textCase(.uppercase)
-            Text(report.dateRangeLabel)
-                .experienceStyle(.subheadline, color: colors.secondaryText)
-            Text("Deterministic insights from your journal")
-                .experienceStyle(.footnote, color: colors.tertiaryText)
-        }
-        .padding(ExperienceSpacing.lg)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.card))
-    }
+private struct PsychologyReportNavigationChrome: ViewModifier {
+    let viewModel: PsychologyReportDetailViewModel
 
-    private func sectionCard(_ section: PsychologyReportSection) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text(section.title)
-                .experienceStyle(.headline, color: colors.primaryText)
-            if let subtitle = section.subtitle {
-                Text(subtitle)
-                    .experienceStyle(.footnote, color: colors.tertiaryText)
-            }
-            if !section.metrics.isEmpty {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: ExperienceSpacing.sm) {
-                    ForEach(section.metrics, id: \.label) { row in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(row.label)
-                                .experienceStyle(.caption2, color: colors.tertiaryText)
-                            Text(row.value)
-                                .font(.subheadline.weight(.semibold).monospacedDigit())
-                                .foregroundStyle(colors.primaryText)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+    @Environment(\.themeColors) private var colors
+
+    func body(content: Content) -> some View {
+        content
+            .experienceNavigationTitle(viewModel.title)
+            .toolbar {
+                if let range = viewModel.dateRangeLabel {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Text(range)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(colors.secondaryText)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                            .accessibilityAddTraits(.isHeader)
                     }
                 }
             }
-            ForEach(section.bullets, id: \.self) { bullet in
-                Text("• \(bullet)")
-                    .experienceStyle(.footnote, color: colors.secondaryText)
-            }
-        }
-        .padding(ExperienceSpacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
-        .overlay {
-            RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
-                .stroke(colors.border, lineWidth: 1)
-        }
-    }
-
-    private func bulletSection(title: String, items: [String], tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            Text(title)
-                .experienceStyle(.headline, color: colors.primaryText)
-            ForEach(items, id: \.self) { item in
-                HStack(alignment: .top, spacing: ExperienceSpacing.sm) {
-                    Circle().fill(tint).frame(width: 6, height: 6).padding(.top, 6)
-                    Text(item).experienceStyle(.footnote, color: colors.secondaryText)
-                }
-            }
-        }
-        .padding(ExperienceSpacing.md)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
-    }
-
-    private func comparisonsSection(_ comparisons: [PsychologyReportComparison]) -> some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("Period Comparisons")
-                .experienceStyle(.headline, color: colors.primaryText)
-            ForEach(comparisons, id: \.headline) { comparison in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(comparison.headline)
-                        .experienceStyle(.subheadline, color: colors.primaryText)
-                        .fontWeight(.semibold)
-                    Text(comparison.detail)
-                        .experienceStyle(.footnote, color: colors.secondaryText)
-                }
-            }
-        }
-        .padding(ExperienceSpacing.md)
-        .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
     }
 }

@@ -27,12 +27,24 @@ struct PropFirmExpensesView: View {
     @State private var showsExpenseHistoryList = false
 
     private let historyPreviewLimit = 3
+    private let embeddedInTraxsProPreview: Bool
 
     @Environment(\.themeColors) private var colors
     @Environment(\.stackNavigation) private var stackNavigation
+    @Environment(\.traxsProPreviewReadOnly) private var traxsProPreviewReadOnly
 
-    init(data: DataEnvironment) {
-        _viewModel = State(initialValue: PropFirmExpensesViewModel(data: data))
+    private var previewReadOnly: Bool {
+        embeddedInTraxsProPreview || traxsProPreviewReadOnly
+    }
+
+    init(data: DataEnvironment, embeddedInTraxsProPreview: Bool = false) {
+        self.embeddedInTraxsProPreview = embeddedInTraxsProPreview
+        _viewModel = State(
+            initialValue: PropFirmExpensesViewModel(
+                data: data,
+                loadsTraxsProPreviewSampleOnly: embeddedInTraxsProPreview
+            )
+        )
     }
 
     var body: some View {
@@ -50,29 +62,31 @@ struct PropFirmExpensesView: View {
         .experienceScreenBackground()
         .experienceNavigationTitle("Expense Tracker")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        presentAddIncome()
-                    } label: {
-                        Label("Income", systemImage: "arrow.down.circle")
-                    }
-                    .accessibilityIdentifier("propFirmExpenses.addIncome")
-                    .contextualTourTarget(.expenseTrackerIncome)
+            if !previewReadOnly {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            presentAddIncome()
+                        } label: {
+                            Label("Income", systemImage: "arrow.down.circle")
+                        }
+                        .accessibilityIdentifier("propFirmExpenses.addIncome")
+                        .contextualTourTarget(.expenseTrackerIncome)
 
-                    Button {
-                        presentAddExpense()
+                        Button {
+                            presentAddExpense()
+                        } label: {
+                            Label("Expense", systemImage: "arrow.up.circle")
+                        }
+                        .accessibilityIdentifier("propFirmExpenses.add")
+                        .contextualTourTarget(.expenseTrackerAdd)
                     } label: {
-                        Label("Expense", systemImage: "arrow.up.circle")
+                        Image(systemName: "plus")
+                            .font(.body.weight(.semibold))
                     }
-                    .accessibilityIdentifier("propFirmExpenses.add")
-                    .contextualTourTarget(.expenseTrackerAdd)
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.body.weight(.semibold))
+                    .accessibilityLabel("Add income or expense")
+                    .accessibilityIdentifier("propFirmExpenses.addMenu")
                 }
-                .accessibilityLabel("Add income or expense")
-                .accessibilityIdentifier("propFirmExpenses.addMenu")
             }
         }
         .task { await viewModel.load() }
@@ -181,7 +195,9 @@ struct PropFirmExpensesView: View {
                 expenseHistorySection
                 taxDeductibleSection(overview)
                 estimatedTaxReserveSection(overview)
-                exportSection
+                if !previewReadOnly {
+                    exportSection
+                }
             }
             .padding(.bottom, ExperienceSpacing.xxxl)
         }
@@ -349,6 +365,13 @@ struct PropFirmExpensesView: View {
                 tint: colors.primaryText,
                 detail: "Unverified estimate"
             )
+            .padding(.horizontal, ExperienceSpacing.md)
+            Text(
+                "This amount is a bookkeeping estimate from recorded prop firm expenses. "
+                    + "Consult a tax professional before claiming deductions — nothing here is guaranteed."
+            )
+            .experienceStyle(.caption, color: colors.secondaryText)
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, ExperienceSpacing.md)
         }
     }
@@ -811,6 +834,7 @@ struct PropFirmExpensesView: View {
     }
 
     private func openIncome(_ row: TrackerIncome) {
+        if previewReadOnly { return }
         if row.opensWithdrawal {
             WithdrawalDetailSelection.stage(row.savedID)
             stackNavigation?.pushSettings(.withdrawalDetail)
@@ -824,6 +848,7 @@ struct PropFirmExpensesView: View {
     }
 
     private func openExpense(_ expense: PropFirmExpense) {
+        guard !previewReadOnly else { return }
         let source = viewModel.expenses.first { $0.id == expense.savedID } ?? expense
         editorExpense = source
         draft = .from(source)

@@ -30,6 +30,23 @@ final class BroadcastChatSignalingTests: XCTestCase {
         XCTAssertNil(parsed?.replyTo)
     }
 
+    func testParsesImageAttachment() throws {
+        let json = """
+        {"type":"chat","userId":"u1","displayName":"U","text":"","sentAt":2,"imageUrl":"https://cdn.example.com/a.jpg"}
+        """.data(using: .utf8)!
+        let parsed = BroadcastChatPayload.parseIncoming(data: json, senderIdentity: "u1")
+        XCTAssertEqual(parsed?.imageURL, "https://cdn.example.com/a.jpg")
+        XCTAssertEqual(parsed?.text, "")
+    }
+
+    func testParsesTradeAttachment() throws {
+        let json = """
+        {"type":"chat","userId":"u1","displayName":"U","text":"","sentAt":3,"tradeId":"trade-1"}
+        """.data(using: .utf8)!
+        let parsed = BroadcastChatPayload.parseIncoming(data: json, senderIdentity: "u1")
+        XCTAssertEqual(parsed?.tradeID?.rawValue, "trade-1")
+    }
+
     func testPreviewTruncatesLongText() {
         let long = String(repeating: "a", count: 120)
         let preview = BroadcastChatReplyFormatting.previewText(long)

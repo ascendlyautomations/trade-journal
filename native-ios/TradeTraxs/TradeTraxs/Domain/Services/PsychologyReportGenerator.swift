@@ -35,7 +35,17 @@ nonisolated enum PsychologyReportGenerator {
         now: Date = Date(),
         preferences: PreferenceRuleContext? = nil
     ) -> PsychologyReport {
-        let bounds = PsychologyReportPeriods.bounds(for: periodRef, now: now)
+        var bounds = PsychologyReportPeriods.bounds(for: periodRef, now: now)
+        if periodRef.periodID == PsychologyReportTimePreset.all.rawValue,
+           let earliest = trades.map(\.entryAt).min() {
+            let calendar = TradingReportPeriods.eastern
+            bounds.start = calendar.startOfDay(for: earliest)
+            bounds.dateRangeLabel = TradingReportPeriods.dateRangeLabel(
+                start: bounds.start,
+                end: bounds.end,
+                kind: .weekly
+            )
+        }
         let periodTrades = filterTrades(trades, start: bounds.start, end: bounds.end)
         let periodCheckIns = filterCheckIns(checkIns, start: bounds.start, end: bounds.end)
 
@@ -77,6 +87,9 @@ nonisolated enum PsychologyReportGenerator {
             facts: facts
         )
 
+        let planTagged = periodTrades.filter { $0.followedPlan != nil }.count
+        let emotionBreakdown = buildEmotionBreakdown(periodTrades)
+
         return PsychologyReport(
             periodRef: periodRef,
             title: periodRef.template.catalogTitle,
@@ -92,7 +105,13 @@ nonisolated enum PsychologyReportGenerator {
             comparisons: comparisons,
             doingWell: summary.doingWell,
             watchItems: summary.watchItems,
-            sections: sections
+            sections: sections,
+            analyticsSections: analytics.sections,
+            insightCards: analytics.dashboardCards,
+            emotionBreakdown: emotionBreakdown,
+            matchedDayCount: analytics.matchedDayCount,
+            checkInMatchedTradeCount: analytics.checkInMatchedTradeCount,
+            planTaggedTradeCount: planTagged
         )
     }
 
@@ -564,5 +583,36 @@ nonisolated enum PsychologyReportGenerator {
 
     private static func iso(_ date: Date) -> String {
         ISO8601.string(from: date)
+    }
+
+    private static func buildEmotionBreakdown(_ trades: [Trade]) -> [PsychologyReportEmotionRow] {
+        var grouped: [String: [Trade]] = [:]
+        for trade in trades {
+            guard let emotion = normalizedEmotion(trade.emotion) else { continue }
+            grouped[emotion, default: []].append(trade)
+        }
+        return grouped
+            .map { label, rows in
+                PsychologyReportEmotionRow(
+                    label: label,
+                    metrics: TraderPsychologyAnalyticsEngine.metrics(for: rows)
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.metrics.tradeCount != rhs.metrics.tradeCount {
+                    return lhs.metrics.tradeCount > rhs.metrics.tradeCount
+                }
+                let left = lhs.metrics.averagePnL.map { NSDecimalNumber(decimal: $0).doubleValue } ?? 0
+                let right = rhs.metrics.averagePnL.map { NSDecimalNumber(decimal: $0).doubleValue } ?? 0
+                return left > right
+            }
+            .prefix(8)
+            .map { $0 }
+    }
+
+    private static func normalizedEmotion(_ raw: String?) -> String? {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return nil }
+        return TradeReviewCatalog.emotions.first { $0.caseInsensitiveCompare(trimmed) == .orderedSame } ?? trimmed
     }
 }

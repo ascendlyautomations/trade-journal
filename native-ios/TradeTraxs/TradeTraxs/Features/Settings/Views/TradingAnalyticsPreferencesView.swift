@@ -18,7 +18,10 @@ struct TradingAnalyticsPreferencesView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
 
+    private let embeddedInTraxsProRulesPreview: Bool
+
     init(data: DataEnvironment, navigationCoordinator: NavigationCoordinator) {
+        self.embeddedInTraxsProRulesPreview = false
         self.navigationCoordinator = navigationCoordinator
         _viewModel = State(initialValue: TradingAnalyticsPreferencesViewModel(
             repository: data.tradingPreferences,
@@ -30,6 +33,24 @@ struct TradingAnalyticsPreferencesView: View {
         ))
     }
 
+    init(
+        data: DataEnvironment,
+        navigationCoordinator: NavigationCoordinator,
+        embeddedInTraxsProRulesPreview: Bool
+    ) {
+        self.embeddedInTraxsProRulesPreview = embeddedInTraxsProRulesPreview
+        self.navigationCoordinator = navigationCoordinator
+        _viewModel = State(initialValue: TradingAnalyticsPreferencesViewModel(
+            repository: data.tradingPreferences,
+            session: data.session,
+            detailCache: data.detailCache,
+            loadAccounts: { userID in
+                try await data.trades.accounts(for: userID)
+            },
+            loadsTraxsProPreviewSample: embeddedInTraxsProRulesPreview
+        ))
+    }
+
     var body: some View {
         preferencesScroll
             .scrollDismissesKeyboard(.interactively)
@@ -37,16 +58,23 @@ struct TradingAnalyticsPreferencesView: View {
             .experienceKeyboardDoneToolbar()
             .experienceFormKeyboard(focus: $focusedField)
             .experienceNavigationTitle("Trading Rules")
-            .toolbar { tradingRulesToolbar }
-            .navigationBarBackButtonHidden(viewModel.hasUnsavedChanges)
+            .toolbar {
+                if !embeddedInTraxsProRulesPreview {
+                    tradingRulesToolbar
+                }
+            }
+            .navigationBarBackButtonHidden(!embeddedInTraxsProRulesPreview && viewModel.hasUnsavedChanges)
             .background {
-                TradingRulesUnsavedNavigationGuard(
-                    isActive: viewModel.hasUnsavedChanges,
-                    interceptBox: unsavedNavigationIntercept
-                )
-                .equatable()
+                if !embeddedInTraxsProRulesPreview {
+                    TradingRulesUnsavedNavigationGuard(
+                        isActive: viewModel.hasUnsavedChanges,
+                        interceptBox: unsavedNavigationIntercept
+                    )
+                    .equatable()
+                }
             }
             .onAppear {
+                guard !embeddedInTraxsProRulesPreview else { return }
                 unsavedNavigationIntercept.onIntercept = { showsUnsavedDialog = true }
             }
             .confirmationDialog(
@@ -70,7 +98,16 @@ struct TradingAnalyticsPreferencesView: View {
                     ProgressView()
                 }
             }
-            .task { await viewModel.load() }
+            .task {
+                await viewModel.load()
+                if embeddedInTraxsProRulesPreview {
+                    generalExpanded = true
+                    riskExpanded = true
+                    executionExpanded = true
+                    disciplineExpanded = true
+                    sessionsExpanded = true
+                }
+            }
             .sheet(isPresented: $showsInstrumentPicker) {
                 NavigationStack {
                     TradingPreferenceInstrumentPicker(viewModel: viewModel) {
@@ -91,16 +128,32 @@ struct TradingAnalyticsPreferencesView: View {
             }
     }
 
+    private var restrictsPremiumRulesEditing: Bool {
+        if embeddedInTraxsProRulesPreview { return false }
+        let profileID = viewModel.preferences.userID.rawValue.isEmpty ? nil : viewModel.preferences.userID
+        return ProMonetizationPolicy.shouldRestrictTradingRulesComplianceAnalytics(
+            demoModeActive: ExploreModeSupport.isActive,
+            profileID: profileID
+        )
+    }
+
     private var preferencesScroll: some View {
         ScrollView {
             LazyVStack(spacing: ExperienceSpacing.md) {
-                tradingRulesAnalyticsLinkCard
+                if !embeddedInTraxsProRulesPreview {
+                    tradingRulesAnalyticsLinkCard
+                }
                 statusMessageBanner
-                generalSettingsCategory
-                riskManagementCategory
-                tradeExecutionCategory
-                disciplineCategory
-                sessionsAndInstrumentsCategory
+                if restrictsPremiumRulesEditing {
+                    freeTierRulesEditor
+                    TradingRulesPremiumLockedSection()
+                } else {
+                    generalSettingsCategory
+                    riskManagementCategory
+                    tradeExecutionCategory
+                    disciplineCategory
+                    sessionsAndInstrumentsCategory
+                }
             }
             .padding(.horizontal, ExperienceSpacing.md)
             .padding(.top, ExperienceSpacing.xs)
@@ -140,6 +193,96 @@ struct TradingAnalyticsPreferencesView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(ExperienceSpacing.md)
                 .experienceTradingRulesCard(prominence: .standard)
+        }
+    }
+
+    private var freeTierRulesEditor: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            Text("Your rules")
+                .experienceStyle(.headline, color: colors.primaryText)
+            Text(MonetizationPlanCopy.tradingRulesFreeTierSummary)
+                .experienceStyle(.caption, color: colors.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(spacing: 0) {
+                dropdownRow(
+                    "Preferred Trading Session",
+                    info: .preferredSessions,
+                    value: sessionSummary,
+                    isPlaceholder: viewModel.preferences.preferredSessions.isEmpty,
+                    identifier: "settings.tradingAnalytics.sessions"
+                ) {
+                    ForEach(TradingPreferenceRules.sessions, id: \.self) { session in
+                        Button {
+                            viewModel.toggleSession(session)
+                        } label: {
+                            let title = TradingSessionCatalog.displayTitle(for: session)
+                            if viewModel.preferences.preferredSessions.contains(session) {
+                                Label(title, systemImage: "checkmark")
+                            } else {
+                                Text(title)
+                            }
+                        }
+                    }
+                }
+                settingsInlineDivider()
+                Button {
+                    showsInstrumentPicker = true
+                } label: {
+                    dropdownLabel(
+                        "Primary Instrument",
+                        info: .primaryInstruments,
+                        value: instrumentSummary,
+                        isPlaceholder: viewModel.preferences.primaryInstruments.isEmpty
+                    )
+                }
+                .buttonStyle(.experiencePlain)
+                .accessibilityIdentifier("settings.tradingAnalytics.instruments")
+                .tradingRulesSettingsRow()
+                settingsInlineDivider()
+                dropdownRow(
+                    "Allowed Trading Days",
+                    info: .allowedTradingDays,
+                    value: allowedDaysSummary,
+                    isPlaceholder: viewModel.preferences.allowedTradingDays.isEmpty,
+                    identifier: "settings.tradingAnalytics.allowedDays"
+                ) {
+                    ForEach(TradingRuleWeekday.displayOrder, id: \.self) { day in
+                        Button {
+                            viewModel.toggleAllowedDay(day)
+                        } label: {
+                            if viewModel.preferences.allowedTradingDays.contains(day.rawValue) {
+                                Label(day.displayLabel, systemImage: "checkmark")
+                            } else {
+                                Text(day.displayLabel)
+                            }
+                        }
+                    }
+                }
+                settingsInlineDivider()
+                scopedNumericField(
+                    "Maximum Trades Per Day",
+                    info: .maxTradesPerDay,
+                    placeholder: "5",
+                    text: $viewModel.maxTrades,
+                    field: .maxTrades,
+                    style: .unsignedInteger,
+                    keyboard: .numberPad,
+                    scope: $viewModel.maxTradesPerDayScope,
+                    scopeIdentifier: "settings.tradingAnalytics.maxTradesScope"
+                )
+                settingsInlineDivider()
+                numericField(
+                    "Maximum Contracts",
+                    info: .maxContractsPerTrade,
+                    placeholder: "4",
+                    text: $viewModel.maxContracts,
+                    field: .maxContracts,
+                    style: .unsignedInteger,
+                    keyboard: .numberPad
+                )
+            }
+            .experienceTradingRulesCard(prominence: .featured)
         }
     }
 

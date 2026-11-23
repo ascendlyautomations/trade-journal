@@ -36,7 +36,7 @@ nonisolated enum DashboardBootstrapApplier {
             accounts,
             for: profileID,
             detailCache: detailCache,
-            kind: .rest
+            kind: .dashboard
         )
         SessionOwnerTradesStore.shared.seed(
             mapped.trades,

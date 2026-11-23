@@ -56,6 +56,15 @@ final class TradeRoomsExperienceTests: XCTestCase {
         )
     }
 
+    func testRejoinPatchBodyEncodesExplicitNullLeftAt() throws {
+        let data = try SupabaseJSONEncoding.encode(TradeRoomMembershipRejoinPatchBody())
+        let json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        XCTAssertTrue(json["left_at"] is NSNull)
+        XCTAssertEqual(json["notification_enabled"] as? Bool, true)
+    }
+
     func testStaleMembershipReconcilerClearsOptimisticJoinWhenServerRowInactive() async {
         let room = RoomID("room-demo-left")
         let viewer = ProfileID("viewer-stale")
@@ -93,6 +102,199 @@ final class TradeRoomsExperienceTests: XCTestCase {
         XCTAssertFalse(TradeRoomMembershipStore.shared.isJoined(room))
         XCTAssertFalse(inbox.rooms.contains { $0.id == room })
         XCTAssertNil(TradeRoomConfirmedMembershipCache.membership(for: room))
+    }
+
+    func testApplyJoinedInvalidatesStaleDiskSnapshot() {
+        let room = RoomID("room-rejoin-disk")
+        let viewer = ProfileID("viewer-rejoin")
+        let tradeRoom = TradeRoom(
+            id: room,
+            ownerProfileID: ProfileID("owner"),
+            name: "Rejoin",
+            slug: "rejoin",
+            description: nil,
+            image: nil,
+            memberCount: 5,
+            showsOnProfile: true,
+            createdAt: .now
+        )
+        SocialPersistedCacheCoordinator.persistRoomSnapshot(
+            viewerID: viewer,
+            roomID: room,
+            room: tradeRoom,
+            membership: nil,
+            channels: [],
+            selectedChannelID: nil,
+            channelThreads: [:]
+        )
+        let membership = RoomMembership(
+            roomID: room,
+            profileID: viewer,
+            role: .member,
+            joinedAt: .now,
+            notificationsEnabled: true
+        )
+        TradeRoomMembershipSync.applyJoined(
+            tradeRoom: tradeRoom,
+            viewerID: viewer,
+            inboxStore: MessagesInboxStore.shared,
+            confirmedMembership: membership
+        )
+        XCTAssertNil(SocialPersistedCacheCoordinator.restoreRoomSnapshot(viewerID: viewer, roomID: room))
+    }
+
+    func testLeaveRejoinSendLifecycleOnStubRepository() async throws {
+        let room = RoomID("room-lifecycle-send")
+        let viewer = ProfileID("viewer-lifecycle-send")
+        let repo = LeaveRejoinLifecycleStubRepository(roomID: room, viewerID: viewer)
+        let activeBeforeLeave = try await repo.membership(roomID: room, profileID: viewer)
+        XCTAssertNotNil(activeBeforeLeave)
+        try await repo.leave(roomID: room, profileID: viewer)
+        let inactiveAfterLeave = try await repo.membership(roomID: room, profileID: viewer)
+        XCTAssertNil(inactiveAfterLeave)
+        let joined = try await repo.join(roomID: room, profileID: viewer)
+        XCTAssertEqual(joined.roomID, room)
+        let activeAfterRejoin = try await repo.membership(roomID: room, profileID: viewer)
+        XCTAssertNotNil(activeAfterRejoin)
+        let channel = RoomChannelID("general")
+        let saved = try await repo.send(
+            RoomMessage(
+                id: RoomMessageID("m1"),
+                roomID: room,
+                senderProfileID: viewer,
+                body: "hello",
+                attachedTradeID: nil,
+                media: [],
+                parentMessageID: nil,
+                channelID: channel,
+                isPinned: false,
+                createdAt: .now
+            )
+        )
+        XCTAssertEqual(saved.body, "hello")
+    }
+
+    func testApplyLeftInvalidatesPersistedRoomSnapshot() {
+        let room = RoomID("room-disk-invalidate")
+        let viewer = ProfileID("viewer-disk")
+        let tradeRoom = TradeRoom(
+            id: room,
+            ownerProfileID: ProfileID("owner"),
+            name: "Disk",
+            slug: "disk",
+            description: nil,
+            image: nil,
+            memberCount: 2,
+            showsOnProfile: true,
+            createdAt: .now
+        )
+        SocialPersistedCacheCoordinator.persistRoomSnapshot(
+            viewerID: viewer,
+            roomID: room,
+            room: tradeRoom,
+            membership: RoomMembership(
+                roomID: room,
+                profileID: viewer,
+                role: .member,
+                joinedAt: .now,
+                notificationsEnabled: true
+            ),
+            channels: [],
+            selectedChannelID: nil,
+            channelThreads: [:]
+        )
+        TradeRoomMembershipSync.applyLeft(
+            roomID: room,
+            viewerID: viewer,
+            inboxStore: MessagesInboxStore.shared
+        )
+        XCTAssertNil(SocialPersistedCacheCoordinator.restoreRoomSnapshot(viewerID: viewer, roomID: room))
+    }
+
+    func testStaleDiskMembershipDoesNotEnableComposerWhenServerInactive() async {
+        let room = RoomID("room-stale-disk-member")
+        let viewer = ProfileID("viewer-stale-disk")
+        let tradeRoom = TradeRoom(
+            id: room,
+            ownerProfileID: ProfileID("owner-stale"),
+            name: "Stale",
+            slug: "stale",
+            description: nil,
+            image: nil,
+            memberCount: 3,
+            showsOnProfile: true,
+            isPrivate: false,
+            joinPolicy: .open,
+            createdAt: .now
+        )
+        SocialPersistedCacheCoordinator.persistRoomSnapshot(
+            viewerID: viewer,
+            roomID: room,
+            room: tradeRoom,
+            membership: RoomMembership(
+                roomID: room,
+                profileID: viewer,
+                role: .member,
+                joinedAt: .now,
+                notificationsEnabled: true
+            ),
+            channels: [
+                RoomChannel(
+                    id: RoomChannelID("general"),
+                    roomID: room,
+                    name: "general",
+                    position: 0,
+                    allowMembersChat: true
+                ),
+            ],
+            selectedChannelID: RoomChannelID("general"),
+            channelThreads: [:]
+        )
+        defer { SocialPersistedCacheCoordinator.invalidateRoomSnapshot(viewerID: viewer, roomID: room) }
+
+        let repo = InactiveMembershipStubRepository()
+        let viewModel = RoomConversationViewModel(
+            roomID: room,
+            rooms: repo,
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: viewer.rawValue),
+            uploadService: TradeRoomsStubUploadService(),
+            objectStorage: TradeRoomsStubObjectStorage(),
+            detailCache: DetailPresentationCache(),
+            inboxStore: MessagesInboxStore.shared
+        )
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.phase == .loaded }
+        XCTAssertNil(viewModel.membership)
+        XCTAssertFalse(viewModel.canShowComposer)
+    }
+
+    func testJoinFlowSurfacesErrorWhenMembershipCannotBeConfirmed() async {
+        let room = RoomID("room-join-fail")
+        let viewer = ProfileID("viewer-join-fail")
+        let suggestion = ExploreRoomSuggestion(
+            id: room,
+            name: "Fail Join",
+            slug: "fail-join",
+            description: nil,
+            memberCount: 1,
+            ownerProfileID: ProfileID("owner"),
+            isJoined: false,
+            isOwner: false,
+            isMember: false,
+            joinPolicy: .open
+        )
+        let repo = JoinFailsAfterWriteStubRepository()
+        let outcome = await TradeRoomJoinFlow.attemptJoin(
+            room: suggestion,
+            viewerID: viewer,
+            rooms: repo
+        )
+        guard case .error(let message) = outcome else {
+            XCTFail("Expected join error, got \(outcome)")
+            return
+        }
+        XCTAssertTrue(message.contains("confirm room membership") || message.contains("join"))
     }
 
     func testMembershipStoreMergePreservesOptimisticJoinAndHonorsLeave() {
@@ -1490,7 +1692,7 @@ final class TradeRoomsExperienceTests: XCTestCase {
     func testDiscoveryHomeToggleOrderAndUnifiedScopes() {
         XCTAssertEqual(
             TradeRoomDiscoveryScope.homeToggleOrder,
-            [.all, .favorites, .yourRooms, .popular]
+            [.all, .popular, .yourRooms, .favorites]
         )
         XCTAssertEqual(TradeRoomDiscoveryScope.normalizedHomeScope(.official), .all)
         XCTAssertEqual(TradeRoomDiscoveryScope.normalizedHomeScope(.community), .all)
@@ -1611,6 +1813,191 @@ final class TradeRoomsExperienceTests: XCTestCase {
             viewModel.allScopeDiscoverableRooms.contains { $0.id == ownedPopular.id }
         )
         XCTAssertEqual(viewModel.allScopeDiscoverableRooms.map(\.id), [peerRoom.id])
+    }
+
+    func testDiscoveryCategoryFilterUsesStoredCategoryAndExcludesOtherCategories() async {
+        let viewer = ProfileID("unit.test.discovery.category-filter")
+        let store = MessagesInboxStore.shared
+        store.resetForTesting()
+        store.setPersistedViewerID(viewer)
+
+        let demoFutures = ExploreRoomSuggestion(
+            id: RoomID("ab8e192f-5da0-477e-958b-1a83fc6e31af"),
+            name: "Demo Trade Room",
+            slug: "tradetraxs_demo-1791222769068",
+            roomKind: .community,
+            category: .futures
+        )
+        let officialFutures = ExploreRoomSuggestion(
+            id: RoomID("3bf2ebcd-f189-4bd8-930c-51d61349f790"),
+            name: "Futures Traders",
+            slug: "futures-traders",
+            roomKind: .official,
+            category: .futures
+        )
+        let optionsOfficial = ExploreRoomSuggestion(
+            id: RoomID("9d38241f-6ac5-4781-9468-d6d252417778"),
+            name: "Options Traders",
+            slug: "options-traders",
+            roomKind: .official,
+            category: .options
+        )
+        let explore = TradeRoomsHomeBootstrapExploreRepository(
+            yourRooms: [],
+            popular: [demoFutures, officialFutures, optionsOfficial]
+        )
+
+        let viewModel = TradeRoomsHomeViewModel(
+            messages: TradeRoomsStubMessageRepository(),
+            rooms: TradeRoomsStubRoomRepository(),
+            explore: explore,
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: viewer.rawValue),
+            detailCache: DetailPresentationCache(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
+            inboxStore: store
+        )
+        viewModel.selectDiscoveryScope(.all)
+        viewModel.loadIfNeeded()
+        await waitFor { viewModel.discoveryPhase == .loaded }
+
+        XCTAssertEqual(
+            viewModel.effectiveDiscoveryCategory(for: demoFutures),
+            TradeRoomCategory.futures
+        )
+        XCTAssertEqual(
+            viewModel.effectiveDiscoveryCategory(for: officialFutures),
+            TradeRoomCategory.futures
+        )
+
+        viewModel.selectDiscoveryCategoryFilter(TradeRoomCategory.futures)
+        let futuresIDs = Set(viewModel.allScopeDiscoverableRooms.map(\.id))
+        XCTAssertTrue(futuresIDs.contains(demoFutures.id))
+        XCTAssertTrue(futuresIDs.contains(officialFutures.id))
+        XCTAssertFalse(futuresIDs.contains(optionsOfficial.id))
+    }
+
+    func testDiscoveryCategoryFilterPassesServerCategoryToBootstrap() async {
+        let viewer = ProfileID("unit.test.discovery.server-category")
+        let store = MessagesInboxStore.shared
+        store.resetForTesting()
+        store.setPersistedViewerID(viewer)
+        SessionTradeRoomsDiscoveryStore.shared.invalidate(viewerID: viewer)
+
+        let explore = TradeRoomsRecordingCategoryExploreRepository()
+        let viewModel = TradeRoomsHomeViewModel(
+            messages: TradeRoomsStubMessageRepository(),
+            rooms: TradeRoomsStubRoomRepository(),
+            explore: explore,
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: viewer.rawValue),
+            detailCache: DetailPresentationCache(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
+            inboxStore: store
+        )
+        viewModel.selectDiscoveryScope(.all)
+        await viewModel.refresh()
+        await waitFor { viewModel.discoveryPhase == .loaded }
+        XCTAssertNil(explore.lastRequestedCategory)
+
+        viewModel.selectDiscoveryCategoryFilter(.futures)
+        await waitFor { explore.lastRequestedCategory == .futures }
+
+        viewModel.selectDiscoveryCategoryFilter(.options)
+        await waitFor { explore.lastRequestedCategory == .options }
+
+        viewModel.selectDiscoveryCategoryFilter(nil)
+        await waitFor { explore.lastRequestedCategory == nil }
+    }
+
+    func testBootstrapCategoryMetadataMergesWhenRoomFingerprintUnchanged() async {
+        let viewer = ProfileID("unit.test.discovery.category-merge-fingerprint")
+        let store = MessagesInboxStore.shared
+        store.resetForTesting()
+        store.setPersistedViewerID(viewer)
+
+        let demoID = RoomID("ab8e192f-5da0-477e-958b-1a83fc6e31af")
+        let optionsID = RoomID("9d38241f-6ac5-4781-9468-d6d252417778")
+        let uncategorizedPopular = [
+            ExploreRoomSuggestion(
+                id: demoID,
+                name: "Demo Trade Room",
+                slug: "tradetraxs_demo-1791222769068",
+                roomKind: .community,
+                category: nil
+            ),
+            ExploreRoomSuggestion(
+                id: optionsID,
+                name: "Options Traders",
+                slug: "options-traders",
+                roomKind: .official,
+                category: nil
+            ),
+        ]
+        let categorizedPopular = [
+            ExploreRoomSuggestion(
+                id: demoID,
+                name: "Demo Trade Room",
+                slug: "tradetraxs_demo-1791222769068",
+                roomKind: .community,
+                category: .futures
+            ),
+            ExploreRoomSuggestion(
+                id: optionsID,
+                name: "Options Traders",
+                slug: "options-traders",
+                roomKind: .official,
+                category: .options
+            ),
+        ]
+        let explore = TradeRoomsStubExploreRepository()
+
+        let viewModel = TradeRoomsHomeViewModel(
+            messages: TradeRoomsStubMessageRepository(),
+            rooms: TradeRoomsStubRoomRepository(),
+            explore: explore,
+            profiles: TradeRoomsStubProfileRepository(),
+            session: TradeRoomsStubSession(userID: viewer.rawValue),
+            detailCache: DetailPresentationCache(),
+            navigationCoordinator: NavigationCoordinator(store: NavigationStore()),
+            inboxStore: store
+        )
+        viewModel.testing_applyHomeBootstrap(
+            TradeRoomsHomeBootstrap(
+                viewerID: viewer,
+                scope: .all,
+                yourRooms: [],
+                suggested: [],
+                popular: uncategorizedPopular,
+                suggestedNextCursor: nil,
+                popularNextCursor: nil
+            ),
+            viewerID: viewer
+        )
+        XCTAssertNil(viewModel.popularItems.first(where: { $0.id == demoID })?.category)
+
+        viewModel.testing_applyHomeBootstrap(
+            TradeRoomsHomeBootstrap(
+                viewerID: viewer,
+                scope: .all,
+                yourRooms: [],
+                suggested: [],
+                popular: categorizedPopular,
+                suggestedNextCursor: nil,
+                popularNextCursor: nil
+            ),
+            viewerID: viewer
+        )
+        XCTAssertEqual(viewModel.popularItems.first(where: { $0.id == demoID })?.category, .futures)
+
+        viewModel.selectDiscoveryScope(.all)
+        viewModel.selectDiscoveryCategoryFilter(.futures)
+        let futuresIDs = Set(viewModel.allScopeDiscoverableRooms.map(\.id))
+        XCTAssertEqual(futuresIDs, [demoID])
+
+        viewModel.selectDiscoveryCategoryFilter(.options)
+        let optionsIDs = Set(viewModel.allScopeDiscoverableRooms.map(\.id))
+        XCTAssertEqual(optionsIDs, [optionsID])
     }
 
     func testJoinedTabPinsOwnedRoomBeforeHighMemberJoinedRooms() async {
@@ -1872,10 +2259,10 @@ private struct TradeRoomsSearchExploreRepository: ExploreRepository {
         scope: TradeRoomDiscoveryScope,
         limit: Int,
         suggestedCursor: String?,
-        popularCursor: String?
+        popularCursor: String?,
+        category: TradeRoomCategory?
     ) async throws -> TradeRoomsHomeBootstrap {
-        _ = suggestedCursor
-        _ = popularCursor
+        _ = (suggestedCursor, popularCursor, category)
         return TradeRoomsFixtures.homeBootstrap(scope: scope)
     }
 }
@@ -1898,10 +2285,10 @@ private struct TradeRoomsStubExploreRepository: ExploreRepository {
         scope: TradeRoomDiscoveryScope,
         limit: Int,
         suggestedCursor: String?,
-        popularCursor: String?
+        popularCursor: String?,
+        category: TradeRoomCategory?
     ) async throws -> TradeRoomsHomeBootstrap {
-        _ = suggestedCursor
-        _ = popularCursor
+        _ = (suggestedCursor, popularCursor, category)
         return TradeRoomsFixtures.homeBootstrap(scope: scope)
     }
 }
@@ -1927,16 +2314,63 @@ private struct TradeRoomsHomeBootstrapExploreRepository: ExploreRepository {
         scope: TradeRoomDiscoveryScope,
         limit: Int,
         suggestedCursor: String?,
-        popularCursor: String?
+        popularCursor: String?,
+        category: TradeRoomCategory?
     ) async throws -> TradeRoomsHomeBootstrap {
         _ = suggestedCursor
         _ = popularCursor
+        let scopedPopular: [ExploreRoomSuggestion]
+        if let category {
+            scopedPopular = popular.filter { $0.category == category }
+        } else {
+            scopedPopular = popular
+        }
         return TradeRoomsHomeBootstrap(
             viewerID: nil,
             scope: scope,
             yourRooms: yourRooms,
             suggested: [],
-            popular: popular,
+            popular: scopedPopular,
+            suggestedNextCursor: nil,
+            popularNextCursor: nil
+        )
+    }
+}
+
+private final class TradeRoomsRecordingCategoryExploreRepository: ExploreRepository, @unchecked Sendable {
+    private let lock = NSLock()
+    private(set) var lastRequestedCategory: TradeRoomCategory?
+
+    func discoverableProfiles(page: PageRequest) async throws -> CursorPage<Profile> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+
+    func socialCounts(for profileIDs: [ProfileID]) async throws -> ExploreSocialCounts { .empty }
+    func tradeActivitySummaries(limit: Int) async throws -> [ProfileID: ExploreTraderRanking.TradeSummary] { [:] }
+    func popularRooms(limit: Int) async throws -> [ExploreRoomSuggestion] { [] }
+    func discoverRooms(
+        mode: TradeRoomDiscoveryMode,
+        scope: TradeRoomDiscoveryScope,
+        limit: Int
+    ) async throws -> [ExploreRoomSuggestion] { [] }
+    func searchRooms(query: String, limit: Int) async throws -> [ExploreRoomSuggestion] { [] }
+    func tradeRoomsHomeBootstrap(
+        scope: TradeRoomDiscoveryScope,
+        limit: Int,
+        suggestedCursor: String?,
+        popularCursor: String?,
+        category: TradeRoomCategory?
+    ) async throws -> TradeRoomsHomeBootstrap {
+        _ = (scope, limit, suggestedCursor, popularCursor)
+        lock.lock()
+        lastRequestedCategory = category
+        lock.unlock()
+        return TradeRoomsHomeBootstrap(
+            viewerID: nil,
+            scope: scope,
+            yourRooms: [],
+            suggested: [],
+            popular: [],
             suggestedNextCursor: nil,
             popularNextCursor: nil
         )
@@ -1971,7 +2405,8 @@ private struct TradeRoomsFilteringExploreRepository: ExploreRepository {
         scope: TradeRoomDiscoveryScope,
         limit: Int,
         suggestedCursor: String?,
-        popularCursor: String?
+        popularCursor: String?,
+        category: TradeRoomCategory?
     ) async throws -> TradeRoomsHomeBootstrap {
         _ = suggestedCursor
         _ = popularCursor
@@ -2253,6 +2688,183 @@ private struct DiskNavigationRoomRepository: RoomRepository, Sendable {
             action: action
         )
     }
+}
+
+private final class LeaveRejoinLifecycleStubRepository: RoomRepository, @unchecked Sendable {
+    let roomID: RoomID
+    let viewerID: ProfileID
+    var isActive = true
+
+    init(roomID: RoomID, viewerID: ProfileID) {
+        self.roomID = roomID
+        self.viewerID = viewerID
+    }
+
+    func room(id: RoomID) async throws -> TradeRoom {
+        TradeRoom(
+            id: roomID,
+            ownerProfileID: ProfileID("owner"),
+            name: "Lifecycle",
+            slug: roomID.rawValue,
+            description: nil,
+            image: nil,
+            memberCount: 2,
+            showsOnProfile: true,
+            createdAt: .now
+        )
+    }
+    func rooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+    func memberRooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+    func activeMemberCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int] { [:] }
+    func activeMembers(roomID: RoomID, ownerProfileID: ProfileID) async throws -> [RoomManagedMember] { [] }
+    func unreadCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int] { [:] }
+    func lastMessageActivity(for roomIDs: [RoomID]) async throws -> [RoomID: Date] { [:] }
+    func markRead(roomID: RoomID) async throws {}
+    func channels(roomID: RoomID) async throws -> [RoomChannel] {
+        [
+            RoomChannel(
+                id: RoomChannelID("general"),
+                roomID: roomID,
+                name: "general",
+                position: 0,
+                allowMembersChat: true
+            ),
+        ]
+    }
+    func isViewerBanned(from roomID: RoomID, profileID: ProfileID) async throws -> Bool { false }
+    func membership(roomID: RoomID, profileID: ProfileID) async throws -> RoomMembership? {
+        guard isActive, roomID == self.roomID, profileID == viewerID else { return nil }
+        return RoomMembership(
+            roomID: roomID,
+            profileID: profileID,
+            role: .member,
+            joinedAt: .now,
+            notificationsEnabled: true
+        )
+    }
+    func join(roomID: RoomID, profileID: ProfileID) async throws -> RoomMembership {
+        guard roomID == self.roomID, profileID == viewerID else {
+            throw AppError.network(.validation(statusCode: nil, message: "Could not confirm room membership."))
+        }
+        isActive = true
+        return try await membership(roomID: roomID, profileID: profileID)!
+    }
+    func leave(roomID: RoomID, profileID: ProfileID) async throws {
+        guard roomID == self.roomID, profileID == viewerID else { return }
+        isActive = false
+    }
+    func messages(roomID: RoomID, page: PageRequest) async throws -> CursorPage<RoomMessage> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+    func messages(
+        roomID: RoomID,
+        channel: RoomChannel?,
+        page: PageRequest
+    ) async throws -> CursorPage<RoomMessage> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+    func roomMessage(roomID: RoomID, messageID: RoomMessageID) async throws -> RoomMessage? { nil }
+    func send(_ message: RoomMessage) async throws -> RoomMessage {
+        guard try await membership(roomID: message.roomID, profileID: message.senderProfileID) != nil else {
+            throw AppError.network(.forbidden)
+        }
+        return message
+    }
+    func deleteMessage(roomID: RoomID, messageID: RoomMessageID) async throws {}
+    func insertMessageReaction(
+        roomID: RoomID,
+        messageID: RoomMessageID,
+        userID: ProfileID,
+        reaction: String
+    ) async throws -> RoomMessageReaction {
+        RoomMessageReaction(id: "r", messageID: messageID, userID: userID, reaction: reaction)
+    }
+    func deleteMessageReaction(id: String) async throws {}
+    func moderate(
+        roomID: RoomID,
+        messageID: RoomMessageID?,
+        targetProfileID: ProfileID?,
+        action: RoomModerationAction
+    ) async throws {}
+    func requestJoin(roomID: RoomID) async throws -> TradeRoomJoinRequestState { .pending }
+    func viewerJoinRequest(roomID: RoomID) async throws -> TradeRoomJoinRequestState? { nil }
+    func setRoomFavorited(roomID: RoomID, profileID: ProfileID, favorited: Bool) async throws {}
+    func favoritedRoomIDs(for profileID: ProfileID) async throws -> Set<RoomID> { [] }
+}
+
+private struct JoinFailsAfterWriteStubRepository: RoomRepository {
+    func room(id: RoomID) async throws -> TradeRoom {
+        TradeRoom(
+            id: id,
+            ownerProfileID: ProfileID("owner"),
+            name: "Room",
+            slug: id.rawValue,
+            description: nil,
+            image: nil,
+            memberCount: 0,
+            showsOnProfile: true,
+            createdAt: .now
+        )
+    }
+    func rooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+    func memberRooms(for profileID: ProfileID, page: PageRequest) async throws -> CursorPage<TradeRoom> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+    func activeMemberCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int] { [:] }
+    func activeMembers(roomID: RoomID, ownerProfileID: ProfileID) async throws -> [RoomManagedMember] { [] }
+    func unreadCounts(for roomIDs: [RoomID]) async throws -> [RoomID: Int] { [:] }
+    func lastMessageActivity(for roomIDs: [RoomID]) async throws -> [RoomID: Date] { [:] }
+    func markRead(roomID: RoomID) async throws {}
+    func channels(roomID: RoomID) async throws -> [RoomChannel] { [] }
+    func isViewerBanned(from roomID: RoomID, profileID: ProfileID) async throws -> Bool { false }
+    func membership(roomID: RoomID, profileID: ProfileID) async throws -> RoomMembership? { nil }
+    func join(roomID: RoomID, profileID: ProfileID) async throws -> RoomMembership {
+        throw AppError.network(
+            .validation(
+                statusCode: nil,
+                message: "Could not confirm room membership. You may not be allowed to join this room."
+            )
+        )
+    }
+    func leave(roomID: RoomID, profileID: ProfileID) async throws {}
+    func messages(roomID: RoomID, page: PageRequest) async throws -> CursorPage<RoomMessage> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+    func messages(
+        roomID: RoomID,
+        channel: RoomChannel?,
+        page: PageRequest
+    ) async throws -> CursorPage<RoomMessage> {
+        CursorPage(items: [], nextCursor: nil)
+    }
+    func roomMessage(roomID: RoomID, messageID: RoomMessageID) async throws -> RoomMessage? { nil }
+    func send(_ message: RoomMessage) async throws -> RoomMessage { message }
+    func deleteMessage(roomID: RoomID, messageID: RoomMessageID) async throws {}
+    func insertMessageReaction(
+        roomID: RoomID,
+        messageID: RoomMessageID,
+        userID: ProfileID,
+        reaction: String
+    ) async throws -> RoomMessageReaction {
+        RoomMessageReaction(id: "r", messageID: messageID, userID: userID, reaction: reaction)
+    }
+    func deleteMessageReaction(id: String) async throws {}
+    func moderate(
+        roomID: RoomID,
+        messageID: RoomMessageID?,
+        targetProfileID: ProfileID?,
+        action: RoomModerationAction
+    ) async throws {}
+    func requestJoin(roomID: RoomID) async throws -> TradeRoomJoinRequestState { .pending }
+    func viewerJoinRequest(roomID: RoomID) async throws -> TradeRoomJoinRequestState? { nil }
+    func setRoomFavorited(roomID: RoomID, profileID: ProfileID, favorited: Bool) async throws {}
+    func favoritedRoomIDs(for profileID: ProfileID) async throws -> Set<RoomID> { [] }
 }
 
 private struct InactiveMembershipStubRepository: RoomRepository {

@@ -85,7 +85,7 @@ nonisolated enum CalendarAnalyticsAggregator {
             todayKey: todayKey
         )
         let weeks = TradingCalendarAggregator.weekSummaries(from: cells)
-        let summary = monthSummary(year: year, month: month, days: monthDays, scopedRows: scoped)
+        let summary = monthSummary(year: year, month: month, days: monthDays)
 
         return TradingCalendarMonth(
             year: year,
@@ -101,13 +101,12 @@ nonisolated enum CalendarAnalyticsAggregator {
     static func monthSummary(
         year: Int,
         month: Int,
-        days: [String: TradingDaySummary],
-        scopedRows: [AnalyticsDailyStatRowV1]
+        days: [String: TradingDaySummary]
     ) -> TradingMonthSummary {
         let values = Array(days.values)
         let net = values.reduce(Decimal(0)) { $0 + $1.netPnL }
         let tradeCount = values.reduce(0) { $0 + $1.tradeCount }
-        let wins = scopedRows.reduce(0) { $0 + $1.win_count }
+        let wins = values.reduce(0) { $0 + $1.winCount }
         let winningDays = values.filter { $0.outcome == .profit }.count
         let losingDays = values.filter { $0.outcome == .loss }.count
         let beDays = values.filter { $0.outcome == .breakeven }.count
@@ -144,8 +143,8 @@ nonisolated enum CalendarAnalyticsAggregator {
         var cards: [TradingYearMonthCard] = []
         var totalNet: Decimal = 0
         var totalTradingDays = 0
-        var winWeighted: Decimal = 0
-        var tradeCountTotal: Decimal = 0
+        var totalWins = 0
+        var totalTrades = 0
         var bestAbbrev: String?
         var bestPnL: Decimal?
 
@@ -164,9 +163,9 @@ nonisolated enum CalendarAnalyticsAggregator {
             if !isFuture {
                 totalNet += summary.netPnL
                 totalTradingDays += summary.tradingDayCount
-                if summary.tradeCount > 0, let rate = summary.tradeWinRate {
-                    winWeighted += rate * Decimal(summary.tradeCount)
-                    tradeCountTotal += Decimal(summary.tradeCount)
+                if summary.tradeCount > 0 {
+                    totalTrades += summary.tradeCount
+                    totalWins += built.days.values.reduce(0) { $0 + $1.winCount }
                 }
                 if summary.tradingDayCount > 0 {
                     if bestPnL == nil || summary.netPnL > (bestPnL ?? 0) {
@@ -203,7 +202,7 @@ nonisolated enum CalendarAnalyticsAggregator {
             )
         }
 
-        let winRate: Decimal? = tradeCountTotal > 0 ? winWeighted / tradeCountTotal : nil
+        let winRate: Decimal? = totalTrades > 0 ? Decimal(totalWins) / Decimal(totalTrades) : nil
 
         return TradingYearOverview(
             year: year,

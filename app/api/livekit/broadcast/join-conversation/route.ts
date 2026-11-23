@@ -125,7 +125,8 @@ export async function POST(req: Request) {
   const session = await mintLiveKitBroadcastConversationToken(
     user.id,
     parsed.roomId,
-    access.displayName
+    access.displayName,
+    active.expiresAt
   )
   if (!session) {
     return Response.json({ error: "Could not mint conversation token." }, { status: 503 })

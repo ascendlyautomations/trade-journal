@@ -57,7 +57,7 @@ final class AccountDeletionExperienceTests: XCTestCase {
         let viewModel = context.viewModel
         await viewModel.refresh()
         let message = viewModel.deleteAccountExplainerMessage
-        XCTAssertTrue(message.contains("TraxPro trial"))
+        XCTAssertTrue(message.contains("TraxsPro trial"))
         XCTAssertTrue(message.localizedCaseInsensitiveContains("stripe"))
         XCTAssertFalse(message.contains("does not cancel your Apple subscription"))
     }
@@ -329,6 +329,10 @@ private struct AccountDeletionStubBilling: BillingRepository {
 
     func refreshEntitlements(for profileID: ProfileID) async throws -> BillingStatus {
         try await status(for: profileID)
+    }
+
+    func redeemCreatorAccessCode(_ code: String) async throws {
+        _ = code
     }
 }
 

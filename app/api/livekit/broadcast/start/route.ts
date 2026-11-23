@@ -82,12 +82,14 @@ export async function POST(req: Request) {
       ? await mintLiveKitBroadcastObsHostToken(
           user.id,
           parsed.roomId,
-          access.displayName
+          access.displayName,
+          claim.session.expiresAt
         )
       : await mintLiveKitBroadcastPublisherToken(
           user.id,
           parsed.roomId,
-          access.displayName
+          access.displayName,
+          claim.session.expiresAt
         )
 
   if (!session) {
@@ -120,5 +122,6 @@ export async function POST(req: Request) {
     visibility: claim.session.visibility,
     publicLive: claim.session.visibility === "public",
     streamTitle: claim.session.streamTitle,
+    expiresAt: claim.session.expiresAt,
   })
 }

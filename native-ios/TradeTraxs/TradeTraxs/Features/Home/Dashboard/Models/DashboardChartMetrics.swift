@@ -225,7 +225,7 @@ nonisolated enum DashboardChartMetrics {
                 DashboardWinLossPoint(label: "Losses", count: lossCount),
             ],
             holdTime: holdTimeRows(from: holdDurations),
-            holdTimeHistogram: holdTimeHistogram(from: holdDurations.all),
+            holdTimeHistogram: holdTimeHistogram(from: trades),
             drawdownSeries: drawdownSeries(from: profileStats.equityData),
             weekdayHeatmap: weekdayHeatmapBars(trades),
             hourHeatmap: hourHeatmapBars(trades),
@@ -505,8 +505,7 @@ nonisolated enum DashboardChartMetrics {
         ]
     }
 
-    private static func holdTimeHistogram(from durations: [TimeInterval]) -> [DashboardHistogramBucket] {
-        guard !durations.isEmpty else { return [] }
+    private static func holdTimeHistogram(from trades: [Trade]) -> [DashboardHistogramBucket] {
         let defs: [(String, Range<TimeInterval>)] = [
             ("<5m", 0..<300),
             ("5–15m", 300..<900),
@@ -514,10 +513,33 @@ nonisolated enum DashboardChartMetrics {
             ("1–4h", 3_600..<14_400),
             ("4h+", 14_400..<TimeInterval.greatestFiniteMagnitude),
         ]
-        return defs.map { label, range in
-            DashboardHistogramBucket(
+        struct BucketScratch {
+            var count = 0
+            var totalPnL = 0.0
+        }
+        var scratch = [String: BucketScratch]()
+        for label in defs.map(\.0) {
+            scratch[label] = BucketScratch()
+        }
+
+        for trade in trades {
+            guard let exit = trade.exitAt else { continue }
+            let duration = exit.timeIntervalSince(trade.entryAt)
+            guard duration > 0 else { continue }
+            guard let def = defs.first(where: { $0.1.contains(duration) }) else { continue }
+            let pnl = NSDecimalNumber(decimal: trade.realizedPnL?.amount ?? 0).doubleValue
+            var bucket = scratch[def.0] ?? BucketScratch()
+            bucket.count += 1
+            bucket.totalPnL += pnl
+            scratch[def.0] = bucket
+        }
+
+        return defs.map { label, _ in
+            let bucket = scratch[label] ?? BucketScratch()
+            return DashboardHistogramBucket(
                 label: label,
-                count: durations.filter { range.contains($0) }.count
+                count: bucket.count,
+                totalNetPnL: bucket.totalPnL
             )
         }
     }

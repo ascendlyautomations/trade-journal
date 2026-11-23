@@ -1,16 +1,3 @@
-/**
- * AUTO-GENERATED — do not hand-edit.
- *
- * Command: npx supabase gen types typescript --project-id "$SUPABASE_PROJECT_ID" --schema public
- * Alternate (MCP): generate_typescript_types(project_id)
- * Schema: public
- * Source: remote TradeTraxs project fobudrkniacatvilbofw (us-east-2)
- * Generated: 2026-09-30 (regenerated from live schema; includes public.trades_public_read)
- *
- * Requires SUPABASE_ACCESS_TOKEN or `supabase login` for CLI regeneration.
- * Set SUPABASE_PROJECT_ID to the linked project ref (not a secret).
- */
-
 export type Json =
   | string
   | number
@@ -23,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.4"
   }
   public: {
     Tables: {
@@ -130,414 +117,6 @@ export type Database = {
           },
         ]
       }
-      prop_firm_expenses: {
-        Row: {
-          account_id: string | null
-          cost_per_account: number
-          created_at: string
-          date_paid: string
-          expense_type: string
-          id: string
-          custom_category: string | null
-          notes: string | null
-          payment_label: string | null
-          project_label: string | null
-          prop_firm_name: string
-          quantity: number
-          recurrence: string | null
-          source: string
-          total_cost: number
-          tracker_kind: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          account_id?: string | null
-          cost_per_account: number
-          created_at?: string
-          custom_category?: string | null
-          date_paid: string
-          expense_type: string
-          id?: string
-          notes?: string | null
-          payment_label?: string | null
-          project_label?: string | null
-          prop_firm_name: string
-          quantity: number
-          recurrence?: string | null
-          source?: string
-          tracker_kind?: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          account_id?: string | null
-          cost_per_account?: number
-          created_at?: string
-          custom_category?: string | null
-          date_paid?: string
-          expense_type?: string
-          id?: string
-          notes?: string | null
-          payment_label?: string | null
-          project_label?: string | null
-          prop_firm_name?: string
-          quantity?: number
-          recurrence?: string | null
-          source?: string
-          tracker_kind?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "prop_firm_expenses_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      expense_categories: {
-        Row: {
-          created_at: string
-          name: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          name: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          name?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      tracker_income: {
-        Row: {
-          amount: number
-          created_at: string
-          date_received: string
-          id: string
-          income_kind: string
-          name: string
-          notes: string | null
-          payment_label: string | null
-          project_label: string | null
-          recurrence: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          amount: number
-          created_at?: string
-          date_received: string
-          id?: string
-          income_kind: string
-          name: string
-          notes?: string | null
-          payment_label?: string | null
-          project_label?: string | null
-          recurrence?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          amount?: number
-          created_at?: string
-          date_received?: string
-          id?: string
-          income_kind?: string
-          name?: string
-          notes?: string | null
-          payment_label?: string | null
-          project_label?: string | null
-          recurrence?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      prop_firm_expense_settings: {
-        Row: {
-          tax_reserve_percent: number
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          tax_reserve_percent: number
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          tax_reserve_percent?: number
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      trading_preference_discovery: {
-        Row: {
-          response: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          response: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          response?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      trading_preferences: {
-        Row: {
-          allowed_trading_days: string[]
-          breakeven_tolerance: number | null
-          consecutive_loss_pause: number | null
-          daily_loss_limit: number | null
-          daily_loss_limit_scope: string
-          daily_profit_rules_scope: string
-          daily_profit_target: number | null
-          max_contracts_per_trade: number | null
-          max_drawdown_goal: number | null
-          max_risk_per_trade: number | null
-          max_trades_per_day: number | null
-          max_trades_per_day_scope: string
-          max_weekly_loss: number | null
-          max_weekly_loss_scope: string
-          min_acceptable_rr: number | null
-          planned_end_minute: number | null
-          planned_start_minute: number | null
-          preferred_sessions: string[]
-          primary_instruments: string[]
-          stop_after_daily_profit_target: boolean
-          target_rr: number | null
-          trading_style: string | null
-          updated_at: string
-          user_id: string
-          wait_after_loss_minutes: number | null
-        }
-        Insert: {
-          allowed_trading_days?: string[]
-          breakeven_tolerance?: number | null
-          consecutive_loss_pause?: number | null
-          daily_loss_limit?: number | null
-          daily_loss_limit_scope?: string
-          daily_profit_rules_scope?: string
-          daily_profit_target?: number | null
-          max_contracts_per_trade?: number | null
-          max_drawdown_goal?: number | null
-          max_risk_per_trade?: number | null
-          max_trades_per_day?: number | null
-          max_trades_per_day_scope?: string
-          max_weekly_loss?: number | null
-          max_weekly_loss_scope?: string
-          min_acceptable_rr?: number | null
-          planned_end_minute?: number | null
-          planned_start_minute?: number | null
-          preferred_sessions?: string[]
-          primary_instruments?: string[]
-          stop_after_daily_profit_target?: boolean
-          target_rr?: number | null
-          trading_style?: string | null
-          updated_at?: string
-          user_id: string
-          wait_after_loss_minutes?: number | null
-        }
-        Update: {
-          allowed_trading_days?: string[]
-          breakeven_tolerance?: number | null
-          consecutive_loss_pause?: number | null
-          daily_loss_limit?: number | null
-          daily_loss_limit_scope?: string
-          daily_profit_rules_scope?: string
-          daily_profit_target?: number | null
-          max_contracts_per_trade?: number | null
-          max_drawdown_goal?: number | null
-          max_risk_per_trade?: number | null
-          max_trades_per_day?: number | null
-          max_trades_per_day_scope?: string
-          max_weekly_loss?: number | null
-          max_weekly_loss_scope?: string
-          min_acceptable_rr?: number | null
-          planned_end_minute?: number | null
-          planned_start_minute?: number | null
-          preferred_sessions?: string[]
-          primary_instruments?: string[]
-          stop_after_daily_profit_target?: boolean
-          target_rr?: number | null
-          trading_style?: string | null
-          updated_at?: string
-          user_id?: string
-          wait_after_loss_minutes?: number | null
-        }
-        Relationships: []
-      }
-      trading_preference_account_overrides: {
-        Row: {
-          account_id: string
-          daily_loss_limit: number | null
-          daily_profit_target: number | null
-          max_drawdown_goal: number | null
-          overrides_daily_loss: boolean
-          overrides_daily_profit_target: boolean
-          overrides_max_drawdown_goal: boolean
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          account_id: string
-          daily_loss_limit?: number | null
-          daily_profit_target?: number | null
-          max_drawdown_goal?: number | null
-          overrides_daily_loss?: boolean
-          overrides_daily_profit_target?: boolean
-          overrides_max_drawdown_goal?: boolean
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          account_id?: string
-          daily_loss_limit?: number | null
-          daily_profit_target?: number | null
-          max_drawdown_goal?: number | null
-          overrides_daily_loss?: boolean
-          overrides_daily_profit_target?: boolean
-          overrides_max_drawdown_goal?: boolean
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      trading_preference_revisions: {
-        Row: {
-          account_id: string | null
-          allowed_trading_days: string[]
-          breakeven_tolerance: number | null
-          consecutive_loss_pause: number | null
-          daily_loss_limit: number | null
-          daily_loss_limit_scope: string
-          daily_profit_rules_scope: string
-          daily_profit_target: number | null
-          effective_from: string
-          id: string
-          max_contracts_per_trade: number | null
-          max_drawdown_goal: number | null
-          max_risk_per_trade: number | null
-          max_trades_per_day: number | null
-          max_trades_per_day_scope: string
-          max_weekly_loss: number | null
-          max_weekly_loss_scope: string
-          min_acceptable_rr: number | null
-          overrides_daily_loss: boolean
-          overrides_daily_profit_target: boolean
-          overrides_max_drawdown_goal: boolean
-          planned_end_minute: number | null
-          planned_start_minute: number | null
-          preferred_sessions: string[]
-          primary_instruments: string[]
-          stop_after_daily_profit_target: boolean
-          target_rr: number | null
-          trading_style: string | null
-          user_id: string
-          wait_after_loss_minutes: number | null
-        }
-        Insert: {
-          account_id?: string | null
-          allowed_trading_days?: string[]
-          breakeven_tolerance?: number | null
-          consecutive_loss_pause?: number | null
-          daily_loss_limit?: number | null
-          daily_loss_limit_scope?: string
-          daily_profit_rules_scope?: string
-          daily_profit_target?: number | null
-          effective_from?: string
-          id?: string
-          max_contracts_per_trade?: number | null
-          max_drawdown_goal?: number | null
-          max_risk_per_trade?: number | null
-          max_trades_per_day?: number | null
-          max_trades_per_day_scope?: string
-          max_weekly_loss?: number | null
-          max_weekly_loss_scope?: string
-          min_acceptable_rr?: number | null
-          overrides_daily_loss?: boolean
-          overrides_daily_profit_target?: boolean
-          overrides_max_drawdown_goal?: boolean
-          planned_end_minute?: number | null
-          planned_start_minute?: number | null
-          preferred_sessions?: string[]
-          primary_instruments?: string[]
-          stop_after_daily_profit_target?: boolean
-          target_rr?: number | null
-          trading_style?: string | null
-          user_id: string
-          wait_after_loss_minutes?: number | null
-        }
-        Update: {
-          account_id?: string | null
-          allowed_trading_days?: string[]
-          breakeven_tolerance?: number | null
-          consecutive_loss_pause?: number | null
-          daily_loss_limit?: number | null
-          daily_loss_limit_scope?: string
-          daily_profit_rules_scope?: string
-          daily_profit_target?: number | null
-          effective_from?: string
-          id?: string
-          max_contracts_per_trade?: number | null
-          max_drawdown_goal?: number | null
-          max_risk_per_trade?: number | null
-          max_trades_per_day?: number | null
-          max_trades_per_day_scope?: string
-          max_weekly_loss?: number | null
-          max_weekly_loss_scope?: string
-          min_acceptable_rr?: number | null
-          overrides_daily_loss?: boolean
-          overrides_daily_profit_target?: boolean
-          overrides_max_drawdown_goal?: boolean
-          planned_end_minute?: number | null
-          planned_start_minute?: number | null
-          preferred_sessions?: string[]
-          primary_instruments?: string[]
-          stop_after_daily_profit_target?: boolean
-          target_rr?: number | null
-          trading_style?: string | null
-          user_id?: string
-          wait_after_loss_minutes?: number | null
-        }
-        Relationships: []
-      }
-      prop_firm_payout_assignments: {
-        Row: {
-          payout_key: string
-          prop_firm_name: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          payout_key: string
-          prop_firm_name: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          payout_key?: string
-          prop_firm_name?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       account_settings: {
         Row: {
           banned_at: string | null
@@ -607,6 +186,7 @@ export type Database = {
           created_at: string | null
           custom_public_status: string | null
           daily_drawdown: number | null
+          drawdown_floor_cap: number | null
           drawdown_type: string | null
           id: string
           is_active: boolean | null
@@ -631,6 +211,7 @@ export type Database = {
           created_at?: string | null
           custom_public_status?: string | null
           daily_drawdown?: number | null
+          drawdown_floor_cap?: number | null
           drawdown_type?: string | null
           id?: string
           is_active?: boolean | null
@@ -655,6 +236,7 @@ export type Database = {
           created_at?: string | null
           custom_public_status?: string | null
           daily_drawdown?: number | null
+          drawdown_floor_cap?: number | null
           drawdown_type?: string | null
           id?: string
           is_active?: boolean | null
@@ -1219,6 +801,7 @@ export type Database = {
           note: string | null
           updated_at: string
           user_id: string
+          web_paywall_enabled: boolean | null
         }
         Insert: {
           created_at?: string
@@ -1227,6 +810,7 @@ export type Database = {
           note?: string | null
           updated_at?: string
           user_id: string
+          web_paywall_enabled?: boolean | null
         }
         Update: {
           created_at?: string
@@ -1235,6 +819,7 @@ export type Database = {
           note?: string | null
           updated_at?: string
           user_id?: string
+          web_paywall_enabled?: boolean | null
         }
         Relationships: []
       }
@@ -1246,6 +831,7 @@ export type Database = {
           launch_access_cutoff_at: string | null
           launch_access_mode: string
           updated_at: string
+          web_paywall_enabled: boolean
         }
         Insert: {
           entitlement_enforcement_enabled?: boolean
@@ -1254,6 +840,7 @@ export type Database = {
           launch_access_cutoff_at?: string | null
           launch_access_mode?: string
           updated_at?: string
+          web_paywall_enabled?: boolean
         }
         Update: {
           entitlement_enforcement_enabled?: boolean
@@ -1262,6 +849,7 @@ export type Database = {
           launch_access_cutoff_at?: string | null
           launch_access_mode?: string
           updated_at?: string
+          web_paywall_enabled?: boolean
         }
         Relationships: []
       }
@@ -1885,6 +1473,33 @@ export type Database = {
           },
         ]
       }
+      content_drafts: {
+        Row: {
+          created_at: string
+          draft_type: string
+          id: string
+          payload: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          draft_type: string
+          id?: string
+          payload?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          draft_type?: string
+          id?: string
+          payload?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       content_reports: {
         Row: {
           created_at: string
@@ -2325,6 +1940,24 @@ export type Database = {
           enrollment_enabled?: boolean
           environment?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      expense_categories: {
+        Row: {
+          created_at: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          name?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -2915,6 +2548,7 @@ export type Database = {
           reactions_enabled: boolean
           replies_enabled: boolean
           room_joins_enabled: boolean
+          room_live_streams_enabled: boolean
           room_mentions_enabled: boolean
           room_messages_enabled: boolean
           shares_enabled: boolean
@@ -2940,6 +2574,7 @@ export type Database = {
           reactions_enabled?: boolean
           replies_enabled?: boolean
           room_joins_enabled?: boolean
+          room_live_streams_enabled?: boolean
           room_mentions_enabled?: boolean
           room_messages_enabled?: boolean
           shares_enabled?: boolean
@@ -2965,6 +2600,7 @@ export type Database = {
           reactions_enabled?: boolean
           replies_enabled?: boolean
           room_joins_enabled?: boolean
+          room_live_streams_enabled?: boolean
           room_mentions_enabled?: boolean
           room_messages_enabled?: boolean
           shares_enabled?: boolean
@@ -3324,6 +2960,241 @@ export type Database = {
           },
         ]
       }
+      product_daily_feature_usage: {
+        Row: {
+          activity_day: string
+          feature_key: string
+          platform: string
+          unique_users: number
+          use_count: number
+        }
+        Insert: {
+          activity_day: string
+          feature_key: string
+          platform: string
+          unique_users?: number
+          use_count?: number
+        }
+        Update: {
+          activity_day?: string
+          feature_key?: string
+          platform?: string
+          unique_users?: number
+          use_count?: number
+        }
+        Relationships: []
+      }
+      product_daily_feature_user_day: {
+        Row: {
+          activity_day: string
+          feature_key: string
+          platform: string
+          user_id: string
+        }
+        Insert: {
+          activity_day: string
+          feature_key: string
+          platform: string
+          user_id: string
+        }
+        Update: {
+          activity_day?: string
+          feature_key?: string
+          platform?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_daily_feature_user_day_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_daily_profile_views: {
+        Row: {
+          activity_day: string
+          unique_viewer_count: number
+          view_count: number
+          viewed_profile_id: string
+        }
+        Insert: {
+          activity_day: string
+          unique_viewer_count?: number
+          view_count?: number
+          viewed_profile_id: string
+        }
+        Update: {
+          activity_day?: string
+          unique_viewer_count?: number
+          view_count?: number
+          viewed_profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_daily_profile_views_viewed_profile_id_fkey"
+            columns: ["viewed_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_daily_user_activity: {
+        Row: {
+          activity_day: string
+          app_open_count: number
+          engaged: boolean
+          first_active_at: string
+          last_active_at: string
+          platforms: string[]
+          screen_view_count: number
+          session_count: number
+          user_id: string
+        }
+        Insert: {
+          activity_day: string
+          app_open_count?: number
+          engaged?: boolean
+          first_active_at: string
+          last_active_at: string
+          platforms?: string[]
+          screen_view_count?: number
+          session_count?: number
+          user_id: string
+        }
+        Update: {
+          activity_day?: string
+          app_open_count?: number
+          engaged?: boolean
+          first_active_at?: string
+          last_active_at?: string
+          platforms?: string[]
+          screen_view_count?: number
+          session_count?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_daily_user_activity_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_events: {
+        Row: {
+          dedupe_key: string | null
+          event_name: string
+          id: string
+          occurred_at: string
+          origin: string
+          platform: string
+          props: Json
+          session_id: string
+          user_id: string
+        }
+        Insert: {
+          dedupe_key?: string | null
+          event_name: string
+          id?: string
+          occurred_at?: string
+          origin?: string
+          platform: string
+          props?: Json
+          session_id: string
+          user_id: string
+        }
+        Update: {
+          dedupe_key?: string | null
+          event_name?: string
+          id?: string
+          occurred_at?: string
+          origin?: string
+          platform?: string
+          props?: Json
+          session_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_profile_view_uniques: {
+        Row: {
+          activity_day: string
+          viewed_profile_id: string
+          viewer_id: string
+        }
+        Insert: {
+          activity_day: string
+          viewed_profile_id: string
+          viewer_id: string
+        }
+        Update: {
+          activity_day?: string
+          viewed_profile_id?: string
+          viewer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_profile_view_uniques_viewed_profile_id_fkey"
+            columns: ["viewed_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_profile_view_uniques_viewer_id_fkey"
+            columns: ["viewer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_user_engagement_summary: {
+        Row: {
+          last_active_at: string
+          last_session_at: string | null
+          total_sessions: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          last_active_at: string
+          last_session_at?: string | null
+          total_sessions?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          last_active_at?: string
+          last_session_at?: string | null
+          total_sessions?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_user_engagement_summary_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profile_pinned_content: {
         Row: {
           content_id: string
@@ -3442,6 +3313,7 @@ export type Database = {
       }
       profile_posts: {
         Row: {
+          client_publish_id: string | null
           content: string | null
           created_at: string | null
           id: string
@@ -3455,6 +3327,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          client_publish_id?: string | null
           content?: string | null
           created_at?: string | null
           id?: string
@@ -3468,6 +3341,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          client_publish_id?: string | null
           content?: string | null
           created_at?: string | null
           id?: string
@@ -3547,6 +3421,8 @@ export type Database = {
           early_access_started_at: string | null
           early_access_status: string | null
           experience: string | null
+          free_plan_trade_slots_confirmed_epoch: number
+          free_plan_trade_slots_epoch: number
           has_email_password: boolean
           has_seen_getting_started_intro: boolean
           has_seen_onboarding_complete_popup: boolean
@@ -3559,6 +3435,7 @@ export type Database = {
           is_private: boolean | null
           is_pro: boolean | null
           last_csv_import_at: string | null
+          last_product_active_at: string | null
           lifetime_access_granted_at: string | null
           lifetime_access_source: string | null
           locked_account_id: string | null
@@ -3611,6 +3488,8 @@ export type Database = {
           early_access_started_at?: string | null
           early_access_status?: string | null
           experience?: string | null
+          free_plan_trade_slots_confirmed_epoch?: number
+          free_plan_trade_slots_epoch?: number
           has_email_password?: boolean
           has_seen_getting_started_intro?: boolean
           has_seen_onboarding_complete_popup?: boolean
@@ -3623,6 +3502,7 @@ export type Database = {
           is_private?: boolean | null
           is_pro?: boolean | null
           last_csv_import_at?: string | null
+          last_product_active_at?: string | null
           lifetime_access_granted_at?: string | null
           lifetime_access_source?: string | null
           locked_account_id?: string | null
@@ -3675,6 +3555,8 @@ export type Database = {
           early_access_started_at?: string | null
           early_access_status?: string | null
           experience?: string | null
+          free_plan_trade_slots_confirmed_epoch?: number
+          free_plan_trade_slots_epoch?: number
           has_email_password?: boolean
           has_seen_getting_started_intro?: boolean
           has_seen_onboarding_complete_popup?: boolean
@@ -3687,6 +3569,7 @@ export type Database = {
           is_private?: boolean | null
           is_pro?: boolean | null
           last_csv_import_at?: string | null
+          last_product_active_at?: string | null
           lifetime_access_granted_at?: string | null
           lifetime_access_source?: string | null
           locked_account_id?: string | null
@@ -3725,6 +3608,116 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      prop_firm_expense_settings: {
+        Row: {
+          tax_reserve_percent: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          tax_reserve_percent: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          tax_reserve_percent?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      prop_firm_expenses: {
+        Row: {
+          account_id: string | null
+          cost_per_account: number
+          created_at: string
+          custom_category: string | null
+          date_paid: string
+          expense_type: string
+          id: string
+          notes: string | null
+          payment_label: string | null
+          project_label: string | null
+          prop_firm_name: string
+          quantity: number
+          recurrence: string | null
+          source: string
+          total_cost: number | null
+          tracker_kind: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          cost_per_account: number
+          created_at?: string
+          custom_category?: string | null
+          date_paid: string
+          expense_type: string
+          id?: string
+          notes?: string | null
+          payment_label?: string | null
+          project_label?: string | null
+          prop_firm_name: string
+          quantity: number
+          recurrence?: string | null
+          source?: string
+          total_cost?: number | null
+          tracker_kind?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          cost_per_account?: number
+          created_at?: string
+          custom_category?: string | null
+          date_paid?: string
+          expense_type?: string
+          id?: string
+          notes?: string | null
+          payment_label?: string | null
+          project_label?: string | null
+          prop_firm_name?: string
+          quantity?: number
+          recurrence?: string | null
+          source?: string
+          total_cost?: number | null
+          tracker_kind?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prop_firm_expenses_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prop_firm_payout_assignments: {
+        Row: {
+          payout_key: string
+          prop_firm_name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          payout_key: string
+          prop_firm_name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          payout_key?: string
+          prop_firm_name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       psychology_coach_snapshots: {
         Row: {
@@ -4076,217 +4069,6 @@ export type Database = {
           },
         ]
       }
-      room_live_broadcasts: {
-        Row: {
-          broadcast_source: string
-          broadcaster_disconnect_check_at: string | null
-          broadcaster_disconnect_reason: string | null
-          broadcaster_user_id: string
-          ended_at: string | null
-          ended_reason: string | null
-          go_live_notified_at: string | null
-          id: string
-          ingress_status_snapshot: string | null
-          last_livekit_signal_at: string | null
-          livekit_ingress_id: string | null
-          primary_media_publisher_identity: string | null
-          room_id: string
-          started_at: string
-          stream_title: string | null
-          video_source: string
-          visibility: string
-          voice_mode: string
-        }
-        Insert: {
-          broadcast_source?: string
-          broadcaster_disconnect_check_at?: string | null
-          broadcaster_disconnect_reason?: string | null
-          broadcaster_user_id: string
-          ended_at?: string | null
-          ended_reason?: string | null
-          go_live_notified_at?: string | null
-          id?: string
-          ingress_status_snapshot?: string | null
-          last_livekit_signal_at?: string | null
-          livekit_ingress_id?: string | null
-          primary_media_publisher_identity?: string | null
-          room_id: string
-          started_at?: string
-          stream_title?: string | null
-          video_source?: string
-          visibility?: string
-          voice_mode?: string
-        }
-        Update: {
-          broadcast_source?: string
-          broadcaster_disconnect_check_at?: string | null
-          broadcaster_disconnect_reason?: string | null
-          broadcaster_user_id?: string
-          ended_at?: string | null
-          ended_reason?: string | null
-          go_live_notified_at?: string | null
-          id?: string
-          ingress_status_snapshot?: string | null
-          last_livekit_signal_at?: string | null
-          livekit_ingress_id?: string | null
-          primary_media_publisher_identity?: string | null
-          room_id?: string
-          started_at?: string
-          stream_title?: string | null
-          video_source?: string
-          visibility?: string
-          voice_mode?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "room_live_broadcasts_room_id_fkey"
-            columns: ["room_id"]
-            isOneToOne: false
-            referencedRelation: "rooms"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      room_live_broadcast_hands: {
-        Row: {
-          broadcast_session_id: string
-          raised_at: string
-          user_id: string
-        }
-        Insert: {
-          broadcast_session_id: string
-          raised_at?: string
-          user_id: string
-        }
-        Update: {
-          broadcast_session_id?: string
-          raised_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      room_live_broadcast_speaker_grants: {
-        Row: {
-          broadcast_session_id: string
-          granted_at: string
-          granted_by: string
-          id: string
-          revoked_at: string | null
-          user_id: string
-        }
-        Insert: {
-          broadcast_session_id: string
-          granted_at?: string
-          granted_by: string
-          id?: string
-          revoked_at?: string | null
-          user_id: string
-        }
-        Update: {
-          broadcast_session_id?: string
-          granted_at?: string
-          granted_by?: string
-          id?: string
-          revoked_at?: string | null
-          user_id?: string
-        }
-        Relationships: []
-      }
-      room_live_broadcast_session_blocks: {
-        Row: {
-          blocked_at: string
-          blocked_by: string
-          broadcast_session_id: string
-          user_id: string
-        }
-        Insert: {
-          blocked_at?: string
-          blocked_by: string
-          broadcast_session_id: string
-          user_id: string
-        }
-        Update: {
-          blocked_at?: string
-          blocked_by?: string
-          broadcast_session_id?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      room_live_broadcast_invitations: {
-        Row: {
-          broadcast_session_id: string
-          id: string
-          invited_at: string
-          invited_by: string
-          responded_at: string | null
-          status: string
-          user_id: string
-        }
-        Insert: {
-          broadcast_session_id: string
-          id?: string
-          invited_at?: string
-          invited_by: string
-          responded_at?: string | null
-          status?: string
-          user_id: string
-        }
-        Update: {
-          broadcast_session_id?: string
-          id?: string
-          invited_at?: string
-          invited_by?: string
-          responded_at?: string | null
-          status?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      room_livekit_disconnect_outbox: {
-        Row: {
-          attempt_count: number
-          created_at: string
-          id: string
-          last_error: string | null
-          processed_at: string | null
-          processing_claimed_at: string | null
-          reason: string
-          room_id: string
-          user_id: string
-        }
-        Insert: {
-          attempt_count?: number
-          created_at?: string
-          id?: string
-          last_error?: string | null
-          processed_at?: string | null
-          processing_claimed_at?: string | null
-          reason: string
-          room_id: string
-          user_id: string
-        }
-        Update: {
-          attempt_count?: number
-          created_at?: string
-          id?: string
-          last_error?: string | null
-          processed_at?: string | null
-          processing_claimed_at?: string | null
-          reason?: string
-          room_id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "room_livekit_disconnect_outbox_room_id_fkey"
-            columns: ["room_id"]
-            isOneToOne: false
-            referencedRelation: "rooms"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       room_bans: {
         Row: {
           banned_by: string
@@ -4381,6 +4163,270 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room_live_broadcast_hands: {
+        Row: {
+          broadcast_session_id: string
+          raised_at: string
+          user_id: string
+        }
+        Insert: {
+          broadcast_session_id: string
+          raised_at?: string
+          user_id: string
+        }
+        Update: {
+          broadcast_session_id?: string
+          raised_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_live_broadcast_hands_broadcast_session_id_fkey"
+            columns: ["broadcast_session_id"]
+            isOneToOne: false
+            referencedRelation: "room_live_broadcasts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room_live_broadcast_invitations: {
+        Row: {
+          broadcast_session_id: string
+          id: string
+          invited_at: string
+          invited_by: string
+          responded_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          broadcast_session_id: string
+          id?: string
+          invited_at?: string
+          invited_by: string
+          responded_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          broadcast_session_id?: string
+          id?: string
+          invited_at?: string
+          invited_by?: string
+          responded_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_live_broadcast_invitations_broadcast_session_id_fkey"
+            columns: ["broadcast_session_id"]
+            isOneToOne: false
+            referencedRelation: "room_live_broadcasts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room_live_broadcast_session_blocks: {
+        Row: {
+          blocked_at: string
+          blocked_by: string
+          broadcast_session_id: string
+          user_id: string
+        }
+        Insert: {
+          blocked_at?: string
+          blocked_by: string
+          broadcast_session_id: string
+          user_id: string
+        }
+        Update: {
+          blocked_at?: string
+          blocked_by?: string
+          broadcast_session_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_live_broadcast_session_blocks_broadcast_session_id_fkey"
+            columns: ["broadcast_session_id"]
+            isOneToOne: false
+            referencedRelation: "room_live_broadcasts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room_live_broadcast_speaker_grants: {
+        Row: {
+          broadcast_session_id: string
+          granted_at: string
+          granted_by: string
+          id: string
+          revoked_at: string | null
+          user_id: string
+        }
+        Insert: {
+          broadcast_session_id: string
+          granted_at?: string
+          granted_by: string
+          id?: string
+          revoked_at?: string | null
+          user_id: string
+        }
+        Update: {
+          broadcast_session_id?: string
+          granted_at?: string
+          granted_by?: string
+          id?: string
+          revoked_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_live_broadcast_speaker_grants_broadcast_session_id_fkey"
+            columns: ["broadcast_session_id"]
+            isOneToOne: false
+            referencedRelation: "room_live_broadcasts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room_live_broadcasts: {
+        Row: {
+          broadcast_source: string
+          broadcaster_disconnect_check_at: string | null
+          broadcaster_disconnect_reason: string | null
+          broadcaster_user_id: string
+          ended_at: string | null
+          ended_reason: string | null
+          expires_at: string | null
+          go_live_notified_at: string | null
+          id: string
+          ingress_status_snapshot: string | null
+          last_livekit_signal_at: string | null
+          livekit_ingress_id: string | null
+          primary_media_publisher_identity: string | null
+          room_id: string
+          started_at: string
+          stream_title: string | null
+          video_source: string
+          visibility: string
+          voice_mode: string
+        }
+        Insert: {
+          broadcast_source?: string
+          broadcaster_disconnect_check_at?: string | null
+          broadcaster_disconnect_reason?: string | null
+          broadcaster_user_id: string
+          ended_at?: string | null
+          ended_reason?: string | null
+          expires_at?: string | null
+          go_live_notified_at?: string | null
+          id?: string
+          ingress_status_snapshot?: string | null
+          last_livekit_signal_at?: string | null
+          livekit_ingress_id?: string | null
+          primary_media_publisher_identity?: string | null
+          room_id: string
+          started_at?: string
+          stream_title?: string | null
+          video_source?: string
+          visibility?: string
+          voice_mode?: string
+        }
+        Update: {
+          broadcast_source?: string
+          broadcaster_disconnect_check_at?: string | null
+          broadcaster_disconnect_reason?: string | null
+          broadcaster_user_id?: string
+          ended_at?: string | null
+          ended_reason?: string | null
+          expires_at?: string | null
+          go_live_notified_at?: string | null
+          id?: string
+          ingress_status_snapshot?: string | null
+          last_livekit_signal_at?: string | null
+          livekit_ingress_id?: string | null
+          primary_media_publisher_identity?: string | null
+          room_id?: string
+          started_at?: string
+          stream_title?: string | null
+          video_source?: string
+          visibility?: string
+          voice_mode?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_live_broadcasts_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room_live_broadcast_broadcaster_cooldowns: {
+        Row: {
+          broadcaster_user_id: string
+          cooldown_until: string
+          updated_at: string
+        }
+        Insert: {
+          broadcaster_user_id: string
+          cooldown_until: string
+          updated_at?: string
+        }
+        Update: {
+          broadcaster_user_id?: string
+          cooldown_until?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      room_livekit_disconnect_outbox: {
+        Row: {
+          attempt_count: number
+          created_at: string
+          id: string
+          last_error: string | null
+          processed_at: string | null
+          processing_claimed_at: string | null
+          reason: string
+          room_id: string
+          user_id: string
+        }
+        Insert: {
+          attempt_count?: number
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          processed_at?: string | null
+          processing_claimed_at?: string | null
+          reason: string
+          room_id: string
+          user_id: string
+        }
+        Update: {
+          attempt_count?: number
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          processed_at?: string | null
+          processing_claimed_at?: string | null
+          reason?: string
+          room_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_livekit_disconnect_outbox_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
             referencedColumns: ["id"]
           },
         ]
@@ -4526,30 +4572,36 @@ export type Database = {
         Row: {
           created_at: string | null
           id: string
+          is_favorited: boolean
           last_read_at: string | null
           last_read_message_id: string | null
           left_at: string | null
           notification_enabled: boolean
+          owner_removed_at: string | null
           room_id: string | null
           user_id: string | null
         }
         Insert: {
           created_at?: string | null
           id?: string
+          is_favorited?: boolean
           last_read_at?: string | null
           last_read_message_id?: string | null
           left_at?: string | null
           notification_enabled?: boolean
+          owner_removed_at?: string | null
           room_id?: string | null
           user_id?: string | null
         }
         Update: {
           created_at?: string | null
           id?: string
+          is_favorited?: boolean
           last_read_at?: string | null
           last_read_message_id?: string | null
           left_at?: string | null
           notification_enabled?: boolean
+          owner_removed_at?: string | null
           room_id?: string | null
           user_id?: string | null
         }
@@ -4814,7 +4866,6 @@ export type Database = {
       rooms: {
         Row: {
           allow_members_chat: boolean | null
-          live_voice_kind: string
           category: string | null
           created_at: string | null
           description: string | null
@@ -4823,6 +4874,7 @@ export type Database = {
           image_url: string | null
           is_private: boolean | null
           join_policy: string
+          live_voice_kind: string
           members_can_message: boolean
           members_can_share_media: boolean
           members_can_share_trades: boolean
@@ -4835,7 +4887,6 @@ export type Database = {
         }
         Insert: {
           allow_members_chat?: boolean | null
-          live_voice_kind?: string
           category?: string | null
           created_at?: string | null
           description?: string | null
@@ -4844,6 +4895,7 @@ export type Database = {
           image_url?: string | null
           is_private?: boolean | null
           join_policy?: string
+          live_voice_kind?: string
           members_can_message?: boolean
           members_can_share_media?: boolean
           members_can_share_trades?: boolean
@@ -4856,7 +4908,6 @@ export type Database = {
         }
         Update: {
           allow_members_chat?: boolean | null
-          live_voice_kind?: string
           category?: string | null
           created_at?: string | null
           description?: string | null
@@ -4865,6 +4916,7 @@ export type Database = {
           image_url?: string | null
           is_private?: boolean | null
           join_policy?: string
+          live_voice_kind?: string
           members_can_message?: boolean
           members_can_share_media?: boolean
           members_can_share_trades?: boolean
@@ -5006,18 +5058,21 @@ export type Database = {
           created_at: string | null
           id: string
           image_url: string | null
+          text_overlays: Json | null
           user_id: string | null
         }
         Insert: {
           created_at?: string | null
           id?: string
           image_url?: string | null
+          text_overlays?: Json | null
           user_id?: string | null
         }
         Update: {
           created_at?: string | null
           id?: string
           image_url?: string | null
+          text_overlays?: Json | null
           user_id?: string | null
         }
         Relationships: [
@@ -5098,6 +5153,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      tracker_income: {
+        Row: {
+          amount: number
+          created_at: string
+          date_received: string
+          id: string
+          income_kind: string
+          name: string
+          notes: string | null
+          payment_label: string | null
+          project_label: string | null
+          recurrence: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          date_received: string
+          id?: string
+          income_kind: string
+          name: string
+          notes?: string | null
+          payment_label?: string | null
+          project_label?: string | null
+          recurrence?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          date_received?: string
+          id?: string
+          income_kind?: string
+          name?: string
+          notes?: string | null
+          payment_label?: string | null
+          project_label?: string | null
+          recurrence?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       trade_comments: {
         Row: {
@@ -5449,15 +5549,18 @@ export type Database = {
           dollar_risk: number | null
           duration_seconds: number | null
           duration_text: string | null
+          early_exit: boolean
           emotion: string | null
           entry_price: number | null
           entry_time: string | null
           execution_rating: number | null
           exit_emotion: string | null
           exit_price: number | null
+          exit_rr: number | null
           exit_time: string | null
           first_published_at: string | null
           followed_plan: boolean | null
+          full_tp: boolean
           id: string
           image_crop: Json | null
           image_display_mode: string
@@ -5469,6 +5572,7 @@ export type Database = {
           is_public: boolean | null
           last_broker_sync_at: string | null
           market_condition: string | null
+          max_rr_reached: number | null
           mistake_type: string | null
           mode: string | null
           news_event: boolean | null
@@ -5477,13 +5581,9 @@ export type Database = {
           points: number | null
           psychology_notes: string | null
           public_description: string | null
+          realized_rr: number | null
           reviewed: boolean | null
           rr: number | null
-          max_rr_reached: number | null
-          realized_rr: number | null
-          full_tp: boolean
-          early_exit: boolean
-          exit_rr: number | null
           session: string | null
           source_account_id: string | null
           strategy: string | null
@@ -5517,15 +5617,18 @@ export type Database = {
           dollar_risk?: number | null
           duration_seconds?: number | null
           duration_text?: string | null
+          early_exit?: boolean
           emotion?: string | null
           entry_price?: number | null
           entry_time?: string | null
           execution_rating?: number | null
           exit_emotion?: string | null
           exit_price?: number | null
+          exit_rr?: number | null
           exit_time?: string | null
           first_published_at?: string | null
           followed_plan?: boolean | null
+          full_tp?: boolean
           id?: string
           image_crop?: Json | null
           image_display_mode?: string
@@ -5537,6 +5640,7 @@ export type Database = {
           is_public?: boolean | null
           last_broker_sync_at?: string | null
           market_condition?: string | null
+          max_rr_reached?: number | null
           mistake_type?: string | null
           mode?: string | null
           news_event?: boolean | null
@@ -5545,13 +5649,9 @@ export type Database = {
           points?: number | null
           psychology_notes?: string | null
           public_description?: string | null
+          realized_rr?: number | null
           reviewed?: boolean | null
           rr?: number | null
-          max_rr_reached?: number | null
-          realized_rr?: number | null
-          full_tp?: boolean
-          early_exit?: boolean
-          exit_rr?: number | null
           session?: string | null
           source_account_id?: string | null
           strategy?: string | null
@@ -5585,15 +5685,18 @@ export type Database = {
           dollar_risk?: number | null
           duration_seconds?: number | null
           duration_text?: string | null
+          early_exit?: boolean
           emotion?: string | null
           entry_price?: number | null
           entry_time?: string | null
           execution_rating?: number | null
           exit_emotion?: string | null
           exit_price?: number | null
+          exit_rr?: number | null
           exit_time?: string | null
           first_published_at?: string | null
           followed_plan?: boolean | null
+          full_tp?: boolean
           id?: string
           image_crop?: Json | null
           image_display_mode?: string
@@ -5605,6 +5708,7 @@ export type Database = {
           is_public?: boolean | null
           last_broker_sync_at?: string | null
           market_condition?: string | null
+          max_rr_reached?: number | null
           mistake_type?: string | null
           mode?: string | null
           news_event?: boolean | null
@@ -5613,13 +5717,9 @@ export type Database = {
           points?: number | null
           psychology_notes?: string | null
           public_description?: string | null
+          realized_rr?: number | null
           reviewed?: boolean | null
           rr?: number | null
-          max_rr_reached?: number | null
-          realized_rr?: number | null
-          full_tp?: boolean
-          early_exit?: boolean
-          exit_rr?: number | null
           session?: string | null
           source_account_id?: string | null
           strategy?: string | null
@@ -5661,6 +5761,257 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      trading_preference_account_overrides: {
+        Row: {
+          account_id: string
+          daily_loss_limit: number | null
+          daily_profit_target: number | null
+          max_drawdown_goal: number | null
+          overrides_daily_loss: boolean
+          overrides_daily_profit_target: boolean
+          overrides_max_drawdown_goal: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          daily_loss_limit?: number | null
+          daily_profit_target?: number | null
+          max_drawdown_goal?: number | null
+          overrides_daily_loss?: boolean
+          overrides_daily_profit_target?: boolean
+          overrides_max_drawdown_goal?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          daily_loss_limit?: number | null
+          daily_profit_target?: number | null
+          max_drawdown_goal?: number | null
+          overrides_daily_loss?: boolean
+          overrides_daily_profit_target?: boolean
+          overrides_max_drawdown_goal?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trading_preference_account_overrides_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trading_preference_discovery: {
+        Row: {
+          response: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          response: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          response?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      trading_preference_revisions: {
+        Row: {
+          account_id: string | null
+          allowed_trading_days: string[]
+          breakeven_tolerance: number | null
+          consecutive_loss_pause: number | null
+          daily_loss_limit: number | null
+          daily_loss_limit_scope: string
+          daily_profit_rules_scope: string
+          daily_profit_target: number | null
+          effective_from: string
+          id: string
+          max_contracts_per_trade: number | null
+          max_drawdown_goal: number | null
+          max_risk_per_trade: number | null
+          max_trades_per_day: number | null
+          max_trades_per_day_scope: string
+          max_weekly_loss: number | null
+          max_weekly_loss_scope: string
+          min_acceptable_rr: number | null
+          overrides_daily_loss: boolean
+          overrides_daily_profit_target: boolean
+          overrides_max_drawdown_goal: boolean
+          planned_end_minute: number | null
+          planned_start_minute: number | null
+          preferred_sessions: string[]
+          primary_instruments: string[]
+          stop_after_daily_profit_target: boolean
+          target_rr: number | null
+          trading_style: string | null
+          user_id: string
+          wait_after_loss_minutes: number | null
+        }
+        Insert: {
+          account_id?: string | null
+          allowed_trading_days?: string[]
+          breakeven_tolerance?: number | null
+          consecutive_loss_pause?: number | null
+          daily_loss_limit?: number | null
+          daily_loss_limit_scope?: string
+          daily_profit_rules_scope?: string
+          daily_profit_target?: number | null
+          effective_from?: string
+          id?: string
+          max_contracts_per_trade?: number | null
+          max_drawdown_goal?: number | null
+          max_risk_per_trade?: number | null
+          max_trades_per_day?: number | null
+          max_trades_per_day_scope?: string
+          max_weekly_loss?: number | null
+          max_weekly_loss_scope?: string
+          min_acceptable_rr?: number | null
+          overrides_daily_loss?: boolean
+          overrides_daily_profit_target?: boolean
+          overrides_max_drawdown_goal?: boolean
+          planned_end_minute?: number | null
+          planned_start_minute?: number | null
+          preferred_sessions?: string[]
+          primary_instruments?: string[]
+          stop_after_daily_profit_target?: boolean
+          target_rr?: number | null
+          trading_style?: string | null
+          user_id: string
+          wait_after_loss_minutes?: number | null
+        }
+        Update: {
+          account_id?: string | null
+          allowed_trading_days?: string[]
+          breakeven_tolerance?: number | null
+          consecutive_loss_pause?: number | null
+          daily_loss_limit?: number | null
+          daily_loss_limit_scope?: string
+          daily_profit_rules_scope?: string
+          daily_profit_target?: number | null
+          effective_from?: string
+          id?: string
+          max_contracts_per_trade?: number | null
+          max_drawdown_goal?: number | null
+          max_risk_per_trade?: number | null
+          max_trades_per_day?: number | null
+          max_trades_per_day_scope?: string
+          max_weekly_loss?: number | null
+          max_weekly_loss_scope?: string
+          min_acceptable_rr?: number | null
+          overrides_daily_loss?: boolean
+          overrides_daily_profit_target?: boolean
+          overrides_max_drawdown_goal?: boolean
+          planned_end_minute?: number | null
+          planned_start_minute?: number | null
+          preferred_sessions?: string[]
+          primary_instruments?: string[]
+          stop_after_daily_profit_target?: boolean
+          target_rr?: number | null
+          trading_style?: string | null
+          user_id?: string
+          wait_after_loss_minutes?: number | null
+        }
+        Relationships: []
+      }
+      trading_preferences: {
+        Row: {
+          allowed_trading_days: string[]
+          apply_rules_to_past_trades: boolean
+          breakeven_tolerance: number | null
+          consecutive_loss_pause: number | null
+          daily_loss_limit: number | null
+          daily_loss_limit_scope: string
+          daily_profit_rules_scope: string
+          daily_profit_target: number | null
+          max_contracts_per_trade: number | null
+          max_drawdown_goal: number | null
+          max_risk_per_trade: number | null
+          max_trades_per_day: number | null
+          max_trades_per_day_scope: string
+          max_weekly_loss: number | null
+          max_weekly_loss_scope: string
+          min_acceptable_rr: number | null
+          personal_compliance_target_percent: number | null
+          planned_end_minute: number | null
+          planned_start_minute: number | null
+          preferred_sessions: string[]
+          primary_instruments: string[]
+          stop_after_daily_profit_target: boolean
+          target_rr: number | null
+          trading_style: string | null
+          updated_at: string
+          user_id: string
+          wait_after_loss_minutes: number | null
+        }
+        Insert: {
+          allowed_trading_days?: string[]
+          apply_rules_to_past_trades?: boolean
+          breakeven_tolerance?: number | null
+          consecutive_loss_pause?: number | null
+          daily_loss_limit?: number | null
+          daily_loss_limit_scope?: string
+          daily_profit_rules_scope?: string
+          daily_profit_target?: number | null
+          max_contracts_per_trade?: number | null
+          max_drawdown_goal?: number | null
+          max_risk_per_trade?: number | null
+          max_trades_per_day?: number | null
+          max_trades_per_day_scope?: string
+          max_weekly_loss?: number | null
+          max_weekly_loss_scope?: string
+          min_acceptable_rr?: number | null
+          personal_compliance_target_percent?: number | null
+          planned_end_minute?: number | null
+          planned_start_minute?: number | null
+          preferred_sessions?: string[]
+          primary_instruments?: string[]
+          stop_after_daily_profit_target?: boolean
+          target_rr?: number | null
+          trading_style?: string | null
+          updated_at?: string
+          user_id: string
+          wait_after_loss_minutes?: number | null
+        }
+        Update: {
+          allowed_trading_days?: string[]
+          apply_rules_to_past_trades?: boolean
+          breakeven_tolerance?: number | null
+          consecutive_loss_pause?: number | null
+          daily_loss_limit?: number | null
+          daily_loss_limit_scope?: string
+          daily_profit_rules_scope?: string
+          daily_profit_target?: number | null
+          max_contracts_per_trade?: number | null
+          max_drawdown_goal?: number | null
+          max_risk_per_trade?: number | null
+          max_trades_per_day?: number | null
+          max_trades_per_day_scope?: string
+          max_weekly_loss?: number | null
+          max_weekly_loss_scope?: string
+          min_acceptable_rr?: number | null
+          personal_compliance_target_percent?: number | null
+          planned_end_minute?: number | null
+          planned_start_minute?: number | null
+          preferred_sessions?: string[]
+          primary_instruments?: string[]
+          stop_after_daily_profit_target?: boolean
+          target_rr?: number | null
+          trading_style?: string | null
+          updated_at?: string
+          user_id?: string
+          wait_after_loss_minutes?: number | null
+        }
+        Relationships: []
       }
       user_accounts: {
         Row: {
@@ -5896,7 +6247,6 @@ export type Database = {
           created_at: string | null
           date: string | null
           direction: string | null
-          dollar_risk: number | null
           duration_seconds: number | null
           duration_text: string | null
           entry_price: number | null
@@ -5912,11 +6262,13 @@ export type Database = {
           is_public: boolean | null
           market_condition: string | null
           mode: string | null
+          participating_account_modes: Json | null
           pnl: number | null
           points: number | null
           public_description: string | null
           rr: number | null
           session: string | null
+          source_account_id: string | null
           ticker: string | null
           timeframe: string | null
           trade_date: string | null
@@ -5947,11 +6299,13 @@ export type Database = {
           is_public?: boolean | null
           market_condition?: string | null
           mode?: string | null
+          participating_account_modes?: never
           pnl?: number | null
           points?: number | null
           public_description?: string | null
           rr?: number | null
           session?: string | null
+          source_account_id?: string | null
           ticker?: string | null
           timeframe?: string | null
           trade_date?: string | null
@@ -5982,11 +6336,13 @@ export type Database = {
           is_public?: boolean | null
           market_condition?: string | null
           mode?: string | null
+          participating_account_modes?: never
           pnl?: number | null
           points?: number | null
           public_description?: string | null
           rr?: number | null
           session?: string | null
+          source_account_id?: string | null
           ticker?: string | null
           timeframe?: string | null
           trade_date?: string | null
@@ -6000,6 +6356,13 @@ export type Database = {
             columns: ["copy_trading_group_id"]
             isOneToOne: false
             referencedRelation: "copy_trading_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trades_source_account_id_fkey"
+            columns: ["source_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -6060,7 +6423,7 @@ export type Database = {
         Args: {
           p_guest: boolean
           p_reel: Database["public"]["Tables"]["reels"]["Row"]
-          p_trade: Database["public"]["Tables"]["trades"]["Row"]
+          p_trade_id: string
         }
         Returns: Json
       }
@@ -6068,14 +6431,42 @@ export type Database = {
         Args: { p_row: Database["public"]["Tables"]["achievements"]["Row"] }
         Returns: Json
       }
-      _v1_session_early_access_active: {
-        Args: { p: Database["public"]["Tables"]["profiles"]["Row"] }
-        Returns: boolean
-      }
-      _v1_session_is_pro: {
-        Args: { p: Database["public"]["Tables"]["profiles"]["Row"] }
-        Returns: boolean
-      }
+      _v1_session_early_access_active:
+        | {
+            Args: { p: Database["public"]["Tables"]["profiles"]["Row"] }
+            Returns: boolean
+          }
+        | {
+            Args: {
+              p_campaign_id: string
+              p_ends_at: string
+              p_enrolled_at: string
+              p_enrollment_source: string
+              p_started_at: string
+              p_status: string
+            }
+            Returns: boolean
+          }
+      _v1_session_is_pro:
+        | {
+            Args: { p: Database["public"]["Tables"]["profiles"]["Row"] }
+            Returns: boolean
+          }
+        | {
+            Args: {
+              p_creator_access: boolean
+              p_early_access_campaign_id: string
+              p_early_access_ends_at: string
+              p_early_access_enrolled_at: string
+              p_early_access_enrollment_source: string
+              p_early_access_started_at: string
+              p_early_access_status: string
+              p_is_pro: boolean
+              p_subscription_status: string
+              p_trial_end: string
+            }
+            Returns: boolean
+          }
       _v1_trade_room_guest_readable: {
         Args: { p_room: Database["public"]["Tables"]["rooms"]["Row"] }
         Returns: boolean
@@ -6109,6 +6500,7 @@ export type Database = {
           legacy_only: boolean
         }[]
       }
+      accounts_can_mutate_can_add_trades: { Args: never; Returns: boolean }
       admin_affiliate_application_approve: {
         Args: {
           p_admin_notes?: string
@@ -6312,6 +6704,10 @@ export type Database = {
         Args: { p_session: string }
         Returns: string
       }
+      analytics_dashboard_session_sort_ord: {
+        Args: { p_label: string }
+        Returns: number
+      }
       analytics_dashboard_streak_snapshot: {
         Args: {
           p_account_id?: string
@@ -6479,6 +6875,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      apply_free_plan_trade_slot_downgrade: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
       backfill_trade_daily_stats_batch: {
         Args: { p_limit?: number }
         Returns: number
@@ -6487,7 +6887,23 @@ export type Database = {
         Args: { p_limit?: number }
         Returns: number
       }
+      broadcast_session_room_id: {
+        Args: { p_session_id: string }
+        Returns: string
+      }
+      can_assign_room_member_tag: {
+        Args: { p_room_id: string; p_tag_id: string; p_user_id: string }
+        Returns: boolean
+      }
       can_manage_trade_room: {
+        Args: { p_room_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      can_moderate_room_member_target: {
+        Args: { p_actor: string; p_room_id: string; p_target: string }
+        Returns: boolean
+      }
+      can_moderate_trade_room: {
         Args: { p_room_id: string; p_user_id: string }
         Returns: boolean
       }
@@ -6533,11 +6949,27 @@ export type Database = {
           preview: string
         }[]
       }
+      copy_trade_public_participating_account_modes_by_trade_id: {
+        Args: { p_trade_id: string }
+        Returns: Json
+      }
+      copy_trade_public_participating_account_modes_json: {
+        Args: { p_trade: Database["public"]["Tables"]["trades"]["Row"] }
+        Returns: Json
+      }
       default_public_account_label: {
         Args: { p_category: string; p_mode: string }
         Returns: string
       }
+      delete_account_payout_entry: {
+        Args: { p_entry_id: string }
+        Returns: undefined
+      }
       delete_own_trade: { Args: { p_trade_id: string }; Returns: undefined }
+      delete_prop_payout: {
+        Args: { p_cycle_id: string; p_drawdown_behavior: string }
+        Returns: undefined
+      }
       early_access_environment_valid: {
         Args: { p_environment: string }
         Returns: boolean
@@ -6546,6 +6978,11 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: undefined
       }
+      enforce_copy_trading_accounts_view_only: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
+      enforce_guest_readonly: { Args: never; Returns: undefined }
       enroll_early_access: {
         Args: {
           p_enrollment_source: string
@@ -6621,12 +7058,12 @@ export type Database = {
         Returns: number
       }
       free_plan_limits_enforced: { Args: never; Returns: boolean }
+      free_plan_trade_slots_pending: {
+        Args: { p_user_id: string }
+        Returns: boolean
+      }
       free_plan_utc_day_start: { Args: never; Returns: string }
       get_active_block_peer_ids: { Args: never; Returns: string[] }
-      weekly_trading_report_eligible_user_ids: {
-        Args: { p_end: string; p_start: string }
-        Returns: string[]
-      },
       get_app_icon_badge: { Args: { p_user_id?: string }; Returns: number }
       get_conversation_shared_media: {
         Args: {
@@ -6703,11 +7140,16 @@ export type Database = {
           other_user_id: string
         }[]
       }
-      room_livekit_claim_outbox: {
-        Args: { p_limit?: number; p_outbox_id?: string }
-        Returns: Database["public"]["Tables"]["room_livekit_disconnect_outbox"]["Row"][]
+      guest_release_session: {
+        Args: { p_session_id: string }
+        Returns: undefined
       }
-      room_livekit_should_disconnect: {
+      guest_session_is_read_only: { Args: never; Returns: boolean }
+      has_elevated_room_member_tag: {
+        Args: { p_room_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      has_room_moderator_tag: {
         Args: { p_room_id: string; p_user_id: string }
         Returns: boolean
       }
@@ -6717,6 +7159,10 @@ export type Database = {
       }
       is_conversation_participant: {
         Args: { p_conversation_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      is_elevated_room_member_tag: {
+        Args: { p_tag_id: string }
         Returns: boolean
       }
       is_room_banned: {
@@ -6785,6 +7231,16 @@ export type Database = {
           user_id: string
         }[]
       }
+      list_blocked_accounts: {
+        Args: never
+        Returns: {
+          avatar_url: string
+          blocked_id: string
+          created_at: string
+          name: string
+          username: string
+        }[]
+      }
       list_muted_dm_peers: {
         Args: never
         Returns: {
@@ -6847,6 +7303,35 @@ export type Database = {
           slug: string
         }[]
       }
+      product_analytics_allowed_event_names: { Args: never; Returns: string[] }
+      product_analytics_apply_event_rollup: {
+        Args: {
+          p_event_name: string
+          p_occurred_at: string
+          p_platform: string
+          p_props: Json
+          p_user_id: string
+        }
+        Returns: undefined
+      }
+      product_analytics_emit_server_event: {
+        Args: {
+          p_dedupe_key: string
+          p_event_name: string
+          p_platform: string
+          p_props?: Json
+          p_user_id: string
+        }
+        Returns: undefined
+      }
+      product_analytics_purge_raw_events: {
+        Args: { p_keep_days?: number }
+        Returns: number
+      }
+      product_analytics_sanitize_props: {
+        Args: { p_props: Json }
+        Returns: Json
+      }
       profile_analytics_v2_perf_probe: {
         Args: { p_profile_id: string }
         Returns: Json
@@ -6860,6 +7345,15 @@ export type Database = {
         Returns: boolean
       }
       profile_is_pro_user: { Args: { p_user_id: string }; Returns: boolean }
+      profile_is_visible_to_viewer: {
+        Args: { p_profile_id: string }
+        Returns: boolean
+      }
+      profile_owner_note_snippet: {
+        Args: { p_trade_id: string }
+        Returns: string
+      }
+      profile_owner_private_fields: { Args: never; Returns: Json }
       profile_pinned_content_bootstrap: {
         Args: {
           p_can_view: boolean
@@ -6880,6 +7374,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      profile_public_account_modes: {
+        Args: { p_profile_id: string }
+        Returns: Json
+      }
       profile_public_daily_stats_mode_rollup: {
         Args: { p_filter_mode: string; p_profile_id: string }
         Returns: Json
@@ -6887,6 +7385,82 @@ export type Database = {
       profile_public_daily_stats_raw_parity: {
         Args: { p_filter_mode: string; p_profile_id: string }
         Returns: Json
+      }
+      profile_reader_row: {
+        Args: { p_identifier: string }
+        Returns: {
+          avatar_url: string | null
+          banned_at: string | null
+          banned_by: string | null
+          banned_reason: string | null
+          beta_signup_notified_at: string | null
+          billing_interval: string | null
+          bio: string | null
+          cancel_at: string | null
+          cancel_at_period_end: boolean | null
+          created_at: string | null
+          creator_access: boolean
+          creator_code: string | null
+          creator_granted_at: string | null
+          current_period_end: string | null
+          dm_privacy: string
+          early_access_campaign_id: string | null
+          early_access_ends_at: string | null
+          early_access_enrolled_at: string | null
+          early_access_enrollment_source: string | null
+          early_access_started_at: string | null
+          early_access_status: string | null
+          experience: string | null
+          free_plan_trade_slots_confirmed_epoch: number
+          free_plan_trade_slots_epoch: number
+          has_email_password: boolean
+          has_seen_getting_started_intro: boolean
+          has_seen_onboarding_complete_popup: boolean
+          has_used_csv_import: boolean | null
+          has_used_initial_import: boolean | null
+          id: string
+          is_banned: boolean
+          is_beta_tester: boolean
+          is_hidden_from_community: boolean
+          is_private: boolean | null
+          is_pro: boolean | null
+          last_csv_import_at: string | null
+          last_product_active_at: string | null
+          lifetime_access_granted_at: string | null
+          lifetime_access_source: string | null
+          locked_account_id: string | null
+          locked_account_name: string | null
+          locked_account_number: string | null
+          locked_account_size: string | null
+          locked_account_type: string | null
+          max_drawdown_limit: number | null
+          name: string | null
+          onboarding_completed: boolean | null
+          primary_market: string | null
+          referral_code: string | null
+          referral_count: number | null
+          referral_earnings: number
+          referred_by: string | null
+          signup_flow_source: string | null
+          started_trading: string | null
+          stripe_customer_id: string | null
+          stripe_price_id: string | null
+          subscription_status: string | null
+          trader_type: string | null
+          trading_model: string | null
+          trading_style: string | null
+          tradovate_login_import_reminder_opt_out: boolean
+          trial_end: string | null
+          use_free_tier: boolean
+          username: string | null
+          username_change_count: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "profiles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       profile_statistics_public_trades: {
         Args: { p_profile_id: string }
@@ -6907,13 +7481,54 @@ export type Database = {
         }
         Returns: string
       }
+      profile_statistics_session_breakdown_for_mode: {
+        Args: { p_mode: string; p_profile_id: string }
+        Returns: Json
+      }
       profile_statistics_trade_matches_mode: {
         Args: { p_acct_mode: string; p_filter_mode: string }
+        Returns: boolean
+      }
+      profile_tab_trades_v2_page: {
+        Args: {
+          p_cursor_id: string
+          p_cursor_ts: string
+          p_fetch_limit: number
+          p_profile_id: string
+        }
+        Returns: {
+          created_at: string
+          id: string
+        }[]
+      }
+      profile_trade_slots_pro: {
+        Args: { p: Database["public"]["Tables"]["profiles"]["Row"] }
+        Returns: boolean
+      }
+      profile_trade_slots_pro_for_user: {
+        Args: { p_user_id: string }
         Returns: boolean
       }
       profile_viewer_can_view_trades: {
         Args: { p_profile_id: string }
         Returns: boolean
+      }
+      profile_visible_trade_rows: {
+        Args: {
+          p_cursor_id: string
+          p_cursor_ts: string
+          p_limit: number
+          p_profile_id: string
+        }
+        Returns: Json
+      }
+      profile_visible_trade_summary: {
+        Args: { p_trade_id: string }
+        Returns: Json
+      }
+      profile_visible_trade_tab_item_v2: {
+        Args: { p_trade_id: string }
+        Returns: Json
       }
       rate_limit_cleanup_counters: {
         Args: { p_retain?: string }
@@ -6950,13 +7565,6 @@ export type Database = {
         Args: { p_recipient: string; p_sender: string }
         Returns: boolean
       }
-      delete_prop_payout: {
-        Args: {
-          p_cycle_id: string
-          p_drawdown_behavior: string
-        }
-        Returns: undefined
-      }
       record_account_payout: {
         Args: {
           p_account_id: string
@@ -6969,20 +7577,46 @@ export type Database = {
         }
         Returns: string
       }
-      upsert_prop_firm_account_purchase_expense: {
-        Args: {
-          p_account_id: string
-          p_cost_per_account: number
-          p_date_paid?: string
-          p_expense_type: string
-          p_prop_firm_name: string
-          p_user_id: string
-        }
-        Returns: string
-      }
       redeem_creator_access_code: {
         Args: { p_code: string; p_user_id: string }
         Returns: string
+      }
+      restore_pro_trade_account_slots: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
+      rls_passes_block_peer_check: {
+        Args: { p_author_id: string }
+        Returns: boolean
+      }
+      rls_viewer_block_peer_ids: { Args: never; Returns: string[] }
+      room_livekit_claim_outbox: {
+        Args: { p_limit?: number; p_outbox_id?: string }
+        Returns: {
+          attempt_count: number
+          created_at: string
+          id: string
+          last_error: string | null
+          processed_at: string | null
+          processing_claimed_at: string | null
+          reason: string
+          room_id: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "room_livekit_disconnect_outbox"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      room_livekit_enqueue_disconnect: {
+        Args: { p_reason: string; p_room_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      room_livekit_should_disconnect: {
+        Args: { p_room_id: string; p_user_id: string }
+        Returns: boolean
       }
       room_message_insert_allowed: {
         Args: {
@@ -7001,9 +7635,22 @@ export type Database = {
         Returns: boolean
       }
       rpc_v1_activity_bootstrap: {
-        Args: { p_cursor?: string; p_limit?: number }
+        Args: {
+          p_achievement_posts_only?: boolean
+          p_created_after?: string
+          p_created_before?: string
+          p_cursor?: string
+          p_exclude_achievement_posts?: boolean
+          p_limit?: number
+          p_types?: string[]
+        }
         Returns: Json
       }
+      rpc_v1_admin_demo: {
+        Args: { p_command: string; p_payload?: Json }
+        Returns: Json
+      }
+      rpc_v1_admin_demo_media_refs: { Args: never; Returns: string[] }
       rpc_v1_analytics_calendar_day_trades: {
         Args: { p_account_id?: string; p_calendar_day: string; p_mode?: string }
         Returns: Json
@@ -7035,6 +7682,10 @@ export type Database = {
           p_start: string
         }
         Returns: Json
+      }
+      rpc_v1_ban_trade_room_member: {
+        Args: { p_room_id: string; p_user_id: string }
+        Returns: undefined
       }
       rpc_v1_broker_integration_status: {
         Args: { p_provider?: string }
@@ -7093,6 +7744,7 @@ export type Database = {
         Args: { p_account_id?: string; p_trade_limit?: number }
         Returns: Json
       }
+      rpc_v1_demo_snapshot: { Args: never; Returns: Json }
       rpc_v1_explore_bootstrap: {
         Args: {
           p_room_limit?: number
@@ -7129,6 +7781,7 @@ export type Database = {
         Args: { p_cursor?: string; p_limit?: number }
         Returns: Json
       }
+      rpc_v1_product_events_ingest: { Args: { p_batch: Json }; Returns: Json }
       rpc_v1_profile_account_insights: {
         Args: { p_identifier: string }
         Returns: Json
@@ -7244,7 +7897,16 @@ export type Database = {
       }
       rpc_v1_trade_owner_read: { Args: { p_trade_id: string }; Returns: Json }
       rpc_v1_trade_room_discovery: {
-        Args: { p_limit?: number; p_mode?: string; p_scope?: string }
+        Args: {
+          p_category?: string
+          p_limit?: number
+          p_mode?: string
+          p_scope?: string
+        }
+        Returns: Json
+      }
+      rpc_v1_trade_room_invite_lookup: {
+        Args: { p_ref: string }
         Returns: Json
       }
       rpc_v1_trade_room_join_request_detail: {
@@ -7253,6 +7915,7 @@ export type Database = {
       }
       rpc_v1_trade_rooms_home_bootstrap: {
         Args: {
+          p_category?: string
           p_limit?: number
           p_popular_cursor?: string
           p_scope?: string
@@ -7378,6 +8041,10 @@ export type Database = {
           other_user_id: string
         }[]
       }
+      set_weekly_report_push_config: {
+        Args: { p_secret: string; p_url: string }
+        Returns: Json
+      }
       should_deliver_notification: {
         Args: {
           p_achievement_post_id?: string
@@ -7423,9 +8090,46 @@ export type Database = {
         }
         Returns: Json
       }
+      trade_summary_profile_copy_linkage_json: {
+        Args: { p_trade: Database["public"]["Tables"]["trades"]["Row"] }
+        Returns: Json
+      }
+      trade_summary_profile_participating_account_mode: {
+        Args: { p_trade: Database["public"]["Tables"]["trades"]["Row"] }
+        Returns: string
+      }
+      trade_summary_public_account_mode_for_owner_account: {
+        Args: { p_account_id: string; p_user_id: string }
+        Returns: string
+      }
+      trading_preference_scope_ok: { Args: { value: string }; Returns: boolean }
+      trading_preference_symbols_ok: {
+        Args: { items: string[] }
+        Returns: boolean
+      }
+      trading_preference_weekdays_ok: {
+        Args: { items: string[] }
+        Returns: boolean
+      }
+      trading_session_from_et: { Args: { p_ts: string }; Returns: string }
       try_story_reply_image_url: {
         Args: { p_content: string }
         Returns: string
+      }
+      upsert_prop_firm_account_purchase_expense: {
+        Args: {
+          p_account_id: string
+          p_cost_per_account: number
+          p_date_paid?: string
+          p_expense_type: string
+          p_prop_firm_name: string
+          p_user_id: string
+        }
+        Returns: string
+      }
+      user_copy_trading_account_ids: {
+        Args: { p_user_id: string }
+        Returns: string[]
       }
       user_streak_milestone_bundle: {
         Args: { p_user_id?: string }
@@ -7443,6 +8147,11 @@ export type Database = {
       users_have_active_block: {
         Args: { p_user_a: string; p_user_b: string }
         Returns: boolean
+      }
+      viewer_has_block_with: { Args: { p_author_id: string }; Returns: boolean }
+      weekly_trading_report_eligible_user_ids: {
+        Args: { p_end: string; p_start: string }
+        Returns: Json
       }
     }
     Enums: {

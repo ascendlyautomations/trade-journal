@@ -9,6 +9,11 @@ import {
 } from "livekit-client"
 import { createExternalStoreSnapshotCache } from "./externalStoreSnapshot.ts"
 import { classifyViewerBroadcastDisconnect } from "./tradeRoomBroadcastViewerDisconnect.ts"
+import {
+  BROADCAST_DURATION_LIMIT_BROADCASTER_MESSAGE,
+  BROADCAST_DURATION_LIMIT_VIEWER_MESSAGE,
+  isBroadcastPastExpiresAt,
+} from "../tradeRoomBroadcastDurationLimit.ts"
 import { runSingleFlightByKey } from "./runSingleFlightByKey.ts"
 import {
   broadcastCaptureErrorMessage,
@@ -34,8 +39,10 @@ import {
 } from "./tradeRoomBroadcastAudio.ts"
 import {
   clearBroadcastChatState,
+  isAllowedBroadcastImageUrl,
   publishBroadcastChatMessage,
   registerBroadcastChatHandlers,
+  sanitizeTradeId,
   trimBroadcastChatMessages,
   type BroadcastChatMessage,
   type BroadcastChatReplyReference,
@@ -122,6 +129,8 @@ export type BroadcastRoomStatus = {
   broadcasterDisplayName?: string | null
   streamTitle?: string | null
   startedAt?: string
+  /** Server-authoritative video broadcast end time (not general voice). */
+  expiresAt?: string | null
   viewerCount?: number | null
   voiceMode?: TradeRoomBroadcastVoiceMode
   videoSource?: TradeRoomBroadcastVideoSource
@@ -254,6 +263,7 @@ export type BroadcastViewerConnectionLost = {
 export type BroadcastViewerStreamEndedNotice = {
   sessionId: string
   roomTitle: string
+  message?: string
 }
 
 export type BroadcastSpeakInviteNotice = {
@@ -723,7 +733,10 @@ export function resumeTradeRoomBroadcastPlayback(): Promise<void> {
   })
 }
 
-function presentViewerStreamEndedNotice(sessionId: string): void {
+function presentViewerStreamEndedNotice(
+  sessionId: string,
+  message?: string
+): void {
   const sid = sessionId.trim()
   if (!sid || voluntaryViewerBroadcastLeave) return
   if (presentedStreamEndedSessionId === sid) return
@@ -731,6 +744,7 @@ function presentViewerStreamEndedNotice(sessionId: string): void {
   viewerStreamEndedNotice = {
     sessionId: sid,
     roomTitle: roomTitle?.trim() || "Trade Room",
+    message: message?.trim() || undefined,
   }
   viewerBroadcastConnectionLost = null
   emit()
@@ -1010,6 +1024,12 @@ function statusPayloadFromApiJson(payload: Record<string, unknown>): BroadcastRo
           ? null
           : undefined,
     startedAt: typeof payload.startedAt === "string" ? payload.startedAt : undefined,
+    expiresAt:
+      typeof payload.expiresAt === "string"
+        ? payload.expiresAt
+        : payload.expiresAt === null
+          ? null
+          : undefined,
     viewerCount:
       typeof payload.viewerCount === "number" ? payload.viewerCount : undefined,
     voiceMode:
@@ -2003,6 +2023,46 @@ export async function refreshTradeRoomBroadcastStatus(
       prevVisibility: prevSnap.visibility ?? null,
     })
     setTradeRoomBroadcastStatus(next)
+
+    const hadExpiry = prevSnap.expiresAt ?? null
+    if (
+      isWatching &&
+      !next.live &&
+      hadExpiry &&
+      isBroadcastPastExpiresAt(hadExpiry)
+    ) {
+      presentViewerStreamEndedNotice(
+        currentSessionId ?? prevSnap.broadcastSessionId ?? "",
+        BROADCAST_DURATION_LIMIT_VIEWER_MESSAGE
+      )
+    }
+
+    if (
+      isPublishing &&
+      currentSessionId &&
+      roomId &&
+      next.expiresAt &&
+      isBroadcastPastExpiresAt(next.expiresAt)
+    ) {
+      broadcasterPreviewError = BROADCAST_DURATION_LIMIT_BROADCASTER_MESSAGE
+      void stopTradeRoomBroadcast({
+        roomId,
+        sessionId: currentSessionId,
+        fetchStop: async (sessionId) => {
+          const bearerToken = await getSupabaseApiAccessToken()
+          if (!bearerToken) return
+          await fetch("/api/livekit/broadcast/stop", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${bearerToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ roomId, sessionId }),
+          })
+        },
+      })
+    }
+
     error = null
   } catch (err) {
     error = err instanceof Error ? err.message : "Could not load stream status."
@@ -2015,6 +2075,8 @@ export async function sendTradeRoomBroadcastChatMessage(options: {
   displayName: string
   avatarUrl: string | null
   text: string
+  imageUrl?: string | null
+  tradeId?: string | null
   replyTo?: BroadcastChatReplyReference | null
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!broadcastRoom) {
@@ -2026,13 +2088,15 @@ export async function sendTradeRoomBroadcastChatMessage(options: {
   }
   const result = await publishBroadcastChatMessage(broadcastRoom, normalized)
   if (result.ok) {
-    const selfMsg = {
+    const selfMsg: BroadcastChatMessage = {
       id: `${options.userId}-${Date.now()}`,
       userId: options.userId,
       displayName: options.displayName,
       avatarUrl: normalized.avatarUrl,
       text: options.text.trim(),
       sentAt: Date.now(),
+      imageUrl: isAllowedBroadcastImageUrl(options.imageUrl ?? undefined),
+      tradeId: sanitizeTradeId(options.tradeId ?? undefined),
       replyTo: options.replyTo ?? null,
     }
     chatMessages = trimBroadcastChatMessages([...chatMessages, selfMsg])
@@ -2592,6 +2656,10 @@ export async function startTradeRoomBroadcast(options: {
         (start as { streamTitle?: string | null }).streamTitle?.trim() ||
         options.setup.streamTitle.trim(),
       startedAt: start.startedAt,
+      expiresAt:
+        typeof (start as { expiresAt?: string | null }).expiresAt === "string"
+          ? (start as { expiresAt: string }).expiresAt
+          : (start as { expiresAt?: null }).expiresAt ?? null,
       voiceMode: start.voiceMode,
       videoSource: start.videoSource,
       broadcastSource:

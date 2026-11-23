@@ -14,7 +14,7 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
             from: "profiles",
             query: [
                 SupabaseQuery.select(
-                    "id,username,name,bio,avatar_url,trader_type,trading_style,primary_market,started_trading,is_private,created_at"
+                    "id,username,name,bio,avatar_url,trader_type,trading_style,trading_model,primary_market,started_trading,is_private,created_at"
                 ),
                 URLQueryItem(name: "username", value: "not.is.null"),
                 URLQueryItem(name: "is_private", value: "neq.true"),
@@ -31,21 +31,37 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
     }
 
     func discoverableProfiles(page: PageRequest) async throws -> CursorPage<Profile> {
+        try await discoverableProfiles(page: page, filter: .inactive)
+    }
+
+    func discoverableProfiles(
+        page: PageRequest,
+        filter: ExploreDiscoverableProfileFilter
+    ) async throws -> CursorPage<Profile> {
         let offset = Int(page.cursor ?? "0") ?? 0
         let limit = max(1, min(page.limit, 48))
+        let columns =
+            "id,username,name,bio,avatar_url,trader_type,trading_style,trading_model,primary_market,started_trading,is_private,created_at"
+        var query: [URLQueryItem] = [
+            SupabaseQuery.select(columns),
+            URLQueryItem(name: "username", value: "not.is.null"),
+            URLQueryItem(name: "is_private", value: "neq.true"),
+            URLQueryItem(name: "order", value: "created_at.desc"),
+            URLQueryItem(name: "offset", value: String(offset)),
+            URLQueryItem(name: "limit", value: String(limit)),
+        ]
+        if let traderType = filter.traderType {
+            query.append(SupabaseQuery.eq("trader_type", traderType.rawValue))
+        }
+        if let strategy = filter.normalizedStrategyQuery {
+            let style = SupabaseQuery.ilikeContains(column: "trading_style", query: strategy)
+            let model = SupabaseQuery.ilikeContains(column: "trading_model", query: strategy)
+            query.append(URLQueryItem(name: "or", value: "(\(style),\(model))"))
+        }
         let rows: [ProfileDTO.Profile] = try await supabase.database.select(
             ProfileDTO.Profile.self,
             from: "profiles",
-            query: [
-                SupabaseQuery.select(
-                    "id,username,name,bio,avatar_url,trader_type,trading_style,primary_market,started_trading,is_private,created_at"
-                ),
-                URLQueryItem(name: "username", value: "not.is.null"),
-                URLQueryItem(name: "is_private", value: "neq.true"),
-                URLQueryItem(name: "order", value: "created_at.desc"),
-                URLQueryItem(name: "offset", value: String(offset)),
-                URLQueryItem(name: "limit", value: String(limit)),
-            ]
+            query: query
         )
         let profiles = rows.compactMap { try? ProfileMapper.mapToDomain($0) }
             .filter { !$0.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -139,7 +155,8 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
         scope: TradeRoomDiscoveryScope,
         limit: Int,
         suggestedCursor: String? = nil,
-        popularCursor: String? = nil
+        popularCursor: String? = nil,
+        category: TradeRoomCategory? = nil
     ) async throws -> TradeRoomsHomeBootstrap {
         let capped = max(1, min(limit, 50))
         struct Meta: Decodable {
@@ -168,6 +185,9 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
         }
         if let popularCursor, !popularCursor.isEmpty {
             params["p_popular_cursor"] = popularCursor
+        }
+        if let category {
+            params["p_category"] = category.rawValue
         }
         let body = try JSONSerialization.data(withJSONObject: params, options: [])
 
@@ -216,6 +236,7 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
         var image_url: String?
         var followed_member_count: PostgresFlexibleInt?
         var room_kind: String?
+        var category: String?
         var discovery_tags: [String]?
         var join_policy: String?
         var viewer_join_request_status: String?
@@ -227,7 +248,8 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
     private func fetchDiscoveryRPC(
         mode: TradeRoomDiscoveryMode,
         scope: TradeRoomDiscoveryScope,
-        limit: Int
+        limit: Int,
+        category: TradeRoomCategory? = nil
     ) async throws -> [ExploreRoomSuggestion] {
         struct Payload: Decodable {
             struct Meta: Decodable { var contract_version: String? }
@@ -236,14 +258,15 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
             var data: DataBlock?
         }
 
-        let body = try JSONSerialization.data(
-            withJSONObject: [
-                "p_mode": mode.rpcValue,
-                "p_limit": limit,
-                "p_scope": scope.rpcValue,
-            ],
-            options: []
-        )
+        var rpcParams: [String: Any] = [
+            "p_mode": mode.rpcValue,
+            "p_limit": limit,
+            "p_scope": scope.rpcValue,
+        ]
+        if let category {
+            rpcParams["p_category"] = category.rawValue
+        }
+        let body = try JSONSerialization.data(withJSONObject: rpcParams, options: [])
         let data = try await supabase.database.rpcData(
             functionName: BackendV2Versioning.RPCName.tradeRoomDiscovery.rawValue,
             parametersJSON: body
@@ -271,6 +294,16 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
             }
             let image = row.image_url?.trimmingCharacters(in: .whitespacesAndNewlines)
             let ownerID = row.owner?.id.flatMap { ProfileID($0) }
+            let decodedCategory = TradeRoomCategory.parseStored(row.category)
+            #if DEBUG
+            TradeRoomCategoryRuntimeProbe.logDecode(
+                roomID: RoomID(id),
+                name: name,
+                rawRPCCategory: row.category,
+                decoded: decodedCategory,
+                section: section
+            )
+            #endif
             return ExploreRoomSuggestion(
                 id: RoomID(id),
                 name: name,
@@ -284,6 +317,7 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
                 ownerAvatarURL: row.owner?.avatar_url,
                 followedMemberCount: row.followed_member_count.map(\.value),
                 roomKind: TradeRoomKind.parse(row.room_kind),
+                category: decodedCategory,
                 discoveryTags: row.discovery_tags ?? [],
                 isJoined: row.is_member,
                 isOwner: row.is_owner,
@@ -322,6 +356,7 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
             var slug: String?
             var member_count: PostgresFlexibleInt?
             var room_kind: String?
+            var category: String?
             var discovery_tags: [String]?
             var join_policy: String?
             var viewer_join_request_status: String?
@@ -350,6 +385,7 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
                 memberCount: row.member_count.map(\.value),
                 imageURL: row.image_url,
                 roomKind: TradeRoomKind.parse(row.room_kind),
+                category: TradeRoomCategory.parseStored(row.category),
                 discoveryTags: row.discovery_tags ?? [],
                 joinPolicy: TradeRoomJoinPolicy(rawValue: row.join_policy ?? "") ?? .open,
                 viewerJoinRequestState: TradeRoomJoinRequestState.parse(row.viewer_join_request_status)
@@ -493,6 +529,7 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
             var member_count: PostgresFlexibleInt?
             var image_url: String?
             var room_kind: String?
+            var category: String?
             var discovery_tags: [String]?
             var join_policy: String?
             var viewer_join_request_status: String?
@@ -535,6 +572,7 @@ nonisolated struct DefaultExploreRepository: ExploreRepository {
                 memberCount: row.member_count.map(\.value),
                 imageURL: (image?.isEmpty == false) ? image : nil,
                 roomKind: TradeRoomKind.parse(row.room_kind),
+                category: TradeRoomCategory.parseStored(row.category),
                 discoveryTags: row.discovery_tags ?? [],
                 isJoined: row.is_member,
                 joinPolicy: TradeRoomJoinPolicy(rawValue: row.join_policy ?? "") ?? .open,

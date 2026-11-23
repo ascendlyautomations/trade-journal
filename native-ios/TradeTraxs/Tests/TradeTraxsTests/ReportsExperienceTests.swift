@@ -18,6 +18,112 @@ final class ReportsExperienceTests: XCTestCase {
         }
     }
 
+    func testWeeklySessionMetricsUseEntryTimeMacroBuckets() throws {
+        let eastern = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = eastern
+
+        func sessionTrade(id: String, hour: Int, minute: Int, pnl: Decimal) -> Trade {
+            let entry = calendar.date(
+                from: DateComponents(
+                    timeZone: eastern,
+                    year: 2026,
+                    month: 11,
+                    day: 10,
+                    hour: hour,
+                    minute: minute
+                )
+            )!
+            return Trade(
+                id: TradeID(id),
+                ownerProfileID: ProfileID("dev.reports.user"),
+                accountID: nil,
+                symbol: Symbol(ticker: "ES"),
+                side: .long,
+                mode: .live,
+                quantity: 1,
+                entryPrice: 100,
+                exitPrice: 101,
+                entryAt: entry,
+                exitAt: entry.addingTimeInterval(3600),
+                realizedPnL: Money(amount: pnl),
+                riskReward: 1,
+                points: 0,
+                sessionLabel: nil,
+                visibility: .private,
+                createdAt: entry,
+                updatedAt: entry
+            )
+        }
+
+        let trades = [
+            sessionTrade(id: "l1", hour: 5, minute: 30, pnl: 120),
+            sessionTrade(id: "l2", hour: 6, minute: 0, pnl: 80),
+            sessionTrade(id: "a1", hour: 20, minute: 0, pnl: -40),
+            sessionTrade(id: "a2", hour: 21, minute: 0, pnl: -60),
+            sessionTrade(id: "n1", hour: 9, minute: 30, pnl: 25),
+        ]
+
+        let report = TradingReportGenerator.generate(
+            trades: trades,
+            week: TradingReportWeekRef(mondayKey: "2026-11-09")
+        )
+
+        XCTAssertEqual(report.metrics.bestSessionLabel, "London")
+        XCTAssertEqual(report.metrics.bestSessionPnl ?? -1, 200, accuracy: 0.01)
+        XCTAssertEqual(report.metrics.worstSessionLabel, "Asia")
+        XCTAssertEqual(report.metrics.worstSessionPnl ?? 0, -100, accuracy: 0.01)
+    }
+
+    func testTradingReportDetailBlockOrder() {
+        let metrics = TradingReportMetrics(
+            netPnl: 100,
+            winRate: 50,
+            knownResultCount: 2,
+            averageRr: 1,
+            profitFactor: 1.2,
+            tradesTaken: 2,
+            bestDayLabel: nil,
+            bestDayPnl: nil,
+            worstDayLabel: nil,
+            worstDayPnl: nil,
+            bestSessionLabel: "London",
+            bestSessionPnl: 80,
+            worstSessionLabel: nil,
+            worstSessionPnl: nil,
+            mostTradedSymbol: "ES",
+            averageHoldTimeSeconds: 60
+        )
+        let report = TradingReport(
+            periodKey: .weeklyLast,
+            kind: .weekly,
+            title: "Weekly Trading Report",
+            dateRangeLabel: "Nov 3–9, 2026",
+            periodStartIso: "",
+            periodEndIso: "",
+            generatedAt: 0,
+            executiveSummary: "Summary",
+            metrics: metrics,
+            strengths: ["Strength"],
+            opportunities: ["Weakness"],
+            recommendations: [],
+            bestTradeId: nil,
+            keyTakeaway: "",
+            summarySource: "deterministic"
+        )
+        let blocks = TradingReportDetailBlock.blocks(from: report)
+        XCTAssertEqual(blocks.map(\.id), ["summary", "strengthsAndWeaknesses", "metrics"])
+
+        var full = report
+        full.recommendations = ["Do more of X"]
+        full.keyTakeaway = "Keep risk steady."
+        let ordered = TradingReportDetailBlock.blocks(from: full)
+        XCTAssertEqual(
+            ordered.map(\.id),
+            ["summary", "strengthsAndWeaknesses", "recommendations", "keyTakeaway", "metrics"]
+        )
+    }
+
     func testHistoricalWeekOpensTheStoredMonday() throws {
         let later = ISO8601DateFormatter().date(from: "2026-11-21T17:00:00Z")!
         let ref = TradingReportWeekRef.parse(reportID: ReportID("week:2026-11-09"))
@@ -138,6 +244,85 @@ final class ReportsExperienceTests: XCTestCase {
         XCTAssertEqual(store.paths.home.last, .report(card.periodKey.reportID))
     }
 
+    func testCustomRangeRefRoundTrip() {
+        let calendar = TradingReportPeriods.eastern
+        let start = calendar.date(from: DateComponents(year: 2026, month: 3, day: 1))!
+        let end = calendar.date(from: DateComponents(year: 2026, month: 3, day: 15))!
+        let interval = DashboardScopeFilterSupport.normalizedCustomInterval(
+            start: start,
+            end: end,
+            calendar: calendar
+        )
+        let ref = TradingReportCustomRangeRef.from(interval: interval)
+        let parsed = TradingReportCustomRangeRef.parse(reportID: ref.reportID)
+        XCTAssertEqual(parsed, ref)
+    }
+
+    func testCustomRangeValidationRejectsFutureEnd() {
+        let calendar = TradingReportPeriods.eastern
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date())!
+        XCTAssertNotNil(
+            TradingReportCustomRangeSupport.validationMessage(
+                start: Date(),
+                end: tomorrow,
+                now: Date(),
+                calendar: calendar
+            )
+        )
+    }
+
+    func testCustomReportUsesOnlyTradesInRange() {
+        let eastern = TradingReportPeriods.eastern
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = eastern.timeZone
+        let owner = ProfileID("dev.custom.report")
+        let inRange = makeCustomRangeTrade(
+            id: "in",
+            owner: owner,
+            year: 2026,
+            month: 3,
+            day: 10,
+            pnl: 100,
+            calendar: calendar
+        )
+        let outRange = makeCustomRangeTrade(
+            id: "out",
+            owner: owner,
+            year: 2026,
+            month: 4,
+            day: 2,
+            pnl: 500,
+            calendar: calendar
+        )
+        let start = eastern.date(from: DateComponents(year: 2026, month: 3, day: 1))!
+        let end = eastern.date(from: DateComponents(year: 2026, month: 3, day: 31, hour: 23, minute: 59))!
+        let interval = DateInterval(start: start, end: end)
+        let report = TradingReportGenerator.generateCustomRange(
+            trades: [inRange, outRange],
+            interval: interval,
+            filters: TradingReportFilters()
+        )
+        XCTAssertEqual(report.kind, .custom)
+        XCTAssertEqual(report.metrics.tradesTaken, 1)
+        XCTAssertEqual(report.metrics.netPnl, 100, accuracy: 0.01)
+    }
+
+    func testCatalogListVisibilityShowsTwoUntilExpanded() {
+        let items = ["a", "b", "c", "d", "e"]
+        XCTAssertEqual(
+            ReportsCatalogListVisibility.visibleItems(from: items, listExpanded: false, compactCount: 2),
+            ["a", "b"]
+        )
+        XCTAssertEqual(
+            ReportsCatalogListVisibility.visibleItems(from: items, listExpanded: true, compactCount: 2),
+            items
+        )
+        XCTAssertEqual(
+            ReportsCatalogListVisibility.visibleItems(from: ["only"], listExpanded: false, compactCount: 2),
+            ["only"]
+        )
+    }
+
     func testReportCardTrailingTitlesUseCompactChevrons() {
         XCTAssertEqual(ReportCard.trailingTitle(for: "View Report", isGenerating: false), "View ›")
         XCTAssertEqual(ReportCard.trailingTitle(for: "Generate", isGenerating: false), "Generate ›")
@@ -255,6 +440,62 @@ final class ReportsExperienceTests: XCTestCase {
         XCTAssertEqual(viewModel.bestTrade, .unavailable)
     }
 
+    func testBestTradeInPreviewRejectsNonCanonicalTrade() async throws {
+        let store = NavigationStore()
+        store.sessionPhase = .authenticated
+        let coordinator = NavigationCoordinator(store: store)
+        let cache = DetailPresentationCache()
+        let userTrade = try XCTUnwrap(
+            ProfileTradeFixtures.samples(owner: ProfileID("dev.reports.user")).first
+        )
+        cache.seed(userTrade)
+        let reportsRepo = StubTradingReportRepository(forcedBestTradeID: userTrade.id.rawValue)
+        let viewModel = ReportDetailViewModel(
+            periodKey: .weeklyThis,
+            tradingReports: reportsRepo,
+            trades: StubReportsTradeRepository(shouldFail: true),
+            session: StubReportsSession(userID: "dev.reports.user"),
+            detailCache: cache,
+            navigationCoordinator: coordinator
+        )
+
+        TraxsProPreviewSession.shared.beginReportsPreview(detailCache: cache)
+        defer { TraxsProPreviewSession.shared.endReportsPreview(detailCache: cache) }
+
+        await viewModel.bootstrapIfNeeded()
+        XCTAssertEqual(viewModel.bestTrade, .unavailable)
+        viewModel.openBestTrade()
+        XCTAssertTrue(store.paths.home.isEmpty)
+    }
+
+    func testBestTradeInPreviewOpensCanonicalSample() async throws {
+        let store = NavigationStore()
+        store.sessionPhase = .authenticated
+        let coordinator = NavigationCoordinator(store: store)
+        let cache = DetailPresentationCache()
+        let sample = try XCTUnwrap(DemoCanonicalDataset.trades().first)
+        let reportsRepo = StubTradingReportRepository(forcedBestTradeID: sample.id.rawValue)
+        let viewModel = ReportDetailViewModel(
+            periodKey: .weeklyThis,
+            tradingReports: reportsRepo,
+            trades: StubReportsTradeRepository(shouldFail: true),
+            session: StubReportsSession(userID: "dev.reports.user"),
+            detailCache: cache,
+            navigationCoordinator: coordinator
+        )
+
+        TraxsProPreviewSession.shared.beginReportsPreview(detailCache: cache)
+        defer { TraxsProPreviewSession.shared.endReportsPreview(detailCache: cache) }
+
+        await viewModel.bootstrapIfNeeded()
+        guard case .available(let trade) = viewModel.bestTrade else {
+            return XCTFail("Expected canonical best trade")
+        }
+        XCTAssertEqual(trade.id, sample.id)
+        viewModel.openBestTrade()
+        XCTAssertEqual(store.paths.home.last, .tradeDetail(sample.id))
+    }
+
     func testReportsNavigationOpensCatalog() {
         let navigationStore = NavigationStore()
         navigationStore.sessionPhase = .authenticated
@@ -369,6 +610,38 @@ final class ReportsExperienceTests: XCTestCase {
 
     // MARK: - Helpers
 
+    private func makeCustomRangeTrade(
+        id: String,
+        owner: ProfileID,
+        year: Int,
+        month: Int,
+        day: Int,
+        pnl: Decimal,
+        calendar: Calendar
+    ) -> Trade {
+        let entry = calendar.date(from: DateComponents(year: year, month: month, day: day, hour: 10))!
+        return Trade(
+            id: TradeID(id),
+            ownerProfileID: owner,
+            accountID: nil,
+            symbol: Symbol(ticker: "ES"),
+            side: .long,
+            mode: .live,
+            quantity: 1,
+            entryPrice: 100,
+            exitPrice: 101,
+            entryAt: entry,
+            exitAt: entry.addingTimeInterval(3600),
+            realizedPnL: Money(amount: pnl),
+            riskReward: 1,
+            points: 0,
+            sessionLabel: nil,
+            visibility: .private,
+            createdAt: entry,
+            updatedAt: entry
+        )
+    }
+
     private func makeDetailViewModel(
         periodKey: TradingReportPeriodKey
     ) -> ReportDetailViewModel {
@@ -457,13 +730,35 @@ private actor StubTradingReportRepository: TradingReportRepository {
         )
     }
 
-    func weekReport(mondayKey: String, forceNetwork: Bool) async throws -> TradingReport {
+    func weekReport(
+        mondayKey: String,
+        filters: TradingReportFilters,
+        forceNetwork: Bool
+    ) async throws -> TradingReport {
         _ = forceNetwork
+        _ = filters
         let trades = ProfileTradeFixtures.samples(owner: ProfileID("dev.reports.stub"))
         guard let week = TradingReportWeekRef.parse(reportID: ReportID("week:\(mondayKey)")) else {
             throw AppError.unknown(message: "Invalid week")
         }
         return TradingReportGenerator.generate(trades: trades, week: week)
+    }
+
+    func customReport(
+        for ref: TradingReportCustomRangeRef,
+        filters: TradingReportFilters,
+        forceNetwork: Bool
+    ) async throws -> TradingReport {
+        _ = forceNetwork
+        guard let interval = ref.interval else {
+            throw AppError.unknown(message: "Invalid custom range")
+        }
+        let trades = ProfileTradeFixtures.samples(owner: ProfileID("dev.reports.stub"))
+        return TradingReportGenerator.generateCustomRange(
+            trades: trades,
+            interval: interval,
+            filters: filters
+        )
     }
 }
 
@@ -487,6 +782,21 @@ private actor StubPsychologyReportRepository: PsychologyReportRepository {
             throw AppError.unknown(message: "Missing psychology report")
         }
         return report
+    }
+
+    func generateReport(
+        periodRef: PsychologyReportPeriodRef,
+        forceNetwork: Bool
+    ) async throws -> PsychologyReport {
+        _ = forceNetwork
+        let snap = try await ensureSnapshot(forceNetwork: false)
+        let trades = ProfileTradeFixtures.samples(owner: ProfileID("dev.reports.stub"))
+        return PsychologyReportGenerator.generate(
+            periodRef: periodRef,
+            trades: trades,
+            checkIns: [],
+            preferences: nil
+        )
     }
 }
 

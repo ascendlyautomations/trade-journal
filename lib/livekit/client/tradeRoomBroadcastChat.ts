@@ -20,6 +20,8 @@ export type BroadcastChatMessage = {
   avatarUrl: string | null
   text: string
   sentAt: number
+  imageUrl?: string | null
+  tradeId?: string | null
   replyTo?: BroadcastChatReplyReference | null
 }
 
@@ -30,6 +32,8 @@ type ChatPayload = {
   avatarUrl: string | null
   text: string
   sentAt: number
+  imageUrl?: string
+  tradeId?: string
   replyToMessageId?: string
   replyToUserId?: string
   replyToDisplayName?: string
@@ -55,6 +59,26 @@ function decodeReplyReference(raw: ChatPayload): BroadcastChatReplyReference | n
   return { messageId, userId, displayName, textPreview }
 }
 
+export function isAllowedBroadcastImageUrl(raw: string | undefined): string | null {
+  if (!raw) return null
+  const trimmed = raw.trim()
+  if (!trimmed || trimmed.length > 2048) return null
+  try {
+    const url = new URL(trimmed)
+    if (url.protocol !== "https:") return null
+    if (!url.hostname) return null
+    return trimmed
+  } catch {
+    return null
+  }
+}
+
+export function sanitizeTradeId(raw: string | undefined): string | null {
+  if (!raw) return null
+  const trimmed = raw.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
 let lastSentAt = 0
 
 export function clearBroadcastChatState(): void {
@@ -70,8 +94,11 @@ export function parseBroadcastChatPayload(
     const raw = JSON.parse(new TextDecoder().decode(bytes)) as ChatPayload
     if (raw.type !== "chat") return null
     if (raw.userId !== senderIdentity) return null
-    const text = raw.text?.trim()
-    if (!text || text.length > BROADCAST_CHAT_MAX_LENGTH) return null
+    const text = raw.text?.trim() ?? ""
+    const imageUrl = isAllowedBroadcastImageUrl(raw.imageUrl)
+    const tradeId = sanitizeTradeId(raw.tradeId)
+    if (!text && !imageUrl && !tradeId) return null
+    if (text.length > BROADCAST_CHAT_MAX_LENGTH) return null
     const replyTo = decodeReplyReference(raw)
     return {
       id: `${raw.userId}-${raw.sentAt}`,
@@ -80,6 +107,8 @@ export function parseBroadcastChatPayload(
       avatarUrl: normalizeBroadcastChatAvatarUrl(raw.avatarUrl ?? null),
       text,
       sentAt: raw.sentAt,
+      imageUrl,
+      tradeId,
       replyTo,
     }
   } catch {
@@ -94,11 +123,15 @@ export async function publishBroadcastChatMessage(
     displayName: string
     avatarUrl: string | null
     text: string
+    imageUrl?: string | null
+    tradeId?: string | null
     replyTo?: BroadcastChatReplyReference | null
   }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const trimmed = options.text.trim()
-  if (!trimmed) return { ok: false, error: "Message is empty." }
+  const imageUrl = isAllowedBroadcastImageUrl(options.imageUrl ?? undefined)
+  const tradeId = sanitizeTradeId(options.tradeId ?? undefined)
+  if (!trimmed && !imageUrl && !tradeId) return { ok: false, error: "Message is empty." }
   if (trimmed.length > BROADCAST_CHAT_MAX_LENGTH) {
     return { ok: false, error: "Message is too long." }
   }
@@ -115,6 +148,8 @@ export async function publishBroadcastChatMessage(
     avatarUrl: options.avatarUrl,
     text: trimmed,
     sentAt: now,
+    ...(imageUrl ? { imageUrl } : {}),
+    ...(tradeId ? { tradeId } : {}),
     ...(options.replyTo
       ? {
           replyToMessageId: options.replyTo.messageId,

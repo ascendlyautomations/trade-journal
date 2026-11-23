@@ -430,7 +430,9 @@ enum CompositionRoot {
             accessTokenProvider: { await data.session.accessToken },
             profileLookup: { ids in
                 try await data.profiles.profiles(ids: ids)
-            }
+            },
+            tradesRepository: data.trades,
+            detailCache: data.detailCache
         )
         TradeRoomObsBroadcastController.shared.configure(
             viewerUserId: nil,

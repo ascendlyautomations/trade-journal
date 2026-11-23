@@ -57,6 +57,15 @@ nonisolated enum SupabaseQuery {
         URLQueryItem(name: "select", value: columns)
     }
 
+    /// PostgREST `column.ilike.*needle*` (wildcard `*` = `%`).
+    static func ilikeContains(column: String, query: String) -> String {
+        let escaped = query
+            .replacingOccurrences(of: ",", with: "")
+            .replacingOccurrences(of: "(", with: "")
+            .replacingOccurrences(of: ")", with: "")
+        return "\(column).ilike.*\(escaped)*"
+    }
+
     static func order(_ column: String, ascending: Bool) -> URLQueryItem {
         URLQueryItem(name: "order", value: "\(column).\(ascending ? "asc" : "desc")")
     }

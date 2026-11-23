@@ -631,6 +631,408 @@ struct DashboardLongShortDonutView: View {
 
 // MARK: - Hold time histogram
 
+private struct HoldHistogramChartPoint: Identifiable {
+    var id: Int { index }
+    var index: Int
+    var label: String
+    var count: Int
+    var averageNetPnL: Double
+}
+
+private struct HoldHistogramYScale {
+    var axisMax: Int
+    var ticks: [Int]
+
+    static func nice(peak: Int) -> HoldHistogramYScale {
+        guard peak > 0 else { return HoldHistogramYScale(axisMax: 1, ticks: [0, 1]) }
+        let divisions = 4
+        let rawStep = Double(peak) / Double(divisions)
+        let magnitude = pow(10.0, floor(log10(max(rawStep, 1))))
+        let residual = rawStep / magnitude
+        let niceResidual: Double
+        if residual <= 1 { niceResidual = 1 }
+        else if residual <= 2 { niceResidual = 2 }
+        else if residual <= 5 { niceResidual = 5 }
+        else { niceResidual = 10 }
+        let step = max(1, Int((niceResidual * magnitude).rounded()))
+        var niceMax = step * divisions
+        while niceMax < peak { niceMax += step }
+        let ticks = stride(from: 0, through: niceMax, by: step).map(\.self)
+        return HoldHistogramYScale(axisMax: niceMax, ticks: ticks)
+    }
+}
+
+private struct HoldHistogramPnLYScale {
+    /// Upper bound for bar height — max absolute average P&L in the plot.
+    var axisMax: Double
+    /// Magnitude ticks only ($0, $100, …); signed values stay in data and labels.
+    var tickValues: [Double]
+
+    static func resolve(averages: [Double]) -> HoldHistogramPnLYScale {
+        let values = averages.filter(\.isFinite)
+        let magnitudePeak = values.map { abs($0) }.max() ?? 0
+
+        if magnitudePeak < 0.01 {
+            return HoldHistogramPnLYScale(axisMax: 100, tickValues: [0, 50, 100])
+        }
+
+        let axisMax = niceLimit(max(magnitudePeak, 1))
+        let ticks = [0, axisMax / 2, axisMax].uniqued().sorted()
+        return HoldHistogramPnLYScale(axisMax: axisMax, tickValues: ticks)
+    }
+
+    private static func niceLimit(_ value: Double) -> Double {
+        guard value > 0 else { return 0 }
+        let magnitude = pow(10.0, floor(log10(value)))
+        let residual = value / magnitude
+        let factor: Double
+        if residual <= 1 { factor = 1 }
+        else if residual <= 2 { factor = 2 }
+        else if residual <= 5 { factor = 5 }
+        else { factor = 10 }
+        var nice = factor * magnitude
+        while nice < value { nice += factor * magnitude / 4 }
+        return nice
+    }
+}
+
+private extension Array where Element: Hashable {
+    func uniqued() -> [Element] {
+        var seen = Set<Element>()
+        return filter { seen.insert($0).inserted }
+    }
+}
+
+/// Native SwiftUI grouped histogram (trade count + avg P&L per bucket).
+private struct HoldHistogramManualChart<Tooltip: View>: View {
+    let chartPoints: [HoldHistogramChartPoint]
+    let buckets: [DashboardHistogramBucket]
+    let tradeCountScale: HoldHistogramYScale
+    let pnlScale: HoldHistogramPnLYScale
+    let colors: SemanticColorPalette
+    /// Persistent bucket index for accessibility adjustment only — not set by touch drag.
+    @Binding var selectedIndex: Int?
+    @GestureState private var inspectLocationX: CGFloat?
+    let tradeBarFill: (HoldHistogramChartPoint) -> Color
+    @ViewBuilder let tooltip: (DashboardHistogramBucket) -> Tooltip
+
+    private let plotHeight: CGFloat = 132
+    private let leadingAxisWidth: CGFloat = 26
+    private let trailingAxisWidth: CGFloat = 38
+    private let xAxisHeight: CGFloat = 22
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            legend
+
+            HStack(alignment: .top, spacing: 6) {
+                tradeCountAxis
+                plotArea
+                    .frame(height: plotHeight)
+                pnlAxis
+            }
+
+            xAxisLabels
+                .padding(.leading, leadingAxisWidth + 6)
+                .padding(.trailing, trailingAxisWidth + 6)
+        }
+    }
+
+    private var legend: some View {
+        HStack(spacing: ExperienceSpacing.md) {
+            legendSwatch(colors.accent, title: "Trades")
+            legendSwatch(nil, title: "Avg P&L", gradient: (colors.profit, colors.loss))
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func legendSwatch(
+        _ color: Color?,
+        title: String,
+        gradient: (Color, Color)? = nil
+    ) -> some View {
+        HStack(spacing: 5) {
+            if let gradient {
+                HStack(spacing: 2) {
+                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                        .fill(gradient.0)
+                        .frame(width: 6, height: 8)
+                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                        .fill(gradient.1)
+                        .frame(width: 6, height: 8)
+                }
+            } else if let color {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(color)
+                    .frame(width: 8, height: 8)
+            }
+            Text(title)
+                .experienceStyle(.caption2, color: colors.tertiaryText)
+        }
+    }
+
+    private var tradeCountAxis: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .trailing) {
+                ForEach(tradeCountScale.ticks, id: \.self) { tick in
+                    Text("\(tick)")
+                        .font(.system(.caption2, design: .rounded).monospacedDigit())
+                        .foregroundStyle(colors.tertiaryText)
+                        .position(x: leadingAxisWidth - 2, y: tradeCountY(tick, height: geo.size.height))
+                }
+            }
+        }
+        .frame(width: leadingAxisWidth, height: plotHeight)
+    }
+
+    private var pnlAxis: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                ForEach(pnlScale.tickValues, id: \.self) { tick in
+                    Text(formatPnlAxisTick(tick))
+                        .font(.system(.caption2, design: .rounded).monospacedDigit())
+                        .foregroundStyle(colors.tertiaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .frame(width: trailingAxisWidth, alignment: .leading)
+                        .position(x: trailingAxisWidth / 2, y: pnlMagnitudeY(tick, height: geo.size.height))
+                }
+            }
+        }
+        .frame(width: trailingAxisWidth, height: plotHeight)
+    }
+
+    private var xAxisLabels: some View {
+        HStack(spacing: 0) {
+            ForEach(chartPoints) { point in
+                Text(point.label)
+                    .font(.system(.caption2, design: .rounded))
+                    .foregroundStyle(colors.tertiaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .frame(height: xAxisHeight)
+    }
+
+    private func highlightedIndex(plotWidth: CGFloat) -> Int? {
+        if let inspectLocationX {
+            return bucketIndex(at: inspectLocationX, plotWidth: plotWidth)
+        }
+        return selectedIndex
+    }
+
+    private var plotArea: some View {
+        GeometryReader { geo in
+            let slotWidth = geo.size.width / CGFloat(max(chartPoints.count, 1))
+            let dualBarWidth = max(5, slotWidth * 0.24)
+            let plotBounds = CGRect(origin: .zero, size: geo.size)
+            let highlightIndex = highlightedIndex(plotWidth: geo.size.width)
+
+            ZStack(alignment: .bottomLeading) {
+                tradeCountGridLines(in: geo.size)
+                pnlBaseline(in: geo.size)
+                pnlGridLines(in: geo.size)
+
+                HStack(alignment: .bottom, spacing: 0) {
+                    ForEach(chartPoints) { point in
+                        HStack(alignment: .bottom, spacing: max(2, slotWidth * 0.06)) {
+                            Group {
+                                if point.count > 0 {
+                                    barColumnShape
+                                        .fill(tradeBarFill(point))
+                                        .frame(
+                                            width: dualBarWidth,
+                                            height: tradeBarHeight(for: point.count, plotHeight: geo.size.height)
+                                        )
+                                } else {
+                                    Color.clear.frame(width: dualBarWidth, height: 1)
+                                }
+                            }
+                            .frame(width: dualBarWidth, alignment: .bottom)
+
+                            pnlBar(
+                                average: point.averageNetPnL,
+                                barWidth: dualBarWidth,
+                                plotHeight: geo.size.height
+                            )
+                        }
+                        .frame(width: slotWidth, height: geo.size.height, alignment: .bottom)
+                    }
+                }
+
+                if let highlightIndex, buckets.indices.contains(highlightIndex) {
+                    selectionLayer(
+                        index: highlightIndex,
+                        plotSize: geo.size,
+                        slotWidth: slotWidth
+                    )
+                }
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .updating($inspectLocationX) { value, state, _ in
+                        if plotBounds.contains(value.location) {
+                            state = value.location.x
+                        } else {
+                            state = nil
+                        }
+                    }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func pnlBar(
+        average: Double,
+        barWidth: CGFloat,
+        plotHeight: CGFloat
+    ) -> some View {
+        let magnitude = abs(average)
+        let height = pnlBarHeight(forMagnitude: magnitude, plotHeight: plotHeight)
+        let fill = average >= 0 ? colors.profit : colors.loss
+        Group {
+            if magnitude > 0.005, height >= 1 {
+                pnlPositiveBarShape
+                    .fill(fill)
+                    .frame(width: barWidth, height: height)
+            } else {
+                Color.clear.frame(width: barWidth, height: 1)
+            }
+        }
+        .frame(width: barWidth, alignment: .bottom)
+    }
+
+    @ViewBuilder
+    private func selectionLayer(index: Int, plotSize: CGSize, slotWidth: CGFloat) -> some View {
+        let anchorX = (CGFloat(index) + 0.5) * slotWidth
+        let bucket = buckets[index]
+        let columnWidth = max(28, slotWidth * 0.7)
+
+        ZStack {
+            Rectangle()
+                .fill(colors.accent.opacity(0.18))
+                .frame(width: columnWidth, height: plotSize.height)
+                .position(x: anchorX, y: plotSize.height / 2)
+
+            selectionRule(at: index, plotSize: plotSize, slotWidth: slotWidth)
+
+            tooltip(bucket)
+                .fixedSize()
+                .position(
+                    x: min(max(anchorX, 72), plotSize.width - 72),
+                    y: -6
+                )
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func selectionRule(at index: Int, plotSize: CGSize, slotWidth: CGFloat) -> some View {
+        let x = (CGFloat(index) + 0.5) * slotWidth
+        return Rectangle()
+            .fill(colors.accent.opacity(0.55))
+            .frame(width: 1.2, height: plotSize.height)
+            .position(x: x, y: plotSize.height / 2)
+    }
+
+    private func tradeCountGridLines(in size: CGSize) -> some View {
+        ZStack {
+            ForEach(tradeCountScale.ticks.filter { $0 > 0 }, id: \.self) { tick in
+                Path { path in
+                    let y = tradeCountY(tick, height: size.height)
+                    path.move(to: CGPoint(x: 0, y: y))
+                    path.addLine(to: CGPoint(x: size.width, y: y))
+                }
+                .stroke(colors.border.opacity(0.35), lineWidth: 0.5)
+            }
+        }
+    }
+
+    private func pnlGridLines(in size: CGSize) -> some View {
+        ZStack {
+            ForEach(pnlScale.tickValues.filter { $0 > 0.01 }, id: \.self) { tick in
+                Path { path in
+                    let y = pnlMagnitudeY(tick, height: size.height)
+                    path.move(to: CGPoint(x: 0, y: y))
+                    path.addLine(to: CGPoint(x: size.width, y: y))
+                }
+                .stroke(colors.border.opacity(0.22), lineWidth: 0.5)
+            }
+        }
+    }
+
+    private func pnlBaseline(in size: CGSize) -> some View {
+        Path { path in
+            let y = size.height
+            path.move(to: CGPoint(x: 0, y: y))
+            path.addLine(to: CGPoint(x: size.width, y: y))
+        }
+        .stroke(colors.border.opacity(0.55), lineWidth: 0.75)
+    }
+
+    private func tradeBarHeight(for count: Int, plotHeight: CGFloat) -> CGFloat {
+        guard count > 0, tradeCountScale.axisMax > 0 else { return 0 }
+        return max(2, plotHeight * CGFloat(count) / CGFloat(tradeCountScale.axisMax))
+    }
+
+    private func tradeCountY(_ tick: Int, height: CGFloat) -> CGFloat {
+        guard tradeCountScale.axisMax > 0 else { return height }
+        return height * (1 - CGFloat(tick) / CGFloat(tradeCountScale.axisMax))
+    }
+
+    private func pnlBarHeight(forMagnitude magnitude: Double, plotHeight: CGFloat) -> CGFloat {
+        guard magnitude > 0, pnlScale.axisMax > 0 else { return 0 }
+        return max(2, plotHeight * CGFloat(magnitude / pnlScale.axisMax))
+    }
+
+    private func pnlMagnitudeY(_ tick: Double, height: CGFloat) -> CGFloat {
+        guard pnlScale.axisMax > 0 else { return height }
+        return height * (1 - CGFloat(tick / pnlScale.axisMax))
+    }
+
+    private func formatPnlAxisTick(_ value: Double) -> String {
+        if value < 0.5 { return "$0" }
+        return NumberDisplay.compactCurrencyAxis(Decimal(value))
+    }
+
+    private func bucketIndex(at x: CGFloat, plotWidth: CGFloat) -> Int {
+        guard !chartPoints.isEmpty, plotWidth > 0 else { return 0 }
+        let slotWidth = plotWidth / CGFloat(chartPoints.count)
+        let raw = Int((x / slotWidth).rounded(.down))
+        return min(max(raw, 0), chartPoints.count - 1)
+    }
+
+    private var barColumnShape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(
+            topLeadingRadius: 4,
+            bottomLeadingRadius: 0,
+            bottomTrailingRadius: 0,
+            topTrailingRadius: 4,
+            style: .continuous
+        )
+    }
+
+    private var pnlPositiveBarShape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(
+            topLeadingRadius: 4,
+            bottomLeadingRadius: 0,
+            bottomTrailingRadius: 0,
+            topTrailingRadius: 4,
+            style: .continuous
+        )
+    }
+
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        guard indices.contains(index) else { return nil }
+        return self[index]
+    }
+}
+
 struct DashboardHoldHistogramView: View {
     let buckets: [DashboardHistogramBucket]
     let averages: [DashboardHoldTimeRow]
@@ -638,6 +1040,30 @@ struct DashboardHoldHistogramView: View {
     var onSelectBucket: ((String) -> Void)?
 
     @Environment(\.themeColors) private var colors
+    @State private var selectedIndex: Int?
+
+    private var chartPoints: [HoldHistogramChartPoint] {
+        buckets.enumerated().map { offset, bucket in
+            HoldHistogramChartPoint(
+                index: offset,
+                label: bucket.label,
+                count: bucket.count,
+                averageNetPnL: bucket.averageNetPnL
+            )
+        }
+    }
+
+    private var totalTrades: Int {
+        buckets.reduce(0) { $0 + $1.count }
+    }
+
+    private var tradeCountScale: HoldHistogramYScale {
+        HoldHistogramYScale.nice(peak: buckets.map(\.count).max() ?? 0)
+    }
+
+    private var pnlScale: HoldHistogramPnLYScale {
+        HoldHistogramPnLYScale.resolve(averages: buckets.map(\.averageNetPnL))
+    }
 
     var body: some View {
         if buckets.allSatisfy({ $0.count == 0 }) {
@@ -646,43 +1072,44 @@ struct DashboardHoldHistogramView: View {
             )
         } else {
             ProposedWidthClamp {
-            VStack(alignment: .leading, spacing: ExperienceSpacing.md) {
-                holdColumns
-                    .accessibilityLabel("Hold time distribution")
+                VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+                    holdHistogramChart
+                        .accessibilityLabel("Hold time distribution")
 
-                if !averages.isEmpty {
-                    HStack(spacing: 0) {
-                        ForEach(Array(averages.enumerated()), id: \.element.id) { index, row in
-                            VStack(spacing: 2) {
-                                Text(row.label)
-                                    .experienceStyle(.caption2, color: colors.tertiaryText)
-                                Text(row.value)
-                                    .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
-                                    .foregroundStyle(colors.primaryText)
-                                    .contentTransition(.numericText())
-                            }
-                            .frame(maxWidth: .infinity)
-                            if index < averages.count - 1 {
-                                Rectangle()
-                                    .fill(colors.border.opacity(0.45))
-                                    .frame(width: ExperienceBorder.hairline, height: 28)
+                    if !averages.isEmpty {
+                        HStack(spacing: 0) {
+                            ForEach(Array(averages.enumerated()), id: \.element.id) { index, row in
+                                VStack(spacing: 2) {
+                                    Text(row.label)
+                                        .experienceStyle(.caption2, color: colors.tertiaryText)
+                                    Text(row.value)
+                                        .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
+                                        .foregroundStyle(colors.primaryText)
+                                        .contentTransition(.numericText())
+                                }
+                                .frame(maxWidth: .infinity)
+                                if index < averages.count - 1 {
+                                    Rectangle()
+                                        .fill(colors.border.opacity(0.45))
+                                        .frame(width: ExperienceBorder.hairline, height: 24)
+                                }
                             }
                         }
                     }
-                    .padding(.vertical, ExperienceSpacing.xs)
-                }
 
-                if !holdExtremes.isEmpty {
-                    LazyVGrid(
-                        columns: [GridItem(.flexible()), GridItem(.flexible())],
-                        spacing: ExperienceSpacing.sm
-                    ) {
-                        ForEach(holdExtremes, id: \.label) { row in
-                            VStack(alignment: .center, spacing: 4) {
-                                Text(row.label)
-                                    .experienceStyle(.caption2, color: colors.tertiaryText)
-                                    .multilineTextAlignment(.center)
+                    if !holdExtremes.isEmpty {
+                        LazyVGrid(
+                            columns: [GridItem(.flexible()), GridItem(.flexible())],
+                            alignment: .center,
+                            spacing: ExperienceSpacing.xs
+                        ) {
+                            ForEach(holdExtremes, id: \.label) { row in
                                 VStack(alignment: .center, spacing: 2) {
+                                    Text(row.label)
+                                        .experienceStyle(.caption2, color: colors.tertiaryText)
+                                        .multilineTextAlignment(.center)
+                                        .lineLimit(2)
+                                        .minimumScaleFactor(0.85)
                                     Text(formatDuration(row.durationSeconds))
                                         .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
                                         .foregroundStyle(colors.primaryText)
@@ -690,69 +1117,114 @@ struct DashboardHoldHistogramView: View {
                                         .font(.system(.caption2, design: .rounded).weight(.medium).monospacedDigit())
                                         .foregroundStyle(row.pnl >= 0 ? colors.profit : colors.loss)
                                 }
-                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: .infinity)
                             }
-                            .frame(maxWidth: .infinity, alignment: .center)
                         }
                     }
-                    .padding(.top, ExperienceSpacing.xs)
                 }
-            }
             }
         }
     }
 
-    private var holdPlotHeight: CGFloat { 88 }
+    private var holdHistogramChart: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            holdChart
 
-    private var holdColumns: some View {
-        let peak = max(buckets.map(\.count).max() ?? 0, 1)
-        return HStack(alignment: .top, spacing: ExperienceSpacing.xxs) {
-            ForEach(buckets) { bucket in
-                VStack(spacing: 6) {
-                    ZStack(alignment: .bottom) {
-                        Color.clear
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(colors.accent.opacity(bucket.count == 0 ? 0.28 : 0.85))
-                            .frame(width: 18, height: barHeight(for: bucket.count, peak: peak))
-                    }
-                    .frame(height: holdPlotHeight)
-                    .frame(maxWidth: .infinity)
-
-                    Button {
-                        ExperienceHaptics.play(.selection)
-                        onSelectBucket?(bucket.label)
-                    } label: {
-                        Text("\(bucket.count)")
-                            .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
-                            .foregroundStyle(colors.primaryText)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, ExperienceSpacing.xs)
-                            .padding(.vertical, 4)
-                            .background(colors.fillSecondary.opacity(0.55), in: Capsule())
-                            .contentTransition(.numericText())
-                    }
-                    .buttonStyle(.experiencePlain)
-                    .frame(maxWidth: .infinity)
-                    .disabled(bucket.count == 0 || onSelectBucket == nil)
-                    .accessibilityLabel("\(bucket.label), \(bucket.count) trades. Double tap to view.")
-
-                    Text(bucket.label)
-                        .font(.system(.caption2, design: .rounded))
-                        .foregroundStyle(colors.tertiaryText)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .frame(maxWidth: .infinity)
+            if let index = selectedIndex,
+               let bucket = buckets[safe: index],
+               bucket.count > 0,
+               let onSelectBucket
+            {
+                Button {
+                    ExperienceHaptics.play(.selection)
+                    onSelectBucket(bucket.label)
+                } label: {
+                    Text("View \(bucket.label) trades")
+                        .experienceStyle(.caption2, color: colors.accent)
+                        .fontWeight(.semibold)
                 }
-                .frame(maxWidth: .infinity)
+                .buttonStyle(.experiencePlain)
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
-        .frame(maxWidth: .infinity)
+        .padding(ExperienceSpacing.sm)
+        .background(colors.fillSecondary.opacity(0.35), in: RoundedRectangle(
+            cornerRadius: ExperienceRadius.md,
+            style: .continuous
+        ))
+        .onChange(of: selectedIndex) { _, newValue in
+            guard newValue != nil else { return }
+            ExperienceHaptics.play(.selection)
+        }
     }
 
-    private func barHeight(for count: Int, peak: Int) -> CGFloat {
-        guard count > 0 else { return 2 }
-        return max(8, holdPlotHeight * CGFloat(count) / CGFloat(peak))
+    private var holdChart: some View {
+        HoldHistogramManualChart(
+            chartPoints: chartPoints,
+            buckets: buckets,
+            tradeCountScale: tradeCountScale,
+            pnlScale: pnlScale,
+            colors: colors,
+            selectedIndex: $selectedIndex,
+            tradeBarFill: tradeBarFill(for:),
+            tooltip: holdTooltip(for:)
+        )
+        .accessibilityHint("Press and drag horizontally to inspect each hold-time range.")
+        .accessibilityAdjustableAction { direction in
+            guard !buckets.isEmpty else { return }
+            let current = selectedIndex ?? 0
+            switch direction {
+            case .increment:
+                selectedIndex = min(current + 1, buckets.count - 1)
+            case .decrement:
+                selectedIndex = max(current - 1, 0)
+            @unknown default:
+                break
+            }
+        }
+    }
+
+    private func holdTooltip(for bucket: DashboardHistogramBucket) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(bucket.label)
+                .experienceStyle(.caption, color: colors.primaryText)
+                .fontWeight(.semibold)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(bucket.count) trades · \(holdPercentLabel(bucket.count))")
+                    .experienceStyle(.caption2, color: colors.secondaryText)
+                Text("Avg \(signedMoney(bucket.averageNetPnL))")
+                    .font(.system(.caption2, design: .rounded).weight(.semibold).monospacedDigit())
+                    .foregroundStyle(bucket.averageNetPnL >= 0 ? colors.profit : colors.loss)
+            }
+        }
+        .padding(.horizontal, ExperienceSpacing.sm)
+        .padding(.vertical, ExperienceSpacing.xs)
+        .background(colors.fillPrimary.opacity(0.92), in: RoundedRectangle(
+            cornerRadius: ExperienceRadius.sm,
+            style: .continuous
+        ))
+        .overlay {
+            RoundedRectangle(cornerRadius: ExperienceRadius.sm, style: .continuous)
+                .stroke(colors.accent.opacity(0.35), lineWidth: ExperienceBorder.hairline)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func tradeBarFill(for point: HoldHistogramChartPoint) -> Color {
+        if point.count == 0 {
+            return colors.accent.opacity(0.28)
+        }
+        return colors.accent
+    }
+
+    private func holdPercentLabel(_ count: Int) -> String {
+        guard totalTrades > 0 else { return "0%" }
+        let pct = (Double(count) / Double(totalTrades)) * 100
+        return NumberDisplay.percent(
+            pct,
+            minimumFractionDigits: 0,
+            maximumFractionDigits: count == totalTrades ? 0 : 1
+        )
     }
 
     private func formatDuration(_ seconds: Double) -> String {
@@ -897,9 +1369,10 @@ struct DashboardStrategyHighlightsView: View {
     private func strategyRow(title: String, highlight: DashboardStrategyHighlight, tone: Color) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .experienceStyle(.caption2, color: colors.tertiaryText)
-            Text(highlight.strategy)
                 .experienceStyle(.callout, color: colors.primaryText)
+                .fontWeight(.bold)
+            Text(highlight.strategy)
+                .experienceStyle(.subheadline, color: colors.tertiaryText)
                 .fontWeight(.semibold)
             HStack(spacing: ExperienceSpacing.sm) {
                 Text(NumberDisplay.chartSignedCurrency(highlight.netPnL))
@@ -947,9 +1420,6 @@ struct DashboardUnderwaterDrawdownView: View {
                             .foregroundStyle(colors.loss)
                             .contentTransition(.numericText())
                     }
-                } else {
-                    Text("Drag to inspect")
-                        .experienceStyle(.caption2, color: colors.tertiaryText)
                 }
             }
 
@@ -1000,9 +1470,9 @@ struct DashboardUnderwaterDrawdownView: View {
                 .chartXSelection(value: $selectedIndex)
                 .frame(height: 140)
                 .accessibilityLabel(
-                    "Underwater drawdown chart. Maximum drawdown \(DashboardViewModel.money(maxDrawdown)). Drag to inspect depth."
+                    "Underwater drawdown chart. Maximum drawdown \(DashboardViewModel.money(maxDrawdown))."
                 )
-                .accessibilityHint("Adjustable. Drag to inspect drawdown at each trade.")
+                .accessibilityHint("Adjustable. Scrub horizontally to inspect drawdown at each trade.")
             } else {
                 DashboardChartEmptyCopy(
                     message: "Add more trades to visualize how deep equity dips from peaks."

@@ -16,9 +16,19 @@ struct RoomBroadcastStudioVideoSection: View {
             Color.black
             BroadcastStreamZoomableVideoView(
                 track: coordinator.videoTrackForExpandedViewer,
-                isFullscreen: false
+                isFullscreen: false,
+                onFirstFrame: { coordinator.markProgramVideoFrameRendered() }
             )
             .id(coordinator.programVideoTrackRevision)
+            .opacity(coordinator.hasDisplayableProgramVideo ? 1 : 0)
+
+            if let placeholder = coordinator.programVideoPlaceholder {
+                BroadcastProgramVideoPlaceholderOverlay(
+                    presentation: placeholder,
+                    compact: isCompactForChatComposer
+                )
+            }
+
             HStack(spacing: ExperienceSpacing.xs) {
                 RoomBroadcastStreamPlaybackMuteButton(coordinator: coordinator)
                 if !isCompactForChatComposer {

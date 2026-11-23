@@ -18,6 +18,7 @@ final class SettingsProfileViewModel {
     var draftDisplayName = ""
     var draftBio = ""
     var draftTradingStyle = ""
+    var draftTradingModel = ""
     var draftPrimaryMarket = ""
     var draftIsPrivate = false
     var draftUsername = ""
@@ -139,6 +140,7 @@ final class SettingsProfileViewModel {
             displayName: draftDisplayName.trimmingCharacters(in: .whitespacesAndNewlines),
             bio: ProfileBioPolicy.persisted(draftBio),
             tradingStyle: draftTradingStyle.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            tradingModel: draftTradingModel.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
             primaryMarket: draftPrimaryMarket.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
             isPrivate: draftIsPrivate,
             username: normalizedUsername,
@@ -290,6 +292,7 @@ final class SettingsProfileViewModel {
         draftDisplayName = profile.displayName
         draftBio = ProfileBioPolicy.constrained(profile.bio ?? "")
         draftTradingStyle = profile.tradingStyle ?? ""
+        draftTradingModel = profile.tradingModel ?? ""
         draftPrimaryMarket = profile.primaryMarket ?? ""
         draftIsPrivate = profile.isPrivate
         draftTraderType = profile.traderType

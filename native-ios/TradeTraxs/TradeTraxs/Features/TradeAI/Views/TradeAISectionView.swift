@@ -74,14 +74,14 @@ struct TradeAISectionView: View {
 
     private var tradeAIUpgradeBlock: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
-            Text("Trade AI analysis is included with TraxPro.")
+            Text("Trade AI analysis is included with TraxsPro.")
                 .experienceStyle(.footnote, color: colors.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
             Button {
                 ExperienceHaptics.play(.selection)
                 ProUpgradeCoordinator.shared.present(reason: .feature(.aiAnalyst))
             } label: {
-                Text("Upgrade to TraxPro")
+                Text("Upgrade to TraxsPro")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)

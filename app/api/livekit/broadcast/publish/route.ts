@@ -11,6 +11,7 @@ import {
 import { parseRoomIdBody } from "../_shared.ts"
 import { after } from "next/server"
 import { notifyTradeRoomMembersBroadcastLive } from "@/lib/server/notifications/handlers/tradeRoomBroadcastLiveNotify.ts"
+import { computeBroadcastExpiresAt } from "@/lib/livekit/tradeRoomBroadcastDurationLimit.ts"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -128,6 +129,7 @@ export async function POST(req: Request) {
     .update({
       visibility: "public",
       go_live_notified_at: new Date().toISOString(),
+      expires_at: computeBroadcastExpiresAt(),
     })
     .eq("id", active.id)
     .eq("room_id", parsed.roomId)

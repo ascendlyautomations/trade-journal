@@ -21,7 +21,8 @@ struct RoomBroadcastChatRow: View {
                 imagePipeline: imagePipeline,
                 profile: profile
             )
-            VStack(alignment: .leading, spacing: 4) {
+
+            VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
                 HStack(spacing: 6) {
                     RoomBroadcastChatProfileNameButton(
                         userId: message.userId,
@@ -33,15 +34,31 @@ struct RoomBroadcastChatRow: View {
                         .font(.system(.caption2, design: .rounded))
                         .foregroundStyle(colors.tertiaryText)
                 }
+
                 if let reply = message.replyTo {
                     replyPreviewBanner(reply)
                 }
-                Text(message.text)
-                    .font(.system(.subheadline, design: .rounded))
-                    .foregroundStyle(colors.secondaryText)
+
+                if let imageURL = message.imageURL {
+                    broadcastChatImageAttachment(imageURL)
+                }
+
+                if let tradeID = message.tradeID {
+                    broadcastChatTradeAttachment(tradeID)
+                }
+
+                if !message.text.isEmpty {
+                    Text(message.text)
+                        .font(.system(.subheadline, design: .rounded))
+                        .foregroundStyle(colors.secondaryText)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, ExperienceSpacing.xxs)
         .padding(.vertical, ExperienceSpacing.xxs)
         .background(
@@ -56,6 +73,42 @@ struct RoomBroadcastChatRow: View {
             }
         }
         .accessibilityIdentifier("tradeRooms.broadcast.chat.row.\(message.id)")
+    }
+
+    private func broadcastChatImageAttachment(_ url: String) -> some View {
+        let reference = MediaReference(id: url, kind: .image, altText: "Chat photo")
+        return AspectFitMediaView(
+            reference: reference,
+            purpose: .tradeScreenshot,
+            imagePipeline: imagePipeline,
+            accessibilityIdentifier: "tradeRooms.broadcast.chat.image.\(message.id)",
+            emptyIcon: .photo,
+            allowsFullResolutionViewer: true,
+            maxDisplayHeightOverride: BroadcastChatAttachmentPolicy.chatImageMaxHeight,
+            loadingPlaceholderHeightOverride: BroadcastChatAttachmentPolicy.chatImagePlaceholderHeight,
+            layoutWidth: BroadcastChatAttachmentPolicy.chatImageMaxWidth
+        )
+        .clipShape(RoundedRectangle(cornerRadius: ExperienceRadius.md, style: .continuous))
+        .frame(width: BroadcastChatAttachmentPolicy.chatImageMaxWidth, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func broadcastChatTradeAttachment(_ tradeID: TradeID) -> some View {
+        let trade = coordinator.chatSharedTrades[tradeID]
+        return Button {
+            _ = coordinator.openSharedTrade(tradeID)
+        } label: {
+            BroadcastChatCompactTradeCard(
+                trade: trade,
+                tradeID: tradeID,
+                loadFailed: coordinator.isBroadcastChatTradeLoadFailed(tradeID),
+                imagePipeline: imagePipeline
+            )
+        }
+        .buttonStyle(.experiencePlain)
+        .frame(maxWidth: BroadcastChatAttachmentPolicy.chatTradeCardMaxWidth, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityIdentifier("tradeRooms.broadcast.chat.trade.\(tradeID.rawValue)")
     }
 
     private func replyPreviewBanner(_ reply: BroadcastChatReplyReference) -> some View {

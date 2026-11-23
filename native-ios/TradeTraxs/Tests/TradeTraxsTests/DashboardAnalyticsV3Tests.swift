@@ -654,6 +654,22 @@ struct DashboardAnalyticsV3Tests {
         #expect(DashboardAnalyticsDiskCache.schemaVersion == 2)
     }
 
+    @Test("Bootstrap account wire maps live drawdown columns")
+    func liveDrawdownAccountWire() throws {
+        let owner = "11111111-1111-1111-1111-111111111111"
+        let wire = DashboardAccountWireV1(
+            id: "33333333-3333-3333-3333-333333333333",
+            name: "Broker Live",
+            mode: "Live",
+            category: "Broker",
+            max_drawdown: PostgresFlexibleDouble(2_500),
+            drawdown_type: "end_of_day_trailing"
+        )
+        let account = try TradingAccountMapper.mapToDomain(wire.asAccountDTO(ownerID: owner))
+        #expect(account.livePersonalDrawdown?.limitAmount == 2_500)
+        #expect(account.livePersonalDrawdown?.limitType == .trailing)
+    }
+
     @Test("Compact bootstrap presets decode without chart blocks")
     func compactAggregatePresetsDecode() throws {
         let json = """

@@ -8,7 +8,7 @@ nonisolated enum TraxProEntitlementPolicy {
 }
 
 nonisolated extension BillingStatus {
-    /// Authoritative TraxPro entitlement. A server snapshot wins over local field math.
+    /// Authoritative TraxsPro entitlement. A server snapshot wins over local field math.
     var hasTraxProAccess: Bool {
         if serverTraxProActive != nil {
             let record = EntitlementSnapshotRecord(

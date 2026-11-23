@@ -27,6 +27,8 @@ nonisolated struct ExploreRoomSuggestion: Hashable, Codable, Sendable, Identifia
     var followedMemberCount: Int?
     /// Authoritative backend classification — never inferred from room name in UI.
     var roomKind: TradeRoomKind
+    /// Primary discovery category (`rooms.category`) — same enum as create/edit.
+    var category: TradeRoomCategory?
     /// Discovery/search labels from backend (`rooms.discovery_tags`).
     var discoveryTags: [String]
     /// Search RPC may include membership; discovery excludes joined rooms server-side.
@@ -55,6 +57,7 @@ nonisolated struct ExploreRoomSuggestion: Hashable, Codable, Sendable, Identifia
         ownerAvatarURL: String? = nil,
         followedMemberCount: Int? = nil,
         roomKind: TradeRoomKind = .community,
+        category: TradeRoomCategory? = nil,
         discoveryTags: [String] = [],
         isJoined: Bool? = nil,
         isOwner: Bool? = nil,
@@ -75,6 +78,7 @@ nonisolated struct ExploreRoomSuggestion: Hashable, Codable, Sendable, Identifia
         self.ownerAvatarURL = ownerAvatarURL
         self.followedMemberCount = followedMemberCount
         self.roomKind = roomKind
+        self.category = category
         self.discoveryTags = discoveryTags
         self.isJoined = isJoined
         self.isOwner = isOwner
@@ -139,6 +143,7 @@ nonisolated struct ExploreRoomSuggestion: Hashable, Codable, Sendable, Identifia
         discoveryTags = room.discoveryTags
         joinPolicy = room.joinPolicy
         roomKind = room.roomKind
+        category = room.category
     }
 
     /// Maps authoritative member-room state into the shared discovery row model.
@@ -171,6 +176,7 @@ nonisolated struct ExploreRoomSuggestion: Hashable, Codable, Sendable, Identifia
             ownerAvatarURL: nil,
             followedMemberCount: nil,
             roomKind: room.roomKind,
+            category: room.category,
             discoveryTags: room.discoveryTags,
             isJoined: true,
             isOwner: resolvedOwner,
@@ -207,7 +213,7 @@ nonisolated enum TradeRoomDiscoveryScope: String, CaseIterable, Hashable, Sendab
 
     /// Trade Rooms home scope chips — fixed order; selection is always by enum case, not index.
     static let homeToggleOrder: [TradeRoomDiscoveryScope] = [
-        .all, .favorites, .yourRooms, .popular,
+        .all, .popular, .yourRooms, .favorites,
     ]
 
     /// Maps legacy or internal scopes to a visible home chip (Official tab removed from home).
@@ -287,6 +293,11 @@ nonisolated enum TradeRoomDiscoveryScope: String, CaseIterable, Hashable, Sendab
 
     var showsFavoritesDiscovery: Bool {
         self == .favorites
+    }
+
+    /// All / Popular — show category dropdown and apply category filtering.
+    var showsDiscoveryCategoryFilter: Bool {
+        self == .all || self == .popular
     }
 
     /// When true, show Suggested and/or Popular discovery lists (not membership rows).

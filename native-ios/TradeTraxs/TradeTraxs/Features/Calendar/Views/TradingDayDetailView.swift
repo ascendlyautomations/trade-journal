@@ -71,9 +71,8 @@ struct TradingDayDetailView: View {
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: ExperienceSpacing.xs) {
-            Text("Net P&L")
-                .experienceStyle(.footnote, color: colors.secondaryText)
+        VStack(alignment: .leading, spacing: ExperienceSpacing.xxs) {
+            heroTitleLine
             Text(CalendarFormatting.fullPnL(viewModel.summary?.netPnL ?? 0))
                 .experienceStyle(
                     .metricLarge,
@@ -81,17 +80,29 @@ struct TradingDayDetailView: View {
                         for: NSDecimalNumber(decimal: viewModel.summary?.netPnL ?? 0).doubleValue
                     )
                 )
-            if let summary = viewModel.summary {
-                Text(CalendarFormatting.tradeCount(summary.tradeCount))
-                    .experienceStyle(.subheadline, color: colors.secondaryText)
-            } else if !viewModel.isLoading {
-                Text("No trades")
-                    .experienceStyle(.subheadline, color: colors.secondaryText)
-            }
         }
-        .padding(ExperienceSpacing.md)
+        .padding(.horizontal, ExperienceSpacing.md)
+        .padding(.vertical, ExperienceSpacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(colors.surfacePrimary, in: RoundedRectangle(cornerRadius: ExperienceRadius.lg, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var heroTitleLine: some View {
+        HStack(spacing: 6) {
+            Text("Net P&L")
+                .fontWeight(.semibold)
+            Text("|")
+            if let summary = viewModel.summary {
+                Text(CalendarFormatting.tradeCount(summary.tradeCount))
+            } else if !viewModel.isLoading {
+                Text("No trades")
+            } else {
+                Text("—")
+            }
+        }
+        .font(ExperienceTypography.font(.footnote))
+        .foregroundStyle(colors.secondaryText)
     }
 
     private var metrics: some View {
@@ -103,11 +114,13 @@ struct TradingDayDetailView: View {
                 ) {
                     metricCard("Wins", "\(summary.winCount)")
                     metricCard("Losses", "\(summary.lossCount)")
-                    if let rate = summary.winRate {
-                        metricCard("Win rate", ProfileDisplay.formatWinRate(rate))
-                    }
-                    metricCard("Gross profit", CalendarFormatting.fullPnL(summary.grossProfit))
-                    metricCard("Gross loss", CalendarFormatting.fullPnL(summary.grossLoss))
+                    metricCard("Gross Profit", CalendarFormatting.fullPnL(summary.grossProfit))
+                    metricCard("Gross Loss", CalendarFormatting.fullPnL(summary.grossLoss))
+                    metricCard("Win Rate", NumberDisplay.winRate(summary.winRate))
+                    metricCard(
+                        "Avg R:R",
+                        viewModel.averageTargetedRr.map { NumberDisplay.ratio($0, fractionDigits: 2) } ?? "—"
+                    )
                 }
             }
         }
@@ -383,6 +396,19 @@ final class CalendarDayDetailLoader {
         } catch {
             errorMessage = UserFacingError.message(for: error)
         }
+    }
+
+    /// Mean targeted R:R for trades on this day (Dashboard parity — positive targets only).
+    var averageTargetedRr: Decimal? {
+        var sum = Decimal(0)
+        var count = 0
+        for trade in dayTrades {
+            guard let rr = TradePointsAndRealizedRr.positiveTargetedRr(trade.riskReward) else { continue }
+            sum += rr
+            count += 1
+        }
+        guard count > 0 else { return nil }
+        return sum / Decimal(count)
     }
 
     func openTrade(_ summary: TradeSummary, navigation: NavigationCoordinator) {

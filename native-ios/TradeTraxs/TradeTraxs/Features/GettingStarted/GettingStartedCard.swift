@@ -27,24 +27,40 @@ struct GettingStartedCard: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Getting Started")
-                    .experienceStyle(.headline, color: colors.primaryText)
-                Text("\(store.progress.completedCount) of \(store.progress.totalCount) complete")
-                    .experienceStyle(.caption, color: colors.secondaryText)
-            }
-            Spacer()
-            Button {
-                ExperienceMotion.withAnimation(ExperienceMotion.selection, reduceMotion: reduceMotion) {
-                    store.toggleCollapsed()
+            if store.isCollapsed {
+                Button {
+                    ExperienceMotion.withAnimation(ExperienceMotion.selection, reduceMotion: reduceMotion) {
+                        store.toggleCollapsed()
+                    }
+                } label: {
+                    HStack(alignment: .center, spacing: ExperienceSpacing.sm) {
+                        headerTitles
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.down")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(colors.secondaryText)
+                            .frame(width: 28, height: 28)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
-            } label: {
-                Image(systemName: store.isCollapsed ? "chevron.down" : "chevron.up")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(colors.secondaryText)
-                    .frame(width: 28, height: 28)
+                .buttonStyle(.experiencePlain)
+                .accessibilityLabel("Expand Getting Started")
+            } else {
+                headerTitles
+                Spacer(minLength: 0)
+                Button {
+                    ExperienceMotion.withAnimation(ExperienceMotion.selection, reduceMotion: reduceMotion) {
+                        store.toggleCollapsed()
+                    }
+                } label: {
+                    Image(systemName: "chevron.up")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(colors.secondaryText)
+                        .frame(width: 28, height: 28)
+                }
+                .accessibilityLabel("Collapse Getting Started")
             }
-            .accessibilityLabel(store.isCollapsed ? "Expand Getting Started" : "Collapse Getting Started")
 
             if store.canPermanentlyDismiss {
                 Button {
@@ -58,6 +74,15 @@ struct GettingStartedCard: View {
                 .accessibilityLabel("Dismiss Getting Started")
                 .accessibilityIdentifier("gettingStarted.dismiss")
             }
+        }
+    }
+
+    private var headerTitles: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Getting Started")
+                .experienceStyle(.headline, color: colors.primaryText)
+            Text("\(store.progress.completedCount) of \(store.progress.totalCount) complete")
+                .experienceStyle(.caption, color: colors.secondaryText)
         }
     }
 

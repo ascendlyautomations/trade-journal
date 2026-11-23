@@ -29,7 +29,8 @@ nonisolated enum TradingRulesComplianceCompute {
         context: PreferenceRuleContext?,
         dashboardInsights: DashboardInsightsPresentation?,
         preferDashboardInsightsCache: Bool,
-        discipline: DisciplineContext = DisciplineContext()
+        discipline: DisciplineContext = DisciplineContext(),
+        allowedRuleIDs: Set<TradingRulesComplianceAnalytics.RuleID>? = nil
     ) async -> ScopedPayload {
         await Task.detached(priority: .userInitiated) {
             computeScopedSync(
@@ -37,7 +38,8 @@ nonisolated enum TradingRulesComplianceCompute {
                 context: context,
                 dashboardInsights: dashboardInsights,
                 preferDashboardInsightsCache: preferDashboardInsightsCache,
-                discipline: discipline
+                discipline: discipline,
+                allowedRuleIDs: allowedRuleIDs
             )
         }.value
     }
@@ -47,7 +49,8 @@ nonisolated enum TradingRulesComplianceCompute {
         context: PreferenceRuleContext?,
         dashboardInsights: DashboardInsightsPresentation?,
         preferDashboardInsightsCache: Bool,
-        discipline: DisciplineContext = DisciplineContext()
+        discipline: DisciplineContext = DisciplineContext(),
+        allowedRuleIDs: Set<TradingRulesComplianceAnalytics.RuleID>? = nil
     ) -> ScopedPayload {
         let started = CFAbsoluteTimeGetCurrent()
         let inputs = TradingRulesComplianceAnalytics.complianceInputs(from: trades)
@@ -64,7 +67,8 @@ nonisolated enum TradingRulesComplianceCompute {
             priorDiscipline = TradingRulesComplianceAnalytics.buildDisciplinePriorMetrics(
                 trades: discipline.priorTrades,
                 context: context,
-                psychologyContextTrades: discipline.psychologyContextTrades
+                psychologyContextTrades: discipline.psychologyContextTrades,
+                allowedRuleIDs: allowedRuleIDs
             )
         }
         let priorDisciplineMs = (CFAbsoluteTimeGetCurrent() - priorStarted) * 1000
@@ -77,7 +81,8 @@ nonisolated enum TradingRulesComplianceCompute {
             trades: trades,
             psychologyContextTrades: discipline.psychologyContextTrades,
             priorDisciplineMetrics: priorDiscipline,
-            complianceGoalPercent: discipline.complianceGoalPercent
+            complianceGoalPercent: discipline.complianceGoalPercent,
+            allowedRuleIDs: allowedRuleIDs
         )
         let analyticsMs = (CFAbsoluteTimeGetCurrent() - analyticsStarted) * 1000
 

@@ -4,6 +4,8 @@ import UIKit
 /// Full suggested-traders list pushed from Explore (Feed stack).
 struct SuggestedTradersView: View {
     @State private var viewModel: SuggestedTradersViewModel
+    @FocusState private var isSearchFocused: Bool
+
     private let imagePipeline: any ImagePipeline
 
     @Environment(\.themeColors) private var colors
@@ -33,43 +35,26 @@ struct SuggestedTradersView: View {
 
     var body: some View {
         Group {
-            if viewModel.isSearching {
-                searchResultsContent
+            if case .failed(let message) = viewModel.phase,
+               viewModel.traders.isEmpty,
+               !viewModel.isSearching
+            {
+                ExperienceErrorState(
+                    title: "Couldn't load suggested traders",
+                    message: message,
+                    onRetry: { Task { await viewModel.refresh() } }
+                )
+                .accessibilityIdentifier("suggestedTraders.error")
+            } else if showsBootstrapLoading {
+                ProgressView("Loading traders…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .accessibilityIdentifier("suggestedTraders.loading")
             } else {
-                switch viewModel.phase {
-                case .idle where viewModel.traders.isEmpty, .loading where viewModel.traders.isEmpty:
-                    ProgressView("Loading traders…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .accessibilityIdentifier("suggestedTraders.loading")
-                case .failed(let message) where viewModel.traders.isEmpty:
-                    ExperienceErrorState(
-                        title: "Couldn't load suggested traders",
-                        message: message,
-                        onRetry: { Task { await viewModel.refresh() } }
-                    )
-                    .accessibilityIdentifier("suggestedTraders.error")
-                case .loaded where viewModel.showsEmpty:
-                    ExperienceEmptyState(
-                        icon: .search,
-                        title: "No suggested traders",
-                        message: "Public profiles will appear here as the community grows."
-                    )
-                    .accessibilityIdentifier("suggestedTraders.empty")
-                default:
-                    listContent
-                }
+                primaryList
             }
         }
         .experienceScreenBackground()
         .experienceNavigationTitle("Suggested Traders")
-        .searchable(
-            text: $viewModel.searchText,
-            placement: .navigationBarDrawer(displayMode: .always),
-            prompt: "Search username or name"
-        )
-        .onChange(of: viewModel.searchText) { _, _ in
-            viewModel.searchChanged()
-        }
         .toolbar(.hidden, for: .tabBar)
         .refreshable {
             await viewModel.refresh()
@@ -95,141 +80,201 @@ struct SuggestedTradersView: View {
         .accessibilityIdentifier("suggestedTraders.home")
     }
 
-    @ViewBuilder
-    private var searchResultsContent: some View {
-        if viewModel.searchPhase == .searching, viewModel.searchResults.isEmpty {
-            ProgressView("Searching…")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .accessibilityIdentifier("suggestedTraders.search.loading")
-        } else if case .failed(let message) = viewModel.searchPhase {
-            ExperienceErrorState(
-                title: "Search failed",
-                message: message,
-                onRetry: { viewModel.searchChanged() }
-            )
-            .accessibilityIdentifier("suggestedTraders.search.error")
-        } else if viewModel.showsSearchEmpty {
-            ExperienceEmptyState(
-                icon: .search,
-                title: "No matches",
-                message: "Try another username or display name."
-            )
-            .accessibilityIdentifier("suggestedTraders.search.empty")
-        } else {
-            traderList(
-                traders: viewModel.displayedTraders,
-                showsPagination: false,
-                accessibilityIdentifier: "suggestedTraders.search.results"
-            )
+    private var showsBootstrapLoading: Bool {
+        switch viewModel.phase {
+        case .idle, .loading:
+            return viewModel.traders.isEmpty && !viewModel.isSearching
+        default:
+            return false
         }
     }
 
-    private var listContent: some View {
-        traderList(
-            traders: viewModel.displayedTraders,
-            showsPagination: true,
-            accessibilityIdentifier: "suggestedTraders.list"
+    private var primaryList: some View {
+        let _ = viewModel.followRevision
+        let showsPagination = !viewModel.isSearching
+        return List {
+            filterHeader
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets())
+
+            if viewModel.showsEmpty {
+                listEmptyRow(
+                    title: "No suggested traders",
+                    message: "Public profiles will appear here as the community grows.",
+                    identifier: "suggestedTraders.empty"
+                )
+            } else if viewModel.isSearching, viewModel.searchPhase == .searching,
+                      viewModel.displayedTraders.isEmpty
+            {
+                HStack {
+                    Spacer()
+                    ProgressView("Searching…")
+                    Spacer()
+                }
+                .padding(.vertical, ExperienceSpacing.lg)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .accessibilityIdentifier("suggestedTraders.search.loading")
+            } else if case .failed(let message) = viewModel.searchPhase, viewModel.isSearching {
+                ExperienceErrorState(
+                    title: "Search failed",
+                    message: message,
+                    onRetry: { viewModel.searchChanged() }
+                )
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .accessibilityIdentifier("suggestedTraders.search.error")
+            } else if viewModel.showsFilteredEmpty {
+                listEmptyRow(
+                    title: "No matching traders",
+                    message: viewModel.isSearching
+                        ? "Try another username, display name, or category."
+                        : "No traders match this category yet.",
+                    identifier: "suggestedTraders.filter.empty"
+                )
+            } else {
+                ForEach(viewModel.displayedTraders) { trader in
+                    traderRow(trader, showsPagination: showsPagination)
+                }
+
+                if showsPagination, viewModel.isLoadingMore {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .accessibilityIdentifier("suggestedTraders.loadingMore")
+                }
+
+                if showsPagination, let message = viewModel.loadMoreFailedMessage {
+                    VStack(spacing: ExperienceSpacing.sm) {
+                        Text(message)
+                            .experienceStyle(.footnote, color: colors.secondaryText)
+                            .multilineTextAlignment(.center)
+                        Button("Try again") {
+                            viewModel.retryLoadMore()
+                        }
+                        .font(.subheadline.weight(.semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, ExperienceSpacing.md)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .accessibilityIdentifier("suggestedTraders.loadMoreError")
+                }
+            }
+        }
+        .scrollDismissesKeyboard(.never)
+        .experiencePlainListStyle()
+        .accessibilityIdentifier(
+            viewModel.isSearching ? "suggestedTraders.search.results" : "suggestedTraders.list"
         )
     }
 
-    private func traderList(
-        traders: [ExploreTraderSuggestion],
-        showsPagination: Bool,
-        accessibilityIdentifier: String
-    ) -> some View {
-        let _ = viewModel.followRevision
-        return List {
-            ForEach(traders) { trader in
-                ExploreTraderListRow(
-                    trader: trader,
-                    profile: viewModel.resolvedProfile(for: trader),
-                    viewerProfileID: viewModel.authenticatedProfileID,
-                    imagePipeline: imagePipeline,
-                    isFollowing: viewModel.isFollowing(trader),
-                    showsFollowControl: viewModel.showsFollowControl(for: trader),
-                    onOpen: { viewModel.openTrader(trader) },
-                    onToggleFollow: { viewModel.toggleFollow(trader) }
-                )
-                .listRowBackground(colors.backgroundPrimary)
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    if viewModel.showsFollowControl(for: trader) {
-                        if viewModel.isFollowing(trader) {
-                            Button(role: .destructive) {
-                                viewModel.toggleFollow(trader)
-                            } label: {
-                                Label("Unfollow", systemImage: "person.badge.minus")
-                            }
-                        } else {
-                            Button {
-                                viewModel.toggleFollow(trader)
-                            } label: {
-                                Label("Follow", systemImage: "person.badge.plus")
-                            }
-                            .tint(colors.accent)
-                        }
-                    }
-                }
-                .contextMenu {
-                    Button {
-                        viewModel.openTrader(trader)
-                    } label: {
-                        Label("View Profile", systemImage: "person.crop.circle")
-                    }
-                    Button {
-                        UIPasteboard.general.string = "@\(trader.profile.username)"
-                        ExperienceHaptics.play(.success)
-                    } label: {
-                        Label("Copy Username", systemImage: "doc.on.doc")
-                    }
-                    if viewModel.showsFollowControl(for: trader) {
-                        Button {
-                            viewModel.toggleFollow(trader)
-                        } label: {
-                            Label(
-                                viewModel.isFollowing(trader) ? "Unfollow" : "Follow",
-                                systemImage: viewModel.isFollowing(trader)
-                                    ? "person.badge.minus"
-                                    : "person.badge.plus"
-                            )
-                        }
-                    }
-                }
-                .onAppear {
-                    if showsPagination, trader.id == traders.last?.id {
-                        viewModel.loadMoreIfNeeded()
-                    }
-                }
-            }
+    private func listEmptyRow(title: String, message: String, identifier: String) -> some View {
+        ExperienceCompactEmptyState(
+            icon: .search,
+            title: title,
+            message: message,
+            accessibilityIdentifier: identifier
+        )
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(
+            top: ExperienceSpacing.sm,
+            leading: ExperienceSpacing.md,
+            bottom: ExperienceSpacing.md,
+            trailing: ExperienceSpacing.md
+        ))
+    }
 
-            if showsPagination, viewModel.isLoadingMore {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                    Spacer()
+    private var filterHeader: some View {
+        VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
+            TextField("Search traders...", text: $viewModel.searchText)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($isSearchFocused)
+                .padding(.horizontal, ExperienceSpacing.md)
+                .padding(.vertical, 10)
+                .background(colors.fillSecondary, in: RoundedRectangle(cornerRadius: ExperienceRadius.sm))
+                .padding(.horizontal, ExperienceSpacing.md)
+                .onChange(of: viewModel.searchText) { _, _ in
+                    viewModel.searchChanged()
                 }
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .accessibilityIdentifier("suggestedTraders.loadingMore")
-            }
+                .accessibilityIdentifier("suggestedTraders.search")
 
-            if showsPagination, let message = viewModel.loadMoreFailedMessage {
-                VStack(spacing: ExperienceSpacing.sm) {
-                    Text(message)
-                        .experienceStyle(.footnote, color: colors.secondaryText)
-                        .multilineTextAlignment(.center)
-                    Button("Try again") {
-                        viewModel.retryLoadMore()
+            SuggestedTraderCategoryFilterBar(
+                selected: viewModel.categoryTab,
+                onSelect: { viewModel.selectCategoryTab($0) }
+            )
+            .padding(.horizontal, ExperienceSpacing.md)
+        }
+        .padding(.vertical, ExperienceSpacing.sm)
+    }
+
+    private func traderRow(_ trader: ExploreTraderSuggestion, showsPagination: Bool) -> some View {
+        let traders = viewModel.displayedTraders
+        return ExploreTraderListRow(
+            trader: trader,
+            profile: viewModel.resolvedProfile(for: trader),
+            viewerProfileID: viewModel.authenticatedProfileID,
+            imagePipeline: imagePipeline,
+            isFollowing: viewModel.isFollowing(trader),
+            showsFollowControl: viewModel.showsFollowControl(for: trader),
+            onOpen: { viewModel.openTrader(trader) },
+            onToggleFollow: { viewModel.toggleFollow(trader) }
+        )
+        .listRowBackground(colors.backgroundPrimary)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if viewModel.showsFollowControl(for: trader) {
+                if viewModel.isFollowing(trader) {
+                    Button(role: .destructive) {
+                        viewModel.toggleFollow(trader)
+                    } label: {
+                        Label("Unfollow", systemImage: "person.badge.minus")
                     }
-                    .font(.subheadline.weight(.semibold))
+                } else {
+                    Button {
+                        viewModel.toggleFollow(trader)
+                    } label: {
+                        Label("Follow", systemImage: "person.badge.plus")
+                    }
+                    .tint(colors.accent)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, ExperienceSpacing.md)
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .accessibilityIdentifier("suggestedTraders.loadMoreError")
             }
         }
-        .experiencePlainListStyle()
-        .accessibilityIdentifier(accessibilityIdentifier)
+        .contextMenu {
+            Button {
+                viewModel.openTrader(trader)
+            } label: {
+                Label("View Profile", systemImage: "person.crop.circle")
+            }
+            Button {
+                UIPasteboard.general.string = "@\(trader.profile.username)"
+                ExperienceHaptics.play(.success)
+            } label: {
+                Label("Copy Username", systemImage: "doc.on.doc")
+            }
+            if viewModel.showsFollowControl(for: trader) {
+                Button {
+                    viewModel.toggleFollow(trader)
+                } label: {
+                    Label(
+                        viewModel.isFollowing(trader) ? "Unfollow" : "Follow",
+                        systemImage: viewModel.isFollowing(trader)
+                            ? "person.badge.minus"
+                            : "person.badge.plus"
+                    )
+                }
+            }
+        }
+        .onAppear {
+            if showsPagination, trader.id == traders.last?.id {
+                viewModel.loadMoreIfNeeded()
+            }
+        }
     }
 }

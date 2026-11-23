@@ -65,6 +65,7 @@ enum TradeRoomMembershipSync {
             ),
             viewer: viewerID
         )
+        SocialPersistedCacheCoordinator.invalidateRoomSnapshot(viewerID: viewerID, roomID: tradeRoom.id)
     }
 
     static func applyLeft(
@@ -72,6 +73,7 @@ enum TradeRoomMembershipSync {
         viewerID: ProfileID,
         inboxStore: MessagesInboxStore
     ) {
+        SocialPersistedCacheCoordinator.invalidateRoomSnapshot(viewerID: viewerID, roomID: roomID)
         TradeRoomMembershipStore.shared.setJoined(roomID, joined: false)
         TradeRoomConfirmedMembershipCache.clear(for: roomID)
         TradeRoomJoinActionCoordinator.shared.clearMutation(for: roomID)
@@ -115,6 +117,7 @@ enum TradeRoomMembershipSync {
             memberCount: suggestion.memberCount,
             showsOnProfile: true,
             isPrivate: false,
+            category: suggestion.category,
             discoveryTags: suggestion.discoveryTags,
             joinPolicy: suggestion.joinPolicy,
             roomKind: suggestion.roomKind,

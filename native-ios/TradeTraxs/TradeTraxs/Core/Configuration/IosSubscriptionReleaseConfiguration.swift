@@ -12,11 +12,22 @@ nonisolated enum IosSubscriptionReleaseConfiguration {
     #if DEBUG
     private static var paywallOverride: Bool?
     private static var enforcementOverride: Bool?
+    private static var creatorPromoOverride: Bool?
     /// Override in unit tests when exercising the referral Settings surface.
     static var iosReferralProgramEnabled = false
     #else
     static let iosReferralProgramEnabled = false
     #endif
+
+    /// TradeTraxs creator/promo code entry (non–App Store). Off in App Store builds until legal review approves.
+    static var iosCreatorPromoRedemptionEnabled: Bool {
+        #if DEBUG
+        if let creatorPromoOverride { return creatorPromoOverride }
+        return false
+        #else
+        return false
+        #endif
+    }
 
     static var iosPaywallEnabled: Bool {
         #if DEBUG
@@ -48,14 +59,16 @@ nonisolated enum IosSubscriptionReleaseConfiguration {
     }
 
     #if DEBUG
-    static func setTestOverrides(paywall: Bool?, enforcement: Bool?) {
+    static func setTestOverrides(paywall: Bool?, enforcement: Bool?, creatorPromo: Bool? = nil) {
         paywallOverride = paywall
         enforcementOverride = enforcement
+        creatorPromoOverride = creatorPromo
     }
 
     static func resetTestOverrides() {
         paywallOverride = nil
         enforcementOverride = nil
+        creatorPromoOverride = nil
     }
     #endif
 }

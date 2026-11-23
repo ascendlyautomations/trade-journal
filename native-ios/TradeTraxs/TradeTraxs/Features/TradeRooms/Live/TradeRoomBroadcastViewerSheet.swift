@@ -16,7 +16,18 @@ extension View {
                 }
             }
         )) {
-            if let session = coordinator.watchSession {
+            if let denial = coordinator.viewerSessionAccessDenied {
+                BroadcastViewerSessionAccessDeniedView(
+                    denial: denial,
+                    coordinator: coordinator
+                )
+                .experienceSheetChrome(
+                    detents: [.large],
+                    dragIndicator: .hidden,
+                    interactiveDismiss: false,
+                    keyboardDoneToolbar: false
+                )
+            } else if let session = coordinator.watchSession {
                 RoomBroadcastWatchView(
                     roomID: session.roomID,
                     roomTitle: session.roomTitle,

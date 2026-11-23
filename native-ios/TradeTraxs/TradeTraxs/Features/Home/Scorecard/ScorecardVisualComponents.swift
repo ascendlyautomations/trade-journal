@@ -27,6 +27,7 @@ struct ScorecardScoreRingView: View {
         ZStack {
             Circle()
                 .stroke(colors.fillSecondary, lineWidth: lineWidth)
+                .frame(width: size, height: size)
             Circle()
                 .trim(from: 0, to: animatedFill)
                 .stroke(
@@ -34,34 +35,52 @@ struct ScorecardScoreRingView: View {
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-            VStack(spacing: 2) {
-                if let score {
-                    Text("\(score)")
-                        .font(.system(size: size * 0.28, weight: .bold, design: .rounded).monospacedDigit())
-                        .foregroundStyle(colors.primaryText)
-                        .contentTransition(.numericText())
-                } else {
-                    Text(buildingCaption)
-                        .font(.system(size: size * 0.16, weight: .semibold, design: .rounded))
-                        .foregroundStyle(colors.secondaryText)
-                }
-                Text(score != nil ? "Score" : "")
-                    .experienceStyle(.caption2, color: colors.tertiaryText)
-                if score == nil, let buildingHint, !buildingHint.isEmpty {
-                    Text(buildingHint)
-                        .experienceStyle(.caption2, color: colors.tertiaryText)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.8)
-                        .frame(maxWidth: size * 1.05)
-                }
-            }
+                .frame(width: size, height: size)
+            ringCenterContent
+                .frame(width: size, height: size)
         }
         .frame(width: size, height: size)
         .onAppear { animateFill() }
         .onChange(of: targetFill) { _, _ in animateFill() }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(score.map { "Plan adherence score \($0) out of 100" } ?? "Score building")
+    }
+
+    @ViewBuilder
+    private var ringCenterContent: some View {
+        if let score {
+            VStack(spacing: 2) {
+                Text("\(score)")
+                    .font(.system(size: size * 0.28, weight: .bold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(colors.primaryText)
+                    .contentTransition(.numericText())
+                Text("Score")
+                    .experienceStyle(.caption2, color: colors.tertiaryText)
+            }
+            .multilineTextAlignment(.center)
+            .frame(width: size, height: size)
+        } else {
+            ZStack {
+                Text(buildingCaption)
+                    .font(.system(size: size * 0.16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(colors.secondaryText)
+                    .multilineTextAlignment(.center)
+                    .frame(width: size, height: size)
+                if let buildingHint, !buildingHint.isEmpty {
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        Text(buildingHint)
+                            .experienceStyle(.caption2, color: colors.tertiaryText)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.8)
+                            .frame(maxWidth: size - lineWidth * 2)
+                    }
+                    .frame(width: size, height: size)
+                }
+            }
+            .frame(width: size, height: size)
+        }
     }
 
     private var ringColor: Color {

@@ -128,9 +128,10 @@ struct DemoExploreRepository: ExploreRepository {
         scope: TradeRoomDiscoveryScope,
         limit: Int,
         suggestedCursor: String?,
-        popularCursor: String?
+        popularCursor: String?,
+        category: TradeRoomCategory?
     ) async throws -> TradeRoomsHomeBootstrap {
-        _ = (limit, suggestedCursor, popularCursor)
+        _ = (limit, suggestedCursor, popularCursor, category)
         return DemoExploreTradeRoom.homeBootstrap(
             viewerID: DemoExperienceSupport.profileID,
             scope: scope
@@ -236,6 +237,11 @@ struct DemoBillingRepository: BillingRepository {
 
     func refreshEntitlements(for profileID: ProfileID) async throws -> BillingStatus {
         demoStatus(profileID)
+    }
+
+    func redeemCreatorAccessCode(_ code: String) async throws {
+        _ = code
+        throw DemoAuthRequired.error
     }
 
     private func demoStatus(_ profileID: ProfileID) -> BillingStatus {

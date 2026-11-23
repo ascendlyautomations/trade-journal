@@ -14,13 +14,21 @@ struct RoomBroadcastWatchView: View {
     @State private var showsParticipants = false
     @State private var isFullscreen = false
     @State private var isChatComposerFocused = false
+    @State private var isTypingMiniPlayerDismissed = false
+    @State private var isViewerVideoCornerPinned = false
 
-    private let chatTypingMiniPlayerClearance: CGFloat = 148
+    private var usesCornerVideo: Bool {
+        isChatComposerFocused || isViewerVideoCornerPinned
+    }
+
+    private var cornerPlayerSize: RoomBroadcastCornerPlayerSize {
+        isChatComposerFocused ? .standard : .compact
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             streamHeader
-            if !isChatComposerFocused {
+            if !usesCornerVideo {
                 RoomBroadcastStudioVideoSection(
                     coordinator: coordinator,
                     isFullscreen: $isFullscreen
@@ -43,20 +51,39 @@ struct RoomBroadcastWatchView: View {
                     useViewerKeyboardChrome: true,
                     composerFocusedBinding: $isChatComposerFocused
                 )
-                .frame(maxHeight: .infinity)
-                .padding(.trailing, isChatComposerFocused ? chatTypingMiniPlayerClearance : 0)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                if isChatComposerFocused {
-                    RoomBroadcastChatTypingMiniPlayer(coordinator: coordinator)
-                        .padding(.top, ExperienceSpacing.xs)
-                        .padding(.trailing, ExperienceSpacing.sm)
-                        .transition(.scale(scale: 0.92, anchor: .topTrailing).combined(with: .opacity))
+                if usesCornerVideo, !isTypingMiniPlayerDismissed {
+                    RoomBroadcastChatTypingMiniPlayerOverlay(
+                        coordinator: coordinator,
+                        isDismissed: $isTypingMiniPlayerDismissed,
+                        size: cornerPlayerSize,
+                        onExpand: isViewerVideoCornerPinned && !isChatComposerFocused
+                            ? { withAnimation(.snappy(duration: 0.28)) { isViewerVideoCornerPinned = false } }
+                            : nil
+                    )
+                } else if usesCornerVideo, isTypingMiniPlayerDismissed {
+                    cornerVideoDismissedPlaceholder
                 }
             }
             .frame(maxHeight: .infinity)
-            streamToolbar
+            if !isChatComposerFocused {
+                streamToolbar
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
         .animation(.snappy(duration: 0.28), value: isChatComposerFocused)
+        .animation(.snappy(duration: 0.28), value: isViewerVideoCornerPinned)
+        .animation(.snappy(duration: 0.28), value: isTypingMiniPlayerDismissed)
+        .onChange(of: isChatComposerFocused) { _, focused in
+            guard !focused else { return }
+            isTypingMiniPlayerDismissed = false
+        }
+        .onChange(of: isViewerVideoCornerPinned) { _, pinned in
+            if pinned {
+                isTypingMiniPlayerDismissed = false
+            }
+        }
         .background(colors.primaryBackground)
         .fullScreenCover(isPresented: $isFullscreen) {
             fullscreenPlayer
@@ -79,6 +106,9 @@ struct RoomBroadcastWatchView: View {
             await coordinator.chatProfileCache.hydrate(userIds: ids)
             let rosterIds = coordinator.rosterParticipants.map(\.identity)
             await coordinator.chatProfileCache.hydrate(userIds: rosterIds)
+        }
+        .task(id: coordinator.chatMessages.compactMap { $0.tradeID?.rawValue }.sorted().joined(separator: ",")) {
+            await coordinator.hydrateBroadcastChatTradesIfNeeded()
         }
         .onChange(of: coordinator.streamFullscreenDismissSignal) { _, _ in
             isFullscreen = false
@@ -142,6 +172,19 @@ struct RoomBroadcastWatchView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Button {
+                toggleCornerVideoPin()
+            } label: {
+                Image(systemName: isViewerVideoCornerPinned ? "pip.exit" : "pip.enter")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(
+                        isViewerVideoCornerPinned ? colors.accent : colors.primaryText
+                    )
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.experiencePlain)
+            .accessibilityLabel(isViewerVideoCornerPinned ? "Expand video" : "Minimize video for chat")
+
+            Button {
                 showsParticipants = true
             } label: {
                 Image(systemName: "person.2.fill")
@@ -157,6 +200,25 @@ struct RoomBroadcastWatchView: View {
         .background(colors.navigationBackground.opacity(0.98))
         .contentShape(Rectangle())
         .simultaneousGesture(headerMinimizeDragGesture)
+    }
+
+    /// Invisible attachment so LiveKit keeps one renderer when the overlay is swiped away.
+    private var cornerVideoDismissedPlaceholder: some View {
+        RoomBroadcastChatTypingMiniPlayer(coordinator: coordinator, size: cornerPlayerSize)
+            .frame(width: 1, height: 1)
+            .opacity(0.001)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
+    private func toggleCornerVideoPin() {
+        ExperienceHaptics.play(.selection)
+        withAnimation(.snappy(duration: 0.28)) {
+            isViewerVideoCornerPinned.toggle()
+            if isViewerVideoCornerPinned {
+                isTypingMiniPlayerDismissed = false
+            }
+        }
     }
 
     private var headerMinimizeDragGesture: some Gesture {
@@ -233,10 +295,17 @@ struct RoomBroadcastWatchView: View {
             Color.black.ignoresSafeArea()
             BroadcastStreamZoomableVideoView(
                 track: coordinator.videoTrackForExpandedViewer,
-                isFullscreen: true
+                isFullscreen: true,
+                onFirstFrame: { coordinator.markProgramVideoFrameRendered() }
             )
             .id(coordinator.programVideoTrackRevision)
+            .opacity(coordinator.hasDisplayableProgramVideo ? 1 : 0)
             .ignoresSafeArea()
+
+            if let placeholder = coordinator.programVideoPlaceholder {
+                BroadcastProgramVideoPlaceholderOverlay(presentation: placeholder)
+                    .ignoresSafeArea()
+            }
 
             VStack(spacing: ExperienceSpacing.sm) {
                 HStack {

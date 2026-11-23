@@ -304,7 +304,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
 
         await viewModel.refresh()
 
-        XCTAssertEqual(viewModel.planTitle, "Free")
+        XCTAssertEqual(viewModel.planTitle, MonetizationPlanCopy.freePlanName)
         XCTAssertNil(viewModel.errorMessage)
         XCTAssertEqual(metrics.loadCount, 1)
         XCTAssertTrue(viewModel.showsApplePurchaseSection)
@@ -338,7 +338,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
         viewModel.applyForegroundEntitlementRefresh(status)
         await waitFor { metrics.loadCount == 1 }
 
-        XCTAssertEqual(viewModel.planTitle, "Free")
+        XCTAssertEqual(viewModel.planTitle, MonetizationPlanCopy.freePlanName)
         XCTAssertNil(viewModel.errorMessage)
         XCTAssertTrue(viewModel.showsApplePurchaseSection)
         XCTAssertTrue(viewModel.showsRestorePurchases)
@@ -363,7 +363,7 @@ final class SettingsSubscriptionViewModelTests: XCTestCase {
             if case .failed = viewModel.productsState { return true }
             return false
         }
-        XCTAssertEqual(viewModel.planTitle, "Free")
+        XCTAssertEqual(viewModel.planTitle, MonetizationPlanCopy.freePlanName)
         XCTAssertEqual(metrics.loadCount, 1)
 
         await viewModel.refresh()
@@ -471,6 +471,10 @@ private struct StubBilling: BillingRepository {
     func refreshEntitlements(for profileID: ProfileID) async throws -> BillingStatus {
         try await status(for: profileID)
     }
+
+    func redeemCreatorAccessCode(_ code: String) async throws {
+        _ = code
+    }
 }
 
 private final class FailThenSucceedBilling: BillingRepository, @unchecked Sendable {
@@ -498,6 +502,10 @@ private final class FailThenSucceedBilling: BillingRepository, @unchecked Sendab
         var copy = status
         copy.profileID = profileID
         return copy
+    }
+
+    func redeemCreatorAccessCode(_ code: String) async throws {
+        _ = code
     }
 }
 
@@ -533,6 +541,10 @@ private final class MutableBillingRepository: BillingRepository, @unchecked Send
         var copy = current
         copy.profileID = profileID
         return copy
+    }
+
+    func redeemCreatorAccessCode(_ code: String) async throws {
+        _ = code
     }
 }
 

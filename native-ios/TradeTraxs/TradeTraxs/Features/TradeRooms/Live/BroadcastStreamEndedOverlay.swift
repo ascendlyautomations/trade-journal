@@ -27,7 +27,7 @@ struct BroadcastStreamEndedOverlay: View {
                     .foregroundStyle(colors.primaryText)
                     .accessibilityAddTraits(.isHeader)
 
-                Text("This livestream has ended.")
+                Text(notice.detailMessage ?? "This livestream has ended.")
                     .font(ExperienceTypography.body)
                     .foregroundStyle(colors.secondaryText)
                     .multilineTextAlignment(.center)

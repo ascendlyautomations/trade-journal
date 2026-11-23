@@ -248,8 +248,13 @@ struct TradeRoomsHomeView: View {
         } else if viewModel.showsFilteredEmpty {
             ExperienceEmptyState(
                 icon: .search,
-                title: "No matches",
-                message: "Try a different room name or keyword."
+                title: viewModel.hasActiveDiscoveryCategoryFilter
+                    ? viewModel.discoveryCategoryEmptyTitle(for: viewModel.activeDiscoveryScope)
+                    : "No matches",
+                message: viewModel.hasActiveDiscoveryCategoryFilter
+                    ? (viewModel.discoveryCategoryEmptyMessage(for: viewModel.activeDiscoveryScope)
+                        ?? "Try a different category or search term.")
+                    : "Try a different room name or keyword."
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityIdentifier("tradeRooms.search.empty")
@@ -312,7 +317,14 @@ struct TradeRoomsHomeView: View {
                 onSelect: { viewModel.selectDiscoveryScope($0) }
             )
             .padding(.top, ExperienceSpacing.sm)
-            .padding(.bottom, ExperienceSpacing.xxs)
+
+            if viewModel.activeDiscoveryScope.showsDiscoveryCategoryFilter {
+                TradeRoomCategoryFilterBar(
+                    selectedCategory: viewModel.discoveryCategoryFilter,
+                    onSelect: { viewModel.selectDiscoveryCategoryFilter($0) }
+                )
+                .padding(.bottom, ExperienceSpacing.xxs)
+            }
 
             if viewModel.discoveryPhase == .loading,
                viewModel.activeDiscoveryScope.showsDiscoverableLists,
@@ -375,8 +387,10 @@ struct TradeRoomsHomeView: View {
         let emptyMessage = viewModel.activeDiscoveryScope.allScopeDiscoveryEmptyMessage
         return VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             if rooms.isEmpty, viewModel.discoveryPhase == .loaded {
-                Text(emptyMessage)
-                    .experienceStyle(.footnote, color: colors.secondaryText)
+                discoveryEmptyContent(
+                    scope: .all,
+                    defaultMessage: emptyMessage
+                )
             } else {
                 ForEach(rooms) { room in
                     discoveryRow(for: room, isYourRoomsContext: false)
@@ -410,8 +424,10 @@ struct TradeRoomsHomeView: View {
         let emptyMessage = viewModel.activeDiscoveryScope.unifiedDiscoveryEmptyMessage
         return VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             if rooms.isEmpty, viewModel.discoveryPhase == .loaded {
-                Text(emptyMessage)
-                    .experienceStyle(.footnote, color: colors.secondaryText)
+                discoveryEmptyContent(
+                    scope: viewModel.activeDiscoveryScope,
+                    defaultMessage: emptyMessage
+                )
             } else {
                 ForEach(rooms) { room in
                     discoveryRow(for: room, isYourRoomsContext: false)
@@ -428,12 +444,21 @@ struct TradeRoomsHomeView: View {
     private var favoritesDiscoverySection: some View {
         VStack(alignment: .leading, spacing: ExperienceSpacing.sm) {
             if viewModel.favoriteRooms.isEmpty, viewModel.discoveryPhase == .loaded {
-                ExperienceEmptyState(
-                    icon: .rooms,
-                    title: "No favorites yet",
-                    message: "Press and hold a joined room to favorite it and pin it here."
-                )
-                .padding(.vertical, ExperienceSpacing.xs)
+                if viewModel.hasActiveDiscoveryCategoryFilter,
+                   let message = viewModel.discoveryCategoryEmptyMessage(for: .favorites)
+                {
+                    discoveryCategoryEmptyState(
+                        title: viewModel.discoveryCategoryEmptyTitle(for: .favorites),
+                        message: message
+                    )
+                } else {
+                    ExperienceEmptyState(
+                        icon: .rooms,
+                        title: "No favorites yet",
+                        message: "Press and hold a joined room to favorite it and pin it here."
+                    )
+                    .padding(.vertical, ExperienceSpacing.xs)
+                }
             } else {
                 ForEach(viewModel.favoriteRooms) { room in
                     discoveryRow(for: room, isYourRoomsContext: true)
@@ -450,14 +475,23 @@ struct TradeRoomsHomeView: View {
             }
 
             if viewModel.yourRooms.isEmpty, viewModel.discoveryPhase == .loaded {
-                ExperienceEmptyState(
-                    icon: .rooms,
-                    title: "No rooms yet",
-                    message: TradeRoomDiscoveryMode.yourRooms.emptyMessage,
-                    actionTitle: viewModel.viewerOwnedRoom == nil ? "Create Trade Room" : nil,
-                    action: viewModel.viewerOwnedRoom == nil ? { viewModel.presentCreateRoom() } : nil
-                )
-                .padding(.vertical, ExperienceSpacing.xs)
+                if viewModel.hasActiveDiscoveryCategoryFilter,
+                   let message = viewModel.discoveryCategoryEmptyMessage(for: .yourRooms)
+                {
+                    discoveryCategoryEmptyState(
+                        title: viewModel.discoveryCategoryEmptyTitle(for: .yourRooms),
+                        message: message
+                    )
+                } else {
+                    ExperienceEmptyState(
+                        icon: .rooms,
+                        title: "No rooms yet",
+                        message: TradeRoomDiscoveryMode.yourRooms.emptyMessage,
+                        actionTitle: viewModel.viewerOwnedRoom == nil ? "Create Trade Room" : nil,
+                        action: viewModel.viewerOwnedRoom == nil ? { viewModel.presentCreateRoom() } : nil
+                    )
+                    .padding(.vertical, ExperienceSpacing.xs)
+                }
             } else if viewModel.yourRooms.isEmpty {
                 Text(TradeRoomDiscoveryMode.yourRooms.emptyMessage)
                     .experienceStyle(.footnote, color: colors.secondaryText)
@@ -476,6 +510,34 @@ struct TradeRoomsHomeView: View {
             .textCase(.uppercase)
             .tracking(0.35)
             .padding(.bottom, ExperienceSpacing.xxs)
+    }
+
+    @ViewBuilder
+    private func discoveryEmptyContent(
+        scope: TradeRoomDiscoveryScope,
+        defaultMessage: String
+    ) -> some View {
+        if viewModel.hasActiveDiscoveryCategoryFilter,
+           let message = viewModel.discoveryCategoryEmptyMessage(for: scope)
+        {
+            discoveryCategoryEmptyState(
+                title: viewModel.discoveryCategoryEmptyTitle(for: scope),
+                message: message
+            )
+        } else {
+            Text(defaultMessage)
+                .experienceStyle(.footnote, color: colors.secondaryText)
+        }
+    }
+
+    private func discoveryCategoryEmptyState(title: String, message: String) -> some View {
+        ExperienceEmptyState(
+            icon: .rooms,
+            title: title,
+            message: message
+        )
+        .padding(.vertical, ExperienceSpacing.xs)
+        .accessibilityIdentifier("tradeRooms.discovery.categoryEmpty")
     }
 
     @ViewBuilder

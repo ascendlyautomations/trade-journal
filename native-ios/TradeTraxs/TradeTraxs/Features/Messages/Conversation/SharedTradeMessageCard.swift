@@ -144,9 +144,11 @@ struct SharedTradeMessageCard: View {
     }
 
     private func sharedTradeDateRow(_ trade: Trade) -> some View {
-        Text(TradeDisplay.dateTimeText(trade.entryAt))
+        Text(TradeDisplay.sharedMessageExecutionStamp(for: trade))
             .experienceStyle(.caption2, color: tertiaryTextColor)
-            .lineLimit(1)
+            .lineLimit(2)
+            .minimumScaleFactor(0.85)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func metaChipBackground(emphasized: Bool) -> Color {
@@ -226,7 +228,7 @@ struct SharedTradeMessageCard: View {
         if let mode = modeLabel(for: trade) {
             parts.append(mode)
         }
-        parts.append(TradeDisplay.dateTimeText(trade.entryAt))
+        parts.append(TradeDisplay.sharedMessageExecutionStamp(for: trade))
         return parts.joined(separator: ", ")
     }
 }

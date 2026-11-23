@@ -26,6 +26,37 @@ nonisolated enum TradeRoomCategory: String, CaseIterable, Codable, Sendable, Has
         case .general: return "General"
         }
     }
+
+    /// Parses `rooms.category` from API / RPC (trimmed, lowercased snake_case).
+    static func parseStored(_ raw: String?) -> TradeRoomCategory? {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return nil }
+        if let match = TradeRoomCategory(rawValue: trimmed) { return match }
+        return TradeRoomCategory(rawValue: trimmed.lowercased())
+    }
+
+    /// Stored value, then official slug inference — never invents `.general` for NULL/legacy rows.
+    static func effectiveForDiscovery(
+        stored: TradeRoomCategory?,
+        slug: String,
+        roomKind: TradeRoomKind
+    ) -> TradeRoomCategory? {
+        if let stored { return stored }
+        return inferredOfficialCategory(slug: slug, roomKind: roomKind)
+    }
+
+    /// Maps seeded official room slugs when `rooms.category` was never set.
+    static func inferredOfficialCategory(slug: String, roomKind: TradeRoomKind) -> TradeRoomCategory? {
+        guard roomKind == .official else { return nil }
+        switch slug.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "futures-traders": return .futures
+        case "options-traders": return .options
+        case "stock-traders": return .stocks
+        case "crypto-traders": return .crypto
+        case "forex-traders": return .forex
+        default: return nil
+        }
+    }
 }
 
 /// Stored on `rooms.is_private` — only set via ``TradeRoomConfiguration/persistedIsPrivate`` for create/update payloads.

@@ -251,6 +251,33 @@ final class TradeDetailExperienceTests: XCTestCase {
         XCTAssertEqual(TradeDisplay.exitExecutionTimeText(for: trade), "—")
     }
 
+    func testSharedMessageExecutionStampShowsEntryExitDayAndDuration() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        let entry = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 13, minute: 5))!
+        let exit = calendar.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 14, minute: 0))!
+        let stamp = TradeDisplay.sharedMessageExecutionStamp(
+            entryAt: entry,
+            exitAt: exit,
+            durationSeconds: nil,
+            durationText: nil
+        )
+        XCTAssertTrue(stamp.contains(" - "), stamp)
+        XCTAssertTrue(stamp.contains("(55m)"), stamp)
+        XCTAssertTrue(stamp.contains("11/20/26"), stamp)
+    }
+
+    func testSharedMessageExecutionStampFallsBackToEntryOnlyWithoutExit() {
+        let entry = Date(timeIntervalSince1970: 1_700_000_000)
+        let stamp = TradeDisplay.sharedMessageExecutionStamp(
+            entryAt: entry,
+            exitAt: nil,
+            durationSeconds: nil,
+            durationText: nil
+        )
+        XCTAssertEqual(stamp, TradeDisplay.dateTimeText(entry))
+    }
+
     func testCompactRRTextFormatsSignedMultiple() {
         XCTAssertEqual(TradeDisplay.compactRRText(Decimal(string: "7.1")), "+7.1R")
         XCTAssertEqual(TradeDisplay.compactRRText(Decimal(string: "-2.4")), "-2.4R")

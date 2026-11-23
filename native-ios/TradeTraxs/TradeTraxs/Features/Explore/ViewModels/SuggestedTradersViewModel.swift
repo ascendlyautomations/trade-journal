@@ -21,6 +21,7 @@ final class SuggestedTradersViewModel {
     private(set) var searchPhase: SearchPhase = .idle
     private(set) var searchResults: [ExploreTraderSuggestion] = []
     var searchText = ""
+    private(set) var categoryTab: SuggestedTraderCategoryTab = .all
     private(set) var isLoadingMore = false
     private(set) var loadMoreFailedMessage: String?
 
@@ -39,6 +40,7 @@ final class SuggestedTradersViewModel {
     private var loadMoreTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
     private var searchGeneration: UInt64 = 0
+    private static let searchDebounceNanoseconds: UInt64 = 300_000_000
     private var loadGeneration = 0
     private var inFlightFollow: Set<ProfileID> = []
 
@@ -94,17 +96,26 @@ final class SuggestedTradersViewModel {
     }
 
     var displayedTraders: [ExploreTraderSuggestion] {
-        isSearching ? searchResults : traders
+        let source = isSearching ? searchResults : traders
+        return applyCategoryFilter(to: source)
     }
 
-    var showsSearchEmpty: Bool {
-        isSearching && searchPhase == .idle && searchResults.isEmpty
+    var showsFilteredEmpty: Bool {
+        guard !showsEmpty else { return false }
+        if isSearching {
+            if searchPhase == .searching { return false }
+            return displayedTraders.isEmpty
+        }
+        return phase == .loaded && displayedTraders.isEmpty
     }
 
-    var canLoadMore: Bool { store.tradersNextCursor != nil }
+    var canLoadMore: Bool {
+        guard !isSearching else { return false }
+        return store.tradersNextCursor != nil
+    }
 
     var showsEmpty: Bool {
-        phase == .loaded && traders.isEmpty
+        !isSearching && phase == .loaded && traders.isEmpty
     }
 
     var followRevision: Int { FollowMutationCoordinator.shared.revision }
@@ -150,8 +161,62 @@ final class SuggestedTradersViewModel {
         await loadFirstPage(source: .refresh, replacing: true, generation: generation)
     }
 
+    func selectCategoryTab(_ tab: SuggestedTraderCategoryTab) {
+        guard categoryTab != tab else { return }
+        ExperienceHaptics.play(.selection)
+        categoryTab = tab
+    }
+
+    func searchChanged() {
+        searchTask?.cancel()
+        searchGeneration &+= 1
+        let generation = searchGeneration
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.count >= 2 else {
+            searchResults = []
+            searchPhase = .idle
+            return
+        }
+
+        if viewerID == DemoExperienceSupport.profileID {
+            let exclude = viewerID ?? DemoExperienceSupport.profileID
+            let filtered = DemoGraph.traders(excluding: exclude).filter {
+                $0.profile.displayName.localizedCaseInsensitiveContains(query)
+                    || $0.profile.username.localizedCaseInsensitiveContains(query)
+            }
+            searchResults = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(
+                ExploreTraderRanking.orderingSearchResults(filtered, query: query) {
+                    resolvedProfile(for: $0)
+                }
+            )
+            searchPhase = .idle
+            return
+        }
+
+        if let viewerID, isLocalDevelopment(viewerID) {
+            let filtered = ExploreFixtures.traders(excluding: viewerID).filter {
+                $0.profile.displayName.localizedCaseInsensitiveContains(query)
+                    || $0.profile.username.localizedCaseInsensitiveContains(query)
+            }
+            searchResults = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(
+                ExploreTraderRanking.orderingSearchResults(filtered, query: query) {
+                    resolvedProfile(for: $0)
+                }
+            )
+            searchPhase = .idle
+            return
+        }
+
+        searchPhase = .searching
+        searchTask = Task {
+            try? await Task.sleep(nanoseconds: Self.searchDebounceNanoseconds)
+            guard !Task.isCancelled, generation == searchGeneration else { return }
+            await performSearch(query: query, generation: generation)
+        }
+    }
+
     func loadMoreIfNeeded() {
-        guard !isSearching, canLoadMore, !isLoadingMore, loadMoreTask == nil else { return }
+        guard canLoadMore, !isLoadingMore, loadMoreTask == nil else { return }
         isLoadingMore = true
         loadMoreFailedMessage = nil
         let generation = loadGeneration
@@ -190,53 +255,11 @@ final class SuggestedTradersViewModel {
 
     var authenticatedProfileID: ProfileID? { viewerID }
 
-    func searchChanged() {
-        searchTask?.cancel()
-        searchGeneration &+= 1
-        let generation = searchGeneration
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard query.count >= 2 else {
-            searchResults = []
-            searchPhase = .idle
-            return
-        }
-
-        if viewerID == DemoExperienceSupport.profileID {
-            let lowered = query.lowercased()
-            let exclude = viewerID ?? DemoExperienceSupport.profileID
-            let filtered = DemoGraph.traders(excluding: exclude).filter {
-                $0.profile.displayName.lowercased().contains(lowered)
-                    || $0.profile.username.lowercased().contains(lowered)
-            }
-            searchResults = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(
-                ExploreTraderRanking.orderingSearchResults(filtered, query: query) {
-                    resolvedProfile(for: $0)
-                }
-            )
-            searchPhase = .idle
-            return
-        }
-
-        if let viewerID, isLocalDevelopment(viewerID) {
-            let lowered = query.lowercased()
-            let filtered = ExploreFixtures.traders(excluding: viewerID).filter {
-                $0.profile.displayName.lowercased().contains(lowered)
-                    || $0.profile.username.lowercased().contains(lowered)
-            }
-            searchResults = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(
-                ExploreTraderRanking.orderingSearchResults(filtered, query: query) {
-                    resolvedProfile(for: $0)
-                }
-            )
-            searchPhase = .idle
-            return
-        }
-
-        searchPhase = .searching
-        searchTask = Task {
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            guard !Task.isCancelled, generation == searchGeneration else { return }
-            await performSearch(query: query, generation: generation)
+    private func applyCategoryFilter(to suggestions: [ExploreTraderSuggestion]) -> [ExploreTraderSuggestion] {
+        guard categoryTab != .all else { return suggestions }
+        let filter = ExploreDiscoverableProfileFilter(category: categoryTab, strategyQuery: nil)
+        return suggestions.filter {
+            ExploreDiscoverableProfileFilter.matches(resolvedProfile(for: $0), filter: filter)
         }
     }
 
@@ -510,6 +533,17 @@ final class SuggestedTradersViewModel {
         }
     }
 
+    private func applyBlockedPeersToVisibleResults() {
+        let filteredTraders = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(store.suggestedTraders)
+        if filteredTraders.count != store.suggestedTraders.count {
+            store.replaceTraders(filteredTraders)
+        }
+        let filteredSearch = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(searchResults)
+        if filteredSearch.count != searchResults.count {
+            searchResults = filteredSearch
+        }
+    }
+
     private func performSearch(query: String, generation: UInt64) async {
         do {
             let page = try await search.search(
@@ -603,17 +637,6 @@ final class SuggestedTradersViewModel {
         } catch {
             guard !Task.isCancelled, generation == searchGeneration else { return }
             searchPhase = .failed(UserFacingError.message(for: error))
-        }
-    }
-
-    private func applyBlockedPeersToVisibleResults() {
-        let filteredTraders = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(store.suggestedTraders)
-        if filteredTraders.count != store.suggestedTraders.count {
-            store.replaceTraders(filteredTraders)
-        }
-        let filteredSearch = FeedBlockedAuthorsFilter.shared.filterTraderSuggestions(searchResults)
-        if filteredSearch.count != searchResults.count {
-            searchResults = filteredSearch
         }
     }
 

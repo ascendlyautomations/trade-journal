@@ -191,7 +191,7 @@ struct CreateRoomView: View {
                     Text("Category")
                         .foregroundStyle(colors.primaryText)
                     Spacer()
-                    Text(viewModel.configuration.category?.displayName ?? "General")
+                    Text(viewModel.configuration.category?.displayName ?? "Uncategorized")
                         .foregroundStyle(colors.secondaryText)
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
